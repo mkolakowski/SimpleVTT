@@ -235,8 +235,3 @@ class UserAudioPreference(Base):
     track_id: Mapped[int] = mapped_column(ForeignKey("playlist_tracks.id", ondelete="CASCADE"))
     volume: Mapped[float] = mapped_column(Float, default=1.0)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
-mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    track_id: Mapped[int] = mapped_column(ForeignKey("playlist_tracks.id", ondelete="CASCADE"))
-    volume: Mapped[float] = mapped_column(Float, default=1.0)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
