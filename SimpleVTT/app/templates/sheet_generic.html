@@ -1,0 +1,42 @@
+<div class="sheet">
+    <h2>{{ char.name }}</h2>
+    <p class="muted">Generic sheet — free-form fields</p>
+
+    <form id="sheet-form" data-char-id="{{ char.id }}" data-template="generic" {% if not can_edit %}data-readonly="1"{% endif %}>
+        <label>Name <input name="name" value="{{ char.name }}" {% if not can_edit %}readonly{% endif %}></label>
+
+        <label>Summary
+            <textarea name="summary" rows="2" {% if not can_edit %}readonly{% endif %}>{{ sheet.get('summary','') }}</textarea>
+        </label>
+
+        <fieldset>
+            <legend>Stats (key / value)</legend>
+            <div id="stat-rows">
+                {% for k, v in (sheet.get('stats') or {}).items() %}
+                <div class="stat-row"><input class="stat-k" value="{{ k }}" {% if not can_edit %}readonly{% endif %}><input class="stat-v" value="{{ v }}" {% if not can_edit %}readonly{% endif %}></div>
+                {% endfor %}
+            </div>
+            {% if can_edit %}<button type="button" onclick="addStatRow()">+ Add stat</button>{% endif %}
+        </fieldset>
+
+        <fieldset>
+            <legend>Inventory (one per line)</legend>
+            <textarea name="inventory" rows="4" {% if not can_edit %}readonly{% endif %}>{{ '\n'.join(sheet.get('inventory') or []) }}</textarea>
+        </fieldset>
+
+        <label>Notes
+            <textarea name="notes" rows="4" {% if not can_edit %}readonly{% endif %}>{{ sheet.get('notes','') }}</textarea>
+        </label>
+
+        {% if can_edit %}
+            <div class="row">
+                <button type="submit">Save</button>
+                <button type="button" onclick="closeSheet()">Cancel</button>
+                <span id="sheet-status" class="muted"></span>
+            </div>
+        {% else %}
+            <button type="button" onclick="closeSheet()">Close</button>
+        {% endif %}
+    </form>
+</div>
+<script src="/static/sheet.js"></script>

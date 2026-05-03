@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Admin — SimpleVTT{% endblock %}
+{% block content %}
+<h1>Admin portal</h1>
+
+<section>
+    <h2>Users</h2>
+    <table class="data">
+        <thead><tr><th>ID</th><th>Email</th><th>Display</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td>{{ u.id }}</td>
+                <td>{{ u.email }}</td>
+                <td>{{ u.display_name }}</td>
+                <td>{% if u.is_admin %}admin{% else %}user{% endif %}</td>
+                <td>{% if u.is_disabled %}disabled{% else %}active{% endif %}</td>
+                <td>
+                    <form method="post" action="/admin/users/{{ u.id }}/disable" style="display:inline">
+                        <button>{% if u.is_disabled %}Enable{% else %}Disable{% endif %}</button>
+                    </form>
+                    <details style="display:inline-block">
+                        <summary>Reset pw</summary>
+                        <form method="post" action="/admin/users/{{ u.id }}/reset_password">
+                            <input type="password" name="new_password" placeholder="new password" minlength="8" required>
+                            <button>Set</button>
+                        </form>
+                    </details>
+                    {% if u.id != user.id %}
+                    <form method="post" action="/admin/users/{{ u.id }}/delete" style="display:inline" onsubmit="return confirm('Delete user?')">
+                        <button>Delete</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <details>
+        <summary>+ Create user</summary>
+        <form method="post" action="/admin/users" class="row">
+            <input name="email" placeholder="email" required>
+            <input name="display_name" placeholder="name" required>
+            <input name="password" type="password" placeholder="password" minlength="8" required>
+            <button>Create</button>
+        </form>
+    </details>
+    <p class="muted">Admin emails come from <code>config.yaml</code>: {{ settings.admins }}</p>
+</section>
+
+<section>
+    <h2>Campaigns</h2>
+    <ul class="cards">
+        {% for c in campaigns %}
+            <li><a href="/admin/campaign/{{ c.id }}"><strong>{{ c.name }}</strong></a> <small class="muted">— GM #{{ c.gm_user_id }}</small></li>
+        {% endfor %}
+    </ul>
+</section>
+{% endblock %}

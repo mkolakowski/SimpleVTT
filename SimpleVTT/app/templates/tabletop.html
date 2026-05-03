@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }} — SimpleVTT{% endblock %}
+{% block head %}
+<style>
+    .tabletop-layout { display: grid; grid-template-columns: 1fr 320px; gap: 12px; height: calc(100vh - 90px); }
+    .map-pane { position: relative; overflow: auto; background: #1c1c1c; border-radius: 6px; }
+    #vtt-canvas { display: block; image-rendering: pixelated; cursor: grab; }
+    .side-pane { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+    .panel { background: #20232a; padding: 10px; border-radius: 6px; }
+    .panel h3 { margin: 0 0 6px; font-size: 14px; }
+    .roll-list { max-height: 260px; overflow-y: auto; font-size: 12px; }
+    .roll-list li { border-bottom: 1px dashed #333; padding: 4px 0; }
+    .roll-vis { font-size: 10px; color: #888; }
+    .character-list li { padding: 3px 0; cursor: pointer; }
+    .character-list li:hover { color: #6cb; }
+    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index: 100; }
+    .modal { background: #1f2128; padding: 20px; border-radius: 8px; max-width: 720px; max-height: 88vh; overflow:auto; width: 90%;}
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+    {% if campaign.thumbnail_url %}
+    <img src="{{ campaign.thumbnail_url }}" alt="" style="width: 48px; height: 48px; border-radius: 6px; object-fit: cover;">
+    {% endif %}
+    <h1 style="margin: 0;">{{ campaign.name }}
+        <span class="badge system" style="background:#2c4a2c; color:#c0ffc0; font-size:11px; padding:2px 8px; border-radius:10px; vertical-align:middle;">{{ system.label }}</span>
+        {% if is_gm %}<span class="muted">(GM)</span>{% endif %}
+    </h1>
+    {% if is_gm %}
+    <span style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+        {% if campaign.session_active %}
+        <form method="post" action="/campaign/{{ campaign.id }}/session/end" style="display:inline;">
+            <button type="submit" title="End session and kick players back to lobby">⏹ End session</button>
+        </form>
+        {% else %}
+        <form method="post" action="/campaign/{{ campaign.id }}/session/start" style="display:inline;">
+            <button type="submit" title="Open the tabletop to players">▶ Start session</button>
+        </form>
+        {% endif %}
+        <a href="/campaign/{{ campaign.id }}/settings" class="btn-link">⚙ Settings</a>
+    </span>
+    {% endif %}
+</div>
+
+<div class="tabletop-layout">
+    <div class="map-pane" id="map-pane">
+        {% if active_map %}
+            <canvas id="vtt-canvas"
+                    width="{{ active_map.width_px }}"
+                    height="{{ active_map.height_px }}"
+                    data-grid-type="{{ active_map.grid_type.value }}"
+                    data-grid-size="{{ active_map.grid_size_px }}"
+                    {% if active_map.image_url %}data-bg="{{ active_map.image_url }}"{% endif %}></canvas>
+        {% else %}
+            <p class="muted" style="padding: 20px;">No active map. {% if is_gm %}Upload one in <a href="/admin/campaign/{{ campaign.id }}">campaign settings</a>.{% endif %}</p>
+        {% endif %}
+    </div>
+
+    <aside class="side-pane">
+        <div class="panel">
+            <h3>Dice roller</h3>
+            <form id="roll-form" class="row">
+                <input type="text" id="roll-expr" placeholder="1d20+5" required>
+                <select id="roll-vis">
+                    <option value="public">All players</option>
+                    <option value="gm_and_roller">GM + me</option>
+                    <option value="gm_only">GM only</option>
+                </select>
+                <button type="submit">Roll</button>
+            </form>
+            <div class="row quick">
+                {# System-aware quick-die buttons #}
+                {% for q in system.quick_dice %}
+                <button type="button" class="quick-die" data-expr="{{ q.expression }}" title="{{ q.expression }}">{{ q.label }}</button>
+                {% endfor %}
+            </div>
+            <p class="muted"><a href="/campaign/{{ campaign.id }}/rolls" target="_blank" onclick="window.open(this.href, 'rolls', 'width=420,height=600'); return false;">Pop out roll log →</a></p>
+        </div>
+
+        <div class="panel" style="flex:1; overflow-y: auto;">
+            <h3>Recent rolls</h3>
+            <ul class="roll-list" id="roll-list">
+                {% for r in rolls %}
+                <li>
+                    <strong>{{ r.user.display_name }}</strong>: {{ r.expression }} = <strong>{{ r.total }}</strong>
+                    <div class="muted">{{ r.breakdown }}</div>
+                    <span class="roll-vis">{{ r.visibility.value }}{% if r.note %} • {{ r.note }}{% endif %}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <div class="panel">
+            <h3>Characters</h3>
+            <ul class="character-list">
+                {% for c in characters %}
+                <li onclick="openSheet({{ c.id }})">
+                    {{ c.name }}
+                    {% if c.owner_user_id %}<small class="muted">(player)</small>{% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+            {% if not characters %}<p class="muted">No characters yet.</p>{% endif %}
+        </div>
+
+        <div class="panel" id="audio-panel"
+             {% if now_playing and now_playing_started_at_ms %}data-initial-play='{"track_id": {{ now_playing.id }}, "name": {{ now_playing.name|tojson }}, "file_url": {{ now_playing.file_url|tojson }}, "started_at_ms": {{ now_playing_started_at_ms }} }'{% endif %}>
+            <h3>🎵 Sound</h3>
+            <p id="audio-now-playing" class="muted">{% if now_playing %}▶ {{ now_playing.name }}{% else %}Nothing playing{% endif %}</p>
+            <div class="row">
+                <label style="flex:1;">Vol
+                    <input type="range" id="audio-volume" min="0" max="1" step="0.01" value="0.6" style="width:100%;">
+                </label>
+                <button type="button" id="audio-mute">🔈 Mute</button>
+            </div>
+            <div id="audio-track-volume" style="display:{% if now_playing %}block{% else %}none{% endif %}; margin-top:4px;">
+                <label style="display:flex; align-items:center; gap:6px;">
+                    <span style="font-size:11px; color:var(--fg-mute); width:5em;">This track</span>
+                    <input type="range" id="audio-track-volume-slider" min="0" max="1" step="0.01" value="1" style="flex:1;">
+                    <span id="audio-track-volume-num" style="width:3em; text-align:right; font-size:11px;">100%</span>
+                </label>
+            </div>
+            <button type="button" id="audio-enable" style="display:none; margin-top:6px;">▶ Click to enable audio</button>
+            <p class="muted" style="margin-top:6px; font-size:11px;">
+                <button type="button" onclick="vttResyncAudio()" title="Resync to GM">⟳ Resync</button>
+                · <a href="/settings">All track volumes</a>
+                {% if is_gm %} · Manage in <a href="/campaign/{{ campaign.id }}/settings#audio">settings</a> ·
+                <button type="button" onclick="vttStopAudio()">⏹ Stop for everyone</button>
+                {% endif %}
+            </p>
+        </div>
+
+        {% if is_gm %}
+        <div class="panel">
+            <h3>GM tools</h3>
+            <button type="button" id="add-token-btn">+ Add token</button>
+            <a href="/admin/campaign/{{ campaign.id }}" class="btn-link">Campaign settings</a>
+        </div>
+        {% endif %}
+    </aside>
+</div>
+
+<div id="modal-root"></div>
+
+<script>
+const CAMPAIGN_ID = {{ campaign.id }};
+const ME = { id: {{ user.id }}, name: {{ user.display_name|tojson }}, isGm: {{ 'true' if is_gm else 'false' }} };
+const GAME_SYSTEM = {{ system.key|tojson }};
+const ROLLABLE_SHEET = {{ 'true' if system.rollable_sheet else 'false' }};
+</script>
+<script id="initial-data" type="application/json">
+{
+  "tokens": [
+    {% for t in tokens %}
+    {"id": {{ t.id }}, "label": {{ t.label|tojson }}, "color": {{ t.color|tojson }}, "x": {{ t.x }}, "y": {{ t.y }}, "size": {{ t.size }}, "character_id": {{ t.character_id|tojson }}}{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ],
+  "characters": [
+    {% for c in characters %}
+    {"id": {{ c.id }}, "name": {{ c.name|tojson }}, "owner_user_id": {{ c.owner_user_id|tojson }}}{% if not loop.last %},{% endif %}
+    {% endfor %}
+  ]
+}
+</script>
+<script src="/static/tabletop.js"></script>
+<script src="/static/audio.js"></script>
+{% endblock %}

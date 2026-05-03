@@ -1,0 +1,68 @@
+# SimpleVTT — docker compose stack
+# All images chosen are multi-arch (linux/amd64 + linux/arm64).
+# All configuration comes from .env (see .env.example).
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: simplevtt-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-simplevtt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-simplevtt}
+      POSTGRES_DB: ${POSTGRES_DB:-simplevtt}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-simplevtt}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    image: simplevtt-app:latest
+    container_name: simplevtt-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-simplevtt}:${POSTGRES_PASSWORD:-simplevtt}@db:5432/${POSTGRES_DB:-simplevtt}
+      APP_PORT: ${APP_PORT:-8013}
+      APP_SECRET_KEY: ${APP_SECRET_KEY}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8013}
+      APP_ALLOW_LOCAL_REGISTRATION: ${APP_ALLOW_LOCAL_REGISTRATION:-true}
+      ADMINS: ${ADMINS:-}
+      CHARACTER_TEMPLATES: ${CHARACTER_TEMPLATES:-generic,dnd5e}
+      GOOGLE_SSO_ENABLED: ${GOOGLE_SSO_ENABLED:-false}
+      GOOGLE_SSO_CLIENT_ID: ${GOOGLE_SSO_CLIENT_ID:-}
+      GOOGLE_SSO_CLIENT_SECRET: ${GOOGLE_SSO_CLIENT_SECRET:-}
+    volumes:
+      - uploads_data:/app/app/static/uploads
+    ports:
+      - "${APP_PORT:-8013}:${APP_PORT:-8013}"
+
+  backup:
+    image: postgres:16-alpine  # contains pg_dump, multi-arch
+    container_name: simplevtt-backup
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-simplevtt}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-simplevtt}
+      POSTGRES_DB: ${POSTGRES_DB:-simplevtt}
+      PGHOST: db
+      BACKUP_CRON: ${BACKUP_CRON:-0 3 * * *}        # daily at 3am UTC
+      KEEP_DAILY: ${KEEP_DAILY:-7}
+      KEEP_WEEKLY: ${KEEP_WEEKLY:-4}
+    volumes:
+      - ./backups:/backups
+      - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
+      - ./scripts/entrypoint-backup.sh:/usr/local/bin/entrypoint-backup.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/entrypoint-backup.sh"]
+
+volumes:
+  db_data:
+  uploads_data:

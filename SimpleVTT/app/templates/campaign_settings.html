@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }} settings{% endblock %}
+{% block content %}
+<p><a href="/campaign/{{ campaign.id }}">← back to tabletop</a></p>
+<h1>{{ campaign.name }} — Settings</h1>
+
+<section>
+    <h2>Basic info</h2>
+    <form method="post" action="/campaign/{{ campaign.id }}/settings" enctype="multipart/form-data" class="stacked">
+        <label>Name <input name="name" value="{{ campaign.name }}" required></label>
+        <label>Description <textarea name="description" rows="3">{{ campaign.description }}</textarea></label>
+        <label>Game system
+            <select name="game_system">
+                {% for s in system_choices %}
+                    <option value="{{ s.key }}" {% if s.key == current_system.key %}selected{% endif %}>{{ s.label }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <p class="muted">Changing the game system affects new characters only — existing sheets keep their original template. Delete and re-add characters if you want a clean cut.</p>
+
+        <fieldset>
+            <legend>Thumbnail</legend>
+            {% if campaign.thumbnail_url %}
+                <p><img src="{{ campaign.thumbnail_url }}" alt="thumbnail" style="max-width: 200px; border-radius: 6px;"></p>
+                <label><input type="checkbox" name="clear_thumbnail" value="true"> Remove current thumbnail</label>
+            {% else %}
+                <p class="muted">No thumbnail set.</p>
+            {% endif %}
+            <label>Replace with new (png/jpg/webp, max 5 MB) <input type="file" name="thumbnail" accept="image/*"></label>
+        </fieldset>
+
+        <button type="submit">Save</button>
+    </form>
+</section>
+
+<section>
+    <h2>Game Masters &amp; players</h2>
+    <p class="muted">Toggle a member's GM flag. The primary GM (campaign owner) cannot be demoted here — only an admin can transfer ownership.</p>
+    <table class="data">
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Action</th></tr></thead>
+        <tbody>
+            <tr>
+                <td>{{ primary_gm.display_name if primary_gm else "?" }}</td>
+                <td>{{ primary_gm.email if primary_gm else "?" }}</td>
+                <td><strong>Primary GM</strong></td>
+                <td><span class="muted">Owner — cannot change here</span></td>
+            </tr>
+            {% for m in members_with_role %}
+            <tr>
+                <td>{{ m.user.display_name }}</td>
+                <td>{{ m.user.email }}</td>
+                <td>{% if m.is_gm %}<strong>Co-GM</strong>{% else %}Player{% endif %}</td>
+                <td>
+                    <form method="post" action="/campaign/{{ campaign.id }}/members/{{ m.membership_id }}/set_gm" style="display:inline">
+                        <input type="hidden" name="is_gm" value="{{ 'false' if m.is_gm else 'true' }}">
+                        <button type="submit">{% if m.is_gm %}Demote to player{% else %}Promote to GM{% endif %}</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if not members_with_role %}
+    <p class="muted">No additional members yet. {% if user.is_admin %}Add members from the <a href="/admin/campaign/{{ campaign.id }}">admin panel</a>.{% else %}Ask an admin to add players to this campaign.{% endif %}</p>
+    {% endif %}
+</section>
+
+<section id="audio">
+    <h2>🎵 Audio playlists</h2>
+    <p class="muted">Upload tracks (mp3, ogg, wav, m4a — max 30 MB each) into a playlist, then play them from the tabletop. All connected players will hear what you start.</p>
+
+    <form method="post" action="/campaign/{{ campaign.id }}/audio/loop" class="row">
+        <label><input type="checkbox" name="loop" value="true" {% if campaign.now_playing_loop %}checked{% endif %}> Loop playlist when the last track ends</label>
+        <button type="submit">Save</button>
+    </form>
+
+    {% for pl in playlists %}
+    <details {% if loop.first %}open{% endif %} style="margin-top:10px;">
+        <summary><strong>{{ pl.name }}</strong> <span class="muted">({{ pl.tracks|length }} track{{ '' if pl.tracks|length == 1 else 's' }})</span></summary>
+        <table class="data" style="margin-top:6px;">
+            <thead><tr><th>#</th><th>Track</th><th>Actions</th></tr></thead>
+            <tbody>
+                {% for t in pl.tracks %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ t.name }}{% if campaign.now_playing_track_id == t.id %} <span class="muted">(now playing)</span>{% endif %}</td>
+                    <td>
+                        <button type="button" onclick="vttPlayTrack({{ t.id }})">▶ Play</button>
+                        <form method="post" action="/campaign/{{ campaign.id }}/tracks/{{ t.id }}/delete" style="display:inline" onsubmit="return confirm('Delete this track?')">
+                            <button>Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if not pl.tracks %}<p class="muted">No tracks yet.</p>{% endif %}
+        <form method="post" action="/campaign/{{ campaign.id }}/playlists/{{ pl.id }}/tracks" enctype="multipart/form-data" class="row" style="margin-top:6px;">
+            <input type="file" name="audio" accept="audio/*,.mp3,.ogg,.wav,.m4a" required>
+            <button>Upload track</button>
+        </form>
+        <form method="post" action="/campaign/{{ campaign.id }}/playlists/{{ pl.id }}/delete" style="margin-top:6px;" onsubmit="return confirm('Delete this entire playlist and all its tracks?')">
+            <button class="danger">Delete playlist</button>
+        </form>
+    </details>
+    {% endfor %}
+
+    <details style="margin-top:10px;">
+        <summary>+ New playlist</summary>
+        <form method="post" action="/campaign/{{ campaign.id }}/playlists" class="row">
+            <input name="name" placeholder="Playlist name" required>
+            <button>Create</button>
+        </form>
+    </details>
+
+    {% if campaign.now_playing_track_id %}
+    <p style="margin-top:10px;">
+        <button type="button" onclick="(async()=>{await fetch('/campaign/{{ campaign.id }}/audio/stop',{method:'POST'}); location.reload();})()">⏹ Stop playback for everyone</button>
+    </p>
+    {% endif %}
+</section>
+
+<script>
+const CAMPAIGN_ID = {{ campaign.id }};
+window.vttPlayTrack = async function (trackId) {
+    const resp = await fetch(`/campaign/${CAMPAIGN_ID}/audio/play`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ track_id: trackId }),
+    });
+    if (!resp.ok) alert('Could not start track: ' + (await resp.text()));
+    else location.reload();
+};
+</script>
+
+{% if user.is_admin %}
+<section>
+    <h2>Admin tools</h2>
+    <p><a href="/admin/campaign/{{ campaign.id }}">Open full admin panel for this campaign →</a></p>
+</section>
+{% endif %}
+{% endblock %}

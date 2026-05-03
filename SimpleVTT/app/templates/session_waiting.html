@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Waiting for {{ campaign.name }} — SimpleVTT{% endblock %}
+{% block head %}
+<style>
+    .waiting-card {
+        max-width: 480px; margin: 80px auto; padding: 32px;
+        background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px;
+        text-align: center;
+    }
+    .waiting-card h1 { margin: 0 0 12px; font-size: 22px; }
+    .waiting-card .thumb {
+        width: 120px; height: 120px; margin: 0 auto 14px; border-radius: 8px;
+        background: #2a2d36 center/cover no-repeat; display: flex;
+        align-items: center; justify-content: center; color: var(--fg-mute);
+        font-size: 38px;
+    }
+    .pulse {
+        display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+        background: #d6a04a; margin-right: 6px; vertical-align: middle;
+        animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+</style>
+{% endblock %}
+{% block content %}
+<div class="waiting-card">
+    <div class="thumb"
+         {% if campaign.thumbnail_url %}style="background-image:url('{{ campaign.thumbnail_url }}')"{% endif %}>
+        {% if not campaign.thumbnail_url %}<span>{{ campaign.name[:1]|upper }}</span>{% endif %}
+    </div>
+    <h1>{{ campaign.name }}</h1>
+    <p class="muted"><span class="pulse"></span> Waiting for the GM to start the session...</p>
+    <p class="muted" style="font-size: 12px;">You'll be sent in automatically the moment they hit Start.</p>
+    <p style="margin-top: 18px;"><a href="/">← Back to lobby</a></p>
+</div>
+
+<script>
+// Open a WebSocket so we get notified the instant the GM starts the session,
+// without polling. Falls back to a 10-second poll if the WebSocket can't
+// connect (e.g., proxy doesn't forward WS).
+const CAMPAIGN_ID = {{ campaign.id }};
+
+function go() { location.href = '/campaign/' + CAMPAIGN_ID; }
+
+const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+let ws;
+function connect() {
+    try {
+        ws = new WebSocket(proto + location.host + '/ws/campaign/' + CAMPAIGN_ID);
+        ws.onmessage = (ev) => {
+            try {
+                const m = JSON.parse(ev.data);
+                if (m.type === 'session_started') go();
+            } catch (_) {}
+        };
+        ws.onclose = () => setTimeout(connect, 2000);
+    } catch (_) { setTimeout(connect, 2000); }
+}
+connect();
+
+// Belt-and-braces: poll the page every 10s in case the WS isn't available.
+setInterval(async () => {
+    try {
+        const r = await fetch(location.href, { method: 'HEAD' });
+        // The waiting page is the same URL; we can't tell from headers.
+        // So fetch the lobby and look for our campaign's session_active state.
+        const r2 = await fetch('/campaign/' + CAMPAIGN_ID, { redirect: 'manual' });
+        // If the body no longer contains the waiting marker, session is open.
+        const txt = await r2.text();
+        if (!txt.includes('Waiting for the GM to start')) go();
+    } catch (_) {}
+}, 10000);
+</script>
+{% endblock %}

@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }} — Admin{% endblock %}
+{% block content %}
+<p><a href="/admin">← admin</a></p>
+<div style="display:flex; align-items:center; gap:12px;">
+    {% if campaign.thumbnail_url %}
+    <img src="{{ campaign.thumbnail_url }}" alt="" style="width:64px; height:64px; border-radius:6px; object-fit:cover;">
+    {% endif %}
+    <div>
+        <h1 style="margin:0;">{{ campaign.name }}
+            <span class="badge system" style="background:#2c4a2c; color:#c0ffc0; font-size:11px; padding:2px 8px; border-radius:10px; vertical-align:middle;">{{ current_system.label }}</span>
+        </h1>
+        <p class="muted" style="margin:4px 0;">{{ campaign.description }}</p>
+        <p style="margin:0;"><a href="/campaign/{{ campaign.id }}">Open tabletop →</a> · <a href="/campaign/{{ campaign.id }}/settings">GM settings →</a></p>
+    </div>
+</div>
+
+<section>
+    <h2>Game system &amp; thumbnail</h2>
+    <form method="post" action="/admin/campaign/{{ campaign.id }}/system" class="row">
+        <select name="game_system">
+            {% for s in system_choices %}
+                <option value="{{ s.key }}" {% if s.key == current_system.key %}selected{% endif %}>{{ s.label }}</option>
+            {% endfor %}
+        </select>
+        <button>Set system</button>
+    </form>
+    <form method="post" action="/admin/campaign/{{ campaign.id }}/thumbnail" enctype="multipart/form-data" class="row" style="margin-top:6px;">
+        <input type="file" name="thumbnail" accept="image/*" required>
+        <button>Upload thumbnail</button>
+    </form>
+    {% if campaign.thumbnail_url %}
+    <form method="post" action="/admin/campaign/{{ campaign.id }}/thumbnail/clear" style="margin-top:6px;">
+        <button>Remove thumbnail</button>
+    </form>
+    {% endif %}
+</section>
+
+<section>
+    <h2>Members &amp; roles</h2>
+    <p class="muted">Primary GM (owner): user #{{ campaign.gm_user_id }} — set when the campaign was created.</p>
+    <table class="data">
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
+        <tbody>
+            {% for m in members_with_role %}
+            <tr>
+                <td>{{ m.user.display_name }}</td>
+                <td>{{ m.user.email }}</td>
+                <td>{% if m.is_gm %}<strong>Co-GM</strong>{% else %}Player{% endif %}</td>
+                <td>
+                    <form method="post" action="/campaign/{{ campaign.id }}/members/{{ m.membership_id }}/set_gm" style="display:inline">
+                        <input type="hidden" name="is_gm" value="{{ 'false' if m.is_gm else 'true' }}">
+                        <button type="submit">{% if m.is_gm %}Demote to player{% else %}Promote to GM{% endif %}</button>
+                    </form>
+                    <form method="post" action="/admin/campaign/{{ campaign.id }}/members/remove" style="display:inline">
+                        <input type="hidden" name="user_id" value="{{ m.user.id }}">
+                        <button>Remove</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% if non_members %}
+    <form method="post" action="/admin/campaign/{{ campaign.id }}/members/add" class="row" style="margin-top:6px;">
+        <select name="user_id">
+            {% for u in non_members %}<option value="{{ u.id }}">{{ u.display_name }} ({{ u.email }})</option>{% endfor %}
+        </select>
+        <button>Add as player</button>
+    </form>
+    {% endif %}
+</section>
+
+<section>
+    <h2>Characters</h2>
+    <table class="data">
+        <thead><tr><th>Name</th><th>Template</th><th>Owner</th><th></th></tr></thead>
+        <tbody>
+        {% for c in characters %}
+            <tr>
+                <td>{{ c.name }}</td>
+                <td>{{ c.template }}</td>
+                <td>
+                    <form method="post" action="/admin/campaign/{{ campaign.id }}/characters/{{ c.id }}/assign" class="row">
+                        <select name="owner_user_id">
+                            <option value="">— unassigned —</option>
+                            {% for u in all_users %}
+                                <option value="{{ u.id }}" {% if c.owner_user_id == u.id %}selected{% endif %}>{{ u.display_name }} ({{ u.email }})</option>
+                            {% endfor %}
+                        </select>
+                        <button>Save</button>
+                    </form>
+                </td>
+                <td>
+                    <form method="post" action="/admin/campaign/{{ campaign.id }}/characters/{{ c.id }}/delete" style="display:inline" onsubmit="return confirm('Delete character?')">
+                        <button>Delete</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <details>
+        <summary>+ Create character</summary>
+        <p class="muted">Sheet template is locked to this campaign's system: <strong>{{ current_system.label }}</strong>. Change it in the section above.</p>
+        <form method="post" action="/admin/campaign/{{ campaign.id }}/characters" class="row">
+            <input name="name" placeholder="Name" required>
+            <select name="owner_user_id">
+                <option value="">— unassigned —</option>
+                {% for u in all_users %}<option value="{{ u.id }}">{{ u.display_name }}</option>{% endfor %}
+            </select>
+            <button>Create</button>
+        </form>
+    </details>
+</section>
+
+<section>
+    <h2>Maps</h2>
+    <ul>
+    {% for m in maps %}
+        <li>
+            {{ m.name }} ({{ m.grid_type.value }}, {{ m.grid_size_px }}px) {% if m.id == campaign.active_map_id %}<strong>(active)</strong>{% endif %}
+            {% if m.id != campaign.active_map_id %}
+            <form method="post" action="/admin/campaign/{{ campaign.id }}/maps/{{ m.id }}/activate" style="display:inline"><button>Activate</button></form>
+            {% endif %}
+        </li>
+    {% endfor %}
+    </ul>
+    <details>
+        <summary>+ Upload map</summary>
+        <form method="post" action="/admin/campaign/{{ campaign.id }}/maps" enctype="multipart/form-data" class="stacked">
+            <label>Name <input name="name" required></label>
+            <label>Grid type
+                <select name="grid_type">
+                    <option value="square">Square</option>
+                    <option value="hex">Hex</option>
+                    <option value="none">None</option>
+                </select>
+            </label>
+            <label>Grid size (px) <input type="number" name="grid_size_px" value="70" min="20" max="300"></label>
+            <label>Width (px) <input type="number" name="width_px" value="2000"></label>
+            <label>Height (px) <input type="number" name="height_px" value="1500"></label>
+            <label>Image (png/jpg/webp, optional) <input type="file" name="image" accept="image/*"></label>
+            <button>Upload</button>
+        </form>
+    </details>
+</section>
+
+<section>
+    <h3 class="danger">Danger zone</h3>
+    <form method="post" action="/admin/campaign/{{ campaign.id }}/delete" onsubmit="return confirm('Delete this campaign and ALL its data?')">
+        <button class="danger">Delete campaign</button>
+    </form>
+</section>
+{% endblock %}

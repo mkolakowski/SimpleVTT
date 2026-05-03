@@ -1,0 +1,100 @@
+<div class="sheet dnd5e">
+    <h2>{{ char.name }}</h2>
+    <p class="muted">D&amp;D 5e sheet</p>
+
+    <form id="sheet-form" data-char-id="{{ char.id }}" data-template="dnd5e" {% if not can_edit %}data-readonly="1"{% endif %}>
+        <div class="row">
+            <label>Name <input name="name" value="{{ char.name }}" {% if not can_edit %}readonly{% endif %}></label>
+            <label>Class <input name="class" value="{{ sheet.get('class','') }}" {% if not can_edit %}readonly{% endif %}></label>
+            <label>Level <input type="number" name="level" value="{{ sheet.get('level',1) }}" min="1" max="20" {% if not can_edit %}readonly{% endif %}></label>
+            <label>Race <input name="race" value="{{ sheet.get('race','') }}" {% if not can_edit %}readonly{% endif %}></label>
+        </div>
+
+        <div class="row">
+            <label>HP cur <input type="number" name="hp.current" value="{{ sheet.get('hp',{}).get('current',10) }}" {% if not can_edit %}readonly{% endif %}></label>
+            <label>HP max <input type="number" name="hp.max" value="{{ sheet.get('hp',{}).get('max',10) }}" {% if not can_edit %}readonly{% endif %}></label>
+            <label>HP temp <input type="number" name="hp.temp" value="{{ sheet.get('hp',{}).get('temp',0) }}" {% if not can_edit %}readonly{% endif %}></label>
+            <label>AC <input type="number" name="ac" value="{{ sheet.get('ac',10) }}" {% if not can_edit %}readonly{% endif %}></label>
+            <label>Speed <input type="number" name="speed" value="{{ sheet.get('speed',30) }}" {% if not can_edit %}readonly{% endif %}></label>
+            <label>Init <input type="number" name="initiative_bonus" value="{{ sheet.get('initiative_bonus',0) }}" {% if not can_edit %}readonly{% endif %}></label>
+            <label>Prof <input type="number" name="proficiency_bonus" value="{{ sheet.get('proficiency_bonus',2) }}" {% if not can_edit %}readonly{% endif %}></label>
+        </div>
+
+        <fieldset>
+            <legend>Abilities <span class="muted">(click 🎲 to roll an ability check)</span></legend>
+            <div class="row">
+                {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+                <label>{{ ab }}
+                    <input type="number" name="abilities.{{ ab }}" value="{{ sheet.get('abilities',{}).get(ab,10) }}" {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <button type="button" class="roll-btn" data-roll-ability="{{ ab }}" title="Roll {{ ab }} check">🎲</button>
+                {% endfor %}
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Saving throws <span class="muted">(check = proficient; click 🎲 to roll)</span></legend>
+            <div class="row">
+                {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+                <label>{{ ab }}
+                    <input type="checkbox" name="saving_throws.{{ ab }}" {% if sheet.get('saving_throws',{}).get(ab) %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>
+                </label>
+                <button type="button" class="roll-btn" data-roll-save="{{ ab }}" title="Roll {{ ab }} save">🎲</button>
+                {% endfor %}
+            </div>
+        </fieldset>
+
+        <fieldset>
+            <legend>Skills <span class="muted">(click 🎲 to roll)</span></legend>
+            <table class="skills">
+                <thead><tr><th>Skill</th><th>Ability</th><th>Prof.</th><th>Expert.</th><th></th></tr></thead>
+                <tbody>
+                {% for skill, info in (sheet.get('skills') or {}).items() %}
+                    <tr>
+                        <td>{{ skill }}</td>
+                        <td>{{ info.get('ability','') }}</td>
+                        <td><input type="checkbox" name="skills.{{ skill }}.proficient" {% if info.get('proficient') %}checked{% endif %} {% if not can_edit %}disabled{% endif %}></td>
+                        <td><input type="checkbox" name="skills.{{ skill }}.expertise" {% if info.get('expertise') %}checked{% endif %} {% if not can_edit %}disabled{% endif %}></td>
+                        <td><button type="button" class="roll-btn" data-roll-skill="{{ skill }}" data-skill-ability="{{ info.get('ability','') }}" title="Roll {{ skill }}">🎲</button></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </fieldset>
+
+        <fieldset>
+            <legend>Attacks (one per line, "Name | bonus | damage")</legend>
+            <textarea name="attacks" rows="3" {% if not can_edit %}readonly{% endif %}>{% for a in (sheet.get('attacks') or []) %}{{ a.get('name','') }} | {{ a.get('bonus','') }} | {{ a.get('damage','') }}
+{% endfor %}</textarea>
+        </fieldset>
+
+        <fieldset>
+            <legend>Spells (one per line, "Name | level | description")</legend>
+            <textarea name="spells" rows="3" {% if not can_edit %}readonly{% endif %}>{% for s in (sheet.get('spells') or []) %}{{ s.get('name','') }} | {{ s.get('level','') }} | {{ s.get('description','') }}
+{% endfor %}</textarea>
+        </fieldset>
+
+        <label>Features
+            <textarea name="features" rows="3" {% if not can_edit %}readonly{% endif %}>{{ sheet.get('features','') }}</textarea>
+        </label>
+
+        <label>Inventory (one per line)
+            <textarea name="inventory" rows="3" {% if not can_edit %}readonly{% endif %}>{{ '\n'.join(sheet.get('inventory') or []) }}</textarea>
+        </label>
+
+        <label>Notes
+            <textarea name="notes" rows="3" {% if not can_edit %}readonly{% endif %}>{{ sheet.get('notes','') }}</textarea>
+        </label>
+
+        {% if can_edit %}
+            <div class="row">
+                <button type="submit">Save</button>
+                <button type="button" onclick="closeSheet()">Cancel</button>
+                <span id="sheet-status" class="muted"></span>
+            </div>
+        {% else %}
+            <button type="button" onclick="closeSheet()">Close</button>
+        {% endif %}
+    </form>
+</div>
+<script src="/static/sheet.js"></script>

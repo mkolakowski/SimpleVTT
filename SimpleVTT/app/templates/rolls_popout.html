@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Rolls — {{ campaign.name }}{% endblock %}
+{% block content %}
+<h2>{{ campaign.name }} — Roll log</h2>
+<p class="muted">{% if is_gm %}You see all rolls.{% else %}You see public rolls + your own private rolls.{% endif %} Auto-refreshes via WebSocket.</p>
+<ul class="roll-list" id="roll-list">
+    {% for r in rolls %}
+    <li>
+        <strong>{{ r.user.display_name }}</strong>: {{ r.expression }} = <strong>{{ r.total }}</strong>
+        <div class="muted">{{ r.breakdown }}</div>
+        <span class="roll-vis">{{ r.visibility.value }}{% if r.note %} • {{ r.note }}{% endif %}</span>
+        <span class="roll-vis">{{ r.created_at }}</span>
+    </li>
+    {% endfor %}
+</ul>
+<script>
+const CAMPAIGN_ID = {{ campaign.id }};
+const IS_GM = {{ 'true' if is_gm else 'false' }};
+const ME_ID = {{ user.id }};
+
+function escapeHTML(s) { return String(s).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
+
+const ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/campaign/' + CAMPAIGN_ID);
+ws.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type !== 'roll') return;
+    const r = msg.data;
+    // Filter by visibility
+    if (!IS_GM) {
+        if (r.visibility === 'gm_only') return;
+        if (r.visibility === 'gm_and_roller' && r.user_id !== ME_ID) return;
+    }
+    const li = document.createElement('li');
+    li.innerHTML = `<strong>${escapeHTML(r.user_name)}</strong>: ${escapeHTML(r.expression)} = <strong>${r.total}</strong>
+        <div class="muted">${escapeHTML(r.breakdown)}</div>
+        <span class="roll-vis">${r.visibility}${r.note ? ' • ' + escapeHTML(r.note) : ''}</span>
+        <span class="roll-vis">${r.created_at || ''}</span>`;
+    document.getElementById('roll-list').prepend(li);
+};
+</script>
+{% endblock %}

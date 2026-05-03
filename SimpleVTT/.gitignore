@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+config/config.yaml
+backups/
+app/static/uploads/
+*.sqlite
+*.db
+.DS_Store

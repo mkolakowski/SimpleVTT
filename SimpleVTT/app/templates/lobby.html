@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}Lobby — SimpleVTT{% endblock %}
+{% block head %}
+<style>
+    .campaign-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; padding: 0; list-style: none; }
+    .campaign-card {
+        background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px;
+        overflow: hidden; display: flex; flex-direction: column;
+    }
+    .campaign-card .thumb {
+        height: 130px; background: #2a2d36 center/cover no-repeat;
+        display: flex; align-items: center; justify-content: center;
+        color: var(--fg-mute); font-size: 28px;
+    }
+    .campaign-card .body { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+    .campaign-card h3 { margin: 0; font-size: 16px; }
+    .campaign-card .desc { color: var(--fg-mute); font-size: 12px; min-height: 1.2em; }
+    .badge {
+        display: inline-block; padding: 2px 8px; border-radius: 10px;
+        font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .badge.gm     { background: #5a3b2e; color: #ffd9a8; }
+    .badge.player { background: #2e4a5a; color: #a8e0ff; }
+    .badge.admin  { background: #3a2f5a; color: #d2c0ff; }
+    .badge.system { background: #2c4a2c; color: #c0ffc0; }
+    .badge.live   { background: #5a2e2e; color: #ffc0c0; }
+    .badge.idle   { background: #3a3a3a; color: #aaaaaa; }
+    .badge-row { display: flex; gap: 6px; flex-wrap: wrap; }
+    .gm-name { font-size: 11px; color: var(--fg-mute); margin-top: auto; }
+    details summary { cursor: pointer; padding: 6px 0; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>Welcome, {{ user.display_name }}</h1>
+
+<section>
+    <h2>Campaigns you run</h2>
+    {% if gm_campaigns %}
+        <ul class="campaign-grid">
+            {% for c in gm_campaigns %}
+                {% set s = get_system(c.game_system) %}
+                <li class="campaign-card">
+                    <a href="/campaign/{{ c.id }}" class="thumb" {% if c.thumbnail_url %}style="background-image:url('{{ c.thumbnail_url }}')"{% endif %}>
+                        {% if not c.thumbnail_url %}<span>{{ c.name[:1]|upper }}</span>{% endif %}
+                    </a>
+                    <div class="body">
+                        <h3><a href="/campaign/{{ c.id }}">{{ c.name }}</a></h3>
+                        <div class="badge-row">
+                            <span class="badge gm">GM</span>
+                            <span class="badge system">{{ s.label }}</span>
+                            <span class="badge {{ 'live' if c.session_active else 'idle' }}">{{ 'Live' if c.session_active else 'Closed' }}</span>
+                        </div>
+                        <div class="desc">{{ c.description or "—" }}</div>
+                        <div class="gm-name" style="display:flex; gap:6px; align-items:center;">
+                            {% if c.session_active %}
+                            <form method="post" action="/campaign/{{ c.id }}/session/end" style="display:inline;">
+                                <button type="submit">⏹ End session</button>
+                            </form>
+                            {% else %}
+                            <form method="post" action="/campaign/{{ c.id }}/session/start" style="display:inline;">
+                                <button type="submit">▶ Start session</button>
+                            </form>
+                            {% endif %}
+                            <a href="/campaign/{{ c.id }}/settings">Settings →</a>
+                        </div>
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="muted">You aren't running any campaigns yet.</p>
+    {% endif %}
+
+    <details>
+        <summary>+ Create a new campaign</summary>
+        <form method="post" action="/campaigns" enctype="multipart/form-data" class="stacked">
+            <label>Name <input type="text" name="name" required></label>
+            <label>Description <textarea name="description" rows="2"></textarea></label>
+            <label>Game system
+                <select name="game_system">
+                    {% for s in system_choices %}
+                        <option value="{{ s.key }}">{{ s.label }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Thumbnail (optional, png/jpg/webp, max 5 MB) <input type="file" name="thumbnail" accept="image/*"></label>
+            <button type="submit">Create</button>
+        </form>
+    </details>
+</section>
+
+<section>
+    <h2>Campaigns you're playing in</h2>
+    {% if member_campaigns %}
+        <ul class="campaign-grid">
+            {% for c in member_campaigns %}
+                {% set s = get_system(c.game_system) %}
+                <li class="campaign-card">
+                    <a href="/campaign/{{ c.id }}" class="thumb" {% if c.thumbnail_url %}style="background-image:url('{{ c.thumbnail_url }}')"{% endif %}>
+                        {% if not c.thumbnail_url %}<span>{{ c.name[:1]|upper }}</span>{% endif %}
+                    </a>
+                    <div class="body">
+                        <h3><a href="/campaign/{{ c.id }}">{{ c.name }}</a></h3>
+                        <div class="badge-row">
+                            <span class="badge player">Player</span>
+                            <span class="badge system">{{ s.label }}</span>
+                            <span class="badge {{ 'live' if c.session_active else 'idle' }}">{{ 'Live' if c.session_active else 'Waiting' }}</span>
+                        </div>
+                        <div class="desc">{{ c.description or "—" }}</div>
+                        <div class="gm-name">GM: {{ gm_names.get(c.id, "?") }}</div>
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="muted">You haven't been added to any campaigns yet. Ask a GM or admin to invite you.</p>
+    {% endif %}
+</section>
+
+{% if user.is_admin and all_campaigns %}
+<section>
+    <h2>All campaigns (admin view)</h2>
+    <ul class="campaign-grid">
+        {% for c in all_campaigns %}
+            {% set s = get_system(c.game_system) %}
+            <li class="campaign-card">
+                <a href="/admin/campaign/{{ c.id }}" class="thumb" {% if c.thumbnail_url %}style="background-image:url('{{ c.thumbnail_url }}')"{% endif %}>
+                    {% if not c.thumbnail_url %}<span>{{ c.name[:1]|upper }}</span>{% endif %}
+                </a>
+                <div class="body">
+                    <h3><a href="/admin/campaign/{{ c.id }}">{{ c.name }}</a></h3>
+                    <div class="badge-row">
+                        <span class="badge admin">Admin</span>
+                        <span class="badge system">{{ s.label }}</span>
+                    </div>
+                    <div class="gm-name">GM: {{ gm_names.get(c.id, "?") }}</div>
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+{% endblock %}

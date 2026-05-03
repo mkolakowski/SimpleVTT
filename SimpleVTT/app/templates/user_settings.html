@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}My settings — SimpleVTT{% endblock %}
+{% block head %}
+<style>
+    .pref-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+    .pref-row .name { flex: 1; }
+    .pref-row input[type=range] { flex: 1; max-width: 220px; }
+    .pref-row .vol-num { width: 3em; text-align: right; font-variant-numeric: tabular-nums; }
+    .pref-row .badge { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: #2c4a2c; color: #c0ffc0; }
+    details > summary { cursor: pointer; padding: 4px 0; font-weight: 600; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>My settings</h1>
+
+<section>
+    <h2>Profile</h2>
+    <p><strong>{{ user.display_name }}</strong> &lt;{{ user.email }}&gt;{% if user.is_admin %} <span class="muted">(admin)</span>{% endif %}</p>
+</section>
+
+<section>
+    <h2>🎵 Per-track volume</h2>
+    <p class="muted">Override the playback volume for individual tracks. The effective volume in the tabletop = your master volume × this per-track value. A track without an override plays at full per-track volume (100%). Currently {{ overrides_count }} override{{ '' if overrides_count == 1 else 's' }} set.</p>
+
+    {% if not grouped %}
+    <p class="muted">No campaigns with audio yet. As soon as a GM uploads tracks into a campaign you're in, they'll appear here so you can pre-set their volume.</p>
+    {% endif %}
+
+    {% for g in grouped %}
+    <details {% if loop.first %}open{% endif %} style="margin-top:10px;">
+        <summary>{{ g.campaign.name }}</summary>
+        {% for pl in g.playlists %}
+        <div style="margin-left:14px; margin-top:6px;">
+            <strong>{{ pl.playlist.name }}</strong>
+            {% for t in pl.tracks %}
+            <div class="pref-row" data-track-id="{{ t.track.id }}">
+                <span class="name">{{ t.track.name }}{% if t.volume is not none %} <span class="badge">override</span>{% endif %}</span>
+                <input type="range" min="0" max="1" step="0.01" value="{{ t.volume if t.volume is not none else 1.0 }}" class="track-volume">
+                <span class="vol-num">{{ ((t.volume if t.volume is not none else 1.0) * 100) | round | int }}%</span>
+                <button type="button" class="reset-btn" {% if t.volume is none %}disabled{% endif %}>Reset</button>
+                <span class="save-status muted" style="font-size:11px; min-width:5em;"></span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </details>
+    {% endfor %}
+</section>
+
+<script>
+// Debounced save: as the user drags the slider we wait 300ms after the last
+// input event before POSTing. The Reset button immediately deletes the override.
+function debounce(fn, ms) {
+    let h = null;
+    return (...args) => {
+        clearTimeout(h);
+        h = setTimeout(() => fn(...args), ms);
+    };
+}
+
+async function saveVolume(row, volume) {
+    const trackId = row.dataset.trackId;
+    const status = row.querySelector('.save-status');
+    status.textContent = 'saving...';
+    try {
+        const resp = await fetch(`/api/audio/preferences/${trackId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ volume }),
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        status.textContent = 'saved';
+        const badge = row.querySelector('.badge');
+        if (volume !== null && !badge) {
+            const b = document.createElement('span');
+            b.className = 'badge';
+            b.textContent = 'override';
+            row.querySelector('.name').appendChild(document.createTextNode(' '));
+            row.querySelector('.name').appendChild(b);
+        } else if (volume === null && badge) {
+            badge.remove();
+        }
+        row.querySelector('.reset-btn').disabled = (volume === null);
+        setTimeout(() => { status.textContent = ''; }, 1500);
+    } catch (e) {
+        status.textContent = 'failed';
+        console.error(e);
+    }
+}
+
+document.querySelectorAll('.pref-row').forEach(row => {
+    const slider = row.querySelector('.track-volume');
+    const num = row.querySelector('.vol-num');
+    const resetBtn = row.querySelector('.reset-btn');
+    const debouncedSave = debounce((v) => saveVolume(row, v), 300);
+    slider.addEventListener('input', () => {
+        const v = parseFloat(slider.value);
+        num.textContent = Math.round(v * 100) + '%';
+        debouncedSave(v);
+    });
+    resetBtn.addEventListener('click', () => {
+        slider.value = '1';
+        num.textContent = '100%';
+        saveVolume(row, null);
+    });
+});
+</script>
+{% endblock %}
