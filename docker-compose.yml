@@ -1,7 +1,12 @@
 # SimpleVTT — docker compose stack
 # All images chosen are multi-arch (linux/amd64 + linux/arm64).
 # All configuration comes from .env (see .env.example).
+#
+# CONVENTION: third-party APIs are added here as named services so they stay
+# on the internal Docker network and never depend on internet availability at
+# request time. See CLAUDE.md for the full rule.
 services:
+  # ── Database ────────────────────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
     container_name: simplevtt-db
@@ -58,11 +63,12 @@ services:
       KEEP_DAILY: ${KEEP_DAILY:-7}
       KEEP_WEEKLY: ${KEEP_WEEKLY:-4}
     volumes:
-      - ./backups:/backups
+      - backup_data:/backups
       - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
       - ./scripts/entrypoint-backup.sh:/usr/local/bin/entrypoint-backup.sh:ro
     entrypoint: ["/bin/sh", "/usr/local/bin/entrypoint-backup.sh"]
 
 volumes:
+  backup_data:
   db_data:
   uploads_data:

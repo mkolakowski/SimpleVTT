@@ -1,4 +1,8 @@
-:root {
+/* ── Theme tokens ──────────────────────────────────────────────────────── */
+
+/* Dark (default) */
+:root,
+[data-theme="dark"] {
     --bg: #15171c;
     --bg-2: #20232a;
     --fg: #e8e8ee;
@@ -6,16 +10,121 @@
     --accent: #6cb4ff;
     --danger: #d74a4a;
     --border: #2c303a;
+    --input-bg: #2a2d36;
+    --btn-bg: #2f4868;
+    --btn-hover: #3a5780;
+    --error-bg: #5a1f1f;
+    --error-fg: #ffd7d7;
 }
+
+/* Midnight — deep black with violet accent */
+[data-theme="midnight"] {
+    --bg: #0d0f14;
+    --bg-2: #13161f;
+    --fg: #dde0f0;
+    --fg-mute: #7a80a0;
+    --accent: #a78bfa;
+    --danger: #f87171;
+    --border: #1e2230;
+    --input-bg: #181b26;
+    --btn-bg: #2d2060;
+    --btn-hover: #3a2a80;
+    --error-bg: #3d1a2a;
+    --error-fg: #ffc0c0;
+}
+
+/* Dim — softer dark, easier on the eyes */
+[data-theme="dim"] {
+    --bg: #22262e;
+    --bg-2: #2a2e38;
+    --fg: #d8dce8;
+    --fg-mute: #8890a8;
+    --accent: #60a5fa;
+    --danger: #ef4444;
+    --border: #383d4a;
+    --input-bg: #313640;
+    --btn-bg: #324060;
+    --btn-hover: #3d4f78;
+    --error-bg: #4a1f1f;
+    --error-fg: #ffd7d7;
+}
+
+/* Light — clean bright mode */
+[data-theme="light"] {
+    --bg: #f2f4f8;
+    --bg-2: #ffffff;
+    --fg: #1e2130;
+    --fg-mute: #6b7280;
+    --accent: #2563eb;
+    --danger: #dc2626;
+    --border: #dde1ea;
+    --input-bg: #f8f9fc;
+    --btn-bg: #dbeafe;
+    --btn-hover: #bfdbfe;
+    --error-bg: #fee2e2;
+    --error-fg: #991b1b;
+}
+
+/* Forest — deep woodland greens */
+[data-theme="forest"] {
+    --bg: #0b150e;
+    --bg-2: #112016;
+    --fg: #cce8d0;
+    --fg-mute: #6a9e72;
+    --accent: #4ade80;
+    --danger: #f87171;
+    --border: #1a3020;
+    --input-bg: #162818;
+    --btn-bg: #1a4220;
+    --btn-hover: #215428;
+    --error-bg: #3a1010;
+    --error-fg: #ffd0c8;
+}
+
+/* Bubblegum — soft pinks and playful magentas */
+[data-theme="bubblegum"] {
+    --bg: #fdf0f8;
+    --bg-2: #ffffff;
+    --fg: #3a1030;
+    --fg-mute: #a060a0;
+    --accent: #d946a8;
+    --danger: #dc2626;
+    --border: #f0c8e8;
+    --input-bg: #fff5fb;
+    --btn-bg: #fce4f4;
+    --btn-hover: #f8c8e8;
+    --error-bg: #fee2e2;
+    --error-fg: #991b1b;
+}
+
+/* Fire — warm ember blacks and blazing oranges */
+[data-theme="fire"] {
+    --bg: #110800;
+    --bg-2: #1e1000;
+    --fg: #f0dfc0;
+    --fg-mute: #b08050;
+    --accent: #f97316;
+    --danger: #ef4444;
+    --border: #2e1600;
+    --input-bg: #1a0e00;
+    --btn-bg: #3a1800;
+    --btn-hover: #4e2200;
+    --error-bg: #3d0a0a;
+    --error-fg: #ffd0c0;
+}
+
+/* ── Base reset & typography ───────────────────────────────────────────── */
 * { box-sizing: border-box; }
-html, body { background: var(--bg); color: var(--fg); margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+html, body { background: var(--bg); color: var(--fg); margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; height: 100%; }
+body { display: flex; flex-direction: column; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .muted { color: var(--fg-mute); }
-.error { background: #5a1f1f; color: #ffd7d7; padding: 6px 10px; border-radius: 4px; }
+.error { background: var(--error-bg); color: var(--error-fg); padding: 6px 10px; border-radius: 4px; }
 .danger { color: var(--danger); }
-button.danger { background: var(--danger); color: #fff; }
+button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
 
+/* ── Navigation ────────────────────────────────────────────────────────── */
 .topnav {
     display: flex; justify-content: space-between; align-items: center;
     padding: 10px 16px; background: var(--bg-2); border-bottom: 1px solid var(--border);
@@ -23,8 +132,9 @@ button.danger { background: var(--danger); color: #fff; }
 .topnav nav a, .topnav .user { margin-left: 12px; }
 .topnav .brand { font-weight: 700; font-size: 18px; }
 
-.container { padding: 16px; }
+.container { padding: 16px; flex: 1; min-height: 0; overflow: auto; }
 
+/* ── Auth card ─────────────────────────────────────────────────────────── */
 .auth-card {
     max-width: 380px; margin: 60px auto; padding: 24px; background: var(--bg-2);
     border-radius: 8px; border: 1px solid var(--border);
@@ -32,26 +142,29 @@ button.danger { background: var(--danger); color: #fff; }
 .auth-card h1 { margin-top: 0; }
 .btn-google { display: inline-block; padding: 8px 14px; background: #fff; color: #222; border-radius: 4px; }
 
+/* ── Layout helpers ────────────────────────────────────────────────────── */
 .stacked { display: flex; flex-direction: column; gap: 8px; }
 .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .row.quick { gap: 4px; margin-top: 6px; }
 
+/* ── Form elements ─────────────────────────────────────────────────────── */
 input, textarea, select {
-    background: #2a2d36; color: var(--fg); border: 1px solid var(--border); padding: 6px 8px; border-radius: 4px;
-    font-family: inherit;
+    background: var(--input-bg); color: var(--fg); border: 1px solid var(--border);
+    padding: 6px 8px; border-radius: 4px; font-family: inherit;
 }
 input[readonly], textarea[readonly] { opacity: 0.7; }
 button {
-    background: #2f4868; color: var(--fg); border: 1px solid var(--border); padding: 6px 12px;
-    border-radius: 4px; cursor: pointer; font-family: inherit;
+    background: var(--btn-bg); color: var(--fg); border: 1px solid var(--border);
+    padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: inherit;
 }
-button:hover { background: #3a5780; }
+button:hover { background: var(--btn-hover); }
 .quick-die { padding: 4px 8px; font-size: 12px; }
 
 label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
 fieldset { border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin: 8px 0; }
 legend { padding: 0 4px; color: var(--fg-mute); }
 
+/* ── Cards & tables ────────────────────────────────────────────────────── */
 .cards { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
 .cards li { background: var(--bg-2); padding: 10px; border-radius: 6px; border: 1px solid var(--border); }
 
@@ -62,6 +175,7 @@ table.data th { background: var(--bg-2); text-align: left; }
 table.skills { border-collapse: collapse; width: 100%; font-size: 12px; }
 table.skills td, table.skills th { border-bottom: 1px solid var(--border); padding: 2px 4px; }
 
+/* ── Misc ──────────────────────────────────────────────────────────────── */
 .btn-link { background: none; border: none; color: var(--accent); padding: 4px; }
 
 .sheet h2 { margin-top: 0; }

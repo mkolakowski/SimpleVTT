@@ -2,19 +2,287 @@
 {% block title %}{{ campaign.name }} — SimpleVTT{% endblock %}
 {% block head %}
 <style>
-    .tabletop-layout { display: grid; grid-template-columns: 1fr 320px; gap: 12px; height: calc(100vh - 90px); }
-    .map-pane { position: relative; overflow: auto; background: #1c1c1c; border-radius: 6px; }
+    body { overflow: hidden; }
+    .container { padding: 8px 12px; overflow: hidden; display: flex; flex-direction: column; }
+    .tabletop-layout { display: flex; flex-direction: row; flex: 1; min-height: 0; }
+    .map-pane { flex: 1; min-width: 0; position: relative; overflow: hidden; background: #1c1c1c; border-radius: 6px; }
     #vtt-canvas { display: block; image-rendering: pixelated; cursor: grab; }
-    .side-pane { display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
     .panel { background: #20232a; padding: 10px; border-radius: 6px; }
     .panel h3 { margin: 0 0 6px; font-size: 14px; }
-    .roll-list { max-height: 260px; overflow-y: auto; font-size: 12px; }
-    .roll-list li { border-bottom: 1px dashed #333; padding: 4px 0; }
-    .roll-vis { font-size: 10px; color: #888; }
-    .character-list li { padding: 3px 0; cursor: pointer; }
+    .character-list { list-style: none; margin: 0; padding: 0; }
+    .character-list li { padding: 5px 2px; cursor: pointer; border-bottom: 1px dashed #2e3140; font-size: 13px; }
     .character-list li:hover { color: #6cb; }
     .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index: 100; }
     .modal { background: #1f2128; padding: 20px; border-radius: 8px; max-width: 720px; max-height: 88vh; overflow:auto; width: 90%;}
+
+    /* ── Drawer system ── */
+    .drawer-sidebar {
+        display: flex; flex-direction: column; flex-shrink: 0;
+        width: 0; height: 100%; overflow: hidden;
+        background: #20232a; border-left: 0 solid #3a3d47;
+        transition: width 0.22s ease, border-left-width 0.22s ease;
+    }
+    .drawer-sidebar.is-open {
+        width: 430px; border-left-width: 1px;
+    }
+    .drawer-sidebar.no-transition { transition: none !important; }
+    #drawer-open-btn {
+        position: absolute; top: 8px; right: 8px; z-index: 50;
+        width: 30px; height: 30px; padding: 0;
+        background: #20232aee; border: 1px solid #3a3d47; border-radius: 4px;
+        color: #9aa0aa; font-size: 15px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        transition: background 0.15s, color 0.15s;
+    }
+    #drawer-open-btn:hover { background: #2c303a; color: #fff; }
+    .drawer-tab-bar {
+        display: flex; flex-direction: row; align-items: center; flex-wrap: wrap;
+        gap: 4px; padding: 6px 8px; border-bottom: 1px solid #333; flex-shrink: 0;
+        min-width: 430px;
+    }
+    .drawer-tab-btn {
+        padding: 5px 11px; background: #2a2d36; border: 1px solid #444; border-radius: 4px;
+        cursor: pointer; color: #bbb; font-size: 11px;
+        font-weight: 500; letter-spacing: 0.4px; transition: background 0.15s, color 0.15s;
+    }
+    .drawer-tab-btn:hover { background: #343744; color: #fff; }
+    .drawer-tab-btn.active { background: #1a3328; color: #6cb; border-color: #3a6a50; }
+    .drawer-pin-btn {
+        margin-left: auto; width: 26px; height: 26px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        background: #2a2d36; border: 1px solid #444; border-radius: 4px;
+        cursor: pointer; color: #666; font-size: 13px; padding: 0;
+        transition: background 0.15s, color 0.15s;
+    }
+    .drawer-pin-btn:hover { background: #343744; color: #bbb; }
+    .drawer-pin-btn.pinned { background: #1a3328; color: #6cb; border-color: #3a6a50; }
+    .drawer-panels-wrapper { position: relative; flex: 1; overflow: hidden; display: none; min-width: 430px; }
+    .drawer-panels-wrapper.has-open { display: block; }
+    .drawer-panel {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: #20232a; display: flex; flex-direction: column; visibility: hidden;
+    }
+    .drawer-panel.open { visibility: visible; }
+    .drawer-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 11px 14px; border-bottom: 1px solid #333; flex-shrink: 0;
+    }
+    .drawer-header h3 { margin: 0; font-size: 14px; }
+    .drawer-close { background: none; border: none; color: #666; font-size: 20px; cursor: pointer; padding: 0 2px; line-height: 1; }
+    .drawer-close:hover { color: #fff; }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 10px 14px; }
+
+    /* ── Roll log cards ── */
+    .roll-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+    .roll-list li { padding: 0; border: none; }
+
+    .roll-card {
+        border-radius: 7px;
+        border: 1px solid var(--border);
+        border-left: 3px solid var(--accent);
+        background: var(--bg);
+        overflow: hidden;
+        font-size: 12px;
+    }
+    .roll-card.vis-gm-only   { border-left-color: var(--danger); }
+    .roll-card.vis-gm-roller { border-left-color: #c8962a; }
+
+    .roll-card-header {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        padding: 5px 10px;
+        background: rgba(0,0,0,.20);
+        border-bottom: 1px solid var(--border);
+    }
+    .roll-card-avatar {
+        width: 28px; height: 28px; border-radius: 50%;
+        overflow: hidden; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(128,128,128,.15); font-size: 15px; line-height: 1;
+    }
+    .roll-card-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .roll-card-user { font-weight: 700; color: var(--fg); flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .roll-card-badge {
+        font-size: 10px; padding: 1px 6px; border-radius: 8px; flex-shrink: 0; white-space: nowrap;
+        background: rgba(108,180,255,.1); border: 1px solid rgba(108,180,255,.2); color: var(--accent);
+    }
+    .roll-card.vis-gm-only   .roll-card-badge { background: rgba(215,74,74,.12); border-color: rgba(215,74,74,.3); color: var(--danger); }
+    .roll-card.vis-gm-roller .roll-card-badge { background: rgba(200,150,42,.12); border-color: rgba(200,150,42,.3); color: #d4a84a; }
+    .roll-card-time  { font-size: 10px; color: var(--fg-mute); flex-shrink: 0; margin-left: auto; }
+
+    .roll-card-body { padding: 8px 10px 10px; }
+    .roll-card-note  { font-size: 11px; color: var(--fg-mute); font-style: italic; margin-bottom: 4px; }
+    .roll-card-total { font-size: 38px; font-weight: 800; color: var(--accent); line-height: 1; letter-spacing: -.5px; display: block; margin-bottom: 6px; }
+    .roll-card.vis-gm-only   .roll-card-total { color: var(--danger); }
+    .roll-card.vis-gm-roller .roll-card-total { color: #d4a84a; }
+    .roll-card-breakdown { font-size: 11px; color: var(--fg-mute); font-family: monospace; word-break: break-all; line-height: 1.6; }
+    .roll-card-breakdown strong { color: var(--fg); font-weight: 700; }
+
+    /* ── Player tab: character list ── */
+    .char-row { display: flex; align-items: center; gap: 6px; padding: 7px 2px; border-bottom: 1px solid #2a2d3a; }
+    .char-fav { background: none; border: none; cursor: pointer; font-size: 15px; padding: 0; flex-shrink: 0; line-height: 1; color: #444; transition: color 0.15s; }
+    .char-fav.active { color: #f5c542; }
+    .char-name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .char-expand-btn { background: #2a2d36; border: 1px solid #3a3d4a; color: #bbb; border-radius: 3px; cursor: pointer; padding: 2px 7px; font-size: 11px; flex-shrink: 0; transition: background 0.15s; }
+    .char-expand-btn:hover { background: #343744; color: #fff; }
+    .char-detail { display: none; padding: 8px 4px 12px; border-bottom: 1px solid #2a2d3a; }
+    .char-detail.open { display: block; }
+    .mini-sheet { font-size: 12px; }
+    .mini-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 7px; }
+    .mini-tag { background: #1a3328; color: #6cb; border-radius: 3px; padding: 1px 6px; font-size: 11px; }
+    .mini-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 6px; }
+    .mini-grid-6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; margin-bottom: 6px; }
+    .mini-cell { background: #1e2030; border-radius: 4px; padding: 4px 3px; text-align: center; }
+    .mini-cell .mc-label { font-size: 9px; color: #778; text-transform: uppercase; letter-spacing: 0.4px; display: block; }
+    .mini-cell .mc-value { font-size: 13px; font-weight: 600; display: block; }
+    .mini-kv { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+    .mini-kv-pair { background: #1e2030; border-radius: 3px; padding: 2px 6px; font-size: 11px; }
+    .mini-kv-pair .mk { color: #778; margin-right: 4px; }
+    .mini-summary { font-size: 11px; color: #99a; margin: 0 0 6px; white-space: pre-wrap; }
+    .mini-open-full { font-size: 11px; padding: 3px 10px; margin-top: 6px; }
+    .no-chars-msg { font-size: 12px; color: #778; padding: 8px 0; }
+    .mini-section-label { font-size: 9px; color: #778; text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; margin: 8px 0 3px; }
+    .mini-roll-row { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
+    .mini-roll-btn { background: #253628; border: 1px solid #3a5040; color: #6cb; border-radius: 3px; cursor: pointer; padding: 1px 6px; font-size: 11px; flex-shrink: 0; line-height: 1.5; transition: background 0.12s; }
+    .mini-roll-btn:hover { background: #2e4532; }
+    .mini-ab-name { font-size: 11px; color: #aab; font-weight: 600; width: 30px; flex-shrink: 0; }
+    .mini-ab-score { font-size: 11px; color: #778; width: 22px; text-align: center; flex-shrink: 0; }
+    .mini-prof-dot { font-size: 9px; width: 14px; text-align: center; flex-shrink: 0; color: #444; }
+    .mini-prof-dot.is-prof { color: #6cb; }
+    .mini-prof-dot.is-exp { color: #f5c542; }
+    .mini-skill-name { font-size: 11px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mini-skill-name.is-prof { color: #6cb; }
+    .mini-skill-name.is-exp { color: #f5c542; }
+    .mini-skill-ab { font-size: 9px; color: #556; width: 26px; flex-shrink: 0; text-align: right; }
+    .mini-skills-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 6px; }
+    /* Ability grid (horizontal layout) */
+    .mini-ab-grid { display: grid; grid-template-columns: repeat(6, 1fr); text-align: center; margin-bottom: 4px; gap: 2px 0; }
+    .mac-name { font-size: 9px; color: #aab; font-weight: 700; letter-spacing: 0.3px; padding: 4px 0 1px; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+    .mac-name-prof { color: #6cb; }
+    .mac-name-prof::after { content: '●'; font-size: 6px; line-height: 1; opacity: 0.85; }
+    .mac-score { font-size: 12px; font-weight: 600; line-height: 1.2; }
+    .mac-mod { font-size: 10px; color: #778; padding-bottom: 2px; }
+    .mac-row-label { grid-column: 1 / -1; font-size: 8px; color: #667; text-transform: uppercase; letter-spacing: 0.5px; padding: 3px 0 2px; border-top: 1px solid #2a2d3a; text-align: left; margin-top: 2px; }
+    .mac-btn { width: 100%; padding: 2px 1px; font-size: 11px; }
+    /* Roll toast */
+    #roll-toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 150; display: flex; flex-direction: column-reverse; align-items: center; gap: 8px; pointer-events: none; }
+    .roll-toast { background: #131c1a; border: 1px solid #3a6a50; border-radius: 10px; padding: 12px 20px; min-width: 160px; max-width: 280px; text-align: center; box-shadow: 0 6px 24px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer; animation: rt-in 0.18s ease; }
+    .rt-label { font-size: 11px; color: #6cb; margin-bottom: 5px; letter-spacing: 0.2px; }
+    .rt-total { font-size: 38px; font-weight: 700; line-height: 1; color: #e8e8ee; }
+    .rt-breakdown { font-size: 11px; color: #667; margin-top: 5px; }
+    .rt-dismiss { font-size: 9px; color: #445; margin-top: 6px; }
+    .roll-toast.rt-out { animation: rt-out 0.35s ease forwards; }
+    @keyframes rt-in { from { opacity:0; transform:translateY(10px) scale(0.94); } to { opacity:1; transform:none; } }
+    @keyframes rt-out { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(10px) scale(0.94); } }
+
+    /* Token tracker */
+    .tt-row { display: flex; align-items: center; gap: 4px; padding: 4px 2px; border-bottom: 1px solid #2a2d3a; min-width: 0; }
+    .tt-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1px solid #555; }
+    .tt-name { flex: 1; min-width: 0; font-size: 12px; outline: none; padding: 1px 3px; border-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+    .tt-name:focus { background: #2a2d3a; white-space: normal; }
+    .tt-btn { background: #2a2d36; border: 1px solid #3a3d4a; color: #bbb; border-radius: 3px; cursor: pointer; padding: 2px 5px; font-size: 11px; flex-shrink: 0; line-height: 1.2; }
+    .tt-btn:hover { background: #343744; color: #fff; }
+    .tt-art-label { cursor: pointer; display: flex; align-items: center; }
+    .tt-ctrl { font-size: 10px; background: #22252f; border: 1px solid #3a3d4a; color: #bbb; border-radius: 3px; max-width: 90px; padding: 2px 3px; flex-shrink: 0; }
+
+    /* ── Initiative Tracker ── */
+    .init-row { display:flex; align-items:center; gap:5px; padding:5px 4px; border-bottom:1px solid #2a2d3a; border-radius:3px; }
+    .init-row.active-turn { background:#1a3328; border-left:3px solid #6cb; padding-left:5px; }
+    .init-swatch { width:10px; height:10px; border-radius:50%; flex-shrink:0; border:1px solid #555; }
+    .init-name { flex:1; font-size:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+    .init-init { width:38px; font-size:12px; font-weight:700; text-align:center; background:#1e2030; border:1px solid #333; border-radius:3px; color:#ddd; padding:2px; flex-shrink:0; }
+    .init-hp-cur { width:36px; font-size:12px; text-align:center; background:#1e2030; border:1px solid #333; border-radius:3px; padding:2px; flex-shrink:0; }
+    .init-hp-max { width:36px; font-size:12px; text-align:center; background:#1e2030; border:1px solid #333; border-radius:3px; color:#778; padding:2px; flex-shrink:0; }
+    .init-rm { background:none; border:none; color:#966; cursor:pointer; font-size:16px; padding:0 2px; line-height:1; flex-shrink:0; }
+    .init-rm:hover { color:#f66; }
+    .battle-banner { font-size:13px; font-weight:600; color:#6cb; background:#1a3328; border-radius:4px; padding:7px 12px; margin-bottom:10px; border:1px solid #3a6a50; }
+    .battle-ctrl { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin-bottom:10px; }
+
+    /* GM music drawer */
+    .gm-playlist { margin-bottom: 4px; border: 1px solid #2a2d3a; border-radius: 6px; overflow: hidden; }
+    .gm-playlist-header { display: flex; align-items: center; gap: 6px; padding: 7px 10px; background: #22253060; cursor: pointer; }
+    .gm-playlist-header:hover { background: #282b3880; }
+    .gm-playlist-chevron { font-size: 9px; color: #556; flex-shrink: 0; transition: transform 0.15s; display: inline-block; }
+    .gm-playlist.open .gm-playlist-chevron { transform: rotate(90deg); }
+    .gm-playlist-label { flex: 1; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+    .gm-playlist-btns { display: flex; gap: 4px; flex-shrink: 0; }
+    .gm-playlist-btns button { padding: 2px 8px; font-size: 12px; }
+    .gm-track-list { list-style: none; margin: 0; padding: 4px 0; display: none; }
+    .gm-playlist.open .gm-track-list { display: block; }
+    .gm-track { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-top: 1px solid #2a2d3a; }
+    .gm-track:hover { background: #1e2030; }
+    .gm-track.now-playing .gm-track-name { color: #6cb; font-weight: 600; }
+    .gm-play-btn { background: #253628; border: 1px solid #3a6040; color: #6cb; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 12px; flex-shrink: 0; }
+    .gm-play-btn:hover { background: #2e4a32; }
+    .gm-track-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .gm-track-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .gm-track-meta { font-size: 10px; color: #667; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+{% set gm_tint = campaign.gm_tab_color or '#d4a84a' %}
+{% set battle_tint = user.battle_tab_color %}
+{% set player_tint = user.player_tab_color %}
+<style>
+    /* ── GM Tools / Settings tab tint (campaign-level) ── */
+    .gm-tools-tab {
+        border-color: {{ gm_tint }};
+        color: {{ gm_tint }};
+        background: #2a2d36;
+        background: color-mix(in srgb, {{ gm_tint }} 12%, #2a2d36);
+    }
+    .gm-tools-tab:hover {
+        color: #fff;
+        background: #343744;
+        background: color-mix(in srgb, {{ gm_tint }} 22%, #343744);
+    }
+    .gm-tools-tab.active {
+        border-color: {{ gm_tint }};
+        color: #fff;
+        background: #1e2130;
+        background: color-mix(in srgb, {{ gm_tint }} 35%, #1e2130);
+    }
+
+    /* ── Battle tab tint (user-level) ── */
+    {% if battle_tint %}
+    .battle-tab {
+        border-color: {{ battle_tint }};
+        color: {{ battle_tint }};
+        background: #2a2d36;
+        background: color-mix(in srgb, {{ battle_tint }} 12%, #2a2d36);
+    }
+    .battle-tab:hover {
+        color: #fff;
+        background: #343744;
+        background: color-mix(in srgb, {{ battle_tint }} 22%, #343744);
+    }
+    .battle-tab.active {
+        border-color: {{ battle_tint }};
+        color: #fff;
+        background: #1e2130;
+        background: color-mix(in srgb, {{ battle_tint }} 35%, #1e2130);
+    }
+    {% endif %}
+
+    /* ── Player tab tint (user-level) ── */
+    {% if player_tint %}
+    .player-tab {
+        border-color: {{ player_tint }};
+        color: {{ player_tint }};
+        background: #2a2d36;
+        background: color-mix(in srgb, {{ player_tint }} 12%, #2a2d36);
+    }
+    .player-tab:hover {
+        color: #fff;
+        background: #343744;
+        background: color-mix(in srgb, {{ player_tint }} 22%, #343744);
+    }
+    .player-tab.active {
+        border-color: {{ player_tint }};
+        color: #fff;
+        background: #1e2130;
+        background: color-mix(in srgb, {{ player_tint }} 35%, #1e2130);
+    }
+    {% endif %}
 </style>
 {% endblock %}
 
@@ -43,8 +311,18 @@
     {% endif %}
 </div>
 
+{% if is_gm %}
+<div id="open5e-stale-banner" style="display:none; background:#3a2800; border-bottom:1px solid #7a5200; color:#ffd06a; padding:8px 16px; font-size:13px; display:flex; align-items:center; gap:10px;">
+    <span style="flex:1;">⚠ Local Open5e data may be out of date. Run <code style="background:#0003; padding:1px 5px; border-radius:3px;">python scripts/sync_open5e.py</code> to refresh.</span>
+    <span id="open5e-stale-detail" style="font-size:11px; color:#c8a040;"></span>
+    <button onclick="document.getElementById('open5e-stale-banner').style.display='none'; localStorage.setItem('open5e_banner_dismissed', Date.now());"
+            style="background:none; border:1px solid #7a5200; color:#ffd06a; padding:2px 10px; border-radius:4px; cursor:pointer; flex-shrink:0;">Dismiss</button>
+</div>
+{% endif %}
+
 <div class="tabletop-layout">
     <div class="map-pane" id="map-pane">
+        <button id="drawer-open-btn" title="Open panel" hidden>☰</button>
         {% if active_map %}
             <canvas id="vtt-canvas"
                     width="{{ active_map.width_px }}"
@@ -57,112 +335,952 @@
         {% endif %}
     </div>
 
-    <aside class="side-pane">
-        <div class="panel">
-            <h3>Dice roller</h3>
-            <form id="roll-form" class="row">
-                <input type="text" id="roll-expr" placeholder="1d20+5" required>
-                <select id="roll-vis">
-                    <option value="public">All players</option>
-                    <option value="gm_and_roller">GM + me</option>
-                    <option value="gm_only">GM only</option>
-                </select>
-                <button type="submit">Roll</button>
-            </form>
-            <div class="row quick">
-                {# System-aware quick-die buttons #}
-                {% for q in system.quick_dice %}
-                <button type="button" class="quick-die" data-expr="{{ q.expression }}" title="{{ q.expression }}">{{ q.label }}</button>
-                {% endfor %}
-            </div>
-            <p class="muted"><a href="/campaign/{{ campaign.id }}/rolls" target="_blank" onclick="window.open(this.href, 'rolls', 'width=420,height=600'); return false;">Pop out roll log →</a></p>
+    <div class="drawer-sidebar">
+        <div class="drawer-tab-bar">
+            <button class="drawer-tab-btn" data-target="roll-log-drawer">Roll Log</button>
+            <button class="drawer-tab-btn player-tab" data-target="players-drawer">Player</button>
+            <button class="drawer-tab-btn battle-tab" data-target="battle-drawer">⚔ Battle</button>
+            <button class="drawer-tab-btn gm-tools-tab" data-target="settings-drawer">Settings</button>
+            {% if is_gm %}
+            <button class="drawer-tab-btn gm-tools-tab" data-target="gm-tools-drawer">⚙ GM Tools</button>
+            {% endif %}
+            <button class="drawer-pin-btn" id="drawer-pin-btn" title="Pin sidebar open">📌</button>
         </div>
+        <div class="drawer-panels-wrapper" id="drawer-panels-wrapper">
 
-        <div class="panel" style="flex:1; overflow-y: auto;">
-            <h3>Recent rolls</h3>
-            <ul class="roll-list" id="roll-list">
-                {% for r in rolls %}
-                <li>
-                    <strong>{{ r.user.display_name }}</strong>: {{ r.expression }} = <strong>{{ r.total }}</strong>
-                    <div class="muted">{{ r.breakdown }}</div>
-                    <span class="roll-vis">{{ r.visibility.value }}{% if r.note %} • {{ r.note }}{% endif %}</span>
-                </li>
-                {% endfor %}
-            </ul>
+<!-- ── Roll log drawer ── -->
+<div id="roll-log-drawer" class="drawer-panel">
+    <div class="drawer-header">
+        <h3>Roll Log</h3>
+        <button class="drawer-close" data-drawer="roll-log-drawer">&times;</button>
+    </div>
+    <div class="drawer-body">
+        <ul class="roll-list" id="roll-list">
+            {% for r in rolls %}
+            {% set vis_class = 'vis-gm-only' if r.visibility.value == 'gm_only' else ('vis-gm-roller' if r.visibility.value == 'gm_and_roller' else '') %}
+            {% set badge_text = 'GM only' if r.visibility.value == 'gm_only' else ('GM + you' if r.visibility.value == 'gm_and_roller' else '') %}
+            {% set ucolor = user_color_map.get(r.user_id, '') %}
+            {% set uportrait = user_portrait_map.get(r.user_id, '') %}
+            <li>
+                <div class="roll-card {{ vis_class }}">
+                    <div class="roll-card-header">
+                        <div class="roll-card-avatar">
+                            {% if uportrait %}<img src="{{ uportrait }}" alt="">{% else %}🎲{% endif %}
+                        </div>
+                        <span class="roll-card-user" data-uid="{{ r.user_id }}"{% if ucolor %} style="color:{{ ucolor }}"{% endif %}>{{ user_char_name_map.get(r.user_id, r.user.display_name) }}</span>
+                        {% if badge_text %}<span class="roll-card-badge">{{ badge_text }}</span>{% endif %}
+                        <span class="roll-card-time">{{ r.created_at.strftime('%I:%M %p') }}</span>
+                    </div>
+                    <div class="roll-card-body">
+                        {% if r.note %}<div class="roll-card-note">{{ r.note }}</div>{% endif %}
+                        <span class="roll-card-total">{{ r.total }}</span>
+                        <div class="roll-card-breakdown">{{ r.breakdown | bold_dice }}</div>
+                    </div>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div style="padding:10px 14px; border-top:1px solid #333; flex-shrink:0;">
+        <form id="roll-form" class="row">
+            <input type="text" id="roll-expr" placeholder="1d20+5" required style="flex:1;">
+            <select id="roll-vis">
+                <option value="public">All players</option>
+                <option value="gm_and_roller">GM + me</option>
+                <option value="gm_only">GM only</option>
+            </select>
+            <button type="submit">Roll</button>
+        </form>
+        <div class="row quick" style="margin-top:6px;">
+            {% for q in system.quick_dice %}
+            <button type="button" class="quick-die" data-expr="{{ q.expression }}" title="{{ q.expression }}">{{ q.label }}</button>
+            {% endfor %}
         </div>
+    </div>
+</div>
 
-        <div class="panel">
-            <h3>Characters</h3>
-            <ul class="character-list">
-                {% for c in characters %}
-                <li onclick="openSheet({{ c.id }})">
-                    {{ c.name }}
-                    {% if c.owner_user_id %}<small class="muted">(player)</small>{% endif %}
-                </li>
-                {% endfor %}
-            </ul>
-            {% if not characters %}<p class="muted">No characters yet.</p>{% endif %}
+<!-- ── Player drawer ── -->
+<div id="players-drawer" class="drawer-panel">
+    <div class="drawer-header">
+        <h3>Player</h3>
+        <button class="drawer-close" data-drawer="players-drawer">&times;</button>
+    </div>
+    <div class="drawer-body">
+        <div id="player-char-list">
+        {% set shown = namespace(count=0) %}
+        {% for c in characters %}
+        {% if is_gm or c.owner_user_id == user.id %}
+        {% set shown.count = shown.count + 1 %}
+        <div class="char-row" data-char-id="{{ c.id }}">
+            <button class="char-fav" data-char-id="{{ c.id }}" title="Favourite">☆</button>
+            <span class="char-name">{{ c.name }}</span>
+            <button class="char-expand-btn" data-char-id="{{ c.id }}">▶</button>
         </div>
-
-        <div class="panel" id="audio-panel"
-             {% if now_playing and now_playing_started_at_ms %}data-initial-play='{"track_id": {{ now_playing.id }}, "name": {{ now_playing.name|tojson }}, "file_url": {{ now_playing.file_url|tojson }}, "started_at_ms": {{ now_playing_started_at_ms }} }'{% endif %}>
-            <h3>🎵 Sound</h3>
-            <p id="audio-now-playing" class="muted">{% if now_playing %}▶ {{ now_playing.name }}{% else %}Nothing playing{% endif %}</p>
-            <div class="row">
-                <label style="flex:1;">Vol
-                    <input type="range" id="audio-volume" min="0" max="1" step="0.01" value="0.6" style="width:100%;">
-                </label>
-                <button type="button" id="audio-mute">🔈 Mute</button>
-            </div>
-            <div id="audio-track-volume" style="display:{% if now_playing %}block{% else %}none{% endif %}; margin-top:4px;">
-                <label style="display:flex; align-items:center; gap:6px;">
-                    <span style="font-size:11px; color:var(--fg-mute); width:5em;">This track</span>
-                    <input type="range" id="audio-track-volume-slider" min="0" max="1" step="0.01" value="1" style="flex:1;">
-                    <span id="audio-track-volume-num" style="width:3em; text-align:right; font-size:11px;">100%</span>
-                </label>
-            </div>
-            <button type="button" id="audio-enable" style="display:none; margin-top:6px;">▶ Click to enable audio</button>
-            <p class="muted" style="margin-top:6px; font-size:11px;">
-                <button type="button" onclick="vttResyncAudio()" title="Resync to GM">⟳ Resync</button>
-                · <a href="/settings">All track volumes</a>
-                {% if is_gm %} · Manage in <a href="/campaign/{{ campaign.id }}/settings#audio">settings</a> ·
-                <button type="button" onclick="vttStopAudio()">⏹ Stop for everyone</button>
+        <div class="char-detail" id="char-detail-{{ c.id }}">
+            <div class="mini-sheet">
+            {% set sh = c.sheet or {} %}
+            {% if c.template == 'dnd5e' %}
+                {% set prof = (sh.get('proficiency_bonus') or 2) | int %}
+                {% set ab_map = sh.get('abilities') or {} %}
+                {% set save_map = sh.get('saving_throws') or {} %}
+                {% set skill_map = sh.get('skills') or {} %}
+                {# ── Combat stats ── #}
+                <div class="mini-tags">
+                    {% if sh.get('class') %}<span class="mini-tag">{{ sh.get('class') }}</span>{% endif %}
+                    {% if sh.get('level') %}<span class="mini-tag">Lv {{ sh.get('level') }}</span>{% endif %}
+                    {% if sh.get('race') %}<span class="mini-tag">{{ sh.get('race') }}</span>{% endif %}
+                </div>
+                <div class="mini-grid-3">
+                    <div class="mini-cell">
+                        <span class="mc-label">HP</span>
+                        <span class="mc-value">{{ (sh.get('hp') or {}).get('current','—') }}<span style="font-size:10px;color:#778;">/{{ (sh.get('hp') or {}).get('max','—') }}</span></span>
+                    </div>
+                    <div class="mini-cell">
+                        <span class="mc-label">AC</span>
+                        <span class="mc-value">{{ sh.get('ac','—') }}</span>
+                    </div>
+                    <div class="mini-cell">
+                        <span class="mc-label">Speed</span>
+                        <span class="mc-value">{{ sh.get('speed','—') }}</span>
+                    </div>
+                </div>
+                {# ── Abilities & Saves ── #}
+                <div class="mini-section-label">Abilities &amp; Saves</div>
+                <div class="mini-ab-grid">
+                    {# Row 1: names — teal + dot for proficient saves #}
+                    {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+                    {% set is_save_prof = save_map.get(ab, false) %}
+                    <span class="mac-name{{ ' mac-name-prof' if is_save_prof else '' }}" title="{{ 'Save proficiency' if is_save_prof else '' }}">{{ ab }}</span>
+                    {% endfor %}
+                    {# Row 2: scores #}
+                    {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+                    {% set score = (ab_map.get(ab) or 10) | int %}
+                    <span class="mac-score">{{ score }}</span>
+                    {% endfor %}
+                    {# Row 3: modifiers #}
+                    {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+                    {% set score = (ab_map.get(ab) or 10) | int %}
+                    {% set mod = ((score - 10) // 2) %}
+                    <span class="mac-mod">{{ ('+' if mod >= 0 else '') ~ (mod | string) }}</span>
+                    {% endfor %}
+                    {# Row 4: check buttons #}
+                    <span class="mac-row-label">Check</span>
+                    {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+                    {% set score = (ab_map.get(ab) or 10) | int %}
+                    {% set mod = ((score - 10) // 2) %}
+                    {% set mod_str = (('+' if mod >= 0 else '') ~ (mod | string)) %}
+                    <button class="mini-roll-btn mac-btn" data-expr="1d20{{ mod_str }}" data-note="{{ c.name }}: {{ ab }} check" title="{{ ab }} check {{ mod_str }}">🎲</button>
+                    {% endfor %}
+                    {# Row 5: save buttons #}
+                    <span class="mac-row-label">Save</span>
+                    {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+                    {% set score = (ab_map.get(ab) or 10) | int %}
+                    {% set mod = ((score - 10) // 2) %}
+                    {% set is_prof = save_map.get(ab, false) %}
+                    {% set sv = mod + (prof if is_prof else 0) %}
+                    {% set sv_str = (('+' if sv >= 0 else '') ~ (sv | string)) %}
+                    <button class="mini-roll-btn mac-btn" data-expr="1d20{{ sv_str }}" data-note="{{ c.name }}: {{ ab }} save{{ ' (prof)' if is_prof else '' }}" title="{{ ab }} save {{ sv_str }}">🎲</button>
+                    {% endfor %}
+                </div>
+                {# ── Skills ── #}
+                <div class="mini-section-label" style="margin-top:10px;">Skills</div>
+                {% set SKILLS_LIST = [
+                    ('Acrobatics','DEX'),('Animal Handling','WIS'),('Arcana','INT'),
+                    ('Athletics','STR'),('Deception','CHA'),('History','INT'),
+                    ('Insight','WIS'),('Intimidation','CHA'),('Investigation','INT'),
+                    ('Medicine','WIS'),('Nature','INT'),('Perception','WIS'),
+                    ('Performance','CHA'),('Persuasion','CHA'),('Religion','INT'),
+                    ('Sleight of Hand','DEX'),('Stealth','DEX'),('Survival','WIS')
+                ] %}
+                <div class="mini-skills-grid">
+                {% for sname, sab in SKILLS_LIST %}
+                {% set s_score = (ab_map.get(sab) or 10) | int %}
+                {% set s_mod = ((s_score - 10) // 2) %}
+                {% set sk = skill_map.get(sname) or {} %}
+                {% set is_sk_prof = sk.get('proficient', false) %}
+                {% set is_sk_exp = sk.get('expertise', false) %}
+                {% set sk_bonus = s_mod + (prof * 2 if is_sk_exp else prof if is_sk_prof else 0) %}
+                {% set sk_str = (('+' if sk_bonus >= 0 else '') ~ (sk_bonus | string)) %}
+                <div class="mini-roll-row">
+                    <span class="mini-skill-name{{ ' is-exp' if is_sk_exp else ' is-prof' if is_sk_prof else '' }}" title="{{ 'Expertise' if is_sk_exp else 'Proficient' if is_sk_prof else '' }}">{{ sname }}</span>
+                    <span class="mini-skill-ab">{{ sab }}</span>
+                    <button class="mini-roll-btn" data-expr="1d20{{ sk_str }}" data-note="{{ c.name }}: {{ sname }}{{ ' (expertise)' if is_sk_exp else ' (prof)' if is_sk_prof else '' }}">🎲 {{ sk_str }}</button>
+                </div>
+                {% endfor %}
+                </div>
+            {% else %}
+                {% if sh.get('summary') %}
+                <p class="mini-summary">{{ sh.get('summary', '')[:180] }}</p>
                 {% endif %}
-            </p>
-        </div>
-
-        {% if is_gm %}
-        <div class="panel">
-            <h3>GM tools</h3>
-            <button type="button" id="add-token-btn">+ Add token</button>
-            <a href="/admin/campaign/{{ campaign.id }}" class="btn-link">Campaign settings</a>
+                {% if sh.get('stats') %}
+                <div class="mini-kv">
+                    {% for k, v in sh.get('stats', {}).items() %}
+                    <span class="mini-kv-pair"><span class="mk">{{ k }}</span>{{ v }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if not sh.get('summary') and not sh.get('stats') %}
+                <p class="no-chars-msg">No sheet data yet.</p>
+                {% endif %}
+            {% endif %}
+            </div>
+            <button class="mini-open-full btn-link" onclick="openSheet({{ c.id }})">Open full sheet →</button>
         </div>
         {% endif %}
-    </aside>
+        {% endfor %}
+        {% if shown.count == 0 %}
+        <p class="no-chars-msg">No characters assigned to you yet.</p>
+        {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ── Battle / Initiative Tracker drawer ── -->
+<div id="battle-drawer" class="drawer-panel">
+    <div class="drawer-header">
+        <h3>⚔ Battle</h3>
+        <button class="drawer-close" data-drawer="battle-drawer">&times;</button>
+    </div>
+    <div class="drawer-body">
+        <div id="battle-banner" class="battle-banner" style="display:none;"></div>
+        <div class="battle-ctrl">
+            <span id="battle-round-label" style="font-size:12px;color:#778;flex-shrink:0;">Not started</span>
+            {% if is_gm %}
+            <button type="button" id="battle-prev-btn" class="tt-btn">◀</button>
+            <button type="button" id="battle-next-btn" class="tt-btn">Next ▶</button>
+            <button type="button" id="battle-start-btn" class="tt-btn" title="Jump to Round 1">↺ Start</button>
+            <button type="button" id="battle-clear-btn" class="tt-btn" style="margin-left:auto;color:#c66;border-color:#622;" title="Clear all combatants">🗑</button>
+            {% endif %}
+        </div>
+        <div id="initiative-list"></div>
+        {% if is_gm %}
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #2e3140;">
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">
+                <button type="button" id="battle-add-char-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Character</button>
+                <button type="button" id="battle-add-manual-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Manual</button>
+                <button type="button" id="battle-roll-init-btn" class="tt-btn" style="flex:1;font-size:11px;">🎲 Roll All</button>
+            </div>
+            <div id="battle-char-panel" style="display:none;background:#191c24;border:1px solid #2e3140;border-radius:5px;padding:8px;max-height:200px;overflow-y:auto;margin-bottom:6px;">
+                <div id="battle-char-list"></div>
+            </div>
+            <div id="battle-manual-panel" style="display:none;background:#191c24;border:1px solid #2e3140;border-radius:5px;padding:8px;margin-bottom:6px;">
+                <div style="display:grid;grid-template-columns:1fr 50px 50px 30px;gap:5px;margin-bottom:6px;align-items:center;">
+                    <input type="text" id="bm-name" placeholder="Name" style="font-size:12px;">
+                    <input type="number" id="bm-init" placeholder="Init" style="font-size:12px;text-align:center;">
+                    <input type="number" id="bm-hp" placeholder="HP" style="font-size:12px;text-align:center;">
+                    <input type="color" id="bm-color" value="#cc3333" style="width:100%;height:28px;padding:1px;cursor:pointer;border-radius:3px;">
+                </div>
+                <div style="display:flex;gap:6px;">
+                    <button type="button" id="bm-add-btn" style="font-size:12px;padding:3px 14px;">Add</button>
+                    <button type="button" id="bm-cancel-btn" style="font-size:12px;padding:3px 14px;">Cancel</button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ── Settings drawer ── -->
+<div id="settings-drawer" class="drawer-panel">
+    <div id="audio-panel"
+         {% if now_playing and now_playing_started_at_ms %}data-initial-play='{"track_id": {{ now_playing.id }}, "name": {{ now_playing.name|tojson }}, "file_url": {{ now_playing.file_url|tojson }}, "started_at_ms": {{ now_playing_started_at_ms }} }'{% endif %}
+         style="display:contents;">
+    </div>
+    <div class="drawer-header">
+        <h3>Settings</h3>
+        <button class="drawer-close" data-drawer="settings-drawer">&times;</button>
+    </div>
+    <div class="drawer-body">
+        <h4 style="margin:0 0 10px; font-size:11px; color:#7ab; text-transform:uppercase; letter-spacing:0.5px;">🎵 Sound</h4>
+        <p id="audio-now-playing" class="muted" style="margin:0 0 8px;">{% if now_playing %}▶ {{ now_playing.name }}{% else %}Nothing playing{% endif %}</p>
+        <div class="row">
+            <label style="flex:1;">Vol
+                <input type="range" id="audio-volume" min="0" max="1" step="0.01" value="0.6" style="width:100%;">
+            </label>
+            <button type="button" id="audio-mute">🔈 Mute</button>
+        </div>
+        <div id="audio-cat-volume" style="display:{% if now_playing %}block{% else %}none{% endif %}; margin-top:6px;">
+            <label style="display:flex; align-items:center; gap:6px;">
+                <span id="audio-cat-volume-label" style="font-size:11px; color:var(--fg-mute); width:5em;">Music</span>
+                <input type="range" id="audio-cat-volume-slider" min="0" max="1" step="0.01" value="1" style="flex:1;">
+                <span id="audio-cat-volume-num" style="width:3em; text-align:right; font-size:11px;">100%</span>
+            </label>
+        </div>
+        <button type="button" id="audio-enable" style="display:none; margin-top:6px;">▶ Click to enable audio</button>
+        <p class="muted" style="margin-top:8px; font-size:11px;">
+            <button type="button" onclick="vttResyncAudio()" title="Resync to GM">⟳ Resync</button>
+            · <a href="/settings">Category volumes</a>
+            {% if is_gm %} · <button type="button" onclick="vttStopAudio()">⏹ Stop</button>{% endif %}
+        </p>
+    </div>
+</div>
+
+{% if is_gm %}
+<!-- ── GM Tools drawer ── -->
+<div id="gm-tools-drawer" class="drawer-panel">
+    <div class="drawer-header">
+        <h3>GM Tools</h3>
+        <button class="drawer-close" data-drawer="gm-tools-drawer">&times;</button>
+    </div>
+    <div class="drawer-body">
+        <div style="margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #333;">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
+                <h4 style="margin:0; font-size:11px; color:#7ab; text-transform:uppercase; letter-spacing:0.5px;">Tokens</h4>
+                <button type="button" id="add-token-btn" style="font-size:11px; padding:3px 10px;">+ Add Token</button>
+            </div>
+            <div id="token-tracker-list"></div>
+        </div>
+        <h4 style="margin:0 0 8px; font-size:11px; color:#7ab; text-transform:uppercase; letter-spacing:0.5px;">Music</h4>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:8px;">
+            <span id="gm-now-playing-label" class="muted" style="font-size:12px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                {% if now_playing %}▶ {{ now_playing.name }}{% else %}Nothing playing{% endif %}
+            </span>
+            <button type="button" onclick="vttStopAudio()" style="font-size:11px; flex-shrink:0;">⏹ Stop all</button>
+        </div>
+
+        {% if playlists %}
+            {% for playlist in playlists %}
+            <div class="gm-playlist{% if now_playing and playlist.tracks and now_playing.id in playlist.tracks | map(attribute='id') | list %} open{% endif %}"
+                 data-playlist-id="{{ playlist.id }}">
+                <div class="gm-playlist-header">
+                    <span class="gm-playlist-chevron">▶</span>
+                    <span class="gm-playlist-label" title="{{ playlist.name }}">{{ playlist.name }}</span>
+                    <div class="gm-playlist-btns">
+                        {% if playlist.tracks %}
+                        <button type="button"
+                                class="gm-play-playlist-btn"
+                                data-first="{{ playlist.tracks[0].id }}"
+                                title="Play from start">▶</button>
+                        <button type="button"
+                                class="gm-shuffle-btn"
+                                data-tracks="{{ playlist.tracks | map(attribute='id') | list | tojson }}"
+                                title="Shuffle">⇄</button>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if playlist.tracks %}
+                <ul class="gm-track-list">
+                    {% for track in playlist.tracks %}
+                    <li class="gm-track{% if now_playing and now_playing.id == track.id %} now-playing{% endif %}" id="gm-track-{{ track.id }}">
+                        <button class="gm-play-btn" type="button" onclick="vttPlayTrack({{ track.id }})">▶</button>
+                        <div class="gm-track-info">
+                            <span class="gm-track-name" title="{{ track.name }}">{{ track.name }}</span>
+                            {% set meta = [track.track_artist, track.track_album, track.track_genre, track.track_year] | select | list %}
+                            {% if meta %}<span class="gm-track-meta">{{ meta | join(' · ') }}</span>{% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <p class="muted" style="font-size:11px; padding:6px 10px; margin:0;">No tracks. Add in <a href="/campaign/{{ campaign.id }}/settings#audio">settings</a>.</p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+        <p class="muted">No playlists yet. Create one in <a href="/campaign/{{ campaign.id }}/settings#audio">campaign settings</a>.</p>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+        </div><!-- /.drawer-panels-wrapper -->
+    </div><!-- /.drawer-sidebar -->
+</div><!-- /.tabletop-layout -->
+
+<!-- Add-token modal -->
+<div id="add-token-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:200; align-items:center; justify-content:center;">
+    <div style="background:#1f2128; border-radius:10px; padding:20px; max-width:580px; width:90vw; max-height:80vh; overflow:auto; position:relative;">
+        <button onclick="document.getElementById('add-token-modal').style.display='none'" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;color:#666;cursor:pointer;">&times;</button>
+        <h3 style="margin:0 0 14px; font-size:15px;">Add Token</h3>
+        <div style="display:flex; gap:6px; margin-bottom:14px;">
+            <button class="atm-tab-btn atm-tab-active" data-tab="atm-tab-library" style="padding:5px 14px; font-size:12px; background:#1a3328; color:#6cb; border:1px solid #3a6a50; border-radius:4px; cursor:pointer;">Library</button>
+            <button class="atm-tab-btn" data-tab="atm-tab-blank" style="padding:5px 14px; font-size:12px; background:#2a2d36; color:#bbb; border:1px solid #444; border-radius:4px; cursor:pointer;">Blank Token</button>
+        </div>
+        <div id="atm-tab-library">
+            <p id="atm-no-templates" class="muted" style="font-size:12px; display:none;">No token templates yet. Create some in <a href="" id="atm-settings-link">campaign settings</a>.</p>
+            <div id="atm-template-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px;"></div>
+        </div>
+        <div id="atm-tab-blank" style="display:none;">
+            <div class="stacked" style="max-width:300px;">
+                <label>Label <input type="text" id="atm-blank-label" placeholder="Token label" value="Token"></label>
+                <label>Color <input type="color" id="atm-blank-color" value="#cc3333"></label>
+                <div><button type="button" id="atm-blank-place">Place on Map</button></div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="modal-root"></div>
+<div id="roll-toast-container"></div>
 
 <script>
 const CAMPAIGN_ID = {{ campaign.id }};
 const ME = { id: {{ user.id }}, name: {{ user.display_name|tojson }}, isGm: {{ 'true' if is_gm else 'false' }} };
 const GAME_SYSTEM = {{ system.key|tojson }};
 const ROLLABLE_SHEET = {{ 'true' if system.rollable_sheet else 'false' }};
+const MEMBERS = [{% for m in members %}{"id":{{ m.id }},"name":{{ m.display_name|tojson }}}{% if not loop.last %},{% endif %}{% endfor %}];
+const USER_COLORS    = {{ user_color_map | tojson }};
+const USER_PORTRAITS = {{ user_portrait_map | tojson }};
+const USER_CHAR_NAMES = {{ user_char_name_map | tojson }};
 </script>
 <script id="initial-data" type="application/json">
-{
-  "tokens": [
-    {% for t in tokens %}
-    {"id": {{ t.id }}, "label": {{ t.label|tojson }}, "color": {{ t.color|tojson }}, "x": {{ t.x }}, "y": {{ t.y }}, "size": {{ t.size }}, "character_id": {{ t.character_id|tojson }}}{% if not loop.last %},{% endif %}
-    {% endfor %}
-  ],
-  "characters": [
-    {% for c in characters %}
-    {"id": {{ c.id }}, "name": {{ c.name|tojson }}, "owner_user_id": {{ c.owner_user_id|tojson }}}{% if not loop.last %},{% endif %}
-    {% endfor %}
-  ]
-}
+{{ {"tokens": token_data, "characters": char_data, "templates": tmpl_data} | tojson }}
 </script>
 <script src="/static/tabletop.js"></script>
 <script src="/static/audio.js"></script>
+<script>
+/* ── Drawer system ── */
+(function () {
+    const tabs = document.querySelectorAll('.drawer-tab-btn');
+    const panels = document.querySelectorAll('.drawer-panel');
+    const wrapper = document.getElementById('drawer-panels-wrapper');
+    const pinBtn = document.getElementById('drawer-pin-btn');
+    const sidebar = document.querySelector('.drawer-sidebar');
+    const openBtn = document.getElementById('drawer-open-btn');
+    const STORAGE_KEY = 'simplevtt_drawer_' + CAMPAIGN_ID;
+    const PIN_KEY = 'simplevtt_drawer_pinned_' + CAMPAIGN_ID;
+
+    let pinned = (() => { try { return localStorage.getItem(PIN_KEY) === '1'; } catch (e) { return false; } })();
+
+    function applyPin() {
+        pinBtn.classList.toggle('pinned', pinned);
+        pinBtn.title = pinned ? 'Unpin sidebar' : 'Pin sidebar open';
+        try { localStorage.setItem(PIN_KEY, pinned ? '1' : ''); } catch (e) {}
+    }
+
+    function saveState(targetId) {
+        try { localStorage.setItem(STORAGE_KEY, targetId || ''); } catch (e) {}
+    }
+
+    function collapseSidebar() {
+        sidebar.classList.remove('is-open');
+        openBtn.hidden = false;
+        tabs.forEach(t => t.classList.remove('active'));
+        panels.forEach(p => p.classList.remove('open'));
+        wrapper.classList.remove('has-open');
+        saveState('');
+    }
+
+    function closeAll() {
+        if (pinned) return;
+        collapseSidebar();
+    }
+
+    function openPanel(targetId) {
+        tabs.forEach(t => t.classList.remove('active'));
+        panels.forEach(p => p.classList.remove('open'));
+        const tab = [...tabs].find(t => t.dataset.target === targetId);
+        const panel = document.getElementById(targetId);
+        if (tab && panel) {
+            tab.classList.add('active');
+            panel.classList.add('open');
+            wrapper.classList.add('has-open');
+            sidebar.classList.add('is-open');
+            openBtn.hidden = true;
+            saveState(targetId);
+        }
+    }
+
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const wasActive = tab.classList.contains('active');
+            if (wasActive && !pinned) { closeAll(); } else { openPanel(tab.dataset.target); }
+        });
+    });
+
+    document.querySelectorAll('.drawer-close').forEach(btn => {
+        btn.addEventListener('click', () => {
+            pinned = false;
+            applyPin();
+            collapseSidebar();
+        });
+    });
+
+    pinBtn.addEventListener('click', () => {
+        pinned = !pinned;
+        applyPin();
+        if (pinned && !wrapper.classList.contains('has-open')) {
+            const lastSaved = (() => { try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; } })();
+            const target = lastSaved || tabs[0]?.dataset.target;
+            if (target) openPanel(target);
+        }
+    });
+
+    openBtn.addEventListener('click', () => {
+        const lastSaved = (() => { try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; } })();
+        const target = lastSaved || tabs[0]?.dataset.target;
+        if (target) openPanel(target);
+    });
+
+    applyPin();
+
+    /* Restore last open drawer on load — suppress animation for initial paint */
+    sidebar.classList.add('no-transition');
+    const saved = (() => { try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; } })();
+    if (saved || pinned) {
+        openPanel(saved || tabs[0]?.dataset.target);
+    } else {
+        openBtn.hidden = false;
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => sidebar.classList.remove('no-transition')));
+
+    /* ── GM Tools: keep now-playing label + track highlight in sync ── */
+    const gmLabel = document.getElementById('gm-now-playing-label');
+    function setGmNowPlaying(trackId, name) {
+        document.querySelectorAll('.gm-track').forEach(el => el.classList.remove('now-playing'));
+        if (trackId) {
+            const row = document.getElementById('gm-track-' + trackId);
+            if (row) row.classList.add('now-playing');
+            if (gmLabel) gmLabel.textContent = '▶ ' + (name || '');
+        } else {
+            if (gmLabel) gmLabel.textContent = 'Nothing playing';
+        }
+    }
+
+    document.addEventListener('vtt:ws-message', (ev) => {
+        const msg = ev.detail;
+        if (msg.type === 'audio_play') setGmNowPlaying(msg.data.track_id, msg.data.name);
+        else if (msg.type === 'audio_stop') setGmNowPlaying(null, null);
+    });
+
+    /* ── GM playlist expand/collapse ── */
+    document.querySelectorAll('.gm-playlist-header').forEach(header => {
+        header.addEventListener('click', ev => {
+            if (ev.target.closest('button')) return;
+            header.closest('.gm-playlist').classList.toggle('open');
+        });
+    });
+
+    /* ── GM play playlist from start ── */
+    document.querySelectorAll('.gm-play-playlist-btn').forEach(btn => {
+        btn.addEventListener('click', ev => {
+            ev.stopPropagation();
+            const firstId = parseInt(btn.dataset.first, 10);
+            if (firstId) vttPlayTrack(firstId);
+        });
+    });
+
+    /* ── GM shuffle playlist ── */
+    document.querySelectorAll('.gm-shuffle-btn').forEach(btn => {
+        btn.addEventListener('click', ev => {
+            ev.stopPropagation();
+            const ids = JSON.parse(btn.dataset.tracks || '[]');
+            if (!ids.length) return;
+            const pick = ids[Math.floor(Math.random() * ids.length)];
+            vttPlayTrack(pick);
+        });
+    });
+
+    /* ── Player tab: favourites + expand ── */
+    (function () {
+        const FAV_KEY = 'simplevtt_favchars_' + CAMPAIGN_ID;
+        let favs;
+        try { favs = new Set(JSON.parse(localStorage.getItem(FAV_KEY) || '[]')); }
+        catch (_) { favs = new Set(); }
+
+        function saveFavs() {
+            try { localStorage.setItem(FAV_KEY, JSON.stringify([...favs])); } catch (_) {}
+        }
+
+        function applyFavs() {
+            const list = document.getElementById('player-char-list');
+            if (!list) return;
+            document.querySelectorAll('.char-fav').forEach(btn => {
+                const id = parseInt(btn.dataset.charId, 10);
+                const isFav = favs.has(id);
+                btn.textContent = isFav ? '★' : '☆';
+                btn.classList.toggle('active', isFav);
+                /* Re-order: move the char-row and its detail to top/bottom */
+                const row = btn.closest('.char-row');
+                const detail = row && document.getElementById('char-detail-' + id);
+                if (row) row.dataset.favOrder = isFav ? '0' : '1';
+                if (detail) detail.dataset.favOrder = isFav ? '0' : '1';
+            });
+            /* Sort DOM nodes by favOrder */
+            const nodes = [...list.children].filter(n => n.dataset.favOrder !== undefined);
+            nodes.sort((a, b) => (a.dataset.favOrder || '1').localeCompare(b.dataset.favOrder || '1'));
+            nodes.forEach(n => list.appendChild(n));
+        }
+
+        document.querySelectorAll('.char-fav').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = parseInt(btn.dataset.charId, 10);
+                if (favs.has(id)) favs.delete(id); else favs.add(id);
+                saveFavs();
+                applyFavs();
+            });
+        });
+
+        document.querySelectorAll('.char-expand-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.dataset.charId;
+                const detail = document.getElementById('char-detail-' + id);
+                if (!detail) return;
+                const isOpen = detail.classList.toggle('open');
+                btn.textContent = isOpen ? '▼' : '▶';
+            });
+        });
+
+        /* Mini-sheet roll buttons — post directly to the roll API */
+        document.getElementById('player-char-list').addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('.mini-roll-btn');
+            if (!btn) return;
+            const expr = btn.dataset.expr;
+            const note = btn.dataset.note || '';
+            if (!expr) return;
+            const visEl = document.getElementById('roll-vis');
+            const visibility = visEl ? visEl.value : 'public';
+            btn.disabled = true;
+            try {
+                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expression: expr, visibility, note }),
+                });
+                if (!resp.ok) alert('Roll failed: ' + await resp.text());
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        applyFavs();
+    })();
+})();
+
+/* ── Battle / Initiative Tracker ── */
+(function () {
+    const IS_GM = ME.isGm;
+    const BATTLE_KEY = 'simplevtt_battle_' + CAMPAIGN_ID;
+    const initData = JSON.parse(document.getElementById('initial-data')?.textContent || '{}');
+    const allChars = initData.characters || [];
+
+    let battle = { combatants: [], turn_index: 0, round: 1, active: false };
+    try { const s = localStorage.getItem(BATTLE_KEY); if (s) battle = JSON.parse(s); } catch {}
+
+    function saveBattle() {
+        try { localStorage.setItem(BATTLE_KEY, JSON.stringify(battle)); } catch {}
+    }
+
+    let _pushTimer = null;
+    function pushBattle() {
+        saveBattle();
+        if (!IS_GM) return;
+        clearTimeout(_pushTimer);
+        _pushTimer = setTimeout(() => {
+            fetch(`/api/campaign/${CAMPAIGN_ID}/battle`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(battle),
+            });
+        }, 150);
+    }
+
+    function _abi(score) { return Math.floor((Number(score || 10) - 10) / 2); }
+
+    function hpColor(cur, max) {
+        const pct = max > 0 ? cur / max : 1;
+        return pct > 0.5 ? '#6cb' : pct > 0.25 ? '#e8a' : '#c55';
+    }
+
+    function renderBattle() {
+        const roundEl = document.getElementById('battle-round-label');
+        const banner  = document.getElementById('battle-banner');
+        const list    = document.getElementById('initiative-list');
+        if (!list) return;
+
+        if (roundEl) {
+            roundEl.textContent = battle.active && battle.combatants.length
+                ? `Round ${battle.round || 1}` : 'Not started';
+        }
+        if (banner) {
+            const cur = battle.active && battle.combatants.length
+                ? battle.combatants[battle.turn_index % battle.combatants.length] : null;
+            banner.style.display = cur ? '' : 'none';
+            if (cur) banner.textContent = `▶ ${cur.name}'s turn`;
+        }
+
+        if (!battle.combatants.length) {
+            list.innerHTML = '<p class="muted" style="font-size:12px;padding:4px 0;">No combatants yet.</p>';
+            return;
+        }
+
+        list.innerHTML = battle.combatants.map((c, i) => {
+            const isActive = battle.active && i === (battle.turn_index % battle.combatants.length);
+            const col = hpColor(c.hp_current, c.hp_max);
+            if (IS_GM) {
+                return `<div class="init-row${isActive ? ' active-turn' : ''}" data-idx="${i}">
+                    <div class="init-swatch" style="background:${c.color || '#888'};"></div>
+                    <span class="init-name" title="${c.name}">${c.name}</span>
+                    <input class="init-init" type="number" value="${c.initiative}" data-idx="${i}" title="Initiative">
+                    <input class="init-hp-cur" type="number" value="${c.hp_current}" data-idx="${i}" title="Current HP" style="color:${col};">
+                    <span class="muted" style="font-size:9px;flex-shrink:0;">/</span>
+                    <input class="init-hp-max" type="number" value="${c.hp_max}" data-idx="${i}" title="Max HP">
+                    <button class="init-rm" data-idx="${i}" title="Remove">×</button>
+                </div>`;
+            } else {
+                return `<div class="init-row${isActive ? ' active-turn' : ''}" data-idx="${i}">
+                    <div class="init-swatch" style="background:${c.color || '#888'};"></div>
+                    <span class="init-name" title="${c.name}">${c.name}</span>
+                    <span style="font-size:12px;font-weight:700;color:#ccc;width:28px;text-align:right;flex-shrink:0;">${c.initiative}</span>
+                    <span style="font-size:11px;color:${col};flex-shrink:0;min-width:44px;text-align:right;">${c.hp_current}/${c.hp_max}</span>
+                </div>`;
+            }
+        }).join('');
+
+        if (!IS_GM) return;
+
+        list.querySelectorAll('.init-init').forEach(inp => inp.addEventListener('change', () => {
+            battle.combatants[+inp.dataset.idx].initiative = parseInt(inp.value) || 0;
+            sortPreservingTurn();
+            pushBattle(); renderBattle();
+        }));
+        list.querySelectorAll('.init-hp-cur').forEach(inp => inp.addEventListener('change', () => {
+            battle.combatants[+inp.dataset.idx].hp_current = Math.max(0, parseInt(inp.value) || 0);
+            pushBattle(); renderBattle();
+        }));
+        list.querySelectorAll('.init-hp-max').forEach(inp => inp.addEventListener('change', () => {
+            battle.combatants[+inp.dataset.idx].hp_max = Math.max(0, parseInt(inp.value) || 0);
+            pushBattle(); renderBattle();
+        }));
+        list.querySelectorAll('.init-rm').forEach(btn => btn.addEventListener('click', () => {
+            const idx = +btn.dataset.idx;
+            const curId = battle.combatants[battle.turn_index % battle.combatants.length]?.id;
+            battle.combatants.splice(idx, 1);
+            if (battle.combatants.length) {
+                const newIdx = battle.combatants.findIndex(c => c.id === curId);
+                battle.turn_index = Math.max(0, newIdx >= 0 ? newIdx : 0);
+            } else {
+                battle.turn_index = 0; battle.active = false;
+            }
+            pushBattle(); renderBattle();
+        }));
+
+        /* scroll active row into view */
+        const activeRow = list.querySelector('.active-turn');
+        if (activeRow) activeRow.scrollIntoView({ block: 'nearest' });
+    }
+
+    function sortPreservingTurn() {
+        const curId = battle.combatants[battle.turn_index % Math.max(1, battle.combatants.length)]?.id;
+        battle.combatants.sort((a, b) => b.initiative - a.initiative);
+        const ni = battle.combatants.findIndex(c => c.id === curId);
+        battle.turn_index = ni >= 0 ? ni : 0;
+    }
+
+    /* ── Controls (GM only) ── */
+    document.getElementById('battle-next-btn')?.addEventListener('click', () => {
+        if (!battle.combatants.length) return;
+        battle.active = true;
+        const next = (battle.turn_index + 1) % battle.combatants.length;
+        if (next === 0) battle.round = (battle.round || 1) + 1;
+        battle.turn_index = next;
+        pushBattle(); renderBattle();
+    });
+
+    document.getElementById('battle-prev-btn')?.addEventListener('click', () => {
+        if (!battle.combatants.length) return;
+        battle.active = true;
+        if (battle.turn_index === 0) {
+            battle.turn_index = battle.combatants.length - 1;
+            battle.round = Math.max(1, (battle.round || 1) - 1);
+        } else {
+            battle.turn_index--;
+        }
+        pushBattle(); renderBattle();
+    });
+
+    document.getElementById('battle-start-btn')?.addEventListener('click', () => {
+        if (!battle.combatants.length) return;
+        battle.active = true; battle.turn_index = 0; battle.round = 1;
+        pushBattle(); renderBattle();
+    });
+
+    document.getElementById('battle-clear-btn')?.addEventListener('click', () => {
+        if (!confirm('Clear all combatants and reset?')) return;
+        battle = { combatants: [], turn_index: 0, round: 1, active: false };
+        pushBattle(); renderBattle();
+    });
+
+    document.getElementById('battle-roll-init-btn')?.addEventListener('click', () => {
+        if (!battle.combatants.length) return;
+        battle.combatants.forEach(c => {
+            c.initiative = Math.ceil(Math.random() * 20) + (c.dex_mod || 0);
+        });
+        battle.combatants.sort((a, b) => b.initiative - a.initiative);
+        battle.turn_index = 0; battle.round = 1; battle.active = true;
+        pushBattle(); renderBattle();
+    });
+
+    /* ── Character picker ── */
+    let charPanelOpen = false;
+    document.getElementById('battle-add-char-btn')?.addEventListener('click', () => {
+        const panel = document.getElementById('battle-char-panel');
+        const manPanel = document.getElementById('battle-manual-panel');
+        if (!panel) return;
+        if (manPanel) manPanel.style.display = 'none';
+        charPanelOpen = !charPanelOpen;
+        panel.style.display = charPanelOpen ? '' : 'none';
+        if (charPanelOpen) renderCharPanel();
+    });
+
+    function renderCharPanel() {
+        const el = document.getElementById('battle-char-list');
+        if (!el) return;
+        if (!allChars.length) { el.innerHTML = '<p class="muted" style="font-size:12px;">No characters in campaign.</p>'; return; }
+        el.innerHTML = allChars.map((c, i) => {
+            const added = battle.combatants.some(x => x.char_id === c.id);
+            return `<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #2a2d3a;">
+                <span style="flex:1;font-size:12px;">${c.name}</span>
+                <button class="tt-btn bc-add" data-ci="${i}" style="font-size:11px;"${added ? ' disabled' : ''}>${added ? '✓' : '+ Add'}</button>
+            </div>`;
+        }).join('');
+        el.querySelectorAll('.bc-add').forEach(btn => btn.addEventListener('click', () => {
+            const c = allChars[+btn.dataset.ci];
+            const sh = c.sheet || {};
+            const ab = sh.abilities || {};
+            const dexMod = _abi(ab.DEX) + parseInt(sh.initiative_bonus || 0);
+            const hp = sh.hp || {};
+            const hpMax = parseInt(hp.max || 10);
+            battle.combatants.push({
+                id: 'char_' + c.id + '_' + Date.now(),
+                char_id: c.id, name: c.name,
+                initiative: 0, hp_current: parseInt(hp.current || hpMax), hp_max: hpMax,
+                color: '#6cb', dex_mod: dexMod,
+            });
+            pushBattle(); renderBattle(); renderCharPanel();
+        }));
+    }
+
+    /* ── Manual entry ── */
+    let manPanelOpen = false;
+    document.getElementById('battle-add-manual-btn')?.addEventListener('click', () => {
+        const panel = document.getElementById('battle-manual-panel');
+        const charPanel = document.getElementById('battle-char-panel');
+        if (!panel) return;
+        if (charPanel) { charPanel.style.display = 'none'; charPanelOpen = false; }
+        manPanelOpen = !manPanelOpen;
+        panel.style.display = manPanelOpen ? '' : 'none';
+        if (manPanelOpen) document.getElementById('bm-name')?.focus();
+    });
+
+    document.getElementById('bm-cancel-btn')?.addEventListener('click', () => {
+        document.getElementById('battle-manual-panel').style.display = 'none';
+        manPanelOpen = false;
+    });
+
+    function doManualAdd() {
+        const nameEl = document.getElementById('bm-name');
+        const name = nameEl?.value.trim();
+        if (!name) { nameEl?.focus(); return; }
+        const init = parseInt(document.getElementById('bm-init')?.value) || 0;
+        const hp   = parseInt(document.getElementById('bm-hp')?.value)   || 10;
+        const color = document.getElementById('bm-color')?.value || '#cc3333';
+        battle.combatants.push({
+            id: 'manual_' + Date.now(), char_id: null,
+            name, initiative: init, hp_current: hp, hp_max: hp, color, dex_mod: 0,
+        });
+        sortPreservingTurn();
+        pushBattle(); renderBattle();
+        if (nameEl) nameEl.value = '';
+        ['bm-init','bm-hp'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        nameEl?.focus();
+    }
+
+    document.getElementById('bm-add-btn')?.addEventListener('click', doManualAdd);
+    document.getElementById('bm-hp')?.addEventListener('keydown', e => { if (e.key === 'Enter') doManualAdd(); });
+
+    /* ── WebSocket sync ── */
+    document.addEventListener('vtt:ws-message', ev => {
+        if (ev.detail.type !== 'battle_update') return;
+        if (IS_GM) return; // GM is the source of truth; ignore echo
+        battle = ev.detail.data;
+        saveBattle();
+        renderBattle();
+    });
+
+    renderBattle();
+})();
+
+/* ── Roll toast ── */
+(function () {
+    const container = document.getElementById('roll-toast-container');
+
+    function dismiss(toast) {
+        if (toast.dataset.gone) return;
+        toast.dataset.gone = '1';
+        clearTimeout(toast._timer);
+        toast.classList.add('rt-out');
+        setTimeout(() => toast.remove(), 370);
+    }
+
+    document.addEventListener('vtt:ws-message', (ev) => {
+        const msg = ev.detail;
+        if (msg.type !== 'roll' || msg.data.user_id !== ME.id) return;
+        const r = msg.data;
+
+        const toast = document.createElement('div');
+        toast.className = 'roll-toast';
+        toast.title = 'Click to dismiss';
+
+        const lbl = document.createElement('div');
+        lbl.className = 'rt-label';
+        lbl.textContent = '🎲 ' + (r.note || r.expression);
+
+        const tot = document.createElement('div');
+        tot.className = 'rt-total';
+        tot.textContent = r.total;
+
+        const bkd = document.createElement('div');
+        bkd.className = 'rt-breakdown';
+        bkd.textContent = r.breakdown;
+
+        const hint = document.createElement('div');
+        hint.className = 'rt-dismiss';
+        hint.textContent = 'click to dismiss';
+
+        toast.append(lbl, tot, bkd, hint);
+        toast.addEventListener('click', () => dismiss(toast));
+        container.appendChild(toast);
+
+        toast._timer = setTimeout(() => dismiss(toast), 10000);
+    });
+})();
+</script>
+
+{% if is_gm %}
+<script>
+(function () {
+    const banner = document.getElementById('open5e-stale-banner');
+    if (!banner) return;
+
+    const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;  // 24 h
+    const DISMISS_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+    const lastCheck    = parseInt(localStorage.getItem('open5e_check_ts')    || '0', 10);
+    const lastDismiss  = parseInt(localStorage.getItem('open5e_banner_dismissed') || '0', 10);
+    const now          = Date.now();
+
+    if (now - lastCheck < CHECK_INTERVAL_MS) return;   // checked recently
+    if (now - lastDismiss < DISMISS_INTERVAL_MS) return; // user dismissed recently
+
+    fetch('/api/open5e/update-check')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            localStorage.setItem('open5e_check_ts', String(Date.now()));
+            if (!data || !data.enabled || !data.stale) return;
+
+            // Build a short detail string e.g. "spells: 402→415"
+            const changed = Object.entries(data.details || {})
+                .filter(([, v]) => v.stale)
+                .map(([k, v]) => `${k}: ${v.local}→${v.remote}`)
+                .join(', ');
+            const detail = document.getElementById('open5e-stale-detail');
+            if (detail && changed) detail.textContent = `(${changed})`;
+
+            banner.style.display = 'flex';
+        })
+        .catch(() => {});   // network error — silently skip
+})();
+</script>
+{% endif %}
 {% endblock %}

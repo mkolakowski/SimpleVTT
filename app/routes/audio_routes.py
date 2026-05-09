@@ -32,10 +32,12 @@ from sqlalchemy.orm import Session
 from ..auth import require_user
 from ..database import get_db
 from ..models import (
+    AUDIO_CATEGORIES,
     Campaign,
     Playlist,
     PlaylistTrack,
     User,
+    UserAudioCategoryPref,
     UserAudioPreference,
 )
 from ..realtime import hub
@@ -43,6 +45,74 @@ from .tabletop_routes import _user_can_view_campaign, _user_is_gm
 
 router = APIRouter()
 log = logging.getLogger(__name__)
+
+
+def _extract_audio_metadata(data: bytes, filename: str) -> dict:
+    """Return {track_artist, track_album, track_genre, track_year} from audio bytes.
+    Uses format-specific easy-tag interfaces so key names are always normalised.
+    All values are str or None. Logs a warning if mutagen is unavailable."""
+    import io
+    ext = Path(filename).suffix.lower()
+    fileobj = io.BytesIO(data)
+    audio = None
+    try:
+        if ext == ".mp3":
+            from mutagen.mp3 import EasyMP3
+            audio = EasyMP3(fileobj)
+        elif ext in (".m4a", ".aac", ".mp4"):
+            from mutagen.mp4 import EasyMP4
+            audio = EasyMP4(fileobj)
+        elif ext in (".ogg", ".oga"):
+            from mutagen.oggvorbis import OggVorbis
+            audio = OggVorbis(fileobj)
+        elif ext == ".flac":
+            from mutagen.flac import FLAC
+            audio = FLAC(fileobj)
+        elif ext == ".wav":
+            from mutagen.wave import WAVE
+            audio = WAVE(fileobj)
+        else:
+            from mutagen import File as MutagenFile
+            audio = MutagenFile(fileobj, filename=filename, easy=True)
+    except ImportError:
+        log.warning("mutagen is not installed — audio metadata will not be extracted. "
+                    "Run: pip install mutagen")
+        return {}
+    except Exception as exc:
+        log.warning("metadata extraction failed for %s: %s", filename, exc)
+        return {}
+
+    if audio is None or audio.tags is None:
+        return {}
+
+    tags = audio.tags
+
+    def _first(*keys: str) -> str | None:
+        for k in keys:
+            try:
+                v = tags.get(k)
+                if v is None and hasattr(tags, "__getitem__"):
+                    try:
+                        v = tags[k]
+                    except KeyError:
+                        pass
+                if v:
+                    s = str(v[0]) if isinstance(v, (list, tuple)) else str(v)
+                    s = s.strip()
+                    if s:
+                        return s
+            except Exception:
+                pass
+        return None
+
+    year_raw = _first("date", "year", "originaldate")
+    year = year_raw[:4] if year_raw and year_raw[:4].isdigit() else None
+    return {
+        "track_artist": _first("artist", "albumartist"),
+        "track_album":  _first("album"),
+        "track_genre":  _first("genre"),
+        "track_year":   year,
+    }
 
 
 UPLOAD_ROOT = Path(__file__).resolve().parent.parent / "static" / "uploads"
@@ -70,6 +140,7 @@ def _now_playing_payload(campaign: Campaign, track: PlaylistTrack) -> dict:
     in epoch milliseconds so clients can compute the seek offset."""
     started_at = campaign.now_playing_started_at or datetime.utcnow()
     started_at_ms = int(started_at.replace(tzinfo=timezone.utc).timestamp() * 1000)
+    category = track.playlist.category if track.playlist else "music"
     return {
         "track_id": track.id,
         "playlist_id": track.playlist_id,
@@ -77,7 +148,38 @@ def _now_playing_payload(campaign: Campaign, track: PlaylistTrack) -> dict:
         "file_url": track.file_url,
         "loop": campaign.now_playing_loop,
         "started_at_ms": started_at_ms,
+        "category": category,
     }
+
+
+# ---------- metadata backfill ----------
+
+@router.post("/campaign/{campaign_id}/audio/backfill_metadata")
+def backfill_metadata(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Re-extract and persist ID3/Vorbis metadata for every track whose audio
+    file is still on disk. Safe to call multiple times."""
+    _require_campaign_gm(db, user, campaign_id)
+    static_root = Path(__file__).resolve().parent.parent / "static"
+    playlists = db.query(Playlist).filter(Playlist.campaign_id == campaign_id).all()
+    updated = 0
+    for pl in playlists:
+        for track in pl.tracks:
+            rel = track.file_url.lstrip("/")
+            fpath = static_root / rel.removeprefix("static/")
+            if not fpath.exists():
+                continue
+            meta = _extract_audio_metadata(fpath.read_bytes(), fpath.name)
+            if not meta:
+                continue
+            for k, v in meta.items():
+                setattr(track, k, v)
+            updated += 1
+    db.commit()
+    return {"ok": True, "updated": updated}
 
 
 # ---------- playlist CRUD ----------
@@ -86,14 +188,66 @@ def _now_playing_payload(campaign: Campaign, track: PlaylistTrack) -> dict:
 def create_playlist(
     campaign_id: int,
     name: str = Form(...),
+    category: str = Form("music"),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
     _require_campaign_gm(db, user, campaign_id)
-    pl = Playlist(campaign_id=campaign_id, name=name.strip()[:120] or "Untitled")
+    cat = category if category in AUDIO_CATEGORIES else "music"
+    pl = Playlist(campaign_id=campaign_id, name=name.strip()[:120] or "Untitled", category=cat)
     db.add(pl)
     db.commit()
     return RedirectResponse(f"/campaign/{campaign_id}/settings#audio", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/playlists/{playlist_id}/rename")
+async def rename_playlist(
+    campaign_id: int,
+    playlist_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_campaign_gm(db, user, campaign_id)
+    pl = (
+        db.query(Playlist)
+        .filter(Playlist.id == playlist_id, Playlist.campaign_id == campaign_id)
+        .first()
+    )
+    if not pl:
+        raise HTTPException(404, "Playlist not found")
+    body = await request.json()
+    name = (body.get("name") or "").strip()[:120]
+    if not name:
+        raise HTTPException(400, "Name cannot be empty")
+    pl.name = name
+    db.commit()
+    return {"ok": True, "name": pl.name}
+
+
+@router.post("/campaign/{campaign_id}/playlists/{playlist_id}/category")
+async def set_playlist_category(
+    campaign_id: int,
+    playlist_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_campaign_gm(db, user, campaign_id)
+    pl = (
+        db.query(Playlist)
+        .filter(Playlist.id == playlist_id, Playlist.campaign_id == campaign_id)
+        .first()
+    )
+    if not pl:
+        raise HTTPException(404, "Playlist not found")
+    body = await request.json()
+    cat = str(body.get("category", "music")).lower()
+    if cat not in AUDIO_CATEGORIES:
+        raise HTTPException(400, f"category must be one of: {', '.join(AUDIO_CATEGORIES)}")
+    pl.category = cat
+    db.commit()
+    return {"ok": True, "category": pl.category}
 
 
 @router.post("/campaign/{campaign_id}/playlists/{playlist_id}/delete")
@@ -125,7 +279,7 @@ async def delete_playlist(
 async def upload_track(
     campaign_id: int,
     playlist_id: int,
-    audio: UploadFile = File(...),
+    audio: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -137,22 +291,6 @@ async def upload_track(
     )
     if not pl:
         raise HTTPException(404, "Playlist not found")
-    if not audio.filename:
-        raise HTTPException(400, "No file uploaded")
-    if audio.content_type not in ALLOWED_AUDIO_TYPES:
-        ext_ok = (audio.filename or "").lower().endswith(
-            (".mp3", ".ogg", ".oga", ".wav", ".m4a", ".aac")
-        )
-        if not ext_ok:
-            raise HTTPException(400, f"Unsupported audio type: {audio.content_type}")
-    data = await audio.read()
-    if len(data) > MAX_AUDIO_BYTES:
-        raise HTTPException(400, "Audio file too large (>30 MB)")
-    ext = Path(audio.filename).suffix.lower() or ".mp3"
-    fname = f"{uuid.uuid4().hex}{ext}"
-    out = AUDIO_DIR / fname
-    out.write_bytes(data)
-    file_url = f"/static/uploads/audio/{fname}"
     last = (
         db.query(PlaylistTrack)
         .filter(PlaylistTrack.playlist_id == playlist_id)
@@ -160,16 +298,82 @@ async def upload_track(
         .first()
     )
     next_pos = (last.position + 1) if last else 0
-    track_name = Path(audio.filename).stem[:200] or "Untitled"
-    track = PlaylistTrack(
-        playlist_id=playlist_id,
-        name=track_name,
-        file_url=file_url,
-        position=next_pos,
-    )
-    db.add(track)
+    for file in audio:
+        if not file.filename:
+            continue
+        if file.content_type not in ALLOWED_AUDIO_TYPES:
+            ext_ok = file.filename.lower().endswith((".mp3", ".ogg", ".oga", ".wav", ".m4a", ".aac"))
+            if not ext_ok:
+                raise HTTPException(400, f"Unsupported audio type: {file.content_type}")
+        data = await file.read()
+        if len(data) > MAX_AUDIO_BYTES:
+            raise HTTPException(400, f"{file.filename} exceeds 30 MB limit")
+        ext = Path(file.filename).suffix.lower() or ".mp3"
+        fname = f"{uuid.uuid4().hex}{ext}"
+        (AUDIO_DIR / fname).write_bytes(data)
+        meta = _extract_audio_metadata(data, file.filename)
+        db.add(PlaylistTrack(
+            playlist_id=playlist_id,
+            name=Path(file.filename).stem[:200] or "Untitled",
+            file_url=f"/static/uploads/audio/{fname}",
+            position=next_pos,
+            **meta,
+        ))
+        next_pos += 1
     db.commit()
     return RedirectResponse(f"/campaign/{campaign_id}/settings#audio", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/tracks/{track_id}/rename")
+async def rename_track(
+    campaign_id: int,
+    track_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_campaign_gm(db, user, campaign_id)
+    track = (
+        db.query(PlaylistTrack)
+        .join(Playlist, Playlist.id == PlaylistTrack.playlist_id)
+        .filter(PlaylistTrack.id == track_id, Playlist.campaign_id == campaign_id)
+        .first()
+    )
+    if not track:
+        raise HTTPException(404, "Track not found")
+    body = await request.json()
+    name = (body.get("name") or "").strip()[:200]
+    if not name:
+        raise HTTPException(400, "Name cannot be empty")
+    track.name = name
+    db.commit()
+    return {"ok": True, "name": track.name}
+
+
+@router.post("/campaign/{campaign_id}/playlists/{playlist_id}/reorder")
+async def reorder_tracks(
+    campaign_id: int,
+    playlist_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_campaign_gm(db, user, campaign_id)
+    pl = (
+        db.query(Playlist)
+        .filter(Playlist.id == playlist_id, Playlist.campaign_id == campaign_id)
+        .first()
+    )
+    if not pl:
+        raise HTTPException(404, "Playlist not found")
+    body = await request.json()
+    order = body.get("order", [])
+    track_map = {t.id: t for t in pl.tracks}
+    for pos, tid in enumerate(order):
+        if tid in track_map:
+            track_map[tid].position = pos
+    db.commit()
+    return {"ok": True}
 
 
 @router.post("/campaign/{campaign_id}/tracks/{track_id}/delete")
@@ -349,61 +553,54 @@ async def resync_audio(
     return {"ok": True, "playing": True}
 
 
-# ---------- per-user per-track volume preferences ----------
+# ---------- per-user per-category volume preferences ----------
 
-@router.get("/api/audio/preferences")
-def get_audio_preferences(
+@router.get("/api/audio/category-preferences")
+def get_category_preferences(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Return all per-track volume overrides for the current user as a dict
-    keyed by track_id. audio.js fetches this on connect."""
+    """Return all per-category volume overrides for the current user.
+    Returns {music: 0.8, sfx: 0.6, environment: 0.7} — missing keys mean 1.0.
+    audio.js fetches this on connect."""
     rows = (
-        db.query(UserAudioPreference)
-        .filter(UserAudioPreference.user_id == user.id)
+        db.query(UserAudioCategoryPref)
+        .filter(UserAudioCategoryPref.user_id == user.id)
         .all()
     )
-    return {str(r.track_id): r.volume for r in rows}
+    return {r.category: r.volume for r in rows}
 
 
-@router.post("/api/audio/preferences/{track_id}")
-async def set_audio_preference(
-    track_id: int,
+@router.post("/api/audio/category-preferences/{category}")
+async def set_category_preference(
+    category: str,
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Set or clear a per-track volume override for the current user.
-
-    Body: {"volume": 0.0..1.0} to set, or {"volume": null} to delete.
+    """Set a per-category volume for the current user.
+    Body: {"volume": 0.0..1.0}
     """
+    if category not in AUDIO_CATEGORIES:
+        raise HTTPException(400, f"category must be one of: {', '.join(AUDIO_CATEGORIES)}")
     body = await request.json()
-    raw = body.get("volume")
-    pref = (
-        db.query(UserAudioPreference)
-        .filter(
-            UserAudioPreference.user_id == user.id,
-            UserAudioPreference.track_id == track_id,
-        )
-        .first()
-    )
-    if raw is None:
-        if pref:
-            db.delete(pref)
-            db.commit()
-        return {"ok": True, "deleted": True}
     try:
-        vol = float(raw)
+        vol = float(body.get("volume", 1.0))
     except (TypeError, ValueError):
         raise HTTPException(400, "volume must be a number 0.0-1.0")
     if not 0.0 <= vol <= 1.0:
         raise HTTPException(400, "volume must be between 0.0 and 1.0")
-    # Validate track exists
-    if not db.query(PlaylistTrack).filter(PlaylistTrack.id == track_id).first():
-        raise HTTPException(404, "Track not found")
+    pref = (
+        db.query(UserAudioCategoryPref)
+        .filter(
+            UserAudioCategoryPref.user_id == user.id,
+            UserAudioCategoryPref.category == category,
+        )
+        .first()
+    )
     if pref:
         pref.volume = vol
     else:
-        db.add(UserAudioPreference(user_id=user.id, track_id=track_id, volume=vol))
+        db.add(UserAudioCategoryPref(user_id=user.id, category=category, volume=vol))
     db.commit()
-    return {"ok": True, "volume": vol}
+    return {"ok": True, "category": category, "volume": vol}

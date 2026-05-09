@@ -86,6 +86,30 @@ Each release section must include all five of these, in this order:
 
 ---
 
+## [0.8.0] - 2026-05-04
+
+**Schema version:** 6
+
+**Commit summary:** Add mini character sheets, roll toasts, proficiency highlights, and collapsible sidebar
+
+**Description:** The Player sidebar tab has been significantly upgraded: players now see only their own characters, can favourite them (persisted in localStorage), and can expand each character inline to a compact mini sheet. The mini sheet shows HP/AC/Speed, all six abilities with Check and Save roll buttons, and all 18 skills with roll buttons — all wired into the existing roll log and WebSocket broadcast. A roll toast container at the bottom-centre of the screen shows each player their own roll results as they come in, auto-dismissing after 10 seconds. The sidebar itself now fully collapses to zero width when unpinned, giving the map the full viewport. No operator action or database migration is required.
+
+### Added
+- Roll toast popup fixed to the bottom-centre of the tabletop: shows expression, total, and breakdown for the current player's own rolls; auto-dismisses after 10 seconds; click to dismiss early.
+- Expandable inline mini character sheet per character card in the Player tab: HP / AC / Speed combat stats, a 6-column ability grid with Check and Save roll buttons, and a 2-column skill grid with roll buttons for all 18 skills.
+- Favourite toggle on character cards in the Player tab; favourites float to the top of the list and preference is persisted per-campaign in localStorage.
+- Proficiency column highlight on ability names in the mini sheet: a teal dot and teal name colour mark abilities that have a save proficiency.
+- Skill proficiency colouring in the mini sheet: teal name = proficient, gold name = expertise; linked ability abbreviation shown on each skill row.
+
+### Changed
+- "Players" sidebar tab renamed to "Player".
+- Player tab now filters characters to only show those owned by the current player; GMs continue to see all characters.
+- Sidebar collapses fully to zero width when an active tab is clicked while the sidebar is unpinned; a floating ☰ button re-opens it so the map can use the full viewport width.
+- Mini sheet Abilities & Saves section restructured from a vertical list to a compact 6-column grid: ability name and score span the top, with Check and Save roll buttons stacked below each column.
+- Mini sheet skills section changed from a single column to a two-column layout.
+
+---
+
 ## [0.7.0] - 2026-05-02
 
 **Schema version:** 6

@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="{{ user.theme if user and user.theme else 'dark' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}SimpleVTT{% endblock %}</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
     {% block head %}{% endblock %}
@@ -14,6 +15,7 @@
         <nav>
             {% if user %}
                 <span class="user">{{ user.display_name }}{% if user.is_admin %} <em>(admin)</em>{% endif %}</span>
+                <a href="/characters">My Characters</a>
                 <a href="/settings">Settings</a>
                 {% if user.is_admin %}<a href="/admin">Admin</a>{% endif %}
                 <a href="/logout">Logout</a>

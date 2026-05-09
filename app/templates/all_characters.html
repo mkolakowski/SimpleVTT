@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+{% block title %}My Characters — SimpleVTT{% endblock %}
+{% block head %}
+<style>
+.char-campaign-section { margin-bottom: 32px; }
+.char-campaign-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 12px; padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+}
+.char-campaign-header img { width: 36px; height: 36px; border-radius: 5px; object-fit: cover; flex-shrink: 0; }
+.char-campaign-header .ch-thumb-placeholder {
+    width: 36px; height: 36px; border-radius: 5px; background: var(--bg-2);
+    border: 1px solid var(--border); display: flex; align-items: center;
+    justify-content: center; font-size: 16px; color: var(--fg-mute); flex-shrink: 0;
+}
+.char-campaign-header h2 { margin: 0; font-size: 17px; }
+.char-campaign-header .ch-badges { display: flex; gap: 5px; flex-wrap: wrap; }
+.ch-badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.ch-badge-system { background: #2c4a2c; color: #c0ffc0; }
+.ch-badge-live   { background: #1a3a1a; color: #6cb; }
+.ch-campaign-links { margin-left: auto; display: flex; gap: 10px; font-size: 12px; flex-shrink: 0; }
+
+.char-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+    list-style: none; padding: 0; margin: 0;
+}
+.char-card {
+    background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;
+}
+.char-card-body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.char-card-body h3 { margin: 0; font-size: 15px; }
+.char-card-body .char-type { font-size: 11px; color: var(--fg-mute); }
+
+.char-kv { display: flex; flex-wrap: wrap; gap: 4px; }
+.char-kv-pair { background: #1e2030; border-radius: 3px; padding: 2px 7px; font-size: 11px; }
+.char-kv-pair .ck { color: #778; margin-right: 4px; }
+
+.char-stat-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.char-stat {
+    background: #1e2030; border-radius: 5px;
+    padding: 4px 8px; text-align: center; min-width: 48px;
+}
+.char-stat .cs-label { font-size: 9px; color: #778; text-transform: uppercase; letter-spacing: 0.4px; display: block; }
+.char-stat .cs-value { font-size: 14px; font-weight: 700; display: block; line-height: 1.3; }
+
+.char-summary-text { font-size: 12px; color: var(--fg-mute); white-space: pre-wrap; }
+
+.char-card-footer {
+    padding: 9px 14px; border-top: 1px solid var(--border);
+    display: flex; justify-content: flex-end;
+}
+.btn-sheet {
+    padding: 5px 14px; font-size: 13px; font-weight: 500;
+    background: #2f4868; color: var(--fg); border: 1px solid var(--border);
+    border-radius: 4px; text-decoration: none;
+}
+.btn-sheet:hover { background: #3a5780; text-decoration: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px;">
+    <h1 style="margin:0;">My Characters</h1>
+    {% if member_campaigns %}
+    <button type="button" id="create-char-toggle"
+            style="padding:6px 16px;font-size:13px;font-weight:600;background:#2f4868;border:1px solid #3a5780;border-radius:5px;cursor:pointer;color:var(--fg);">
+        + New Character
+    </button>
+    {% endif %}
+</div>
+
+{% if member_campaigns %}
+<div id="create-char-panel" style="display:none;background:var(--bg-2);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:24px;">
+    <h3 style="margin:0 0 12px;">Create New Character</h3>
+
+    <div style="display:flex;gap:8px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:12px;">
+        <button type="button" class="cc-tab cc-tab-active" data-tab="campaign" style="font-size:12px;padding:4px 12px;border-radius:4px;">In a Campaign</button>
+        <button type="button" class="cc-tab" data-tab="standalone" style="font-size:12px;padding:4px 12px;border-radius:4px;opacity:0.6;">Standalone</button>
+    </div>
+
+    <form id="cc-form-campaign" method="post" action="/characters/new" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+        <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px;">
+            <span style="font-size:12px;color:var(--fg-mute);">Character Name</span>
+            <input name="name" placeholder="e.g. Thalindra Moonwhisper" required style="font-size:13px;">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px;">
+            <span style="font-size:12px;color:var(--fg-mute);">Campaign</span>
+            <select name="campaign_id" required style="font-size:13px;">
+                {% for c in member_campaigns %}
+                <option value="{{ c.id }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <button type="submit" style="padding:6px 18px;font-size:13px;font-weight:600;">Create</button>
+        <button type="button" class="cc-cancel-btn" style="padding:6px 14px;font-size:13px;opacity:0.7;">Cancel</button>
+    </form>
+
+    <form id="cc-form-standalone" method="post" action="/characters/new-standalone" style="display:none;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+        <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px;">
+            <span style="font-size:12px;color:var(--fg-mute);">Character Name</span>
+            <input name="name" placeholder="e.g. Thalindra Moonwhisper" required style="font-size:13px;">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;min-width:140px;">
+            <span style="font-size:12px;color:var(--fg-mute);">Sheet Type</span>
+            <select name="template" style="font-size:13px;">
+                <option value="generic">Generic</option>
+                <option value="dnd5e">D&amp;D 5e</option>
+            </select>
+        </label>
+        <button type="submit" style="padding:6px 18px;font-size:13px;font-weight:600;">Create</button>
+        <button type="button" class="cc-cancel-btn" style="padding:6px 14px;font-size:13px;opacity:0.7;">Cancel</button>
+    </form>
+</div>
+<script>
+    document.getElementById('create-char-toggle').addEventListener('click', function() {
+        document.getElementById('create-char-panel').style.display = 'block';
+        this.style.display = 'none';
+    });
+    document.querySelectorAll('.cc-cancel-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.getElementById('create-char-panel').style.display = 'none';
+            document.getElementById('create-char-toggle').style.display = '';
+        });
+    });
+    document.querySelectorAll('.cc-tab').forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.cc-tab').forEach(function(t) {
+                t.classList.remove('cc-tab-active');
+                t.style.opacity = '0.6';
+            });
+            this.classList.add('cc-tab-active');
+            this.style.opacity = '1';
+            var which = this.dataset.tab;
+            document.getElementById('cc-form-campaign').style.display = which === 'campaign' ? 'flex' : 'none';
+            document.getElementById('cc-form-standalone').style.display = which === 'standalone' ? 'flex' : 'none';
+        });
+    });
+</script>
+{% endif %}
+
+{% if grouped %}
+    {% for entry in grouped %}
+    {% set c = entry.campaign %}
+    {% set sys = entry.system %}
+    <section class="char-campaign-section">
+        <div class="char-campaign-header">
+            {% if c.thumbnail_url %}
+            <img src="{{ c.thumbnail_url }}" alt="">
+            {% else %}
+            <div class="ch-thumb-placeholder">{{ c.name[:1]|upper }}</div>
+            {% endif %}
+            <div>
+                <h2>{{ c.name }}</h2>
+                <div class="ch-badges">
+                    <span class="ch-badge ch-badge-system">{{ sys.label }}</span>
+                    {% if c.session_active %}<span class="ch-badge ch-badge-live">Live</span>{% endif %}
+                </div>
+            </div>
+            <div class="ch-campaign-links">
+                <a href="/campaign/{{ c.id }}/characters">All characters</a>
+                {% if c.session_active %}<a href="/campaign/{{ c.id }}">Tabletop →</a>{% endif %}
+            </div>
+        </div>
+
+        <ul class="char-cards">
+            {% for char in entry.characters %}
+            {% set s = char.sheet or {} %}
+            <li class="char-card">
+                {% if char.portrait_url %}
+                <img src="{{ char.portrait_url }}" alt="{{ char.name }}"
+                     style="width:100%; height:160px; object-fit:cover; object-position:top; display:block;">
+                {% endif %}
+                <div class="char-card-body">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        {% if not char.portrait_url %}
+                        <div style="width:40px; height:40px; border-radius:6px; background:#1e2030; border:1px solid #2a2d3a; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; color:#556; flex-shrink:0;">
+                            {{ char.name[:1]|upper }}
+                        </div>
+                        {% endif %}
+                        <div>
+                            <h3 style="margin:0;">{{ char.name }}</h3>
+                            <div class="char-type">{{ char.template }}</div>
+                        </div>
+                    </div>
+                    {% if char.template == 'dnd5e' %}
+                        <div class="char-kv">
+                            {% if s.get('class') %}<span class="char-kv-pair"><span class="ck">Class</span>{{ s.get('class') }}</span>{% endif %}
+                            {% if s.get('level') %}<span class="char-kv-pair"><span class="ck">Lvl</span>{{ s.get('level') }}</span>{% endif %}
+                            {% if s.get('race')  %}<span class="char-kv-pair"><span class="ck">Race</span>{{ s.get('race') }}</span>{% endif %}
+                        </div>
+                        <div class="char-stat-row">
+                            <div class="char-stat">
+                                <span class="cs-label">HP</span>
+                                <span class="cs-value">{{ s.get('hp',{}).get('current','—') }}<span style="font-size:10px;color:#778;">/{{ s.get('hp',{}).get('max','—') }}</span></span>
+                            </div>
+                            <div class="char-stat">
+                                <span class="cs-label">AC</span>
+                                <span class="cs-value">{{ s.get('ac','—') }}</span>
+                            </div>
+                            <div class="char-stat">
+                                <span class="cs-label">Speed</span>
+                                <span class="cs-value" style="font-size:12px;">{{ s.get('speed','—') }}ft</span>
+                            </div>
+                        </div>
+                    {% else %}
+                        {% if s.get('summary') %}
+                        <p class="char-summary-text">{{ s.get('summary') }}</p>
+                        {% endif %}
+                        {% if s.get('stats') %}
+                        <div class="char-kv">
+                            {% for k, v in (s.get('stats') or {}).items() %}
+                            <span class="char-kv-pair"><span class="ck">{{ k }}</span>{{ v }}</span>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                <div class="char-card-footer">
+                    <a href="/campaign/{{ c.id }}/character/{{ char.id }}/sheet" class="btn-sheet">View Sheet →</a>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endfor %}
+{% endif %}
+
+{% if standalone %}
+<section class="char-campaign-section">
+    <div class="char-campaign-header">
+        <div class="ch-thumb-placeholder">📄</div>
+        <div>
+            <h2>Standalone Characters</h2>
+            <div class="ch-badges"><span class="ch-badge ch-badge-system">Not in a campaign</span></div>
+        </div>
+    </div>
+    <ul class="char-cards">
+        {% for char in standalone %}
+        {% set s = char.sheet or {} %}
+        <li class="char-card">
+            {% if char.portrait_url %}
+            <img src="{{ char.portrait_url }}" alt="{{ char.name }}"
+                 style="width:100%; height:160px; object-fit:cover; object-position:top; display:block;">
+            {% endif %}
+            <div class="char-card-body">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    {% if not char.portrait_url %}
+                    <div style="width:40px; height:40px; border-radius:6px; background:#1e2030; border:1px solid #2a2d3a; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; color:#556; flex-shrink:0;">
+                        {{ char.name[:1]|upper }}
+                    </div>
+                    {% endif %}
+                    <div>
+                        <h3 style="margin:0;">{{ char.name }}</h3>
+                        <div class="char-type">{{ char.template }}</div>
+                    </div>
+                </div>
+                {% if char.template == 'dnd5e' %}
+                    <div class="char-kv">
+                        {% if s.get('class') %}<span class="char-kv-pair"><span class="ck">Class</span>{{ s.get('class') }}</span>{% endif %}
+                        {% if s.get('level') %}<span class="char-kv-pair"><span class="ck">Lvl</span>{{ s.get('level') }}</span>{% endif %}
+                        {% if s.get('race')  %}<span class="char-kv-pair"><span class="ck">Race</span>{{ s.get('race') }}</span>{% endif %}
+                    </div>
+                    <div class="char-stat-row">
+                        <div class="char-stat"><span class="cs-label">HP</span><span class="cs-value">{{ s.get('hp',{}).get('current','—') }}<span style="font-size:10px;color:#778;">/{{ s.get('hp',{}).get('max','—') }}</span></span></div>
+                        <div class="char-stat"><span class="cs-label">AC</span><span class="cs-value">{{ s.get('ac','—') }}</span></div>
+                        <div class="char-stat"><span class="cs-label">Speed</span><span class="cs-value" style="font-size:12px;">{{ s.get('speed','—') }}ft</span></div>
+                    </div>
+                {% else %}
+                    {% if s.get('summary') %}<p class="char-summary-text">{{ s.get('summary') }}</p>{% endif %}
+                {% endif %}
+            </div>
+            <div class="char-card-footer">
+                <a href="/character/{{ char.id }}/sheet" class="btn-sheet">View Sheet →</a>
+            </div>
+        </li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+{% if not grouped and not standalone %}
+    <p class="muted">You don't have any characters yet.
+        {% if member_campaigns %}Use the <strong>New Character</strong> button above to create one, or ask your GM to assign one.{% else %}Ask your GM to assign one to you.{% endif %}
+    </p>
+{% endif %}
+{% endblock %}

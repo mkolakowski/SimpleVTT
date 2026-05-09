@@ -1,10 +1,89 @@
 {% extends "base.html" %}
-{% block title %}{{ campaign.name }} settings{% endblock %}
+{% block title %}{{ campaign.name }} — Settings{% endblock %}
 {% block content %}
-<p><a href="/campaign/{{ campaign.id }}">← back to tabletop</a></p>
-<h1>{{ campaign.name }} — Settings</h1>
+<style>
+.settings-nav {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px;
+    padding-bottom: 12px; border-bottom: 1px solid var(--border);
+}
+.settings-nav a {
+    padding: 5px 12px; background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 4px; font-size: 13px; color: var(--fg-mute); text-decoration: none;
+}
+.settings-nav a:hover { color: var(--fg); border-color: #555; }
 
-<section>
+.settings-section { margin-bottom: 36px; scroll-margin-top: 12px; }
+.settings-section h2 { margin-top: 0; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+.playlist-card {
+    background: #1a1d24; border: 1px solid #2e3140; border-radius: 8px;
+    margin-top: 12px; overflow: hidden;
+}
+.playlist-card summary {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    background: #20232e; cursor: pointer; user-select: none; list-style: none;
+}
+.playlist-card summary::-webkit-details-marker { display: none; }
+.playlist-card[open] .pl-chevron { transform: rotate(90deg); }
+.pl-chevron { display: inline-block; transition: transform 0.15s; font-size: 11px; color: #666; flex-shrink: 0; }
+.pl-name { font-size: 14px; }
+.pl-count { font-size: 12px; }
+.pl-actions { margin-left: auto; display: flex; gap: 4px; flex-shrink: 0; }
+.playlist-body { padding: 12px 14px; }
+
+.track-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+.track-row {
+    display: flex; align-items: center; gap: 8px; padding: 6px 6px;
+    border-radius: 5px; border: 1px solid transparent; transition: background 0.1s;
+}
+.track-row:hover { background: #20232e; border-color: #2e3140; }
+.track-row.dragging { opacity: 0.35; }
+.track-drag-handle { cursor: grab; color: #444; flex-shrink: 0; font-size: 14px; }
+.track-num { color: #555; font-size: 11px; width: 1.8em; text-align: right; flex-shrink: 0; }
+.track-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.track-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track-meta { font-size: 11px; color: #666; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track-name-input { width: 100%; font-size: 13px; box-sizing: border-box; }
+.badge-playing { color: #6cb; font-size: 11px; flex-shrink: 0; }
+.track-actions { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
+.track-actions button { padding: 2px 7px; font-size: 12px; }
+
+.upload-zone {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border: 1px dashed #333; border-radius: 6px; margin-top: 8px; background: #181b22;
+}
+.upload-zone .file-label { font-size: 12px; color: #666; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pl-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid #2e3140; }
+.new-playlist-bar { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+#new-playlist-form { display: none; align-items: center; gap: 8px; margin-top: 8px; }
+
+.danger-zone { border: 1px solid var(--danger); border-radius: 6px; padding: 16px; background: #1f1010; }
+.danger-zone h2 { color: var(--danger); margin-top: 0; }
+</style>
+
+<div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+    {% if campaign.thumbnail_url %}
+    <img src="{{ campaign.thumbnail_url }}" alt="" style="width:48px;height:48px;border-radius:6px;object-fit:cover;">
+    {% endif %}
+    <div>
+        <h1 style="margin:0;">{{ campaign.name }} — Settings</h1>
+        <p style="margin:2px 0 0;"><a href="/campaign/{{ campaign.id }}">← back to tabletop</a></p>
+    </div>
+</div>
+
+<nav class="settings-nav">
+    <a href="#basic">Basic info</a>
+    <a href="#members">Members</a>
+    <a href="#characters">Characters</a>
+    <a href="#maps">Maps</a>
+    <a href="#audio">Audio</a>
+    <a href="#tmpl">Token Templates</a>
+    {% if user.is_admin %}<a href="#danger" style="color:var(--danger);">Danger zone</a>{% endif %}
+</nav>
+
+<!-- ── Basic info ── -->
+<section class="settings-section" id="basic">
     <h2>Basic info</h2>
     <form method="post" action="/campaign/{{ campaign.id }}/settings" enctype="multipart/form-data" class="stacked">
         <label>Name <input name="name" value="{{ campaign.name }}" required></label>
@@ -12,38 +91,50 @@
         <label>Game system
             <select name="game_system">
                 {% for s in system_choices %}
-                    <option value="{{ s.key }}" {% if s.key == current_system.key %}selected{% endif %}>{{ s.label }}</option>
+                <option value="{{ s.key }}" {% if s.key == current_system.key %}selected{% endif %}>{{ s.label }}</option>
                 {% endfor %}
             </select>
         </label>
-        <p class="muted">Changing the game system affects new characters only — existing sheets keep their original template. Delete and re-add characters if you want a clean cut.</p>
-
+        <p class="muted" style="margin:0;">Changing the game system affects new characters only — existing sheets keep their original template.</p>
         <fieldset>
             <legend>Thumbnail</legend>
             {% if campaign.thumbnail_url %}
-                <p><img src="{{ campaign.thumbnail_url }}" alt="thumbnail" style="max-width: 200px; border-radius: 6px;"></p>
-                <label><input type="checkbox" name="clear_thumbnail" value="true"> Remove current thumbnail</label>
+            <p><img src="{{ campaign.thumbnail_url }}" alt="thumbnail" style="max-width:200px;border-radius:6px;"></p>
+            <label><input type="checkbox" name="clear_thumbnail" value="true"> Remove current thumbnail</label>
             {% else %}
-                <p class="muted">No thumbnail set.</p>
+            <p class="muted">No thumbnail set.</p>
             {% endif %}
-            <label>Replace with new (png/jpg/webp, max 5 MB) <input type="file" name="thumbnail" accept="image/*"></label>
+            <label>Upload new (png/jpg/webp, max 5 MB) <input type="file" name="thumbnail" accept="image/*"></label>
         </fieldset>
-
-        <button type="submit">Save</button>
+        <label style="flex-direction:row;align-items:center;gap:10px;">
+            GM Tools tab color
+            <input type="color" name="gm_tab_color" value="{{ campaign.gm_tab_color or '#d4a84a' }}">
+            <span class="muted" style="font-size:12px;">Tints the GM Tools tab in the tabletop sidebar.</span>
+        </label>
+        <div><button type="submit">Save basic info</button></div>
     </form>
 </section>
 
-<section>
-    <h2>Game Masters &amp; players</h2>
-    <p class="muted">Toggle a member's GM flag. The primary GM (campaign owner) cannot be demoted here — only an admin can transfer ownership.</p>
+<!-- ── Members ── -->
+<section class="settings-section" id="members">
+    <h2>Members</h2>
+    <p class="muted">The primary GM (campaign owner) cannot be demoted here. Use the color swatch to set a roll-log highlight color for each member.</p>
     <table class="data">
-        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Action</th></tr></thead>
+        <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Roll color</th><th>Actions</th></tr></thead>
         <tbody>
             <tr>
                 <td>{{ primary_gm.display_name if primary_gm else "?" }}</td>
                 <td>{{ primary_gm.email if primary_gm else "?" }}</td>
                 <td><strong>Primary GM</strong></td>
-                <td><span class="muted">Owner — cannot change here</span></td>
+                <td>
+                    <input type="color"
+                           class="member-color-input"
+                           data-user-id="{{ campaign.gm_user_id }}"
+                           value="{{ campaign.gm_color or '#9aa0aa' }}"
+                           title="Roll-log color for {{ primary_gm.display_name if primary_gm else 'GM' }}">
+                    <span class="color-save-status" style="font-size:11px;color:#6cb;margin-left:4px;"></span>
+                </td>
+                <td><span class="muted">Owner</span></td>
             </tr>
             {% for m in members_with_role %}
             <tr>
@@ -51,92 +142,1030 @@
                 <td>{{ m.user.email }}</td>
                 <td>{% if m.is_gm %}<strong>Co-GM</strong>{% else %}Player{% endif %}</td>
                 <td>
-                    <form method="post" action="/campaign/{{ campaign.id }}/members/{{ m.membership_id }}/set_gm" style="display:inline">
+                    <input type="color"
+                           class="member-color-input"
+                           data-user-id="{{ m.user.id }}"
+                           value="{{ m.color or '#9aa0aa' }}"
+                           title="Roll-log color for {{ m.user.display_name }}">
+                    <span class="color-save-status" style="font-size:11px;color:#6cb;margin-left:4px;"></span>
+                </td>
+                <td style="display:flex;gap:4px;flex-wrap:wrap;">
+                    <form method="post" action="/campaign/{{ campaign.id }}/members/{{ m.membership_id }}/set_gm" style="display:inline;">
                         <input type="hidden" name="is_gm" value="{{ 'false' if m.is_gm else 'true' }}">
-                        <button type="submit">{% if m.is_gm %}Demote to player{% else %}Promote to GM{% endif %}</button>
+                        <button type="submit">{% if m.is_gm %}Demote{% else %}Make GM{% endif %}</button>
                     </form>
+                    {% if user.is_admin %}
+                    <form method="post" action="/campaign/{{ campaign.id }}/settings/members/{{ m.membership_id }}/remove" style="display:inline;" onsubmit="return confirm('Remove {{ m.user.display_name }} from this campaign?')">
+                        <button type="submit" class="danger">Remove</button>
+                    </form>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
     {% if not members_with_role %}
-    <p class="muted">No additional members yet. {% if user.is_admin %}Add members from the <a href="/admin/campaign/{{ campaign.id }}">admin panel</a>.{% else %}Ask an admin to add players to this campaign.{% endif %}</p>
+    <p class="muted">No additional members yet.</p>
     {% endif %}
+    {% if user.is_admin and non_members %}
+    <details style="margin-top:10px;">
+        <summary style="cursor:pointer;font-size:13px;">+ Add member</summary>
+        <form method="post" action="/campaign/{{ campaign.id }}/settings/members/add" class="row" style="margin-top:8px;">
+            <select name="user_id">
+                {% for u in non_members %}<option value="{{ u.id }}">{{ u.display_name }} ({{ u.email }})</option>{% endfor %}
+            </select>
+            <button type="submit">Add as player</button>
+        </form>
+    </details>
+    {% endif %}
+
+    <script>
+    (function () {
+        const CAMPAIGN_ID = {{ campaign.id }};
+        function debounce(fn, ms) { let h; return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); }; }
+
+        document.querySelectorAll('.member-color-input').forEach(input => {
+            const statusEl = input.nextElementSibling;
+            const save = debounce(async (color) => {
+                statusEl.textContent = 'saving…';
+                try {
+                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/member_color`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ user_id: parseInt(input.dataset.userId), color }),
+                    });
+                    if (!resp.ok) throw new Error(await resp.text());
+                    statusEl.textContent = '✓';
+                    setTimeout(() => { statusEl.textContent = ''; }, 1800);
+                } catch (e) {
+                    statusEl.textContent = '✗';
+                    console.error(e);
+                }
+            }, 400);
+
+            input.addEventListener('input', () => save(input.value));
+        });
+    })();
+    </script>
 </section>
 
-<section id="audio">
-    <h2>🎵 Audio playlists</h2>
-    <p class="muted">Upload tracks (mp3, ogg, wav, m4a — max 30 MB each) into a playlist, then play them from the tabletop. All connected players will hear what you start.</p>
+<!-- ── Characters ── -->
+<section class="settings-section" id="characters">
+    <h2>Characters</h2>
+    {% if characters %}
+    <table class="data">
+        <thead><tr><th>Name</th><th>Template</th><th>Owner</th><th>Roll color</th><th></th></tr></thead>
+        <tbody>
+        {% for c in characters %}
+        <tr>
+            <td>{{ c.name }}</td>
+            <td>{{ c.template }}</td>
+            <td>
+                <form method="post" action="/campaign/{{ campaign.id }}/settings/characters/{{ c.id }}/assign" class="row">
+                    <select name="owner_user_id">
+                        <option value="">— unassigned —</option>
+                        {% for u in all_users %}
+                        <option value="{{ u.id }}" {% if c.owner_user_id == u.id %}selected{% endif %}>{{ u.display_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit">Assign</button>
+                </form>
+            </td>
+            <td>
+                <input type="color"
+                       class="char-color-input"
+                       data-char-id="{{ c.id }}"
+                       value="{{ c.color or '#9aa0aa' }}"
+                       title="Roll-log color for {{ c.name }} (overrides player color)">
+                <span class="char-color-status" style="font-size:11px;color:#6cb;margin-left:4px;"></span>
+            </td>
+            <td>
+                <form method="post" action="/campaign/{{ campaign.id }}/settings/characters/{{ c.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete {{ c.name }}?')">
+                    <button type="submit" class="danger">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No characters yet.</p>
+    {% endif %}
+    <details style="margin-top:10px;">
+        <summary style="cursor:pointer;font-size:13px;">+ Create character</summary>
+        <p class="muted" style="margin:6px 0 4px;font-size:12px;">Sheet template is locked to this campaign's system: <strong>{{ current_system.label }}</strong>.</p>
+        <form method="post" action="/campaign/{{ campaign.id }}/settings/characters" class="row" style="margin-top:4px;">
+            <input name="name" placeholder="Character name" required>
+            <select name="owner_user_id">
+                <option value="">— unassigned —</option>
+                {% for u in all_users %}<option value="{{ u.id }}">{{ u.display_name }}</option>{% endfor %}
+            </select>
+            <button type="submit">Create</button>
+        </form>
+    </details>
 
-    <form method="post" action="/campaign/{{ campaign.id }}/audio/loop" class="row">
-        <label><input type="checkbox" name="loop" value="true" {% if campaign.now_playing_loop %}checked{% endif %}> Loop playlist when the last track ends</label>
-        <button type="submit">Save</button>
-    </form>
-
-    {% for pl in playlists %}
-    <details {% if loop.first %}open{% endif %} style="margin-top:10px;">
-        <summary><strong>{{ pl.name }}</strong> <span class="muted">({{ pl.tracks|length }} track{{ '' if pl.tracks|length == 1 else 's' }})</span></summary>
-        <table class="data" style="margin-top:6px;">
-            <thead><tr><th>#</th><th>Track</th><th>Actions</th></tr></thead>
+    {% if importable %}
+    <details style="margin-top:6px;">
+        <summary style="cursor:pointer;font-size:13px;">+ Add from player characters</summary>
+        <p class="muted" style="margin:6px 0 8px;font-size:12px;">
+            Import a copy of an existing character owned by a campaign member. The original is kept untouched.
+        </p>
+        <table class="data" style="margin-top:4px;">
+            <thead><tr><th>Name</th><th>System</th><th>Owner</th><th></th></tr></thead>
             <tbody>
-                {% for t in pl.tracks %}
-                <tr>
-                    <td>{{ loop.index }}</td>
-                    <td>{{ t.name }}{% if campaign.now_playing_track_id == t.id %} <span class="muted">(now playing)</span>{% endif %}</td>
-                    <td>
-                        <button type="button" onclick="vttPlayTrack({{ t.id }})">▶ Play</button>
-                        <form method="post" action="/campaign/{{ campaign.id }}/tracks/{{ t.id }}/delete" style="display:inline" onsubmit="return confirm('Delete this track?')">
-                            <button>Delete</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
+            {% for item in importable %}
+            {% set ch = item.char %}
+            {% set owner = item.owner_name %}
+            <tr>
+                <td>{{ ch.name }}</td>
+                <td>{{ ch.template }}</td>
+                <td>{{ owner.display_name if owner else '—' }}</td>
+                <td>
+                    <form method="post" action="/campaign/{{ campaign.id }}/settings/characters/import">
+                        <input type="hidden" name="source_char_id" value="{{ ch.id }}">
+                        <button type="submit">Import</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
             </tbody>
         </table>
-        {% if not pl.tracks %}<p class="muted">No tracks yet.</p>{% endif %}
-        <form method="post" action="/campaign/{{ campaign.id }}/playlists/{{ pl.id }}/tracks" enctype="multipart/form-data" class="row" style="margin-top:6px;">
-            <input type="file" name="audio" accept="audio/*,.mp3,.ogg,.wav,.m4a" required>
-            <button>Upload track</button>
+    </details>
+    {% endif %}
+
+    <script>
+    (function () {
+        const CAMPAIGN_ID = {{ campaign.id }};
+        function debounce(fn, ms) { let h; return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); }; }
+        document.querySelectorAll('.char-color-input').forEach(input => {
+            const statusEl = input.nextElementSibling;
+            const save = debounce(async (color) => {
+                statusEl.textContent = 'saving…';
+                try {
+                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/character/${input.dataset.charId}/color`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ color }),
+                    });
+                    if (!resp.ok) throw new Error(await resp.text());
+                    statusEl.textContent = '✓';
+                    setTimeout(() => { statusEl.textContent = ''; }, 1800);
+                } catch (e) {
+                    statusEl.textContent = '✗';
+                    console.error(e);
+                }
+            }, 400);
+            input.addEventListener('input', () => save(input.value));
+        });
+    })();
+    </script>
+</section>
+
+<!-- ── Maps ── -->
+<section class="settings-section" id="maps">
+    <h2>Maps</h2>
+    {% if maps %}
+    <table class="data">
+        <thead><tr><th>Name</th><th>Grid</th><th>Size</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+        {% for m in maps %}
+        <tr>
+            <td>{{ m.name }}</td>
+            <td>{{ m.grid_type.value }}</td>
+            <td>{{ m.width_px }}×{{ m.height_px }}px / {{ m.grid_size_px }}px grid</td>
+            <td>{% if m.id == campaign.active_map_id %}<strong style="color:#6cb;">Active</strong>{% else %}<span class="muted">Inactive</span>{% endif %}</td>
+            <td style="display:flex;gap:4px;flex-wrap:wrap;">
+                {% if m.id != campaign.active_map_id %}
+                <form method="post" action="/campaign/{{ campaign.id }}/settings/maps/{{ m.id }}/activate" style="display:inline;">
+                    <button type="submit">Activate</button>
+                </form>
+                {% endif %}
+                <form method="post" action="/campaign/{{ campaign.id }}/settings/maps/{{ m.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete map {{ m.name }}?')">
+                    <button type="submit" class="danger">Delete</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No maps yet.</p>
+    {% endif %}
+    <details style="margin-top:10px;">
+        <summary style="cursor:pointer;font-size:13px;">+ Upload map</summary>
+        <form method="post" action="/campaign/{{ campaign.id }}/settings/maps" enctype="multipart/form-data" class="stacked" style="margin-top:8px;max-width:480px;">
+            <label>Name <input name="name" required></label>
+            <label>Grid type
+                <select name="grid_type">
+                    <option value="square">Square</option>
+                    <option value="hex">Hex</option>
+                    <option value="none">None</option>
+                </select>
+            </label>
+            <div class="row">
+                <label>Grid size (px) <input type="number" name="grid_size_px" value="70" min="20" max="300" style="width:80px;"></label>
+                <label>Width (px) <input type="number" name="width_px" value="2000" min="200" max="8000" style="width:90px;"></label>
+                <label>Height (px) <input type="number" name="height_px" value="1500" min="200" max="8000" style="width:90px;"></label>
+            </div>
+            <label>Image (png/jpg/webp, optional — max 25 MB) <input type="file" name="image" accept="image/*"></label>
+            <div><button type="submit">Upload map</button></div>
         </form>
-        <form method="post" action="/campaign/{{ campaign.id }}/playlists/{{ pl.id }}/delete" style="margin-top:6px;" onsubmit="return confirm('Delete this entire playlist and all its tracks?')">
-            <button class="danger">Delete playlist</button>
-        </form>
+    </details>
+</section>
+
+<!-- ── Audio ── -->
+<section class="settings-section" id="audio">
+    <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;margin-bottom:6px;">
+        <h2 style="margin:0;">🎵 Audio playlists</h2>
+        <span style="display:flex;gap:8px;">
+            <button type="button" id="backfill-meta-btn" title="Re-read ID3/Vorbis tags from every track file">↺ Refresh metadata</button>
+            {% if campaign.now_playing_track_id %}
+            <button type="button" id="stop-all-btn">⏹ Stop playback</button>
+            {% endif %}
+        </span>
+    </div>
+    <p class="muted" style="margin-bottom:10px;">Upload tracks (mp3, ogg, wav, m4a — max 30 MB each). All connected players hear what you start.</p>
+
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+        <input type="checkbox" id="loop-checkbox" {% if campaign.now_playing_loop %}checked{% endif %}>
+        Loop playlist when last track ends
+        <span id="loop-saved" style="font-size:11px;color:#6cb;display:none;">Saved</span>
+    </label>
+
+    {% for pl in playlists %}
+    <details class="playlist-card" {% if loop.first %}open{% endif %} data-playlist-details-id="{{ pl.id }}">
+        <summary>
+            <span class="pl-chevron">▶</span>
+            <strong class="pl-name">{{ pl.name }}</strong>
+            <input class="pl-name-input" type="text" value="{{ pl.name|e }}" style="display:none;font-weight:bold;flex:1;min-width:0;">
+            <span class="muted pl-count">({{ pl.tracks|length }} track{{ '' if pl.tracks|length == 1 else 's' }})</span>
+            <select class="pl-category-select" data-playlist-id="{{ pl.id }}" style="font-size:11px;padding:2px 4px;margin-left:4px;" title="Audio category">
+                <option value="music" {% if pl.category == 'music' %}selected{% endif %}>Music</option>
+                <option value="sfx" {% if pl.category == 'sfx' %}selected{% endif %}>SFX</option>
+                <option value="environment" {% if pl.category == 'environment' %}selected{% endif %}>Environment</option>
+            </select>
+            <div class="pl-actions">
+                <button type="button" class="pl-rename-btn" title="Rename">✏</button>
+                <button type="button" class="pl-rename-save" style="display:none;">Save</button>
+                <button type="button" class="pl-rename-cancel" style="display:none;">✕</button>
+            </div>
+        </summary>
+        <div class="playlist-body">
+            <div class="track-list" data-playlist-id="{{ pl.id }}">
+                {% for t in pl.tracks %}
+                <div class="track-row" data-track-id="{{ t.id }}" draggable="true">
+                    <span class="track-drag-handle" title="Drag to reorder">⠿</span>
+                    <span class="track-num">{{ loop.index }}</span>
+                    <div class="track-info">
+                        <span class="track-name">{{ t.name }}</span>
+                        <input class="track-name-input" type="text" value="{{ t.name|e }}" style="display:none;">
+                        {% set meta = [t.track_artist, t.track_album, t.track_genre, t.track_year] | select | list %}
+                        {% if meta %}<span class="track-meta">{{ meta | join(' · ') }}</span>{% endif %}
+                    </div>
+                    {% if campaign.now_playing_track_id == t.id %}<span class="badge-playing" title="Now playing">▶</span>{% endif %}
+                    <div class="track-actions">
+                        <button type="button" class="rename-btn" title="Rename">✏</button>
+                        <button type="button" class="rename-save" style="display:none;">Save</button>
+                        <button type="button" class="rename-cancel" style="display:none;">✕</button>
+                        <button type="button" onclick="vttPlayTrack({{ t.id }})" title="Play">▶ Play</button>
+                        <button type="button" class="delete-track-btn danger" data-track-id="{{ t.id }}" title="Delete">Delete</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% if not pl.tracks %}<p class="muted" style="font-size:13px;margin:0 0 10px;">No tracks yet — upload some below.</p>{% endif %}
+
+            <form class="upload-form" method="post" action="/campaign/{{ campaign.id }}/playlists/{{ pl.id }}/tracks" enctype="multipart/form-data">
+                <div class="upload-zone">
+                    <input type="file" name="audio" accept="audio/*,.mp3,.ogg,.wav,.m4a" multiple required class="file-input" style="display:none;">
+                    <button type="button" class="choose-files-btn">Choose files…</button>
+                    <span class="file-label">No files chosen</span>
+                    <button type="submit" class="upload-submit-btn" style="display:none;">Upload</button>
+                </div>
+            </form>
+
+            <div class="pl-footer">
+                <span class="muted" style="font-size:12px;">Drag tracks to reorder</span>
+                <button type="button" class="danger pl-delete-btn" data-playlist-id="{{ pl.id }}" data-name="{{ pl.name|e }}">Delete playlist</button>
+            </div>
+        </div>
     </details>
     {% endfor %}
 
-    <details style="margin-top:10px;">
-        <summary>+ New playlist</summary>
-        <form method="post" action="/campaign/{{ campaign.id }}/playlists" class="row">
-            <input name="name" placeholder="Playlist name" required>
-            <button>Create</button>
-        </form>
-    </details>
+    {% if not playlists %}<p class="muted" style="margin-top:8px;">No playlists yet.</p>{% endif %}
 
-    {% if campaign.now_playing_track_id %}
-    <p style="margin-top:10px;">
-        <button type="button" onclick="(async()=>{await fetch('/campaign/{{ campaign.id }}/audio/stop',{method:'POST'}); location.reload();})()">⏹ Stop playback for everyone</button>
-    </p>
-    {% endif %}
+    <div class="new-playlist-bar">
+        <button type="button" id="new-playlist-btn">+ New playlist</button>
+    </div>
+    <form id="new-playlist-form" method="post" action="/campaign/{{ campaign.id }}/playlists">
+        <input name="name" placeholder="Playlist name" required id="new-playlist-name">
+        <select name="category">
+            <option value="music">Music</option>
+            <option value="sfx">SFX</option>
+            <option value="environment">Environment</option>
+        </select>
+        <button type="submit">Create</button>
+        <button type="button" id="cancel-new-playlist">Cancel</button>
+    </form>
 </section>
+
+<!-- ── Token Templates ── -->
+<section class="settings-section" id="tmpl">
+    <h2>🎭 Token Templates</h2>
+    <p class="muted">Create reusable tokens for NPCs, monsters, and recurring characters. Templates can be placed directly from the GM Tools panel during play.</p>
+
+    {% for tmpl in templates %}
+    <details class="playlist-card tmpl-card" data-tmpl-id="{{ tmpl.id }}">
+        <summary>
+            <span class="pl-chevron">▶</span>
+            {% if tmpl.image_url %}
+            <img src="{{ tmpl.image_url }}" style="width:32px;height:32px;border-radius:4px;object-fit:cover;flex-shrink:0;">
+            {% else %}
+            <span style="width:32px;height:32px;border-radius:4px;background:#1e2030;display:inline-flex;align-items:center;justify-content:center;font-weight:700;color:#556;flex-shrink:0;font-size:14px;">{{ tmpl.name[:1]|upper }}</span>
+            {% endif %}
+            <strong class="tmpl-name">{{ tmpl.name }}</strong>
+            <span class="muted" style="font-size:11px;">{{ 'D&D 5e' if tmpl.template == 'dnd5e' else 'Generic' }}</span>
+            {% if tmpl.tags %}
+            <span class="muted" style="font-size:11px;">{{ tmpl.tags | join(', ') }}</span>
+            {% endif %}
+            <div class="pl-actions" style="margin-left:auto;">
+            </div>
+        </summary>
+        <div class="playlist-body">
+            <!-- Image upload -->
+            <div style="margin-bottom:10px; display:flex; align-items:center; gap:10px;">
+                {% if tmpl.image_url %}
+                <img src="{{ tmpl.image_url }}" style="width:64px;height:64px;object-fit:cover;border-radius:6px;" class="tmpl-preview-img">
+                {% else %}
+                <div class="tmpl-preview-img" style="width:64px;height:64px;background:#1e2030;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#556;font-weight:700;">{{ tmpl.name[:1]|upper }}</div>
+                {% endif %}
+                <label style="cursor:pointer;">
+                    <button type="button" class="tmpl-img-btn" onclick="this.nextElementSibling.click()">Upload image</button>
+                    <input type="file" class="tmpl-img-input" accept="image/*" style="display:none;">
+                </label>
+            </div>
+            <!-- Name -->
+            <div class="row" style="margin-bottom:8px;">
+                <input type="text" class="tmpl-name-input" value="{{ tmpl.name|e }}" placeholder="Template name" style="flex:1;">
+                <button type="button" class="tmpl-name-save">Rename</button>
+            </div>
+            <!-- Tags -->
+            <div class="row" style="margin-bottom:8px;">
+                <input type="text" class="tmpl-tags-input" value="{{ tmpl.tags | join(', ') }}" placeholder="Tags (comma-separated)" style="flex:1;" title="Comma-separated tags">
+                <button type="button" class="tmpl-tags-save">Save tags</button>
+            </div>
+            <!-- Type -->
+            <div class="row" style="margin-bottom:10px;">
+                <label style="font-size:13px;">Type
+                    <select class="tmpl-type-select" style="margin-left:6px;">
+                        <option value="generic" {% if tmpl.template == 'generic' %}selected{% endif %}>Generic</option>
+                        <option value="dnd5e" {% if tmpl.template == 'dnd5e' %}selected{% endif %}>D&amp;D 5e</option>
+                    </select>
+                </label>
+            </div>
+            <!-- Sheet edit + delete -->
+            <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid #2e3140; padding-top:10px; margin-top:4px;">
+                <button type="button" class="tmpl-edit-sheet-btn">📋 Edit sheet</button>
+                <button type="button" class="danger tmpl-delete-btn" data-tmpl-id="{{ tmpl.id }}" data-name="{{ tmpl.name|e }}">Delete</button>
+            </div>
+        </div>
+    </details>
+    {% endfor %}
+
+    {% if not templates %}<p class="muted" style="margin-top:8px;">No templates yet.</p>{% endif %}
+
+    <div class="new-playlist-bar" style="margin-top:14px; display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+        <button type="button" id="new-tmpl-btn">+ New template</button>
+        <button type="button" id="export-tmpls-btn">⬇ Export</button>
+        <button type="button" id="import-tmpls-btn">⬆ Import</button>
+    </div>
+    <form id="new-tmpl-form" style="display:none; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px;" onsubmit="return false;">
+        <input name="name" id="new-tmpl-name" placeholder="Template name" required>
+        <select id="new-tmpl-type"><option value="generic">Generic</option><option value="dnd5e">D&amp;D 5e</option></select>
+        <input id="new-tmpl-tags" placeholder="Tags (comma-separated)">
+        <button type="submit">Create</button>
+        <button type="button" id="cancel-new-tmpl">Cancel</button>
+    </form>
+</section>
+
+<!-- Template sheet edit modal -->
+<div id="tmpl-sheet-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:300; align-items:center; justify-content:center;">
+    <div style="background:#1f2128; border-radius:10px; padding:20px; max-width:780px; width:94vw; max-height:90vh; overflow:auto; position:relative;">
+        <button id="tmpl-sheet-modal-close" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;color:#666;cursor:pointer;">&times;</button>
+        <div id="tmpl-sheet-modal-body"></div>
+    </div>
+</div>
+
+<!-- Import templates modal -->
+<div id="tmpl-import-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:300; align-items:center; justify-content:center;">
+    <div style="background:#1f2128; border-radius:10px; padding:20px; max-width:700px; width:94vw; max-height:90vh; overflow:auto; position:relative;">
+        <button id="tmpl-import-close" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:20px;color:#666;cursor:pointer;">&times;</button>
+        <h3 style="margin:0 0 14px;">Import Token Templates</h3>
+
+        <!-- Tab bar -->
+        <div style="display:flex; gap:6px; margin-bottom:16px; border-bottom:1px solid #2e3140; padding-bottom:10px;">
+            <button class="import-tab-btn active" data-tab="file" style="padding:5px 12px; background:#1a3328; color:#6cb; border:1px solid #3a6a50; border-radius:4px; cursor:pointer; font-size:12px;">📁 From File</button>
+            <button class="import-tab-btn" data-tab="campaign" style="padding:5px 12px; background:#2a2d36; color:#bbb; border:1px solid #444; border-radius:4px; cursor:pointer; font-size:12px;">🎲 From Campaign</button>
+            <button class="import-tab-btn" data-tab="open5e" style="padding:5px 12px; background:#2a2d36; color:#bbb; border:1px solid #444; border-radius:4px; cursor:pointer; font-size:12px;">🐉 From Open5e</button>
+        </div>
+
+        <!-- Tab: From File -->
+        <div class="import-tab-panel" id="import-panel-file">
+            <p class="muted" style="font-size:12px; margin-top:0;">Upload a JSON export file from SimpleVTT, or paste JSON directly.</p>
+            <div style="margin-bottom:10px; display:flex; align-items:center; gap:10px;">
+                <button type="button" id="import-file-choose-btn">Choose JSON file</button>
+                <input type="file" id="import-file-input" accept=".json,application/json" style="display:none;">
+                <span id="import-file-name" class="muted" style="font-size:12px;">No file chosen</span>
+            </div>
+            <textarea id="import-json-paste" rows="9" placeholder='Or paste JSON here — array of templates or {"templates":[...]} export object'
+                style="width:100%; box-sizing:border-box; font-family:monospace; font-size:12px; resize:vertical;"></textarea>
+            <div style="display:flex; align-items:center; gap:10px; margin-top:10px;">
+                <button type="button" id="import-file-btn">Import</button>
+                <span id="import-file-status" class="muted" style="font-size:12px;"></span>
+            </div>
+        </div>
+
+        <!-- Tab: From Campaign -->
+        <div class="import-tab-panel" id="import-panel-campaign" style="display:none;">
+            <div style="margin-bottom:10px;">
+                <label style="font-size:13px;">Source campaign
+                    <select id="import-campaign-select" style="margin-left:8px;">
+                        <option value="">— select campaign —</option>
+                    </select>
+                </label>
+            </div>
+            <div id="import-campaign-list" style="max-height:300px; overflow-y:auto; border:1px solid #2e3140; border-radius:4px; padding:6px; min-height:56px;">
+                <span class="muted" style="font-size:12px;">Select a campaign above to see its templates.</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:10px; flex-wrap:wrap;">
+                <button type="button" id="import-campaign-btn">Import selected</button>
+                <button type="button" id="import-campaign-all-btn">Import all</button>
+                <span id="import-campaign-status" class="muted" style="font-size:12px;"></span>
+            </div>
+        </div>
+
+        <!-- Tab: From Open5e -->
+        <div class="import-tab-panel" id="import-panel-open5e" style="display:none;">
+            <p class="muted" style="font-size:12px; margin-top:0;">Search the Open5e SRD database and import monsters as D&amp;D 5e templates.</p>
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+                <input type="text" id="open5e-search-input" placeholder="Search monsters (e.g. goblin, dragon, troll)…" style="flex:1;">
+                <button type="button" id="open5e-search-btn">Search</button>
+            </div>
+            <div id="open5e-results" style="max-height:340px; overflow-y:auto; border:1px solid #2e3140; border-radius:4px; padding:6px; min-height:56px;">
+                <span class="muted" style="font-size:12px;">Enter a search term above.</span>
+            </div>
+            <p class="muted" style="font-size:11px; margin-top:8px; margin-bottom:0;">
+                Data from <a href="https://open5e.com" target="_blank" rel="noopener noreferrer" style="color:#6cb;">open5e.com</a> — SRD monsters only.
+            </p>
+        </div>
+    </div>
+</div>
+
+<!-- ── Danger zone (admin only) ── -->
+{% if user.is_admin %}
+<section class="settings-section" id="danger">
+    <div class="danger-zone">
+        <h2>Danger zone</h2>
+        <p class="muted">These actions are permanent and cannot be undone.</p>
+        <form method="post" action="/campaign/{{ campaign.id }}/settings/delete" onsubmit="return confirm('Permanently delete campaign &quot;{{ campaign.name }}&quot; and ALL its data?')">
+            <button type="submit" class="danger">Delete campaign</button>
+        </form>
+    </div>
+</section>
+{% endif %}
 
 <script>
 const CAMPAIGN_ID = {{ campaign.id }};
+
 window.vttPlayTrack = async function (trackId) {
     const resp = await fetch(`/campaign/${CAMPAIGN_ID}/audio/play`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ track_id: trackId }),
     });
     if (!resp.ok) alert('Could not start track: ' + (await resp.text()));
     else location.reload();
 };
-</script>
 
-{% if user.is_admin %}
-<section>
-    <h2>Admin tools</h2>
-    <p><a href="/admin/campaign/{{ campaign.id }}">Open full admin panel for this campaign →</a></p>
-</section>
-{% endif %}
+document.getElementById('loop-checkbox')?.addEventListener('change', async function () {
+    const fd = new FormData();
+    if (this.checked) fd.append('loop', 'true');
+    await fetch(`/campaign/${CAMPAIGN_ID}/audio/loop`, { method: 'POST', body: fd });
+    const saved = document.getElementById('loop-saved');
+    saved.style.display = '';
+    setTimeout(() => { saved.style.display = 'none'; }, 1500);
+});
+
+document.getElementById('stop-all-btn')?.addEventListener('click', async () => {
+    await fetch(`/campaign/${CAMPAIGN_ID}/audio/stop`, { method: 'POST' });
+    location.reload();
+});
+
+document.getElementById('backfill-meta-btn')?.addEventListener('click', async function () {
+    this.disabled = true; this.textContent = '↺ Refreshing…';
+    try {
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/audio/backfill_metadata`, { method: 'POST' });
+        const data = await resp.json();
+        if (resp.ok) {
+            this.textContent = `↺ Done (${data.updated} track${data.updated === 1 ? '' : 's'} updated)`;
+            setTimeout(() => location.reload(), 800);
+        } else { alert('Metadata refresh failed'); this.disabled = false; this.textContent = '↺ Refresh metadata'; }
+    } catch { alert('Metadata refresh failed'); this.disabled = false; this.textContent = '↺ Refresh metadata'; }
+});
+
+const newPlBtn = document.getElementById('new-playlist-btn');
+const newPlForm = document.getElementById('new-playlist-form');
+const cancelNewPl = document.getElementById('cancel-new-playlist');
+newPlBtn.addEventListener('click', () => {
+    newPlForm.style.display = 'flex'; newPlBtn.style.display = 'none';
+    document.getElementById('new-playlist-name').focus();
+});
+cancelNewPl.addEventListener('click', () => { newPlForm.style.display = 'none'; newPlBtn.style.display = ''; });
+
+document.querySelectorAll('.upload-form').forEach(form => {
+    const input = form.querySelector('.file-input');
+    const label = form.querySelector('.file-label');
+    const chooseBtn = form.querySelector('.choose-files-btn');
+    const submitBtn = form.querySelector('.upload-submit-btn');
+    chooseBtn.addEventListener('click', () => input.click());
+    input.addEventListener('change', () => {
+        const n = input.files.length;
+        label.textContent = n === 0 ? 'No files chosen' : n === 1 ? input.files[0].name : `${n} files selected`;
+        submitBtn.style.display = n > 0 ? '' : 'none';
+    });
+});
+
+document.querySelectorAll('details[data-playlist-details-id]').forEach(details => {
+    const playlistId = details.dataset.playlistDetailsId;
+    const summary = details.querySelector('summary');
+    const nameSpan = details.querySelector('.pl-name');
+    const nameInput = details.querySelector('.pl-name-input');
+    const editBtn = details.querySelector('.pl-rename-btn');
+    const saveBtn = details.querySelector('.pl-rename-save');
+    const cancelBtn = details.querySelector('.pl-rename-cancel');
+
+    summary.addEventListener('click', ev => { if (ev.target.closest('button, input')) ev.preventDefault(); });
+
+    function enterEdit() {
+        nameInput.value = nameSpan.textContent.trim();
+        nameSpan.style.display = 'none'; nameInput.style.display = '';
+        editBtn.style.display = 'none'; saveBtn.style.display = ''; cancelBtn.style.display = '';
+        nameInput.focus(); nameInput.select();
+    }
+    function exitEdit() {
+        nameInput.style.display = 'none'; nameSpan.style.display = '';
+        editBtn.style.display = ''; saveBtn.style.display = 'none'; cancelBtn.style.display = 'none';
+    }
+    async function saveRename() {
+        const newName = nameInput.value.trim();
+        if (!newName) return;
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/playlists/${playlistId}/rename`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName }),
+        });
+        if (!resp.ok) { alert('Rename failed'); return; }
+        nameSpan.textContent = newName;
+        details.querySelector('.pl-delete-btn').dataset.name = newName;
+        exitEdit();
+    }
+    editBtn.addEventListener('click', enterEdit);
+    cancelBtn.addEventListener('click', exitEdit);
+    saveBtn.addEventListener('click', saveRename);
+    nameInput.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') { ev.preventDefault(); saveRename(); }
+        if (ev.key === 'Escape') exitEdit();
+    });
+});
+
+document.querySelectorAll('.pl-category-select').forEach(sel => {
+    sel.addEventListener('change', async () => {
+        const playlistId = sel.dataset.playlistId;
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/playlists/${playlistId}/category`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category: sel.value }),
+        });
+        if (!resp.ok) { alert('Failed to save category'); sel.value = sel.dataset.saved; }
+        else sel.dataset.saved = sel.value;
+    });
+    sel.dataset.saved = sel.value;
+});
+
+document.querySelectorAll('.pl-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        if (!confirm(`Delete playlist "${btn.dataset.name}" and all its tracks?`)) return;
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/playlists/${btn.dataset.playlistId}/delete`, { method: 'POST' });
+        if (resp.ok || resp.redirected) btn.closest('.playlist-card').remove();
+        else alert('Delete failed');
+    });
+});
+
+document.querySelectorAll('.track-row[data-track-id]').forEach(row => {
+    const trackId = row.dataset.trackId;
+    const nameSpan = row.querySelector('.track-name');
+    const nameInput = row.querySelector('.track-name-input');
+    const editBtn = row.querySelector('.rename-btn');
+    const saveBtn = row.querySelector('.rename-save');
+    const cancelBtn = row.querySelector('.rename-cancel');
+
+    function enterEdit() {
+        nameInput.value = nameSpan.textContent.trim();
+        nameSpan.style.display = 'none'; nameInput.style.display = '';
+        editBtn.style.display = 'none'; saveBtn.style.display = ''; cancelBtn.style.display = '';
+        nameInput.focus(); nameInput.select();
+    }
+    function exitEdit() {
+        nameInput.style.display = 'none'; nameSpan.style.display = '';
+        editBtn.style.display = ''; saveBtn.style.display = 'none'; cancelBtn.style.display = 'none';
+    }
+    async function saveRename() {
+        const newName = nameInput.value.trim();
+        if (!newName) return;
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/tracks/${trackId}/rename`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName }),
+        });
+        if (!resp.ok) { alert('Rename failed'); return; }
+        nameSpan.textContent = newName;
+        exitEdit();
+    }
+    editBtn.addEventListener('click', enterEdit);
+    cancelBtn.addEventListener('click', exitEdit);
+    saveBtn.addEventListener('click', saveRename);
+    nameInput.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') { ev.preventDefault(); saveRename(); }
+        if (ev.key === 'Escape') exitEdit();
+    });
+});
+
+document.querySelectorAll('.delete-track-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        if (!confirm('Delete this track?')) return;
+        const trackId = btn.dataset.trackId;
+        const row = btn.closest('.track-row');
+        const list = btn.closest('.track-list');
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/tracks/${trackId}/delete`, { method: 'POST' });
+        if (!resp.ok && !resp.redirected) { alert('Delete failed'); return; }
+        row.remove();
+        list.querySelectorAll('.track-row').forEach((r, i) => { r.querySelector('.track-num').textContent = i + 1; });
+    });
+});
+
+let dragSrc = null;
+document.querySelectorAll('.track-list[data-playlist-id]').forEach(list => {
+    const playlistId = list.dataset.playlistId;
+    function rows() { return [...list.querySelectorAll('.track-row[data-track-id]')]; }
+    function refreshPositions() { rows().forEach((r, i) => { r.querySelector('.track-num').textContent = i + 1; }); }
+
+    list.addEventListener('dragstart', ev => {
+        dragSrc = ev.target.closest('.track-row[data-track-id]');
+        if (!dragSrc) return;
+        ev.dataTransfer.effectAllowed = 'move';
+        requestAnimationFrame(() => dragSrc.classList.add('dragging'));
+    });
+    list.addEventListener('dragover', ev => {
+        ev.preventDefault(); ev.dataTransfer.dropEffect = 'move';
+        const target = ev.target.closest('.track-row[data-track-id]');
+        if (!target || target === dragSrc) return;
+        const all = rows();
+        if (all.indexOf(dragSrc) < all.indexOf(target)) target.after(dragSrc);
+        else target.before(dragSrc);
+    });
+    list.addEventListener('dragend', async () => {
+        if (dragSrc) { dragSrc.classList.remove('dragging'); dragSrc = null; }
+        refreshPositions();
+        const order = rows().map(r => parseInt(r.dataset.trackId, 10));
+        await fetch(`/campaign/${CAMPAIGN_ID}/playlists/${playlistId}/reorder`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order }),
+        });
+    });
+});
+
+// ── Export / Import ──
+const importModal = document.getElementById('tmpl-import-modal');
+
+document.getElementById('tmpl-import-close')?.addEventListener('click', () => { importModal.style.display = 'none'; });
+importModal?.addEventListener('click', ev => { if (ev.target === importModal) importModal.style.display = 'none'; });
+
+document.getElementById('import-tmpls-btn')?.addEventListener('click', () => { importModal.style.display = 'flex'; });
+
+document.getElementById('export-tmpls-btn')?.addEventListener('click', async () => {
+    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/templates/export`);
+    if (!resp.ok) { alert('Export failed'); return; }
+    const data = await resp.json();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `templates-campaign-${CAMPAIGN_ID}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+});
+
+// Tab switching
+document.querySelectorAll('.import-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.import-tab-btn').forEach(b => {
+            b.style.background = '#2a2d36'; b.style.color = '#bbb'; b.style.borderColor = '#444';
+        });
+        document.querySelectorAll('.import-tab-panel').forEach(p => { p.style.display = 'none'; });
+        btn.style.background = '#1a3328'; btn.style.color = '#6cb'; btn.style.borderColor = '#3a6a50';
+        document.getElementById(`import-panel-${btn.dataset.tab}`).style.display = '';
+    });
+});
+
+// ── Tab: From File ──
+const importFileInput = document.getElementById('import-file-input');
+let importFileData = null;
+
+document.getElementById('import-file-choose-btn')?.addEventListener('click', () => importFileInput.click());
+
+importFileInput?.addEventListener('change', () => {
+    const file = importFileInput.files[0];
+    const nameEl = document.getElementById('import-file-name');
+    if (!file) { nameEl.textContent = 'No file chosen'; importFileData = null; return; }
+    nameEl.textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            importFileData = JSON.parse(e.target.result);
+            document.getElementById('import-json-paste').value = '';
+        } catch {
+            nameEl.textContent = '✗ Invalid JSON';
+            importFileData = null;
+        }
+    };
+    reader.readAsText(file);
+});
+
+document.getElementById('import-file-btn')?.addEventListener('click', async () => {
+    const status = document.getElementById('import-file-status');
+    let data = importFileData;
+    if (!data) {
+        const raw = document.getElementById('import-json-paste').value.trim();
+        if (!raw) { status.textContent = 'No data provided.'; return; }
+        try { data = JSON.parse(raw); } catch { status.textContent = '✗ Invalid JSON.'; return; }
+    }
+    status.textContent = 'Importing…';
+    const body = Array.isArray(data) ? { templates: data } : data;
+    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/templates/import`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    if (!resp.ok) { status.textContent = '✗ Import failed: ' + await resp.text(); return; }
+    const result = await resp.json();
+    status.textContent = `✓ Imported ${result.count} template(s).`;
+    setTimeout(() => location.reload(), 900);
+});
+
+// ── Tab: From Campaign ──
+let campaignTemplatesList = [];
+
+document.querySelector('.import-tab-btn[data-tab="campaign"]')?.addEventListener('click', async () => {
+    const sel = document.getElementById('import-campaign-select');
+    if (sel.options.length > 1) return;
+    const resp = await fetch('/api/user/gm-campaigns');
+    if (!resp.ok) return;
+    const campaigns = await resp.json();
+    const others = campaigns.filter(c => c.id !== CAMPAIGN_ID);
+    if (!others.length) {
+        sel.options[0].textContent = '— no other campaigns —';
+        return;
+    }
+    others.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c.id; opt.textContent = c.name;
+        sel.appendChild(opt);
+    });
+});
+
+document.getElementById('import-campaign-select')?.addEventListener('change', async function () {
+    const srcId = this.value;
+    const list = document.getElementById('import-campaign-list');
+    campaignTemplatesList = [];
+    if (!srcId) {
+        list.innerHTML = '<span class="muted" style="font-size:12px;">Select a campaign above to see its templates.</span>';
+        return;
+    }
+    list.innerHTML = '<span class="muted" style="font-size:12px;">Loading…</span>';
+    const resp = await fetch(`/api/campaign/${srcId}/templates`);
+    if (!resp.ok) { list.innerHTML = '<span class="muted" style="font-size:12px;">Failed to load templates.</span>'; return; }
+    campaignTemplatesList = await resp.json();
+    if (!campaignTemplatesList.length) {
+        list.innerHTML = '<span class="muted" style="font-size:12px;">No templates in this campaign.</span>';
+        return;
+    }
+    list.innerHTML = campaignTemplatesList.map((t, i) => `
+        <label style="display:flex; align-items:center; gap:8px; padding:5px 2px; border-bottom:1px dashed #2e3140; cursor:pointer; font-size:13px;">
+            <input type="checkbox" class="camp-tmpl-check" data-idx="${i}" checked>
+            ${t.image_url ? `<img src="${t.image_url}" style="width:24px;height:24px;border-radius:3px;object-fit:cover;flex-shrink:0;">` : ''}
+            <span style="flex:1;">${t.name}</span>
+            <span class="muted" style="font-size:11px;">${t.template === 'dnd5e' ? 'D&D 5e' : 'Generic'}</span>
+            ${t.tags.length ? `<span class="muted" style="font-size:11px;">${t.tags.join(', ')}</span>` : ''}
+        </label>
+    `).join('');
+});
+
+async function _doImportCampaignTemplates(all) {
+    const status = document.getElementById('import-campaign-status');
+    const selected = all
+        ? campaignTemplatesList
+        : [...document.querySelectorAll('.camp-tmpl-check:checked')].map(c => campaignTemplatesList[+c.dataset.idx]);
+    if (!selected.length) { status.textContent = 'Nothing selected.'; return; }
+    status.textContent = 'Importing…';
+    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/templates/import`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templates: selected }),
+    });
+    if (!resp.ok) { status.textContent = '✗ Import failed: ' + await resp.text(); return; }
+    const result = await resp.json();
+    status.textContent = `✓ Imported ${result.count} template(s).`;
+    setTimeout(() => location.reload(), 900);
+}
+document.getElementById('import-campaign-btn')?.addEventListener('click', () => _doImportCampaignTemplates(false));
+document.getElementById('import-campaign-all-btn')?.addEventListener('click', () => _doImportCampaignTemplates(true));
+
+// ── Tab: From Open5e ──
+async function open5eSearch() {
+    const q = document.getElementById('open5e-search-input').value.trim();
+    const resultsEl = document.getElementById('open5e-results');
+    resultsEl.innerHTML = '<span class="muted" style="font-size:12px;">Searching…</span>';
+    const resp = await fetch(`/api/open5e/monsters?search=${encodeURIComponent(q)}&limit=30`);
+    if (!resp.ok) {
+        resultsEl.innerHTML = '<span class="muted" style="font-size:12px;">Search failed — Open5e may be unavailable.</span>';
+        return;
+    }
+    const data = await resp.json();
+    if (!data.results.length) {
+        resultsEl.innerHTML = '<span class="muted" style="font-size:12px;">No results found.</span>';
+        return;
+    }
+    resultsEl.innerHTML = `
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+            <thead><tr style="border-bottom:1px solid #2e3140; color:#888; font-size:11px; text-align:left;">
+                <th style="padding:4px 6px;">Name</th>
+                <th style="padding:4px 6px;">CR</th>
+                <th style="padding:4px 6px;">Type</th>
+                <th style="padding:4px 6px;">HP / AC</th>
+                <th style="padding:4px 6px; text-align:right;"></th>
+            </tr></thead>
+            <tbody>
+            ${data.results.map(m => `
+                <tr style="border-bottom:1px dashed #2e3140;">
+                    <td style="padding:4px 6px;">${m.name}</td>
+                    <td style="padding:4px 6px;">${m.cr}</td>
+                    <td style="padding:4px 6px;">${m.type || '—'}</td>
+                    <td style="padding:4px 6px;">${m.hp} / ${m.ac}</td>
+                    <td style="padding:4px 6px; text-align:right;">
+                        <button type="button" class="open5e-import-btn" data-slug="${m.slug}"
+                            style="padding:2px 10px; font-size:11px;">+ Add</button>
+                    </td>
+                </tr>
+            `).join('')}
+            </tbody>
+        </table>
+    `;
+    resultsEl.querySelectorAll('.open5e-import-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            btn.disabled = true; btn.textContent = '…';
+            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/templates/import-monster`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug: btn.dataset.slug }),
+            });
+            if (!resp.ok) { btn.textContent = '✗'; btn.style.color = '#c66'; btn.disabled = false; return; }
+            btn.textContent = '✓'; btn.style.color = '#6c6';
+        });
+    });
+}
+document.getElementById('open5e-search-btn')?.addEventListener('click', open5eSearch);
+document.getElementById('open5e-search-input')?.addEventListener('keydown', ev => { if (ev.key === 'Enter') open5eSearch(); });
+
+// ── Token Templates ──
+const newTmplBtn = document.getElementById('new-tmpl-btn');
+const newTmplForm = document.getElementById('new-tmpl-form');
+const cancelNewTmpl = document.getElementById('cancel-new-tmpl');
+if (newTmplBtn) {
+    newTmplBtn.addEventListener('click', () => { newTmplForm.style.display = 'flex'; newTmplBtn.style.display = 'none'; document.getElementById('new-tmpl-name').focus(); });
+    cancelNewTmpl.addEventListener('click', () => { newTmplForm.style.display = 'none'; newTmplBtn.style.display = ''; });
+    newTmplForm.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const name = document.getElementById('new-tmpl-name').value.trim();
+        const template = document.getElementById('new-tmpl-type').value;
+        const tagsRaw = document.getElementById('new-tmpl-tags').value;
+        const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+        if (!name) return;
+        const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/templates`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, template, tags }),
+        });
+        if (resp.ok) location.reload();
+        else alert('Create failed');
+    });
+}
+
+// Template sheet modal close
+const tmplSheetModal = document.getElementById('tmpl-sheet-modal');
+const tmplSheetModalClose = document.getElementById('tmpl-sheet-modal-close');
+if (tmplSheetModalClose) tmplSheetModalClose.addEventListener('click', () => { tmplSheetModal.style.display = 'none'; });
+if (tmplSheetModal) tmplSheetModal.addEventListener('click', ev => { if (ev.target === tmplSheetModal) tmplSheetModal.style.display = 'none'; });
+
+let _tmplSheetJs = null;
+
+document.querySelectorAll('.tmpl-card[data-tmpl-id]').forEach(card => {
+    const tmplId = card.dataset.tmplId;
+
+    // Image upload
+    const imgInput = card.querySelector('.tmpl-img-input');
+    if (imgInput) {
+        imgInput.addEventListener('change', async () => {
+            const file = imgInput.files[0];
+            if (!file) return;
+            const fd = new FormData();
+            fd.append('image', file);
+            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/templates/${tmplId}/image`, { method: 'POST', body: fd });
+            if (resp.ok) location.reload();
+            else alert('Image upload failed');
+        });
+    }
+
+    // Rename
+    const nameSave = card.querySelector('.tmpl-name-save');
+    if (nameSave) {
+        nameSave.addEventListener('click', async () => {
+            const name = card.querySelector('.tmpl-name-input').value.trim();
+            if (!name) return;
+            await fetch(`/api/campaign/${CAMPAIGN_ID}/templates/${tmplId}`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name }),
+            });
+            card.querySelector('.tmpl-name').textContent = name;
+        });
+    }
+
+    // Tags
+    const tagsSave = card.querySelector('.tmpl-tags-save');
+    if (tagsSave) {
+        tagsSave.addEventListener('click', async () => {
+            const raw = card.querySelector('.tmpl-tags-input').value;
+            const tags = raw.split(',').map(t => t.trim()).filter(Boolean);
+            await fetch(`/api/campaign/${CAMPAIGN_ID}/templates/${tmplId}`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tags }),
+            });
+        });
+    }
+
+    // Type change
+    const typeSelect = card.querySelector('.tmpl-type-select');
+    if (typeSelect) {
+        typeSelect.addEventListener('change', async () => {
+            await fetch(`/api/campaign/${CAMPAIGN_ID}/templates/${tmplId}`, {
+                method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ template: typeSelect.value }),
+            });
+        });
+    }
+
+    // Edit sheet
+    const editSheetBtn = card.querySelector('.tmpl-edit-sheet-btn');
+    if (editSheetBtn) {
+        editSheetBtn.addEventListener('click', async () => {
+            const body = document.getElementById('tmpl-sheet-modal-body');
+            body.innerHTML = '<p class="muted">Loading…</p>';
+            tmplSheetModal.style.display = 'flex';
+            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/templates/${tmplId}/sheet`);
+            if (!resp.ok) { body.innerHTML = '<p class="muted">Failed to load sheet.</p>'; return; }
+            const html = await resp.text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+            doc.querySelectorAll('script[src]').forEach(s => s.remove());
+            body.innerHTML = doc.body.innerHTML;
+            // Run sheet.js in page context
+            if (!_tmplSheetJs) _tmplSheetJs = await fetch('/static/sheet.js').then(r => r.text());
+            const s = document.createElement('script');
+            s.textContent = _tmplSheetJs;
+            document.head.appendChild(s);
+            s.remove();
+            // Run portrait upload inline script
+            const portraitInlineScripts = doc.body.querySelectorAll('script:not([src])');
+            portraitInlineScripts.forEach(inlineS => {
+                const s2 = document.createElement('script');
+                s2.textContent = inlineS.textContent;
+                document.head.appendChild(s2);
+                s2.remove();
+            });
+        });
+    }
+
+    // Delete
+    const deleteBtn = card.querySelector('.tmpl-delete-btn');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', async () => {
+            if (!confirm(`Delete template "${deleteBtn.dataset.name}"?`)) return;
+            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/templates/${tmplId}`, { method: 'DELETE' });
+            if (resp.ok) card.remove();
+            else alert('Delete failed');
+        });
+    }
+});
+</script>
 {% endblock %}

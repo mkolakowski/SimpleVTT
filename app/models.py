@@ -35,6 +35,9 @@ class GridType(str, enum.Enum):
     NONE = "none"
 
 
+VALID_THEMES = {"dark", "midnight", "dim", "light", "forest", "bubblegum", "fire"}
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -46,6 +49,10 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_disabled: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    theme: Mapped[str] = mapped_column(String(20), default="dark", server_default="dark")
+    # Per-user tab tint colors for the tabletop sidebar
+    battle_tab_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    player_tab_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
 
     characters: Mapped[list["Character"]] = relationship(
         back_populates="owner", foreign_keys="Character.owner_user_id"
@@ -78,6 +85,10 @@ class Campaign(Base):
     # access regardless. session_started_at is set the moment Start is hit.
     session_active: Mapped[bool] = mapped_column(Boolean, default=False)
     session_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # GM-assigned color for the primary GM in the roll log
+    gm_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # Tint color for the GM Tools tab in the tabletop sidebar
+    gm_tab_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     gm: Mapped[User] = relationship(foreign_keys=[gm_user_id])
@@ -120,7 +131,9 @@ class Character(Base):
     __tablename__ = "characters"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id", ondelete="CASCADE"))
+    campaign_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="SET NULL"), nullable=True
+    )
     owner_user_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("users.id"), nullable=True
     )
@@ -128,9 +141,10 @@ class Character(Base):
     template: Mapped[str] = mapped_column(String(40), default="generic")
     sheet: Mapped[dict] = mapped_column(JSON, default=dict)
     portrait_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    campaign: Mapped[Campaign] = relationship(back_populates="characters")
+    campaign: Mapped[Optional[Campaign]] = relationship(back_populates="characters")
     owner: Mapped[Optional[User]] = relationship(
         back_populates="characters", foreign_keys=[owner_user_id]
     )
@@ -145,6 +159,9 @@ class Token(Base):
     character_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("characters.id", ondelete="SET NULL"), nullable=True
     )
+    controller_user_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     label: Mapped[str] = mapped_column(String(120), default="")
     color: Mapped[str] = mapped_column(String(20), default="#cc3333")
     image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
@@ -152,9 +169,14 @@ class Token(Base):
     y: Mapped[float] = mapped_column(Float, default=0)
     size: Mapped[int] = mapped_column(Integer, default=1)
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)
+    token_template_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("token_templates.id", use_alter=True, name="fk_token_template", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     map: Mapped[Map] = relationship(back_populates="tokens")
     character: Mapped[Optional[Character]] = relationship(back_populates="tokens")
+    controller: Mapped[Optional[User]] = relationship(foreign_keys=[controller_user_id])
 
 
 class DiceRoll(Base):
@@ -180,6 +202,7 @@ class CampaignMembership(Base):
     """Users invited to a campaign (other than the primary GM/owner).
 
     is_gm=True marks a co-GM with full GM powers in this campaign.
+    color is a GM-assigned hex color used to highlight this member in the roll log.
     """
     __tablename__ = "campaign_memberships"
     __table_args__ = (UniqueConstraint("campaign_id", "user_id", name="uq_membership"),)
@@ -188,7 +211,12 @@ class CampaignMembership(Base):
     campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id", ondelete="CASCADE"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     is_gm: Mapped[bool] = mapped_column(Boolean, default=False)
+    color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+AUDIO_CATEGORIES = ("music", "sfx", "environment")
+AUDIO_CATEGORY_LABELS = {"music": "Music", "sfx": "Sound Effects", "environment": "Environment"}
 
 
 class Playlist(Base):
@@ -198,6 +226,7 @@ class Playlist(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id", ondelete="CASCADE"))
     name: Mapped[str] = mapped_column(String(120))
+    category: Mapped[str] = mapped_column(String(20), default="music")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     tracks: Mapped[list["PlaylistTrack"]] = relationship(
@@ -218,13 +247,16 @@ class PlaylistTrack(Base):
     position: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
+    track_artist: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    track_album: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    track_genre: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    track_year: Mapped[Optional[str]] = mapped_column(String(4), nullable=True)
+
     playlist: Mapped[Playlist] = relationship(back_populates="tracks")
 
 
 class UserAudioPreference(Base):
-    """Per-user-per-track volume override (0.0-1.0). Stored server-side so it
-    follows the user across browsers/devices. The effective playback volume
-    is master_volume * track_override (or 1.0 if no override exists)."""
+    """Per-user-per-track volume override (legacy — superseded by UserAudioCategoryPref)."""
     __tablename__ = "user_audio_preferences"
     __table_args__ = (
         UniqueConstraint("user_id", "track_id", name="uq_user_track_pref"),
@@ -235,3 +267,34 @@ class UserAudioPreference(Base):
     track_id: Mapped[int] = mapped_column(ForeignKey("playlist_tracks.id", ondelete="CASCADE"))
     volume: Mapped[float] = mapped_column(Float, default=1.0)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class UserAudioCategoryPref(Base):
+    """Per-user-per-category volume (0.0-1.0). Categories: music, sfx, environment.
+    Stored server-side so preferences follow the user across browsers/devices.
+    Effective playback volume = master × category_volume."""
+    __tablename__ = "user_audio_category_prefs"
+    __table_args__ = (
+        UniqueConstraint("user_id", "category", name="uq_user_category_pref"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    category: Mapped[str] = mapped_column(String(20))
+    volume: Mapped[float] = mapped_column(Float, default=1.0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class TokenTemplate(Base):
+    """Reusable token with a character sheet for NPCs/monsters."""
+    __tablename__ = "token_templates"
+    __table_args__ = ()
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(200))
+    image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    template: Mapped[str] = mapped_column(String(40), default="generic")
+    sheet: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

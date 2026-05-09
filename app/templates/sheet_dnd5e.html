@@ -1,65 +1,385 @@
 <div class="sheet dnd5e">
-    <h2>{{ char.name }}</h2>
-    <p class="muted">D&amp;D 5e sheet</p>
+    <form id="sheet-form" data-char-id="{{ char.id }}" data-template="dnd5e" data-save-url="{{ sheet_save_url|default('') }}" data-save-method="{{ sheet_save_method|default('POST') }}" {% if not can_edit %}data-readonly="1"{% endif %}>
 
-    <form id="sheet-form" data-char-id="{{ char.id }}" data-template="dnd5e" {% if not can_edit %}data-readonly="1"{% endif %}>
-        <div class="row">
-            <label>Name <input name="name" value="{{ char.name }}" {% if not can_edit %}readonly{% endif %}></label>
-            <label>Class <input name="class" value="{{ sheet.get('class','') }}" {% if not can_edit %}readonly{% endif %}></label>
-            <label>Level <input type="number" name="level" value="{{ sheet.get('level',1) }}" min="1" max="20" {% if not can_edit %}readonly{% endif %}></label>
-            <label>Race <input name="race" value="{{ sheet.get('race','') }}" {% if not can_edit %}readonly{% endif %}></label>
-        </div>
+        {# ── Character header ─────────────────────────────────────────── #}
+        <div style="display:flex;gap:14px;margin-bottom:12px;align-items:flex-start;">
 
-        <div class="row">
-            <label>HP cur <input type="number" name="hp.current" value="{{ sheet.get('hp',{}).get('current',10) }}" {% if not can_edit %}readonly{% endif %}></label>
-            <label>HP max <input type="number" name="hp.max" value="{{ sheet.get('hp',{}).get('max',10) }}" {% if not can_edit %}readonly{% endif %}></label>
-            <label>HP temp <input type="number" name="hp.temp" value="{{ sheet.get('hp',{}).get('temp',0) }}" {% if not can_edit %}readonly{% endif %}></label>
-            <label>AC <input type="number" name="ac" value="{{ sheet.get('ac',10) }}" {% if not can_edit %}readonly{% endif %}></label>
-            <label>Speed <input type="number" name="speed" value="{{ sheet.get('speed',30) }}" {% if not can_edit %}readonly{% endif %}></label>
-            <label>Init <input type="number" name="initiative_bonus" value="{{ sheet.get('initiative_bonus',0) }}" {% if not can_edit %}readonly{% endif %}></label>
-            <label>Prof <input type="number" name="proficiency_bonus" value="{{ sheet.get('proficiency_bonus',2) }}" {% if not can_edit %}readonly{% endif %}></label>
+            {# Portrait column #}
+            <div style="flex-shrink:0;position:relative;width:96px;">
+                {% if char.portrait_url %}
+                <img id="char-portrait-img" src="{{ char.portrait_url }}" alt="{{ char.name }}"
+                     style="width:96px;height:96px;object-fit:cover;border-radius:8px;display:block;">
+                {% else %}
+                <div id="char-portrait-placeholder"
+                     style="width:96px;height:96px;background:#1e2030;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:36px;color:#556;border:1px solid #2a2d3a;font-weight:700;">
+                    {{ char.name[:1]|upper }}
+                </div>
+                {% endif %}
+                {% if can_edit %}
+                <label title="Upload character art" data-portrait-url="{{ portrait_upload_url|default('') }}"
+                       style="position:absolute;bottom:4px;right:4px;background:#20232aee;border:1px solid #3a3d47;border-radius:3px;padding:2px 5px;cursor:pointer;font-size:12px;line-height:1;color:#9aa0aa;">
+                    📷<input type="file" id="portrait-upload-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;">
+                </label>
+                {% endif %}
+            </div>
+
+            {# Identity + vitals column #}
+            <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;">
+
+                {# Name + identity tags + Edit button #}
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
+                    <div style="min-width:0;">
+                        <div id="char-name-disp" style="font-size:21px;font-weight:800;color:#e8ecf4;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ char.name }}</div>
+                        <div id="char-tags-row" style="display:flex;flex-wrap:wrap;gap:3px;align-items:center;font-size:12px;color:#7a8ab0;margin-top:3px;">
+                            <span id="tag-class">{{ sheet.get('class','') or '—' }}</span>
+                            <span id="sep-sub" style="color:#3a4560;{% if not sheet.get('subclass') %}display:none;{% endif %}">•</span>
+                            <span id="tag-subclass" style="{% if not sheet.get('subclass') %}display:none;{% endif %}">{{ sheet.get('subclass','') }}</span>
+                            <span id="sep-race" style="color:#3a4560;{% if not sheet.get('race') %}display:none;{% endif %}">•</span>
+                            <span id="tag-race" style="{% if not sheet.get('race') %}display:none;{% endif %}">{{ sheet.get('race','') }}</span>
+                            <span style="color:#3a4560;">•</span>
+                            <span id="tag-level" style="color:#6ab;font-weight:700;">Level {{ sheet.get('level',1) }}</span>
+                        </div>
+                    </div>
+                    {% if can_edit %}
+                    <button type="button" id="char-edit-btn" style="font-size:11px;padding:2px 8px;flex-shrink:0;white-space:nowrap;margin-top:2px;">✏ Edit</button>
+                    {% endif %}
+                </div>
+
+                {# HP tracker + combat stat chips #}
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+
+                    {# HP block #}
+                    <div style="flex:1;min-width:155px;background:#1a1e2c;border:1px solid #2e3550;border-radius:8px;padding:10px 12px;">
+                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:5px;">❤ Hit Points</div>
+                        <div style="display:flex;align-items:baseline;gap:5px;">
+                            <input type="number" name="hp.current" value="{{ sheet.get('hp',{}).get('current',10) }}"
+                                   style="width:56px;font-size:30px;font-weight:800;color:#e4a0a0;text-align:center;background:transparent;border:none;border-bottom:2px solid #5a3040;padding:0 2px;-moz-appearance:textfield;"
+                                   {% if not can_edit %}readonly{% endif %}>
+                            <span style="font-size:16px;color:#3a4560;">/</span>
+                            <span id="hp-max-disp" style="font-size:16px;font-weight:600;color:#7a8ab0;">{{ sheet.get('hp',{}).get('max',10) }}</span>
+                            <span style="font-size:10px;color:#3a4560;margin-left:1px;">max</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:6px;margin-top:7px;padding-top:7px;border-top:1px solid #1e2436;">
+                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Temp</span>
+                            <input type="number" name="hp.temp" value="{{ sheet.get('hp',{}).get('temp',0) }}"
+                                   style="width:44px;font-size:15px;font-weight:700;color:#8ecfe0;text-align:center;background:transparent;border:none;border-bottom:1px solid #1e3040;padding:0 2px;-moz-appearance:textfield;"
+                                   {% if not can_edit %}readonly{% endif %}>
+                            <span style="font-size:10px;color:#3a4560;">HP</span>
+                        </div>
+                    </div>
+
+                    {# Combat stat chips (2×2 grid) #}
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;flex-shrink:0;">
+                        {# AC — always editable in play #}
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1e2c;border:1px solid #2e3550;border-radius:6px;padding:6px 8px;min-width:58px;min-height:56px;">
+                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:2px;">AC</span>
+                            <input type="number" name="ac" value="{{ sheet.get('ac',10) }}"
+                                   style="width:38px;font-size:22px;font-weight:800;color:#e8ecf4;text-align:center;background:transparent;border:none;padding:0;-moz-appearance:textfield;"
+                                   {% if not can_edit %}readonly{% endif %}>
+                        </div>
+                        {# Speed — display; edit via panel #}
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1e2c;border:1px solid #2e3550;border-radius:6px;padding:6px 8px;min-width:58px;min-height:56px;">
+                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:2px;">Speed</span>
+                            <span id="speed-disp" style="font-size:22px;font-weight:800;color:#e8ecf4;">{{ sheet.get('speed',30) }}</span>
+                        </div>
+                        {# Initiative — display; edit via panel #}
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1e2c;border:1px solid #2e3550;border-radius:6px;padding:6px 8px;min-width:58px;min-height:56px;">
+                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:2px;">Init</span>
+                            <span id="init-disp" style="font-size:22px;font-weight:800;color:#e8ecf4;">{{ '+' if sheet.get('initiative_bonus',0) >= 0 else '' }}{{ sheet.get('initiative_bonus',0) }}</span>
+                        </div>
+                        {# Proficiency — display; edit via panel #}
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1e2c;border:1px solid #2e3550;border-radius:6px;padding:6px 8px;min-width:58px;min-height:56px;">
+                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:2px;">Prof</span>
+                            <span id="prof-disp" style="font-size:22px;font-weight:800;color:#e8ecf4;">{{ '+' if sheet.get('proficiency_bonus',2) >= 0 else '' }}{{ sheet.get('proficiency_bonus',2) }}</span>
+                        </div>
+                    </div>
+
+                </div>{# end HP + chips #}
+            </div>{# end identity+vitals column #}
+        </div>{# end header flex #}
+
+        {# ── Edit panel (hidden by default) ──────────────────────────── #}
+        {% if can_edit %}
+        <div id="char-edit-panel" style="display:none;background:#191c24;border:1px solid #2e3140;border-radius:8px;padding:12px 14px;margin-bottom:12px;">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:10px;">Character Details</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px;">
+                <label style="display:flex;flex-direction:column;gap:3px;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Name</span>
+                    <input name="name" id="char-name-input" value="{{ char.name }}">
+                </label>
+                <label style="display:flex;flex-direction:column;gap:3px;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Class</span>
+                    <select name="class" id="class-select" data-current="{{ sheet.get('class','') }}">
+                        <option value="">— loading… —</option>
+                    </select>
+                </label>
+                <label style="display:flex;flex-direction:column;gap:3px;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Subclass</span>
+                    <select name="subclass" id="subclass-select" data-current="{{ sheet.get('subclass','') }}">
+                        <option value="">— select class first —</option>
+                    </select>
+                </label>
+                <label style="display:flex;flex-direction:column;gap:3px;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Race</span>
+                    <select name="race" id="race-select" data-current="{{ sheet.get('race','') }}">
+                        <option value="">— loading… —</option>
+                    </select>
+                </label>
+                <label style="display:flex;flex-direction:column;gap:3px;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Level</span>
+                    <input type="number" name="level" id="level-input" value="{{ sheet.get('level',1) }}" min="1" max="20">
+                </label>
+                <label style="display:flex;flex-direction:column;gap:3px;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Max HP</span>
+                    <input type="number" name="hp.max" id="hp-max-input" value="{{ sheet.get('hp',{}).get('max',10) }}">
+                </label>
+                <label style="display:flex;flex-direction:column;gap:3px;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Speed</span>
+                    <input type="number" name="speed" id="speed-edit-input" value="{{ sheet.get('speed',30) }}">
+                </label>
+                <label style="display:flex;flex-direction:column;gap:3px;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Initiative</span>
+                    <input type="number" name="initiative_bonus" id="init-edit-input" value="{{ sheet.get('initiative_bonus',0) }}">
+                </label>
+                <label style="display:flex;flex-direction:column;gap:3px;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Prof Bonus</span>
+                    <input type="number" name="proficiency_bonus" id="prof-edit-input" value="{{ sheet.get('proficiency_bonus',2) }}">
+                </label>
+            </div>
+            <div style="display:flex;justify-content:flex-end;">
+                <button type="button" id="char-done-btn">✓ Done</button>
+            </div>
         </div>
+        {% else %}
+        {# Readonly: hidden inputs so roll calculations can read these values #}
+        <input type="hidden" name="proficiency_bonus" value="{{ sheet.get('proficiency_bonus',2) }}">
+        <input type="hidden" name="initiative_bonus"  value="{{ sheet.get('initiative_bonus',0) }}">
+        <input type="hidden" name="hp.max"            value="{{ sheet.get('hp',{}).get('max',10) }}">
+        <input type="hidden" name="speed"             value="{{ sheet.get('speed',30) }}">
+        <input type="hidden" name="level"             value="{{ sheet.get('level',1) }}">
+        {% endif %}
+
+        <style>
+        .ab-roll-card:hover  { background:#243048!important; border-color:#3e4f70!important; }
+        .ab-roll-card:active { background:#18202e!important; transform:scale(.96); }
+        .st-roll-card:hover  { background:#243048!important; border-color:#3e4f70!important; }
+        .st-roll-card:active { background:#18202e!important; transform:scale(.96); }
+        .sk-roll-card:hover  { background:#243048!important; border-color:#3e4f70!important; }
+        .sk-roll-card:active { background:#18202e!important; transform:scale(.96); }
+        /* Ability + saving throw grids: 6-across on tablet/desktop, 3-across on mobile */
+        #ab-card-view, #st-card-view { grid-template-columns: repeat(6, 1fr); }
+        @media (max-width: 599px) {
+            #ab-card-view, #st-card-view { grid-template-columns: repeat(3, 1fr); }
+        }
+        /* Skills grid: 4-across on tablet/desktop, 2-across on mobile */
+        #sk-card-view { grid-template-columns: repeat(4, 1fr); }
+        @media (max-width: 599px) {
+            #sk-card-view { grid-template-columns: repeat(2, 1fr); }
+        }
+        </style>
 
         <fieldset>
-            <legend>Abilities <span class="muted">(click 🎲 to roll an ability check)</span></legend>
-            <div class="row">
+            <legend>
+                Abilities
+                {% if can_edit %}
+                <button type="button" id="ab-edit-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">✏ Edit</button>
+                <button type="button" id="ab-done-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;display:none;">✓ Done</button>
+                {% endif %}
+            </legend>
+
+            {# ── Card view (default) ── #}
+            <div id="ab-card-view" style="display:grid;gap:8px;margin-top:8px;">
                 {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
-                <label>{{ ab }}
-                    <input type="number" name="abilities.{{ ab }}" value="{{ sheet.get('abilities',{}).get(ab,10) }}" {% if not can_edit %}readonly{% endif %}>
-                </label>
-                <button type="button" class="roll-btn" data-roll-ability="{{ ab }}" title="Roll {{ ab }} check">🎲</button>
+                {% set score = sheet.get('abilities',{}).get(ab,10) %}
+                {% set mod = (score - 10) // 2 %}
+                <button type="button" class="roll-btn ab-roll-card"
+                        data-roll-ability="{{ ab }}" data-ab="{{ ab }}"
+                        title="Roll {{ ab }} check"
+                        style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:90px;padding:8px 4px;background:#1c2235;border:1px solid #2e3550;border-radius:8px;cursor:pointer;width:100%;">
+                    <span style="font-size:10px;font-weight:700;color:#7a8ab0;text-transform:uppercase;letter-spacing:.06em;">{{ ab }}</span>
+                    <span style="width:32px;height:1px;background:#2e3550;margin:1px 0;"></span>
+                    <span class="ab-score-disp" data-ab="{{ ab }}" style="font-size:22px;font-weight:700;color:#dde2f0;line-height:1.1;">{{ score }}</span>
+                    <span class="ab-mod-disp"   data-ab="{{ ab }}" style="font-size:12px;font-weight:600;color:#6ab;background:#1a3040;padding:1px 7px;border-radius:8px;min-width:32px;text-align:center;">{{ '+' if mod >= 0 else '' }}{{ mod }}</span>
+                </button>
                 {% endfor %}
             </div>
+
+            {# ── Edit view (hidden until Edit clicked) ── #}
+            {% if can_edit %}
+            <div id="ab-edit-view" style="display:none;flex-wrap:wrap;gap:10px;margin-top:8px;justify-content:center;">
+                {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+                {% set score = sheet.get('abilities',{}).get(ab,10) %}
+                <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
+                    <span style="font-size:10px;font-weight:700;color:#7a8ab0;text-transform:uppercase;letter-spacing:.06em;">{{ ab }}</span>
+                    <input type="number" name="abilities.{{ ab }}" id="ab-input-{{ ab }}"
+                           value="{{ score }}" min="1" max="30" data-ab="{{ ab }}"
+                           style="width:54px;text-align:center;font-size:18px;font-weight:700;padding:4px 2px;">
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            {# View-only: hidden inputs so readField() still works for rolls #}
+            {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+            <input type="hidden" name="abilities.{{ ab }}" value="{{ sheet.get('abilities',{}).get(ab,10) }}">
+            {% endfor %}
+            {% endif %}
         </fieldset>
 
         <fieldset>
-            <legend>Saving throws <span class="muted">(check = proficient; click 🎲 to roll)</span></legend>
-            <div class="row">
+            <legend>Saving Throws
+                {% if can_edit %}
+                <button type="button" id="st-edit-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">✏ Edit</button>
+                <button type="button" id="st-done-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;display:none;">✓ Done</button>
+                {% endif %}
+            </legend>
+
+            {# ── Card view (default) ── #}
+            <div id="st-card-view" style="display:grid;gap:8px;margin-top:8px;">
                 {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
-                <label>{{ ab }}
-                    <input type="checkbox" name="saving_throws.{{ ab }}" {% if sheet.get('saving_throws',{}).get(ab) %}checked{% endif %} {% if not can_edit %}disabled{% endif %}>
-                </label>
-                <button type="button" class="roll-btn" data-roll-save="{{ ab }}" title="Roll {{ ab }} save">🎲</button>
+                {% set score = sheet.get('abilities',{}).get(ab,10) %}
+                {% set ab_mod = (score - 10) // 2 %}
+                {% set is_prof = sheet.get('saving_throws',{}).get(ab, false) %}
+                {% set prof_bonus = sheet.get('proficiency_bonus', 2) %}
+                {% set total = ab_mod + (prof_bonus if is_prof else 0) %}
+                <button type="button" class="roll-btn st-roll-card"
+                        data-roll-save="{{ ab }}" data-ab="{{ ab }}"
+                        title="Roll {{ ab }} saving throw"
+                        style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:82px;padding:6px 4px;background:#1c2235;border:1px solid #2e3550;border-radius:8px;cursor:pointer;width:100%;">
+                    <span class="st-prof-dot" data-ab="{{ ab }}"
+                          style="width:9px;height:9px;border-radius:50%;border:2px solid #3e5a70;background:{{ '#6ab' if is_prof else 'transparent' }};"></span>
+                    <span style="font-size:10px;font-weight:700;color:#7a8ab0;text-transform:uppercase;letter-spacing:.06em;">{{ ab }}</span>
+                    <span style="width:32px;height:1px;background:#2e3550;margin:1px 0;"></span>
+                    <span class="st-mod-disp" data-ab="{{ ab }}" style="font-size:18px;font-weight:700;color:#dde2f0;line-height:1.1;">{{ '+' if total >= 0 else '' }}{{ total }}</span>
+                    <span style="font-size:9px;color:#5a7090;letter-spacing:.04em;">SAVE</span>
+                </button>
                 {% endfor %}
             </div>
+
+            {# ── Edit view (hidden; contains checkboxes for proficiency) ── #}
+            {% if can_edit %}
+            <div id="st-edit-view" style="display:none;flex-wrap:wrap;gap:14px;margin-top:10px;padding:10px;background:#191c24;border-radius:6px;justify-content:center;">
+                {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+                <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
+                    <input type="checkbox" name="saving_throws.{{ ab }}" data-ab="{{ ab }}"
+                           {% if sheet.get('saving_throws',{}).get(ab) %}checked{% endif %}>
+                    {{ ab }}
+                </label>
+                {% endfor %}
+            </div>
+            {% else %}
+            {# View-only: hidden checkboxes so readField() works for roll calculations #}
+            {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+            <input type="checkbox" name="saving_throws.{{ ab }}" style="display:none;"
+                   {% if sheet.get('saving_throws',{}).get(ab) %}checked{% endif %} disabled>
+            {% endfor %}
+            {% endif %}
         </fieldset>
 
         <fieldset>
-            <legend>Skills <span class="muted">(click 🎲 to roll)</span></legend>
-            <table class="skills">
-                <thead><tr><th>Skill</th><th>Ability</th><th>Prof.</th><th>Expert.</th><th></th></tr></thead>
-                <tbody>
+            <legend>Skills
+                {% if can_edit %}
+                <button type="button" id="sk-edit-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">✏ Edit</button>
+                <button type="button" id="sk-done-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;display:none;">✓ Done</button>
+                {% endif %}
+            </legend>
+
+            {# ── Card view (2-column grid) ── #}
+            <div id="sk-card-view" style="display:grid;gap:4px;margin-top:8px;">
                 {% for skill, info in (sheet.get('skills') or {}).items() %}
+                {% set ab = info.get('ability','') %}
+                {% set score = sheet.get('abilities',{}).get(ab,10) %}
+                {% set ab_mod = (score - 10) // 2 %}
+                {% set is_prof = info.get('proficient', false) %}
+                {% set is_exp  = info.get('expertise', false) %}
+                {% set prof_bonus = sheet.get('proficiency_bonus', 2) %}
+                {% set bonus = (prof_bonus * 2 if is_exp else (prof_bonus if is_prof else 0)) %}
+                {% set total = ab_mod + bonus %}
+                <button type="button" class="roll-btn sk-roll-card"
+                        data-roll-skill="{{ skill }}" data-skill-ability="{{ ab }}" data-skill="{{ skill }}"
+                        title="Roll {{ skill }}"
+                        style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:#1c2235;border:1px solid #2e3550;border-radius:6px;cursor:pointer;text-align:left;min-height:34px;">
+                    <span class="sk-prof-dot" data-skill="{{ skill }}"
+                          style="width:8px;height:8px;border-radius:50%;flex-shrink:0;
+                                 background:{{ '#e8a' if is_exp else ('#6ab' if is_prof else 'transparent') }};
+                                 border:2px solid {{ '#e8a' if is_exp else ('#3e5a70') }};"></span>
+                    <span style="flex:1;font-size:12px;font-weight:500;color:#dde2f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ skill }}</span>
+                    <span style="font-size:10px;color:#5a7090;flex-shrink:0;">{{ ab }}</span>
+                    <span class="sk-mod-disp" data-skill="{{ skill }}" style="font-size:13px;font-weight:700;color:#6ab;flex-shrink:0;min-width:26px;text-align:right;">{{ '+' if total >= 0 else '' }}{{ total }}</span>
+                </button>
+                {% endfor %}
+            </div>
+
+            {# ── Edit view (hidden; proficiency/expertise checkboxes) ── #}
+            {% if can_edit %}
+            <div id="sk-edit-view" style="display:none;margin-top:10px;">
+                <table class="skills">
+                    <thead><tr><th>Skill</th><th>Ability</th><th>Prof.</th><th>Expert.</th></tr></thead>
+                    <tbody>
+                    {% for skill, info in (sheet.get('skills') or {}).items() %}
                     <tr>
                         <td>{{ skill }}</td>
                         <td>{{ info.get('ability','') }}</td>
-                        <td><input type="checkbox" name="skills.{{ skill }}.proficient" {% if info.get('proficient') %}checked{% endif %} {% if not can_edit %}disabled{% endif %}></td>
-                        <td><input type="checkbox" name="skills.{{ skill }}.expertise" {% if info.get('expertise') %}checked{% endif %} {% if not can_edit %}disabled{% endif %}></td>
-                        <td><button type="button" class="roll-btn" data-roll-skill="{{ skill }}" data-skill-ability="{{ info.get('ability','') }}" title="Roll {{ skill }}">🎲</button></td>
+                        <td><input type="checkbox" name="skills.{{ skill }}.proficient"
+                                   data-skill="{{ skill }}" data-type="prof"
+                                   {% if info.get('proficient') %}checked{% endif %}></td>
+                        <td><input type="checkbox" name="skills.{{ skill }}.expertise"
+                                   data-skill="{{ skill }}" data-type="exp"
+                                   {% if info.get('expertise') %}checked{% endif %}></td>
                     </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            {# View-only: hidden checkboxes so readField() works for roll calculations #}
+            {% for skill, info in (sheet.get('skills') or {}).items() %}
+            <input type="checkbox" name="skills.{{ skill }}.proficient" style="display:none;"
+                   {% if info.get('proficient') %}checked{% endif %} disabled>
+            <input type="checkbox" name="skills.{{ skill }}.expertise" style="display:none;"
+                   {% if info.get('expertise') %}checked{% endif %} disabled>
+            {% endfor %}
+            {% endif %}
+        </fieldset>
+
+        {# ── Conditions ───────────────────────────────────────────────── #}
+        <fieldset>
+            <legend>Conditions</legend>
+            <input type="hidden" name="conditions" id="conditions-input"
+                   value="{{ (sheet.get('conditions') or []) | tojson }}">
+            {% set active_conds = sheet.get('conditions') or [] %}
+            {% set all_conditions = [
+                ('blinded',       'Blinded'),
+                ('charmed',       'Charmed'),
+                ('deafened',      'Deafened'),
+                ('exhaustion',    'Exhaustion'),
+                ('frightened',    'Frightened'),
+                ('grappled',      'Grappled'),
+                ('incapacitated', 'Incapacitated'),
+                ('invisible',     'Invisible'),
+                ('paralyzed',     'Paralyzed'),
+                ('petrified',     'Petrified'),
+                ('poisoned',      'Poisoned'),
+                ('prone',         'Prone'),
+                ('restrained',    'Restrained'),
+                ('stunned',       'Stunned'),
+                ('unconscious',   'Unconscious')
+            ] %}
+            <div id="condition-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+                {% for slug, label in all_conditions %}
+                {% set is_active = slug in active_conds %}
+                <button type="button" class="cond-chip" data-slug="{{ slug }}"
+                        style="padding:4px 11px;border-radius:12px;font-size:12px;cursor:pointer;
+                               transition:background .15s,border-color .15s,color .15s;
+                               background:{{ '#4a1520' if is_active else '#1c2235' }};
+                               border:1px solid {{ '#c05070' if is_active else '#2e3550' }};
+                               color:{{ '#f0a0b8' if is_active else '#7a8ab0' }};
+                               font-weight:{{ '700' if is_active else '500' }};">{{ label }}</button>
                 {% endfor %}
-                </tbody>
-            </table>
+            </div>
+            <div id="cond-desc-popover"
+                 style="display:none;margin-top:10px;padding:10px 12px;background:#191c24;
+                        border:1px solid #2e3140;border-radius:6px;font-size:12px;
+                        color:#b0b8cc;line-height:1.6;"></div>
         </fieldset>
 
         <fieldset>
@@ -68,10 +388,302 @@
 {% endfor %}</textarea>
         </fieldset>
 
+        {# ── Unified Spells fieldset ──────────────────────────────────── #}
+        <fieldset id="spells-fieldset">
+            <legend>Spells
+                {% if can_edit %}
+                <button type="button" id="spell-browser-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">🔍 Browse Spells</button>
+                <button type="button" id="add-custom-spell-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;">+ Custom</button>
+                <button type="button" id="hide-unprepared-btn" style="display:none;font-size:11px;padding:2px 8px;margin-left:4px;">🙈 Hide Unprepared</button>
+                {% endif %}
+            </legend>
+
+            {# ── Spellcasting Info Bar ── #}
+            <div id="sc-info-bar" style="display:none;background:#141720;border:1px solid #252840;border-radius:6px;padding:10px 14px;margin-bottom:10px;">
+                <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;">
+                    <div>
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#4a5870;margin-bottom:3px;">Type</div>
+                        <div id="sc-type" style="font-size:13px;font-weight:700;color:#c0c8d8;">—</div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#4a5870;margin-bottom:3px;">Ability</div>
+                        <div id="sc-ability" style="font-size:13px;font-weight:700;color:#c0c8d8;">—</div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#4a5870;margin-bottom:3px;">Save DC</div>
+                        <div id="sc-dc" style="font-size:13px;font-weight:700;color:#c0c8d8;">—</div>
+                    </div>
+                    <div>
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#4a5870;margin-bottom:3px;">Atk Bonus</div>
+                        <div id="sc-atk" style="font-size:13px;font-weight:700;color:#c0c8d8;">—</div>
+                    </div>
+                    <div id="sc-limit-wrap" style="margin-left:auto;text-align:right;">
+                        <div id="sc-limit-label" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#4a5870;margin-bottom:3px;">Prepared</div>
+                        <div style="font-size:13px;font-weight:700;">
+                            <span id="sc-limit-cur" style="color:#80e0a0;">0</span><span style="color:#3a4560;"> / </span><span id="sc-limit-max" style="color:#c0c8d8;">?</span>
+                        </div>
+                    </div>
+                </div>
+                {% if can_edit %}
+                <div style="margin-top:8px;display:flex;align-items:center;gap:8px;border-top:1px solid #1e2030;padding-top:8px;flex-wrap:wrap;">
+                    <button type="button" id="sc-autofill-btn"
+                            style="font-size:11px;padding:3px 10px;background:#162030;border:1px solid #2a4060;color:#6ab;border-radius:4px;cursor:pointer;">⚡ Auto-fill Slots</button>
+                    <span id="sc-autofill-note" style="font-size:11px;color:#4a6070;font-style:italic;"></span>
+                </div>
+                {% endif %}
+            </div>
+
+            {# ── Spell Slots parking div — rows are moved into spell groups by JS ── #}
+            <div id="spell-slots-ui" style="display:none;">
+                {% for lvl in range(1, 10) %}
+                {% set sd = (sheet.get('spell_slots') or {}).get(lvl|string, {}) %}
+                {% set total = sd.get('total', 0) %}
+                {% set used = sd.get('used', 0) %}
+                <div class="ss-row" data-lvl="{{ lvl }}" data-total="{{ total }}" data-used="{{ used }}"
+                     style="display:{% if total == 0 %}none{% else %}flex{% endif %};align-items:center;gap:8px;">
+                    <span style="font-size:11px;font-weight:600;width:38px;flex-shrink:0;color:#7a8ab0;letter-spacing:.03em;">Lv {{ lvl }}</span>
+                    <div class="ss-pips" style="display:flex;gap:5px;flex-wrap:wrap;flex:1;"></div>
+                    <input type="hidden" name="spell_slots.{{ lvl }}.total" class="ss-total-input" value="{{ total }}">
+                    <input type="hidden" name="spell_slots.{{ lvl }}.used"  class="ss-used-input"  value="{{ used }}">
+                </div>
+                {% endfor %}
+                <p id="ss-empty-msg" style="font-size:12px;color:#3a4560;margin:2px 0 0;">Select a class and level to auto-fill spell slots.</p>
+            </div>
+
+            {# ── Spell list ── #}
+            <textarea id="spells-data" name="spells" style="display:none;" {% if not can_edit %}readonly{% endif %}>{{ (sheet.get('spells') or []) | tojson }}</textarea>
+            <div id="spell-list-container" style="min-height:20px;"></div>
+
+            {# ── Custom spell panel ── #}
+            {% if can_edit %}
+            <div id="custom-spell-panel" style="display:none;margin-top:10px;border:1px solid #2e3140;border-radius:5px;padding:10px;background:#191c24;">
+                <div class="row" style="margin-bottom:6px;flex-wrap:wrap;">
+                    <label style="flex:2;min-width:120px;">Name<input type="text" id="cs-name" placeholder="Spell name" style="width:100%;"></label>
+                    <label>Level<input type="number" id="cs-level" value="1" min="0" max="9" style="width:46px;"></label>
+                    <label style="flex:1;min-width:90px;">School<input type="text" id="cs-school" placeholder="Evocation" style="width:100%;"></label>
+                </div>
+                <div class="row" style="margin-bottom:6px;flex-wrap:wrap;">
+                    <label style="flex:1;min-width:80px;">Cast time<input type="text" id="cs-cast" placeholder="1 action" style="width:100%;"></label>
+                    <label style="flex:1;min-width:80px;">Range<input type="text" id="cs-range" placeholder="30 feet" style="width:100%;"></label>
+                    <label style="flex:1;min-width:80px;">Duration<input type="text" id="cs-dur" placeholder="Instantaneous" style="width:100%;"></label>
+                    <label style="flex:1;min-width:80px;">Components<input type="text" id="cs-comp" placeholder="V, S" style="width:100%;"></label>
+                    <label style="flex:1;min-width:80px;">Damage<input type="text" id="cs-damage" placeholder="2d6 fire" style="width:100%;"></label>
+                    <label style="flex:1;min-width:80px;">Save<select id="cs-save" style="width:100%;">
+                        <option value="">None</option>
+                        <option value="STR">STR</option><option value="DEX">DEX</option>
+                        <option value="CON">CON</option><option value="INT">INT</option>
+                        <option value="WIS">WIS</option><option value="CHA">CHA</option>
+                    </select></label>
+                </div>
+                <label>Description<textarea id="cs-desc" rows="3" placeholder="Spell effect…" style="width:100%;font-size:12px;"></textarea></label>
+                <div style="display:flex;gap:8px;margin-top:8px;">
+                    <button type="button" id="cs-add-btn">Add Spell</button>
+                    <button type="button" id="cs-cancel-btn">Cancel</button>
+                </div>
+            </div>
+            {% endif %}
+        </fieldset>
+
+        {# ── Spell Browser Overlay ────────────────────────────────────── #}
+        <div id="spell-browser-overlay"
+             style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(6,8,16,.82);overflow:hidden;">
+            <div style="position:absolute;inset:16px;max-width:860px;margin:0 auto;
+                        background:#1a1d27;border:1px solid #2e3140;border-radius:10px;
+                        display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0009;">
+
+                {# Header #}
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;
+                            background:#191c24;border-bottom:1px solid #2e3140;flex-shrink:0;">
+                    <span style="font-size:14px;font-weight:700;color:#dde2f0;">🔍 Spell Browser</span>
+                    <input type="text" id="sb-search" placeholder="Search spells…"
+                           style="flex:1;max-width:280px;font-size:12px;">
+                    <button type="button" id="sb-search-btn" style="font-size:12px;padding:4px 12px;">Search</button>
+                    <button type="button" id="sb-close-btn"
+                            style="margin-left:auto;font-size:12px;padding:4px 12px;background:#2a1010;border-color:#6a2020;color:#e0a0a0;">✕ Close</button>
+                </div>
+
+                {# Spell limit status bar #}
+                <div id="sb-limit-bar" style="display:none;padding:5px 16px;background:#101318;border-bottom:1px solid #1e2130;flex-shrink:0;font-size:11px;color:#5a6880;display:flex;align-items:center;gap:10px;">
+                    <span id="sb-limit-text"></span>
+                </div>
+
+                {# Level filter chips #}
+                <div style="display:flex;gap:5px;flex-wrap:wrap;padding:8px 14px;
+                            background:#161820;border-bottom:1px solid #1e2130;flex-shrink:0;align-items:center;">
+                    <span style="font-size:10px;font-weight:700;color:#5a6080;text-transform:uppercase;letter-spacing:.06em;margin-right:4px;">Level</span>
+                    <button type="button" class="sb-lvl" data-lvl="all"
+                            style="font-size:11px;padding:3px 10px;border-radius:10px;background:#2a3a5a;border-color:#6ab;color:#6ab;">All</button>
+                    <button type="button" class="sb-lvl" data-lvl="0"
+                            style="font-size:11px;padding:3px 10px;border-radius:10px;background:transparent;border-color:#2e3550;color:#5a6080;">Cantrip</button>
+                    {% for lvl in range(1, 10) %}
+                    <button type="button" class="sb-lvl" data-lvl="{{ lvl }}"
+                            style="font-size:11px;padding:3px 10px;border-radius:10px;background:transparent;border-color:#2e3550;color:#5a6080;">{{ lvl }}</button>
+                    {% endfor %}
+                </div>
+
+                {# Body — list + detail panels #}
+                <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
+                    {# Spell list #}
+                    <div id="sb-list-panel"
+                         style="width:260px;border-right:1px solid #1e2130;overflow-y:auto;flex-shrink:0;padding:6px 0;">
+                        <div style="padding:14px;color:#3a4560;font-size:12px;">
+                            Select a level filter or search to browse spells.
+                        </div>
+                    </div>
+                    {# Spell detail #}
+                    <div id="sb-detail-panel"
+                         style="flex:1;overflow-y:auto;padding:18px 20px;">
+                        <p style="color:#3a4560;font-size:13px;">Select a spell to see its details.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# Spell slot pip renderer (inline, runs immediately) #}
+        <script>
+        (function () {
+            function renderPips(row) {
+                const total = parseInt(row.dataset.total) || 0;
+                const used  = parseInt(row.dataset.used)  || 0;
+                const pipsDiv = row.querySelector('.ss-pips');
+                pipsDiv.innerHTML = '';
+                if (total === 0) { row.style.display = 'none'; return; }
+                row.style.display = 'flex';
+                for (let i = 0; i < total; i++) {
+                    const pip = document.createElement('button');
+                    pip.type = 'button';
+                    const isUsed = i < used;
+                    pip.style.cssText = [
+                        'width:18px','height:18px','border-radius:50%',
+                        'border:2px solid #7b8cde','padding:0','cursor:pointer',
+                        'transition:background .15s',
+                        isUsed ? 'background:#7b8cde' : 'background:transparent',
+                    ].join(';');
+                    pip.title = isUsed ? 'Click to restore' : 'Click to expend';
+                    pip.dataset.idx = i;
+                    pip.addEventListener('click', function () {
+                        const idx = parseInt(this.dataset.idx);
+                        const curUsed = parseInt(row.dataset.used) || 0;
+                        row.dataset.used = (idx < curUsed) ? idx : idx + 1;
+                        syncInputs(row);
+                        renderPips(row);
+                    });
+                    pipsDiv.appendChild(pip);
+                }
+            }
+            function syncInputs(row) {
+                row.querySelector('.ss-total-input').value = row.dataset.total;
+                row.querySelector('.ss-used-input').value  = row.dataset.used;
+            }
+            // Show/hide the empty-slots message
+            const anyVisible = Array.from(document.querySelectorAll('.ss-row'))
+                .some(r => parseInt(r.dataset.total) > 0);
+            const emptyMsg = document.getElementById('ss-empty-msg');
+            if (emptyMsg) emptyMsg.style.display = anyVisible ? 'none' : '';
+
+            document.querySelectorAll('.ss-row').forEach(renderPips);
+            window._ssRenderPips  = renderPips;
+            window._ssSyncInputs  = syncInputs;
+        })();
+        </script>
+
         <fieldset>
-            <legend>Spells (one per line, "Name | level | description")</legend>
-            <textarea name="spells" rows="3" {% if not can_edit %}readonly{% endif %}>{% for s in (sheet.get('spells') or []) %}{{ s.get('name','') }} | {{ s.get('level','') }} | {{ s.get('description','') }}
-{% endfor %}</textarea>
+            <legend>Class Proficiencies
+                {% if can_edit %}
+                <button type="button" id="sync-class-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;" title="Re-fetch class details from Open5e">↻ Sync</button>
+                <span id="sync-class-status" style="font-size:11px;margin-left:6px;"></span>
+                {% endif %}
+            </legend>
+            {% set _hd = sheet.get('class_hit_die','') %}
+            {% set _ar = sheet.get('class_armor','') %}
+            {% set _wp = sheet.get('class_weapons','') %}
+            {% set _tl = sheet.get('class_tools','') %}
+            {% set _st = sheet.get('class_saving_throws','') %}
+            {% set _sk = sheet.get('class_skills','') %}
+            {% set _sp = sheet.get('class_spellcasting','') %}
+            {% set _eq = sheet.get('class_equipment','') %}
+
+            {% macro prof_row(label, name, value) %}
+            <div style="display:flex;align-items:baseline;gap:8px;padding:4px 0;border-bottom:1px solid #1e2130;">
+                <span style="font-size:11px;font-weight:700;color:var(--muted,#888);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;min-width:110px;">{{ label }}</span>
+                {% if can_edit %}
+                <input type="text" name="{{ name }}" value="{{ value }}" style="flex:1;font-size:12px;" placeholder="—">
+                {% else %}
+                <span style="font-size:12px;color:var(--fg,#e0e0e0);">{{ value or '—' }}</span>
+                {% endif %}
+            </div>
+            {% endmacro %}
+
+            <div style="margin-top:6px;">
+                {% if _hd or can_edit %}{{ prof_row('Hit Die', 'class_hit_die', _hd) }}{% endif %}
+                {% if _ar or can_edit %}{{ prof_row('Armor', 'class_armor', _ar) }}{% endif %}
+                {% if _wp or can_edit %}{{ prof_row('Weapons', 'class_weapons', _wp) }}{% endif %}
+                {% if _tl or can_edit %}{{ prof_row('Tools', 'class_tools', _tl) }}{% endif %}
+                {% if _st or can_edit %}{{ prof_row('Saving Throws', 'class_saving_throws', _st) }}{% endif %}
+                {% if _sk or can_edit %}{{ prof_row('Skills', 'class_skills', _sk) }}{% endif %}
+                {% if _sp or can_edit %}{{ prof_row('Spellcasting', 'class_spellcasting', _sp) }}{% endif %}
+            </div>
+
+            {% if _eq or can_edit %}
+            <label style="margin-top:10px;display:block;">Starting Equipment
+                {% if can_edit %}
+                <textarea name="class_equipment" rows="3" style="font-size:12px;" placeholder="Auto-filled when you select a class">{{ _eq }}</textarea>
+                {% else %}
+                <div style="white-space:pre-wrap;font-size:12px;line-height:1.6;color:var(--fg,#e0e0e0);margin-top:4px;">{{ _eq }}</div>
+                {% endif %}
+            </label>
+            {% endif %}
+
+            {% if not _hd and not _ar and not _wp and not _tl and not _st and not _sk and not _sp and not _eq and not can_edit %}
+            <p class="muted" style="font-size:12px;margin:6px 0 0;">Select a class to auto-fill proficiencies.</p>
+            {% endif %}
+        </fieldset>
+
+        <fieldset>
+            <legend>Class, Subclass &amp; Race Features</legend>
+
+            {% set cf = sheet.get('class_features','') %}
+            {% set sf = sheet.get('subclass_features','') %}
+            {% set rt = sheet.get('race_traits','') %}
+
+            {# Hidden textareas keep values flowing through form submission #}
+            {% if can_edit %}
+            <textarea name="class_features" style="display:none">{{ cf }}</textarea>
+            <textarea name="subclass_features" style="display:none">{{ sf }}</textarea>
+            <textarea name="race_traits" style="display:none">{{ rt }}</textarea>
+            {% endif %}
+
+            <div style="display:flex;flex-direction:column;gap:14px;margin-top:6px;">
+
+                {# Class Features text is auto-filled for internal use; not displayed directly #}
+                <div id="cf-display" style="display:none;">{{ cf }}</div>
+                <p id="cf-empty" style="display:none;"></p>
+
+                <div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                        <span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted,#888);text-transform:uppercase;">Subclass Features</span>
+                        {% if can_edit %}
+                        <button type="button" id="sync-subclass-btn" style="font-size:11px;padding:2px 8px;" title="Re-fetch subclass features from Open5e">↻ Sync</button>
+                        <span id="sync-subclass-status" style="font-size:11px;margin-left:4px;"></span>
+                        {% endif %}
+                    </div>
+                    <div id="sf-display" style="{% if not sf %}display:none;{% endif %}"></div>
+                    <p id="sf-empty" class="muted" style="font-size:12px;margin:4px 0 0;{% if sf %}display:none;{% endif %}">{% if can_edit %}Auto-filled when you select a subclass.{% else %}—{% endif %}</p>
+                </div>
+
+                <div>
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                        <span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted,#888);text-transform:uppercase;">Racial Traits</span>
+                        {% if can_edit %}
+                        <button type="button" id="sync-race-btn" style="font-size:11px;padding:2px 8px;" title="Re-fetch racial traits from Open5e">↻ Sync</button>
+                        <span id="sync-race-status" style="font-size:11px;margin-left:4px;"></span>
+                        {% endif %}
+                    </div>
+                    <div id="rt-display" style="{% if not rt %}display:none;{% endif %}"></div>
+                    <p id="rt-empty" class="muted" style="font-size:12px;margin:4px 0 0;{% if rt %}display:none;{% endif %}">{% if can_edit %}Auto-filled when you select a race.{% else %}—{% endif %}</p>
+                </div>
+
+            </div>
         </fieldset>
 
         <label>Features
@@ -97,4 +709,753 @@
         {% endif %}
     </form>
 </div>
+<script>
+// ── Subclass features cache ───────────────────────────────────────────────────
+// Prefer new per-feature format; fall back to legacy blob for unsynced chars.
+(function () {
+    var features = {{ (sheet.get('subclass_features') or none) | tojson }};
+    var name     = {{ (sheet.get('subclass_name',    '') or '') | tojson }};
+    var flavor   = {{ (sheet.get('subclass_flavor',  '') or '') | tojson }};
+    var legacy   = {{ (sheet.get('subclass_features_data') or none) | tojson }};
+
+    if (features && features.length) {
+        window._savedSubclassData = { name: name, flavor: flavor, features: features };
+    } else if (legacy) {
+        window._savedSubclassData = legacy;
+    } else {
+        window._savedSubclassData = null;
+    }
+})();
+
+// ── Race traits cache ─────────────────────────────────────────────────────────
+(function () {
+    var traits  = {{ (sheet.get('race_trait_items') or none) | tojson }};
+    var name    = {{ (sheet.get('race', '') or '') | tojson }};
+    var flavor  = {{ (sheet.get('race_flavor', '') or '') | tojson }};
+    var legacy  = {{ (sheet.get('race_parsed_data') or none) | tojson }};
+
+    if (traits && traits.length) {
+        window._savedRaceData = { name: name, flavor: flavor, traits: traits };
+    } else if (legacy) {
+        window._savedRaceData = legacy;
+    } else {
+        window._savedRaceData = null;
+    }
+})();
+</script>
 <script src="/static/sheet.js"></script>
+<script>
+(function () {
+    const inp = document.getElementById('portrait-upload-input');
+    if (!inp) return;
+    inp.addEventListener('change', async () => {
+        const file = inp.files[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append('portrait', file);
+        try {
+            const portraitUrl = inp.closest('label').dataset.portraitUrl || `/campaign/${CAMPAIGN_ID}/character/{{ char.id }}/portrait`;
+            const resp = await fetch(portraitUrl, {
+                method: 'POST', credentials: 'same-origin', body: fd,
+            });
+            if (!resp.ok) { alert('Upload failed: ' + await resp.text()); return; }
+            const data = await resp.json();
+            const url = data.portrait_url + '?t=' + Date.now();
+            const img = document.getElementById('char-portrait-img');
+            const ph = document.getElementById('char-portrait-placeholder');
+            if (img) {
+                img.src = url;
+            } else if (ph) {
+                const newImg = document.createElement('img');
+                newImg.id = 'char-portrait-img';
+                Object.assign(newImg.style, { width:'90px', height:'90px', objectFit:'cover', borderRadius:'8px', display:'block' });
+                newImg.src = url;
+                ph.replaceWith(newImg);
+            }
+        } catch (e) { alert('Upload failed'); }
+        inp.value = '';
+    });
+})();
+</script>
+<script>
+(function () {
+    const spellsData = document.getElementById('spells-data');
+    if (!spellsData || spellsData.dataset.spellBound === '1') return;
+    spellsData.dataset.spellBound = '1';
+
+    const isReadonly = spellsData.hasAttribute('readonly');
+    const container  = document.getElementById('spell-list-container');
+
+    function _esc(str) {
+        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+    function _diceExpr(dmgStr) {
+        const m = /(\d+d\d+(?:\s*[+-]\s*\d+)?)/.exec(dmgStr || '');
+        return m ? m[1].replace(/\s+/g, '') : '';
+    }
+
+    // Load spells
+    let spells = [];
+    try {
+        const parsed = JSON.parse(spellsData.value.trim() || '[]');
+        spells = parsed.map(s => ({
+            name:         s.name         || '',
+            level:        parseInt(s.level, 10) || 0,
+            school:       s.school       || '',
+            casting_time: s.casting_time || '',
+            range:        s.range        || '',
+            duration:     s.duration     || '',
+            components:   s.components   || '',
+            concentration: !!s.concentration,
+            ritual:       !!s.ritual,
+            prepared:     s.prepared !== false,
+            damage:       s.damage       || '',
+            save_ability: s.save_ability || '',
+            desc:         s.desc || s.description || '',
+            _slug:        s._slug        || '',
+        }));
+    } catch { spells = []; }
+
+    function syncSpells() { spellsData.value = JSON.stringify(spells); }
+
+    // ── Spellcasting Framework ─────────────────────────────────────────────────
+    // Per-class spellcasting config.  Keys match Open5e class slugs (lowercase).
+    const _SC = {
+        bard:      { type:'known',    ability:'cha', slots:'full',
+                     known:[4,5,6,7,8,9,10,11,12,14,15,15,16,18,19,19,20,22,22,22] },
+        cleric:    { type:'prepared', ability:'wis', slots:'full',
+                     prep:(m,l)=>Math.max(1,m+l) },
+        druid:     { type:'prepared', ability:'wis', slots:'full',
+                     prep:(m,l)=>Math.max(1,m+l) },
+        paladin:   { type:'prepared', ability:'cha', slots:'half',
+                     prep:(m,l)=>Math.max(1,m+Math.floor(l/2)) },
+        ranger:    { type:'known',    ability:'wis', slots:'half',
+                     known:[0,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11] },
+        sorcerer:  { type:'known',    ability:'cha', slots:'full',
+                     known:[2,3,4,5,6,7,8,9,10,11,12,12,13,13,14,14,15,15,15,15] },
+        warlock:   { type:'known',    ability:'cha', slots:'pact',
+                     known:[2,3,4,5,6,7,8,9,10,10,11,11,12,12,13,13,14,14,15,15] },
+        wizard:    { type:'prepared', ability:'int', slots:'full',
+                     prep:(m,l)=>Math.max(1,m+l) },
+        artificer: { type:'prepared', ability:'int', slots:'half',
+                     prep:(m,l)=>Math.max(1,m+Math.ceil(l/2)) },
+    };
+    // Spell slot tables indexed by [classLevel-1][spellLevel-1]
+    const _SLOTS = {
+        full: [
+            [2,0,0,0,0,0,0,0,0],[3,0,0,0,0,0,0,0,0],[4,2,0,0,0,0,0,0,0],[4,3,0,0,0,0,0,0,0],
+            [4,3,2,0,0,0,0,0,0],[4,3,3,0,0,0,0,0,0],[4,3,3,1,0,0,0,0,0],[4,3,3,2,0,0,0,0,0],
+            [4,3,3,3,1,0,0,0,0],[4,3,3,3,2,0,0,0,0],[4,3,3,3,2,1,0,0,0],[4,3,3,3,2,1,0,0,0],
+            [4,3,3,3,2,1,1,0,0],[4,3,3,3,2,1,1,0,0],[4,3,3,3,2,1,1,1,0],[4,3,3,3,2,1,1,1,0],
+            [4,3,3,3,2,1,1,1,1],[4,3,3,3,3,1,1,1,1],[4,3,3,3,3,2,1,1,1],[4,3,3,3,3,2,2,1,1],
+        ],
+        half: [
+            [0,0,0,0,0],[2,0,0,0,0],[3,0,0,0,0],[3,0,0,0,0],
+            [4,2,0,0,0],[4,2,0,0,0],[4,3,0,0,0],[4,3,0,0,0],
+            [4,3,2,0,0],[4,3,2,0,0],[4,3,3,0,0],[4,3,3,0,0],
+            [4,3,3,1,0],[4,3,3,1,0],[4,3,3,2,0],[4,3,3,2,0],
+            [4,3,3,3,1],[4,3,3,3,1],[4,3,3,3,2],[4,3,3,3,2],
+        ],
+        // Warlock Pact Magic: [slots, slotLevel] per class level
+        pact: [
+            [1,1],[2,1],[2,2],[2,2],[2,3],[2,3],[2,4],[2,4],
+            [2,5],[2,5],[3,5],[3,5],[3,5],[3,5],[3,5],[3,5],
+            [4,5],[4,5],[4,5],[4,5],
+        ],
+    };
+    const _PROF = [2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6]; // prof bonus by level-1
+
+    function _scData() { return _SC[_classVal()] || null; }
+
+    function _charLevel() {
+        const sf = document.getElementById('sheet-form');
+        return Math.max(1, Math.min(20, parseInt(sf?.querySelector('[name="level"]')?.value, 10) || 1));
+    }
+    function _abilityMod(key) {
+        const sf = document.getElementById('sheet-form');
+        const score = parseInt(sf?.querySelector(`[name="abilities.${key}"]`)?.value, 10) || 10;
+        return Math.floor((score - 10) / 2);
+    }
+    function _spellLimit() {
+        const sc = _scData();
+        if (!sc) return null;
+        const lvl = _charLevel();
+        if (sc.type === 'prepared') return sc.prep(_abilityMod(sc.ability), lvl);
+        return sc.known[Math.min(lvl - 1, 19)] ?? 0;
+    }
+
+    // Count spells toward the class limit (cantrips are always free)
+    function _spellCount(sc) {
+        if (!sc) return 0;
+        return sc.type === 'prepared'
+            ? spells.filter(s => s.prepared && s.level > 0).length
+            : spells.filter(s => s.level > 0).length;
+    }
+
+    function updateScInfo() {
+        const sc  = _scData();
+        const bar = document.getElementById('sc-info-bar');
+        if (!bar) return;
+        if (!sc) { bar.style.display = 'none'; return; }
+
+        const lvl  = _charLevel();
+        const mod  = _abilityMod(sc.ability);
+        const prof = _PROF[Math.min(lvl - 1, 19)];
+        const dc   = 8 + prof + mod;
+        const atk  = prof + mod;
+
+        const abvMap   = { str:'STR', dex:'DEX', con:'CON', int:'INT', wis:'WIS', cha:'CHA' };
+        const typeLabel = sc.type === 'prepared'
+            ? (sc.slots === 'half' ? 'Prepared ½-caster' : 'Prepared')
+            : (sc.slots === 'pact' ? 'Known (Pact Magic)' : 'Known');
+
+        document.getElementById('sc-type').textContent    = typeLabel;
+        document.getElementById('sc-ability').textContent = abvMap[sc.ability] || sc.ability.toUpperCase();
+        document.getElementById('sc-dc').textContent      = dc;
+        document.getElementById('sc-atk').textContent     = (atk >= 0 ? '+' : '') + atk;
+
+        const limit  = _spellLimit();
+        const cur    = _spellCount(sc);
+        const overMax = cur > limit;
+        const el = {
+            label: document.getElementById('sc-limit-label'),
+            cur:   document.getElementById('sc-limit-cur'),
+            max:   document.getElementById('sc-limit-max'),
+        };
+        if (el.label) el.label.textContent = sc.type === 'prepared' ? 'Prepared' : 'Known';
+        if (el.cur) {
+            el.cur.textContent = cur;
+            el.cur.style.color = overMax ? '#e07070' : (cur >= limit && limit > 0 ? '#e0c070' : '#80e0a0');
+        }
+        if (el.max) el.max.textContent = limit ?? '?';
+
+        bar.style.display = '';
+    }
+
+    function applyClassSlots() {
+        const sc  = _scData();
+        const lvl = _charLevel();
+        const noteEl = document.getElementById('sc-autofill-note');
+        if (!sc) {
+            if (noteEl) noteEl.textContent = 'Select a class first.';
+            return;
+        }
+        const idx  = Math.min(lvl - 1, 19);
+        const rows = document.querySelectorAll('.ss-row');
+
+        if (sc.slots === 'pact') {
+            const [slotCnt, slotLvl] = _SLOTS.pact[idx];
+            rows.forEach(row => {
+                const rowLvl   = parseInt(row.dataset.lvl, 10);
+                const newTotal = (rowLvl === slotLvl) ? slotCnt : 0;
+                const newUsed  = Math.min(parseInt(row.dataset.used, 10) || 0, newTotal);
+                row.dataset.total = newTotal;
+                row.dataset.used  = newUsed;
+                const ti = row.querySelector('.ss-total-input'); if (ti) ti.value = newTotal;
+                const ui = row.querySelector('.ss-used-input');  if (ui) ui.value = newUsed;
+                if (window._ssRenderPips) window._ssRenderPips(row);
+                if (window._ssSyncInputs) window._ssSyncInputs(row);
+            });
+            if (noteEl) noteEl.textContent =
+                `Warlock Lv${lvl}: ${slotCnt} pact slot${slotCnt !== 1 ? 's' : ''} at spell level ${slotLvl}.`;
+        } else {
+            const table = _SLOTS[sc.slots];
+            if (!table) return;
+            const slotRow = table[idx];
+            rows.forEach(row => {
+                const rowLvl   = parseInt(row.dataset.lvl, 10);
+                const newTotal = (rowLvl >= 1 && rowLvl <= slotRow.length) ? (slotRow[rowLvl - 1] ?? 0) : 0;
+                const newUsed  = Math.min(parseInt(row.dataset.used, 10) || 0, newTotal);
+                row.dataset.total = newTotal;
+                row.dataset.used  = newUsed;
+                const ti = row.querySelector('.ss-total-input'); if (ti) ti.value = newTotal;
+                const ui = row.querySelector('.ss-used-input');  if (ui) ui.value = newUsed;
+                if (window._ssRenderPips) window._ssRenderPips(row);
+                if (window._ssSyncInputs) window._ssSyncInputs(row);
+            });
+            const anyVis = Array.from(rows).some(r => parseInt(r.dataset.total) > 0);
+            const emptyMsg = document.getElementById('ss-empty-msg');
+            if (emptyMsg) emptyMsg.style.display = anyVis ? 'none' : '';
+            const cv = _classVal();
+            if (noteEl) noteEl.textContent =
+                `Applied ${cv.charAt(0).toUpperCase() + cv.slice(1)} Lv${lvl} slot table.`;
+        }
+    }
+    // ── End Spellcasting Framework ─────────────────────────────────────────────
+
+    function spellRowHtml(s, idx) {
+        const sc = _scData();
+        // Cantrips are always available — show a fixed icon; no checkbox needed
+        const isCantrip = s.level === 0;
+        const prepLabel = sc ? (sc.type === 'prepared' ? 'Prepared' : 'Known') : 'Prepared';
+        const prepCtrl = isReadonly
+            ? `<span style="flex-shrink:0;color:${(isCantrip || s.prepared) ? '#6c6' : '#555'};"
+                     title="${isCantrip ? 'Cantrip (always available)' : (s.prepared ? prepLabel : 'Not ' + prepLabel)}"
+                     >${(isCantrip || s.prepared) ? '✓' : '○'}</span>`
+            : isCantrip
+                ? `<span style="flex-shrink:0;color:#4a8a6a;font-size:11px;" title="Cantrip (always available)">✦</span>`
+                : `<input type="checkbox" class="sp-prep" data-idx="${idx}" ${s.prepared ? 'checked' : ''}
+                          title="${prepLabel}" style="flex-shrink:0;cursor:pointer;">`;
+        const rmBtn = isReadonly ? '' :
+            `<button type="button" class="sp-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:#966;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
+        const icons = (s.concentration ? ' ⏱' : '') + (s.ritual ? ' ®' : '');
+        return `
+        <div class="sp-row" style="border:1px solid #2a2d3a;border-radius:4px;margin-bottom:3px;">
+            <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;">
+                ${prepCtrl}
+                <button type="button" class="sp-expand" data-idx="${idx}"
+                    style="background:none;border:none;color:#668;font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
+                <span style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                    title="${_esc(s.name)}">${_esc(s.name)}${icons ? `<span style="font-size:11px;color:#888;"> ${icons.trim()}</span>` : ''}</span>
+                ${s.school       ? `<span style="font-size:11px;color:#6ab;flex-shrink:0;">${_esc(s.school)}</span>` : ''}
+                ${s.casting_time ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.casting_time)}</span>` : ''}
+                ${s.range        ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.range)}</span>` : ''}
+                ${s.damage && _diceExpr(s.damage)
+                    ? `<button type="button" class="sp-dmg-roll" data-idx="${idx}"
+                           data-expr="${_esc(_diceExpr(s.damage))}" data-label="${_esc(s.name + ' damage')}"
+                           title="Roll ${_esc(s.damage)}"
+                           style="font-size:11px;color:#e8a;font-weight:500;background:none;border:1px solid #a86;border-radius:3px;padding:1px 6px;cursor:pointer;flex-shrink:0;"
+                       >🎲 ${_esc(s.damage)}</button>`
+                    : s.damage ? `<span style="font-size:11px;color:#e8a;flex-shrink:0;font-weight:500;">${_esc(s.damage)}</span>` : ''}
+                ${s.save_ability
+                    ? `<button type="button" class="sp-save-roll" data-idx="${idx}"
+                           data-ability="${_esc(s.save_ability)}" data-label="${_esc(s.name + ' — ' + s.save_ability + ' save')}"
+                           title="Roll ${_esc(s.save_ability)} saving throw"
+                           style="font-size:11px;color:#8cf;font-weight:500;background:none;border:1px solid #468;border-radius:3px;padding:1px 6px;cursor:pointer;flex-shrink:0;"
+                       >🎲 ${_esc(s.save_ability)} save</button>`
+                    : ''}
+                ${rmBtn}
+            </div>
+            <div class="sp-detail" data-idx="${idx}" style="display:none;padding:6px 10px;border-top:1px dashed #2e3140;font-size:12px;color:#9aa0aa;">
+                <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:${s.desc ? '5px' : '0'};">
+                    ${s.duration    ? `<span>Duration: ${_esc(s.duration)}</span>` : ''}
+                    ${s.components  ? `<span>Components: ${_esc(s.components)}</span>` : ''}
+                    ${s.concentration ? '<span style="color:#e8a;">Concentration</span>' : ''}
+                    ${s.ritual       ? '<span style="color:#8ae;">Ritual</span>' : ''}
+                </div>
+                ${s.desc ? `<div style="line-height:1.5;color:#8a90a0;">${_esc(s.desc)}</div>` : ''}
+            </div>
+        </div>`;
+    }
+
+    let hideUnprepared = false;
+
+    function renderSpells() {
+        if (!container) return;
+
+        // ── Return any .ss-row elements from previous render back to the parking div ──
+        const slotsUi = document.getElementById('spell-slots-ui');
+        if (slotsUi) container.querySelectorAll('.ss-row').forEach(r => slotsUi.appendChild(r));
+
+        // ── Update SC info bar ──
+        updateScInfo();
+        const sc             = _scData();
+        const isPreparedCaster = sc && sc.type === 'prepared';
+
+        // ── Update "Hide Unprepared" button visibility & label ──
+        const hideBtn = document.getElementById('hide-unprepared-btn');
+        if (hideBtn) {
+            hideBtn.style.display = (isPreparedCaster && !isReadonly) ? '' : 'none';
+            hideBtn.textContent   = hideUnprepared ? '👁 Show All' : '🙈 Hide Unprepared';
+            Object.assign(hideBtn.style, hideUnprepared
+                ? { background:'#1a2f50', borderColor:'#6ab', color:'#8cd' }
+                : { background:'', borderColor:'', color:'' });
+        }
+
+        // ── Clear container ──
+        container.innerHTML = '';
+
+        if (!spells.length) {
+            container.insertAdjacentHTML('beforeend',
+                '<span class="muted" style="font-size:12px;">No spells added yet.</span>');
+            return;
+        }
+
+        // ── Build filtered groups ──
+        const groups = {};
+        spells.forEach((s, i) => {
+            if (hideUnprepared && isPreparedCaster && s.level > 0 && !s.prepared) return;
+            const l = s.level || 0;
+            (groups[l] = groups[l] || []).push(i);
+        });
+
+        if (!Object.keys(groups).length) {
+            container.insertAdjacentHTML('beforeend',
+                '<span class="muted" style="font-size:12px;">No prepared spells — uncheck "Hide Unprepared" to see all.</span>');
+            return;
+        }
+
+        // ── Render each level group ──
+        Object.keys(groups).sort((a, b) => +a - +b).forEach(lvl => {
+            const groupDiv = document.createElement('div');
+            groupDiv.style.marginBottom = '10px';
+
+            // Pull the matching slot row above this level's spells (levels 1–9 only)
+            if (+lvl >= 1 && slotsUi) {
+                const slotRow = slotsUi.querySelector(`.ss-row[data-lvl="${lvl}"]`);
+                if (slotRow && parseInt(slotRow.dataset.total) > 0) {
+                    slotRow.style.display       = 'flex';
+                    slotRow.style.marginBottom  = '5px';
+                    slotRow.style.paddingBottom = '5px';
+                    slotRow.style.borderBottom  = '1px solid #1e2130';
+                    groupDiv.appendChild(slotRow);
+                    if (window._ssRenderPips) window._ssRenderPips(slotRow);
+                }
+            }
+
+            // Level heading
+            const heading = document.createElement('div');
+            heading.style.cssText = 'font-size:10px;color:#668;text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;padding-left:2px;';
+            heading.textContent = +lvl === 0 ? 'Cantrips' : `Level ${lvl} Spells`;
+            groupDiv.appendChild(heading);
+
+            // Spell rows (via innerHTML on the group div, not the container)
+            groupDiv.insertAdjacentHTML('beforeend',
+                groups[lvl].map(idx => spellRowHtml(spells[idx], idx)).join(''));
+
+            container.appendChild(groupDiv);
+        });
+
+        // ── Wire event listeners ──
+        container.querySelectorAll('.sp-prep').forEach(inp =>
+            inp.addEventListener('change', () => {
+                spells[+inp.dataset.idx].prepared = inp.checked;
+                syncSpells();
+                updateScInfo();
+                // Remove the spell from view immediately if filter is active
+                if (hideUnprepared && isPreparedCaster && !inp.checked) renderSpells();
+            }));
+        container.querySelectorAll('.sp-rm').forEach(btn =>
+            btn.addEventListener('click', () => { spells.splice(+btn.dataset.idx, 1); syncSpells(); renderSpells(); }));
+        container.querySelectorAll('.sp-expand').forEach(btn =>
+            btn.addEventListener('click', () => {
+                const d = container.querySelector(`.sp-detail[data-idx="${btn.dataset.idx}"]`);
+                if (!d) return;
+                const open = d.style.display === 'none';
+                d.style.display = open ? '' : 'none';
+                btn.textContent = open ? '▼' : '▶';
+            }));
+        container.querySelectorAll('.sp-dmg-roll').forEach(btn =>
+            btn.addEventListener('click', async () => {
+                const expr = btn.dataset.expr, note = btn.dataset.label;
+                if (!expr || typeof CAMPAIGN_ID === 'undefined') return;
+                const vis = (document.getElementById('roll-vis')?.value) || 'public';
+                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expression: expr, visibility: vis, note }),
+                });
+                if (!resp.ok) alert('Roll failed: ' + await resp.text());
+            }));
+        container.querySelectorAll('.sp-save-roll').forEach(btn =>
+            btn.addEventListener('click', async () => {
+                const ab = btn.dataset.ability, note = btn.dataset.label;
+                if (!ab || typeof CAMPAIGN_ID === 'undefined') return;
+                const sf = document.getElementById('sheet-form');
+                const _rf = n => { const el = sf?.querySelector(`[name="${CSS.escape(n)}"]`); return el ? (el.type === 'checkbox' ? el.checked : el.value) : null; };
+                const mod = Math.floor((Number(_rf(`abilities.${ab}`) || 10) - 10) / 2);
+                const prof = Number(_rf('proficiency_bonus') || 2);
+                const total = mod + (!!_rf(`saving_throws.${ab}`) ? prof : 0);
+                const expr = `1d20${total >= 0 ? '+' + total : total}`;
+                const vis = (document.getElementById('roll-vis')?.value) || 'public';
+                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expression: expr, visibility: vis, note }),
+                });
+                if (!resp.ok) alert('Roll failed: ' + await resp.text());
+            }));
+    }
+
+    renderSpells();
+    if (isReadonly) return;
+
+    // ── Hide Unprepared toggle ──
+    document.getElementById('hide-unprepared-btn')?.addEventListener('click', () => {
+        hideUnprepared = !hideUnprepared;
+        renderSpells();
+    });
+
+    // ── Custom spell ──
+    const customPanel = document.getElementById('custom-spell-panel');
+    document.getElementById('add-custom-spell-btn')?.addEventListener('click', () => {
+        if (customPanel) customPanel.style.display = customPanel.style.display === 'block' ? 'none' : 'block';
+    });
+    document.getElementById('cs-cancel-btn')?.addEventListener('click', () => { if (customPanel) customPanel.style.display = 'none'; });
+    document.getElementById('cs-add-btn')?.addEventListener('click', () => {
+        const name = (document.getElementById('cs-name')?.value || '').trim();
+        if (!name) return;
+        const dur = (document.getElementById('cs-dur')?.value || '').trim();
+        spells.push({
+            name,
+            level:        parseInt(document.getElementById('cs-level')?.value, 10) || 0,
+            school:       (document.getElementById('cs-school')?.value || '').trim(),
+            casting_time: (document.getElementById('cs-cast')?.value  || '').trim(),
+            range:        (document.getElementById('cs-range')?.value  || '').trim(),
+            duration:     dur,
+            components:   (document.getElementById('cs-comp')?.value  || '').trim(),
+            concentration: /concentration/i.test(dur),
+            ritual: false, prepared: true,
+            damage:       (document.getElementById('cs-damage')?.value || '').trim(),
+            save_ability: (document.getElementById('cs-save')?.value  || ''),
+            desc:         (document.getElementById('cs-desc')?.value  || '').trim(),
+            _slug: '',
+        });
+        syncSpells(); renderSpells();
+        ['cs-name','cs-school','cs-cast','cs-range','cs-dur','cs-comp','cs-damage','cs-desc']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        if (document.getElementById('cs-level')) document.getElementById('cs-level').value = '1';
+        if (document.getElementById('cs-save'))  document.getElementById('cs-save').value  = '';
+        if (customPanel) customPanel.style.display = 'none';
+    });
+
+    // ── Auto-fill Slots button ──
+    document.getElementById('sc-autofill-btn')?.addEventListener('click', applyClassSlots);
+
+    // Re-compute info bar whenever class or level changes
+    function _onClassLevelChange() {
+        updateScInfo();
+        // Also update the level-filter chip highlights in the browser
+        if (typeof _updateLvlButtons === 'function') _updateLvlButtons();
+    }
+    const _classSelectEl = document.getElementById('class-select') || document.querySelector('[name="class"]');
+    const _levelInputEl  = document.querySelector('[name="level"]');
+    if (_classSelectEl) _classSelectEl.addEventListener('change', _onClassLevelChange);
+    if (_levelInputEl)  _levelInputEl .addEventListener('change', _onClassLevelChange);
+    // Also watch each ability score field that could affect DC / prep count
+    ['wis','int','cha'].forEach(ab => {
+        document.querySelector(`[name="abilities.${ab}"]`)
+            ?.addEventListener('change', updateScInfo);
+    });
+
+    // ── Spell Browser Overlay ──
+    const overlay    = document.getElementById('spell-browser-overlay');
+    const sbListEl   = document.getElementById('sb-list-panel');
+    const sbDetailEl = document.getElementById('sb-detail-panel');
+    const sbSearchEl = document.getElementById('sb-search');
+    if (!overlay || !sbListEl || !sbDetailEl) return;
+
+    let sbCurrentLvl = 'all';
+    let sbCurrentResults = [];
+    let sbSelectedIdx = -1;
+
+    function _classVal() {
+        return (document.getElementById('class-select') || document.querySelector('[name="class"]'))?.value?.toLowerCase().trim() || '';
+    }
+
+    function _availableLevels() {
+        const avail = new Set(['all', '0']);
+        document.querySelectorAll('.ss-row').forEach(r => {
+            if (parseInt(r.dataset.total) > 0) avail.add(r.dataset.lvl);
+        });
+        return avail;
+    }
+
+    function _updateLvlButtons() {
+        const avail = _availableLevels();
+        document.querySelectorAll('.sb-lvl').forEach(btn => {
+            const active    = btn.dataset.lvl === sbCurrentLvl;
+            const hasSlots  = avail.has(btn.dataset.lvl);
+            btn.style.background  = active ? '#253050' : 'transparent';
+            btn.style.borderColor = active ? '#6ab' : (hasSlots ? '#3a5570' : '#2e3140');
+            btn.style.color       = active ? '#8cd' : (hasSlots ? '#8aa0c0' : '#3a4560');
+            btn.style.fontWeight  = active ? '700' : '400';
+        });
+    }
+
+    function _isOnSheet(slug, name) {
+        return spells.some(s => (slug && s._slug === slug) || s.name === name);
+    }
+
+    function _renderList() {
+        const items = sbCurrentResults;
+        if (!items.length) {
+            sbListEl.innerHTML = '<div style="padding:14px;color:#3a4560;font-size:12px;">No spells found.</div>';
+            return;
+        }
+        sbListEl.innerHTML = items.map((s, i) => {
+            const onSheet = _isOnSheet(s.slug, s.name);
+            const lvlLabel = s.level === 0 ? 'C' : s.level;
+            return `<div class="sb-item" data-ridx="${i}"
+                style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;
+                       border-bottom:1px solid #1a1d27;
+                       ${sbSelectedIdx === i ? 'background:#1e2540;' : ''}">
+                <span style="font-size:10px;font-weight:700;color:#4a5870;min-width:14px;text-align:center;">${lvlLabel}</span>
+                <span style="flex:1;font-size:12px;font-weight:${onSheet ? '700' : '400'};
+                             color:${onSheet ? '#8cd' : '#c0c8d8'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                      title="${_esc(s.name)}">${onSheet ? '✓ ' : ''}${_esc(s.name)}</span>
+                <span style="font-size:10px;color:#4a5870;flex-shrink:0;">${_esc(s.school || '')}</span>
+            </div>`;
+        }).join('');
+
+        sbListEl.querySelectorAll('.sb-item').forEach(el => {
+            el.addEventListener('click', () => {
+                sbSelectedIdx = parseInt(el.dataset.ridx);
+                _renderList(); // refresh to highlight selected
+                _showDetail(items[sbSelectedIdx]);
+            });
+        });
+    }
+
+    function _sbUpdateLimitBar() {
+        const sc    = _scData();
+        const bar   = document.getElementById('sb-limit-bar');
+        const txt   = document.getElementById('sb-limit-text');
+        if (!bar || !txt) return;
+        if (!sc) { bar.style.display = 'none'; return; }
+        const limit = _spellLimit();
+        const cur   = _spellCount(sc);
+        const label = sc.type === 'prepared' ? 'Prepared' : 'Known';
+        const over  = cur > limit;
+        txt.innerHTML = `<b style="color:${over ? '#e07070' : '#80e0a0'};">${label}: ${cur} / ${limit}</b>`
+            + (sc.type === 'prepared'
+                ? ` <span style="color:#3a4860;">· Cantrips are free · Prepared = ${sc.ability.toUpperCase()} mod + level</span>`
+                : ` <span style="color:#3a4860;">· Cantrips are free · From the ${_classVal()} spells known table</span>`);
+        bar.style.display = 'flex';
+    }
+
+    function _showDetail(s) {
+        if (!s) { sbDetailEl.innerHTML = ''; return; }
+        const onSheet = _isOnSheet(s.slug, s.name);
+        const sc      = _scData();
+        const limit   = _spellLimit();
+        const cur     = _spellCount(sc);
+        const wouldExceed = !onSheet && sc && s.level > 0 && cur >= limit;
+        const lvlText = s.level === 0 ? 'Cantrip' : `Level ${s.level}`;
+
+        let limitNote = '';
+        if (sc && !onSheet && s.level > 0) {
+            const label = sc.type === 'prepared' ? 'prepare' : 'learn';
+            if (wouldExceed) {
+                limitNote = `<div style="margin-bottom:12px;padding:6px 10px;background:#2a1010;border:1px solid #6a2020;border-radius:4px;font-size:11px;color:#e09090;">
+                    ⚠ Adding this spell will exceed your ${sc.type === 'prepared' ? 'prepared' : 'known'} spell limit (${cur} / ${limit}).
+                    Remove a spell first, or level up.
+                </div>`;
+            } else if (limit !== null) {
+                const remaining = limit - cur;
+                limitNote = `<div style="margin-bottom:10px;font-size:11px;color:#4a6880;">
+                    You can ${label} <b style="color:#8aa0c0;">${remaining}</b> more spell${remaining !== 1 ? 's' : ''} (${cur} / ${limit}).
+                </div>`;
+            }
+        }
+
+        sbDetailEl.innerHTML = `
+            <div style="font-size:18px;font-weight:800;color:#dde2f0;margin-bottom:4px;">${_esc(s.name)}</div>
+            <div style="font-size:12px;color:#6ab;margin-bottom:12px;">${lvlText}${s.school ? ' · ' + _esc(s.school) : ''}</div>
+            <div style="font-size:12px;color:#8a9ab0;line-height:2;margin-bottom:12px;">
+                ${s.casting_time ? `<div><b style="color:#7a8ab0;">Casting Time</b> ${_esc(s.casting_time)}</div>` : ''}
+                ${s.range        ? `<div><b style="color:#7a8ab0;">Range</b> ${_esc(s.range)}</div>` : ''}
+                ${s.duration     ? `<div><b style="color:#7a8ab0;">Duration</b> ${_esc(s.duration)}</div>` : ''}
+                ${s.components   ? `<div><b style="color:#7a8ab0;">Components</b> ${_esc(s.components)}</div>` : ''}
+                ${s.damage       ? `<div><b style="color:#7a8ab0;">Damage</b> ${_esc(s.damage)}</div>` : ''}
+                ${s.save_ability ? `<div><b style="color:#7a8ab0;">Save</b> ${_esc(s.save_ability)}</div>` : ''}
+                ${s.concentration ? '<div style="color:#e8a;">⏱ Concentration</div>' : ''}
+                ${s.ritual       ? '<div style="color:#8ae;">® Ritual</div>' : ''}
+            </div>
+            ${s.desc ? `<div style="font-size:12px;color:#8a90a0;line-height:1.7;margin-bottom:16px;">${_esc(s.desc)}</div>` : ''}
+            ${limitNote}
+            <button type="button" id="sb-toggle-btn"
+                style="padding:6px 16px;font-size:13px;font-weight:600;border-radius:6px;
+                       background:${onSheet ? '#2a1010' : '#102a1a'};
+                       border:1px solid ${onSheet ? '#a04040' : '#40a060'};
+                       color:${onSheet ? '#e08080' : '#80e0a0'};">
+                ${onSheet ? '− Remove from Sheet' : '+ Add to Sheet'}
+            </button>`;
+
+        document.getElementById('sb-toggle-btn')?.addEventListener('click', () => {
+            if (_isOnSheet(s.slug, s.name)) {
+                const idx = spells.findIndex(sp => (s.slug && sp._slug === s.slug) || sp.name === s.name);
+                if (idx !== -1) { spells.splice(idx, 1); syncSpells(); renderSpells(); }
+            } else {
+                // For known casters all spells are always known (prepared=true)
+                // For prepared casters new spells start unprepared so players choose deliberately
+                const sc = _scData();
+                const startPrepared = !sc || sc.type === 'known';
+                spells.push({
+                    name: s.name, level: s.level, school: s.school,
+                    casting_time: s.casting_time, range: s.range,
+                    duration: s.duration, components: s.components,
+                    concentration: /concentration/i.test(s.duration || ''),
+                    ritual: false, prepared: startPrepared,
+                    damage: s.damage || '', save_ability: s.save_ability || '',
+                    desc: s.desc, _slug: s.slug || '',
+                });
+                syncSpells(); renderSpells();
+            }
+            _sbUpdateLimitBar();
+            _renderList();
+            _showDetail(s);
+        });
+    }
+
+    function _showPrompt() {
+        const cv = _classVal();
+        const hint = cv
+            ? `Showing spells for <strong style="color:#8cd;">${_esc(cv.charAt(0).toUpperCase() + cv.slice(1))}</strong> — select a level or search by name.`
+            : 'Select a level filter or search by name to browse spells.';
+        sbListEl.innerHTML = `<div style="padding:14px;font-size:12px;color:#5a6880;line-height:1.6;">${hint}</div>`;
+    }
+
+    async function _doSearch() {
+        const q  = (sbSearchEl?.value || '').trim();
+        const cv = _classVal();
+        // If nothing to filter on, just show the prompt
+        if (!q && sbCurrentLvl === 'all' && !cv) { _showPrompt(); return; }
+
+        sbListEl.innerHTML = '<div style="padding:14px;color:#3a4560;font-size:12px;">Loading…</div>';
+        sbDetailEl.innerHTML = '<p style="color:#3a4560;font-size:13px;">Select a spell to see its details.</p>';
+        sbSelectedIdx = -1;
+
+        const qs = new URLSearchParams({ limit: '80' });
+        if (q)  qs.set('search', q);
+        if (cv) qs.set('spell_list', cv);
+        if (sbCurrentLvl !== 'all') qs.set('level', sbCurrentLvl);
+
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 12000);
+        try {
+            const resp = await fetch('/api/open5e/spells?' + qs, { signal: ctrl.signal });
+            clearTimeout(timer);
+            if (!resp.ok) {
+                const msg = await resp.text().catch(() => '');
+                throw new Error(`HTTP ${resp.status}${msg ? ': ' + msg.slice(0, 120) : ''}`);
+            }
+            sbCurrentResults = (await resp.json()).results || [];
+        } catch (err) {
+            clearTimeout(timer);
+            const reason = err?.name === 'AbortError' ? 'Request timed out' : (err?.message || 'Unknown error');
+            sbListEl.innerHTML = `<div style="padding:14px;color:#c07070;font-size:12px;">
+                ⚠ Spell lookup failed: <em>${_esc(reason)}</em><br>
+                <span style="color:#5a6880;font-size:11px;margin-top:4px;display:block;">Open5e may be slow or unavailable — try again in a moment.</span>
+            </div>`;
+            return;
+        }
+        _renderList();
+    }
+
+    // Open — show prompt, don't auto-fetch (avoids a slow unfiltered API call)
+    document.getElementById('spell-browser-btn')?.addEventListener('click', () => {
+        overlay.style.display = '';
+        sbCurrentLvl = 'all';
+        _updateLvlButtons();
+        _sbUpdateLimitBar();
+        _showPrompt();
+        sbDetailEl.innerHTML = '<p style="color:#3a4560;font-size:13px;">Select a spell to see its details.</p>';
+        if (sbSearchEl) sbSearchEl.value = '';
+        sbCurrentResults = [];
+        sbSelectedIdx = -1;
+    });
+    // Close
+    document.getElementById('sb-close-btn')?.addEventListener('click', () => { overlay.style.display = 'none'; });
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.style.display = 'none'; });
+    // Level filter — each click fetches fresh results from the server
+    document.querySelectorAll('.sb-lvl').forEach(btn => {
+        btn.addEventListener('click', () => {
+            sbCurrentLvl = btn.dataset.lvl;
+            _updateLvlButtons();
+            _doSearch();
+        });
+    });
+    // Search
+    document.getElementById('sb-search-btn')?.addEventListener('click', _doSearch);
+    sbSearchEl?.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); _doSearch(); } });
+})();
+</script>

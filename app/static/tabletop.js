@@ -17,10 +17,12 @@
     const canvas = document.getElementById('vtt-canvas');
     if (!canvas) return;
 
+    const mapPane = document.getElementById('map-pane');
     const ctx = canvas.getContext('2d');
     const initialData = JSON.parse(document.getElementById('initial-data').textContent);
     let tokens = initialData.tokens || [];
     const characters = initialData.characters || [];
+    const templates = initialData.templates || [];
 
     const gridType = canvas.dataset.gridType || 'square';
     const gridSize = parseInt(canvas.dataset.gridSize || '70', 10);
@@ -96,21 +98,55 @@
         ctx.stroke();
     }
 
-    function drawToken(t) {
-        const radius = (gridSize * t.size) / 2 - 4;
+    const _tokenImgCache = {};
+
+    function _drawCircleToken(t, cx, cy, r) {
         ctx.beginPath();
-        ctx.arc(t.x + gridSize / 2, t.y + gridSize / 2, radius, 0, Math.PI * 2);
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
         ctx.fillStyle = t.color || '#cc3333';
         ctx.fill();
         ctx.lineWidth = 2;
         ctx.strokeStyle = '#000';
         ctx.stroke();
-        // Label
         ctx.fillStyle = '#fff';
         ctx.font = '12px system-ui';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText((t.label || '').slice(0, 12), t.x + gridSize / 2, t.y + gridSize / 2);
+        ctx.fillText((t.label || '').slice(0, 12), cx, cy);
+    }
+
+    function drawToken(t) {
+        if (t.is_hidden && !ME.isGm) return;
+        const cx = t.x + gridSize / 2;
+        const cy = t.y + gridSize / 2;
+        const r = (gridSize * t.size) / 2 - 4;
+        ctx.save();
+        if (t.is_hidden) ctx.globalAlpha = 0.4;
+        if (t.image_url) {
+            if (!_tokenImgCache[t.image_url]) {
+                const img = new Image();
+                img.src = t.image_url;
+                img.onload = render;
+                _tokenImgCache[t.image_url] = img;
+            }
+            const img = _tokenImgCache[t.image_url];
+            if (img.complete && img.naturalWidth > 0) {
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.clip();
+                ctx.drawImage(img, cx - r, cy - r, r * 2, r * 2);
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = t.color || '#000';
+                ctx.stroke();
+            } else {
+                _drawCircleToken(t, cx, cy, r);
+            }
+        } else {
+            _drawCircleToken(t, cx, cy, r);
+        }
+        ctx.restore();
     }
 
     function render() {
@@ -127,8 +163,36 @@
     }
     render();
 
+    // ---------- Pan & zoom ----------
+    let scale = 1;
+    let panX = 0;
+    let panY = 0;
+    const MIN_SCALE = 0.15;
+    const MAX_SCALE = 5;
+    canvas.style.transformOrigin = '0 0';
+
+    function applyTransform() {
+        canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    }
+
+    mapPane.addEventListener('wheel', (ev) => {
+        ev.preventDefault();
+        const rect = mapPane.getBoundingClientRect();
+        const mouseX = ev.clientX - rect.left;
+        const mouseY = ev.clientY - rect.top;
+        const factor = ev.deltaY < 0 ? 1.12 : 1 / 1.12;
+        const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale * factor));
+        panX = mouseX - (mouseX - panX) * (newScale / scale);
+        panY = mouseY - (mouseY - panY) * (newScale / scale);
+        scale = newScale;
+        applyTransform();
+    }, { passive: false });
+
+    canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
+
     // ---------- Drag handling ----------
     let dragging = null;     // { token, offsetX, offsetY }
+    let panning = null;      // { startX, startY }
 
     function pointInToken(x, y, t) {
         const cx = t.x + gridSize / 2, cy = t.y + gridSize / 2;
@@ -138,6 +202,8 @@
 
     function canMove(t) {
         if (ME.isGm) return true;
+        if (t.is_hidden) return false;
+        if (t.controller_user_id != null && t.controller_user_id === ME.id) return true;
         if (!t.character_id) return false;
         const c = characters.find(c => c.id === t.character_id);
         return c && c.owner_user_id === ME.id;
@@ -145,14 +211,20 @@
 
     function clientToCanvas(ev) {
         const rect = canvas.getBoundingClientRect();
-        const sx = canvas.width / rect.width;
-        const sy = canvas.height / rect.height;
-        return [(ev.clientX - rect.left) * sx, (ev.clientY - rect.top) * sy];
+        return [
+            (ev.clientX - rect.left) / scale,
+            (ev.clientY - rect.top) / scale,
+        ];
     }
 
     canvas.addEventListener('mousedown', (ev) => {
+        if (ev.button === 2) {
+            panning = { startX: ev.clientX - panX, startY: ev.clientY - panY };
+            canvas.style.cursor = 'move';
+            ev.preventDefault();
+            return;
+        }
         const [x, y] = clientToCanvas(ev);
-        // Iterate top-to-bottom (last drawn first)
         for (let i = tokens.length - 1; i >= 0; i--) {
             const t = tokens[i];
             if (pointInToken(x, y, t) && canMove(t)) {
@@ -164,6 +236,12 @@
     });
 
     canvas.addEventListener('mousemove', (ev) => {
+        if (panning) {
+            panX = ev.clientX - panning.startX;
+            panY = ev.clientY - panning.startY;
+            applyTransform();
+            return;
+        }
         if (!dragging) return;
         const [x, y] = clientToCanvas(ev);
         dragging.token.x = x - dragging.offsetX;
@@ -171,7 +249,12 @@
         render();
     });
 
-    canvas.addEventListener('mouseup', () => {
+    canvas.addEventListener('mouseup', (ev) => {
+        if (ev.button === 2) {
+            panning = null;
+            canvas.style.cursor = 'grab';
+            return;
+        }
         if (!dragging) return;
         const [sx, sy] = snapToGrid(dragging.token.x, dragging.token.y);
         dragging.token.x = sx;
@@ -185,6 +268,14 @@
         dragging = null;
         canvas.style.cursor = 'grab';
         render();
+    });
+
+    // Release pan/drag if mouse button is lifted outside the canvas
+    document.addEventListener('mouseup', (ev) => {
+        if (ev.button === 2 && panning) {
+            panning = null;
+            canvas.style.cursor = 'grab';
+        }
     });
 
     canvas.addEventListener('dblclick', (ev) => {
@@ -221,12 +312,38 @@
                 if (t) { t.x = msg.data.x; t.y = msg.data.y; render(); }
             } else if (msg.type === 'token_add') {
                 tokens.push(msg.data);
+                renderTokenTracker();
+                refreshPlaceButtons();
                 render();
             } else if (msg.type === 'token_delete') {
                 tokens = tokens.filter(t => t.id !== msg.data.id);
+                renderTokenTracker();
+                refreshPlaceButtons();
                 render();
+            } else if (msg.type === 'token_update') {
+                const t = tokens.find(t => t.id === msg.data.id);
+                if (t) { Object.assign(t, msg.data); renderTokenTracker(); refreshPlaceButtons(); render(); }
             } else if (msg.type === 'roll') {
                 appendRoll(msg.data);
+            } else if (msg.type === 'member_color_update') {
+                const { user_id, color } = msg.data;
+                if (color) USER_COLORS[user_id] = color;
+                else delete USER_COLORS[user_id];
+                // Only apply if there's no character-level color overriding it
+                // (character_color_update handles that separately)
+                document.querySelectorAll(`.roll-card-user[data-uid="${user_id}"]`).forEach(el => {
+                    if (!el.dataset.charColor) el.style.color = color || '';
+                });
+            } else if (msg.type === 'character_color_update') {
+                const { owner_user_id, color } = msg.data;
+                if (owner_user_id == null) return;
+                // Character color overrides player color; update all cards for this user
+                document.querySelectorAll(`.roll-card-user[data-uid="${owner_user_id}"]`).forEach(el => {
+                    const effective = color || USER_COLORS[owner_user_id] || '';
+                    el.style.color = effective;
+                    if (color) el.dataset.charColor = color;
+                    else delete el.dataset.charColor;
+                });
             }
         };
         ws.onclose = () => setTimeout(connectWs, 2000);
@@ -240,12 +357,51 @@
             if (r.visibility === 'gm_only') return;
             if (r.visibility === 'gm_and_roller' && r.user_id !== ME.id) return;
         }
+        const visClass  = r.visibility === 'gm_only'      ? 'vis-gm-only'
+                        : r.visibility === 'gm_and_roller' ? 'vis-gm-roller'
+                        : '';
+        const badgeText = r.visibility === 'gm_only'      ? 'GM only'
+                        : r.visibility === 'gm_and_roller' ? 'GM + you'
+                        : '';
+        const now = new Date();
+        const h = now.getHours(), m = now.getMinutes();
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12  = (h % 12) || 12;
+        const hhmm = h12.toString().padStart(2,'0') + ':' + m.toString().padStart(2,'0') + ' ' + ampm;
+
+        // Portrait and color — prefer values from the broadcast, fall back to local maps
+        const portrait  = r.portrait_url || USER_PORTRAITS[r.user_id] || '';
+        const color     = r.user_color   || USER_COLORS[r.user_id]   || '';
+        const dispName  = r.char_name    || USER_CHAR_NAMES[r.user_id] || r.user_name;
+        const avatarInner = portrait
+            ? `<img src="${escapeHTML(portrait)}" alt="">`
+            : '🎲';
+
         const ul = document.getElementById('roll-list');
         const li = document.createElement('li');
-        li.innerHTML = `<strong>${escapeHTML(r.user_name)}</strong>: ${escapeHTML(r.expression)} = <strong>${r.total}</strong>
-            <div class="muted">${escapeHTML(r.breakdown)}</div>
-            <span class="roll-vis">${r.visibility}${r.note ? ' • ' + escapeHTML(r.note) : ''}</span>`;
+        li.innerHTML = `
+            <div class="roll-card ${visClass}">
+                <div class="roll-card-header">
+                    <div class="roll-card-avatar">${avatarInner}</div>
+                    <span class="roll-card-user" data-uid="${r.user_id}"${color ? ` style="color:${escapeHTML(color)}"` : ''}>${escapeHTML(dispName)}</span>
+                    ${badgeText ? `<span class="roll-card-badge">${badgeText}</span>` : ''}
+                    <span class="roll-card-time">${hhmm}</span>
+                </div>
+                <div class="roll-card-body">
+                    ${r.note ? `<div class="roll-card-note">${escapeHTML(r.note)}</div>` : ''}
+                    <span class="roll-card-total">${r.total}</span>
+                    <div class="roll-card-breakdown">${formatBreakdown(r.breakdown)}</div>
+                </div>
+            </div>`;
         ul.prepend(li);
+    }
+
+    function formatBreakdown(s) {
+        // HTML-escape the string, then bold individual die values inside [...]
+        return escapeHTML(s).replace(/\[([^\]]*)\]/g, (_, inner) => {
+            const bolded = inner.replace(/(\d+)/g, '<strong>$1</strong>');
+            return `[${bolded}]`;
+        });
     }
 
     function escapeHTML(s) {
@@ -280,30 +436,484 @@
     // ---------- GM: add token button ----------
     const addBtn = document.getElementById('add-token-btn');
     if (addBtn) {
-        addBtn.addEventListener('click', async () => {
-            const label = prompt('Token label?', 'Token');
-            if (label === null) return;
-            const charIdStr = prompt('Character ID to link (blank for unlinked):', '');
-            const charId = charIdStr ? parseInt(charIdStr, 10) : null;
-            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/tokens`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ label, character_id: charId, x: 100, y: 100 }),
+        addBtn.addEventListener('click', () => {
+            const modal = document.getElementById('add-token-modal');
+            // Populate template grid
+            const grid = document.getElementById('atm-template-grid');
+            const noTmpl = document.getElementById('atm-no-templates');
+            const settingsLink = document.getElementById('atm-settings-link');
+            if (settingsLink) settingsLink.href = `/campaign/${CAMPAIGN_ID}/settings#tmpl`;
+            grid.innerHTML = '';
+            if (!templates.length) {
+                noTmpl.style.display = '';
+                grid.style.display = 'none';
+            } else {
+                noTmpl.style.display = 'none';
+                grid.style.display = '';
+                templates.forEach(tmpl => {
+                    const card = document.createElement('div');
+                    card.style.cssText = 'background:#20232a;border:1px solid #2e3140;border-radius:6px;overflow:hidden;cursor:pointer;transition:border-color 0.15s;';
+                    card.addEventListener('mouseenter', () => { card.style.borderColor = '#6cb'; });
+                    card.addEventListener('mouseleave', () => { card.style.borderColor = '#2e3140'; });
+                    if (tmpl.image_url) {
+                        const img = document.createElement('img');
+                        img.src = tmpl.image_url;
+                        img.style.cssText = 'width:100%;height:90px;object-fit:cover;display:block;';
+                        card.appendChild(img);
+                    } else {
+                        const ph = document.createElement('div');
+                        ph.style.cssText = 'width:100%;height:90px;display:flex;align-items:center;justify-content:center;background:#1e2030;font-size:28px;font-weight:700;color:#556;';
+                        ph.textContent = tmpl.name.slice(0,1).toUpperCase();
+                        card.appendChild(ph);
+                    }
+                    const info = document.createElement('div');
+                    info.style.cssText = 'padding:7px 8px;';
+                    const nameEl = document.createElement('div');
+                    nameEl.style.cssText = 'font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+                    nameEl.textContent = tmpl.name;
+                    info.appendChild(nameEl);
+                    if (tmpl.tags && tmpl.tags.length) {
+                        const tags = document.createElement('div');
+                        tags.style.cssText = 'font-size:10px;color:#6cb;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;';
+                        tags.textContent = tmpl.tags.join(', ');
+                        info.appendChild(tags);
+                    }
+                    card.appendChild(info);
+                    card.addEventListener('click', async () => {
+                        modal.style.display = 'none';
+                        const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/tokens`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token_template_id: tmpl.id }),
+                        });
+                        if (!resp.ok) alert('Failed to place token');
+                    });
+                    grid.appendChild(card);
+                });
+            }
+            // Tab switching
+            modal.querySelectorAll('.atm-tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    modal.querySelectorAll('.atm-tab-btn').forEach(b => {
+                        b.style.background = '#2a2d36'; b.style.color = '#bbb'; b.style.borderColor = '#444';
+                    });
+                    btn.style.background = '#1a3328'; btn.style.color = '#6cb'; btn.style.borderColor = '#3a6a50';
+                    modal.querySelectorAll('[id^="atm-tab-"]').forEach(t => t.style.display = 'none');
+                    const tab = document.getElementById(btn.dataset.tab);
+                    if (tab) tab.style.display = '';
+                });
             });
-            if (!resp.ok) alert('Failed to add token');
-            // Token appears via WS broadcast.
+            // Reset to library tab
+            modal.querySelectorAll('.atm-tab-btn').forEach(b => {
+                b.style.background = '#2a2d36'; b.style.color = '#bbb'; b.style.borderColor = '#444';
+            });
+            modal.querySelectorAll('[id^="atm-tab-"]').forEach(t => t.style.display = 'none');
+            const libBtn = modal.querySelector('[data-tab="atm-tab-library"]');
+            const libTab = document.getElementById('atm-tab-library');
+            if (libBtn) { libBtn.style.background = '#1a3328'; libBtn.style.color = '#6cb'; libBtn.style.borderColor = '#3a6a50'; }
+            if (libTab) libTab.style.display = '';
+            modal.style.display = 'flex';
+        });
+
+        // Blank token placement
+        const blankPlaceBtn = document.getElementById('atm-blank-place');
+        if (blankPlaceBtn) {
+            blankPlaceBtn.addEventListener('click', async () => {
+                const label = document.getElementById('atm-blank-label').value.trim() || 'Token';
+                const color = document.getElementById('atm-blank-color').value || '#cc3333';
+                document.getElementById('add-token-modal').style.display = 'none';
+                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/tokens`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label, color, x: 100, y: 100 }),
+                });
+                if (!resp.ok) alert('Failed to add token');
+            });
+        }
+
+        // Close modal on backdrop click
+        document.getElementById('add-token-modal').addEventListener('click', (ev) => {
+            if (ev.target === ev.currentTarget) ev.currentTarget.style.display = 'none';
         });
     }
 
+    // ---------- GM: token tracker ----------
+
+    function buildMiniSheetEl(name, tmpl, sheet) {
+        const sh = sheet || {};
+        const wrap = document.createElement('div');
+        wrap.className = 'mini-sheet';
+        wrap.style.padding = '8px 2px';
+
+        if (tmpl === 'dnd5e') {
+            const abMap = sh.abilities || {};
+            const saveMap = sh.saving_throws || {};
+            const skillMap = sh.skills || {};
+            const prof = parseInt(sh.proficiency_bonus || 2);
+            function abMod(ab) { return Math.floor(((parseInt(abMap[ab] || 10)) - 10) / 2); }
+            function fmtM(m) { return (m >= 0 ? '+' : '') + m; }
+
+            // Tags
+            const tags = [sh['class'], sh.level ? `Lv ${sh.level}` : null, sh.race].filter(Boolean);
+            if (tags.length) {
+                const tagRow = document.createElement('div');
+                tagRow.className = 'mini-tags';
+                tags.forEach(tag => {
+                    const s = document.createElement('span');
+                    s.className = 'mini-tag';
+                    s.textContent = tag;
+                    tagRow.appendChild(s);
+                });
+                wrap.appendChild(tagRow);
+            }
+
+            // Combat stats
+            const statsGrid = document.createElement('div');
+            statsGrid.className = 'mini-grid-3';
+            const hp = sh.hp || {};
+            [
+                ['HP', `${hp.current ?? '—'}/${hp.max ?? '—'}`],
+                ['AC', sh.ac ?? '—'],
+                ['Speed', sh.speed ? sh.speed + 'ft' : '—'],
+            ].forEach(([lbl, val]) => {
+                const cell = document.createElement('div');
+                cell.className = 'mini-cell';
+                cell.innerHTML = `<span class="mc-label">${escapeHTML(lbl)}</span><span class="mc-value">${escapeHTML(String(val))}</span>`;
+                statsGrid.appendChild(cell);
+            });
+            wrap.appendChild(statsGrid);
+
+            // Abilities
+            const abLbl = document.createElement('div');
+            abLbl.className = 'mini-section-label';
+            abLbl.textContent = 'Abilities & Saves';
+            wrap.appendChild(abLbl);
+            const abGrid = document.createElement('div');
+            abGrid.className = 'mini-ab-grid';
+            const ABS = ['STR','DEX','CON','INT','WIS','CHA'];
+            // Row 1: names
+            ABS.forEach(ab => {
+                const isP = saveMap[ab];
+                const el = document.createElement('span');
+                el.className = 'mac-name' + (isP ? ' mac-name-prof' : '');
+                el.textContent = ab;
+                abGrid.appendChild(el);
+            });
+            // Row 2: scores
+            ABS.forEach(ab => {
+                const el = document.createElement('span');
+                el.className = 'mac-score';
+                el.textContent = abMap[ab] ?? 10;
+                abGrid.appendChild(el);
+            });
+            // Row 3: modifiers
+            ABS.forEach(ab => {
+                const el = document.createElement('span');
+                el.className = 'mac-mod';
+                el.textContent = fmtM(abMod(ab));
+                abGrid.appendChild(el);
+            });
+            // Row 4: Check label + buttons
+            const ckLbl = document.createElement('span');
+            ckLbl.className = 'mac-row-label';
+            ckLbl.textContent = 'Check';
+            abGrid.appendChild(ckLbl);
+            ABS.forEach(ab => {
+                const m = abMod(ab);
+                const btn = document.createElement('button');
+                btn.className = 'mini-roll-btn mac-btn';
+                btn.dataset.expr = `1d20${fmtM(m)}`;
+                btn.dataset.note = `${ab} check`;
+                btn.textContent = '🎲';
+                abGrid.appendChild(btn);
+            });
+            // Row 5: Save label + buttons
+            const svLbl = document.createElement('span');
+            svLbl.className = 'mac-row-label';
+            svLbl.textContent = 'Save';
+            abGrid.appendChild(svLbl);
+            ABS.forEach(ab => {
+                const m = abMod(ab);
+                const isP = saveMap[ab];
+                const sv = m + (isP ? prof : 0);
+                const btn = document.createElement('button');
+                btn.className = 'mini-roll-btn mac-btn';
+                btn.dataset.expr = `1d20${fmtM(sv)}`;
+                btn.dataset.note = `${ab} save${isP ? ' (prof)' : ''}`;
+                btn.textContent = '🎲';
+                abGrid.appendChild(btn);
+            });
+            wrap.appendChild(abGrid);
+
+            // Skills
+            const sklLbl = document.createElement('div');
+            sklLbl.className = 'mini-section-label';
+            sklLbl.style.marginTop = '10px';
+            sklLbl.textContent = 'Skills';
+            wrap.appendChild(sklLbl);
+            const sklGrid = document.createElement('div');
+            sklGrid.className = 'mini-skills-grid';
+            [
+                ['Acrobatics','DEX'],['Animal Handling','WIS'],['Arcana','INT'],
+                ['Athletics','STR'],['Deception','CHA'],['History','INT'],
+                ['Insight','WIS'],['Intimidation','CHA'],['Investigation','INT'],
+                ['Medicine','WIS'],['Nature','INT'],['Perception','WIS'],
+                ['Performance','CHA'],['Persuasion','CHA'],['Religion','INT'],
+                ['Sleight of Hand','DEX'],['Stealth','DEX'],['Survival','WIS'],
+            ].forEach(([sname, sab]) => {
+                const sMod = abMod(sab);
+                const sk = skillMap[sname] || {};
+                const isExp = sk.expertise;
+                const isProf = sk.proficient;
+                const bonus = sMod + (isExp ? prof*2 : isProf ? prof : 0);
+                const row = document.createElement('div');
+                row.className = 'mini-roll-row';
+                const nameEl = document.createElement('span');
+                nameEl.className = `mini-skill-name${isExp ? ' is-exp' : isProf ? ' is-prof' : ''}`;
+                nameEl.textContent = sname;
+                const abEl = document.createElement('span');
+                abEl.className = 'mini-skill-ab';
+                abEl.textContent = sab;
+                const btn = document.createElement('button');
+                btn.className = 'mini-roll-btn';
+                btn.dataset.expr = `1d20${fmtM(bonus)}`;
+                btn.dataset.note = `${sname}${isExp ? ' (expertise)' : isProf ? ' (prof)' : ''}`;
+                btn.textContent = `🎲 ${fmtM(bonus)}`;
+                row.append(nameEl, abEl, btn);
+                sklGrid.appendChild(row);
+            });
+            wrap.appendChild(sklGrid);
+
+        } else {
+            // Generic sheet
+            if (sh.summary) {
+                const p = document.createElement('p');
+                p.className = 'mini-summary';
+                p.textContent = String(sh.summary).slice(0, 200);
+                wrap.appendChild(p);
+            }
+            if (sh.stats && Object.keys(sh.stats).length) {
+                const kv = document.createElement('div');
+                kv.className = 'mini-kv';
+                Object.entries(sh.stats).forEach(([k, v]) => {
+                    const pair = document.createElement('span');
+                    pair.className = 'mini-kv-pair';
+                    pair.innerHTML = `<span class="mk">${escapeHTML(k)}</span>${escapeHTML(String(v))}`;
+                    kv.appendChild(pair);
+                });
+                wrap.appendChild(kv);
+            }
+            if (!sh.summary && (!sh.stats || !Object.keys(sh.stats).length)) {
+                const p = document.createElement('p');
+                p.className = 'no-chars-msg';
+                p.textContent = 'No sheet data yet.';
+                wrap.appendChild(p);
+            }
+        }
+
+        // Wire roll buttons (public roll by default; respects roll-vis selector)
+        wrap.querySelectorAll('.mini-roll-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const expr = btn.dataset.expr;
+                if (!expr) return;
+                const note = `${name}: ${btn.dataset.note || ''}`;
+                const visEl = document.getElementById('roll-vis');
+                const visibility = visEl ? visEl.value : 'public';
+                btn.disabled = true;
+                try {
+                    await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ expression: expr, visibility, note }),
+                    });
+                } finally { btn.disabled = false; }
+            });
+        });
+
+        return wrap;
+    }
+
+    async function patchToken(id, updates) {
+        return fetch(`/api/campaign/${CAMPAIGN_ID}/token/${id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates),
+        });
+    }
+
+    function renderTokenTracker() {
+        const list = document.getElementById('token-tracker-list');
+        if (!list) return;
+        list.innerHTML = '';
+        if (!tokens.length) {
+            list.innerHTML = '<p class="muted" style="font-size:11px;margin:4px 0;">No tokens on this map.</p>';
+            return;
+        }
+        tokens.forEach(t => {
+            const row = document.createElement('div');
+            row.className = 'tt-row';
+            row.dataset.id = t.id;
+            const memberOpts = (typeof MEMBERS !== 'undefined' ? MEMBERS : [])
+                .map(m => `<option value="${m.id}"${t.controller_user_id === m.id ? ' selected' : ''}>${escapeHTML(m.name)}</option>`)
+                .join('');
+            row.innerHTML = `
+                <span class="tt-swatch" style="background:${escapeHTML(t.color || '#cc3333')}"></span>
+                <span class="tt-name" contenteditable="true" spellcheck="false">${escapeHTML(t.label)}</span>
+                <button class="tt-btn tt-vis" title="${t.is_hidden ? 'Show token' : 'Hide token'}">${t.is_hidden ? '🚫' : '👁'}</button>
+                <label class="tt-btn tt-art-label" title="Upload art">
+                    🖼<input class="tt-art-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
+                </label>
+                <select class="tt-ctrl">
+                    <option value="">No controller</option>
+                    ${memberOpts}
+                </select>
+                <button class="tt-btn tt-sheet" title="Show sheet">📋</button>
+                <button class="tt-btn tt-del" title="Delete token">🗑</button>`;
+            list.appendChild(row);
+
+            const nameEl = row.querySelector('.tt-name');
+            nameEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); nameEl.blur(); } });
+            nameEl.addEventListener('blur', () => {
+                const label = nameEl.textContent.trim().slice(0, 120);
+                if (label !== t.label) patchToken(t.id, { label });
+            });
+
+            row.querySelector('.tt-vis').addEventListener('click', () => {
+                patchToken(t.id, { is_hidden: !t.is_hidden });
+            });
+
+            row.querySelector('.tt-art-input').addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const fd = new FormData();
+                fd.append('image', file);
+                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/token/${t.id}/image`, { method: 'POST', body: fd });
+                if (!resp.ok) alert('Image upload failed');
+            });
+
+            row.querySelector('.tt-ctrl').addEventListener('change', (e) => {
+                const val = e.target.value;
+                patchToken(t.id, { controller_user_id: val ? parseInt(val, 10) : null });
+            });
+
+            row.querySelector('.tt-del').addEventListener('click', () => {
+                if (!confirm(`Delete "${t.label}"?`)) return;
+                fetch(`/api/campaign/${CAMPAIGN_ID}/tokens/${t.id}`, { method: 'DELETE' });
+            });
+
+            // Mini-sheet expand
+            const sheetBtn = row.querySelector('.tt-sheet');
+            if (sheetBtn) {
+                const sheetRow = document.createElement('div');
+                sheetRow.style.cssText = 'display:none; padding:0 10px 10px; border-bottom:1px solid #2a2d3a;';
+                row.after(sheetRow);
+                sheetBtn.addEventListener('click', () => {
+                    const isOpen = sheetRow.style.display !== 'none';
+                    if (isOpen) {
+                        sheetRow.style.display = 'none';
+                    } else {
+                        if (!sheetRow.children.length) {
+                            // Build the mini-sheet
+                            let sheetData = null;
+                            if (t.character_id) {
+                                const c = characters.find(c => c.id === t.character_id);
+                                if (c) sheetData = { name: c.name, template: c.template, sheet: c.sheet };
+                            } else if (t.token_template_id) {
+                                const tmpl = templates.find(tmpl => tmpl.id === t.token_template_id);
+                                if (tmpl) sheetData = { name: tmpl.name, template: tmpl.template, sheet: tmpl.sheet };
+                            }
+                            if (sheetData) {
+                                sheetRow.appendChild(buildMiniSheetEl(sheetData.name, sheetData.template, sheetData.sheet));
+                            } else {
+                                const p = document.createElement('p');
+                                p.className = 'no-chars-msg';
+                                p.textContent = 'No sheet data for this token.';
+                                sheetRow.appendChild(p);
+                            }
+                        }
+                        sheetRow.style.display = '';
+                    }
+                });
+            }
+        });
+    }
+
+    renderTokenTracker();
+
+    // ---------- Player: place/remove character token buttons ----------
+    function charTokenOnMap(charId) {
+        return tokens.find(t => t.character_id === charId) || null;
+    }
+
+    function canPlaceChar(charId) {
+        if (ME.isGm) return true;
+        const c = characters.find(c => c.id === charId);
+        return c && c.owner_user_id === ME.id;
+    }
+
+    function refreshPlaceButtons() {
+        document.querySelectorAll('.char-row[data-char-id]').forEach(row => {
+            const charId = parseInt(row.dataset.charId, 10);
+            if (!canPlaceChar(charId)) return;
+            let btn = row.querySelector('.char-place-btn');
+            if (!btn) {
+                btn = document.createElement('button');
+                btn.className = 'char-expand-btn char-place-btn';
+                btn.style.marginRight = '2px';
+                const expandBtn = row.querySelector('.char-expand-btn:not(.char-place-btn)');
+                row.insertBefore(btn, expandBtn);
+                btn.addEventListener('click', async () => {
+                    const existing = charTokenOnMap(charId);
+                    const url = existing
+                        ? `/api/campaign/${CAMPAIGN_ID}/character/${charId}/token`
+                        : `/api/campaign/${CAMPAIGN_ID}/character/${charId}/place-token`;
+                    btn.disabled = true;
+                    try {
+                        const resp = await fetch(url, {
+                            method: existing ? 'DELETE' : 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                        });
+                        if (!resp.ok) alert('Failed: ' + await resp.text());
+                    } finally { btn.disabled = false; }
+                });
+            }
+            const existing = charTokenOnMap(charId);
+            btn.textContent = existing ? '⊖' : '⊕';
+            btn.title = existing ? 'Remove token from map' : 'Place token on map';
+        });
+    }
+
+    refreshPlaceButtons();
+
     // ---------- Sheet modal ----------
+    let _sheetJs = null;   // cached text of sheet.js so we only fetch it once
+
     window.openSheet = async function (charId) {
-        const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/character/${charId}`);
-        if (!resp.ok) { alert('Could not load character'); return; }
-        const html = await resp.text();
+        const [sheetResp] = await Promise.all([
+            fetch(`/api/campaign/${CAMPAIGN_ID}/character/${charId}`),
+        ]);
+        if (!sheetResp.ok) { alert('Could not load character'); return; }
+        const html = await sheetResp.text();
+
+        // Strip <script> tags before injecting — innerHTML never executes them
+        // and createContextualFragment behavior for external src varies by browser.
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        doc.querySelectorAll('script').forEach(s => s.remove());
+
         const root = document.getElementById('modal-root');
-        root.innerHTML = `<div class="modal-bg" onclick="if(event.target===this)closeSheet()"><div class="modal">${html}</div></div>`;
-        // The injected fragment contains <script src="/static/sheet.js"> which
-        // will re-bind the sheet form on load.
+        root.innerHTML = '<div class="modal-bg"><div class="modal"></div></div>';
+        root.firstChild.onclick = (ev) => { if (ev.target === ev.currentTarget) closeSheet(); };
+        root.querySelector('.modal').innerHTML = doc.body.innerHTML;
+
+        // Explicitly fetch and run sheet.js so the form is always bound.
+        // We use a real <script> element rather than new Function() because
+        // new Function() only sees window properties, not const/let top-level
+        // bindings (e.g. CAMPAIGN_ID) that live in the declarative record.
+        if (!_sheetJs) _sheetJs = await fetch('/static/sheet.js').then(r => r.text());
+        const _s = document.createElement('script');
+        _s.textContent = _sheetJs;
+        document.head.appendChild(_s);
+        _s.remove();
     };
     window.closeSheet = function () {
         document.getElementById('modal-root').innerHTML = '';

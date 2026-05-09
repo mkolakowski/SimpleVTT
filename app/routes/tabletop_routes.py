@@ -6,7 +6,9 @@ The WebSocket pushes those changes to other connected clients.
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import timezone
+from pathlib import Path
 from typing import Optional
 
 from fastapi import (
@@ -33,16 +35,19 @@ from ..models import (
     CampaignMembership,
     Character,
     DiceRoll,
+    GridType,
     Map,
     Playlist,
     PlaylistTrack,
     Token,
+    TokenTemplate,
     User,
     Visibility,
 )
 from ..realtime import hub
 from ..sheet_templates import get_template
 from ..templates import templates
+
 
 router = APIRouter()
 log = logging.getLogger(__name__)
@@ -97,6 +102,10 @@ def _user_is_primary_gm(user: User, campaign: Campaign) -> bool:
 def _user_can_move_token(db: Session, user: User, token: Token, campaign: Campaign) -> bool:
     if _user_is_gm(user, campaign, db):
         return True
+    if token.is_hidden:
+        return False
+    if token.controller_user_id is not None and token.controller_user_id == user.id:
+        return True
     if token.character_id is None:
         return False
     char = db.query(Character).filter(Character.id == token.character_id).first()
@@ -111,6 +120,54 @@ def _filter_roll_for_user(roll: DiceRoll, user: User, campaign: Campaign, db: Op
     if roll.visibility == Visibility.GM_AND_ROLLER:
         return roll.user_id == user.id
     return False
+
+
+def _build_user_maps(db: Session, campaign: Campaign):
+    """Return (user_color_map, user_portrait_map, user_char_name_map) for a campaign.
+
+    user_color_map    : {user_id: hex_color_str}  — char color if set, else player color
+    user_portrait_map : {user_id: portrait_url}   — first character portrait per user
+    user_char_name_map: {user_id: char_name}       — first character name per user
+    """
+    # Start with player-level colors from memberships and GM
+    memberships = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign.id)
+        .all()
+    )
+    user_color_map: dict[int, str] = {}
+    for m in memberships:
+        if m.color:
+            user_color_map[m.user_id] = m.color
+    if campaign.gm_color:
+        user_color_map[campaign.gm_user_id] = campaign.gm_color
+
+    # Characters: first per user wins for name/portrait; char color overrides player color
+    chars = (
+        db.query(Character)
+        .filter(
+            Character.campaign_id == campaign.id,
+            Character.owner_user_id.isnot(None),
+        )
+        .all()
+    )
+    user_portrait_map: dict[int, str] = {}
+    user_char_name_map: dict[int, str] = {}
+    for c in chars:
+        uid = c.owner_user_id
+        if uid not in user_char_name_map:
+            # First character per user wins
+            user_char_name_map[uid] = c.name
+            if c.portrait_url:
+                user_portrait_map[uid] = c.portrait_url
+            if c.color:
+                user_color_map[uid] = c.color  # char color overrides player color
+        elif c.color and uid not in user_portrait_map:
+            # Still might pick up portrait from a later char if first had none
+            if c.portrait_url:
+                user_portrait_map[uid] = c.portrait_url
+
+    return user_color_map, user_portrait_map, user_char_name_map
 
 
 # ----------- pages -----------
@@ -268,6 +325,19 @@ def campaign_view(
         now_playing_started_at_ms = int(
             campaign.now_playing_started_at.replace(tzinfo=timezone.utc).timestamp() * 1000
         )
+    playlists = (
+        db.query(Playlist)
+        .filter(Playlist.campaign_id == campaign.id)
+        .order_by(Playlist.id)
+        .all()
+        if is_gm
+        else []
+    )
+    tmpl_objs = db.query(TokenTemplate).filter(TokenTemplate.campaign_id == campaign.id).order_by(TokenTemplate.name).all()
+    char_data = [{"id": c.id, "name": c.name, "owner_user_id": c.owner_user_id, "template": c.template, "sheet": c.sheet or {}} for c in characters]
+    token_data = [_token_dict(t) for t in tokens]
+    tmpl_data = [{"id": t.id, "name": t.name, "image_url": t.image_url, "tags": t.tags or [], "template": t.template, "sheet": t.sheet or {}} for t in tmpl_objs]
+    user_color_map, user_portrait_map, user_char_name_map = _build_user_maps(db, campaign)
     return templates.TemplateResponse(
         "tabletop.html",
         {
@@ -284,6 +354,13 @@ def campaign_view(
             "system": get_system(campaign.game_system),
             "now_playing": now_playing,
             "now_playing_started_at_ms": now_playing_started_at_ms,
+            "playlists": playlists,
+            "char_data": char_data,
+            "token_data": token_data,
+            "tmpl_data": tmpl_data,
+            "user_color_map": user_color_map,
+            "user_portrait_map": user_portrait_map,
+            "user_char_name_map": user_char_name_map,
         },
     )
 
@@ -308,15 +385,48 @@ def campaign_settings(
         .all()
     )
     members_with_role = [
-        {"user": u, "is_gm": m.is_gm, "membership_id": m.id} for m, u in member_rows
+        {"user": u, "is_gm": m.is_gm, "membership_id": m.id, "color": m.color or ""} for m, u in member_rows
     ]
+    member_user_ids = {m["user"].id for m in members_with_role}
     primary_gm = db.query(User).filter(User.id == campaign.gm_user_id).first()
+    all_users = db.query(User).order_by(User.display_name).all()
+    non_members = [
+        u for u in all_users
+        if u.id not in member_user_ids and u.id != campaign.gm_user_id
+    ]
+    characters = (
+        db.query(Character)
+        .filter(Character.campaign_id == campaign_id)
+        .order_by(Character.name)
+        .all()
+    )
+    maps = db.query(Map).filter(Map.campaign_id == campaign_id).order_by(Map.id).all()
     playlists = (
         db.query(Playlist)
         .filter(Playlist.campaign_id == campaign_id)
         .order_by(Playlist.id)
         .all()
     )
+    tmpl_objs = db.query(TokenTemplate).filter(TokenTemplate.campaign_id == campaign_id).order_by(TokenTemplate.name).all()
+
+    # Characters owned by campaign members (from any campaign) that aren't already here
+    all_member_ids = list(member_user_ids | {campaign.gm_user_id})
+    existing_char_ids = {c.id for c in characters}
+    importable_chars = (
+        db.query(Character)
+        .filter(Character.owner_user_id.in_(all_member_ids))
+        .filter(Character.campaign_id != campaign_id)
+        .order_by(Character.name)
+        .all()
+    ) if all_member_ids else []
+
+    # Annotate with owner display name for the template
+    user_map = {u.id: u for u in all_users}
+    importable = [
+        {"char": c, "owner_name": user_map.get(c.owner_user_id, None)}
+        for c in importable_chars
+    ]
+
     return templates.TemplateResponse(
         "campaign_settings.html",
         {
@@ -327,7 +437,13 @@ def campaign_settings(
             "current_system": get_system(campaign.game_system),
             "members_with_role": members_with_role,
             "primary_gm": primary_gm,
+            "all_users": all_users,
+            "non_members": non_members,
+            "characters": characters,
+            "maps": maps,
             "playlists": playlists,
+            "templates": tmpl_objs,
+            "importable": importable,
         },
     )
 
@@ -339,6 +455,7 @@ async def campaign_settings_save(
     name: str = Form(...),
     description: str = Form(""),
     game_system: str = Form("generic"),
+    gm_tab_color: str = Form(""),
     thumbnail: UploadFile = File(None),
     clear_thumbnail: bool = Form(False),
     db: Session = Depends(get_db),
@@ -352,6 +469,7 @@ async def campaign_settings_save(
     campaign.name = name.strip()[:120] or campaign.name
     campaign.description = description.strip()
     campaign.game_system = get_system(game_system).key
+    campaign.gm_tab_color = gm_tab_color.strip()[:20] or None
     if clear_thumbnail:
         campaign.thumbnail_url = None
     if thumbnail and thumbnail.filename:
@@ -450,6 +568,7 @@ def rolls_popout(
         .all()
     )
     visible = [r for r in rolls if _filter_roll_for_user(r, user, campaign, db)]
+    user_color_map, user_portrait_map, user_char_name_map = _build_user_maps(db, campaign)
     return templates.TemplateResponse(
         "rolls_popout.html",
         {
@@ -458,6 +577,9 @@ def rolls_popout(
             "campaign": campaign,
             "rolls": visible,
             "is_gm": _user_is_gm(user, campaign, db),
+            "user_color_map": user_color_map,
+            "user_portrait_map": user_portrait_map,
+            "user_char_name_map": user_char_name_map,
         },
     )
 
@@ -506,11 +628,24 @@ async def create_token(
         raise HTTPException(403, "GM only")
     if not campaign.active_map_id:
         raise HTTPException(400, "Campaign has no active map")
+
+    tmpl_id = body.get("token_template_id")
+    tmpl = None
+    if tmpl_id:
+        tmpl = db.query(TokenTemplate).filter(
+            TokenTemplate.id == tmpl_id, TokenTemplate.campaign_id == campaign_id
+        ).first()
+
+    label = str(body.get("label") or (tmpl.name if tmpl else "Token"))[:120]
+    image_url = body.get("image_url") or (tmpl.image_url if tmpl else None)
+
     t = Token(
         map_id=campaign.active_map_id,
         character_id=body.get("character_id"),
-        label=str(body.get("label", "Token"))[:120],
+        token_template_id=tmpl_id if tmpl else None,
+        label=label,
         color=str(body.get("color", "#cc3333"))[:20],
+        image_url=image_url,
         x=float(body.get("x", 100)),
         y=float(body.get("y", 100)),
         size=int(body.get("size", 1)),
@@ -523,6 +658,98 @@ async def create_token(
         {"type": "token_add", "data": _token_dict(t)},
     )
     return _token_dict(t)
+
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/place-token")
+async def place_character_token(
+    campaign_id: int,
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Place a character's token on the active map (character owner or GM).
+    If the character already has a token on this map it is replaced.
+    Token image is pre-filled from the character's portrait if one is set."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not campaign.active_map_id:
+        raise HTTPException(400, "No active map")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not _user_is_gm(user, campaign, db) and char.owner_user_id != user.id:
+        raise HTTPException(403, "Cannot place this character's token")
+
+    # Remove any existing token for this character on the active map first.
+    existing = (
+        db.query(Token)
+        .filter(Token.character_id == char_id, Token.map_id == campaign.active_map_id)
+        .first()
+    )
+    if existing:
+        old_id = existing.id
+        db.delete(existing)
+        db.flush()
+        await hub.broadcast(campaign_id, {"type": "token_delete", "data": {"id": old_id}})
+
+    active_map = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    gsize = active_map.grid_size_px if active_map else 70
+    cx = round((active_map.width_px / 2) / gsize) * gsize if active_map else 0
+    cy = round((active_map.height_px / 2) / gsize) * gsize if active_map else 0
+
+    t = Token(
+        map_id=campaign.active_map_id,
+        character_id=char.id,
+        controller_user_id=char.owner_user_id,
+        label=char.name[:120],
+        color="#cc3333",
+        image_url=char.portrait_url,
+        x=float(cx),
+        y=float(cy),
+        size=1,
+    )
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+    await hub.broadcast(campaign_id, {"type": "token_add", "data": _token_dict(t)})
+    return _token_dict(t)
+
+
+@router.delete("/api/campaign/{campaign_id}/character/{char_id}/token")
+async def remove_character_token(
+    campaign_id: int,
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Remove a character's token from the active map (character owner or GM)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not _user_is_gm(user, campaign, db) and char.owner_user_id != user.id:
+        raise HTTPException(403, "Cannot remove this character's token")
+    if not campaign.active_map_id:
+        return {"ok": True, "removed": False}
+    token = (
+        db.query(Token)
+        .filter(Token.character_id == char_id, Token.map_id == campaign.active_map_id)
+        .first()
+    )
+    if not token:
+        return {"ok": True, "removed": False}
+    token_id = token.id
+    db.delete(token)
+    db.commit()
+    await hub.broadcast(campaign_id, {"type": "token_delete", "data": {"id": token_id}})
+    return {"ok": True, "removed": True}
 
 
 @router.delete("/api/campaign/{campaign_id}/tokens/{token_id}")
@@ -544,6 +771,69 @@ async def delete_token(
     return {"ok": True}
 
 
+@router.patch("/api/campaign/{campaign_id}/token/{token_id}")
+async def update_token(
+    campaign_id: int,
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    body = await request.json()
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token or token.map.campaign_id != campaign_id:
+        raise HTTPException(404, "Token not found")
+    if "label" in body:
+        token.label = str(body["label"])[:120]
+    if "is_hidden" in body:
+        token.is_hidden = bool(body["is_hidden"])
+    if "controller_user_id" in body:
+        val = body["controller_user_id"]
+        token.controller_user_id = int(val) if val else None
+    if "color" in body:
+        token.color = str(body["color"])[:20]
+    db.commit()
+    await hub.broadcast(campaign_id, {"type": "token_update", "data": _token_dict(token)})
+    return _token_dict(token)
+
+
+@router.post("/api/campaign/{campaign_id}/token/{token_id}/image")
+async def upload_token_image(
+    campaign_id: int,
+    token_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    import uuid
+    from pathlib import Path as _Path
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token or token.map.campaign_id != campaign_id:
+        raise HTTPException(404, "Token not found")
+    allowed = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+    if image.content_type not in allowed:
+        raise HTTPException(400, "Unsupported image type")
+    data = await image.read()
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Image too large (>5 MB)")
+    token_dir = _Path(__file__).resolve().parent.parent / "static" / "uploads" / "tokens"
+    token_dir.mkdir(parents=True, exist_ok=True)
+    ext = _Path(image.filename or "img.png").suffix.lower() or ".png"
+    fname = f"{uuid.uuid4().hex}{ext}"
+    (token_dir / fname).write_bytes(data)
+    token.image_url = f"/static/uploads/tokens/{fname}"
+    db.commit()
+    await hub.broadcast(campaign_id, {"type": "token_update", "data": _token_dict(token)})
+    return {"image_url": token.image_url}
+
+
 def _token_dict(t: Token) -> dict:
     return {
         "id": t.id,
@@ -553,7 +843,10 @@ def _token_dict(t: Token) -> dict:
         "y": t.y,
         "size": t.size,
         "character_id": t.character_id,
+        "controller_user_id": t.controller_user_id,
         "image_url": t.image_url,
+        "is_hidden": t.is_hidden,
+        "token_template_id": t.token_template_id,
     }
 
 
@@ -593,6 +886,24 @@ async def roll_dice(
     db.add(rec)
     db.commit()
     db.refresh(rec)
+    # Look up roller's character, then resolve color (char > player > gm) and portrait
+    _char = (
+        db.query(Character)
+        .filter(Character.campaign_id == campaign_id, Character.owner_user_id == user.id)
+        .first()
+    )
+    _char_name   = _char.name        if _char else None
+    _portrait_url = _char.portrait_url if _char else None
+    _membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id, CampaignMembership.user_id == user.id)
+        .first()
+    )
+    _player_color = (
+        _membership.color if _membership and _membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    _user_color = (_char.color if _char and _char.color else _player_color)
     await hub.broadcast(
         campaign_id,
         {
@@ -601,6 +912,9 @@ async def roll_dice(
                 "id": rec.id,
                 "user_id": user.id,
                 "user_name": user.display_name,
+                "char_name": _char_name,
+                "user_color": _user_color,
+                "portrait_url": _portrait_url,
                 "expression": rec.expression,
                 "breakdown": rec.breakdown,
                 "total": rec.total,
@@ -611,6 +925,916 @@ async def roll_dice(
         },
     )
     return {"ok": True, "total": rec.total, "breakdown": rec.breakdown}
+
+
+@router.post("/api/campaign/{campaign_id}/member_color")
+async def set_member_color(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """GM sets a roll-log highlight color for any campaign member (including themselves)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    body = await request.json()
+    target_user_id = int(body.get("user_id", 0))
+    color = str(body.get("color", "")).strip()[:20] or None  # None clears the color
+    if target_user_id == campaign.gm_user_id:
+        campaign.gm_color = color
+    else:
+        membership = (
+            db.query(CampaignMembership)
+            .filter(CampaignMembership.campaign_id == campaign_id, CampaignMembership.user_id == target_user_id)
+            .first()
+        )
+        if not membership:
+            raise HTTPException(404, "Member not found")
+        membership.color = color
+    db.commit()
+    await hub.broadcast(
+        campaign_id,
+        {"type": "member_color_update", "data": {"user_id": target_user_id, "color": color}},
+    )
+    return {"ok": True}
+
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/color")
+async def set_character_color(
+    campaign_id: int,
+    char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """GM sets a roll-log color on a character. Overrides the player's assigned color."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    body = await request.json()
+    color = str(body.get("color", "")).strip()[:20] or None
+    char.color = color
+    db.commit()
+    # Broadcast so live tabletop updates immediately
+    await hub.broadcast(
+        campaign_id,
+        {
+            "type": "character_color_update",
+            "data": {
+                "char_id": char.id,
+                "owner_user_id": char.owner_user_id,
+                "color": color,
+            },
+        },
+    )
+    return {"ok": True}
+
+
+# ----------- API: battle / initiative tracker -----------
+
+@router.put("/api/campaign/{campaign_id}/battle")
+async def update_battle(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    state = await request.json()
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+    return {"ok": True}
+
+
+# ----------- API: character portrait -----------
+
+_PORTRAIT_DIR = Path(__file__).resolve().parent.parent / "static" / "uploads" / "portraits"
+_PORTRAIT_DIR.mkdir(parents=True, exist_ok=True)
+_MAX_PORTRAIT_BYTES = 5 * 1024 * 1024
+_ALLOWED_PORTRAIT_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
+@router.post("/campaign/{campaign_id}/character/{char_id}/portrait")
+async def upload_portrait(
+    campaign_id: int,
+    char_id: int,
+    portrait: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not campaign or not char or char.campaign_id != campaign_id:
+        raise HTTPException(404, "Not found")
+    if not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Cannot edit this character")
+    ext = Path(portrait.filename or "").suffix.lower() or ".png"
+    if ext not in _ALLOWED_PORTRAIT_EXT:
+        raise HTTPException(400, "Unsupported image format (use png/jpg/webp/gif)")
+    data = await portrait.read()
+    if len(data) > _MAX_PORTRAIT_BYTES:
+        raise HTTPException(400, "Image exceeds 5 MB limit")
+    if char.portrait_url and char.portrait_url.startswith("/static/uploads/portraits/"):
+        old_path = Path(__file__).resolve().parent.parent / "static" / char.portrait_url.removeprefix("/static/")
+        try:
+            old_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+    fname = f"{uuid.uuid4().hex}{ext}"
+    (_PORTRAIT_DIR / fname).write_bytes(data)
+    char.portrait_url = f"/static/uploads/portraits/{fname}"
+    db.commit()
+    return {"ok": True, "portrait_url": char.portrait_url}
+
+
+# ----------- API: token templates -----------
+
+_TMPL_IMG_DIR = Path(__file__).resolve().parent.parent / "static" / "uploads" / "token_templates"
+_TMPL_IMG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _tmpl_dict(tmpl: "TokenTemplate") -> dict:
+    return {
+        "id": tmpl.id,
+        "name": tmpl.name,
+        "image_url": tmpl.image_url,
+        "tags": tmpl.tags or [],
+        "template": tmpl.template,
+        "sheet": tmpl.sheet or {},
+    }
+
+
+@router.get("/api/campaign/{campaign_id}/templates")
+def list_templates(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    tmpls = db.query(TokenTemplate).filter(TokenTemplate.campaign_id == campaign_id).order_by(TokenTemplate.name).all()
+    return [_tmpl_dict(t) for t in tmpls]
+
+
+@router.post("/api/campaign/{campaign_id}/templates")
+async def create_template(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    body = await request.json()
+    tmpl = TokenTemplate(
+        campaign_id=campaign_id,
+        name=str(body.get("name", "Unnamed"))[:200],
+        tags=body.get("tags", []),
+        template=body.get("template", "generic"),
+        sheet=body.get("sheet", {}),
+    )
+    db.add(tmpl)
+    db.commit()
+    db.refresh(tmpl)
+    return _tmpl_dict(tmpl)
+
+
+@router.get("/api/campaign/{campaign_id}/templates/export")
+def export_templates(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    tmpls = db.query(TokenTemplate).filter(TokenTemplate.campaign_id == campaign_id).order_by(TokenTemplate.name).all()
+    return {"version": 1, "campaign": campaign.name, "templates": [_tmpl_dict(t) for t in tmpls]}
+
+
+@router.post("/api/campaign/{campaign_id}/templates/import")
+async def import_templates(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    body = await request.json()
+    raw_list = body if isinstance(body, list) else body.get("templates", [])
+    if not isinstance(raw_list, list):
+        raise HTTPException(400, "Expected a list of templates")
+    created = []
+    for td in raw_list[:100]:
+        if not isinstance(td, dict):
+            continue
+        tpl_type = td.get("template", "generic")
+        if tpl_type not in ("generic", "dnd5e"):
+            tpl_type = "generic"
+        tags = td.get("tags", [])
+        img = td.get("image_url")
+        sheet = td.get("sheet", {})
+        t = TokenTemplate(
+            campaign_id=campaign_id,
+            name=str(td.get("name", "Imported"))[:200],
+            image_url=str(img)[:500] if isinstance(img, str) and img else None,
+            tags=tags if isinstance(tags, list) else [],
+            template=tpl_type,
+            sheet=sheet if isinstance(sheet, dict) else {},
+        )
+        db.add(t)
+        db.flush()
+        created.append(_tmpl_dict(t))
+    db.commit()
+    return {"ok": True, "count": len(created), "templates": created}
+
+
+@router.post("/api/campaign/{campaign_id}/templates/import-monster")
+async def import_open5e_monster(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    body = await request.json()
+    slug = str(body.get("slug", "")).strip()
+    if not slug:
+        raise HTTPException(400, "slug required")
+    import json as _json
+    import urllib.request as _urlreq
+    try:
+        req = _urlreq.Request(
+            f"https://api.open5e.com/v2/creatures/{slug}/",
+            headers={"User-Agent": "SimpleVTT/1.0"},
+        )
+        with _urlreq.urlopen(req, timeout=10) as r:
+            monster = _json.loads(r.read())
+    except Exception as exc:
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    sheet = _open5e_to_dnd5e_sheet(monster)
+    tags = [t for t in [monster.get("type", ""), monster.get("size", ""), f"CR {monster.get('challenge_rating', '0')}"] if t]
+    tmpl = TokenTemplate(
+        campaign_id=campaign_id,
+        name=monster.get("name", slug)[:200],
+        tags=tags,
+        template="dnd5e",
+        sheet=sheet,
+    )
+    db.add(tmpl)
+    db.commit()
+    db.refresh(tmpl)
+    return _tmpl_dict(tmpl)
+
+
+@router.get("/api/user/gm-campaigns")
+def user_gm_campaigns(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    primary = db.query(Campaign).filter(Campaign.gm_user_id == user.id).all()
+    co_ids = [
+        m.campaign_id
+        for m in db.query(CampaignMembership).filter(
+            CampaignMembership.user_id == user.id,
+            CampaignMembership.is_gm == True,  # noqa: E712
+        ).all()
+    ]
+    co_gm = db.query(Campaign).filter(Campaign.id.in_(co_ids)).all() if co_ids else []
+    seen = {c.id for c in primary}
+    return [{"id": c.id, "name": c.name} for c in primary + [c for c in co_gm if c.id not in seen]]
+
+
+@router.get("/api/open5e/monsters")
+def open5e_monsters_proxy(search: str = "", limit: int = 20):
+    import json as _json
+    import urllib.parse as _urlparse
+    import urllib.request as _urlreq
+    qs = _urlparse.urlencode({"search": search, "limit": min(abs(limit), 50)})
+    url = f"https://api.open5e.com/v2/creatures/?{qs}"
+    try:
+        req = _urlreq.Request(url, headers={"User-Agent": "SimpleVTT/1.0"})
+        with _urlreq.urlopen(req, timeout=8) as r:
+            data = _json.loads(r.read())
+    except Exception as exc:
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    results = []
+    for m in data.get("results", []):
+        ac = m.get("armor_class", 10)
+        if isinstance(ac, list) and ac:
+            ac = ac[0].get("value", 10) if isinstance(ac[0], dict) else ac[0]
+        results.append({
+            "slug": m.get("key", m.get("slug", "")),
+            "name": m.get("name", ""),
+            "cr": str(m.get("challenge_rating", "0")),
+            "type": m.get("type", ""),
+            "size": m.get("size", ""),
+            "hp": m.get("hit_points", 0),
+            "ac": ac,
+            "source": m.get("document__title", m.get("document", {}).get("title", "") if isinstance(m.get("document"), dict) else ""),
+        })
+    return {"count": data.get("count", 0), "results": results}
+
+
+@router.get("/api/open5e/update-check")
+def open5e_update_check(request: Request, db: Session = Depends(get_db)):
+    """Compare local Open5e data counts against the live public API.
+
+    Only meaningful when LOCAL_OPEN5E=true. Restricted to authenticated users
+    so random visitors can't trigger outbound HTTP calls.
+    """
+    user = get_current_user(request, db)
+    if not user:
+        raise HTTPException(401, "Login required")
+    from ..open5e_local import check_staleness
+    return check_staleness()
+
+
+def _fmt_hit_die(c: dict) -> str:
+    hd = c.get("hit_die") or c.get("hit_dice") or ""
+    if not hd:
+        return ""
+    s = str(hd).strip()
+    if not s or s == "0":
+        return ""
+    if s.startswith("1d"):
+        return s[1:]   # "1d6" → "d6"
+    if s.startswith("d"):
+        return s
+    try:
+        int(s)
+        return f"d{s}"
+    except ValueError:
+        return s
+
+
+def _class_detail_response(c: dict) -> dict:
+    from ..open5e_local import format_class_text
+    return {
+        "text": format_class_text(c),
+        "hit_die": _fmt_hit_die(c),
+        "armor": c.get("prof_armor", "") or "",
+        "weapons": c.get("prof_weapons", "") or "",
+        "tools": c.get("prof_tools", "") or "",
+        "saving_throws": c.get("prof_saving_throws", "") or "",
+        "skills": c.get("prof_skills", "") or "",
+        "spellcasting": (c.get("spellcasting_ability", "") or "").upper(),
+        "equipment": c.get("equipment", "") or "",
+        "features": c.get("features_json", "") or c.get("features", "") or "",
+    }
+
+
+@router.get("/api/open5e/class-detail")
+def open5e_class_detail(slug: str = ""):
+    from ..open5e_local import is_ready, get_class
+    if not slug:
+        raise HTTPException(400, "slug required")
+    if is_ready():
+        c = get_class(slug)
+        if c:
+            return _class_detail_response(c)
+    import json as _json, urllib.request as _urlreq
+    try:
+        req = _urlreq.Request(f"https://api.open5e.com/v1/classes/{slug}/",
+                              headers={"User-Agent": "SimpleVTT/1.0"})
+        with _urlreq.urlopen(req, timeout=8) as r:
+            c = _json.loads(r.read())
+    except Exception as exc:
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    return _class_detail_response(c)
+
+
+def _subclass_response(s: dict) -> dict:
+    from ..open5e_local import format_subclass_text, parse_subclass_features
+    parsed = parse_subclass_features(s)
+    return {
+        "text": format_subclass_text(s),
+        "name": parsed["name"],
+        "flavor": parsed["flavor"],
+        "features": parsed["features"],
+    }
+
+
+@router.get("/api/open5e/subclass-detail")
+def open5e_subclass_detail(slug: str = "", class_slug: str = ""):
+    from ..open5e_local import is_ready, get_subclass
+    if not slug:
+        raise HTTPException(400, "slug required")
+    if is_ready():
+        s = get_subclass(slug)
+        if s:
+            return _subclass_response(s)
+    import json as _json, urllib.request as _urlreq
+
+    def _req(url: str) -> dict:
+        r = _urlreq.Request(url, headers={"User-Agent": "SimpleVTT/1.0"})
+        with _urlreq.urlopen(r, timeout=8) as resp:
+            return _json.loads(resp.read())
+
+    # Primary: v1/subclasses/{slug}/
+    try:
+        s = _req(f"https://api.open5e.com/v1/subclasses/{slug}/")
+        return _subclass_response(s)
+    except Exception:
+        pass
+
+    # Fallback: find the archetype inside the parent class detail
+    if class_slug:
+        try:
+            data = _req(f"https://api.open5e.com/v1/classes/{class_slug}/")
+            archetypes = data.get("archetypes") or data.get("subclasses") or []
+            for a in archetypes:
+                if a.get("slug") == slug or a.get("name", "").lower() == slug.replace("-", " "):
+                    return _subclass_response(a)
+        except Exception:
+            pass
+
+    return {"text": "", "name": "", "flavor": "", "features": []}
+
+
+@router.get("/api/open5e/race-detail")
+def open5e_race_detail(slug: str = ""):
+    from ..open5e_local import is_ready, get_race, format_race_text, parse_race_traits
+    if not slug:
+        raise HTTPException(400, "slug required")
+    if is_ready():
+        r_data = get_race(slug)
+        if r_data:
+            parsed = parse_race_traits(r_data)
+            return {
+                "text":   format_race_text(r_data),
+                "name":   parsed["name"],
+                "flavor": parsed["flavor"],
+                "traits": parsed["traits"],
+            }
+    import json as _json, urllib.request as _urlreq
+    try:
+        req = _urlreq.Request(f"https://api.open5e.com/v1/races/{slug}/",
+                              headers={"User-Agent": "SimpleVTT/1.0"})
+        with _urlreq.urlopen(req, timeout=8) as r:
+            r_data = _json.loads(r.read())
+    except Exception as exc:
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    parsed = parse_race_traits(r_data)
+    return {
+        "text":   format_race_text(r_data),
+        "name":   parsed["name"],
+        "flavor": parsed["flavor"],
+        "traits": parsed["traits"],
+    }
+
+
+@router.get("/api/open5e/subclasses")
+def open5e_subclasses_proxy(search: str = "", class_slug: str = "", limit: int = 20):
+    from ..open5e_local import is_ready, search_subclasses, _source
+    cap = min(abs(limit), 100)
+    if is_ready():
+        items, total = search_subclasses(q=search, class_slug=class_slug, limit=cap)
+        return {"count": total, "results": [
+            {"name": s.get("name", ""), "slug": s.get("slug", ""),
+             "flavor": s.get("subclass_flavor", ""), "source": _source(s)}
+            for s in items
+        ]}
+    import json as _json, urllib.parse as _urlparse, urllib.request as _urlreq
+
+    def _req(url: str) -> dict:
+        r = _urlreq.Request(url, headers={"User-Agent": "SimpleVTT/1.0"})
+        with _urlreq.urlopen(r, timeout=8) as resp:
+            return _json.loads(resp.read())
+
+    def _q_match(name: str) -> bool:
+        return not search or search.lower() in name.lower()
+
+    # ── Primary: v1/subclasses/ ───────────────────────────────────────────────
+    try:
+        params: dict = {"limit": cap}
+        if search:     params["search"] = search
+        if class_slug: params["class_slug"] = class_slug
+        data = _req(f"https://api.open5e.com/v1/subclasses/?{_urlparse.urlencode(params)}")
+        results = []
+        for s in data.get("results", []):
+            src = s.get("document__title", "") or (
+                s.get("document", {}).get("title", "") if isinstance(s.get("document"), dict) else ""
+            )
+            results.append({"name": s.get("name", ""), "slug": s.get("slug", ""),
+                             "flavor": s.get("subclass_flavor", ""), "source": src})
+        return {"count": data.get("count", 0), "results": results}
+    except Exception:
+        pass
+
+    # ── Fallback: extract archetypes from the class detail endpoint ───────────
+    # The v1/subclasses/ endpoint is unreliable; v1/classes/{slug}/ embeds
+    # archetype data (subclasses) directly in the class object.
+    if class_slug:
+        try:
+            data = _req(f"https://api.open5e.com/v1/classes/{class_slug}/")
+            archetypes = data.get("archetypes") or data.get("subclasses") or []
+            results = []
+            for a in archetypes:
+                name = a.get("name", "")
+                if not _q_match(name):
+                    continue
+                results.append({
+                    "name": name,
+                    "slug": a.get("slug", ""),
+                    "flavor": a.get("subtypes_name", "") or "",
+                    "source": a.get("document__title", ""),
+                })
+            return {"count": len(results), "results": results[:cap]}
+        except Exception:
+            pass
+
+    # ── Both sources failed — return empty rather than 502 ───────────────────
+    return {"count": 0, "results": []}
+
+
+@router.get("/api/open5e/classes")
+def open5e_classes_proxy(search: str = "", limit: int = 20):
+    from ..open5e_local import is_ready, search_classes, _source
+    cap = min(abs(limit), 30)
+    if is_ready():
+        items, total = search_classes(q=search, limit=cap)
+        return {"count": total, "results": [
+            {"name": c.get("name", ""), "slug": c.get("slug", ""),
+             "hit_die": c.get("hit_die", ""), "source": _source(c)}
+            for c in items
+        ]}
+    import json as _json, urllib.parse as _urlparse, urllib.request as _urlreq
+    url = f"https://api.open5e.com/v1/classes/?{_urlparse.urlencode({'search': search, 'limit': cap})}"
+    try:
+        req = _urlreq.Request(url, headers={"User-Agent": "SimpleVTT/1.0"})
+        with _urlreq.urlopen(req, timeout=8) as r:
+            data = _json.loads(r.read())
+    except Exception as exc:
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    results = []
+    for c in data.get("results", []):
+        src = c.get("document__title", "") or (
+            c.get("document", {}).get("title", "") if isinstance(c.get("document"), dict) else ""
+        )
+        results.append({"name": c.get("name", ""), "slug": c.get("slug", ""),
+                         "hit_die": c.get("hit_die", ""), "source": src})
+    return {"count": data.get("count", 0), "results": results}
+
+
+@router.get("/api/open5e/races")
+def open5e_races_proxy(search: str = "", limit: int = 20):
+    from ..open5e_local import is_ready, search_races, _source
+    cap = min(abs(limit), 30)
+    if is_ready():
+        items, total = search_races(q=search, limit=cap)
+        return {"count": total, "results": [
+            {"name": r.get("name", ""), "slug": r.get("slug", ""),
+             "size": r.get("size", ""), "source": _source(r)}
+            for r in items
+        ]}
+    import json as _json, urllib.parse as _urlparse, urllib.request as _urlreq
+    url = f"https://api.open5e.com/v1/races/?{_urlparse.urlencode({'search': search, 'limit': cap})}"
+    try:
+        req = _urlreq.Request(url, headers={"User-Agent": "SimpleVTT/1.0"})
+        with _urlreq.urlopen(req, timeout=8) as r:
+            data = _json.loads(r.read())
+    except Exception as exc:
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    results = []
+    for r in data.get("results", []):
+        src = r.get("document__title", "") or (
+            r.get("document", {}).get("title", "") if isinstance(r.get("document"), dict) else ""
+        )
+        results.append({"name": r.get("name", ""), "slug": r.get("slug", ""),
+                         "size": r.get("size", ""), "source": src})
+    return {"count": data.get("count", 0), "results": results}
+
+
+@router.get("/api/open5e/spells")
+def open5e_spells_proxy(search: str = "", limit: int = 20, spell_list: str = "", level: int = -1):
+    import re as _re
+
+    def _fmt_spell(s: dict) -> dict:
+        desc = s.get("desc", "")
+        desc = _re.sub(r"[*_#`]+", "", desc).replace("|", ",").replace("\n", " ").strip()
+        dmg_m = _re.search(r"(\d+d\d+(?:\s*[+-]\s*\d+)?)\s+(\w+)\s+damage", desc, _re.IGNORECASE)
+        damage = f"{dmg_m.group(1).replace(' ', '')} {dmg_m.group(2).lower()}" if dmg_m else ""
+        _save_map = {"strength": "STR", "dexterity": "DEX", "constitution": "CON",
+                     "intelligence": "INT", "wisdom": "WIS", "charisma": "CHA"}
+        save_m = _re.search(
+            r"\b(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+saving\s+throw",
+            desc, _re.IGNORECASE)
+        save_ability = _save_map.get(save_m.group(1).lower(), "") if save_m else ""
+        return {
+            "slug": s.get("slug", ""),
+            "name": s.get("name", ""),
+            "level": s.get("level_int", s.get("spell_level", 0)),
+            "school": s.get("school", ""),
+            "casting_time": s.get("casting_time", ""),
+            "range": s.get("range", ""),
+            "duration": s.get("duration", ""),
+            "components": s.get("components", ""),
+            "damage": damage,
+            "save_ability": save_ability,
+            "desc": desc,
+        }
+
+    from ..open5e_local import is_ready, search_spells
+    cap = min(abs(limit), 100)
+    if is_ready():
+        items, total = search_spells(q=search, limit=cap, spell_list=spell_list, level=level)
+        return {"count": total, "results": [_fmt_spell(s) for s in items]}
+    import json as _json, urllib.parse as _urlparse, urllib.request as _urlreq
+    params: dict = {"limit": cap}
+    if search:     params["search"]      = search
+    if spell_list: params["spell_lists"] = spell_list.lower()  # Open5e v1 param name
+    if level >= 0: params["level_int"]   = level               # Open5e v1 integer level field
+    url = f"https://api.open5e.com/v1/spells/?{_urlparse.urlencode(params)}"
+    try:
+        req = _urlreq.Request(url, headers={"User-Agent": "SimpleVTT/1.0"})
+        with _urlreq.urlopen(req, timeout=15) as r:
+            data = _json.loads(r.read())
+    except Exception as exc:
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    return {"count": data.get("count", 0), "results": [_fmt_spell(s) for s in data.get("results", [])]}
+
+
+@router.get("/api/open5e/conditions")
+def open5e_conditions_proxy():
+    """Return all D&D 5e conditions (small static list — always fetched in full)."""
+    def _fmt(c: dict) -> dict:
+        return {"slug": c.get("slug", ""), "name": c.get("name", ""), "desc": c.get("desc", "")}
+
+    from ..open5e_local import is_ready, search_conditions
+    if is_ready():
+        items, _ = search_conditions(limit=50)
+        return {"results": [_fmt(c) for c in items]}
+
+    import json as _json, urllib.request as _urlreq
+    try:
+        req = _urlreq.Request(
+            "https://api.open5e.com/v1/conditions/?limit=50",
+            headers={"User-Agent": "SimpleVTT/1.0"},
+        )
+        with _urlreq.urlopen(req, timeout=8) as r:
+            data = _json.loads(r.read())
+    except Exception as exc:
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    return {"results": [_fmt(c) for c in data.get("results", [])]}
+
+
+def _open5e_to_dnd5e_sheet(m: dict) -> dict:
+    import copy
+    import re
+    from ..sheet_templates import DND5E_TEMPLATE
+
+    sheet = copy.deepcopy(DND5E_TEMPLATE)
+
+    # HP
+    hp = int(m.get("hit_points") or 10)
+    sheet["hp"] = {"current": hp, "max": hp, "temp": 0}
+
+    # AC — integer or list of dicts in v2
+    ac = m.get("armor_class", 10)
+    if isinstance(ac, list) and ac:
+        ac = ac[0].get("value", 10) if isinstance(ac[0], dict) else ac[0]
+    if isinstance(ac, str):
+        digs = re.search(r"\d+", ac)
+        ac = int(digs.group()) if digs else 10
+    sheet["ac"] = int(ac or 10)
+
+    # Speed — dict {"walk": 30} or string
+    speed_raw = m.get("speed", {})
+    if isinstance(speed_raw, dict):
+        walk = speed_raw.get("walk", 30)
+        if isinstance(walk, str):
+            digs = re.search(r"\d+", walk)
+            walk = int(digs.group()) if digs else 30
+        sheet["speed"] = int(walk or 30)
+    elif isinstance(speed_raw, (int, float)):
+        sheet["speed"] = int(speed_raw)
+    else:
+        digs = re.search(r"\d+", str(speed_raw))
+        sheet["speed"] = int(digs.group()) if digs else 30
+
+    # Ability scores
+    for ab, key in [("STR", "strength"), ("DEX", "dexterity"), ("CON", "constitution"),
+                    ("INT", "intelligence"), ("WIS", "wisdom"), ("CHA", "charisma")]:
+        val = m.get(key)
+        if val is not None:
+            sheet["abilities"][ab] = int(val)
+
+    # CR → proficiency bonus
+    cr_str = str(m.get("challenge_rating", "0"))
+    try:
+        cr_val = float(cr_str.split("/")[0]) / float(cr_str.split("/")[1]) if "/" in cr_str else float(cr_str)
+    except Exception:
+        cr_val = 0.0
+    sheet["proficiency_bonus"] = (
+        2 if cr_val < 5 else 3 if cr_val < 9 else 4 if cr_val < 13 else
+        5 if cr_val < 17 else 6 if cr_val < 21 else 7 if cr_val < 25 else
+        8 if cr_val < 29 else 9
+    )
+
+    # Creature meta
+    sheet["race"] = f"{m.get('size', '')} {m.get('type', '')}".strip()
+    sheet["background"] = m.get("alignment", "")
+
+    # Saving throw proficiencies (open5e fields: strength_save etc.)
+    for ab, key in [("STR", "strength_save"), ("DEX", "dexterity_save"), ("CON", "constitution_save"),
+                    ("INT", "intelligence_save"), ("WIS", "wisdom_save"), ("CHA", "charisma_save")]:
+        if m.get(key) is not None:
+            sheet["saving_throws"][ab] = True
+
+    # Skill proficiencies
+    skill_map = {
+        "acrobatics": "Acrobatics", "animal_handling": "Animal Handling", "arcana": "Arcana",
+        "athletics": "Athletics", "deception": "Deception", "history": "History",
+        "insight": "Insight", "intimidation": "Intimidation", "investigation": "Investigation",
+        "medicine": "Medicine", "nature": "Nature", "perception": "Perception",
+        "performance": "Performance", "persuasion": "Persuasion", "religion": "Religion",
+        "sleight_of_hand": "Sleight of Hand", "stealth": "Stealth", "survival": "Survival",
+    }
+    for api_key, skill_name in skill_map.items():
+        if m.get(api_key) is not None and skill_name in sheet["skills"]:
+            sheet["skills"][skill_name]["proficient"] = True
+
+    # Actions → attacks
+    attacks = []
+    for action in (m.get("actions") or []):
+        desc = action.get("desc", "")
+        bonus_m = re.search(r"([+-]\d+) to hit", desc)
+        dmg_m = re.search(r"(\d+d\d+(?:\s*[+-]\s*\d+)?)\s+\w+\s+damage", desc)
+        attacks.append({
+            "name": action.get("name", ""),
+            "bonus": bonus_m.group(1) if bonus_m else "",
+            "damage": dmg_m.group(1).replace(" ", "") if dmg_m else "",
+        })
+    sheet["attacks"] = attacks
+
+    # Special abilities → features
+    features = []
+    for sa in (m.get("special_abilities") or []):
+        name = sa.get("name", "")
+        desc = sa.get("desc", "")
+        if name or desc:
+            features.append(f"{name}: {desc}" if name else desc)
+    sheet["features"] = "\n\n".join(features)
+
+    # Notes: stat block meta
+    parts = []
+    for label, key in [
+        ("Hit Dice", "hit_dice"), ("CR", "challenge_rating"),
+        ("Languages", "languages"), ("Senses", "senses"),
+        ("Damage Immunities", "damage_immunities"),
+        ("Damage Resistances", "damage_resistances"),
+        ("Condition Immunities", "condition_immunities"),
+    ]:
+        if m.get(key):
+            parts.append(f"{label}: {m[key]}")
+    sheet["notes"] = "\n".join(parts)
+
+    return sheet
+
+
+@router.patch("/api/campaign/{campaign_id}/templates/{tmpl_id}")
+async def update_template(
+    campaign_id: int,
+    tmpl_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    tmpl = db.query(TokenTemplate).filter(TokenTemplate.id == tmpl_id, TokenTemplate.campaign_id == campaign_id).first()
+    if not tmpl:
+        raise HTTPException(404, "Template not found")
+    body = await request.json()
+    if "name" in body:
+        tmpl.name = str(body["name"])[:200]
+    if "tags" in body:
+        tmpl.tags = body["tags"] if isinstance(body["tags"], list) else []
+    if "template" in body and body["template"] in ("generic", "dnd5e"):
+        tmpl.template = body["template"]
+    if "sheet" in body and isinstance(body["sheet"], dict):
+        tmpl.sheet = body["sheet"]
+    db.commit()
+    return _tmpl_dict(tmpl)
+
+
+@router.delete("/api/campaign/{campaign_id}/templates/{tmpl_id}")
+async def delete_template(
+    campaign_id: int,
+    tmpl_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    tmpl = db.query(TokenTemplate).filter(TokenTemplate.id == tmpl_id, TokenTemplate.campaign_id == campaign_id).first()
+    if not tmpl:
+        raise HTTPException(404, "Template not found")
+    if tmpl.image_url and tmpl.image_url.startswith("/static/uploads/token_templates/"):
+        p = Path(__file__).resolve().parent.parent / "static" / tmpl.image_url.removeprefix("/static/")
+        try:
+            p.unlink(missing_ok=True)
+        except Exception:
+            pass
+    db.delete(tmpl)
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/api/campaign/{campaign_id}/templates/{tmpl_id}/image")
+async def upload_template_image(
+    campaign_id: int,
+    tmpl_id: int,
+    image: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    tmpl = db.query(TokenTemplate).filter(TokenTemplate.id == tmpl_id, TokenTemplate.campaign_id == campaign_id).first()
+    if not tmpl:
+        raise HTTPException(404, "Template not found")
+    ext = Path(image.filename or "").suffix.lower() or ".png"
+    if ext not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
+        raise HTTPException(400, "Unsupported image type")
+    data = await image.read()
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(400, "Image exceeds 5 MB")
+    if tmpl.image_url and tmpl.image_url.startswith("/static/uploads/token_templates/"):
+        old = Path(__file__).resolve().parent.parent / "static" / tmpl.image_url.removeprefix("/static/")
+        try:
+            old.unlink(missing_ok=True)
+        except Exception:
+            pass
+    fname = f"{uuid.uuid4().hex}{ext}"
+    (_TMPL_IMG_DIR / fname).write_bytes(data)
+    tmpl.image_url = f"/static/uploads/token_templates/{fname}"
+    db.commit()
+    return {"ok": True, "image_url": tmpl.image_url}
+
+
+@router.get("/api/campaign/{campaign_id}/templates/{tmpl_id}/sheet", response_class=HTMLResponse)
+def get_template_sheet(
+    campaign_id: int,
+    tmpl_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Returns sheet HTML for editing a token template's sheet data."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    tmpl = db.query(TokenTemplate).filter(TokenTemplate.id == tmpl_id, TokenTemplate.campaign_id == campaign_id).first()
+    if not tmpl:
+        raise HTTPException(404, "Template not found")
+
+    class _Char:
+        pass
+
+    char_obj = _Char()
+    char_obj.id = tmpl.id
+    char_obj.name = tmpl.name
+    char_obj.portrait_url = tmpl.image_url
+    char_obj.template = tmpl.template
+
+    tname = "sheet_dnd5e.html" if tmpl.template == "dnd5e" else "sheet_generic.html"
+    return templates.TemplateResponse(tname, {
+        "request": request,
+        "char": char_obj,
+        "sheet": tmpl.sheet or get_template(tmpl.template),
+        "can_edit": True,
+        "campaign": campaign,
+        "sheet_save_url": f"/api/campaign/{campaign_id}/templates/{tmpl_id}",
+        "sheet_save_method": "PATCH",
+        "portrait_upload_url": f"/api/campaign/{campaign_id}/templates/{tmpl_id}/image",
+    })
 
 
 # ----------- API: character sheets -----------
@@ -672,48 +1896,31 @@ async def update_sheet(
     return {"ok": True}
 
 
-# ----------- WebSocket -----------
-
-@router.websocket("/ws/campaign/{campaign_id}")
-async def campaign_ws(websocket: WebSocket, campaign_id: int):
-    session = websocket.session  # type: ignore[attr-defined]
-    user_id = session.get("user_id") if session else None
-    if not user_id:
-        await websocket.close(code=4401)
-        return
-    db = SessionLocal()
-    try:
-        user = db.query(User).filter(User.id == user_id).first()
-        campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
-        if not user or not campaign or not _user_can_view_campaign(db, user, campaign):
-            await websocket.close(code=4403)
-            return
-    finally:
-        db.close()
-
-    await hub.connect(campaign_id, websocket)
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:
-        log.warning("ws error: %s", e)
-    finally:
-        await hub.disconnect(campaign_id, websocket)
-aign,
-        },
-    )
+# Allowed keys for the lightweight sheet-fields patch (avoids full-sheet replace).
+# subclass_features_data kept for backward-compat; the three individual keys let
+# each feature be stored and queried without re-parsing the whole blob.
+_SHEET_PATCH_KEYS = {
+    # Subclass features (new per-feature format + legacy blob)
+    "subclass_features_data",   # legacy blob (kept for backwards compat)
+    "subclass_name",
+    "subclass_flavor",
+    "subclass_features",        # list[{name, desc, level}]
+    # Race traits (same pattern)
+    "race_parsed_data",         # legacy blob
+    "race_flavor",
+    "race_trait_items",         # list[{name, desc}]
+}
 
 
-@router.post("/api/campaign/{campaign_id}/character/{char_id}")
-async def update_sheet(
+@router.patch("/api/campaign/{campaign_id}/character/{char_id}/sheet-fields")
+async def patch_sheet_fields(
     campaign_id: int,
     char_id: int,
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    """Merge a small set of pre-approved keys into a character's sheet JSON."""
     body = await request.json()
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     char = db.query(Character).filter(Character.id == char_id).first()
@@ -721,17 +1928,10 @@ async def update_sheet(
         raise HTTPException(404, "Not found")
     if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
         raise HTTPException(403, "Forbidden")
-    if "name" in body:
-        char.name = str(body["name"])[:120]
-    if "sheet" in body and isinstance(body["sheet"], dict):
-        char.sheet = body["sheet"]
-    if "template" in body and body["template"] in ("generic", "dnd5e"):
-        char.template = body["template"]
-    db.commit()
-    await hub.broadcast(
-        campaign_id,
-        {"type": "character_update", "data": {"id": char.id, "name": char.name}},
-    )
+    patch = {k: v for k, v in body.items() if k in _SHEET_PATCH_KEYS}
+    if patch:
+        char.sheet = {**(char.sheet or {}), **patch}
+        db.commit()
     return {"ok": True}
 
 
@@ -764,3 +1964,333 @@ async def campaign_ws(websocket: WebSocket, campaign_id: int):
         log.warning("ws error: %s", e)
     finally:
         await hub.disconnect(campaign_id, websocket)
+
+
+# ----------- Player character roster + standalone sheet -----------
+
+@router.get("/campaign/{campaign_id}/characters", response_class=HTMLResponse)
+def player_characters(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Character roster — accessible without an active session."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    is_gm = _user_is_gm(user, campaign, db)
+    if is_gm:
+        characters = (
+            db.query(Character)
+            .filter(Character.campaign_id == campaign_id)
+            .order_by(Character.name)
+            .all()
+        )
+    else:
+        characters = (
+            db.query(Character)
+            .filter(
+                Character.campaign_id == campaign_id,
+                Character.owner_user_id == user.id,
+            )
+            .order_by(Character.name)
+            .all()
+        )
+    # Build owner name map for GM view
+    owner_names: dict[int, str] = {}
+    if is_gm:
+        owner_ids = {c.owner_user_id for c in characters if c.owner_user_id}
+        if owner_ids:
+            for u in db.query(User).filter(User.id.in_(owner_ids)).all():
+                owner_names[u.id] = u.display_name
+    return templates.TemplateResponse(
+        "my_characters.html",
+        {
+            "request": request,
+            "user": user,
+            "campaign": campaign,
+            "characters": characters,
+            "is_gm": is_gm,
+            "owner_names": owner_names,
+            "system": get_system(campaign.game_system),
+        },
+    )
+
+
+@router.get("/campaign/{campaign_id}/character/{char_id}/sheet", response_class=HTMLResponse)
+def character_sheet_page(
+    campaign_id: int,
+    char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Standalone full-page character sheet — no active session required."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not campaign or not char or char.campaign_id != campaign_id:
+        raise HTTPException(404, "Not found")
+    if not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    can_edit = _user_is_gm(user, campaign, db) or char.owner_user_id == user.id
+    sheet_template = "sheet_dnd5e.html" if char.template == "dnd5e" else "sheet_generic.html"
+    return templates.TemplateResponse(
+        "character_page.html",
+        {
+            "request": request,
+            "user": user,
+            "campaign": campaign,
+            "char": char,
+            "sheet": char.sheet or get_template(char.template),
+            "can_edit": can_edit,
+            "sheet_template": sheet_template,
+            "system": get_system(campaign.game_system),
+        },
+    )
+
+
+# ----------- Settings: characters (GM) -----------
+
+_SETTINGS_UPLOAD_ROOT = Path(__file__).resolve().parent.parent / "static" / "uploads"
+_MAP_DIR = _SETTINGS_UPLOAD_ROOT / "maps"
+_ALLOWED_IMG = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+
+
+@router.post("/campaign/{campaign_id}/settings/characters")
+def settings_create_character(
+    campaign_id: int,
+    name: str = Form(...),
+    owner_user_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    sys = get_system(campaign.game_system)
+    char = Character(
+        campaign_id=campaign_id,
+        name=name.strip()[:120] or "New character",
+        template=sys.sheet_template,
+        sheet=get_template(sys.sheet_template),
+        owner_user_id=owner_user_id or None,
+    )
+    db.add(char)
+    db.commit()
+    return RedirectResponse(f"/campaign/{campaign_id}/settings#characters", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/settings/characters/{char_id}/assign")
+def settings_assign_character(
+    campaign_id: int,
+    char_id: int,
+    owner_user_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    char = db.query(Character).filter(Character.id == char_id, Character.campaign_id == campaign_id).first()
+    if not char:
+        raise HTTPException(404)
+    char.owner_user_id = owner_user_id or None
+    db.commit()
+    return RedirectResponse(f"/campaign/{campaign_id}/settings#characters", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/settings/characters/{char_id}/delete")
+def settings_delete_character(
+    campaign_id: int,
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    char = db.query(Character).filter(Character.id == char_id, Character.campaign_id == campaign_id).first()
+    if not char:
+        raise HTTPException(404)
+    db.delete(char)
+    db.commit()
+    return RedirectResponse(f"/campaign/{campaign_id}/settings#characters", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/settings/characters/import")
+def settings_import_character(
+    campaign_id: int,
+    source_char_id: int = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """GM imports (copies) a player's character from another campaign into this one."""
+    import copy as _copy
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    source = db.query(Character).filter(Character.id == source_char_id).first()
+    if not source:
+        raise HTTPException(404, "Character not found")
+    new_char = Character(
+        campaign_id=campaign_id,
+        name=source.name,
+        template=source.template,
+        sheet=_copy.deepcopy(source.sheet or {}),
+        portrait_url=source.portrait_url,
+        owner_user_id=source.owner_user_id,
+    )
+    db.add(new_char)
+    db.commit()
+    return RedirectResponse(f"/campaign/{campaign_id}/settings#characters", status_code=303)
+
+
+# ----------- Settings: maps (GM) -----------
+
+@router.post("/campaign/{campaign_id}/settings/maps")
+async def settings_upload_map(
+    campaign_id: int,
+    name: str = Form(...),
+    grid_type: str = Form("square"),
+    grid_size_px: int = Form(70),
+    width_px: int = Form(2000),
+    height_px: int = Form(1500),
+    image: UploadFile = File(None),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    image_url: Optional[str] = None
+    if image and image.filename:
+        if image.content_type not in _ALLOWED_IMG:
+            raise HTTPException(400, "Unsupported image type")
+        data = await image.read()
+        if len(data) > 25 * 1024 * 1024:
+            raise HTTPException(400, "Map image too large (>25 MB)")
+        _MAP_DIR.mkdir(parents=True, exist_ok=True)
+        ext = Path(image.filename).suffix.lower() or ".png"
+        fname = f"{uuid.uuid4().hex}{ext}"
+        (_MAP_DIR / fname).write_bytes(data)
+        image_url = f"/static/uploads/maps/{fname}"
+    try:
+        gt = GridType(grid_type)
+    except ValueError:
+        gt = GridType.SQUARE
+    m = Map(
+        campaign_id=campaign_id,
+        name=name.strip()[:120] or "Map",
+        image_url=image_url,
+        grid_type=gt,
+        grid_size_px=max(20, min(grid_size_px, 300)),
+        width_px=max(200, min(width_px, 8000)),
+        height_px=max(200, min(height_px, 8000)),
+    )
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    if not campaign.active_map_id:
+        campaign.active_map_id = m.id
+        db.commit()
+    return RedirectResponse(f"/campaign/{campaign_id}/settings#maps", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/activate")
+def settings_activate_map(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    campaign.active_map_id = m.id
+    db.commit()
+    return RedirectResponse(f"/campaign/{campaign_id}/settings#maps", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/delete")
+def settings_delete_map(
+    campaign_id: int,
+    map_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    if campaign.active_map_id == m.id:
+        campaign.active_map_id = None
+    db.delete(m)
+    db.commit()
+    return RedirectResponse(f"/campaign/{campaign_id}/settings#maps", status_code=303)
+
+
+# ----------- Settings: members + danger zone (admin) -----------
+
+@router.post("/campaign/{campaign_id}/settings/members/add")
+def settings_add_member(
+    campaign_id: int,
+    user_id: int = Form(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    if not user.is_admin:
+        raise HTTPException(403, "Admin only")
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404)
+    existing = db.query(CampaignMembership).filter(
+        CampaignMembership.campaign_id == campaign_id,
+        CampaignMembership.user_id == user_id,
+    ).first()
+    if not existing:
+        db.add(CampaignMembership(campaign_id=campaign_id, user_id=user_id))
+        db.commit()
+    return RedirectResponse(f"/campaign/{campaign_id}/settings#members", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/settings/members/{membership_id}/remove")
+def settings_remove_member(
+    campaign_id: int,
+    membership_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    if not user.is_admin:
+        raise HTTPException(403, "Admin only")
+    db.query(CampaignMembership).filter(
+        CampaignMembership.id == membership_id,
+        CampaignMembership.campaign_id == campaign_id,
+    ).delete()
+    db.commit()
+    return RedirectResponse(f"/campaign/{campaign_id}/settings#members", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/settings/delete")
+def settings_delete_campaign(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    if not user.is_admin:
+        raise HTTPException(403, "Admin only")
+    c = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not c:
+        raise HTTPException(404)
+    c.active_map_id = None
+    db.commit()
+    db.delete(c)
+    db.commit()
+    return RedirectResponse("/", status_code=303)

@@ -107,7 +107,10 @@
                             <span class="badge {{ 'live' if c.session_active else 'idle' }}">{{ 'Live' if c.session_active else 'Waiting' }}</span>
                         </div>
                         <div class="desc">{{ c.description or "—" }}</div>
-                        <div class="gm-name">GM: {{ gm_names.get(c.id, "?") }}</div>
+                        <div class="gm-name" style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+                            <span>GM: {{ gm_names.get(c.id, "?") }}</span>
+                            <a href="/campaign/{{ c.id }}/characters" style="font-size:12px;">My Characters →</a>
+                        </div>
                     </div>
                 </li>
             {% endfor %}

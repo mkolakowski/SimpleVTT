@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- d20 shape: icosahedron face outline -->
+  <polygon points="32,4 60,20 60,44 32,60 4,44 4,20" fill="#1a1d2e" stroke="#6cb" stroke-width="2.5"/>
+  <!-- inner triangle top -->
+  <polygon points="32,4 60,20 4,20" fill="none" stroke="#4a8a6a" stroke-width="1.5"/>
+  <!-- inner triangle bottom -->
+  <polygon points="4,44 60,44 32,60" fill="none" stroke="#4a8a6a" stroke-width="1.5"/>
+  <!-- center diamond -->
+  <polygon points="32,18 52,32 32,46 12,32" fill="none" stroke="#4a8a6a" stroke-width="1.5"/>
+  <!-- 20 text -->
+  <text x="32" y="37" text-anchor="middle" font-family="Georgia, serif" font-size="16" font-weight="bold" fill="#6cb">20</text>
+</svg>

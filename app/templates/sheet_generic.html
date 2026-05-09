@@ -1,8 +1,30 @@
 <div class="sheet">
-    <h2>{{ char.name }}</h2>
-    <p class="muted">Generic sheet — free-form fields</p>
+    <div style="display:flex; align-items:flex-start; gap:14px; margin-bottom:14px;">
+        <div style="flex-shrink:0; position:relative; width:90px; height:90px;">
+            {% if char.portrait_url %}
+            <img id="char-portrait-img" src="{{ char.portrait_url }}" alt="{{ char.name }}"
+                 style="width:90px; height:90px; object-fit:cover; border-radius:8px; display:block;">
+            {% else %}
+            <div id="char-portrait-placeholder"
+                 style="width:90px; height:90px; background:#1e2030; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:32px; color:#556; border:1px solid #2a2d3a; font-weight:700;">
+                {{ char.name[:1]|upper }}
+            </div>
+            {% endif %}
+            {% if can_edit %}
+            <label title="Upload character art" data-portrait-url="{{ portrait_upload_url|default('') }}"
+                   style="position:absolute; bottom:4px; right:4px; background:#20232aee; border:1px solid #3a3d47; border-radius:3px; padding:2px 5px; cursor:pointer; font-size:12px; line-height:1; color:#9aa0aa;">
+                📷
+                <input type="file" id="portrait-upload-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;">
+            </label>
+            {% endif %}
+        </div>
+        <div style="flex:1; min-width:0;">
+            <h2 style="margin:0 0 2px;">{{ char.name }}</h2>
+            <p class="muted" style="margin:0;">Generic sheet — free-form fields</p>
+        </div>
+    </div>
 
-    <form id="sheet-form" data-char-id="{{ char.id }}" data-template="generic" {% if not can_edit %}data-readonly="1"{% endif %}>
+    <form id="sheet-form" data-char-id="{{ char.id }}" data-template="generic" data-save-url="{{ sheet_save_url|default('') }}" data-save-method="{{ sheet_save_method|default('POST') }}" {% if not can_edit %}data-readonly="1"{% endif %}>
         <label>Name <input name="name" value="{{ char.name }}" {% if not can_edit %}readonly{% endif %}></label>
 
         <label>Summary
@@ -40,3 +62,36 @@
     </form>
 </div>
 <script src="/static/sheet.js"></script>
+<script>
+(function () {
+    const inp = document.getElementById('portrait-upload-input');
+    if (!inp) return;
+    inp.addEventListener('change', async () => {
+        const file = inp.files[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append('portrait', file);
+        try {
+            const portraitUrl = inp.closest('label').dataset.portraitUrl || `/campaign/${CAMPAIGN_ID}/character/{{ char.id }}/portrait`;
+            const resp = await fetch(portraitUrl, {
+                method: 'POST', credentials: 'same-origin', body: fd,
+            });
+            if (!resp.ok) { alert('Upload failed: ' + await resp.text()); return; }
+            const data = await resp.json();
+            const url = data.portrait_url + '?t=' + Date.now();
+            const img = document.getElementById('char-portrait-img');
+            const ph = document.getElementById('char-portrait-placeholder');
+            if (img) {
+                img.src = url;
+            } else if (ph) {
+                const newImg = document.createElement('img');
+                newImg.id = 'char-portrait-img';
+                Object.assign(newImg.style, { width:'90px', height:'90px', objectFit:'cover', borderRadius:'8px', display:'block' });
+                newImg.src = url;
+                ph.replaceWith(newImg);
+            }
+        } catch (e) { alert('Upload failed'); }
+        inp.value = '';
+    });
+})();
+</script>

@@ -2,12 +2,38 @@
 {% block title %}My settings — SimpleVTT{% endblock %}
 {% block head %}
 <style>
-    .pref-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px dashed var(--border); }
-    .pref-row .name { flex: 1; }
-    .pref-row input[type=range] { flex: 1; max-width: 220px; }
-    .pref-row .vol-num { width: 3em; text-align: right; font-variant-numeric: tabular-nums; }
-    .pref-row .badge { font-size: 11px; padding: 1px 6px; border-radius: 8px; background: #2c4a2c; color: #c0ffc0; }
-    details > summary { cursor: pointer; padding: 4px 0; font-weight: 600; }
+    /* ── Audio volume rows ── */
+    .cat-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px dashed var(--border); }
+    .cat-row .cat-name { width: 9em; font-size: 14px; flex-shrink: 0; }
+    .cat-row input[type=range] { flex: 1; max-width: 280px; }
+    .cat-row .vol-num { width: 3.5em; text-align: right; font-variant-numeric: tabular-nums; font-size: 13px; }
+    .cat-row .save-status { font-size: 11px; color: #6cb; min-width: 4em; }
+
+    /* ── Theme picker ── */
+    .theme-grid {
+        display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;
+    }
+    .theme-card {
+        display: flex; flex-direction: column; align-items: center; gap: 8px;
+        cursor: pointer; padding: 4px; border-radius: 8px;
+        border: 2px solid transparent; transition: border-color .15s;
+        background: none; font-family: inherit;
+    }
+    .theme-card:hover { border-color: var(--accent); }
+    .theme-card.active { border-color: var(--accent); }
+    .theme-card.active .theme-label { color: var(--accent); font-weight: 700; }
+
+    .theme-swatch {
+        width: 120px; height: 72px; border-radius: 6px; overflow: hidden;
+        border: 1px solid rgba(128,128,128,.25);
+        display: grid; grid-template-rows: 24px 1fr;
+    }
+    .theme-swatch .sw-nav { display: flex; align-items: center; padding: 0 8px; gap: 6px; }
+    .theme-swatch .sw-dot { width: 40px; height: 8px; border-radius: 4px; }
+    .theme-swatch .sw-body { padding: 6px 8px; display: flex; flex-direction: column; gap: 4px; }
+    .theme-swatch .sw-line { height: 6px; border-radius: 3px; }
+    .theme-label { font-size: 13px; color: var(--fg-mute); }
+    #theme-status { font-size: 12px; color: var(--fg-mute); margin-top: 6px; min-height: 1.4em; }
 </style>
 {% endblock %}
 {% block content %}
@@ -19,89 +45,262 @@
 </section>
 
 <section>
-    <h2>🎵 Per-track volume</h2>
-    <p class="muted">Override the playback volume for individual tracks. The effective volume in the tabletop = your master volume × this per-track value. A track without an override plays at full per-track volume (100%). Currently {{ overrides_count }} override{{ '' if overrides_count == 1 else 's' }} set.</p>
+    <h2>🎨 Theme</h2>
+    <p class="muted">Choose how SimpleVTT looks for you. Your preference is saved to your account and applies on every device.</p>
 
-    {% if not grouped %}
-    <p class="muted">No campaigns with audio yet. As soon as a GM uploads tracks into a campaign you're in, they'll appear here so you can pre-set their volume.</p>
-    {% endif %}
+    <div class="theme-grid" id="theme-grid" data-current="{{ user.theme or 'dark' }}">
 
-    {% for g in grouped %}
-    <details {% if loop.first %}open{% endif %} style="margin-top:10px;">
-        <summary>{{ g.campaign.name }}</summary>
-        {% for pl in g.playlists %}
-        <div style="margin-left:14px; margin-top:6px;">
-            <strong>{{ pl.playlist.name }}</strong>
-            {% for t in pl.tracks %}
-            <div class="pref-row" data-track-id="{{ t.track.id }}">
-                <span class="name">{{ t.track.name }}{% if t.volume is not none %} <span class="badge">override</span>{% endif %}</span>
-                <input type="range" min="0" max="1" step="0.01" value="{{ t.volume if t.volume is not none else 1.0 }}" class="track-volume">
-                <span class="vol-num">{{ ((t.volume if t.volume is not none else 1.0) * 100) | round | int }}%</span>
-                <button type="button" class="reset-btn" {% if t.volume is none %}disabled{% endif %}>Reset</button>
-                <span class="save-status muted" style="font-size:11px; min-width:5em;"></span>
+        {# Dark #}
+        <button type="button" class="theme-card" data-theme="dark" aria-label="Dark theme">
+            <div class="theme-swatch" style="background:#15171c;">
+                <div class="sw-nav" style="background:#20232a;">
+                    <div class="sw-dot" style="background:#2f4868;"></div>
+                    <div class="sw-dot" style="width:24px;background:#6cb4ff;margin-left:auto;"></div>
+                </div>
+                <div class="sw-body">
+                    <div class="sw-line" style="background:#2c303a;width:80%;"></div>
+                    <div class="sw-line" style="background:#2c303a;width:55%;"></div>
+                    <div class="sw-line" style="background:#6cb4ff;width:35%;"></div>
+                </div>
             </div>
-            {% endfor %}
+            <span class="theme-label">Dark</span>
+        </button>
+
+        {# Midnight #}
+        <button type="button" class="theme-card" data-theme="midnight" aria-label="Midnight theme">
+            <div class="theme-swatch" style="background:#0d0f14;">
+                <div class="sw-nav" style="background:#13161f;">
+                    <div class="sw-dot" style="background:#2d2060;"></div>
+                    <div class="sw-dot" style="width:24px;background:#a78bfa;margin-left:auto;"></div>
+                </div>
+                <div class="sw-body">
+                    <div class="sw-line" style="background:#1e2230;width:80%;"></div>
+                    <div class="sw-line" style="background:#1e2230;width:55%;"></div>
+                    <div class="sw-line" style="background:#a78bfa;width:35%;"></div>
+                </div>
+            </div>
+            <span class="theme-label">Midnight</span>
+        </button>
+
+        {# Dim #}
+        <button type="button" class="theme-card" data-theme="dim" aria-label="Dim theme">
+            <div class="theme-swatch" style="background:#22262e;">
+                <div class="sw-nav" style="background:#2a2e38;">
+                    <div class="sw-dot" style="background:#324060;"></div>
+                    <div class="sw-dot" style="width:24px;background:#60a5fa;margin-left:auto;"></div>
+                </div>
+                <div class="sw-body">
+                    <div class="sw-line" style="background:#383d4a;width:80%;"></div>
+                    <div class="sw-line" style="background:#383d4a;width:55%;"></div>
+                    <div class="sw-line" style="background:#60a5fa;width:35%;"></div>
+                </div>
+            </div>
+            <span class="theme-label">Dim</span>
+        </button>
+
+        {# Light #}
+        <button type="button" class="theme-card" data-theme="light" aria-label="Light theme">
+            <div class="theme-swatch" style="background:#f2f4f8;">
+                <div class="sw-nav" style="background:#ffffff;border-bottom:1px solid #dde1ea;">
+                    <div class="sw-dot" style="background:#dbeafe;"></div>
+                    <div class="sw-dot" style="width:24px;background:#2563eb;margin-left:auto;"></div>
+                </div>
+                <div class="sw-body">
+                    <div class="sw-line" style="background:#dde1ea;width:80%;"></div>
+                    <div class="sw-line" style="background:#dde1ea;width:55%;"></div>
+                    <div class="sw-line" style="background:#2563eb;width:35%;"></div>
+                </div>
+            </div>
+            <span class="theme-label">Light</span>
+        </button>
+
+        {# Forest #}
+        <button type="button" class="theme-card" data-theme="forest" aria-label="Forest theme">
+            <div class="theme-swatch" style="background:#0b150e;">
+                <div class="sw-nav" style="background:#112016;">
+                    <div class="sw-dot" style="background:#1a4220;"></div>
+                    <div class="sw-dot" style="width:24px;background:#4ade80;margin-left:auto;"></div>
+                </div>
+                <div class="sw-body">
+                    <div class="sw-line" style="background:#1a3020;width:80%;"></div>
+                    <div class="sw-line" style="background:#1a3020;width:55%;"></div>
+                    <div class="sw-line" style="background:#4ade80;width:35%;"></div>
+                </div>
+            </div>
+            <span class="theme-label">Forest</span>
+        </button>
+
+        {# Bubblegum #}
+        <button type="button" class="theme-card" data-theme="bubblegum" aria-label="Bubblegum theme">
+            <div class="theme-swatch" style="background:#fdf0f8;">
+                <div class="sw-nav" style="background:#ffffff;border-bottom:1px solid #f0c8e8;">
+                    <div class="sw-dot" style="background:#fce4f4;"></div>
+                    <div class="sw-dot" style="width:24px;background:#d946a8;margin-left:auto;"></div>
+                </div>
+                <div class="sw-body">
+                    <div class="sw-line" style="background:#f0c8e8;width:80%;"></div>
+                    <div class="sw-line" style="background:#f0c8e8;width:55%;"></div>
+                    <div class="sw-line" style="background:#d946a8;width:35%;"></div>
+                </div>
+            </div>
+            <span class="theme-label">Bubblegum</span>
+        </button>
+
+        {# Fire #}
+        <button type="button" class="theme-card" data-theme="fire" aria-label="Fire theme">
+            <div class="theme-swatch" style="background:#110800;">
+                <div class="sw-nav" style="background:#1e1000;">
+                    <div class="sw-dot" style="background:#3a1800;"></div>
+                    <div class="sw-dot" style="width:24px;background:#f97316;margin-left:auto;"></div>
+                </div>
+                <div class="sw-body">
+                    <div class="sw-line" style="background:#2e1600;width:80%;"></div>
+                    <div class="sw-line" style="background:#2e1600;width:55%;"></div>
+                    <div class="sw-line" style="background:#f97316;width:35%;"></div>
+                </div>
+            </div>
+            <span class="theme-label">Fire</span>
+        </button>
+
+    </div>
+    <div id="theme-status"></div>
+</section>
+
+<section>
+    <h2>🗂️ Tabletop tab colors</h2>
+    <p class="muted">Tint specific sidebar tabs with a personal color. Only visible to you. Leave at the default grey to keep the standard look.</p>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <span style="width:9em;font-size:14px;flex-shrink:0;">Player tab</span>
+            <input type="color" id="player-tab-color" value="{{ user.player_tab_color or '#9aa0aa' }}">
+            <span id="player-tab-status" style="font-size:11px;color:#6cb;min-width:4em;"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+            <span style="width:9em;font-size:14px;flex-shrink:0;">Battle tab</span>
+            <input type="color" id="battle-tab-color" value="{{ user.battle_tab_color or '#9aa0aa' }}">
+            <span id="battle-tab-status" style="font-size:11px;color:#6cb;min-width:4em;"></span>
+        </div>
+    </div>
+    <script>
+    (function () {
+        function debounce(fn, ms) { let h; return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); }; }
+        [
+            { inputId: 'player-tab-color', statusId: 'player-tab-status', key: 'player' },
+            { inputId: 'battle-tab-color', statusId: 'battle-tab-status', key: 'battle' },
+        ].forEach(({ inputId, statusId, key }) => {
+            const input  = document.getElementById(inputId);
+            const status = document.getElementById(statusId);
+            const save = debounce(async (color) => {
+                status.textContent = 'saving…';
+                try {
+                    const resp = await fetch('/api/settings/tab_color', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ key, color }),
+                    });
+                    if (!resp.ok) throw new Error(await resp.text());
+                    status.textContent = '✓ Saved';
+                    setTimeout(() => { status.textContent = ''; }, 2000);
+                } catch (e) {
+                    status.textContent = '✗ Failed';
+                    console.error(e);
+                }
+            }, 400);
+            input.addEventListener('input', () => save(input.value));
+        });
+    })();
+    </script>
+</section>
+
+<section>
+    <h2>🎵 Category volumes</h2>
+    <p class="muted">Set your personal volume for each audio category. These preferences are saved server-side and apply across all browsers and devices. The effective volume in the tabletop = master volume × category volume.</p>
+
+    <div id="cat-vol-list">
+        {% for cat in categories %}
+        <div class="cat-row" data-category="{{ cat.key }}">
+            <span class="cat-name">{{ cat.label }}</span>
+            <input type="range" min="0" max="1" step="0.01" value="{{ cat.volume }}" class="cat-volume">
+            <span class="vol-num">{{ (cat.volume * 100) | round | int }}%</span>
+            <span class="save-status"></span>
         </div>
         {% endfor %}
-    </details>
-    {% endfor %}
+    </div>
 </section>
 
 <script>
-// Debounced save: as the user drags the slider we wait 300ms after the last
-// input event before POSTing. The Reset button immediately deletes the override.
+/* ── Theme picker ─────────────────────────────────────────────── */
+(function () {
+    const grid   = document.getElementById('theme-grid');
+    const status = document.getElementById('theme-status');
+    if (!grid) return;
+
+    const current = grid.dataset.current || 'dark';
+
+    function setActive(name) {
+        grid.querySelectorAll('.theme-card').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.theme === name);
+        });
+    }
+    setActive(current);
+
+    grid.querySelectorAll('.theme-card').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const name = btn.dataset.theme;
+            // Apply immediately so the user sees the effect right away
+            document.documentElement.setAttribute('data-theme', name);
+            setActive(name);
+            status.textContent = 'Saving…';
+            try {
+                const resp = await fetch('/api/settings/theme', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ theme: name }),
+                });
+                if (!resp.ok) throw new Error(await resp.text());
+                status.textContent = '✓ Theme saved';
+                setTimeout(() => { status.textContent = ''; }, 2000);
+            } catch (e) {
+                status.textContent = '✗ Save failed — ' + e.message;
+                console.error(e);
+            }
+        });
+    });
+})();
+
+/* ── Audio volume sliders ─────────────────────────────────────── */
 function debounce(fn, ms) {
     let h = null;
-    return (...args) => {
-        clearTimeout(h);
-        h = setTimeout(() => fn(...args), ms);
-    };
+    return (...args) => { clearTimeout(h); h = setTimeout(() => fn(...args), ms); };
 }
 
-async function saveVolume(row, volume) {
-    const trackId = row.dataset.trackId;
-    const status = row.querySelector('.save-status');
-    status.textContent = 'saving...';
-    try {
-        const resp = await fetch(`/api/audio/preferences/${trackId}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ volume }),
-        });
-        if (!resp.ok) throw new Error(await resp.text());
-        status.textContent = 'saved';
-        const badge = row.querySelector('.badge');
-        if (volume !== null && !badge) {
-            const b = document.createElement('span');
-            b.className = 'badge';
-            b.textContent = 'override';
-            row.querySelector('.name').appendChild(document.createTextNode(' '));
-            row.querySelector('.name').appendChild(b);
-        } else if (volume === null && badge) {
-            badge.remove();
+document.querySelectorAll('.cat-row').forEach(row => {
+    const slider   = row.querySelector('.cat-volume');
+    const num      = row.querySelector('.vol-num');
+    const status   = row.querySelector('.save-status');
+    const category = row.dataset.category;
+
+    const save = debounce(async (vol) => {
+        status.textContent = 'saving…';
+        try {
+            const resp = await fetch(`/api/audio/category-preferences/${category}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ volume: vol }),
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+            status.textContent = 'saved';
+            setTimeout(() => { status.textContent = ''; }, 1500);
+        } catch (e) {
+            status.textContent = 'failed';
+            console.error(e);
         }
-        row.querySelector('.reset-btn').disabled = (volume === null);
-        setTimeout(() => { status.textContent = ''; }, 1500);
-    } catch (e) {
-        status.textContent = 'failed';
-        console.error(e);
-    }
-}
+    }, 300);
 
-document.querySelectorAll('.pref-row').forEach(row => {
-    const slider = row.querySelector('.track-volume');
-    const num = row.querySelector('.vol-num');
-    const resetBtn = row.querySelector('.reset-btn');
-    const debouncedSave = debounce((v) => saveVolume(row, v), 300);
     slider.addEventListener('input', () => {
         const v = parseFloat(slider.value);
         num.textContent = Math.round(v * 100) + '%';
-        debouncedSave(v);
-    });
-    resetBtn.addEventListener('click', () => {
-        slider.value = '1';
-        num.textContent = '100%';
-        saveVolume(row, null);
+        save(v);
     });
 });
 </script>

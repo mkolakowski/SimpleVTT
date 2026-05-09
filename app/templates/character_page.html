@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}{{ char.name }}{% if campaign %} — {{ campaign.name }}{% endif %}{% endblock %}
+{% block head %}
+<style>
+.sheet-page-wrap {
+    max-width: 780px;
+    margin: 0 auto;
+}
+.sheet-breadcrumb {
+    font-size: 13px;
+    margin-bottom: 14px;
+    color: var(--fg-mute);
+}
+.sheet-breadcrumb a { color: var(--accent); }
+
+/* Roll toast — same as tabletop */
+#roll-toast-container {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    z-index: 150; display: flex; flex-direction: column-reverse;
+    align-items: center; gap: 8px; pointer-events: none;
+}
+.roll-toast {
+    background: #131c1a; border: 1px solid #3a6a50; border-radius: 10px;
+    padding: 12px 20px; min-width: 160px; max-width: 280px; text-align: center;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer;
+    animation: rt-in 0.18s ease;
+}
+.rt-label  { font-size: 11px; color: #6cb; margin-bottom: 5px; letter-spacing: 0.2px; }
+.rt-total  { font-size: 38px; font-weight: 700; line-height: 1; color: #e8e8ee; }
+.rt-breakdown { font-size: 11px; color: #667; margin-top: 5px; }
+.rt-dismiss { font-size: 9px; color: #445; margin-top: 6px; }
+.roll-toast.rt-out { animation: rt-out 0.35s ease forwards; }
+@keyframes rt-in  { from { opacity:0; transform:translateY(10px) scale(0.94); } to { opacity:1; transform:none; } }
+@keyframes rt-out { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(10px) scale(0.94); } }
+
+/* Keep the sheet form readable at full width */
+.sheet { max-width: 100%; }
+.sheet fieldset { margin-bottom: 10px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sheet-page-wrap">
+
+    <div class="sheet-breadcrumb">
+        <a href="/">Lobby</a> ›
+        {% if campaign %}
+        <a href="/campaign/{{ campaign.id }}/characters">{{ campaign.name }}</a> ›
+        {% else %}
+        <a href="/characters">My Characters</a> ›
+        {% endif %}
+        {{ char.name }}
+    </div>
+
+    <div id="roll-toast-container"></div>
+
+    {# Define closeSheet() before the sheet template so inline onclick handlers work #}
+    <script>
+        const CAMPAIGN_ID = {{ campaign.id if campaign else 'null' }};
+        const CHAR_ID     = {{ char.id }};
+        const ME = { id: {{ user.id }} };
+        window.closeSheet = function () {
+            {% if campaign %}
+            window.location.href = '/campaign/{{ campaign.id }}/characters';
+            {% else %}
+            window.location.href = '/characters';
+            {% endif %}
+        };
+    </script>
+
+    {% if not campaign %}
+    {# Override save endpoint for standalone (campaign-less) characters #}
+    {% set sheet_save_url = '/api/character/' ~ char.id %}
+    {% set sheet_save_method = 'POST' %}
+    {% endif %}
+
+    {% include sheet_template %}
+
+    {% if campaign %}
+    <script>
+    // ── Roll toasts via WebSocket (campaign characters only) ──
+    (function () {
+        const container = document.getElementById('roll-toast-container');
+
+        function dismiss(toast) {
+            if (toast.dataset.gone) return;
+            toast.dataset.gone = '1';
+            clearTimeout(toast._timer);
+            toast.classList.add('rt-out');
+            setTimeout(() => toast.remove(), 370);
+        }
+
+        function showToast(r) {
+            const toast = document.createElement('div');
+            toast.className = 'roll-toast';
+            toast.title = 'Click to dismiss';
+            const lbl = document.createElement('div'); lbl.className = 'rt-label'; lbl.textContent = '🎲 ' + (r.note || r.expression);
+            const tot = document.createElement('div'); tot.className = 'rt-total'; tot.textContent = r.total;
+            const bkd = document.createElement('div'); bkd.className = 'rt-breakdown'; bkd.textContent = r.breakdown;
+            const hint = document.createElement('div'); hint.className = 'rt-dismiss'; hint.textContent = 'click to dismiss';
+            toast.append(lbl, tot, bkd, hint);
+            toast.addEventListener('click', () => dismiss(toast));
+            container.appendChild(toast);
+            toast._timer = setTimeout(() => dismiss(toast), 10000);
+        }
+
+        const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let ws;
+        function connect() {
+            ws = new WebSocket(`${wsProto}${location.host}/ws/campaign/${CAMPAIGN_ID}`);
+            ws.addEventListener('message', ev => {
+                try {
+                    const msg = JSON.parse(ev.data);
+                    if (msg.type === 'roll' && msg.data.user_id === ME.id) {
+                        showToast(msg.data);
+                    }
+                } catch (_) {}
+            });
+            ws.addEventListener('close', () => setTimeout(connect, 3000));
+        }
+        connect();
+    })();
+    </script>
+    {% endif %}
+
+</div>
+{% endblock %}

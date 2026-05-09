@@ -23,11 +23,25 @@ class CampaignHub:
     def __init__(self) -> None:
         self._channels: Dict[int, Set[WebSocket]] = defaultdict(set)
         self._lock = asyncio.Lock()
+        self._battle: Dict[int, dict] = {}
+
+    def get_battle(self, campaign_id: int) -> dict | None:
+        return self._battle.get(campaign_id)
+
+    def set_battle(self, campaign_id: int, state: dict) -> None:
+        self._battle[campaign_id] = state
 
     async def connect(self, campaign_id: int, ws: WebSocket) -> None:
         await ws.accept()
         async with self._lock:
             self._channels[campaign_id].add(ws)
+        # Send current battle state to the newly connected client
+        state = self._battle.get(campaign_id)
+        if state:
+            try:
+                await ws.send_text(json.dumps({"type": "battle_update", "data": state}))
+            except Exception:
+                pass
 
     async def disconnect(self, campaign_id: int, ws: WebSocket) -> None:
         async with self._lock:

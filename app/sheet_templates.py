@@ -19,8 +19,20 @@ GENERIC_TEMPLATE: Dict[str, Any] = {
 
 DND5E_TEMPLATE: Dict[str, Any] = {
     "class": "",
+    "subclass": "",
     "level": 1,
     "race": "",
+    "class_hit_die": "",
+    "class_armor": "",
+    "class_weapons": "",
+    "class_tools": "",
+    "class_saving_throws": "",
+    "class_skills": "",
+    "class_spellcasting": "",
+    "class_equipment": "",
+    "class_features": "",
+    "subclass_features": "",
+    "race_traits": "",
     "background": "",
     "alignment": "",
     "hp": {"current": 10, "max": 10, "temp": 0},
@@ -58,7 +70,8 @@ DND5E_TEMPLATE: Dict[str, Any] = {
         "Survival":        {"ability": "WIS", "proficient": False, "expertise": False},
     },
     "attacks": [],     # [{name, bonus, damage, type}]
-    "spells": [],      # [{name, level, description}]
+    "spells": [],      # [{name, level, school, casting_time, range, duration, components, concentration, ritual, prepared, desc}]
+    "spell_slots": {str(i): {"total": 0, "used": 0} for i in range(1, 10)},
     "features": "",
     "inventory": [],
     "notes": "",
