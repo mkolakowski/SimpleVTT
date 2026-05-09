@@ -1,6 +1,6 @@
 # SimpleVTT
 
-> Current version: **0.7.0** · Schema: **v6** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions.
+> Current version: **0.20.0** · Schema: **v20** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions.
 
 A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 
@@ -109,6 +109,20 @@ export $(grep -v '^#' .env.example | xargs)
 # DATABASE_URL defaults to sqlite:///./simplevtt.db when not set.
 uvicorn app.main:app --reload --port 8013
 ```
+
+## Third-party fonts
+
+The following free/open-source fonts are loaded from Google Fonts and available as optional display fonts in **Settings → Display font**:
+
+| Font | Designer | Licence | Source |
+|------|----------|---------|--------|
+| **Lora** | Cyreal | [SIL OFL 1.1](https://scripts.sil.org/OFL) | [Google Fonts](https://fonts.google.com/specimen/Lora) |
+| **Cormorant Garamond** | Christian Thalmann | [SIL OFL 1.1](https://scripts.sil.org/OFL) | [Google Fonts](https://fonts.google.com/specimen/Cormorant+Garamond) |
+| **IM Fell English** | Igino Marini | [SIL OFL 1.1](https://scripts.sil.org/OFL) | [Google Fonts](https://fonts.google.com/specimen/IM+Fell+English) |
+
+All three fonts are served by the Google Fonts CDN and are used only as optional UI preferences — the default UI uses the system sans-serif stack. No fonts are bundled in the repository.
+
+Players pick a font in **Settings → Display font**. GMs can override this for all players on the tabletop page via **Campaign Settings → GM font override**.
 
 ## Notes / future work
 

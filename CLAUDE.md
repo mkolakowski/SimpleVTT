@@ -1,5 +1,21 @@
 # SimpleVTT — Claude Code guidelines
 
+## Always update the changelog and version when making changes
+
+Every time you make a user-visible, behavior-changing, or schema-changing edit you **must** update both `app/version.py` and `CHANGELOG.md` before finishing. Read `CHANGELOG.md` in full at the start of any version-related work — the file contains detailed bump rules and a required entry format in its header section.
+
+**Quick rules:**
+
+- `APP_VERSION` lives in `app/version.py` and follows SemVer:
+  - **PATCH** — bug fixes, copy tweaks, no schema change.
+  - **MINOR** — new backward-compatible feature or additive schema change.
+  - **MAJOR** — breaking API/config/schema change that requires operator action.
+- `SCHEMA_VERSION` (also in `app/version.py`) increments by **+1** for every migration block added to `_apply_inline_migrations()` in `app/database.py`.
+- Add a new `## [X.Y.Z] - YYYY-MM-DD` section at the **top** of the changelog (below the instructions header). Use today's UTC date.
+- Every entry must include: heading, `**Schema version:** N`, `**Commit summary:**`, `**Description:**`, and at least one categorised change list (`### Added`, `### Changed`, `### Fixed`, `### Schema`, etc.).
+- Also update the version badge in the first paragraph of `README.md` to match.
+- Do **not** edit version numbers anywhere else — `app/version.py` is the single source of truth.
+
 ## Third-party APIs must be Docker Compose services
 
 When integrating any external API or data service, add it as a named service in

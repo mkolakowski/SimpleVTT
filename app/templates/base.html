@@ -1,11 +1,16 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="{{ user.theme if user and user.theme else 'dark' }}">
+<html lang="en" data-theme="{{ user.theme if user and user.theme else 'dark' }}" data-font="{{ user.font_preference or '' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}SimpleVTT{% endblock %}</title>
     <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style-fantasy-themes.css">
+    <link rel="stylesheet" href="/static/sheet-fantasy.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Lora:wght@400;500;600&family=IM+Fell+English&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
     {% block head %}{% endblock %}
 </head>

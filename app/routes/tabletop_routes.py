@@ -34,11 +34,13 @@ from ..models import (
     Campaign,
     CampaignMembership,
     Character,
+    ConcentrationEffect,
     DiceRoll,
     GridType,
     Map,
     Playlist,
     PlaylistTrack,
+    RollRequest,
     Token,
     TokenTemplate,
     User,
@@ -338,6 +340,16 @@ def campaign_view(
     token_data = [_token_dict(t) for t in tokens]
     tmpl_data = [{"id": t.id, "name": t.name, "image_url": t.image_url, "tags": t.tags or [], "template": t.template, "sheet": t.sheet or {}} for t in tmpl_objs]
     user_color_map, user_portrait_map, user_char_name_map = _build_user_maps(db, campaign)
+    conc_effects = db.query(ConcentrationEffect).filter(ConcentrationEffect.campaign_id == campaign_id).all()
+    conc_by_char = {
+        e.character_id: {
+            "id": e.id,
+            "spell_name": e.spell_name,
+            "rounds_remaining": e.rounds_remaining,
+            "notes": e.notes or "",
+        }
+        for e in conc_effects
+    }
     return templates.TemplateResponse(
         "tabletop.html",
         {
@@ -361,6 +373,7 @@ def campaign_view(
             "user_color_map": user_color_map,
             "user_portrait_map": user_portrait_map,
             "user_char_name_map": user_char_name_map,
+            "conc_by_char": conc_by_char,
         },
     )
 
@@ -448,6 +461,9 @@ def campaign_settings(
     )
 
 
+_VALID_CAMPAIGN_FONTS = {"", "lora", "cormorant", "im-fell"}
+
+
 @router.post("/campaign/{campaign_id}/settings")
 async def campaign_settings_save(
     campaign_id: int,
@@ -456,6 +472,7 @@ async def campaign_settings_save(
     description: str = Form(""),
     game_system: str = Form("generic"),
     gm_tab_color: str = Form(""),
+    font_override: str = Form(""),
     thumbnail: UploadFile = File(None),
     clear_thumbnail: bool = Form(False),
     db: Session = Depends(get_db),
@@ -470,6 +487,8 @@ async def campaign_settings_save(
     campaign.description = description.strip()
     campaign.game_system = get_system(game_system).key
     campaign.gm_tab_color = gm_tab_color.strip()[:20] or None
+    fo = font_override.strip()
+    campaign.font_override = fo if fo in _VALID_CAMPAIGN_FONTS and fo else None
     if clear_thumbnail:
         campaign.thumbnail_url = None
     if thumbnail and thumbnail.filename:
@@ -998,6 +1017,397 @@ async def set_character_color(
         },
     )
     return {"ok": True}
+
+
+# ----------- API: roll requests -----------
+
+def _resolve_stat_modifier(sheet: dict, template: str, stat_key: str) -> tuple[int, str]:
+    """Return (modifier, display_label) by looking up *stat_key* in a D&D 5e sheet.
+
+    stat_key forms:
+      "str_save" … "cha_save"   → saving throw (adds prof if proficient)
+      "str_check" … "cha_check" → raw ability modifier
+      Exact skill name           → skill modifier (adds prof/expertise)
+      Anything else / non-5e    → (0, "")
+    """
+    if not stat_key or template != "dnd5e":
+        return 0, ""
+
+    abilities = sheet.get("abilities") or {}
+    saving_throws = sheet.get("saving_throws") or {}
+    skills = sheet.get("skills") or {}
+    prof = int(sheet.get("proficiency_bonus") or 2)
+
+    _AB_LONG = {"str": "STR", "dex": "DEX", "con": "CON",
+                "int": "INT", "wis": "WIS", "cha": "CHA"}
+
+    def ab_mod(ab: str) -> int:
+        return (int(abilities.get(ab, 10)) - 10) // 2
+
+    # Saving throw: "str_save", "con_save", …
+    for short, long in _AB_LONG.items():
+        if stat_key == f"{short}_save":
+            mod = ab_mod(long)
+            if saving_throws.get(long, False):
+                mod += prof
+            label = f"{long} Save{'(prof)' if saving_throws.get(long) else ''}"
+            return mod, label
+        if stat_key in (f"{short}_check", f"{short}_mod"):
+            return ab_mod(long), f"{long} Check"
+
+    # Skill: exact name e.g. "Perception", "Stealth"
+    skill_data = skills.get(stat_key)
+    if skill_data:
+        ab = skill_data.get("ability", "STR")
+        mod = ab_mod(ab)
+        if skill_data.get("expertise", False):
+            mod += prof * 2
+            suffix = " (exp)"
+        elif skill_data.get("proficient", False):
+            mod += prof
+            suffix = " (prof)"
+        else:
+            suffix = ""
+        return mod, f"{stat_key}{suffix}"
+
+    return 0, ""
+
+
+@router.post("/api/campaign/{campaign_id}/roll_request")
+async def create_roll_request(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """GM posts a roll-request card to the roll log so players can respond."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+
+    body = await request.json()
+    label = str(body.get("label", "")).strip()[:200]
+    if not label:
+        raise HTTPException(400, "label is required")
+
+    stat_key = str(body.get("stat_key", "") or "").strip()[:60] or None
+    base_expr = str(body.get("base_expression", "1d20") or "1d20").strip()[:60] or "1d20"
+    dc_raw = body.get("dc")
+    dc = int(dc_raw) if dc_raw is not None and str(dc_raw).strip() else None
+    visibility_str = str(body.get("visibility", "public")).lower()
+    try:
+        visibility = Visibility(visibility_str)
+    except ValueError:
+        visibility = Visibility.PUBLIC
+
+    req = RollRequest(
+        campaign_id=campaign_id,
+        created_by_user_id=user.id,
+        label=label,
+        base_expression=base_expr,
+        stat_key=stat_key,
+        dc=dc,
+        visibility=visibility,
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    await hub.broadcast(
+        campaign_id,
+        {
+            "type": "roll_request",
+            "data": {
+                "id": req.id,
+                "label": req.label,
+                "stat_key": req.stat_key,
+                "base_expression": req.base_expression,
+                "dc": req.dc,
+                "visibility": req.visibility.value,
+                "created_by_name": user.display_name,
+                "created_by_user_id": user.id,
+            },
+        },
+    )
+    return {"ok": True, "id": req.id}
+
+
+@router.post("/api/campaign/{campaign_id}/roll_request/{req_id}/respond")
+async def respond_roll_request(
+    campaign_id: int,
+    req_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Player (or GM acting as a token) clicks the Roll button in a roll-request card.
+
+    The server resolves the stat modifier from the chosen character sheet, builds
+    the final expression, rolls it, and broadcasts a standard ``roll`` WS message.
+    A DC pass/fail note is appended when the request has a DC set.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    roll_req = db.query(RollRequest).filter(
+        RollRequest.id == req_id,
+        RollRequest.campaign_id == campaign_id,
+    ).first()
+    if not roll_req:
+        raise HTTPException(404, "Roll request not found")
+
+    body = await request.json()
+    char_id = body.get("character_id")
+
+    # Load character — GMs may roll for any campaign character; players only theirs
+    char: Optional[Character] = None
+    if char_id:
+        char = db.query(Character).filter(
+            Character.id == char_id,
+            Character.campaign_id == campaign_id,
+        ).first()
+        if not char:
+            raise HTTPException(404, "Character not found")
+        is_gm = _user_is_gm(user, campaign, db)
+        if not is_gm and char.owner_user_id != user.id:
+            raise HTTPException(403, "Not your character")
+
+    # Resolve stat modifier from sheet
+    mod, stat_label = (0, "")
+    if char and roll_req.stat_key:
+        mod, stat_label = _resolve_stat_modifier(
+            char.sheet or {}, char.template, roll_req.stat_key
+        )
+
+    # Build final expression
+    base = roll_req.base_expression or "1d20"
+    if mod > 0:
+        final_expr = f"{base}+{mod}"
+    elif mod < 0:
+        final_expr = f"{base}{mod}"
+    else:
+        final_expr = base
+
+    # Roll
+    try:
+        result = dice_mod.roll(final_expr)
+    except dice_mod.DiceParseError as e:
+        raise HTTPException(400, f"Bad expression '{final_expr}': {e}")
+
+    # Build a descriptive note
+    char_name = char.name if char else None
+    note_parts = [f"→ {roll_req.label}"]
+    if stat_label:
+        note_parts.append(stat_label)
+    if roll_req.dc is not None:
+        outcome = "✓ Pass" if result.total >= roll_req.dc else "✗ Fail"
+        note_parts.append(f"DC {roll_req.dc} — {outcome}")
+    note = " | ".join(note_parts)[:200]
+
+    rec = DiceRoll(
+        campaign_id=campaign_id,
+        user_id=user.id,
+        expression=final_expr,
+        breakdown=result.breakdown,
+        total=result.total,
+        visibility=roll_req.visibility,
+        note=note,
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+
+    # Resolve portrait / color for broadcast
+    _membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id, CampaignMembership.user_id == user.id)
+        .first()
+    )
+    _player_color = (
+        _membership.color if _membership and _membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    _portrait_url = char.portrait_url if char else None
+    _user_color = (char.color if char and char.color else _player_color)
+
+    await hub.broadcast(
+        campaign_id,
+        {
+            "type": "roll",
+            "data": {
+                "id": rec.id,
+                "user_id": user.id,
+                "user_name": user.display_name,
+                "char_name": char_name,
+                "user_color": _user_color,
+                "portrait_url": _portrait_url,
+                "expression": rec.expression,
+                "breakdown": rec.breakdown,
+                "total": rec.total,
+                "visibility": rec.visibility.value,
+                "note": rec.note,
+                "created_at": rec.created_at.isoformat() if rec.created_at else None,
+            },
+        },
+    )
+    return {"ok": True, "total": rec.total, "breakdown": rec.breakdown}
+
+
+# ----------- API: concentration tracking -----------
+
+@router.post("/api/campaign/{campaign_id}/concentration")
+async def set_concentration(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Set (or replace) the concentration effect for a character.
+    Allowed by the character's owner or any GM.
+    Body: {character_id, spell_name, rounds, notes}
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    body = await request.json()
+    char_id = int(body.get("character_id", 0))
+    spell_name = str(body.get("spell_name", "")).strip()[:120]
+    if not spell_name:
+        raise HTTPException(400, "spell_name is required")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+
+    is_gm = _user_is_gm(user, campaign, db)
+    if not is_gm and char.owner_user_id != user.id:
+        raise HTTPException(403, "Not your character")
+
+    rounds_raw = body.get("rounds")
+    rounds = int(rounds_raw) if rounds_raw is not None and str(rounds_raw).strip() else None
+    notes = str(body.get("notes", "") or "").strip()[:200] or None
+
+    eff = db.query(ConcentrationEffect).filter(
+        ConcentrationEffect.campaign_id == campaign_id,
+        ConcentrationEffect.character_id == char_id,
+    ).first()
+    if eff:
+        eff.spell_name = spell_name
+        eff.rounds_remaining = rounds
+        eff.notes = notes
+    else:
+        eff = ConcentrationEffect(
+            campaign_id=campaign_id,
+            character_id=char_id,
+            spell_name=spell_name,
+            rounds_remaining=rounds,
+            notes=notes,
+        )
+        db.add(eff)
+    db.commit()
+
+    await hub.broadcast(campaign_id, {
+        "type": "concentration_update",
+        "data": {
+            "character_id": char_id,
+            "spell_name": spell_name,
+            "rounds_remaining": rounds,
+            "notes": notes or "",
+            "ended": False,
+        },
+    })
+    return {"ok": True}
+
+
+@router.delete("/api/campaign/{campaign_id}/concentration/{char_id}")
+async def end_concentration(
+    campaign_id: int,
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """End the concentration effect for a character."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+
+    is_gm = _user_is_gm(user, campaign, db)
+    if not is_gm and char.owner_user_id != user.id:
+        raise HTTPException(403, "Not your character")
+
+    eff = db.query(ConcentrationEffect).filter(
+        ConcentrationEffect.campaign_id == campaign_id,
+        ConcentrationEffect.character_id == char_id,
+    ).first()
+    if eff:
+        db.delete(eff)
+        db.commit()
+
+    await hub.broadcast(campaign_id, {
+        "type": "concentration_update",
+        "data": {"character_id": char_id, "ended": True},
+    })
+    return {"ok": True}
+
+
+@router.post("/api/campaign/{campaign_id}/concentration/{char_id}/tick")
+async def tick_concentration(
+    campaign_id: int,
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Decrement rounds_remaining by 1 at the end of the character's turn.
+    If rounds_remaining reaches 0, concentration ends automatically.
+    Called by the GM's battle tracker when advancing turns.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+
+    eff = db.query(ConcentrationEffect).filter(
+        ConcentrationEffect.campaign_id == campaign_id,
+        ConcentrationEffect.character_id == char_id,
+    ).first()
+    if not eff:
+        return {"ok": True, "active": False}
+
+    # Only decrement if rounds are being tracked
+    if eff.rounds_remaining is not None:
+        eff.rounds_remaining = max(0, eff.rounds_remaining - 1)
+        if eff.rounds_remaining == 0:
+            db.delete(eff)
+            db.commit()
+            await hub.broadcast(campaign_id, {
+                "type": "concentration_update",
+                "data": {"character_id": char_id, "ended": True, "reason": "expired"},
+            })
+            return {"ok": True, "active": False, "ended": True}
+        db.commit()
+
+    await hub.broadcast(campaign_id, {
+        "type": "concentration_update",
+        "data": {
+            "character_id": char_id,
+            "spell_name": eff.spell_name,
+            "rounds_remaining": eff.rounds_remaining,
+            "notes": eff.notes or "",
+            "ended": False,
+        },
+    })
+    return {"ok": True, "active": True, "rounds_remaining": eff.rounds_remaining}
 
 
 # ----------- API: battle / initiative tracker -----------

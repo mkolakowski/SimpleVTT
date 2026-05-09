@@ -1,0 +1,55 @@
+/* ============================================================
+   SimpleVTT — Sheet ornament layer for fantasy themes (optional)
+   Save as: app/static/sheet-fantasy.css
+   Loaded after style-fantasy-themes.css. Inert on the seven
+   existing themes (no --theme-* tokens defined → no ornament).
+   ============================================================ */
+
+/* Paper grain on parchment themes */
+body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none;
+    background-image: url('/static/fantasy-themes/paper-grain.svg');
+    background-size: 240px 240px;
+    opacity: var(--theme-grain-opacity, 0);
+    z-index: 0; mix-blend-mode: multiply;
+}
+
+/* Candle glow on dark fantasy themes */
+body::after {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(ellipse 800px 600px at 50% -10%,
+        var(--theme-glow, transparent), transparent 60%);
+}
+
+/* Theme-aware HP card lift */
+[data-theme="hearthstone"] .hp-block,
+[data-theme="forge"] .hp-block {
+    box-shadow:
+        inset 0 1px 0 var(--theme-rule, transparent),
+        0 8px 24px -12px var(--theme-glow, transparent);
+}
+[data-theme="hobbiton"] .hp-block,
+[data-theme="mosswood"] .hp-block,
+[data-theme="inkwell"] .hp-block {
+    box-shadow: 0 1px 2px rgba(60, 40, 20, 0.06);
+}
+
+/* Display serif for character names + page titles on parchment themes */
+[data-theme="hobbiton"] h1, [data-theme="hobbiton"] h2,
+[data-theme="mosswood"] h1, [data-theme="mosswood"] h2,
+[data-theme="inkwell"] h1, [data-theme="inkwell"] h2,
+[data-theme="hearthstone"] h1, [data-theme="hearthstone"] h2,
+[data-theme="forge"] h1, [data-theme="forge"] h2 {
+    font-family: var(--font-display, Georgia, serif);
+    letter-spacing: 0.005em;
+}
+
+/* Theme-aware focus ring */
+[data-theme="hobbiton"] :is(input,select,button):focus-visible,
+[data-theme="mosswood"] :is(input,select,button):focus-visible,
+[data-theme="inkwell"] :is(input,select,button):focus-visible,
+[data-theme="hearthstone"] :is(input,select,button):focus-visible,
+[data-theme="forge"] :is(input,select,button):focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+    outline-offset: 1px;
+}

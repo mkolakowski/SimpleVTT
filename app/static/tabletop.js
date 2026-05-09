@@ -344,6 +344,8 @@
                     if (color) el.dataset.charColor = color;
                     else delete el.dataset.charColor;
                 });
+            } else if (msg.type === 'roll_request') {
+                appendRollRequest(msg.data);
             }
         };
         ws.onclose = () => setTimeout(connectWs, 2000);
@@ -393,6 +395,90 @@
                     <div class="roll-card-breakdown">${formatBreakdown(r.breakdown)}</div>
                 </div>
             </div>`;
+        ul.prepend(li);
+    }
+
+    function appendRollRequest(req) {
+        const ul = document.getElementById('roll-list');
+        if (!ul) return;
+
+        const now = new Date();
+        const h = now.getHours(), m = now.getMinutes();
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = (h % 12) || 12;
+        const timeStr = h12.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0') + ' ' + ampm;
+
+        // Characters this user can roll as (GM sees all; players see only theirs)
+        const myChars = ME.isGm
+            ? characters.filter(c => c.owner_user_id != null)
+            : characters.filter(c => c.owner_user_id === ME.id);
+
+        let charSelectHtml = '';
+        if (myChars.length > 1) {
+            charSelectHtml = `<select class="roll-req-select">${
+                myChars.map(c => `<option value="${c.id}">${escapeHTML(c.name)}</option>`).join('')
+            }</select>`;
+        } else if (myChars.length === 1) {
+            charSelectHtml = `<input type="hidden" class="roll-req-select" value="${myChars[0].id}">
+                <span class="roll-req-char-label">${escapeHTML(myChars[0].name)}</span>`;
+        }
+
+        const dcBadge = req.dc
+            ? `<span class="roll-req-dc">DC ${req.dc}</span>`
+            : '';
+
+        const statLabel = req.stat_key
+            ? req.stat_key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+            : '';
+        const exprHint = statLabel
+            ? `<div class="roll-req-expr">${escapeHTML(req.base_expression)} + ${statLabel}</div>`
+            : `<div class="roll-req-expr">${escapeHTML(req.base_expression)}</div>`;
+
+        const li = document.createElement('li');
+        li.dataset.reqId = req.id;
+        li.innerHTML = `
+            <div class="roll-req-card">
+                <div class="roll-req-header">
+                    <span class="roll-req-icon">📋</span>
+                    <span class="roll-req-creator">${escapeHTML(req.created_by_name)}</span>
+                    <span class="roll-req-time">${timeStr}</span>
+                </div>
+                <div class="roll-req-body">
+                    <div class="roll-req-label">${escapeHTML(req.label)}</div>
+                    ${dcBadge}
+                    ${exprHint}
+                    <div class="roll-req-actions">
+                        ${charSelectHtml}
+                        <button class="roll-req-btn" type="button">🎲 Roll</button>
+                        <span class="roll-req-status"></span>
+                    </div>
+                </div>
+            </div>`;
+
+        const rollBtn = li.querySelector('.roll-req-btn');
+        rollBtn.addEventListener('click', async () => {
+            const sel = li.querySelector('.roll-req-select');
+            const charId = sel ? (parseInt(sel.value) || null) : null;
+            rollBtn.disabled = true;
+            rollBtn.textContent = '…';
+            const statusEl = li.querySelector('.roll-req-status');
+            try {
+                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll_request/${req.id}/respond`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ character_id: charId }),
+                });
+                if (!resp.ok) throw new Error(await resp.text());
+                rollBtn.textContent = '✓ Rolled';
+                if (statusEl) statusEl.textContent = 'Result in log';
+            } catch (e) {
+                rollBtn.disabled = false;
+                rollBtn.textContent = '🎲 Roll';
+                if (statusEl) statusEl.textContent = '✗ Error';
+                console.error(e);
+            }
+        });
+
         ul.prepend(li);
     }
 

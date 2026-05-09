@@ -86,6 +86,54 @@ Each release section must include all five of these, in this order:
 
 ---
 
+## [0.20.0] - 2026-05-09
+
+**Schema version:** 20
+
+**Commit summary:** Add themes, fantasy fonts, roll requests, concentration tracking, and token templates
+
+**Description:** A large batch of features accumulated since v0.10.0. Highlights include a fully theme-aware tabletop (all hardcoded dark-mode colours replaced with CSS custom properties so all eight themes work on the tabletop page), eight new themes including OLED and five fantasy parchment/tavern themes, three optional OFL-licensed fantasy display fonts with player-selectable preference and a GM-level campaign font override, a GM roll-request framework that lets the GM post prompted rolls to the log that players click to auto-resolve against their character sheet, and a concentration spell tracker integrated with the initiative turn order. Standalone characters (not tied to a campaign) are now supported. All schema changes are additive and applied automatically on first boot with no operator action needed beyond a redeploy.
+
+### Added
+- **OLED dark theme** — pure-black (`#000000`) background variant for pixel-off savings on OLED screens.
+- **Five fantasy themes** — Hobbiton (warm parchment), Hearthstone (tavern dark), Mosswood (sage green parchment), Inkwell (aged manuscript), and Forge (hammered copper dark). Each theme ships with computed `--theme-*` tokens and an optional SVG paper-grain / candle-glow overlay (`sheet-fantasy.css`).
+- **Display font system** — three OFL-licensed fonts loaded from Google Fonts: *Lora* (elegant serif), *Cormorant Garamond* (ornate fantasy), *IM Fell English* (old book). Players choose in Settings → Display font; GMs can override per-campaign in Campaign Settings → GM font override. Applied via `data-font` on `<html>` without a page reload.
+- **Roll request framework** — GMs can post a prompted roll card to the roll log (saving throw, ability check, skill check, or custom expression). Each card shows a character dropdown; clicking Roll resolves the stat modifier server-side from the character's D&D 5e sheet, rolls, appends a pass/fail note if a DC is set, and broadcasts the result.
+- **Concentration spell tracker** — GMs or character owners can set a concentration spell on any character (spell name, optional round count, notes). A 🧿 indicator appears on the character row in the Player tab and a full badge with controls shows in the expanded sheet. The GM's Next ▶ button in the battle tracker automatically ticks the round count for the current combatant; at 0 the effect ends and a WebSocket event notifies all clients.
+- **Token templates** — reusable NPC/monster tokens with a pre-filled sheet that GMs can place on the map without building a full character record.
+- **Standalone characters** — characters no longer require a campaign; `characters.campaign_id` is nullable so characters can exist independently.
+- **Theme CSS computed variables** — `--surface-hover`, `--accent-bg`, `--accent-bg2`, `--accent-bg-hover`, `--accent-border` added to `:root` using `color-mix()` so they cascade correctly to every theme automatically.
+- **Per-user theme persistence** — `users.theme` column stores the chosen theme across sessions (schema v12).
+- **Roll-log colours** — `campaign_memberships.color` and `campaigns.gm_color` allow per-member highlight colours in the roll log (schema v13). Characters have their own `characters.color` column (schema v14).
+- **Tab tint colours** — `campaigns.gm_tab_color` tints the GM Tools tab (schema v15); `users.battle_tab_color` and `users.player_tab_color` tint the Battle and Player tabs per-user (schema v16).
+- **Token controller** — `tokens.controller_user_id` lets the GM assign a token to a specific player who can then drag it independently (schema v8, recorded here).
+- **Playlist audio metadata** — `playlist_tracks` gains `track_artist`, `track_album`, `track_genre`, `track_year` columns for richer now-playing display (schema v7, recorded here).
+- **Playlist categories** — `playlists.category` (music / sfx / environment) and `user_audio_category_prefs` table for per-category volume preferences (schema v9, recorded here).
+
+### Changed
+- **Tabletop page is now fully theme-aware** — every hardcoded hex colour in `tabletop.html` (panels, drawer, roll cards, initiative tracker, token tracker, music drawer, toast, etc.) replaced with CSS custom properties. Tab tint `color-mix()` fallback backgrounds also updated.
+- **Drawer tab bar** minimum width corrected to 430 px so the GM Tools tab no longer wraps.
+- **Roll log redesigned** as styled cards with avatar, colour-coded visibility border, large total, and monospace breakdown.
+
+### Fixed
+- `ConcentrationEffect` and `RollRequest` models were absent from `models.py` causing an `ImportError` on startup; both classes restored.
+- `"oled"` removed from `VALID_THEMES` inadvertently during fantasy-theme addition; restored.
+
+### Schema
+- v11 — `characters.campaign_id` made nullable (standalone characters). SQLite requires table recreation; PostgreSQL uses `DROP NOT NULL`.
+- v12 — `users.theme VARCHAR(20) NOT NULL DEFAULT 'dark'` added.
+- v13 — `campaign_memberships.color VARCHAR(20)` and `campaigns.gm_color VARCHAR(20)` added.
+- v14 — `characters.color VARCHAR(20)` added.
+- v15 — `campaigns.gm_tab_color VARCHAR(20)` added.
+- v16 — `users.battle_tab_color VARCHAR(20)` and `users.player_tab_color VARCHAR(20)` added.
+- v17 — New table `roll_requests` (id, campaign_id, created_by_user_id, label, base_expression, stat_key, dc, visibility, created_at).
+- v18 — New table `concentration_effects` (id, campaign_id, character_id, spell_name, rounds_remaining, notes, created_at) with unique constraint on (campaign_id, character_id).
+- v19 — `users.font_preference VARCHAR(30)` added.
+- v20 — `campaigns.font_override VARCHAR(30)` added.
+- `SCHEMA_VERSION` bumped from 10 to 20.
+
+---
+
 ## [0.8.0] - 2026-05-04
 
 **Schema version:** 6

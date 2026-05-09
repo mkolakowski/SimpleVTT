@@ -35,7 +35,11 @@ class GridType(str, enum.Enum):
     NONE = "none"
 
 
-VALID_THEMES = {"dark", "midnight", "dim", "light", "forest", "bubblegum", "fire"}
+VALID_THEMES = {
+    "dark", "midnight", "dim", "light", "forest", "bubblegum", "fire", "oled",
+    # Fantasy themes
+    "hobbiton", "hearthstone", "mosswood", "inkwell", "forge",
+}
 
 
 class User(Base):
@@ -50,6 +54,8 @@ class User(Base):
     is_disabled: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     theme: Mapped[str] = mapped_column(String(20), default="dark", server_default="dark")
+    # Per-user fantasy font preference (None = system default sans-serif)
+    font_preference: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     # Per-user tab tint colors for the tabletop sidebar
     battle_tab_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     player_tab_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
@@ -89,6 +95,8 @@ class Campaign(Base):
     gm_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     # Tint color for the GM Tools tab in the tabletop sidebar
     gm_tab_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # GM-forced font for all players in this campaign (None = each player's own preference)
+    font_override: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     gm: Mapped[User] = relationship(foreign_keys=[gm_user_id])
@@ -297,4 +305,58 @@ class TokenTemplate(Base):
     tags: Mapped[list] = mapped_column(JSON, default=list)
     template: Mapped[str] = mapped_column(String(40), default="generic")
     sheet: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class RollRequest(Base):
+    """A GM-posted roll prompt that any player (or the GM acting as a token)
+    can respond to by clicking a button.  The resulting DiceRoll is a normal
+    roll record; the request itself is ephemeral (shown live; not replayed on
+    refresh, but kept in the DB for audit purposes).
+
+    stat_key controls which sheet stat is resolved server-side before rolling:
+      • Saving throw  → "str_save" / "dex_save" / … / "cha_save"
+      • Ability check → "str_check" / … / "cha_check"
+      • Skill check   → exact skill name from DND5E_TEMPLATE, e.g. "Perception"
+      • Empty/None    → roll base_expression with no sheet modifier
+    """
+    __tablename__ = "roll_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id", ondelete="CASCADE"))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    # Human-readable label shown in the roll-request card, e.g. "CON Save DC 15"
+    label: Mapped[str] = mapped_column(String(200))
+    # Dice expression before the sheet modifier is appended, e.g. "1d20"
+    base_expression: Mapped[str] = mapped_column(String(60), default="1d20")
+    # Stat key for D&D 5e sheet resolution (see docstring above)
+    stat_key: Mapped[Optional[str]] = mapped_column(String(60), nullable=True)
+    # Optional difficulty class for pass/fail display
+    dc: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # Visibility applied to every responding DiceRoll
+    visibility: Mapped[Visibility] = mapped_column(
+        Enum(Visibility), default=Visibility.PUBLIC
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    creator: Mapped["User"] = relationship(foreign_keys=[created_by_user_id])
+
+
+class ConcentrationEffect(Base):
+    """One active concentration spell per character (at most one at a time).
+
+    rounds_remaining = None means unlimited (tracked by scene, not rounds).
+    Rounds decrement at the END of the concentrating character's initiative turn.
+    """
+    __tablename__ = "concentration_effects"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "character_id", name="uq_conc_char"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    campaign_id: Mapped[int] = mapped_column(ForeignKey("campaigns.id", ondelete="CASCADE"))
+    character_id: Mapped[int] = mapped_column(ForeignKey("characters.id", ondelete="CASCADE"))
+    spell_name: Mapped[str] = mapped_column(String(120))
+    rounds_remaining: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

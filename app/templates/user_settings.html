@@ -162,8 +162,153 @@
             <span class="theme-label">Fire</span>
         </button>
 
+        {# Hobbiton #}
+        <button type="button" class="theme-card" data-theme="hobbiton" aria-label="Hobbiton theme">
+            <div class="theme-swatch" style="background:#f4ecda;">
+                <div class="sw-nav" style="background:#fbf6e7;border-bottom:1px solid #d8c8a8;">
+                    <div class="sw-dot" style="background:#e8dcc0;"></div>
+                    <div class="sw-dot" style="width:24px;background:#4a7a4a;margin-left:auto;"></div>
+                </div>
+                <div class="sw-body">
+                    <div class="sw-line" style="background:#d8c8a8;width:80%;"></div>
+                    <div class="sw-line" style="background:#d8c8a8;width:55%;"></div>
+                    <div class="sw-line" style="background:#b04a2a;width:35%;"></div>
+                </div>
+            </div>
+            <span class="theme-label">Hobbiton</span>
+        </button>
+
+        {# Hearthstone #}
+        <button type="button" class="theme-card" data-theme="hearthstone" aria-label="Hearthstone theme">
+            <div class="theme-swatch" style="background:#1a120a;">
+                <div class="sw-nav" style="background:#241810;">
+                    <div class="sw-dot" style="background:#3a2418;"></div>
+                    <div class="sw-dot" style="width:24px;background:#d4a14a;margin-left:auto;"></div>
+                </div>
+                <div class="sw-body">
+                    <div class="sw-line" style="background:#3a2818;width:80%;"></div>
+                    <div class="sw-line" style="background:#3a2818;width:55%;"></div>
+                    <div class="sw-line" style="background:#d4a14a;width:35%;"></div>
+                </div>
+            </div>
+            <span class="theme-label">Hearthstone</span>
+        </button>
+
+        {# Mosswood #}
+        <button type="button" class="theme-card" data-theme="mosswood" aria-label="Mosswood theme">
+            <div class="theme-swatch" style="background:#e8e6d4;">
+                <div class="sw-nav" style="background:#f3f1e0;border-bottom:1px solid #c0c4a8;">
+                    <div class="sw-dot" style="background:#d8dcc0;"></div>
+                    <div class="sw-dot" style="width:24px;background:#5a7a3a;margin-left:auto;"></div>
+                </div>
+                <div class="sw-body">
+                    <div class="sw-line" style="background:#c0c4a8;width:80%;"></div>
+                    <div class="sw-line" style="background:#c0c4a8;width:55%;"></div>
+                    <div class="sw-line" style="background:#c89858;width:35%;"></div>
+                </div>
+            </div>
+            <span class="theme-label">Mosswood</span>
+        </button>
+
+        {# Inkwell #}
+        <button type="button" class="theme-card" data-theme="inkwell" aria-label="Inkwell theme">
+            <div class="theme-swatch" style="background:#f0e6cf;">
+                <div class="sw-nav" style="background:#f8efd8;border-bottom:1px solid #d0bc92;">
+                    <div class="sw-dot" style="background:#e6d8b0;"></div>
+                    <div class="sw-dot" style="width:24px;background:#8a3030;margin-left:auto;"></div>
+                </div>
+                <div class="sw-body">
+                    <div class="sw-line" style="background:#d0bc92;width:80%;"></div>
+                    <div class="sw-line" style="background:#d0bc92;width:55%;"></div>
+                    <div class="sw-line" style="background:#8a3030;width:35%;"></div>
+                </div>
+            </div>
+            <span class="theme-label">Inkwell</span>
+        </button>
+
+        {# Forge #}
+        <button type="button" class="theme-card" data-theme="forge" aria-label="Forge theme">
+            <div class="theme-swatch" style="background:#161310;">
+                <div class="sw-nav" style="background:#1f1a14;">
+                    <div class="sw-dot" style="background:#2e2218;"></div>
+                    <div class="sw-dot" style="width:24px;background:#c8702a;margin-left:auto;"></div>
+                </div>
+                <div class="sw-body">
+                    <div class="sw-line" style="background:#2e2418;width:80%;"></div>
+                    <div class="sw-line" style="background:#2e2418;width:55%;"></div>
+                    <div class="sw-line" style="background:#c8702a;width:35%;"></div>
+                </div>
+            </div>
+            <span class="theme-label">Forge</span>
+        </button>
+
     </div>
     <div id="theme-status"></div>
+</section>
+
+<section>
+    <h2>✍ Display font</h2>
+    <p class="muted">Choose an optional fantasy-style font for headings and body text across the whole app. Leave on System default for the standard UI look.</p>
+    <div style="display:flex; flex-direction:column; gap:10px; margin-top:14px;" id="font-picker" data-current="{{ user.font_preference or '' }}">
+
+        <label style="display:flex; align-items:center; gap:12px; cursor:pointer;">
+            <input type="radio" name="font_pref" value="" {% if not user.font_preference %}checked{% endif %}>
+            <span>
+                <strong style="font-family:system-ui,-apple-system,sans-serif;">System default</strong>
+                <span class="muted" style="font-size:12px; margin-left:6px;">Aa — clean sans-serif (current look)</span>
+            </span>
+        </label>
+
+        <label style="display:flex; align-items:center; gap:12px; cursor:pointer;">
+            <input type="radio" name="font_pref" value="lora" {% if user.font_preference == 'lora' %}checked{% endif %}>
+            <span>
+                <strong style="font-family:'Lora',Georgia,serif;">Lora</strong>
+                <span class="muted" style="font-size:12px; margin-left:6px; font-family:'Lora',Georgia,serif;">Aa — elegant readable serif</span>
+            </span>
+        </label>
+
+        <label style="display:flex; align-items:center; gap:12px; cursor:pointer;">
+            <input type="radio" name="font_pref" value="cormorant" {% if user.font_preference == 'cormorant' %}checked{% endif %}>
+            <span>
+                <strong style="font-family:'Cormorant Garamond',Georgia,serif; font-size:110%;">Cormorant Garamond</strong>
+                <span class="muted" style="font-size:12px; margin-left:6px; font-family:'Cormorant Garamond',Georgia,serif;">Aa — ornate fantasy serif</span>
+            </span>
+        </label>
+
+        <label style="display:flex; align-items:center; gap:12px; cursor:pointer;">
+            <input type="radio" name="font_pref" value="im-fell" {% if user.font_preference == 'im-fell' %}checked{% endif %}>
+            <span>
+                <strong style="font-family:'IM Fell English',Georgia,serif;">IM Fell English</strong>
+                <span class="muted" style="font-size:12px; margin-left:6px; font-family:'IM Fell English',Georgia,serif;">Aa — old book / handwritten feel</span>
+            </span>
+        </label>
+    </div>
+    <div id="font-status" style="font-size:12px; color:var(--fg-mute); margin-top:8px; min-height:1.4em;"></div>
+    <script>
+    (function () {
+        const status = document.getElementById('font-status');
+        document.querySelectorAll('input[name="font_pref"]').forEach(radio => {
+            radio.addEventListener('change', async () => {
+                status.textContent = 'Saving…';
+                try {
+                    const resp = await fetch('/api/settings/font', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ font: radio.value }),
+                    });
+                    if (!resp.ok) throw new Error(await resp.text());
+                    // Apply immediately without page reload
+                    document.documentElement.dataset.font = radio.value;
+                    status.textContent = '✓ Saved';
+                    setTimeout(() => { status.textContent = ''; }, 2000);
+                } catch (e) {
+                    status.textContent = '✗ Failed — ' + e.message;
+                    console.error(e);
+                }
+            });
+        });
+    })();
+    </script>
 </section>
 
 <section>

@@ -15,6 +15,13 @@
     --btn-hover: #3a5780;
     --error-bg: #5a1f1f;
     --error-fg: #ffd7d7;
+
+    /* Computed — derived from the primitives above; do NOT override per-theme */
+    --surface-hover: color-mix(in srgb, var(--fg) 8%, var(--input-bg));
+    --accent-bg:     color-mix(in srgb, var(--accent) 12%, var(--bg));
+    --accent-bg2:    color-mix(in srgb, var(--accent) 18%, var(--bg));
+    --accent-bg-hover: color-mix(in srgb, var(--accent) 26%, var(--bg));
+    --accent-border: color-mix(in srgb, var(--accent) 35%, var(--border));
 }
 
 /* Midnight — deep black with violet accent */
@@ -97,6 +104,22 @@
     --error-fg: #991b1b;
 }
 
+/* OLED — pure black for pixel-off savings on OLED screens */
+[data-theme="oled"] {
+    --bg: #000000;
+    --bg-2: #0a0a0a;
+    --fg: #f0f0f0;
+    --fg-mute: #7a7a7a;
+    --accent: #6cb4ff;
+    --danger: #ff5555;
+    --border: #1c1c1c;
+    --input-bg: #111111;
+    --btn-bg: #181818;
+    --btn-hover: #262626;
+    --error-bg: #2a0000;
+    --error-fg: #ff9999;
+}
+
 /* Fire — warm ember blacks and blazing oranges */
 [data-theme="fire"] {
     --bg: #110800;
@@ -112,6 +135,13 @@
     --error-bg: #3d0a0a;
     --error-fg: #ffd0c0;
 }
+
+/* ── Font preferences ──────────────────────────────────────────────────── */
+/* data-font is set on <html> from the user's saved font_preference.         */
+/* Loaded fonts: Lora, Cormorant Garamond, IM Fell English (Google Fonts)    */
+[data-font="lora"]      { font-family: "Lora", Georgia, "Times New Roman", serif; }
+[data-font="cormorant"] { font-family: "Cormorant Garamond", Georgia, "Times New Roman", serif; font-size: 105%; }
+[data-font="im-fell"]   { font-family: "IM Fell English", "Cormorant Garamond", Georgia, serif; }
 
 /* ── Base reset & typography ───────────────────────────────────────────── */
 * { box-sizing: border-box; }

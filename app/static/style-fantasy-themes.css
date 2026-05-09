@@ -1,0 +1,144 @@
+/* ============================================================
+   SimpleVTT — Fantasy Themes (drop-in)
+
+   Adds five new themes to SimpleVTT's existing token surface:
+   Hobbiton, Hearthstone, Mosswood, Inkwell, Forge.
+
+   How to use:
+     1. Save this file as app/static/style-fantasy-themes.css
+     2. In app/templates/base.html, AFTER the existing
+        <link rel="stylesheet" href="/static/style.css">, add:
+          <link rel="stylesheet" href="/static/style-fantasy-themes.css">
+        and (optionally — for the ornamented character sheet):
+          <link rel="stylesheet" href="/static/sheet-fantasy.css">
+        and (for the display fonts):
+          <link rel="preconnect" href="https://fonts.googleapis.com">
+          <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+          <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Lora:wght@400;500;600&family=IM+Fell+English&display=swap" rel="stylesheet">
+     3. In app/models.py, add the new theme keys to VALID_THEMES:
+          VALID_THEMES = {
+              "dark","midnight","dim","light","forest","bubblegum","fire",
+              "hobbiton","hearthstone","mosswood","inkwell","forge",
+          }
+     4. In app/templates/user_settings.html, paste the snippet from
+        templates/user_settings-snippet.html into the .theme-grid block.
+
+   No existing tokens or selectors are modified — purely additive.
+   ============================================================ */
+
+:root {
+    --font-display: "Cormorant Garamond", Georgia, "Times New Roman", serif;
+    --font-body:    "Lora", Georgia, "Times New Roman", serif;
+    --font-scribed: "IM Fell English", "Cormorant Garamond", Georgia, serif;
+}
+
+[data-theme="hobbiton"] {
+    --bg:          #f4ecda;
+    --bg-2:        #fbf6e7;
+    --fg:          #3a2a1a;
+    --fg-mute:     #8a6a4a;
+    --accent:      #4a7a4a;       /* round-door green */
+    --danger:      #b04a2a;       /* terracotta */
+    --border:      #d8c8a8;
+    --input-bg:    #fdf9ec;
+    --btn-bg:      #e8dcc0;
+    --btn-hover:   #ddcca8;
+    --error-bg:    #f3d8c8;
+    --error-fg:    #6a2010;
+    /* flavor */
+    --theme-paper: #f4ecda;
+    --theme-rule:  #b89868;       /* warm wood */
+    --theme-warm:  #b04a2a;       /* terracotta hearth */
+    --theme-cool:  #4a7a4a;       /* moss */
+    --theme-glow:  rgba(176, 74, 42, 0.25);
+    --theme-grain-opacity: 0.05;
+}
+
+[data-theme="hearthstone"] {
+    --bg:          #1a120a;
+    --bg-2:        #241810;
+    --fg:          #ecd9b8;
+    --fg-mute:     #a8896a;
+    --accent:      #d4a14a;       /* brass tankard */
+    --danger:      #c45a3a;       /* ember */
+    --border:      #3a2818;
+    --input-bg:    #1f1408;
+    --btn-bg:      #3a2418;
+    --btn-hover:   #4a2e1e;
+    --error-bg:    #3d1a10;
+    --error-fg:    #f0c8a8;
+    /* flavor */
+    --theme-paper: #1a120a;
+    --theme-rule:  #6a4828;
+    --theme-warm:  #d4a14a;
+    --theme-cool:  #5a6a4a;       /* tarnished pewter green */
+    --theme-glow:  rgba(212, 161, 74, 0.30);
+    --theme-grain-opacity: 0.04;
+}
+
+[data-theme="mosswood"] {
+    --bg:          #e8e6d4;
+    --bg-2:        #f3f1e0;
+    --fg:          #2a3528;
+    --fg-mute:     #6a7a5a;
+    --accent:      #5a7a3a;       /* sage moss */
+    --danger:      #b8633a;       /* autumn rust */
+    --border:      #c0c4a8;
+    --input-bg:    #f6f4e2;
+    --btn-bg:      #d8dcc0;
+    --btn-hover:   #c8cca8;
+    --error-bg:    #ecd6c0;
+    --error-fg:    #5a2010;
+    /* flavor */
+    --theme-paper: #e8e6d4;
+    --theme-rule:  #8a9a6a;
+    --theme-warm:  #c89858;       /* autumn gold */
+    --theme-cool:  #5a7a3a;
+    --theme-glow:  rgba(90, 122, 58, 0.20);
+    --theme-grain-opacity: 0.04;
+}
+
+[data-theme="inkwell"] {
+    --bg:          #f0e6cf;
+    --bg-2:        #f8efd8;
+    --fg:          #2e1f0e;
+    --fg-mute:     #7a5a3a;
+    --accent:      #8a3030;       /* oxblood wax seal */
+    --danger:      #8a3030;
+    --border:      #d0bc92;
+    --input-bg:    #faf2dc;
+    --btn-bg:      #e6d8b0;
+    --btn-hover:   #dcc998;
+    --error-bg:    #ecd0c0;
+    --error-fg:    #5a1810;
+    /* flavor */
+    --theme-paper: #f0e6cf;
+    --theme-rule:  #b8924a;       /* gilt rule */
+    --theme-warm:  #8a3030;       /* wax seal */
+    --theme-cool:  #4a4030;       /* sepia ink */
+    --theme-glow:  rgba(184, 146, 74, 0.25);
+    --theme-grain-opacity: 0.07;
+}
+
+[data-theme="forge"] {
+    --bg:          #161310;
+    --bg-2:        #1f1a14;
+    --fg:          #e6d4b8;
+    --fg-mute:     #8a7458;
+    --accent:      #c8702a;       /* hammered copper */
+    --danger:      #d44a2a;       /* coal-glow */
+    --border:      #2e2418;
+    --input-bg:    #1a1510;
+    --btn-bg:      #2e2218;
+    --btn-hover:   #3e2e20;
+    --error-bg:    #3d1408;
+    --error-fg:    #f0b898;
+    /* flavor */
+    --theme-paper: #161310;
+    --theme-rule:  #6a4a28;
+    --theme-warm:  #c8702a;
+    --theme-cool:  #4a5868;       /* cold steel */
+    --theme-glow:  rgba(200, 112, 42, 0.32);
+    --theme-grain-opacity: 0.05;
+}
+

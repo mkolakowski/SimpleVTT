@@ -111,6 +111,16 @@
             <input type="color" name="gm_tab_color" value="{{ campaign.gm_tab_color or '#d4a84a' }}">
             <span class="muted" style="font-size:12px;">Tints the GM Tools tab in the tabletop sidebar.</span>
         </label>
+        <label>
+            GM font override
+            <select name="font_override">
+                <option value="" {% if not campaign.font_override %}selected{% endif %}>No override — each player uses their own font preference</option>
+                <option value="lora" {% if campaign.font_override == 'lora' %}selected{% endif %}>Lora — elegant readable serif</option>
+                <option value="cormorant" {% if campaign.font_override == 'cormorant' %}selected{% endif %}>Cormorant Garamond — ornate fantasy serif</option>
+                <option value="im-fell" {% if campaign.font_override == 'im-fell' %}selected{% endif %}>IM Fell English — old book / handwritten</option>
+            </select>
+            <span class="muted" style="font-size:12px;">Forces all players to use this font on the tabletop page.</span>
+        </label>
         <div><button type="submit">Save basic info</button></div>
     </form>
 </section>

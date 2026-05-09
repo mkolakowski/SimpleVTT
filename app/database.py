@@ -176,6 +176,26 @@ def _apply_inline_migrations() -> None:
         if user_cols_v16 and "player_tab_color" not in user_cols_v16:
             conn.execute(text("ALTER TABLE users ADD COLUMN player_tab_color VARCHAR(20)"))
 
+    # ---- Schema v17 (0.17.0): roll_requests table ----
+    from .models import RollRequest
+    RollRequest.__table__.create(bind=engine, checkfirst=True)
+
+    # ---- Schema v18 (0.18.0): concentration_effects table ----
+    from .models import ConcentrationEffect
+    ConcentrationEffect.__table__.create(bind=engine, checkfirst=True)
+
+    # ---- Schema v19 (0.19.0): users.font_preference ----
+    user_cols_v19 = _column_names("users")
+    with engine.begin() as conn:
+        if user_cols_v19 and "font_preference" not in user_cols_v19:
+            conn.execute(text("ALTER TABLE users ADD COLUMN font_preference VARCHAR(30)"))
+
+    # ---- Schema v20 (0.20.0): campaigns.font_override ----
+    camp_cols_v20 = _column_names("campaigns")
+    with engine.begin() as conn:
+        if camp_cols_v20 and "font_override" not in camp_cols_v20:
+            conn.execute(text("ALTER TABLE campaigns ADD COLUMN font_override VARCHAR(30)"))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

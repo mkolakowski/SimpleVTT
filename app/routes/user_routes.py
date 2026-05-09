@@ -267,6 +267,27 @@ def update_theme(
     return {"ok": True, "theme": body.theme}
 
 
+_VALID_FONTS = {"", "lora", "cormorant", "im-fell"}
+
+
+class _FontBody(BaseModel):
+    font: str
+
+
+@router.post("/api/settings/font")
+def update_font(
+    body: _FontBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Persist the user's chosen display font preference."""
+    if body.font not in _VALID_FONTS:
+        raise HTTPException(400, f"Invalid font '{body.font}'. Valid: {sorted(_VALID_FONTS)}")
+    user.font_preference = body.font or None
+    db.commit()
+    return {"ok": True, "font": body.font}
+
+
 class _TabColorBody(BaseModel):
     key: str   # "battle" | "player"
     color: str  # hex color string, or "" to clear
