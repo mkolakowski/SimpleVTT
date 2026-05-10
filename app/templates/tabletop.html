@@ -756,9 +756,17 @@
                 {% set save_map = sh.get('saving_throws') or {} %}
                 {% set skill_map = sh.get('skills') or {} %}
                 {# ── Combat stats ── #}
+                {# ── Combined classes tag (highest level first), e.g. "Druid 5 / Wizard 3" ── #}
+                {% set _mc = sh.get('classes') or [] %}
+                {% set _mc_sorted = _mc | sort(attribute='level', reverse=True) %}
                 <div class="mini-tags">
-                    {% if sh.get('class') %}<span class="mini-tag">{{ sh.get('class') }}</span>{% endif %}
-                    {% if sh.get('level') %}<span class="mini-tag">Lv {{ sh.get('level') }}</span>{% endif %}
+                    {% if _mc_sorted %}
+                        {% for _cc in _mc_sorted %}
+                        <span class="mini-tag">{{ _cc.get('class') }} {{ _cc.get('level',1) }}</span>
+                        {% endfor %}
+                    {% elif sh.get('class') %}
+                        <span class="mini-tag">{{ sh.get('class') }} {{ sh.get('level',1) }}</span>
+                    {% endif %}
                     {% if sh.get('race') %}<span class="mini-tag">{{ sh.get('race') }}</span>{% endif %}
                 </div>
                 {# ── HP / Temp / AC / Speed unified stat row ── #}
@@ -902,37 +910,53 @@
                 {% endfor %}
                 </div>
                 {% endif %}
-                {# ── Mini Spells ── #}
+                {# ── Mini Spells (multiclass-aware) ──
+                   Group spells by (class, level). Each class shows its own
+                   slot pip rows. Untagged spells fall back to the primary
+                   (highest-level) class. #}
                 {% set spells_list = sh.get('spells') or [] %}
                 {% set spell_slots_map = sh.get('spell_slots') or {} %}
-                {% set _class_slug = (sh.get('class') or '') | string | lower | trim %}
-                {% set _is_prepared_caster = _class_slug in ['cleric','druid','paladin','wizard','artificer'] %}
+                {% set _PREPARED_CASTERS = ['cleric','druid','paladin','wizard','artificer'] %}
+                {% set _primary_slug = (sh.get('class') or '') | string | lower | trim | replace(' ', '-') %}
                 {% set _spell_vis = namespace(any=false) %}
                 {% for s in spells_list %}
                 {% set s_lvl = (s.level or 0) | int %}
-                {% if not (_is_prepared_caster and s_lvl > 0 and not s.prepared) %}
+                {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
+                {% set _is_prepared = s_cls in _PREPARED_CASTERS %}
+                {% if not (_is_prepared and s_lvl > 0 and not s.prepared) %}
                 {% set _spell_vis.any = true %}
                 {% endif %}
                 {% endfor %}
                 {% if _spell_vis.any %}
                 <div class="mini-section-label" style="margin-top:10px;">Spells</div>
                 <div class="mini-spells" data-char-id="{{ c.id }}">
+                {# Iterate classes in order of highest level first; fall back to a
+                   single synthesized "primary class" if there's no roster yet. #}
+                {% set _iter_classes = (_mc_sorted if _mc_sorted else (
+                    [{'class': sh.get('class',''), 'level': sh.get('level',1)}] if sh.get('class') else []
+                )) %}
+                {% for _cc in _iter_classes %}
+                {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+                {% set _cc_label = _cc.get('class') %}
+                {% set _cc_is_prepared = _cc_slug in _PREPARED_CASTERS %}
+                {% set _cc_slots = spell_slots_map.get(_cc_slug) or {} %}
                 {% for lvl_i in range(10) %}
                     {% set _level_has = namespace(any=false) %}
                     {% for s in spells_list %}
                     {% set s_lvl = (s.level or 0) | int %}
-                    {% if s_lvl == lvl_i and not (_is_prepared_caster and s_lvl > 0 and not s.prepared) %}
+                    {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
+                    {% if s_lvl == lvl_i and s_cls == _cc_slug and not (_cc_is_prepared and s_lvl > 0 and not s.prepared) %}
                     {% set _level_has.any = true %}
                     {% endif %}
                     {% endfor %}
                     {% if _level_has.any %}
-                    <div class="mini-spell-level">{{ 'Cantrips' if lvl_i == 0 else 'Level ' ~ lvl_i ~ ' Spells' }}</div>
+                    <div class="mini-spell-level">{{ ('Cantrips' if lvl_i == 0 else 'Level ' ~ lvl_i ~ ' Spells') ~ (' - ' ~ _cc_label if _cc_label else '') }}</div>
                     {% if lvl_i >= 1 %}
-                    {% set slot = spell_slots_map.get(lvl_i | string) or {} %}
+                    {% set slot = _cc_slots.get(lvl_i | string) or {} %}
                     {% set slot_total = (slot.get('total') or 0) | int %}
                     {% set slot_used = (slot.get('used') or 0) | int %}
                     {% if slot_total > 0 %}
-                    <div class="mini-slot-row" data-char-id="{{ c.id }}" data-slot-level="{{ lvl_i }}" data-total="{{ slot_total }}" data-used="{{ slot_used }}">
+                    <div class="mini-slot-row" data-char-id="{{ c.id }}" data-class-slug="{{ _cc_slug }}" data-slot-level="{{ lvl_i }}" data-total="{{ slot_total }}" data-used="{{ slot_used }}">
                         <span class="mini-slot-label">Slots</span>
                         <span class="mini-slot-pips">
                         {% for i in range(slot_total) %}<span class="mini-slot-pip{{ ' used' if i < slot_used else '' }}"></span>{% endfor %}
@@ -943,16 +967,18 @@
                     {% endif %}
                     {% for s in spells_list %}
                     {% set s_lvl = (s.level or 0) | int %}
-                    {% if s_lvl == lvl_i and not (_is_prepared_caster and s_lvl > 0 and not s.prepared) %}
+                    {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
+                    {% if s_lvl == lvl_i and s_cls == _cc_slug and not (_cc_is_prepared and s_lvl > 0 and not s.prepared) %}
                     <div class="mini-spell-row" title="{{ s.name }}{% if s.casting_time %} · {{ s.casting_time }}{% endif %}{% if s.range %} · {{ s.range }}{% endif %}">
                         <span class="mini-spell-name">{{ s.name }}{% if s.concentration %} <span class="mini-spell-tag" title="Concentration">⏱</span>{% endif %}{% if s.ritual %} <span class="mini-spell-tag" title="Ritual">®</span>{% endif %}</span>
                         {% if s.damage %}<span class="mini-spell-tag dmg">{{ s.damage }}</span>{% endif %}
                         {% if s.save_ability %}<span class="mini-spell-tag save">{{ s.save_ability }} save</span>{% endif %}
-                        <button type="button" class="mini-cast-btn" data-char-id="{{ c.id }}" data-spell-idx="{{ loop.index0 }}" data-spell-name="{{ s.name }}" data-spell-level="{{ s_lvl }}" title="Cast {{ s.name }}{% if s_lvl > 0 %} (uses Lv {{ s_lvl }} slot){% endif %}">🪄 Cast</button>
+                        <button type="button" class="mini-cast-btn" data-char-id="{{ c.id }}" data-spell-idx="{{ loop.index0 }}" data-spell-name="{{ s.name }}" data-spell-level="{{ s_lvl }}" data-class-slug="{{ s_cls }}" title="Cast {{ s.name }}{% if s_lvl > 0 %} (uses Lv {{ s_lvl }} slot for {{ _cc_label or 'this class' }}){% endif %}">🪄 Cast</button>
                     </div>
                     {% endif %}
                     {% endfor %}
                     {% endif %}
+                {% endfor %}
                 {% endfor %}
                 </div>
                 {% endif %}
@@ -1489,13 +1515,16 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const idx = parseInt(btn.dataset.spellIdx, 10);
             const lvl = parseInt(btn.dataset.spellLevel, 10) || 0;
             const spellName = btn.dataset.spellName || 'Spell';
+            const classSlug = (btn.dataset.classSlug || '').toLowerCase();
             if (!charId || isNaN(idx)) return;
 
-            // Optimistically decrement the matching slot pip (cantrips skip this)
+            // Optimistically decrement the matching (class, level) slot pip
             let slotRow = null, prevUsed = 0;
             if (lvl >= 1) {
-                slotRow = document.querySelector(
-                    `.mini-spells[data-char-id="${charId}"] .mini-slot-row[data-slot-level="${lvl}"]`);
+                const sel = classSlug
+                    ? `.mini-spells[data-char-id="${charId}"] .mini-slot-row[data-class-slug="${classSlug}"][data-slot-level="${lvl}"]`
+                    : `.mini-spells[data-char-id="${charId}"] .mini-slot-row[data-slot-level="${lvl}"]`;
+                slotRow = document.querySelector(sel);
                 if (slotRow) {
                     const total = parseInt(slotRow.dataset.total) || 0;
                     prevUsed = parseInt(slotRow.dataset.used) || 0;
@@ -1517,6 +1546,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         character_id: charId,
                         spell_index: idx,
                         slot_level: lvl,
+                        class_slug: classSlug,
                     }),
                 });
                 if (!resp.ok) {
@@ -1689,8 +1719,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (!msg || msg.type !== 'spell_slot_update') return;
             const d = msg.data || {};
             if (!d.character_id || d.level == null) return;
-            const slotRow = document.querySelector(
-                `.mini-spells[data-char-id="${d.character_id}"] .mini-slot-row[data-slot-level="${d.level}"]`);
+            const cs = (d.class_slug || '').toLowerCase();
+            const sel = cs
+                ? `.mini-spells[data-char-id="${d.character_id}"] .mini-slot-row[data-class-slug="${cs}"][data-slot-level="${d.level}"]`
+                : `.mini-spells[data-char-id="${d.character_id}"] .mini-slot-row[data-slot-level="${d.level}"]`;
+            const slotRow = document.querySelector(sel);
             if (!slotRow) return;
             slotRow.dataset.total = d.total ?? slotRow.dataset.total;
             slotRow.dataset.used = d.used ?? slotRow.dataset.used;

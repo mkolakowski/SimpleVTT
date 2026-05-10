@@ -188,19 +188,6 @@ async def update_standalone_sheet(
     return JSONResponse({"ok": True})
 
 
-_SHEET_PATCH_KEYS = {
-    # Subclass features (new per-feature format + legacy blob)
-    "subclass_features_data",
-    "subclass_name",
-    "subclass_flavor",
-    "subclass_features",        # list[{name, desc, level}]
-    # Race traits (same pattern)
-    "race_parsed_data",
-    "race_flavor",
-    "race_trait_items",         # list[{name, desc}]
-}
-
-
 @router.patch("/api/character/{char_id}/sheet-fields")
 async def patch_standalone_sheet_fields(
     char_id: int,
@@ -215,10 +202,11 @@ async def patch_standalone_sheet_fields(
     if char.owner_user_id != user.id and not user.is_admin:
         raise HTTPException(403)
     body = await request.json()
-    patch = {k: v for k, v in body.items() if k in _SHEET_PATCH_KEYS}
-    if patch:
-        char.sheet = {**(char.sheet or {}), **patch}
-        db.commit()
+    # Re-use the campaign route's patch helper so subclass writes get routed
+    # into the matching ``classes[]`` entry when ``class_slug`` is supplied.
+    from .tabletop_routes import _apply_sheet_patch  # local import to avoid cycle
+    char.sheet = _apply_sheet_patch(char.sheet, body)
+    db.commit()
     return JSONResponse({"ok": True})
 
 

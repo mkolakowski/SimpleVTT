@@ -31,13 +31,27 @@
                     <div style="min-width:0;">
                         <div id="char-name-disp" style="font-size:21px;font-weight:800;color:var(--s-fg);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ char.name }}</div>
                         <div id="char-tags-row" style="display:flex;flex-wrap:wrap;gap:3px;align-items:center;font-size:12px;color:var(--s-mute);margin-top:3px;">
-                            <span id="tag-class">{{ sheet.get('class','') or '—' }}</span>
-                            <span id="sep-sub" style="color:var(--s-mute);{% if not sheet.get('subclass') %}display:none;{% endif %}">•</span>
-                            <span id="tag-subclass" style="{% if not sheet.get('subclass') %}display:none;{% endif %}">{{ sheet.get('subclass','') }}</span>
+                            {# ── Combined class + level badge — highest-level class first, e.g. "Druid 5 / Wizard 3" ── #}
+                            <span id="tag-classes" style="font-weight:700;color:var(--s-fg);">
+                                {%- set _roster = class_roster|default([]) -%}
+                                {%- if _roster -%}
+                                    {%- for c in _roster -%}
+                                        {{ c.class }} {{ c.level }}{% if not loop.last %} <span style="color:var(--s-mute);font-weight:400;">/</span> {% endif %}
+                                    {%- endfor -%}
+                                {%- else -%}—{%- endif -%}
+                            </span>
+                            {# Subclass list — only when at least one class has a subclass set #}
+                            {%- set _has_sub = _roster and (_roster | selectattr('subclass') | list | length > 0) -%}
+                            <span id="sep-sub" style="color:var(--s-mute);{% if not _has_sub %}display:none;{% endif %}">•</span>
+                            <span id="tag-subclass" style="{% if not _has_sub %}display:none;{% endif %}">
+                                {%- for c in _roster if c.subclass -%}
+                                    {{ c.subclass }}{% if not loop.last %}, {% endif %}
+                                {%- endfor -%}
+                            </span>
                             <span id="sep-race" style="color:var(--s-mute);{% if not sheet.get('race') %}display:none;{% endif %}">•</span>
                             <span id="tag-race" style="{% if not sheet.get('race') %}display:none;{% endif %}">{{ sheet.get('race','') }}</span>
                             <span style="color:var(--s-mute);">•</span>
-                            <span id="tag-level" style="color:var(--s-accent);font-weight:700;">Level {{ sheet.get('level',1) }}</span>
+                            <span id="tag-level" style="color:var(--s-accent);font-weight:700;">Total Lv {{ sheet.get('level',1) }}</span>
                         </div>
                     </div>
                     {% if can_edit %}
@@ -140,26 +154,10 @@
                     <input name="name" id="char-name-input" value="{{ char.name }}">
                 </label>
                 <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Class</span>
-                    <select name="class" id="class-select" data-current="{{ sheet.get('class','') }}">
-                        <option value="">— loading… —</option>
-                    </select>
-                </label>
-                <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Subclass</span>
-                    <select name="subclass" id="subclass-select" data-current="{{ sheet.get('subclass','') }}">
-                        <option value="">— select class first —</option>
-                    </select>
-                </label>
-                <label style="display:flex;flex-direction:column;gap:3px;">
                     <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Race</span>
                     <select name="race" id="race-select" data-current="{{ sheet.get('race','') }}">
                         <option value="">— loading… —</option>
                     </select>
-                </label>
-                <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Level</span>
-                    <input type="number" name="level" id="level-input" value="{{ sheet.get('level',1) }}" min="1" max="20">
                 </label>
                 <label style="display:flex;flex-direction:column;gap:3px;">
                     <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Max HP</span>
@@ -184,18 +182,41 @@
                     <input type="number" name="proficiency_bonus" id="prof-edit-input" value="{{ sheet.get('proficiency_bonus',2) }}">
                 </label>
             </div>
+            {# ── Multiclass editor ─────────────────────────────────────── #}
+            <div id="multiclass-editor" style="background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:10px 12px;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Classes &amp; Levels</span>
+                    <span id="mc-total-display" style="font-size:11px;color:var(--s-mute);">Total: <span id="mc-total-lv" style="color:var(--s-fg);font-weight:700;">{{ sheet.get('level',1) }}</span> / 20</span>
+                    <button type="button" id="mc-add-class-btn" style="margin-left:auto;font-size:11px;padding:3px 10px;">+ Add Class</button>
+                </div>
+                <div id="mc-class-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+                <p id="mc-hint" class="muted" style="font-size:11px;margin:6px 0 0;">Pick a class, optional subclass, and how many levels you have in it. Total of all classes is capped at 20.</p>
+            </div>
             <div style="display:flex;justify-content:flex-end;">
                 <button type="button" id="char-done-btn">✓ Done</button>
             </div>
         </div>
+
+        {# ── Hidden inputs that mirror the *primary* (highest-level) class onto
+             the legacy form fields so older code (spellcasting framework, item
+             browser, attacks engine) keeps reading [name="class"]/[name="level"]/
+             [name="subclass"] without changes. The visible editor is the
+             multiclass list above; ``classes_json`` is the JSON source of truth.
+             #}
+        <input type="hidden" name="class"    id="class-select"    value="{{ sheet.get('class','') }}"    data-current="{{ sheet.get('class','') }}">
+        <input type="hidden" name="subclass" id="subclass-select" value="{{ sheet.get('subclass','') }}" data-current="{{ sheet.get('subclass','') }}">
+        <input type="hidden" name="level"    id="level-input"     value="{{ sheet.get('level',1) }}">
+        <textarea name="classes_json" id="classes-data" style="display:none;">{{ (sheet.get('classes') or []) | tojson }}</textarea>
         {% else %}
         {# Readonly: hidden inputs so roll / spellcasting calculations can read these values #}
         <input type="hidden" name="proficiency_bonus" value="{{ sheet.get('proficiency_bonus',2) }}">
         <input type="hidden" name="initiative_bonus"  value="{{ sheet.get('initiative_bonus',0) }}">
         <input type="hidden" name="hp.max"            value="{{ sheet.get('hp',{}).get('max',10) }}">
         <input type="hidden" name="speed"             value="{{ sheet.get('speed',30) }}">
-        <input type="hidden" name="level"             value="{{ sheet.get('level',1) }}">
-        <input type="hidden" name="class"             value="{{ sheet.get('class','') }}">
+        <input type="hidden" name="level"   id="level-input"      value="{{ sheet.get('level',1) }}">
+        <input type="hidden" name="class"   id="class-select"     value="{{ sheet.get('class','') }}"    data-current="{{ sheet.get('class','') }}">
+        <input type="hidden" name="subclass" id="subclass-select" value="{{ sheet.get('subclass','') }}" data-current="{{ sheet.get('subclass','') }}">
+        <textarea name="classes_json" id="classes-data" style="display:none;" readonly>{{ (sheet.get('classes') or []) | tojson }}</textarea>
         <input type="hidden" name="base_ac" id="base-ac-input" value="{{ sheet.get('base_ac', sheet.get('ac', 10)) }}">
         <input type="hidden" name="hit_dice.max"     value="{{ (sheet.get('hit_dice') or {}).get('max', sheet.get('level',1)) }}">
         <input type="hidden" name="hit_dice.current" value="{{ (sheet.get('hit_dice') or {}).get('current', (sheet.get('hit_dice') or {}).get('max', sheet.get('level',1))) }}">
@@ -627,56 +648,51 @@
                 {% endif %}
                 {# "Hide Unprepared" toggle is purely visual — available to readonly viewers too. #}
                 <button type="button" id="hide-unprepared-btn" style="display:none;font-size:11px;padding:2px 8px;margin-left:4px;" title="Toggle visibility of unprepared leveled spells">👁 Showing all</button>
+                {% if can_edit %}
+                <button type="button" id="sc-autofill-btn" style="display:none;font-size:11px;padding:2px 8px;margin-left:4px;" title="Recompute spell slots for every spellcasting class on this sheet">⚡ Auto-fill Slots</button>
+                {% endif %}
             </legend>
 
-            {# ── Spellcasting Info Bar ── #}
-            <div id="sc-info-bar" style="display:none;background:var(--bg);border:1px solid var(--s-border);border-radius:6px;padding:10px 14px;margin-bottom:10px;">
-                <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;">
-                    <div>
-                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);margin-bottom:3px;">Type</div>
-                        <div id="sc-type" style="font-size:13px;font-weight:700;color:var(--s-fg);">—</div>
-                    </div>
-                    <div>
-                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);margin-bottom:3px;">Ability</div>
-                        <div id="sc-ability" style="font-size:13px;font-weight:700;color:var(--s-fg);">—</div>
-                    </div>
-                    <div>
-                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);margin-bottom:3px;">Save DC</div>
-                        <div id="sc-dc" style="font-size:13px;font-weight:700;color:var(--s-fg);">—</div>
-                    </div>
-                    <div>
-                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);margin-bottom:3px;">Atk Bonus</div>
-                        <div id="sc-atk" style="font-size:13px;font-weight:700;color:var(--s-fg);">—</div>
-                    </div>
-                    <div id="sc-limit-wrap" style="margin-left:auto;text-align:right;">
-                        <div id="sc-limit-label" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);margin-bottom:3px;">Prepared</div>
-                        <div style="font-size:13px;font-weight:700;">
-                            <span id="sc-limit-cur" style="color:#80e0a0;">0</span><span style="color:var(--s-mute);"> / </span><span id="sc-limit-max" style="color:var(--s-fg);">?</span>
-                        </div>
-                    </div>
+            {# ── Spellcasting Info Bar (multiclass-aware: one row per class).
+                 Collapsible: clicking the header hides only the rows, leaving
+                 the spell list itself fully visible. ── #}
+            <div id="sc-info-bar" style="display:none;background:var(--bg);border:1px solid var(--s-border);border-radius:6px;padding:6px 10px;margin-bottom:10px;">
+                <div id="sc-info-header" style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;">
+                    <span id="sc-info-chevron" style="font-size:9px;color:var(--s-mute);transition:transform .15s;">▼</span>
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Spellcasting</span>
+                    <span id="sc-info-summary" style="font-size:11px;color:var(--s-mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;"></span>
                 </div>
-                {% if can_edit %}
-                <div style="margin-top:8px;display:flex;align-items:center;gap:8px;border-top:1px solid var(--s-border);padding-top:8px;flex-wrap:wrap;">
-                    <button type="button" id="sc-autofill-btn"
-                            style="font-size:11px;padding:3px 10px;background:var(--s-btn);border:1px solid var(--s-border);color:var(--s-accent);border-radius:4px;cursor:pointer;">⚡ Auto-fill Slots</button>
-                    <span id="sc-autofill-note" style="font-size:11px;color:var(--s-mute);font-style:italic;"></span>
-                </div>
-                {% endif %}
+                <div id="sc-info-rows" style="display:flex;flex-direction:column;gap:3px;margin-top:6px;"></div>
             </div>
 
-            {# ── Spell Slots parking div — rows are moved into spell groups by JS ── #}
+            {# ── Spell Slots parking div — one row per (class, slot level).
+                 Rows are moved into the spell list groups by sheet.js so each
+                 group ("Level 1 Spells - Druid") shows its own slot pips. The
+                 hidden inputs serialise into ``sheet.spell_slots[<class>][<lvl>]``. #}
             <div id="spell-slots-ui" style="display:none;">
+                {% set _all_slots = sheet.get('spell_slots') or {} %}
+                {% for c in (sheet.get('classes') or []) %}
+                {% set _cslug = (c.get('class') or '').strip().lower().replace(' ', '-') %}
+                {% if _cslug %}
+                {% set _by_lvl = _all_slots.get(_cslug) or {} %}
                 {% for lvl in range(1, 10) %}
-                {% set sd = (sheet.get('spell_slots') or {}).get(lvl|string, {}) %}
+                {% set sd = _by_lvl.get(lvl|string, {}) %}
                 {% set total = sd.get('total', 0) %}
                 {% set used = sd.get('used', 0) %}
-                <div class="ss-row" data-lvl="{{ lvl }}" data-total="{{ total }}" data-used="{{ used }}"
+                <div class="ss-row"
+                     data-cslug="{{ _cslug }}"
+                     data-class-label="{{ c.get('class') }}"
+                     data-mc-idx="{{ loop.index0 }}"
+                     data-lvl="{{ lvl }}"
+                     data-total="{{ total }}" data-used="{{ used }}"
                      style="display:{% if total == 0 %}none{% else %}flex{% endif %};align-items:center;gap:8px;">
                     <span style="font-size:11px;font-weight:600;width:38px;flex-shrink:0;color:var(--s-mute);letter-spacing:.03em;">Lv {{ lvl }}</span>
                     <div class="ss-pips" style="display:flex;gap:5px;flex-wrap:wrap;flex:1;"></div>
-                    <input type="hidden" name="spell_slots.{{ lvl }}.total" class="ss-total-input" value="{{ total }}">
-                    <input type="hidden" name="spell_slots.{{ lvl }}.used"  class="ss-used-input"  value="{{ used }}">
+                    <input type="hidden" name="spell_slots.{{ _cslug }}.{{ lvl }}.total" class="ss-total-input" value="{{ total }}">
+                    <input type="hidden" name="spell_slots.{{ _cslug }}.{{ lvl }}.used"  class="ss-used-input"  value="{{ used }}">
                 </div>
+                {% endfor %}
+                {% endif %}
                 {% endfor %}
                 <p id="ss-empty-msg" style="font-size:12px;color:var(--s-mute);margin:2px 0 0;">Select a class and level to auto-fill spell slots.</p>
             </div>
@@ -733,6 +749,14 @@
                     <button type="button" id="sb-search-btn" style="font-size:12px;padding:4px 12px;">Search</button>
                     <button type="button" id="sb-close-btn"
                             style="margin-left:auto;font-size:12px;padding:4px 12px;background:var(--s-err-bg);border-color:var(--s-danger);color:var(--s-err-fg);">✕ Close</button>
+                </div>
+
+                {# Class-context selector — which class is "casting" this spell.
+                   Drives both the spell_list= filter and the tag added to a
+                   newly-imported spell. #}
+                <div id="sb-class-bar" style="display:flex;gap:5px;flex-wrap:wrap;padding:6px 14px;background:var(--bg);border-bottom:1px solid var(--s-border);flex-shrink:0;align-items:center;">
+                    <span style="font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;margin-right:4px;">Class</span>
+                    <span id="sb-class-chips" style="display:flex;gap:5px;flex-wrap:wrap;"></span>
                 </div>
 
                 {# Spell limit status bar #}
@@ -819,22 +843,9 @@
             document.querySelectorAll('.ss-row').forEach(renderPips);
             window._ssRenderPips  = renderPips;
             window._ssSyncInputs  = syncInputs;
-
-            // Live update from /cast_spell broadcasts: when this character's
-            // slot changes on another client, mirror it into the open sheet.
-            const MY_CHAR_ID = {{ char.id }};
-            document.addEventListener('vtt:ws-message', function (ev) {
-                const msg = ev.detail;
-                if (!msg || msg.type !== 'spell_slot_update') return;
-                const d = msg.data || {};
-                if (d.character_id !== MY_CHAR_ID) return;
-                const row = document.querySelector(`.ss-row[data-lvl="${d.level}"]`);
-                if (!row) return;
-                row.dataset.total = d.total;
-                row.dataset.used  = d.used;
-                syncInputs(row);
-                renderPips(row);
-            });
+            // (The spell_slot_update WebSocket handler is bound by the
+            //  multiclass module in sheet.js so it correctly resolves the
+            //  (class, level) row instead of just (level).)
         })();
         </script>
 
@@ -952,33 +963,31 @@
         <fieldset class="collapsible" data-collapse-key="features">
             <legend><span class="fs-chevron">▼</span>Class, Subclass &amp; Race Features</legend>
 
-            {% set cf = sheet.get('class_features','') %}
-            {% set sf = sheet.get('subclass_features','') %}
             {% set rt = sheet.get('race_traits','') %}
 
-            {# Hidden textareas keep values flowing through form submission #}
+            {# Hidden textarea keeps the legacy ``race_traits`` value flowing
+               through form submission. Subclass-features and class-features
+               text now lives per-entry under sheet["classes"][i] and is
+               persisted via the multiclass JSON, not as flat textareas. #}
             {% if can_edit %}
-            <textarea name="class_features" style="display:none">{{ cf }}</textarea>
-            <textarea name="subclass_features" style="display:none">{{ sf }}</textarea>
             <textarea name="race_traits" style="display:none">{{ rt }}</textarea>
             {% endif %}
 
             <div style="display:flex;flex-direction:column;gap:14px;margin-top:6px;">
 
                 {# Class Features text is auto-filled for internal use; not displayed directly #}
-                <div id="cf-display" style="display:none;">{{ cf }}</div>
+                <div id="cf-display" style="display:none;"></div>
                 <p id="cf-empty" style="display:none;"></p>
 
-                <div>
-                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                        <span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted,#888);text-transform:uppercase;">Subclass Features</span>
-                        {% if can_edit %}
-                        <button type="button" id="sync-subclass-btn" style="font-size:11px;padding:2px 8px;" title="Re-fetch subclass features from Open5e">↻ Sync</button>
-                        <span id="sync-subclass-status" style="font-size:11px;margin-left:4px;"></span>
-                        {% endif %}
-                    </div>
-                    <div id="sf-display" style="{% if not sf %}display:none;{% endif %}"></div>
-                    <p id="sf-empty" class="muted" style="font-size:12px;margin:4px 0 0;{% if sf %}display:none;{% endif %}">{% if can_edit %}Auto-filled when you select a subclass.{% else %}—{% endif %}</p>
+                {# ── Per-class subclass features ──
+                   One block per class. Heading reads "<Class> - <Subclass>".
+                   Each block is rendered/refreshed by sheet.js from
+                   sheet["classes"][i] data; the markup here is just the
+                   container scaffolding. #}
+                <div id="sf-multiclass-list" style="display:flex;flex-direction:column;gap:14px;">
+                    <p id="sf-empty" class="muted" style="font-size:12px;margin:4px 0 0;">
+                        {% if can_edit %}Pick a subclass on each class to auto-fill its features.{% else %}—{% endif %}
+                    </p>
                 </div>
 
                 <div>
@@ -999,53 +1008,79 @@
         <fieldset class="collapsible" data-collapse-key="class-prof">
             <legend><span class="fs-chevron">▼</span>Class Proficiencies
                 {% if can_edit %}
-                <button type="button" id="sync-class-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;" title="Re-fetch class details from Open5e">↻ Sync</button>
+                <button type="button" id="sync-class-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;" title="Re-fetch class details from Open5e for every class on this character">↻ Sync</button>
                 <span id="sync-class-status" style="font-size:11px;margin-left:6px;"></span>
                 {% endif %}
             </legend>
-            {% set _hd = sheet.get('class_hit_die','') %}
-            {% set _ar = sheet.get('class_armor','') %}
-            {% set _wp = sheet.get('class_weapons','') %}
-            {% set _tl = sheet.get('class_tools','') %}
-            {% set _st = sheet.get('class_saving_throws','') %}
-            {% set _sk = sheet.get('class_skills','') %}
-            {% set _sp = sheet.get('class_spellcasting','') %}
-            {% set _eq = sheet.get('class_equipment','') %}
-
-            {% macro prof_row(label, name, value) %}
-            <div style="display:flex;align-items:baseline;gap:8px;padding:4px 0;border-bottom:1px solid var(--s-border);">
-                <span style="font-size:11px;font-weight:700;color:var(--muted,#888);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;min-width:110px;">{{ label }}</span>
-                {% if can_edit %}
-                <input type="text" name="{{ name }}" value="{{ value }}" style="flex:1;font-size:12px;" placeholder="—">
-                {% else %}
-                <span style="font-size:12px;color:var(--fg,#e0e0e0);">{{ value or '—' }}</span>
-                {% endif %}
+            {# ── Multi-class proficiencies table ──────────────────────────
+               One column per class. Header row shows class name + level.
+               ``classes`` is normalised by normalize_dnd5e_sheet() so it
+               always has at least the primary class for D&D 5e sheets.   #}
+            {% set _classes = sheet.get('classes') or [] %}
+            {% if _classes %}
+            <div id="class-prof-table-wrap" style="overflow-x:auto;margin-top:6px;">
+            <table id="class-prof-table" style="width:100%;border-collapse:collapse;font-size:12px;">
+                <colgroup>
+                    <col style="width:130px;">
+                    {% for c in _classes %}<col>{% endfor %}
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th style="text-align:left;font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--s-border);">&nbsp;</th>
+                        {% for c in _classes %}
+                        <th class="cprof-class-th" data-mc-idx="{{ loop.index0 }}"
+                            style="text-align:left;font-size:11px;font-weight:700;color:var(--s-fg);padding:6px 8px;border-bottom:1px solid var(--s-border);white-space:nowrap;">
+                            {{ c.get('class') or '—' }}
+                            <span style="color:var(--s-accent);">Lv {{ c.get('level',1) }}</span>
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set _rows = [
+                        ('Hit Die',        'class_hit_die'),
+                        ('Armor',          'class_armor'),
+                        ('Weapons',        'class_weapons'),
+                        ('Tools',          'class_tools'),
+                        ('Saving Throws',  'class_saving_throws'),
+                        ('Skills',         'class_skills'),
+                        ('Spellcasting',   'class_spellcasting'),
+                        ('Starting Eq.',   'class_equipment'),
+                    ] %}
+                    {% for label, key in _rows %}
+                    <tr>
+                        <th style="text-align:left;font-size:11px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.04em;padding:5px 8px;border-bottom:1px solid var(--s-border);white-space:nowrap;vertical-align:top;">{{ label }}</th>
+                        {% for c in _classes %}
+                        <td class="cprof-cell" data-mc-idx="{{ loop.index0 }}" data-cprof-key="{{ key }}"
+                            style="padding:4px 8px;border-bottom:1px solid var(--s-border);vertical-align:top;">
+                            {% if can_edit %}
+                            <input type="text" class="cprof-input" data-mc-idx="{{ loop.index0 }}" data-cprof-key="{{ key }}"
+                                   value="{{ c.get(key,'') }}"
+                                   style="width:100%;font-size:12px;" placeholder="—">
+                            {% else %}
+                            <span style="font-size:12px;color:var(--fg,#e0e0e0);white-space:pre-wrap;">{{ c.get(key,'') or '—' }}</span>
+                            {% endif %}
+                        </td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
             </div>
-            {% endmacro %}
-
-            <div style="margin-top:6px;">
-                {% if _hd or can_edit %}{{ prof_row('Hit Die', 'class_hit_die', _hd) }}{% endif %}
-                {% if _ar or can_edit %}{{ prof_row('Armor', 'class_armor', _ar) }}{% endif %}
-                {% if _wp or can_edit %}{{ prof_row('Weapons', 'class_weapons', _wp) }}{% endif %}
-                {% if _tl or can_edit %}{{ prof_row('Tools', 'class_tools', _tl) }}{% endif %}
-                {% if _st or can_edit %}{{ prof_row('Saving Throws', 'class_saving_throws', _st) }}{% endif %}
-                {% if _sk or can_edit %}{{ prof_row('Skills', 'class_skills', _sk) }}{% endif %}
-                {% if _sp or can_edit %}{{ prof_row('Spellcasting', 'class_spellcasting', _sp) }}{% endif %}
-            </div>
-
-            {% if _eq or can_edit %}
-            <label style="margin-top:10px;display:block;">Starting Equipment
-                {% if can_edit %}
-                <textarea name="class_equipment" rows="3" style="font-size:12px;" placeholder="Auto-filled when you select a class">{{ _eq }}</textarea>
-                {% else %}
-                <div style="white-space:pre-wrap;font-size:12px;line-height:1.6;color:var(--fg,#e0e0e0);margin-top:4px;">{{ _eq }}</div>
-                {% endif %}
-            </label>
+            {% else %}
+            <p class="muted" style="font-size:12px;margin:6px 0 0;">Add a class above to auto-fill proficiencies.</p>
             {% endif %}
 
-            {% if not _hd and not _ar and not _wp and not _tl and not _st and not _sk and not _sp and not _eq and not can_edit %}
-            <p class="muted" style="font-size:12px;margin:6px 0 0;">Select a class to auto-fill proficiencies.</p>
-            {% endif %}
+            {# Hidden mirror for legacy single-class consumers (item browser, etc.) #}
+            <input type="hidden" name="class_hit_die"        value="{{ sheet.get('class_hit_die','') }}">
+            <input type="hidden" name="class_armor"          value="{{ sheet.get('class_armor','') }}">
+            <input type="hidden" name="class_weapons"        value="{{ sheet.get('class_weapons','') }}">
+            <input type="hidden" name="class_tools"          value="{{ sheet.get('class_tools','') }}">
+            <input type="hidden" name="class_saving_throws"  value="{{ sheet.get('class_saving_throws','') }}">
+            <input type="hidden" name="class_skills"         value="{{ sheet.get('class_skills','') }}">
+            <input type="hidden" name="class_spellcasting"   value="{{ sheet.get('class_spellcasting','') }}">
+            <input type="hidden" name="class_equipment"      value="{{ sheet.get('class_equipment','') }}">
+            <input type="hidden" name="class_features"       value="{{ sheet.get('class_features','') }}">
         </fieldset>
 
         {# Features field is hidden in the UI but kept in the form so existing data round-trips on save. #}
@@ -1183,24 +1218,34 @@
     // ── Spellcasting Framework ─────────────────────────────────────────────────
     // Per-class spellcasting config.  Keys match Open5e class slugs (lowercase).
     const _SC = {
+        // ``cantrips`` is the per-class "Cantrips Known" column from the PHB
+        // (and Tasha's for artificer), indexed by class-level minus one.
+        // Paladin and Ranger have no cantrips by RAW, so we omit the field.
         bard:      { type:'known',    ability:'cha', slots:'full',
-                     known:[4,5,6,7,8,9,10,11,12,14,15,15,16,18,19,19,20,22,22,22] },
+                     known:[4,5,6,7,8,9,10,11,12,14,15,15,16,18,19,19,20,22,22,22],
+                     cantrips:[2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4] },
         cleric:    { type:'prepared', ability:'wis', slots:'full',
-                     prep:(m,l)=>Math.max(1,m+l) },
+                     prep:(m,l)=>Math.max(1,m+l),
+                     cantrips:[3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5] },
         druid:     { type:'prepared', ability:'wis', slots:'full',
-                     prep:(m,l)=>Math.max(1,m+l) },
+                     prep:(m,l)=>Math.max(1,m+l),
+                     cantrips:[2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4] },
         paladin:   { type:'prepared', ability:'cha', slots:'half',
                      prep:(m,l)=>Math.max(1,m+Math.floor(l/2)) },
         ranger:    { type:'known',    ability:'wis', slots:'half',
                      known:[0,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11] },
         sorcerer:  { type:'known',    ability:'cha', slots:'full',
-                     known:[2,3,4,5,6,7,8,9,10,11,12,12,13,13,14,14,15,15,15,15] },
+                     known:[2,3,4,5,6,7,8,9,10,11,12,12,13,13,14,14,15,15,15,15],
+                     cantrips:[4,4,4,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,6,6] },
         warlock:   { type:'known',    ability:'cha', slots:'pact',
-                     known:[2,3,4,5,6,7,8,9,10,10,11,11,12,12,13,13,14,14,15,15] },
+                     known:[2,3,4,5,6,7,8,9,10,10,11,11,12,12,13,13,14,14,15,15],
+                     cantrips:[2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4] },
         wizard:    { type:'prepared', ability:'int', slots:'full',
-                     prep:(m,l)=>Math.max(1,m+l) },
+                     prep:(m,l)=>Math.max(1,m+l),
+                     cantrips:[3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5] },
         artificer: { type:'prepared', ability:'int', slots:'half',
-                     prep:(m,l)=>Math.max(1,m+Math.ceil(l/2)) },
+                     prep:(m,l)=>Math.max(1,m+Math.ceil(l/2)),
+                     cantrips:[2,2,2,2,2,2,2,2,2,3,3,3,3,4,4,4,4,4,4,4] },
     };
     // Spell slot tables indexed by [classLevel-1][spellLevel-1]
     const _SLOTS = {
@@ -1225,91 +1270,230 @@
             [4,5],[4,5],[4,5],[4,5],
         ],
     };
-    const _PROF = [2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6]; // prof bonus by level-1
+    const _PROF = [2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,6,6,6,6]; // prof bonus by total-level-1
 
-    function _scData() { return _SC[_classVal()] || null; }
-
-    function _charLevel() {
+    // ── Multiclass-aware helpers ──
+    // Each class entry is {class, subclass, level, ...}. The first / primary
+    // class is the highest-level one; legacy single-class code paths read
+    // from there.
+    function _classSlug(name) {
+        return (name || '').toString().trim().toLowerCase().replace(/\s+/g, '-');
+    }
+    function _classes() {
+        if (typeof window._mcRoster === 'function') {
+            const arr = window._mcRoster();
+            if (Array.isArray(arr) && arr.length) return arr;
+        }
+        // Fallback: synthesise a single entry from the legacy hidden inputs
         const sf = document.getElementById('sheet-form');
-        return Math.max(1, Math.min(20, parseInt(sf?.querySelector('[name="level"]')?.value, 10) || 1));
+        const cn = sf?.querySelector('[name="class"]')?.value || '';
+        const sc = sf?.querySelector('[name="subclass"]')?.value || '';
+        const lv = parseInt(sf?.querySelector('[name="level"]')?.value, 10) || 1;
+        return cn ? [{ class: cn, subclass: sc, level: lv }] : [];
+    }
+    function _primaryEntry() {
+        const arr = _classes();
+        if (!arr.length) return null;
+        return arr.slice().sort((a, b) => (b.level || 0) - (a.level || 0))[0];
+    }
+    function _classVal() {  // primary class slug (legacy callers)
+        return _classSlug((_primaryEntry() || {}).class || '');
+    }
+    function _scForEntry(entry) {
+        return entry ? (_SC[_classSlug(entry.class || '')] || null) : null;
+    }
+    function _scData() { return _scForEntry(_primaryEntry()); }
+
+    function _classLevel(entry) {
+        return Math.max(1, Math.min(20, parseInt(entry && entry.level, 10) || 1));
+    }
+    // Total character level (sum across all classes). Used for proficiency-
+    // bonus lookups and feature-level gating.
+    function _charLevel() {
+        const arr = _classes();
+        if (!arr.length) return 1;
+        return Math.max(1, Math.min(20, arr.reduce((a, c) => a + (parseInt(c.level, 10) || 0), 0)));
     }
     function _abilityMod(key) {
         const sf = document.getElementById('sheet-form');
         const score = parseInt(sf?.querySelector(`[name="abilities.${key}"]`)?.value, 10) || 10;
         return Math.floor((score - 10) / 2);
     }
-    function _spellLimit() {
-        const sc = _scData();
+    function _spellLimitFor(entry) {
+        const sc = _scForEntry(entry);
         if (!sc) return null;
-        const lvl = _charLevel();
+        const lvl = _classLevel(entry);
         if (sc.type === 'prepared') return sc.prep(_abilityMod(sc.ability), lvl);
         return sc.known[Math.min(lvl - 1, 19)] ?? 0;
     }
+    function _spellLimit() {  // primary class limit (legacy callers)
+        return _spellLimitFor(_primaryEntry());
+    }
 
-    // Count spells toward the class limit (cantrips are always free)
-    function _spellCount(sc) {
+    // Count spells *tagged with this class* toward its limit. Untagged
+    // spells are charged to the primary class.
+    function _spellCountFor(entry) {
+        const sc = _scForEntry(entry);
         if (!sc) return 0;
+        const cslug = _classSlug(entry.class || '');
+        const primarySlug = _classVal();
+        const matches = (s) => {
+            const tag = (s.class || '').toLowerCase();
+            return tag === cslug || (!tag && cslug === primarySlug);
+        };
         return sc.type === 'prepared'
-            ? spells.filter(s => s.prepared && s.level > 0).length
-            : spells.filter(s => s.level > 0).length;
+            ? spells.filter(s => matches(s) && s.prepared && s.level > 0).length
+            : spells.filter(s => matches(s) && s.level > 0).length;
+    }
+    function _spellCount(sc) {  // legacy: primary class count
+        return _spellCountFor(_primaryEntry());
+    }
+
+    // ── Cantrips known: per-class table from PHB / Tasha's ──
+    function _cantripLimitFor(entry) {
+        const sc = _scForEntry(entry);
+        if (!sc || !Array.isArray(sc.cantrips)) return null;
+        const lvl = _classLevel(entry);
+        return sc.cantrips[Math.min(lvl - 1, 19)] ?? 0;
+    }
+    function _cantripCountFor(entry) {
+        if (!entry) return 0;
+        const cslug = _classSlug(entry.class || '');
+        const primarySlug = _classVal();
+        // Cantrips tagged with this class — untagged ones charge to primary
+        return spells.filter(s => {
+            if ((s.level || 0) !== 0) return false;
+            const tag = (s.class || '').toLowerCase();
+            return tag === cslug || (!tag && cslug === primarySlug);
+        }).length;
     }
 
     function updateScInfo() {
-        const sc  = _scData();
-        const bar = document.getElementById('sc-info-bar');
-        if (!bar) return;
-        if (!sc) { bar.style.display = 'none'; return; }
+        const bar  = document.getElementById('sc-info-bar');
+        const rows = document.getElementById('sc-info-rows');
+        const summaryEl = document.getElementById('sc-info-summary');
+        if (!bar || !rows) return;
 
-        const lvl  = _charLevel();
-        const mod  = _abilityMod(sc.ability);
-        const prof = _PROF[Math.min(lvl - 1, 19)];
-        const dc   = 8 + prof + mod;
-        const atk  = prof + mod;
+        const arr = _classes();
+        const totalLvl = _charLevel();
+        const prof = _PROF[Math.min(totalLvl - 1, 19)];
+        const abvMap = { str:'STR', dex:'DEX', con:'CON', int:'INT', wis:'WIS', cha:'CHA' };
 
-        const abvMap   = { str:'STR', dex:'DEX', con:'CON', int:'INT', wis:'WIS', cha:'CHA' };
-        const typeLabel = sc.type === 'prepared'
-            ? (sc.slots === 'half' ? 'Prepared ½-caster' : 'Prepared')
-            : (sc.slots === 'pact' ? 'Known (Pact Magic)' : 'Known');
+        rows.innerHTML = '';
+        const summaryParts = [];
+        let casterCount = 0;
+        arr.forEach(entry => {
+            const sc = _scForEntry(entry);
+            if (!sc) return;
+            casterCount++;
+            const cLvl  = _classLevel(entry);
+            const mod   = _abilityMod(sc.ability);
+            const dc    = 8 + prof + mod;
+            const atk   = prof + mod;
+            const limit = _spellLimitFor(entry) ?? 0;
+            const cur   = _spellCountFor(entry);
+            const over  = cur > limit;
+            const limitColor = over
+                ? 'var(--s-danger)'
+                : (cur >= limit && limit > 0 ? '#e0c070' : '#80e0a0');
+            const limitLabel = sc.type === 'prepared' ? 'Prep' : 'Known';
+            const ab = abvMap[sc.ability] || sc.ability.toUpperCase();
+            const cls = (entry.class || '').replace(/</g,'&lt;');
 
-        document.getElementById('sc-type').textContent    = typeLabel;
-        document.getElementById('sc-ability').textContent = abvMap[sc.ability] || sc.ability.toUpperCase();
-        document.getElementById('sc-dc').textContent      = dc;
-        document.getElementById('sc-atk').textContent     = (atk >= 0 ? '+' : '') + atk;
+            // Cantrip tracker — only for classes that learn cantrips.
+            const cantripLimit = _cantripLimitFor(entry);
+            const hasCantrips  = cantripLimit !== null;
+            const cantripCur   = hasCantrips ? _cantripCountFor(entry) : 0;
+            const cantripOver  = hasCantrips && cantripCur > cantripLimit;
+            const cantripColor = !hasCantrips
+                ? 'var(--s-mute)'
+                : (cantripOver ? 'var(--s-danger)'
+                    : (cantripCur >= cantripLimit && cantripLimit > 0 ? '#e0c070' : '#80e0a0'));
 
-        const limit  = _spellLimit();
-        const cur    = _spellCount(sc);
-        const overMax = cur > limit;
-        const el = {
-            label: document.getElementById('sc-limit-label'),
-            cur:   document.getElementById('sc-limit-cur'),
-            max:   document.getElementById('sc-limit-max'),
-        };
-        if (el.label) el.label.textContent = sc.type === 'prepared' ? 'Prepared' : 'Known';
-        if (el.cur) {
-            el.cur.textContent = cur;
-            el.cur.style.color = overMax ? 'var(--s-danger)' : (cur >= limit && limit > 0 ? '#e0c070' : '#80e0a0');
-        }
-        if (el.max) el.max.textContent = limit ?? '?';
+            // One compact line per class. Layout:
+            //   Druid Lv 5 · Prep · WIS · DC 15 · +7   Prep 4/8 · Cantrips 2/3
+            const row = document.createElement('div');
+            row.className = 'sc-info-row';
+            row.dataset.cslug = _classSlug(entry.class);
+            row.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;font-size:12px;line-height:1.4;';
+            row.innerHTML = `
+                <span style="font-weight:700;color:var(--s-accent);">${cls}</span>
+                <span style="color:var(--s-mute);">Lv ${cLvl}</span>
+                <span style="color:var(--s-border);">·</span>
+                <span style="color:var(--s-fg);">${limitLabel}</span>
+                <span style="color:var(--s-border);">·</span>
+                <span style="color:var(--s-fg);">${ab}</span>
+                <span style="color:var(--s-border);">·</span>
+                <span style="color:var(--s-fg);">DC ${dc}</span>
+                <span style="color:var(--s-border);">·</span>
+                <span style="color:var(--s-fg);">${(atk >= 0 ? '+' : '') + atk}</span>
+                <span style="margin-left:auto;font-weight:700;display:flex;gap:8px;align-items:baseline;">
+                    <span title="${limitLabel === 'Prep' ? 'Prepared' : 'Known'} leveled spells">
+                        <span style="color:var(--s-mute);font-weight:400;font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-right:3px;">${limitLabel}</span>
+                        <span style="color:${limitColor};">${cur}</span><span style="color:var(--s-mute);"> / </span><span style="color:var(--s-fg);">${limit}</span>
+                    </span>
+                    ${hasCantrips ? `
+                    <span style="color:var(--s-border);">·</span>
+                    <span title="Cantrips known at class level ${cLvl}">
+                        <span style="color:var(--s-mute);font-weight:400;font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-right:3px;">Cantrips</span>
+                        <span style="color:${cantripColor};">${cantripCur}</span><span style="color:var(--s-mute);"> / </span><span style="color:var(--s-fg);">${cantripLimit}</span>
+                    </span>` : ''}
+                </span>`;
+            rows.appendChild(row);
 
-        bar.style.display = '';
+            summaryParts.push(
+                hasCantrips
+                    ? `${entry.class || cls} ${cur}/${limit} (${cantripCur}/${cantripLimit} cantrips)`
+                    : `${entry.class || cls} ${cur}/${limit}`
+            );
+        });
+
+        bar.style.display = casterCount ? '' : 'none';
+        if (summaryEl) summaryEl.textContent = summaryParts.join(' · ');
+
+        // Toggle the Auto-fill button visibility to match
+        const af = document.getElementById('sc-autofill-btn');
+        if (af) af.style.display = casterCount ? '' : 'none';
     }
 
-    function applyClassSlots() {
-        const sc  = _scData();
-        const lvl = _charLevel();
-        const noteEl = document.getElementById('sc-autofill-note');
-        if (!sc) {
-            if (noteEl) noteEl.textContent = 'Select a class first.';
-            return;
+    // ── Collapse toggle for the spellcasting info bar ──
+    (function () {
+        const SC_COLL_KEY = `simplevtt_sc_collapsed_{{ char.id }}`;
+        const header  = document.getElementById('sc-info-header');
+        const rows    = document.getElementById('sc-info-rows');
+        const chevron = document.getElementById('sc-info-chevron');
+        const summary = document.getElementById('sc-info-summary');
+        if (!header || !rows) return;
+        let collapsed = false;
+        try { collapsed = localStorage.getItem(SC_COLL_KEY) === '1'; } catch {}
+        function apply() {
+            rows.style.display = collapsed ? 'none' : 'flex';
+            if (chevron) chevron.style.transform = collapsed ? 'rotate(-90deg)' : 'rotate(0deg)';
+            if (summary) summary.style.display = collapsed ? '' : 'none';
         }
-        const idx  = Math.min(lvl - 1, 19);
-        const rows = document.querySelectorAll('.ss-row');
+        apply();
+        header.addEventListener('click', () => {
+            collapsed = !collapsed;
+            try { localStorage.setItem(SC_COLL_KEY, collapsed ? '1' : ''); } catch {}
+            apply();
+        });
+    })();
 
+    function _applySlotsForEntry(entry, force) {
+        const sc = _scForEntry(entry);
+        if (!sc) return null;
+        const cslug = _classSlug(entry.class || '');
+        const lvl   = _classLevel(entry);
+        const idx   = Math.min(lvl - 1, 19);
+        const rows  = document.querySelectorAll(`.ss-row[data-cslug="${CSS.escape(cslug)}"]`);
+        let note    = '';
         if (sc.slots === 'pact') {
             const [slotCnt, slotLvl] = _SLOTS.pact[idx];
             rows.forEach(row => {
                 const rowLvl   = parseInt(row.dataset.lvl, 10);
                 const newTotal = (rowLvl === slotLvl) ? slotCnt : 0;
+                const curTotal = parseInt(row.dataset.total, 10) || 0;
+                if (!force && curTotal > 0 && curTotal !== newTotal) return;
                 const newUsed  = Math.min(parseInt(row.dataset.used, 10) || 0, newTotal);
                 row.dataset.total = newTotal;
                 row.dataset.used  = newUsed;
@@ -1318,15 +1502,16 @@
                 if (window._ssRenderPips) window._ssRenderPips(row);
                 if (window._ssSyncInputs) window._ssSyncInputs(row);
             });
-            if (noteEl) noteEl.textContent =
-                `Warlock Lv${lvl}: ${slotCnt} pact slot${slotCnt !== 1 ? 's' : ''} at spell level ${slotLvl}.`;
+            note = `${entry.class} Lv${lvl}: ${slotCnt} pact slot${slotCnt !== 1 ? 's' : ''} at spell level ${slotLvl}.`;
         } else {
             const table = _SLOTS[sc.slots];
-            if (!table) return;
+            if (!table) return null;
             const slotRow = table[idx];
             rows.forEach(row => {
                 const rowLvl   = parseInt(row.dataset.lvl, 10);
                 const newTotal = (rowLvl >= 1 && rowLvl <= slotRow.length) ? (slotRow[rowLvl - 1] ?? 0) : 0;
+                const curTotal = parseInt(row.dataset.total, 10) || 0;
+                if (!force && curTotal > 0 && curTotal !== newTotal) return;
                 const newUsed  = Math.min(parseInt(row.dataset.used, 10) || 0, newTotal);
                 row.dataset.total = newTotal;
                 row.dataset.used  = newUsed;
@@ -1335,14 +1520,33 @@
                 if (window._ssRenderPips) window._ssRenderPips(row);
                 if (window._ssSyncInputs) window._ssSyncInputs(row);
             });
-            const anyVis = Array.from(rows).some(r => parseInt(r.dataset.total) > 0);
-            const emptyMsg = document.getElementById('ss-empty-msg');
-            if (emptyMsg) emptyMsg.style.display = anyVis ? 'none' : '';
-            const cv = _classVal();
-            if (noteEl) noteEl.textContent =
-                `Applied ${cv.charAt(0).toUpperCase() + cv.slice(1)} Lv${lvl} slot table.`;
+            note = `Applied ${entry.class} Lv${lvl} slot table.`;
         }
+        return note;
     }
+
+    function applyClassSlots() {
+        const arr = _classes();
+        const notes = [];
+        arr.forEach(e => {
+            const n = _applySlotsForEntry(e, true);
+            if (n) notes.push(n);
+        });
+        const anyVis = Array.from(document.querySelectorAll('.ss-row')).some(r => parseInt(r.dataset.total) > 0);
+        const emptyMsg = document.getElementById('ss-empty-msg');
+        if (emptyMsg) emptyMsg.style.display = anyVis ? 'none' : '';
+        // The inline footer note is gone now that the button lives in the
+        // legend; surface the result as a toast instead.
+        const msg = notes.length ? notes.join(' ') : 'No spellcasting class.';
+        if (window.showToast) window.showToast(msg, notes.length ? 'success' : 'warning');
+    }
+
+    // Auto-fill: only writes into rows that are currently zero (so we don't
+    // clobber manual edits). Used by the multiclass module on roster change.
+    function _autoFillSlotsAll(force) {
+        _classes().forEach(e => _applySlotsForEntry(e, !!force));
+    }
+    window._mcAutoFillSlots = _autoFillSlotsAll;
     // ── End Spellcasting Framework ─────────────────────────────────────────────
 
     function spellRowHtml(s, idx) {
@@ -1407,15 +1611,22 @@
 
         // ── Update SC info bar ──
         updateScInfo();
-        const sc             = _scData();
-        const isPreparedCaster = sc && sc.type === 'prepared';
+        const arr = _classes();
+        const primarySlug = _classVal();
+        const isPreparedPrimary = (() => {
+            const sc = _scData();
+            return sc && sc.type === 'prepared';
+        })();
 
         // ── Update "Hide Unprepared" button visibility & label ──
-        // The toggle is purely visual, so it works on readonly sheets too.
+        // Show the toggle if ANY class on the sheet is a prepared caster.
+        const anyPreparedCaster = arr.some(e => {
+            const sc = _scForEntry(e);
+            return sc && sc.type === 'prepared';
+        });
         const hideBtn = document.getElementById('hide-unprepared-btn');
         if (hideBtn) {
-            hideBtn.style.display = isPreparedCaster ? '' : 'none';
-            // Eye-open = showing everything; eye-closed (see-no-evil) = hiding unprepared.
+            hideBtn.style.display = anyPreparedCaster ? '' : 'none';
             hideBtn.textContent   = hideUnprepared ? '🙈 Hiding unprepared' : '👁 Showing all';
             Object.assign(hideBtn.style, hideUnprepared
                 ? { background:'var(--accent-bg2)', borderColor:'var(--s-accent)', color:'var(--s-accent)' }
@@ -1425,56 +1636,114 @@
         // ── Clear container ──
         container.innerHTML = '';
 
-        if (!spells.length) {
-            container.insertAdjacentHTML('beforeend',
-                '<span class="muted" style="font-size:12px;">No spells added yet.</span>');
-            return;
-        }
+        // ── Build (class -> level -> spell indices) map. Untagged spells go
+        //     under the primary class. Use the order of the roster for class
+        //     iteration so the highest-level class shows first.            ──
+        const classOrder = arr.length ? arr.map(e => _classSlug(e.class || ''))
+                                      : [primarySlug || '__none__'];
+        const classLabel = {};
+        arr.forEach(e => { classLabel[_classSlug(e.class)] = e.class; });
+        const groups = {};                                  // {cslug: {lvl: [idx,...]}}
+        classOrder.forEach(cs => { groups[cs] = {}; });
 
-        // ── Build filtered groups ──
-        const groups = {};
         spells.forEach((s, i) => {
-            if (hideUnprepared && isPreparedCaster && s.level > 0 && !s.prepared) return;
+            const isPreparedHere = (() => {
+                const e = arr.find(en => _classSlug(en.class) === ((s.class || primarySlug || '').toLowerCase()));
+                const sc = _scForEntry(e);
+                return sc && sc.type === 'prepared';
+            })();
+            if (hideUnprepared && isPreparedHere && s.level > 0 && !s.prepared) return;
+            const cs = (s.class || primarySlug || '__none__').toLowerCase();
+            const bucket = groups[cs] || (groups[cs] = {});
             const l = s.level || 0;
-            (groups[l] = groups[l] || []).push(i);
+            (bucket[l] = bucket[l] || []).push(i);
         });
 
-        if (!Object.keys(groups).length) {
-            container.insertAdjacentHTML('beforeend',
-                '<span class="muted" style="font-size:12px;">No prepared spells — uncheck "Hide Unprepared" to see all.</span>');
-            return;
+        // Helper: list slot levels (1-9) where this class has total > 0
+        function _slotLevelsFor(cs) {
+            if (!slotsUi || !cs) return [];
+            const out = [];
+            for (let lvl = 1; lvl <= 9; lvl++) {
+                const r = slotsUi.querySelector(`.ss-row[data-cslug="${CSS.escape(cs)}"][data-lvl="${lvl}"]`);
+                if (r && parseInt(r.dataset.total) > 0) out.push(lvl);
+            }
+            return out;
         }
 
-        // ── Render each level group ──
-        Object.keys(groups).sort((a, b) => +a - +b).forEach(lvl => {
-            const groupDiv = document.createElement('div');
-            groupDiv.style.marginBottom = '10px';
+        // ── Render each class's section ──
+        // Iterate every roster class, then any spell-tagged slugs that don't
+        // appear on the roster. Each class gets its own header card so the
+        // "Cantrips - Druid", "Level 1 Spells - Druid", … sections live under
+        // a clearly-labelled section, and each class's slot rows always show
+        // (even at levels with no spells yet).
+        const stray = Object.keys(groups).filter(cs =>
+            classOrder.indexOf(cs) < 0
+            && Object.values(groups[cs] || {}).some(arr2 => arr2.length > 0)
+        );
+        const orderedClasses = classOrder.concat(stray);
+        let rendered = 0;
+        orderedClasses.forEach(cs => {
+            const byLvl = groups[cs] || {};
+            const slotLvls = _slotLevelsFor(cs);
+            const spellLvls = Object.keys(byLvl).filter(l => byLvl[l].length).map(l => +l);
+            const allLvls = Array.from(new Set([...spellLvls, ...slotLvls])).sort((a, b) => a - b);
+            if (!allLvls.length) return;
+            rendered++;
+            const niceClass = classLabel[cs] || (cs === '__none__' ? '' : cs);
 
-            // Pull the matching slot row above this level's spells (levels 1–9 only)
-            if (+lvl >= 1 && slotsUi) {
-                const slotRow = slotsUi.querySelector(`.ss-row[data-lvl="${lvl}"]`);
-                if (slotRow && parseInt(slotRow.dataset.total) > 0) {
-                    slotRow.style.display       = 'flex';
-                    slotRow.style.marginBottom  = '5px';
-                    slotRow.style.paddingBottom = '5px';
-                    slotRow.style.borderBottom  = '1px solid var(--s-border)';
-                    groupDiv.appendChild(slotRow);
-                    if (window._ssRenderPips) window._ssRenderPips(slotRow);
-                }
+            // Class section header — divider + class name (e.g. "── Druid ──")
+            if (niceClass) {
+                const sectionHdr = document.createElement('div');
+                sectionHdr.style.cssText = 'display:flex;align-items:center;gap:8px;margin:8px 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-accent);';
+                sectionHdr.innerHTML = `<span style="flex:0 0 auto;">${niceClass}</span><span style="flex:1;height:1px;background:var(--s-border);"></span>`;
+                container.appendChild(sectionHdr);
             }
 
-            // Level heading
-            const heading = document.createElement('div');
-            heading.style.cssText = 'font-size:10px;color:var(--s-mute);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;padding-left:2px;';
-            heading.textContent = +lvl === 0 ? 'Cantrips' : `Level ${lvl} Spells`;
-            groupDiv.appendChild(heading);
+            allLvls.forEach(lvl => {
+                const groupDiv = document.createElement('div');
+                groupDiv.style.marginBottom = '10px';
 
-            // Spell rows (via innerHTML on the group div, not the container)
-            groupDiv.insertAdjacentHTML('beforeend',
-                groups[lvl].map(idx => spellRowHtml(spells[idx], idx)).join(''));
+                // Slot row for (class, level) — always shown when total > 0
+                if (lvl >= 1 && slotsUi) {
+                    const slotRow = slotsUi.querySelector(
+                        `.ss-row[data-cslug="${CSS.escape(cs)}"][data-lvl="${lvl}"]`
+                    );
+                    if (slotRow && parseInt(slotRow.dataset.total) > 0) {
+                        slotRow.style.display       = 'flex';
+                        slotRow.style.marginBottom  = '5px';
+                        slotRow.style.paddingBottom = '5px';
+                        slotRow.style.borderBottom  = '1px solid var(--s-border)';
+                        groupDiv.appendChild(slotRow);
+                        if (window._ssRenderPips) window._ssRenderPips(slotRow);
+                    }
+                }
 
-            container.appendChild(groupDiv);
+                // "Level N Spells - <Class>" heading
+                const heading = document.createElement('div');
+                heading.style.cssText = 'font-size:10px;color:var(--s-mute);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;padding-left:2px;';
+                const baseLabel = lvl === 0 ? 'Cantrips' : `Level ${lvl} Spells`;
+                heading.textContent = niceClass ? `${baseLabel} - ${niceClass}` : baseLabel;
+                groupDiv.appendChild(heading);
+
+                const spellIdxs = byLvl[lvl] || [];
+                if (spellIdxs.length) {
+                    groupDiv.insertAdjacentHTML('beforeend',
+                        spellIdxs.map(idx => spellRowHtml(spells[idx], idx)).join(''));
+                } else {
+                    // Level has slots but no spells yet — show a hint instead.
+                    groupDiv.insertAdjacentHTML('beforeend',
+                        `<div class="muted" style="font-size:11px;font-style:italic;padding:2px 4px;">No ${lvl === 0 ? 'cantrips' : 'spells'} learned at this level yet.</div>`);
+                }
+                container.appendChild(groupDiv);
+            });
         });
+
+        if (!rendered) {
+            container.insertAdjacentHTML('beforeend',
+                spells.length
+                    ? '<span class="muted" style="font-size:12px;">No prepared spells — uncheck "Hide Unprepared" to see all.</span>'
+                    : '<span class="muted" style="font-size:12px;">No spells added yet.</span>');
+        }
 
         // ── Wire event listeners ──
         container.querySelectorAll('.sp-prep').forEach(inp =>
@@ -1502,11 +1771,14 @@
                 const s = spells[idx];
                 if (!s) return;
                 const lvl = parseInt(s.level, 10) || 0;
+                const spellClass = (s.class || _classVal() || '').toLowerCase();
 
-                // Optimistically decrement the matching slot pip (cantrips skip this)
+                // Optimistically decrement the matching (class, level) slot pip
                 let slotRow = null, prevUsed = 0;
                 if (lvl >= 1) {
-                    slotRow = document.querySelector(`.ss-row[data-lvl="${lvl}"]`);
+                    slotRow = spellClass
+                        ? document.querySelector(`.ss-row[data-cslug="${CSS.escape(spellClass)}"][data-lvl="${lvl}"]`)
+                        : document.querySelector(`.ss-row[data-lvl="${lvl}"]`);
                     if (slotRow) {
                         const total = parseInt(slotRow.dataset.total) || 0;
                         prevUsed = parseInt(slotRow.dataset.used) || 0;
@@ -1529,6 +1801,7 @@
                             character_id: {{ char.id }},
                             spell_index: idx,
                             slot_level: lvl,
+                            class_slug: spellClass,
                         }),
                     });
                     if (!resp.ok) {
@@ -1555,6 +1828,8 @@
             }));
     }
 
+    // Expose so the multiclass module can re-render when the roster changes
+    window._mcRenderSpells = renderSpells;
     renderSpells();
 
     // ── Hide Unprepared toggle (works on readonly sheets too — purely visual) ──
@@ -1592,6 +1867,7 @@
             save_ability: (document.getElementById('cs-save')?.value  || ''),
             desc:         (document.getElementById('cs-desc')?.value  || '').trim(),
             _slug: '',
+            class:        _classVal(),
         });
         syncSpells(); renderSpells();
         ['cs-name','cs-school','cs-cast','cs-range','cs-dur','cs-comp','cs-damage','cs-healing','cs-desc']
@@ -1634,21 +1910,58 @@
     let sbCurrentLvl = 'all';
     let sbCurrentResults = [];
     let sbSelectedIdx = -1;
+    // Which class slug is "casting" this spell. Drives spell_list= filter
+    // + the tag added on import. Defaults to the primary class but the user
+    // can switch via the class chips.
+    let sbCurrentClass = '';
 
-    function _classVal() {
-        const el = document.getElementById('class-select') || document.querySelector('[name="class"]');
-        if (!el) return '';
-        // The class <select> is populated asynchronously by sheet.js after
-        // Open5e returns the class list; until that finishes el.value is ''.
-        // The server stamps the saved class on data-current at render time
-        // so we have something to read immediately.
-        return ((el.value || el.dataset?.current || '') + '').toLowerCase().trim();
+    function _availableClasses() {
+        const arr = (typeof window._mcRoster === 'function') ? window._mcRoster() : _classes();
+        return (arr || []).map(e => ({ slug: _classSlug(e.class), label: e.class })).filter(x => x.slug);
     }
+
+    function _renderClassChips() {
+        const wrap = document.getElementById('sb-class-chips');
+        if (!wrap) return;
+        const classes = _availableClasses();
+        if (!classes.length) {
+            wrap.innerHTML = '<span style="font-size:11px;color:var(--s-mute);font-style:italic;">No class set on this character.</span>';
+            return;
+        }
+        if (!sbCurrentClass || !classes.find(c => c.slug === sbCurrentClass)) {
+            sbCurrentClass = classes[0].slug;
+        }
+        wrap.innerHTML = classes.map(c => {
+            const active = c.slug === sbCurrentClass;
+            return `<button type="button" class="sb-class-chip" data-cslug="${c.slug}"
+                style="font-size:11px;padding:3px 12px;border-radius:10px;
+                       background:${active ? 'var(--accent-bg2)' : 'transparent'};
+                       border:1px solid ${active ? 'var(--s-accent)' : 'var(--s-border)'};
+                       color:${active ? 'var(--s-accent)' : 'var(--s-mute)'};
+                       font-weight:${active ? '700' : '400'};">${c.label}</button>`;
+        }).join('');
+        wrap.querySelectorAll('.sb-class-chip').forEach(btn => {
+            btn.addEventListener('click', () => {
+                sbCurrentClass = btn.dataset.cslug;
+                _renderClassChips();
+                _sbUpdateLimitBar();
+                _updateLvlButtons();
+                _doSearch();
+            });
+        });
+    }
+    // (The legacy _classVal helper is now defined above and returns the
+    //  primary class slug. The browser uses sbCurrentClass instead so the
+    //  user can switch which class is being searched/added against.)
 
     function _availableLevels() {
         const avail = new Set(['all', '0']);
+        // Only count rows belonging to the currently-selected class (or all
+        // rows when no class chip is active).
+        const sel = sbCurrentClass || _classVal();
         document.querySelectorAll('.ss-row').forEach(r => {
-            if (parseInt(r.dataset.total) > 0) avail.add(r.dataset.lvl);
+            if (parseInt(r.dataset.total) <= 0) return;
+            if (!sel || r.dataset.cslug === sel) avail.add(r.dataset.lvl);
         });
         return avail;
     }
@@ -1666,7 +1979,14 @@
     }
 
     function _isOnSheet(slug, name) {
-        return spells.some(s => (slug && s._slug === slug) || s.name === name);
+        // The same spell can be on the sheet under multiple classes (multi-
+        // class casters), so we only mark "on sheet" for the *current* class
+        // context — letting the browser still let you add it for another.
+        const cls = sbCurrentClass || _classVal();
+        return spells.some(s => {
+            const sameClass = !cls || (s.class || '').toLowerCase() === cls;
+            return sameClass && ((slug && s._slug === slug) || s.name === name);
+        });
     }
 
     function _renderList() {
@@ -1700,29 +2020,45 @@
     }
 
     function _sbUpdateLimitBar() {
-        const sc    = _scData();
         const bar   = document.getElementById('sb-limit-bar');
         const txt   = document.getElementById('sb-limit-text');
         if (!bar || !txt) return;
-        if (!sc) { bar.style.display = 'none'; return; }
-        const limit = _spellLimit();
-        const cur   = _spellCount(sc);
+        // Look up the entry matching the currently-selected class chip.
+        const arr = _classes();
+        const entry = arr.find(e => _classSlug(e.class) === sbCurrentClass) || _primaryEntry();
+        const sc = _scForEntry(entry);
+        if (!sc || !entry) { bar.style.display = 'none'; return; }
+        const limit = _spellLimitFor(entry);
+        const cur   = _spellCountFor(entry);
         const label = sc.type === 'prepared' ? 'Prepared' : 'Known';
         const over  = cur > limit;
-        txt.innerHTML = `<b style="color:${over ? '#e07070' : '#80e0a0'};">${label}: ${cur} / ${limit}</b>`
+        const className = entry.class || sbCurrentClass;
+        // Cantrip tracker (only when the class learns cantrips)
+        const cantripLimit = _cantripLimitFor(entry);
+        const cantripCur   = cantripLimit !== null ? _cantripCountFor(entry) : 0;
+        const cantripOver  = cantripLimit !== null && cantripCur > cantripLimit;
+        const cantripChip = cantripLimit !== null
+            ? ` <span style="color:var(--s-border);">·</span> <b style="color:${cantripOver ? '#e07070' : '#80e0a0'};">Cantrips: ${cantripCur} / ${cantripLimit}</b>`
+            : '';
+        txt.innerHTML = `<b style="color:${over ? '#e07070' : '#80e0a0'};">${className} — ${label}: ${cur} / ${limit}</b>${cantripChip}`
             + (sc.type === 'prepared'
-                ? ` <span style="color:var(--s-mute);">· Cantrips are free · Prepared = ${sc.ability.toUpperCase()} mod + level</span>`
-                : ` <span style="color:var(--s-mute);">· Cantrips are free · From the ${_classVal()} spells known table</span>`);
+                ? ` <span style="color:var(--s-mute);">· Prepared = ${sc.ability.toUpperCase()} mod + class level</span>`
+                : ` <span style="color:var(--s-mute);">· From the ${className} spells known table</span>`);
         bar.style.display = 'flex';
     }
 
     function _showDetail(s) {
         if (!s) { sbDetailEl.innerHTML = ''; return; }
         const onSheet = _isOnSheet(s.slug, s.name);
-        const sc      = _scData();
-        const limit   = _spellLimit();
-        const cur     = _spellCount(sc);
+        const arr     = _classes();
+        const entry   = arr.find(e => _classSlug(e.class) === sbCurrentClass) || _primaryEntry();
+        const sc      = _scForEntry(entry);
+        const limit   = _spellLimitFor(entry);
+        const cur     = _spellCountFor(entry);
+        const cantripLimit = _cantripLimitFor(entry);
+        const cantripCur   = cantripLimit !== null ? _cantripCountFor(entry) : 0;
         const wouldExceed = !onSheet && sc && s.level > 0 && cur >= limit;
+        const wouldExceedCantrip = !onSheet && sc && s.level === 0 && cantripLimit !== null && cantripCur >= cantripLimit;
         const lvlText = s.level === 0 ? 'Cantrip' : `Level ${s.level}`;
 
         let limitNote = '';
@@ -1737,6 +2073,18 @@
                 const remaining = limit - cur;
                 limitNote = `<div style="margin-bottom:10px;font-size:11px;color:var(--s-mute);">
                     You can ${label} <b style="color:var(--s-fg);">${remaining}</b> more spell${remaining !== 1 ? 's' : ''} (${cur} / ${limit}).
+                </div>`;
+            }
+        } else if (sc && !onSheet && s.level === 0 && cantripLimit !== null) {
+            if (wouldExceedCantrip) {
+                limitNote = `<div style="margin-bottom:12px;padding:6px 10px;background:var(--s-err-bg);border:1px solid var(--s-danger);border-radius:4px;font-size:11px;color:var(--s-err-fg);">
+                    ⚠ Adding this cantrip will exceed your cantrips-known limit (${cantripCur} / ${cantripLimit}).
+                    Remove a cantrip first, or level up.
+                </div>`;
+            } else {
+                const remaining = cantripLimit - cantripCur;
+                limitNote = `<div style="margin-bottom:10px;font-size:11px;color:var(--s-mute);">
+                    You can learn <b style="color:var(--s-fg);">${remaining}</b> more cantrip${remaining !== 1 ? 's' : ''} (${cantripCur} / ${cantripLimit}).
                 </div>`;
             }
         }
@@ -1765,13 +2113,18 @@
             </button>`;
 
         document.getElementById('sb-toggle-btn')?.addEventListener('click', () => {
+            const cls = sbCurrentClass || _classVal();
             if (_isOnSheet(s.slug, s.name)) {
-                const idx = spells.findIndex(sp => (s.slug && sp._slug === s.slug) || sp.name === s.name);
+                // Only remove the entry tagged with the current class so a
+                // multiclass char can keep the spell on another class's list.
+                const idx = spells.findIndex(sp => {
+                    const sameClass = !cls || (sp.class || '').toLowerCase() === cls;
+                    return sameClass && ((s.slug && sp._slug === s.slug) || sp.name === s.name);
+                });
                 if (idx !== -1) { spells.splice(idx, 1); syncSpells(); renderSpells(); }
             } else {
                 // For known casters all spells are always known (prepared=true)
                 // For prepared casters new spells start unprepared so players choose deliberately
-                const sc = _scData();
                 const startPrepared = !sc || sc.type === 'known';
                 spells.push({
                     name: s.name, level: s.level, school: s.school,
@@ -1782,6 +2135,7 @@
                     damage: s.damage || '', save_ability: s.save_ability || '',
                     healing: s.healing || '', aoe_targets: s.aoe_targets || 1,
                     desc: s.desc, _slug: s.slug || '',
+                    class: cls,
                 });
                 syncSpells(); renderSpells();
             }
@@ -1792,16 +2146,19 @@
     }
 
     function _showPrompt() {
-        const cv = _classVal();
-        const hint = cv
-            ? `Showing spells for <strong style="color:var(--s-accent);">${_esc(cv.charAt(0).toUpperCase() + cv.slice(1))}</strong> — select a level or search by name.`
-            : 'Select a level filter or search by name to browse spells.';
+        const cv = sbCurrentClass || _classVal();
+        const arr = _classes();
+        const entry = arr.find(e => _classSlug(e.class) === cv);
+        const niceName = (entry && entry.class) || cv;
+        const hint = niceName
+            ? `Showing spells for <strong style="color:var(--s-accent);">${_esc(niceName)}</strong> — select a level or search by name.`
+            : 'Add a class above first, then select a level filter or search by name to browse spells.';
         sbListEl.innerHTML = `<div style="padding:14px;font-size:12px;color:var(--s-mute);line-height:1.6;">${hint}</div>`;
     }
 
     async function _doSearch() {
         const q  = (sbSearchEl?.value || '').trim();
-        const cv = _classVal();
+        const cv = sbCurrentClass || _classVal();
         // If nothing to filter on, just show the prompt
         if (!q && sbCurrentLvl === 'all' && !cv) { _showPrompt(); return; }
 
@@ -1840,6 +2197,7 @@
     document.getElementById('spell-browser-btn')?.addEventListener('click', () => {
         overlay.style.display = '';
         sbCurrentLvl = 'all';
+        _renderClassChips();
         _updateLvlButtons();
         _sbUpdateLimitBar();
         _showPrompt();
@@ -2100,30 +2458,43 @@
         artificer:  { armor: ['light','medium','shield'], weapons: ['simple'],            specific: [] },
     };
 
-    function _classSlug() {
+    // Multiclass-aware: gather every class's proficiency block and union them.
+    function _classSlugs() {
+        const arr = (typeof window._mcRoster === 'function') ? window._mcRoster() : [];
+        const out = (arr || []).map(e => (e.class || '').toLowerCase().trim()).filter(Boolean);
+        if (out.length) return out;
+        // Fallback: legacy single-class hidden input
         const el = document.getElementById('class-select') || document.querySelector('[name="class"]');
-        return (el?.value || '').toLowerCase().trim();
+        const v = (el?.value || '').toLowerCase().trim();
+        return v ? [v] : [];
     }
-    function _classProfs() {
-        return CLASS_PROFS[_classSlug()] || null;
+    // Legacy single-slug helper for the label
+    function _classSlug() { return _classSlugs()[0] || ''; }
+
+    function _classProfsList() {
+        return _classSlugs().map(s => CLASS_PROFS[s]).filter(Boolean);
     }
 
     function _isProficient(it, cat) {
-        const prof = _classProfs();
+        const profs = _classProfsList();
         // No class set, or magic items, or unknown class: don't filter
-        if (!prof || cat === 'magicitems') return true;
+        if (!profs.length || cat === 'magicitems') return true;
         const itemCat = (it.category || '').toLowerCase();
+        const itemName = (it.name || '').toLowerCase();
         if (cat === 'weapons') {
-            if (prof.weapons.some(w => itemCat.includes(w))) return true;
-            const itemName = (it.name || '').toLowerCase();
-            if ((prof.specific || []).some(w => itemName.includes(w))) return true;
-            return false;
+            // Proficient if ANY class on the sheet covers this weapon.
+            return profs.some(prof => {
+                if (prof.weapons.some(w => itemCat.includes(w))) return true;
+                if ((prof.specific || []).some(w => itemName.includes(w))) return true;
+                return false;
+            });
         }
         if (cat === 'armor') {
-            // Open5e armor categories include the literal words "Light Armor",
-            // "Medium Armor", "Heavy Armor", or "Shield".
-            if (itemCat.includes('shield')) return prof.armor.includes('shield');
-            return prof.armor.some(a => itemCat.includes(a));
+            const isShield = itemCat.includes('shield');
+            return profs.some(prof => {
+                if (isShield) return prof.armor.includes('shield');
+                return prof.armor.some(a => itemCat.includes(a));
+            });
         }
         return true;
     }
@@ -2138,12 +2509,15 @@
     }
 
     function _updateProfClassLabel() {
-        const slug = _classSlug();
-        const lbl  = document.getElementById('ib-prof-class');
+        const slugs = _classSlugs();
+        const lbl   = document.getElementById('ib-prof-class');
         if (!lbl) return;
-        if (!slug)                lbl.textContent = '(no class set)';
-        else if (!CLASS_PROFS[slug]) lbl.textContent = `(${slug} — unknown class, no filter)`;
-        else                      lbl.textContent = `(${slug})`;
+        if (!slugs.length) { lbl.textContent = '(no class set)'; return; }
+        const known = slugs.filter(s => CLASS_PROFS[s]);
+        const unknown = slugs.filter(s => !CLASS_PROFS[s]);
+        if (!known.length) { lbl.textContent = `(${slugs.join(', ')} — unknown, no filter)`; return; }
+        const note = unknown.length ? ` + ${unknown.length} unknown` : '';
+        lbl.textContent = `(${known.join(', ')}${note})`;
     }
 
     function _setCat(cat) {
@@ -2316,6 +2690,11 @@
     // If the user changes class while the browser is open, refresh the filter
     const classSelEl = document.getElementById('class-select') || document.querySelector('[name="class"]');
     classSelEl?.addEventListener('change', () => {
+        _updateProfClassLabel();
+        if (overlay.style.display !== 'none') _renderList();
+    });
+    // Multiclass roster changes (add/remove/level/class swap)
+    document.addEventListener('vtt:mc-changed', () => {
         _updateProfClassLabel();
         if (overlay.style.display !== 'none') _renderList();
     });

@@ -48,7 +48,12 @@ from ..models import (
     Visibility,
 )
 from ..realtime import hub
-from ..sheet_templates import get_template
+from ..sheet_templates import (
+    class_levels_summary,
+    class_slug as _class_slug,
+    get_template,
+    normalize_dnd5e_sheet,
+)
 from ..templates import templates
 
 
@@ -309,6 +314,11 @@ def campaign_view(
         db.query(Token).filter(Token.map_id == active_map.id).all() if active_map else []
     )
     characters = db.query(Character).filter(Character.campaign_id == campaign.id).all()
+    # Normalize D&D 5e sheets so the tabletop mini-sheet sees a multiclass-aware
+    # ``classes`` roster + nested ``spell_slots`` even on legacy data.
+    for _ch in characters:
+        if _ch.template == "dnd5e" and isinstance(_ch.sheet, dict):
+            normalize_dnd5e_sheet(_ch.sheet)
     rolls = (
         db.query(DiceRoll)
         .filter(DiceRoll.campaign_id == campaign.id)
@@ -1304,6 +1314,8 @@ async def cast_spell(
         raise HTTPException(403, "Not your character")
 
     sheet = dict(char.sheet or {})
+    if char.template == "dnd5e":
+        normalize_dnd5e_sheet(sheet)
     spells = list(sheet.get("spells") or [])
     if spell_index >= len(spells):
         raise HTTPException(404, "Spell not found")
@@ -1316,25 +1328,45 @@ async def cast_spell(
     if slot_level < spell_level:
         slot_level = spell_level
 
+    # Determine which class's slots to deduct from.  Body may pass
+    # ``class_slug`` explicitly; otherwise fall back to the spell's tagged
+    # class, then the primary (highest-level) class on the sheet.
+    body_slug = (body.get("class_slug") or "").strip().lower()
+    spell_class_slug = (spell.get("class") or "").strip().lower()
+    primary_slug = _class_slug(sheet.get("class") or "")
+    cslug = body_slug or spell_class_slug or primary_slug
+
     # Decrement slot when this is a leveled spell (cantrips are free)
     updated_slot = None
     if spell_level >= 1:
-        slots = dict(sheet.get("spell_slots") or {})
+        all_slots = dict(sheet.get("spell_slots") or {})
+        per_class = dict(all_slots.get(cslug) or {})
         slot_key = str(slot_level)
-        slot = dict(slots.get(slot_key) or {"total": 0, "used": 0})
+        slot = dict(per_class.get(slot_key) or {"total": 0, "used": 0})
         total = int(slot.get("total") or 0)
         used = int(slot.get("used") or 0)
         if total <= 0 or used >= total:
             return JSONResponse(
                 status_code=409,
-                content={"error": "no_slot", "level": slot_level, "spell_name": spell.get("name", "")},
+                content={
+                    "error": "no_slot",
+                    "level": slot_level,
+                    "class_slug": cslug,
+                    "spell_name": spell.get("name", ""),
+                },
             )
         slot["used"] = used + 1
-        slots[slot_key] = slot
-        sheet["spell_slots"] = slots
+        per_class[slot_key] = slot
+        all_slots[cslug] = per_class
+        sheet["spell_slots"] = all_slots
         char.sheet = sheet
         db.commit()
-        updated_slot = {"level": slot_level, "total": total, "used": slot["used"]}
+        updated_slot = {
+            "class_slug": cslug,
+            "level": slot_level,
+            "total": total,
+            "used": slot["used"],
+        }
 
     # Resolve caster display info (same shape as roll broadcasts)
     membership = (
@@ -1393,6 +1425,7 @@ async def cast_spell(
             "type": "spell_slot_update",
             "data": {
                 "character_id": char.id,
+                "class_slug": updated_slot["class_slug"],
                 "level": updated_slot["level"],
                 "total": updated_slot["total"],
                 "used": updated_slot["used"],
@@ -1526,6 +1559,8 @@ async def rest_character(
         raise HTTPException(403, "Not your character")
 
     sheet = dict(char.sheet or {})
+    if char.template == "dnd5e":
+        normalize_dnd5e_sheet(sheet)
     hp = dict(sheet.get("hp") or {})
     hp_max = int(hp.get("max") or 0)
     hp_cur = int(hp.get("current") or 0)
@@ -1538,13 +1573,30 @@ async def rest_character(
         hp["temp"] = 0
         hd["max"] = hd_max
         hd["current"] = min(hd_max, hd_cur + max(1, hd_max // 2)) if hd_max > 0 else hd_cur
+        # Reset slots across every class's nested slot map.
         slots = dict(sheet.get("spell_slots") or {})
-        new_slots = {}
-        for k, v in slots.items():
-            if isinstance(v, dict):
-                new_slots[k] = {**v, "used": 0}
+        new_slots: dict = {}
+        broadcasts: list[tuple[str, int, int]] = []  # (class_slug, level, total)
+        for cslug, by_lvl in slots.items():
+            if isinstance(by_lvl, dict):
+                cleaned: dict = {}
+                for lvl_key, slot_obj in by_lvl.items():
+                    if isinstance(slot_obj, dict):
+                        cleaned[lvl_key] = {**slot_obj, "used": 0}
+                        try:
+                            total = int(slot_obj.get("total") or 0)
+                        except (TypeError, ValueError):
+                            total = 0
+                        if total > 0:
+                            try:
+                                broadcasts.append((cslug, int(lvl_key), total))
+                            except (TypeError, ValueError):
+                                pass
+                    else:
+                        cleaned[lvl_key] = slot_obj
+                new_slots[cslug] = cleaned
             else:
-                new_slots[k] = v
+                new_slots[cslug] = by_lvl
         sheet["spell_slots"] = new_slots
         sheet["hp"] = hp
         sheet["hit_dice"] = hd
@@ -1552,20 +1604,20 @@ async def rest_character(
         db.commit()
 
         # Broadcast slot-pip updates so any open sheet / mini-sheet re-renders
-        for k, v in new_slots.items():
-            if isinstance(v, dict) and int(v.get("total") or 0) > 0:
-                try:
-                    await hub.broadcast(campaign_id, {
-                        "type": "spell_slot_update",
-                        "data": {
-                            "character_id": char.id,
-                            "level": int(k),
-                            "total": int(v.get("total") or 0),
-                            "used": 0,
-                        },
-                    })
-                except Exception:
-                    pass
+        for cslug, lvl, total in broadcasts:
+            try:
+                await hub.broadcast(campaign_id, {
+                    "type": "spell_slot_update",
+                    "data": {
+                        "character_id": char.id,
+                        "class_slug": cslug,
+                        "level": lvl,
+                        "total": total,
+                        "used": 0,
+                    },
+                })
+            except Exception:
+                pass
 
         return {"ok": True, "type": "long", "hp": hp, "hit_dice": hd}
 
@@ -2812,15 +2864,19 @@ def get_template_sheet(
     char_obj.template = tmpl.template
 
     tname = "sheet_dnd5e.html" if tmpl.template == "dnd5e" else "sheet_generic.html"
+    tmpl_sheet = tmpl.sheet or get_template(tmpl.template)
+    if tmpl.template == "dnd5e":
+        normalize_dnd5e_sheet(tmpl_sheet)
     return templates.TemplateResponse(tname, {
         "request": request,
         "char": char_obj,
-        "sheet": tmpl.sheet or get_template(tmpl.template),
+        "sheet": tmpl_sheet,
         "can_edit": True,
         "campaign": campaign,
         "sheet_save_url": f"/api/campaign/{campaign_id}/templates/{tmpl_id}",
         "sheet_save_method": "PATCH",
         "portrait_upload_url": f"/api/campaign/{campaign_id}/templates/{tmpl_id}/image",
+        "class_roster": class_levels_summary(tmpl_sheet) if tmpl.template == "dnd5e" else [],
     })
 
 
@@ -2842,14 +2898,18 @@ def get_sheet(
         raise HTTPException(403, "Forbidden")
     can_edit = _user_is_gm(user, campaign, db) or char.owner_user_id == user.id
     template_name = "sheet_dnd5e.html" if char.template == "dnd5e" else "sheet_generic.html"
+    sheet = char.sheet or get_template(char.template)
+    if char.template == "dnd5e":
+        normalize_dnd5e_sheet(sheet)
     return templates.TemplateResponse(
         template_name,
         {
             "request": request,
             "char": char,
-            "sheet": char.sheet or get_template(char.template),
+            "sheet": sheet,
             "can_edit": can_edit,
             "campaign": campaign,
+            "class_roster": class_levels_summary(sheet) if char.template == "dnd5e" else [],
         },
     )
 
@@ -2900,6 +2960,46 @@ _SHEET_PATCH_KEYS = {
     "race_trait_items",         # list[{name, desc}]
 }
 
+# Keys that route into a specific entry of ``sheet["classes"]`` when the
+# caller passes ``class_slug``.  These are the per-class subclass cache keys.
+_CLASS_SCOPED_KEYS = {
+    "subclass_features_data",
+    "subclass_name",
+    "subclass_flavor",
+    "subclass_features",
+}
+
+
+def _apply_sheet_patch(sheet: dict, body: dict) -> dict:
+    """Merge whitelisted keys onto a sheet, routing per-class fields into
+    the right entry of ``sheet["classes"]`` when ``class_slug`` is supplied."""
+    patch = {k: v for k, v in body.items() if k in _SHEET_PATCH_KEYS}
+    if not patch:
+        return sheet
+    cslug = (body.get("class_slug") or "").strip().lower()
+    sheet = {**(sheet or {})}
+    if cslug:
+        # Ensure classes[] exists, then merge per-class keys into the matching entry
+        normalize_dnd5e_sheet(sheet)
+        classes = list(sheet.get("classes") or [])
+        target_idx = next(
+            (i for i, c in enumerate(classes)
+             if isinstance(c, dict) and _class_slug(c.get("class") or "") == cslug),
+            None,
+        )
+        if target_idx is not None:
+            entry = dict(classes[target_idx])
+            for k, v in patch.items():
+                if k in _CLASS_SCOPED_KEYS:
+                    entry[k] = v
+            classes[target_idx] = entry
+            sheet["classes"] = classes
+            # Re-mirror primary onto top-level
+            normalize_dnd5e_sheet(sheet)
+    # Always merge into top-level too (legacy callers / non-class-scoped keys).
+    sheet.update({k: v for k, v in patch.items() if k not in _CLASS_SCOPED_KEYS or not cslug})
+    return sheet
+
 
 @router.patch("/api/campaign/{campaign_id}/character/{char_id}/sheet-fields")
 async def patch_sheet_fields(
@@ -2917,10 +3017,8 @@ async def patch_sheet_fields(
         raise HTTPException(404, "Not found")
     if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
         raise HTTPException(403, "Forbidden")
-    patch = {k: v for k, v in body.items() if k in _SHEET_PATCH_KEYS}
-    if patch:
-        char.sheet = {**(char.sheet or {}), **patch}
-        db.commit()
+    char.sheet = _apply_sheet_patch(char.sheet, body)
+    db.commit()
     return {"ok": True}
 
 
@@ -3026,6 +3124,9 @@ def character_sheet_page(
         raise HTTPException(403, "Not a member")
     can_edit = _user_is_gm(user, campaign, db) or char.owner_user_id == user.id
     sheet_template = "sheet_dnd5e.html" if char.template == "dnd5e" else "sheet_generic.html"
+    page_sheet = char.sheet or get_template(char.template)
+    if char.template == "dnd5e":
+        normalize_dnd5e_sheet(page_sheet)
     return templates.TemplateResponse(
         "character_page.html",
         {
@@ -3033,10 +3134,11 @@ def character_sheet_page(
             "user": user,
             "campaign": campaign,
             "char": char,
-            "sheet": char.sheet or get_template(char.template),
+            "sheet": page_sheet,
             "can_edit": can_edit,
             "sheet_template": sheet_template,
             "system": get_system(campaign.game_system),
+            "class_roster": class_levels_summary(page_sheet) if char.template == "dnd5e" else [],
         },
     )
 

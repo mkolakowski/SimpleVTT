@@ -277,6 +277,17 @@
                 name = el.value;
                 return;
             }
+            // Multiclass roster — JSON array stored in a hidden textarea.
+            // We deserialise it into ``sheet.classes`` and DO NOT keep the raw
+            // ``classes_json`` key in the saved sheet.
+            if (n === 'classes_json' && template === 'dnd5e') {
+                const raw = (el.value || '').trim();
+                let arr = [];
+                if (raw) { try { arr = JSON.parse(raw); } catch { arr = []; } }
+                if (!Array.isArray(arr)) arr = [];
+                sheet.classes = arr;
+                return;
+            }
             let v;
             if (el.type === 'checkbox') v = el.checked;
             else if (el.type === 'number') v = el.value === '' ? 0 : Number(el.value);
@@ -433,8 +444,13 @@
 
 // ── Open5e select dropdowns (class, subclass, race) ──
 ;(function () {
-    const classSelect = document.getElementById('class-select');
-    const subSelect   = document.getElementById('subclass-select');
+    // Multiclass mode: if the multiclass JSON textarea is present, the
+    // class+subclass dropdowns are now rendered per-row by the multiclass
+    // module further down. We still want this IIFE to run for race init,
+    // so we conditionally null out the class/subclass references.
+    const _MC = !!document.getElementById('classes-data');
+    const classSelect = _MC ? null : document.getElementById('class-select');
+    const subSelect   = _MC ? null : document.getElementById('subclass-select');
     const raceSelect  = document.getElementById('race-select');
     if (!classSelect && !subSelect && !raceSelect) return;
 
@@ -1268,8 +1284,795 @@
     });
 })();
 
+// ── Multiclass editor + per-class subclass features + class-prof table ─────
+//
+//  Source of truth: <textarea name="classes_json" id="classes-data">.
+//  Hidden mirrors:  #class-select / #subclass-select / #level-input reflect
+//                   the *primary* (highest-level) class so older code that
+//                   still reads [name="class"]/[name="level"]/[name="subclass"]
+//                   keeps working.
+//
+;(function () {
+    const dataEl = document.getElementById('classes-data');
+    if (!dataEl) return;
+    const sheetForm = document.getElementById('sheet-form');
+    const isReadonly = !!sheetForm && sheetForm.dataset.readonly === '1';
+
+    const listEl       = document.getElementById('mc-class-list');
+    const totalEl      = document.getElementById('mc-total-lv');
+    const addBtn       = document.getElementById('mc-add-class-btn');
+    const sfContainer  = document.getElementById('sf-multiclass-list');
+    const sfEmptyMsg   = document.getElementById('sf-empty');
+    const profTable    = document.getElementById('class-prof-table');
+    const slotsParking = document.getElementById('spell-slots-ui');
+
+    const MAX_TOTAL_LEVEL = 20;
+
+    function _slug(name) {
+        return (name || '').toString().trim().toLowerCase().replace(/\s+/g, '-');
+    }
+
+    function _esc(s) {
+        return String(s ?? '')
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function _readRoster() {
+        try {
+            const arr = JSON.parse(dataEl.value || '[]');
+            return Array.isArray(arr) ? arr : [];
+        } catch { return []; }
+    }
+
+    function _writeRoster(arr) {
+        dataEl.value = JSON.stringify(arr || []);
+        _refreshMirrors();
+        _refreshTotalLevel();
+        // Tabletop / mini-sheet listeners can react to roster changes
+        document.dispatchEvent(new CustomEvent('vtt:mc-changed', { detail: arr }));
+    }
+
+    function _primary(arr) {
+        if (!arr || !arr.length) return null;
+        return arr.slice().sort((a, b) => (b.level || 0) - (a.level || 0))[0];
+    }
+
+    function _refreshTotalLevel() {
+        const arr = _readRoster();
+        const total = arr.reduce((acc, c) => acc + (parseInt(c.level, 10) || 0), 0);
+        if (totalEl) {
+            totalEl.textContent = total;
+            totalEl.style.color = total > MAX_TOTAL_LEVEL ? 'var(--s-danger,#e07070)' : 'var(--s-fg)';
+        }
+    }
+
+    function _refreshMirrors() {
+        const arr = _readRoster();
+        const p = _primary(arr) || {};
+        const setHidden = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.value = val == null ? '' : String(val);
+                if ('dataset' in el && el.dataset && id !== 'level-input') el.dataset.current = el.value;
+            }
+        };
+        setHidden('class-select', p.class || '');
+        setHidden('subclass-select', p.subclass || '');
+        const total = arr.reduce((a, c) => a + (parseInt(c.level, 10) || 0), 0);
+        setHidden('level-input', Math.max(1, Math.min(MAX_TOTAL_LEVEL, total || 1)));
+
+        // Mirror primary class proficiency fields into the hidden inputs that
+        // legacy code (item browser, etc.) reads.
+        ['class_hit_die','class_armor','class_weapons','class_tools',
+         'class_saving_throws','class_skills','class_spellcasting',
+         'class_equipment','class_features'].forEach(k => {
+            const el = sheetForm && sheetForm.querySelector(`input[type="hidden"][name="${k}"]`);
+            if (el) el.value = (p && p[k]) ? p[k] : '';
+        });
+    }
+
+    // ── Open5e list cache (shared across rows) ──
+    const _LSC_TTL = 86400000; // 24h
+    async function _fetchListCached(url, key) {
+        try {
+            const raw = localStorage.getItem(key);
+            if (raw) {
+                const { ts, data } = JSON.parse(raw);
+                if (Date.now() - ts < _LSC_TTL && data && data.length) return data;
+            }
+        } catch {}
+        try {
+            const r = await fetch(url);
+            if (r.ok) {
+                const items = (await r.json()).results || [];
+                if (items.length) {
+                    try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data: items })); } catch {}
+                }
+                return items;
+            }
+        } catch {}
+        return [];
+    }
+
+    let _classesPromise = null;
+    function _classList() {
+        if (!_classesPromise) {
+            _classesPromise = _fetchListCached('/api/open5e/classes?limit=30', 'simplevtt_classes_list');
+        }
+        return _classesPromise;
+    }
+    async function _subclassList(classSlug) {
+        if (!classSlug) return [];
+        return _fetchListCached(
+            '/api/open5e/subclasses?limit=100&class_slug=' + encodeURIComponent(classSlug),
+            'simplevtt_subclasses_' + classSlug,
+        );
+    }
+
+    function _populateSelect(sel, items, currentName) {
+        sel.innerHTML = '';
+        const blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = '— none —';
+        sel.appendChild(blank);
+        let matched = false;
+        items.forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item.name;
+            opt.textContent = item.name;
+            opt.dataset.slug = item.slug || '';
+            sel.appendChild(opt);
+            if (item.name === currentName) { opt.selected = true; matched = true; }
+        });
+        if (!matched && currentName) {
+            const opt = document.createElement('option');
+            opt.value = currentName;
+            opt.textContent = currentName;
+            opt.dataset.slug = _slug(currentName);
+            opt.selected = true;
+            sel.insertBefore(opt, blank.nextSibling);
+        }
+    }
+
+    // ── Class-detail (proficiencies) auto-fill for one row ──
+    async function _fillClassDetail(entry, force) {
+        const slug = _slug(entry.class || '');
+        if (!slug) return entry;
+        try {
+            const r = await fetch('/api/open5e/class-detail?slug=' + encodeURIComponent(slug));
+            if (!r.ok) return entry;
+            const d = await r.json();
+            const map = {
+                'class_hit_die': d.hit_die,
+                'class_armor': d.armor,
+                'class_weapons': d.weapons,
+                'class_tools': d.tools,
+                'class_saving_throws': d.saving_throws,
+                'class_skills': d.skills,
+                'class_spellcasting': d.spellcasting,
+                'class_equipment': d.equipment,
+                'class_features': d.features || d.text || '',
+            };
+            for (const [k, v] of Object.entries(map)) {
+                if (force || !(entry[k] && String(entry[k]).trim())) entry[k] = v || '';
+            }
+        } catch {}
+        return entry;
+    }
+
+    // ── Subclass-detail auto-fill for one row ──
+    async function _fillSubclassDetail(entry) {
+        const cslug = _slug(entry.class || '');
+        const sslug = entry._subclass_slug || _slug(entry.subclass || '');
+        if (!sslug) {
+            entry.subclass_features = [];
+            entry.subclass_name = entry.subclass || '';
+            entry.subclass_flavor = '';
+            return entry;
+        }
+        const url = '/api/open5e/subclass-detail?slug=' + encodeURIComponent(sslug)
+            + (cslug ? '&class_slug=' + encodeURIComponent(cslug) : '');
+        try {
+            const r = await fetch(url);
+            if (!r.ok) return entry;
+            const d = await r.json();
+            entry.subclass_features = d.features || [];
+            entry.subclass_name = d.name || entry.subclass || '';
+            entry.subclass_flavor = d.flavor || '';
+            entry.subclass_features_data = d;
+        } catch {}
+        return entry;
+    }
+
+    // Persist a single class entry's subclass cache to the DB (fire-and-forget)
+    function _saveSubclassCacheRow(entry) {
+        if (typeof CHAR_ID === 'undefined') return;
+        const url = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID)
+            ? '/api/campaign/' + CAMPAIGN_ID + '/character/' + CHAR_ID + '/sheet-fields'
+            : '/api/character/' + CHAR_ID + '/sheet-fields';
+        fetch(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                class_slug: _slug(entry.class || ''),
+                subclass_features_data: entry.subclass_features_data || null,
+                subclass_name:     entry.subclass_name     || '',
+                subclass_flavor:   entry.subclass_flavor   || '',
+                subclass_features: entry.subclass_features || [],
+            }),
+        }).catch(() => {});
+    }
+
+    // ── Subclass features renderer (per class block) ──
+    // Mirrors the legacy renderSubclassFeatures() in this file, but draws
+    // into a target container and prefixes with "<Class> - <Subclass>".
+    function _cleanMd(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+            .replace(/\*{3}([^*]+)\*{3}/g, '$1')
+            .replace(/\*{2}([^*]+)\*{2}/g, '$1')
+            .replace(/_{2}([^_]+)_{2}/g, '$1')
+            .replace(/\*([^*\n]+)\*/g, '$1')
+            .replace(/_([^_\n]+)_/g, '$1')
+            .replace(/^#{1,6}\s+/gm, '')
+            .replace(/^[*\-]\s+/gm, '• ')
+            .replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    function _renderSubclassBlock(target, entry) {
+        target.innerHTML = '';
+
+        const className = entry.class || '';
+        const subName   = entry.subclass_name || entry.subclass || '';
+        const features  = (entry.subclass_features || []).slice();
+        const flavor    = entry.subclass_flavor || '';
+        const lvl       = parseInt(entry.level, 10) || 0;
+
+        // Heading: "<Class> - <Subclass>"
+        const heading = document.createElement('div');
+        heading.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:4px;';
+        const lbl = document.createElement('span');
+        lbl.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted,#888);text-transform:uppercase;';
+        lbl.textContent = className + (subName ? ' - ' + subName : ' - (no subclass)');
+        heading.appendChild(lbl);
+        if (!isReadonly) {
+            const sync = document.createElement('button');
+            sync.type = 'button';
+            sync.className = 'mc-sync-sub-btn';
+            sync.dataset.cslug = _slug(className);
+            sync.style.cssText = 'font-size:11px;padding:2px 8px;';
+            sync.textContent = '↻ Sync';
+            sync.title = 'Re-fetch subclass features from Open5e';
+            heading.appendChild(sync);
+        }
+        target.appendChild(heading);
+
+        if (!features.length && !flavor) {
+            const p = document.createElement('p');
+            p.className = 'muted';
+            p.style.cssText = 'font-size:12px;margin:4px 0 0;';
+            p.textContent = subName
+                ? 'No features cached yet. Click ↻ Sync to load.'
+                : 'Pick a subclass on this class to see its features.';
+            target.appendChild(p);
+            return;
+        }
+
+        const cleanedFlavor = _cleanMd(flavor);
+        if (cleanedFlavor) {
+            const f = document.createElement('div');
+            f.style.cssText = 'font-size:12px;color:#8a9;font-style:italic;margin-bottom:10px;line-height:1.55;border-left:2px solid #3a6a50;padding-left:8px;';
+            f.textContent = cleanedFlavor;
+            target.appendChild(f);
+        }
+
+        const visible = features.filter(f => f.level == null || f.level <= lvl);
+        const locked  = features.filter(f => f.level != null && f.level >  lvl);
+
+        function makeCard(feat, dimmed) {
+            const card = document.createElement('div');
+            card.style.cssText = 'margin-bottom:5px;border-radius:5px;overflow:hidden;border:1px solid ' + (dimmed ? '#252530' : '#2e3250') + ';opacity:' + (dimmed ? '0.45' : '1') + ';';
+            const hdr = document.createElement('div');
+            hdr.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 10px;background:' + (dimmed ? '#1c1e2a' : '#252c45') + ';cursor:pointer;user-select:none;';
+            const arrow = document.createElement('span');
+            arrow.style.cssText = 'font-size:9px;color:#667;flex-shrink:0;transition:transform .15s;transform:rotate(-90deg);';
+            arrow.textContent = '▼';
+            hdr.appendChild(arrow);
+            const nameSpan = document.createElement('span');
+            nameSpan.style.cssText = 'font-size:12px;font-weight:600;color:' + (dimmed ? '#667' : '#c8cce8') + ';flex:1;';
+            nameSpan.textContent = feat.name || 'Feature';
+            hdr.appendChild(nameSpan);
+            if (feat.level != null) {
+                const badge = document.createElement('span');
+                badge.style.cssText = 'font-size:10px;padding:1px 7px;border-radius:10px;white-space:nowrap;flex-shrink:0;' +
+                    (dimmed ? 'background:#1e1e28;color:#445;' : 'background:#1c3040;color:#6ab;');
+                badge.textContent = 'Lvl ' + feat.level;
+                hdr.appendChild(badge);
+            }
+            card.appendChild(hdr);
+            if (feat.desc) {
+                const body = document.createElement('div');
+                body.style.cssText = 'display:none;padding:10px 12px;font-size:12px;line-height:1.65;color:#b0b4cc;background:#191c2b;';
+                _cleanMd(feat.desc).split('\n\n').forEach(para => {
+                    para = para.trim(); if (!para) return;
+                    const p = document.createElement('p');
+                    p.style.cssText = 'margin:0 0 8px;';
+                    if (para.includes('\n')) {
+                        para.split('\n').forEach((line, i) => {
+                            if (i > 0) p.appendChild(document.createElement('br'));
+                            p.appendChild(document.createTextNode(line));
+                        });
+                    } else { p.textContent = para; }
+                    body.appendChild(p);
+                });
+                card.appendChild(body);
+                hdr.addEventListener('click', () => {
+                    const open = body.style.display !== 'none';
+                    body.style.display = open ? 'none' : '';
+                    arrow.style.transform = open ? 'rotate(-90deg)' : 'rotate(0deg)';
+                });
+            }
+            return card;
+        }
+
+        visible.forEach(f => target.appendChild(makeCard(f, false)));
+        if (locked.length) {
+            const lockedWrap = document.createElement('div');
+            lockedWrap.style.cssText = 'margin-top:6px;';
+            const lockedLabel = document.createElement('div');
+            lockedLabel.style.cssText = 'font-size:10px;color:#445;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;padding-left:2px;';
+            lockedLabel.textContent = 'Future features';
+            lockedWrap.appendChild(lockedLabel);
+            locked.forEach(f => lockedWrap.appendChild(makeCard(f, true)));
+            target.appendChild(lockedWrap);
+        }
+    }
+
+    function _renderAllSubclassBlocks() {
+        if (!sfContainer) return;
+        const arr = _readRoster();
+        // Clear any previous blocks but keep #sf-empty for the no-classes state
+        sfContainer.querySelectorAll('.sf-class-block').forEach(b => b.remove());
+        if (sfEmptyMsg) sfEmptyMsg.style.display = arr.length ? 'none' : '';
+        // One block per class entry
+        arr.forEach((entry) => {
+            const block = document.createElement('div');
+            block.className = 'sf-class-block';
+            block.dataset.cslug = _slug(entry.class || '');
+            sfContainer.appendChild(block);
+            _renderSubclassBlock(block, entry);
+        });
+    }
+
+    // ── Multiclass list editor ──
+    function _row(entry, idx, classOptions) {
+        const row = document.createElement('div');
+        row.className = 'mc-row';
+        row.dataset.mcIdx = idx;
+        row.style.cssText = 'display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 70px auto;gap:6px;align-items:center;';
+
+        const classWrap = document.createElement('div');
+        classWrap.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
+        const classLabel = document.createElement('span');
+        classLabel.style.cssText = 'font-size:9px;color:var(--s-mute);font-weight:700;text-transform:uppercase;letter-spacing:.06em;';
+        classLabel.textContent = idx === 0 ? 'Class' : 'Class ' + (idx + 1);
+        classWrap.appendChild(classLabel);
+        const classSel = document.createElement('select');
+        classSel.className = 'mc-class-select';
+        classSel.dataset.mcIdx = idx;
+        classSel.style.cssText = 'font-size:12px;';
+        if (isReadonly) classSel.disabled = true;
+        _populateSelect(classSel, classOptions, entry.class || '');
+        classWrap.appendChild(classSel);
+        row.appendChild(classWrap);
+
+        const subWrap = document.createElement('div');
+        subWrap.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
+        const subLabel = document.createElement('span');
+        subLabel.style.cssText = 'font-size:9px;color:var(--s-mute);font-weight:700;text-transform:uppercase;letter-spacing:.06em;';
+        subLabel.textContent = 'Subclass';
+        subWrap.appendChild(subLabel);
+        const subSel = document.createElement('select');
+        subSel.className = 'mc-subclass-select';
+        subSel.dataset.mcIdx = idx;
+        subSel.style.cssText = 'font-size:12px;';
+        if (isReadonly) subSel.disabled = true;
+        const placeholder = document.createElement('option');
+        placeholder.value = '';
+        placeholder.textContent = entry.class ? '— loading… —' : '— pick a class —';
+        subSel.appendChild(placeholder);
+        subWrap.appendChild(subSel);
+        row.appendChild(subWrap);
+
+        const lvlWrap = document.createElement('div');
+        lvlWrap.style.cssText = 'display:flex;flex-direction:column;gap:2px;';
+        const lvlLabel = document.createElement('span');
+        lvlLabel.style.cssText = 'font-size:9px;color:var(--s-mute);font-weight:700;text-transform:uppercase;letter-spacing:.06em;';
+        lvlLabel.textContent = 'Level';
+        lvlWrap.appendChild(lvlLabel);
+        const lvlInp = document.createElement('input');
+        lvlInp.type = 'number';
+        lvlInp.className = 'mc-level-input';
+        lvlInp.dataset.mcIdx = idx;
+        lvlInp.min = '1';
+        lvlInp.max = '20';
+        lvlInp.value = entry.level || 1;
+        lvlInp.style.cssText = 'font-size:12px;text-align:center;';
+        if (isReadonly) lvlInp.readOnly = true;
+        lvlWrap.appendChild(lvlInp);
+        row.appendChild(lvlWrap);
+
+        const rmBtn = document.createElement('button');
+        rmBtn.type = 'button';
+        rmBtn.className = 'mc-remove-btn';
+        rmBtn.dataset.mcIdx = idx;
+        rmBtn.textContent = '×';
+        rmBtn.title = 'Remove this class';
+        rmBtn.style.cssText = 'background:transparent;border:1px solid var(--s-border);color:var(--s-danger);width:28px;height:28px;border-radius:4px;cursor:pointer;font-size:14px;line-height:1;align-self:flex-end;';
+        if (isReadonly) rmBtn.style.display = 'none';
+        row.appendChild(rmBtn);
+
+        return row;
+    }
+
+    async function _renderEditor() {
+        if (!listEl) { _refreshTotalLevel(); _refreshMirrors(); _renderAllSubclassBlocks(); _refreshProfTable(); return; }
+        const arr = _readRoster();
+        listEl.innerHTML = '';
+        const classOptions = await _classList();
+        arr.forEach((entry, idx) => listEl.appendChild(_row(entry, idx, classOptions)));
+        _refreshTotalLevel();
+
+        // Wire each row's class select
+        listEl.querySelectorAll('.mc-class-select').forEach(async (sel) => {
+            const idx = parseInt(sel.dataset.mcIdx, 10);
+            const entry = (_readRoster()[idx] || {});
+            const subSel = listEl.querySelector(`.mc-subclass-select[data-mc-idx="${idx}"]`);
+            // populate subclass options for this entry's class
+            if (subSel) {
+                if (entry.class) {
+                    const items = await _subclassList(_slug(entry.class));
+                    _populateSelect(subSel, items, entry.subclass || '');
+                } else {
+                    subSel.innerHTML = '<option value="">— pick a class first —</option>';
+                }
+            }
+            sel.addEventListener('change', async () => {
+                const arr2 = _readRoster();
+                const e = arr2[idx] || {};
+                e.class = sel.value;
+                e.subclass = '';
+                e.subclass_features = [];
+                e.subclass_name = '';
+                e.subclass_flavor = '';
+                // Clear cached proficiencies so the new class's data fills in
+                ['class_hit_die','class_armor','class_weapons','class_tools',
+                 'class_saving_throws','class_skills','class_spellcasting',
+                 'class_equipment','class_features'].forEach(k => { delete e[k]; });
+                arr2[idx] = e;
+                await _fillClassDetail(e, true);
+                _writeRoster(arr2);
+                // Repopulate subclass dropdown for the new class
+                if (subSel) {
+                    if (e.class) {
+                        const items = await _subclassList(_slug(e.class));
+                        _populateSelect(subSel, items, '');
+                    } else {
+                        subSel.innerHTML = '<option value="">— pick a class first —</option>';
+                    }
+                }
+                _renderAllSubclassBlocks();
+                _refreshProfTable(true);
+                _refreshSpellSlots(false);
+            });
+        });
+
+        // Wire each row's subclass select
+        listEl.querySelectorAll('.mc-subclass-select').forEach(sel => {
+            const idx = parseInt(sel.dataset.mcIdx, 10);
+            sel.addEventListener('change', async () => {
+                const arr2 = _readRoster();
+                const e = arr2[idx] || {};
+                e.subclass = sel.value;
+                const opt = sel.options[sel.selectedIndex];
+                e._subclass_slug = (opt && opt.dataset && opt.dataset.slug) || _slug(sel.value);
+                arr2[idx] = e;
+                await _fillSubclassDetail(e);
+                _writeRoster(arr2);
+                _renderAllSubclassBlocks();
+                _saveSubclassCacheRow(e);
+            });
+        });
+
+        // Level inputs
+        listEl.querySelectorAll('.mc-level-input').forEach(inp => {
+            const idx = parseInt(inp.dataset.mcIdx, 10);
+            const apply = () => {
+                let v = parseInt(inp.value, 10);
+                if (isNaN(v) || v < 1) v = 1;
+                if (v > 20) v = 20;
+                const arr2 = _readRoster();
+                const otherTotal = arr2.reduce((acc, c, i) => i === idx ? acc : acc + (parseInt(c.level, 10) || 0), 0);
+                const max = MAX_TOTAL_LEVEL - otherTotal;
+                if (v > max) {
+                    v = Math.max(1, max);
+                    if (window.showToast) window.showToast(`Total level capped at ${MAX_TOTAL_LEVEL}.`, 'warning');
+                }
+                inp.value = v;
+                if (arr2[idx]) {
+                    arr2[idx].level = v;
+                    _writeRoster(arr2);
+                    _renderAllSubclassBlocks();
+                    _refreshProfTable();
+                    _refreshSpellSlots(false);
+                }
+            };
+            inp.addEventListener('change', apply);
+            inp.addEventListener('input', apply);
+        });
+
+        // Remove buttons
+        listEl.querySelectorAll('.mc-remove-btn').forEach(btn => {
+            const idx = parseInt(btn.dataset.mcIdx, 10);
+            btn.addEventListener('click', () => {
+                const arr2 = _readRoster();
+                if (arr2.length <= 1) {
+                    if (window.showToast) window.showToast('Need at least one class.', 'warning');
+                    return;
+                }
+                const removed = arr2.splice(idx, 1)[0];
+                // Drop the removed class's spell slots so they don't linger
+                const removedSlug = _slug(removed && removed.class);
+                if (removedSlug && slotsParking) {
+                    slotsParking.querySelectorAll(`.ss-row[data-cslug="${CSS.escape(removedSlug)}"]`).forEach(r => r.remove());
+                }
+                _writeRoster(arr2);
+                _renderEditor();
+                _renderAllSubclassBlocks();
+                _refreshProfTable(true);
+                _refreshSpellSlots(false);
+            });
+        });
+
+        // Subclass-features ↻ Sync buttons (delegate)
+        if (sfContainer && !sfContainer._mcSyncBound) {
+            sfContainer._mcSyncBound = true;
+            sfContainer.addEventListener('click', async (ev) => {
+                const btn = ev.target.closest('.mc-sync-sub-btn');
+                if (!btn) return;
+                const cslug = btn.dataset.cslug;
+                const arr2 = _readRoster();
+                const idx = arr2.findIndex(c => _slug(c.class) === cslug);
+                if (idx < 0) return;
+                btn.disabled = true; btn.textContent = '↻ Syncing…';
+                try {
+                    await _fillSubclassDetail(arr2[idx]);
+                    _writeRoster(arr2);
+                    _renderAllSubclassBlocks();
+                    _saveSubclassCacheRow(arr2[idx]);
+                } finally {
+                    btn.disabled = false; btn.textContent = '↻ Sync';
+                }
+            });
+        }
+
+        _refreshMirrors();
+        _renderAllSubclassBlocks();
+        _refreshProfTable();
+        _refreshSpellSlots(true);
+    }
+
+    // ── Class proficiency table sync ──
+    function _refreshProfTable(rebuildOnRosterChange) {
+        if (!profTable) return;
+        const arr = _readRoster();
+        if (rebuildOnRosterChange) {
+            // Rebuild header + body to match the current roster
+            const nClasses = arr.length;
+            const colgroup = profTable.querySelector('colgroup');
+            if (colgroup) {
+                colgroup.innerHTML = '<col style="width:130px;">' + Array(nClasses).fill('<col>').join('');
+            }
+            const thead = profTable.querySelector('thead');
+            if (thead) {
+                const ths = arr.map((c, i) =>
+                    `<th class="cprof-class-th" data-mc-idx="${i}" style="text-align:left;font-size:11px;font-weight:700;color:var(--s-fg);padding:6px 8px;border-bottom:1px solid var(--s-border);white-space:nowrap;">
+                        ${_esc(c.class || '—')} <span style="color:var(--s-accent);">Lv ${parseInt(c.level,10)||1}</span>
+                    </th>`).join('');
+                thead.innerHTML = `<tr>
+                    <th style="text-align:left;font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--s-border);">&nbsp;</th>
+                    ${ths}
+                </tr>`;
+            }
+            const tbody = profTable.querySelector('tbody');
+            if (tbody) {
+                const rows = [
+                    ['Hit Die',       'class_hit_die'],
+                    ['Armor',         'class_armor'],
+                    ['Weapons',       'class_weapons'],
+                    ['Tools',         'class_tools'],
+                    ['Saving Throws', 'class_saving_throws'],
+                    ['Skills',        'class_skills'],
+                    ['Spellcasting',  'class_spellcasting'],
+                    ['Starting Eq.',  'class_equipment'],
+                ];
+                tbody.innerHTML = rows.map(([label, key]) =>
+                    `<tr><th style="text-align:left;font-size:11px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.04em;padding:5px 8px;border-bottom:1px solid var(--s-border);white-space:nowrap;vertical-align:top;">${_esc(label)}</th>` +
+                    arr.map((c, i) =>
+                        `<td class="cprof-cell" data-mc-idx="${i}" data-cprof-key="${key}" style="padding:4px 8px;border-bottom:1px solid var(--s-border);vertical-align:top;">${
+                            isReadonly
+                                ? `<span style="font-size:12px;color:var(--fg,#e0e0e0);white-space:pre-wrap;">${_esc(c[key] || '—')}</span>`
+                                : `<input type="text" class="cprof-input" data-mc-idx="${i}" data-cprof-key="${key}" value="${_esc(c[key] || '')}" style="width:100%;font-size:12px;" placeholder="—">`
+                        }</td>`
+                    ).join('') + '</tr>'
+                ).join('');
+            }
+        } else {
+            // Light update: just refresh header levels + cell values to reflect current roster
+            profTable.querySelectorAll('.cprof-class-th').forEach((th) => {
+                const i = parseInt(th.dataset.mcIdx, 10);
+                const c = arr[i];
+                if (c) th.innerHTML = `${_esc(c.class || '—')} <span style="color:var(--s-accent);">Lv ${parseInt(c.level,10)||1}</span>`;
+            });
+            profTable.querySelectorAll('.cprof-input').forEach((inp) => {
+                const i = parseInt(inp.dataset.mcIdx, 10);
+                const k = inp.dataset.cprofKey;
+                const c = arr[i];
+                if (c && document.activeElement !== inp) inp.value = c[k] || '';
+            });
+        }
+
+        // Wire input listeners (delegated)
+        if (!profTable._cprofBound) {
+            profTable._cprofBound = true;
+            profTable.addEventListener('input', (ev) => {
+                const inp = ev.target.closest('.cprof-input');
+                if (!inp) return;
+                const idx = parseInt(inp.dataset.mcIdx, 10);
+                const key = inp.dataset.cprofKey;
+                const arr2 = _readRoster();
+                if (arr2[idx]) {
+                    arr2[idx][key] = inp.value;
+                    _writeRoster(arr2);
+                }
+            });
+        }
+
+        // Wire ↻ Sync (re-fetch all classes' details)
+        const syncBtn = document.getElementById('sync-class-btn');
+        if (syncBtn && !syncBtn._mcBound) {
+            syncBtn._mcBound = true;
+            syncBtn.addEventListener('click', async () => {
+                const arr2 = _readRoster();
+                syncBtn.disabled = true;
+                syncBtn.textContent = '↻ Syncing…';
+                const status = document.getElementById('sync-class-status');
+                if (status) status.textContent = '';
+                try {
+                    for (const e of arr2) await _fillClassDetail(e, true);
+                    _writeRoster(arr2);
+                    _refreshProfTable(true);
+                    if (status) { status.textContent = '✓ Synced'; status.style.color = '#6cb'; }
+                } catch (err) {
+                    if (status) { status.textContent = 'Error: ' + err.message; status.style.color = '#e07070'; }
+                } finally {
+                    syncBtn.disabled = false; syncBtn.textContent = '↻ Sync';
+                    if (status) setTimeout(() => { status.textContent = ''; }, 4000);
+                }
+            });
+        }
+    }
+
+    // ── Per-class spell slot management ──
+    // Spell slots live in #spell-slots-ui as .ss-row elements, each tagged
+    // with data-cslug + data-lvl. Adding a new class creates 9 fresh rows
+    // (all level 1-9 empty). Removing a class removes its rows.
+    function _ensureSlotRowsForClass(cslug, classLabel) {
+        if (!slotsParking || !cslug) return;
+        for (let lvl = 1; lvl <= 9; lvl++) {
+            let row = slotsParking.querySelector(`.ss-row[data-cslug="${CSS.escape(cslug)}"][data-lvl="${lvl}"]`);
+            if (row) {
+                row.dataset.classLabel = classLabel || cslug;
+                continue;
+            }
+            row = document.createElement('div');
+            row.className = 'ss-row';
+            row.dataset.cslug = cslug;
+            row.dataset.classLabel = classLabel || cslug;
+            row.dataset.lvl = String(lvl);
+            row.dataset.total = '0';
+            row.dataset.used = '0';
+            row.style.cssText = 'display:none;align-items:center;gap:8px;';
+            row.innerHTML =
+                `<span style="font-size:11px;font-weight:600;width:38px;flex-shrink:0;color:var(--s-mute);letter-spacing:.03em;">Lv ${lvl}</span>` +
+                `<div class="ss-pips" style="display:flex;gap:5px;flex-wrap:wrap;flex:1;"></div>` +
+                `<input type="hidden" name="spell_slots.${cslug}.${lvl}.total" class="ss-total-input" value="0">` +
+                `<input type="hidden" name="spell_slots.${cslug}.${lvl}.used"  class="ss-used-input"  value="0">`;
+            slotsParking.appendChild(row);
+        }
+    }
+
+    function _refreshSpellSlots(autoFillIfZero) {
+        if (!slotsParking) return;
+        const arr = _readRoster();
+        // Make sure every active class has its 9 rows present
+        const liveSlugs = new Set();
+        arr.forEach(e => {
+            const slug = _slug(e.class);
+            if (!slug) return;
+            liveSlugs.add(slug);
+            _ensureSlotRowsForClass(slug, e.class);
+            // Also tag the row's mc-idx so we can find it later
+            slotsParking.querySelectorAll(`.ss-row[data-cslug="${CSS.escape(slug)}"]`).forEach(r => {
+                r.dataset.classLabel = e.class || slug;
+            });
+        });
+        // Remove rows for classes no longer present
+        slotsParking.querySelectorAll('.ss-row').forEach(r => {
+            const s = r.dataset.cslug;
+            if (s && !liveSlugs.has(s)) r.remove();
+        });
+        // Optionally auto-fill slot tables (preserves existing non-zero values)
+        if (autoFillIfZero && typeof window._mcAutoFillSlots === 'function') {
+            window._mcAutoFillSlots(false);
+        }
+        // Re-render the spell list groups to pick up new slot rows
+        if (typeof window._mcRenderSpells === 'function') window._mcRenderSpells();
+    }
+
+    // ── WebSocket: spell_slot_update — update the right (class, level) row ──
+    document.addEventListener('vtt:ws-message', function (ev) {
+        const msg = ev.detail;
+        if (!msg || msg.type !== 'spell_slot_update') return;
+        const d = msg.data || {};
+        const myCharId = (sheetForm && parseInt(sheetForm.dataset.charId, 10)) || null;
+        if (myCharId == null || d.character_id !== myCharId) return;
+        const cslug = (d.class_slug || '').toLowerCase();
+        const row = cslug
+            ? slotsParking && slotsParking.querySelector(`.ss-row[data-cslug="${CSS.escape(cslug)}"][data-lvl="${d.level}"]`)
+            : null;
+        if (!row) return;
+        row.dataset.total = d.total;
+        row.dataset.used  = d.used;
+        if (window._ssSyncInputs) window._ssSyncInputs(row);
+        if (window._ssRenderPips) window._ssRenderPips(row);
+    });
+
+    // ── Add Class ──
+    if (addBtn) {
+        addBtn.addEventListener('click', async () => {
+            const arr = _readRoster();
+            const total = arr.reduce((a, c) => a + (parseInt(c.level, 10) || 0), 0);
+            if (total >= MAX_TOTAL_LEVEL) {
+                if (window.showToast) window.showToast(`Total level already at ${MAX_TOTAL_LEVEL}.`, 'warning');
+                return;
+            }
+            arr.push({ class: '', subclass: '', level: 1 });
+            _writeRoster(arr);
+            await _renderEditor();
+        });
+    }
+
+    // ── Expose helpers to other modules in the page ──
+    window._mcRoster      = _readRoster;
+    window._mcWriteRoster = _writeRoster;
+    window._mcPrimary     = () => _primary(_readRoster());
+    window._mcClassSlug   = _slug;
+
+    // Initial render
+    _renderEditor();
+})();
+
 // ── Spell slot auto-fill from class + level ──
 ;(function () {
+    // In multiclass mode the per-class autofill lives in the spellcasting
+    // framework script inside sheet_dnd5e.html, so this legacy single-class
+    // helper becomes a no-op.
+    if (document.getElementById('classes-data')) {
+        window._syncSpellSlots = function () {};
+        return;
+    }
     // Rows indexed by characterLevel - 1 (index 0 = level 1).
     // Each row: [slots_l1, slots_l2, ..., slots_l9]
     const _FULL = [

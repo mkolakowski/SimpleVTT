@@ -86,6 +86,78 @@ Each release section must include all five of these, in this order:
 
 ---
 
+## [0.32.3] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Track cantrips known per class with limit enforcement in the spell browser
+
+**Description:** Each spellcasting class now displays a "Cantrips cur/max" tracker alongside its prepared/known leveled-spell count, sourced from the PHB / Tasha's cantrips-known column for that class at its current level (e.g. Druid Lv 5 → 3 cantrips, Wizard Lv 5 → 4). The tracker turns yellow at the limit and red when over. The spell browser's status bar shows the cantrip count for the selected class, and the detail pane warns before adding a cantrip that would exceed the limit.
+
+### Added
+- `cantrips` per-level table on every cantrip-learning class in `_SC` (bard, cleric, druid, sorcerer, warlock, wizard, artificer).
+- `_cantripLimitFor()` / `_cantripCountFor()` helpers driving the new tracker.
+- "Cantrips X / Y" chip on each per-class spellcasting info-bar row (and in its collapsed summary).
+- Cantrips count in the spell browser limit bar plus an over-limit warning in the detail pane when adding a cantrip would exceed the class's cap.
+
+---
+
+## [0.32.2] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Compact spellcasting info bar, collapse toggle, and Auto-fill Slots in the legend
+
+**Description:** The spellcasting info bar is now a single-line-per-class compact strip and can be collapsed by clicking its header — when collapsed it shows just a "Druid 4/8 · Wizard 2/6" summary so the spell list stays in view. The ⚡ Auto-fill Slots button moved up into the Spells fieldset legend next to 👁 Hide Unprepared, and its result message is now surfaced as a toast instead of an inline footer.
+
+### Changed
+- `#sc-info-bar` rebuilt as a collapsible card; rows render one line per spellcasting class (Class · Lv · Type · Ability · DC · Atk · Prep/Known cur/max).
+- ⚡ Auto-fill Slots button moved from the info-bar footer to the Spells legend; status is now a toast.
+- Collapse state is persisted per-character in localStorage.
+
+---
+
+## [0.32.1] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Show per-class spellcasting info bar and always render every available slot row
+
+**Description:** The spellcasting info bar (Type / Ability / Save DC / Atk / Prepared) now renders one row per spellcasting class on the sheet, so a Druid 5 / Wizard 3 sees Druid's Prepared count and DC alongside Wizard's Prepared count and DC. The spell list also now shows each class's slot pip rows for every level where that class has slots, even at levels where no spells have been added yet, so empty Lv 2 / Lv 3 / etc. slots are no longer hidden. Each class's spell groups are introduced by an underlined section header so a multiclass roster reads top-to-bottom as distinct class blocks.
+
+### Changed
+- `#sc-info-bar` is now driven entirely by JS; its DOM is rebuilt as one row per spellcasting class with the class name + level prefix.
+- `renderSpells()` walks every roster class, unions its slot levels with its spell levels, and renders an explicit "no spells learned at this level yet" hint when slots exist without spells.
+- Each class block is preceded by a section header (e.g. "── DRUID ──") to visually separate multiclass spell lists.
+
+---
+
+## [0.32.0] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Add D&D 5e multiclassing with per-class spells, slots, and proficiencies
+
+**Description:** Player characters can now hold up to 20 levels split between any number of D&D 5e classes. The character sheet edit panel exposes a Classes & Levels list with a "+ Add Class" button, each row picking a class, optional subclass, and level (capped at 20 total). Class Proficiencies is rendered as a table with one column per class. Spell groups are now keyed by both class and level (e.g. "Level 1 Spells - Druid"), and spell slots track per class so a Druid 5 / Wizard 3 sees independent slot pips. The spell browser exposes a class-context selector for tagging newly-added spells, the inventory item browser unions weapon/armor proficiencies across every class, and subclass features are headed with the class name. The tabletop mini-sheet shows the combined class roster sorted highest level first. No operator action is needed; existing single-class characters are auto-upgraded to a one-entry roster on first read.
+
+### Added
+- `sheet["classes"]` array on D&D 5e sheets — each entry stores `{class, subclass, level}` plus that class's `class_hit_die`, `class_armor`, …, `subclass_features`, `subclass_name`, `subclass_flavor`.
+- Multiclass editor (Class & Levels list, +Add Class, ×Remove, total-level cap) inside the character edit panel.
+- Class Proficiencies fieldset rendered as a multi-column table keyed by class.
+- Spell Browser class chips + per-class limit bar; new spells get tagged with the chosen class on import.
+- `class_slug` field on `/cast_spell` requests + `class_slug` field on `spell_slot_update` WebSocket messages so multi-class casters draw from the right slot pool.
+- `normalize_dnd5e_sheet()` helper in `app/sheet_templates.py` that mirrors the highest-level class onto legacy flat fields and migrates flat `spell_slots` to the new nested-by-class shape on read.
+
+### Changed
+- Spell list grouping: spells are now grouped by `(class, level)` and headings read "Level N Spells - <Class>" (mirrored on the tabletop mini-sheet).
+- `sheet["spell_slots"]` is now nested by class slug: `{"druid": {"1": {"total":4,"used":0}, …}, "wizard": {…}}`. Old flat shape is auto-migrated.
+- Inventory item browser "Proficient only" filter now unions proficiencies across every class on the sheet.
+- Subclass-features block is rendered once per class, prefixed with `<Class> - <Subclass>`.
+- Long rest now resets every class's slots; short/long-rest broadcasts include `class_slug` per slot.
+- Tabletop drawer: class tags collapse into a single combined badge ("Druid 5 / Wizard 3") sorted by level descending.
+
+---
+
 ## [0.31.3] - 2026-05-10
 
 **Schema version:** 21
