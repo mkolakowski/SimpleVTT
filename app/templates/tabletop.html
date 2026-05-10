@@ -6,6 +6,26 @@
     .container { padding: 8px 12px; overflow: hidden; display: flex; flex-direction: column; }
     .tabletop-layout { display: flex; flex-direction: row; flex: 1; min-height: 0; }
     .map-pane { flex: 1; min-width: 0; position: relative; overflow: hidden; background: var(--bg); border-radius: 6px; }
+
+    /* ── Tabletop top bar ── */
+    .tt-topbar {
+        display: flex; align-items: center; gap: 12px;
+        flex-wrap: wrap; row-gap: 6px; margin-bottom: 6px;
+    }
+    .tt-topbar-thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
+    .tt-topbar-title { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .tt-topbar-badge {
+        background: var(--accent-bg2); color: var(--accent);
+        font-size: 11px; padding: 2px 8px; border-radius: 10px;
+        vertical-align: middle; white-space: nowrap;
+    }
+    .tt-topbar-gm { white-space: nowrap; }
+    .tt-topbar-actions {
+        margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    }
+    .tt-topbar-form { display: inline; }
+    .tt-topbar-actions button,
+    .tt-topbar-actions .btn-link { white-space: nowrap; }
     #vtt-canvas { display: block; image-rendering: pixelated; cursor: grab; }
     .panel { background: var(--bg-2); padding: 10px; border-radius: 6px; }
     .panel h3 { margin: 0 0 6px; font-size: 14px; }
@@ -198,6 +218,40 @@
     .spell-cast-pass { color: #4ade80; font-weight: 600; }
     .spell-cast-fail { color: var(--danger); font-weight: 600; }
 
+    /* ── Weapon-attack card (variant of spell-cast card) ── */
+    .weapon-atk-card { border-left-color: #fbb88a; }
+    .weapon-atk-card .roll-card-header { background: rgba(251,184,138,.08); }
+    .weapon-atk-card .spell-cast-slot {
+        color: #fbb88a;
+        background: rgba(251,184,138,.12);
+        border-color: rgba(251,184,138,.3);
+    }
+    .weapon-atk-card .spell-cast-btn {
+        background: rgba(251,184,138,.10);
+        color: #fbb88a;
+        border-color: rgba(251,184,138,.4);
+    }
+    .weapon-atk-card .spell-cast-btn:hover { background: rgba(251,184,138,.22); }
+    .weapon-atk-line {
+        display: flex; align-items: baseline; gap: 8px;
+        padding: 4px 6px; margin: 2px 0;
+        background: rgba(255,255,255,.02);
+        border: 1px solid var(--border); border-radius: 4px;
+        font-size: 12px;
+    }
+    .weapon-atk-label {
+        font-size: 10px; font-weight: 700;
+        color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.4px;
+        flex-shrink: 0; min-width: 60px;
+    }
+    .weapon-atk-total { font-size: 16px; font-weight: 800; color: var(--fg); flex-shrink: 0; }
+    .weapon-atk-dmgtype { font-size: 10px; color: var(--fg-mute); font-weight: 500; }
+    .weapon-atk-breakdown {
+        flex: 1; min-width: 0; font-family: monospace; font-size: 10px;
+        color: var(--fg-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .weapon-atk-breakdown strong { color: var(--fg); }
+
     /* ── Token / character picker popup ── */
     .token-picker-overlay {
         position: fixed; inset: 0; z-index: 9999;
@@ -322,7 +376,35 @@
     .mac-score { font-size: 12px; font-weight: 600; line-height: 1.2; }
     .mac-mod { font-size: 10px; color: var(--fg-mute); padding-bottom: 2px; }
     .mac-row-label { grid-column: 1 / -1; font-size: 8px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.5px; padding: 3px 0 2px; border-top: 1px solid var(--border); text-align: left; margin-top: 2px; }
-    .mac-btn { width: 100%; padding: 2px 1px; font-size: 11px; }
+    .mac-btn { width: 100%; padding: 2px 1px; font-size: 10px; display: flex; flex-direction: column; align-items: center; line-height: 1.15; gap: 0; }
+    .mac-btn .mac-btn-ab { font-size: 9px; opacity: 0.85; letter-spacing: 0.3px; }
+    .mac-btn .mac-btn-mod { font-size: 11px; font-weight: 600; }
+    /* Mini spells */
+    .mini-spells { display: flex; flex-direction: column; gap: 2px; }
+    .mini-spell-level { font-size: 9px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 0 1px; margin-top: 2px; }
+    .mini-spell-row { display: flex; align-items: center; gap: 5px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); }
+    .mini-spell-name { flex: 1; font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mini-spell-tag { font-size: 9px; color: var(--fg-mute); flex-shrink: 0; }
+    .mini-spell-tag.dmg { color: #e8a; font-weight: 500; }
+    .mini-spell-tag.save { color: #8cf; font-weight: 500; }
+    .mini-cast-btn { background: rgba(167,139,250,.12); border: 1px solid rgba(167,139,250,.4); color: #b9a3fb; border-radius: 3px; padding: 1px 7px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; line-height: 1.4; }
+    .mini-cast-btn:hover { background: rgba(167,139,250,.22); }
+    .mini-cast-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .mini-slot-row { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--fg-mute); padding: 1px 2px; }
+    .mini-slot-row .mini-slot-label { width: 28px; flex-shrink: 0; }
+    .mini-slot-pip { display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--accent-border); background: var(--accent-bg2); margin-right: 2px; }
+    .mini-slot-pip.used { background: transparent; opacity: 0.45; }
+    /* Mini attacks */
+    .mini-attacks { display: flex; flex-direction: column; gap: 2px; }
+    .mini-attack-row { display: flex; align-items: center; gap: 5px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); }
+    .mini-attack-name { flex: 1; font-size: 11px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mini-attack-tag { font-size: 9px; flex-shrink: 0; font-weight: 500; color: var(--fg-mute); }
+    .mini-attack-tag.atk { color: #8cf; }
+    .mini-attack-tag.dmg { color: #e8a; }
+    .mini-attack-tag.save { color: #fb6; }
+    .mini-strike-btn { background: rgba(251,184,138,.10); border: 1px solid rgba(251,184,138,.4); color: #fbb88a; border-radius: 3px; padding: 1px 7px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; line-height: 1.4; }
+    .mini-strike-btn:hover { background: rgba(251,184,138,.22); }
+    .mini-strike-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     /* Roll toast */
     #roll-toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 150; display: flex; flex-direction: column-reverse; align-items: center; gap: 8px; pointer-events: none; }
     .roll-toast { background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 10px; padding: 12px 20px; min-width: 160px; max-width: 280px; text-align: center; box-shadow: 0 6px 24px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer; animation: rt-in 0.18s ease; }
@@ -441,6 +523,35 @@
         background: color-mix(in srgb, {{ player_tint }} 35%, var(--bg));
     }
     {% endif %}
+
+    /* ── Mobile (phones only — iPads keep the desktop layout) ── */
+    @media (max-width: 640px) {
+        body { overflow: auto; }
+        .container { padding: 6px 8px; overflow: visible; }
+
+        /* Hide the map/canvas pane entirely; the drawer becomes the whole UI */
+        .tabletop-layout .map-pane { display: none; }
+
+        /* Sidebar fills the screen and stays open with no slide animation */
+        .tabletop-layout .drawer-sidebar,
+        .tabletop-layout .drawer-sidebar.is-open {
+            width: 100%; flex: 1; min-width: 0;
+            border-left-width: 0; border-top: 1px solid var(--border);
+            transition: none;
+        }
+        .drawer-tab-bar { min-width: 0; padding: 5px 6px; }
+        .drawer-tab-btn { padding: 6px 10px; }
+        .drawer-panels-wrapper { min-width: 0; display: block; }
+
+        /* No need for the open-arrow or the pin button in the always-open layout */
+        #drawer-open-btn,
+        #drawer-pin-btn { display: none; }
+
+        /* Slightly tighter top bar on phones */
+        .tt-topbar { gap: 8px; }
+        .tt-topbar-title { font-size: 18px; }
+        .tt-topbar-thumb { width: 36px; height: 36px; }
+    }
 </style>
 {% if campaign.font_override %}
 <script>document.documentElement.dataset.font = {{ campaign.font_override | tojson }};</script>
@@ -448,22 +559,22 @@
 {% endblock %}
 
 {% block content %}
-<div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+<div class="tt-topbar">
     {% if campaign.thumbnail_url %}
-    <img src="{{ campaign.thumbnail_url }}" alt="" style="width: 48px; height: 48px; border-radius: 6px; object-fit: cover;">
+    <img src="{{ campaign.thumbnail_url }}" alt="" class="tt-topbar-thumb">
     {% endif %}
-    <h1 style="margin: 0;">{{ campaign.name }}
-        <span class="badge system" style="background:var(--accent-bg2); color:var(--accent); font-size:11px; padding:2px 8px; border-radius:10px; vertical-align:middle;">{{ system.label }}</span>
-        {% if is_gm %}<span class="muted">(GM)</span>{% endif %}
+    <h1 class="tt-topbar-title">{{ campaign.name }}
+        <span class="badge system tt-topbar-badge">{{ system.label }}</span>
+        {% if is_gm %}<span class="muted tt-topbar-gm">(GM)</span>{% endif %}
     </h1>
     {% if is_gm %}
-    <span style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+    <span class="tt-topbar-actions">
         {% if campaign.session_active %}
-        <form method="post" action="/campaign/{{ campaign.id }}/session/end" style="display:inline;">
+        <form method="post" action="/campaign/{{ campaign.id }}/session/end" class="tt-topbar-form">
             <button type="submit" title="End session and kick players back to lobby">⏹ End session</button>
         </form>
         {% else %}
-        <form method="post" action="/campaign/{{ campaign.id }}/session/start" style="display:inline;">
+        <form method="post" action="/campaign/{{ campaign.id }}/session/start" class="tt-topbar-form">
             <button type="submit" title="Open the tabletop to players">▶ Start session</button>
         </form>
         {% endif %}
@@ -570,7 +681,7 @@
         <div id="player-char-list">
         {% set shown = namespace(count=0) %}
         {% for c in characters %}
-        {% if is_gm or c.owner_user_id == user.id %}
+        {% if c.owner_user_id == user.id %}
         {% set shown.count = shown.count + 1 %}
         <div class="char-row" data-char-id="{{ c.id }}">
             <button class="char-fav" data-char-id="{{ c.id }}" title="Favourite">☆</button>
@@ -631,7 +742,7 @@
                     {% set score = (ab_map.get(ab) or 10) | int %}
                     {% set mod = ((score - 10) // 2) %}
                     {% set mod_str = (('+' if mod >= 0 else '') ~ (mod | string)) %}
-                    <button class="mini-roll-btn mac-btn" data-expr="1d20{{ mod_str }}" data-note="{{ c.name }}: {{ ab }} check" title="{{ ab }} check {{ mod_str }}">🎲</button>
+                    <button class="mini-roll-btn mac-btn" data-expr="1d20{{ mod_str }}" data-note="{{ c.name }}: {{ ab }} check" title="{{ ab }} check {{ mod_str }}"><span class="mac-btn-ab">{{ ab }}</span><span class="mac-btn-mod">{{ mod_str }}</span></button>
                     {% endfor %}
                     {# Row 5: save buttons #}
                     <span class="mac-row-label">Save</span>
@@ -641,7 +752,7 @@
                     {% set is_prof = save_map.get(ab, false) %}
                     {% set sv = mod + (prof if is_prof else 0) %}
                     {% set sv_str = (('+' if sv >= 0 else '') ~ (sv | string)) %}
-                    <button class="mini-roll-btn mac-btn" data-expr="1d20{{ sv_str }}" data-note="{{ c.name }}: {{ ab }} save{{ ' (prof)' if is_prof else '' }}" title="{{ ab }} save {{ sv_str }}">🎲</button>
+                    <button class="mini-roll-btn mac-btn" data-expr="1d20{{ sv_str }}" data-note="{{ c.name }}: {{ ab }} save{{ ' (prof)' if is_prof else '' }}" title="{{ ab }} save {{ sv_str }}{{ ' (prof)' if is_prof else '' }}"><span class="mac-btn-ab">{{ ab }}</span><span class="mac-btn-mod">{{ sv_str }}</span></button>
                     {% endfor %}
                 </div>
                 {# ── Skills ── #}
@@ -670,6 +781,79 @@
                 </div>
                 {% endfor %}
                 </div>
+                {# ── Mini Attacks ── #}
+                {% set attacks_list = sh.get('attacks') or [] %}
+                {% if attacks_list %}
+                <div class="mini-section-label" style="margin-top:10px;">Attacks</div>
+                <div class="mini-attacks" data-char-id="{{ c.id }}">
+                {% for a in attacks_list %}
+                {% set a_save_dc = (a.save_dc or 0) | int %}
+                {% set a_is_save = a_save_dc > 0 and a.save_ability %}
+                {% set a_atk_bonus = a.attack_bonus or a.bonus or '' %}
+                <div class="mini-attack-row" title="{{ a.name }}{% if a.range %} · {{ a.range }}{% endif %}">
+                    <span class="mini-attack-name">{{ a.name }}</span>
+                    {% if a_atk_bonus and not a_is_save %}<span class="mini-attack-tag atk">{{ a_atk_bonus }}</span>{% endif %}
+                    {% if a.damage %}<span class="mini-attack-tag dmg">{{ a.damage }}</span>{% endif %}
+                    {% if a_is_save %}<span class="mini-attack-tag save">DC {{ a_save_dc }} {{ a.save_ability }}</span>{% endif %}
+                    <button type="button" class="mini-strike-btn" data-char-id="{{ c.id }}" data-attack-idx="{{ loop.index0 }}" data-attack-name="{{ a.name }}" title="Strike with {{ a.name }}">🗡 Strike</button>
+                </div>
+                {% endfor %}
+                </div>
+                {% endif %}
+                {# ── Mini Spells ── #}
+                {% set spells_list = sh.get('spells') or [] %}
+                {% set spell_slots_map = sh.get('spell_slots') or {} %}
+                {% set _class_slug = (sh.get('class') or '') | string | lower | trim %}
+                {% set _is_prepared_caster = _class_slug in ['cleric','druid','paladin','wizard','artificer'] %}
+                {% set _spell_vis = namespace(any=false) %}
+                {% for s in spells_list %}
+                {% set s_lvl = (s.level or 0) | int %}
+                {% if not (_is_prepared_caster and s_lvl > 0 and not s.prepared) %}
+                {% set _spell_vis.any = true %}
+                {% endif %}
+                {% endfor %}
+                {% if _spell_vis.any %}
+                <div class="mini-section-label" style="margin-top:10px;">Spells</div>
+                <div class="mini-spells" data-char-id="{{ c.id }}">
+                {% for lvl_i in range(10) %}
+                    {% set _level_has = namespace(any=false) %}
+                    {% for s in spells_list %}
+                    {% set s_lvl = (s.level or 0) | int %}
+                    {% if s_lvl == lvl_i and not (_is_prepared_caster and s_lvl > 0 and not s.prepared) %}
+                    {% set _level_has.any = true %}
+                    {% endif %}
+                    {% endfor %}
+                    {% if _level_has.any %}
+                    <div class="mini-spell-level">{{ 'Cantrips' if lvl_i == 0 else 'Level ' ~ lvl_i ~ ' Spells' }}</div>
+                    {% if lvl_i >= 1 %}
+                    {% set slot = spell_slots_map.get(lvl_i | string) or {} %}
+                    {% set slot_total = (slot.get('total') or 0) | int %}
+                    {% set slot_used = (slot.get('used') or 0) | int %}
+                    {% if slot_total > 0 %}
+                    <div class="mini-slot-row" data-char-id="{{ c.id }}" data-slot-level="{{ lvl_i }}" data-total="{{ slot_total }}" data-used="{{ slot_used }}">
+                        <span class="mini-slot-label">Slots</span>
+                        <span class="mini-slot-pips">
+                        {% for i in range(slot_total) %}<span class="mini-slot-pip{{ ' used' if i < slot_used else '' }}"></span>{% endfor %}
+                        </span>
+                        <span class="mini-slot-count">{{ slot_total - slot_used }}/{{ slot_total }}</span>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+                    {% for s in spells_list %}
+                    {% set s_lvl = (s.level or 0) | int %}
+                    {% if s_lvl == lvl_i and not (_is_prepared_caster and s_lvl > 0 and not s.prepared) %}
+                    <div class="mini-spell-row" title="{{ s.name }}{% if s.casting_time %} · {{ s.casting_time }}{% endif %}{% if s.range %} · {{ s.range }}{% endif %}">
+                        <span class="mini-spell-name">{{ s.name }}{% if s.concentration %} <span class="mini-spell-tag" title="Concentration">⏱</span>{% endif %}{% if s.ritual %} <span class="mini-spell-tag" title="Ritual">®</span>{% endif %}</span>
+                        {% if s.damage %}<span class="mini-spell-tag dmg">{{ s.damage }}</span>{% endif %}
+                        {% if s.save_ability %}<span class="mini-spell-tag save">{{ s.save_ability }} save</span>{% endif %}
+                        <button type="button" class="mini-cast-btn" data-char-id="{{ c.id }}" data-spell-idx="{{ loop.index0 }}" data-spell-name="{{ s.name }}" data-spell-level="{{ s_lvl }}" title="Cast {{ s.name }}{% if s_lvl > 0 %} (uses Lv {{ s_lvl }} slot){% endif %}">🪄 Cast</button>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                    {% endif %}
+                {% endfor %}
+                </div>
+                {% endif %}
             {% else %}
                 {% if sh.get('summary') %}
                 <p class="mini-summary">{{ sh.get('summary', '')[:180] }}</p>
@@ -1053,7 +1237,8 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     /* Restore last open drawer on load — suppress animation for initial paint */
     sidebar.classList.add('no-transition');
     const saved = (() => { try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; } })();
-    if (saved || pinned) {
+    const isMobile = window.matchMedia('(max-width: 640px)').matches;
+    if (saved || pinned || isMobile) {
         openPanel(saved || tabs[0]?.dataset.target);
     } else {
         openBtn.hidden = false;
@@ -1177,6 +1362,118 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             } finally {
                 btn.disabled = false;
             }
+        });
+
+        /* Mini-sheet spell cast buttons — post to /cast_spell */
+        function _renderMiniSlotPips(slotRow) {
+            const total = parseInt(slotRow.dataset.total) || 0;
+            const used = parseInt(slotRow.dataset.used) || 0;
+            const pipBox = slotRow.querySelector('.mini-slot-pips');
+            const countEl = slotRow.querySelector('.mini-slot-count');
+            if (pipBox) {
+                let pips = '';
+                for (let i = 0; i < total; i++) {
+                    pips += `<span class="mini-slot-pip${i < used ? ' used' : ''}"></span>`;
+                }
+                pipBox.innerHTML = pips;
+            }
+            if (countEl) countEl.textContent = `${total - used}/${total}`;
+        }
+
+        document.getElementById('player-char-list').addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('.mini-cast-btn');
+            if (!btn) return;
+            const charId = parseInt(btn.dataset.charId, 10);
+            const idx = parseInt(btn.dataset.spellIdx, 10);
+            const lvl = parseInt(btn.dataset.spellLevel, 10) || 0;
+            const spellName = btn.dataset.spellName || 'Spell';
+            if (!charId || isNaN(idx)) return;
+
+            // Optimistically decrement the matching slot pip (cantrips skip this)
+            let slotRow = null, prevUsed = 0;
+            if (lvl >= 1) {
+                slotRow = document.querySelector(
+                    `.mini-spells[data-char-id="${charId}"] .mini-slot-row[data-slot-level="${lvl}"]`);
+                if (slotRow) {
+                    const total = parseInt(slotRow.dataset.total) || 0;
+                    prevUsed = parseInt(slotRow.dataset.used) || 0;
+                    if (total <= 0 || prevUsed >= total) {
+                        (window.showToast || function (m) { alert(m); })(
+                            `No Lv ${lvl} spell slot available for ${spellName}.`, 'error');
+                        return;
+                    }
+                    slotRow.dataset.used = prevUsed + 1;
+                    _renderMiniSlotPips(slotRow);
+                }
+            }
+            btn.disabled = true;
+            try {
+                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        character_id: charId,
+                        spell_index: idx,
+                        slot_level: lvl,
+                    }),
+                });
+                if (!resp.ok) {
+                    if (slotRow) {
+                        slotRow.dataset.used = prevUsed;
+                        _renderMiniSlotPips(slotRow);
+                    }
+                    let body;
+                    try { body = await resp.json(); } catch { body = null; }
+                    if (resp.status === 409 && body && body.error === 'no_slot') {
+                        (window.showToast || function (m) { alert(m); })(
+                            `No Lv ${body.level} spell slot available for ${spellName}.`, 'error');
+                    } else {
+                        (window.showToast || function (m) { alert(m); })(
+                            'Cast failed: ' + (body ? JSON.stringify(body) : await resp.text()), 'error');
+                    }
+                }
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        /* Mini-sheet strike (weapon attack) buttons — post to /attack */
+        document.getElementById('player-char-list').addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('.mini-strike-btn');
+            if (!btn) return;
+            const charId = parseInt(btn.dataset.charId, 10);
+            const idx = parseInt(btn.dataset.attackIdx, 10);
+            const atkName = btn.dataset.attackName || 'Attack';
+            if (!charId || isNaN(idx)) return;
+            btn.disabled = true;
+            try {
+                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ character_id: charId, attack_index: idx }),
+                });
+                if (!resp.ok) {
+                    let body; try { body = await resp.json(); } catch { body = null; }
+                    (window.showToast || function (m) { alert(m); })(
+                        `Strike failed (${atkName}): ` + (body ? JSON.stringify(body) : await resp.text()), 'error');
+                }
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        /* Keep mini slot pips in sync with broadcasts from /cast_spell */
+        document.addEventListener('vtt:ws-message', (ev) => {
+            const msg = ev.detail;
+            if (!msg || msg.type !== 'spell_slot_update') return;
+            const d = msg.data || {};
+            if (!d.character_id || d.level == null) return;
+            const slotRow = document.querySelector(
+                `.mini-spells[data-char-id="${d.character_id}"] .mini-slot-row[data-slot-level="${d.level}"]`);
+            if (!slotRow) return;
+            slotRow.dataset.total = d.total ?? slotRow.dataset.total;
+            slotRow.dataset.used = d.used ?? slotRow.dataset.used;
+            _renderMiniSlotPips(slotRow);
         });
 
         applyFavs();

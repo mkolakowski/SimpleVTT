@@ -51,31 +51,35 @@
                     {# HP block #}
                     <div style="flex:1;min-width:155px;background:#1a1e2c;border:1px solid #2e3550;border-radius:8px;padding:10px 12px;">
                         <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:5px;">❤ Hit Points</div>
-                        <div style="display:flex;align-items:baseline;gap:5px;">
-                            <input type="number" name="hp.current" value="{{ sheet.get('hp',{}).get('current',10) }}"
+                        <div style="display:flex;align-items:center;gap:5px;">
+                            {% if can_edit %}<button type="button" class="hp-step-btn minus" data-hp-step="-1" title="Lose 1 HP (Shift = -5)">−</button>{% endif %}
+                            <input type="number" name="hp.current" id="hp-current-input" value="{{ sheet.get('hp',{}).get('current',10) }}"
                                    style="width:56px;font-size:30px;font-weight:800;color:#e4a0a0;text-align:center;background:transparent;border:none;border-bottom:2px solid #5a3040;padding:0 2px;-moz-appearance:textfield;"
                                    {% if not can_edit %}readonly{% endif %}>
+                            {% if can_edit %}<button type="button" class="hp-step-btn plus" data-hp-step="1" title="Heal 1 HP (Shift = +5)">+</button>{% endif %}
                             <span style="font-size:16px;color:#3a4560;">/</span>
                             <span id="hp-max-disp" style="font-size:16px;font-weight:600;color:#7a8ab0;">{{ sheet.get('hp',{}).get('max',10) }}</span>
                             <span style="font-size:10px;color:#3a4560;margin-left:1px;">max</span>
                         </div>
-                        <div style="display:flex;align-items:center;gap:6px;margin-top:7px;padding-top:7px;border-top:1px solid #1e2436;">
+                        <div style="display:flex;align-items:center;gap:5px;margin-top:7px;padding-top:7px;border-top:1px solid #1e2436;">
                             <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Temp</span>
-                            <input type="number" name="hp.temp" value="{{ sheet.get('hp',{}).get('temp',0) }}"
+                            {% if can_edit %}<button type="button" class="hp-step-btn hp-step-btn-temp minus" data-temp-step="-1" title="-1 Temp HP">−</button>{% endif %}
+                            <input type="number" name="hp.temp" id="hp-temp-input" value="{{ sheet.get('hp',{}).get('temp',0) }}"
                                    style="width:44px;font-size:15px;font-weight:700;color:#8ecfe0;text-align:center;background:transparent;border:none;border-bottom:1px solid #1e3040;padding:0 2px;-moz-appearance:textfield;"
                                    {% if not can_edit %}readonly{% endif %}>
+                            {% if can_edit %}<button type="button" class="hp-step-btn hp-step-btn-temp plus" data-temp-step="1" title="+1 Temp HP">+</button>{% endif %}
                             <span style="font-size:10px;color:#3a4560;">HP</span>
                         </div>
                     </div>
 
                     {# Combat stat chips (2×2 grid) #}
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;flex-shrink:0;">
-                        {# AC — always editable in play #}
-                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1e2c;border:1px solid #2e3550;border-radius:6px;padding:6px 8px;min-width:58px;min-height:56px;">
+                        {# AC — computed from base AC + equipped inventory items #}
+                        <div id="ac-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1e2c;border:1px solid #2e3550;border-radius:6px;padding:6px 8px;min-width:58px;min-height:56px;"
+                             title="Effective AC. Edit Base AC in the character details panel.">
                             <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:2px;">AC</span>
-                            <input type="number" name="ac" value="{{ sheet.get('ac',10) }}"
-                                   style="width:38px;font-size:22px;font-weight:800;color:#e8ecf4;text-align:center;background:transparent;border:none;padding:0;-moz-appearance:textfield;"
-                                   {% if not can_edit %}readonly{% endif %}>
+                            <span id="ac-disp" style="font-size:22px;font-weight:800;color:#e8ecf4;line-height:1;">{{ sheet.get('ac',10) }}</span>
+                            <input type="number" name="ac" id="ac-hidden" value="{{ sheet.get('ac',10) }}" style="display:none;" tabindex="-1" aria-hidden="true">
                         </div>
                         {# Speed — display; edit via panel #}
                         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1e2c;border:1px solid #2e3550;border-radius:6px;padding:6px 8px;min-width:58px;min-height:56px;">
@@ -95,6 +99,10 @@
                     </div>
 
                 </div>{# end HP + chips #}
+                {# AC breakdown — explains how the AC card was computed #}
+                <div id="ac-breakdown-line" style="font-size:10px;color:#5a6080;font-style:italic;margin-top:2px;line-height:1.4;">
+                    AC = {{ sheet.get('ac', 10) }}
+                </div>
             </div>{# end identity+vitals column #}
         </div>{# end header flex #}
 
@@ -134,6 +142,12 @@
                     <input type="number" name="hp.max" id="hp-max-input" value="{{ sheet.get('hp',{}).get('max',10) }}">
                 </label>
                 <label style="display:flex;flex-direction:column;gap:3px;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;" title="Your AC when nothing AC-altering is equipped (unarmored).">Base AC</span>
+                    <input type="number" name="base_ac" id="base-ac-input"
+                           value="{{ sheet.get('base_ac', sheet.get('ac', 10)) }}"
+                           min="0" max="40">
+                </label>
+                <label style="display:flex;flex-direction:column;gap:3px;">
                     <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Speed</span>
                     <input type="number" name="speed" id="speed-edit-input" value="{{ sheet.get('speed',30) }}">
                 </label>
@@ -151,12 +165,14 @@
             </div>
         </div>
         {% else %}
-        {# Readonly: hidden inputs so roll calculations can read these values #}
+        {# Readonly: hidden inputs so roll / spellcasting calculations can read these values #}
         <input type="hidden" name="proficiency_bonus" value="{{ sheet.get('proficiency_bonus',2) }}">
         <input type="hidden" name="initiative_bonus"  value="{{ sheet.get('initiative_bonus',0) }}">
         <input type="hidden" name="hp.max"            value="{{ sheet.get('hp',{}).get('max',10) }}">
         <input type="hidden" name="speed"             value="{{ sheet.get('speed',30) }}">
         <input type="hidden" name="level"             value="{{ sheet.get('level',1) }}">
+        <input type="hidden" name="class"             value="{{ sheet.get('class','') }}">
+        <input type="hidden" name="base_ac" id="base-ac-input" value="{{ sheet.get('base_ac', sheet.get('ac', 10)) }}">
         {% endif %}
 
         <style>
@@ -176,6 +192,72 @@
         @media (max-width: 599px) {
             #sk-card-view { grid-template-columns: repeat(2, 1fr); }
         }
+
+        /* Currency tracker — GP cell is emphasized */
+        .currency-bar .cur-cell {
+            display: flex; align-items: center; gap: 5px;
+            background: #1a1e2c; border: 1px solid #2e3550; border-radius: 5px;
+            padding: 3px 8px;
+        }
+        .currency-bar .cur-label {
+            font-size: 10px; font-weight: 700; letter-spacing: .04em;
+            color: #7a8ab0; min-width: 18px;
+        }
+        .currency-bar .cur-cell input {
+            width: 50px; font-size: 12px; font-weight: 600; color: #e8ecf4;
+            text-align: right; background: transparent; border: none; padding: 0 2px;
+            -moz-appearance: textfield;
+        }
+        .currency-bar .cur-cell input::-webkit-outer-spin-button,
+        .currency-bar .cur-cell input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .currency-bar .cur-cp .cur-label { color: #b87333; }   /* copper */
+        .currency-bar .cur-sp .cur-label { color: #c4c8cf; }   /* silver */
+        .currency-bar .cur-ep .cur-label { color: #b8bf8a; }   /* electrum */
+        .currency-bar .cur-pp .cur-label { color: #d6e0ec; }   /* platinum */
+        .currency-bar .cur-gp {
+            background: linear-gradient(180deg, #2a230f, #1f1a0a);
+            border-color: #6a5418;
+            box-shadow: 0 0 0 1px rgba(218, 165, 32, .12) inset;
+        }
+        .currency-bar .cur-gp .cur-label { color: #f5c842; font-size: 12px; }
+        .currency-bar .cur-gp input { font-size: 14px; font-weight: 700; color: #f5c842; width: 64px; }
+
+        /* Suppress the browser's number-input spinner on HP / Temp HP — the
+           explicit ± buttons are the supported way to adjust those values. */
+        #hp-current-input,
+        #hp-temp-input { -moz-appearance: textfield; appearance: textfield; }
+        #hp-current-input::-webkit-outer-spin-button,
+        #hp-current-input::-webkit-inner-spin-button,
+        #hp-temp-input::-webkit-outer-spin-button,
+        #hp-temp-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+        /* HP / Temp +/- buttons */
+        .hp-step-btn {
+            width: 22px; height: 22px;
+            display: inline-flex; align-items: center; justify-content: center;
+            background: #20242e; border: 1px solid #38415a; border-radius: 4px;
+            color: #c0c8d8; font-size: 13px; font-weight: 700; line-height: 1;
+            cursor: pointer; padding: 0; transition: background .12s, border-color .12s;
+            -webkit-user-select: none; user-select: none;
+        }
+        .hp-step-btn:hover  { background: #2a3046; border-color: #5a6886; }
+        .hp-step-btn:active { transform: scale(.94); }
+        .hp-step-btn.minus  { color: #e4a0a0; }
+        .hp-step-btn.plus   { color: #a0e4a0; }
+        .hp-step-btn-temp { width: 18px; height: 18px; font-size: 11px; }
+
+        /* Collapsible fieldsets — click the legend (or its chevron) to collapse */
+        fieldset.collapsible > legend { cursor: pointer; user-select: none; }
+        fieldset.collapsible > legend .fs-chevron {
+            display: inline-block;
+            margin-right: 6px;
+            font-size: 9px;
+            color: var(--muted, #888);
+            transition: transform 0.15s ease;
+            transform: rotate(0deg);
+        }
+        fieldset.collapsible.collapsed > legend .fs-chevron { transform: rotate(-90deg); }
+        fieldset.collapsible.collapsed > *:not(legend) { display: none !important; }
         </style>
 
         <fieldset>
@@ -382,11 +464,91 @@
                         color:#b0b8cc;line-height:1.6;"></div>
         </fieldset>
 
-        <fieldset>
-            <legend>Attacks (one per line, "Name | bonus | damage")</legend>
-            <textarea name="attacks" rows="3" {% if not can_edit %}readonly{% endif %}>{% for a in (sheet.get('attacks') or []) %}{{ a.get('name','') }} | {{ a.get('bonus','') }} | {{ a.get('damage','') }}
-{% endfor %}</textarea>
+        {# ── Attacks fieldset ─────────────────────────────────────────── #}
+        <fieldset id="attacks-fieldset">
+            <legend>Attacks
+                {% if can_edit %}
+                <button type="button" id="browse-weapons-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">🔍 Browse Items</button>
+                <button type="button" id="add-custom-attack-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;">+ Custom</button>
+                {% endif %}
+            </legend>
+
+            <textarea id="attacks-data" name="attacks" style="display:none;" {% if not can_edit %}readonly{% endif %}>{{ (sheet.get('attacks') or []) | tojson }}</textarea>
+            <div id="attacks-list-container" style="min-height:20px;"></div>
+
+            {% if can_edit %}
+            <div id="custom-attack-panel" style="display:none;margin-top:10px;border:1px solid #2e3140;border-radius:5px;padding:10px;background:#191c24;">
+                <div class="row" style="margin-bottom:6px;flex-wrap:wrap;">
+                    <label style="flex:2;min-width:140px;">Name<input type="text" id="ca-name" placeholder="e.g. Longsword" style="width:100%;"></label>
+                    <label style="flex:1;min-width:90px;">Range<input type="text" id="ca-range" placeholder="Melee or 30/120 ft" style="width:100%;"></label>
+                </div>
+                <div class="row" style="margin-bottom:6px;flex-wrap:wrap;">
+                    <label style="width:90px;">Atk bonus<input type="text" id="ca-atk" placeholder="+5" style="width:100%;" title="To-hit bonus, e.g. +5. Leave blank for save-only attacks."></label>
+                    <label style="flex:1;min-width:100px;">Damage<input type="text" id="ca-damage" placeholder="1d8+3" style="width:100%;" title="Damage dice expression, e.g. 1d8+3 or 2d6"></label>
+                    <label style="flex:1;min-width:90px;">Damage type<input type="text" id="ca-damage-type" placeholder="slashing" style="width:100%;"></label>
+                </div>
+                <div class="row" style="margin-bottom:6px;flex-wrap:wrap;">
+                    <label style="width:90px;">Save DC<input type="number" id="ca-save-dc" placeholder="" min="0" max="40" style="width:100%;" title="Set if this attack is save-based instead of attack-roll based."></label>
+                    <label style="width:90px;">Save<select id="ca-save-ability" style="width:100%;">
+                        <option value="">—</option>
+                        <option value="STR">STR</option><option value="DEX">DEX</option>
+                        <option value="CON">CON</option><option value="INT">INT</option>
+                        <option value="WIS">WIS</option><option value="CHA">CHA</option>
+                    </select></label>
+                </div>
+                <label>Description<textarea id="ca-desc" rows="2" placeholder="Notes, properties, etc." style="width:100%;font-size:12px;"></textarea></label>
+                <div style="display:flex;gap:8px;margin-top:8px;">
+                    <button type="button" id="ca-add-btn">Add Attack</button>
+                    <button type="button" id="ca-cancel-btn">Cancel</button>
+                </div>
+            </div>
+            {% endif %}
         </fieldset>
+
+        {# ── Item Browser Overlay (shared by Inventory + Attacks) ─────── #}
+        <div id="item-browser-overlay"
+             style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(6,8,16,.82);overflow:hidden;">
+            <div style="position:absolute;inset:16px;max-width:860px;margin:0 auto;
+                        background:#1a1d27;border:1px solid #2e3140;border-radius:10px;
+                        display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0009;">
+                <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;
+                            background:#191c24;border-bottom:1px solid #2e3140;flex-shrink:0;">
+                    <span style="font-size:14px;font-weight:700;color:#dde2f0;">🔍 Item Browser</span>
+                    <input type="text" id="ib-search" placeholder="Search items…"
+                           style="flex:1;max-width:280px;font-size:12px;">
+                    <button type="button" id="ib-search-btn" style="font-size:12px;padding:4px 12px;">Search</button>
+                    <button type="button" id="ib-close-btn"
+                            style="margin-left:auto;font-size:12px;padding:4px 12px;background:#2a1010;border-color:#6a2020;color:#e0a0a0;">✕ Close</button>
+                </div>
+                <div style="display:flex;gap:5px;flex-wrap:wrap;padding:8px 14px;
+                            background:#161820;border-bottom:1px solid #1e2130;flex-shrink:0;align-items:center;">
+                    <span style="font-size:10px;font-weight:700;color:#5a6080;text-transform:uppercase;letter-spacing:.06em;margin-right:4px;">Type</span>
+                    <button type="button" class="ib-cat" data-cat="weapons"
+                            style="font-size:11px;padding:3px 12px;border-radius:10px;background:#2a3a5a;border-color:#6ab;color:#6ab;">Weapons</button>
+                    <button type="button" class="ib-cat" data-cat="armor"
+                            style="font-size:11px;padding:3px 12px;border-radius:10px;background:transparent;border-color:#2e3550;color:#5a6080;">Armor</button>
+                    <button type="button" class="ib-cat" data-cat="magicitems"
+                            style="font-size:11px;padding:3px 12px;border-radius:10px;background:transparent;border-color:#2e3550;color:#5a6080;">Magic Items</button>
+                    <label id="ib-prof-only-wrap" style="margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11px;color:#7a8ab0;cursor:pointer;">
+                        <input type="checkbox" id="ib-prof-only" checked>
+                        <span>Proficient only</span>
+                        <span id="ib-prof-class" style="font-size:10px;color:#5a6080;font-style:italic;"></span>
+                    </label>
+                </div>
+                <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
+                    <div id="ib-list-panel"
+                         style="width:260px;border-right:1px solid #1e2130;overflow-y:auto;flex-shrink:0;padding:6px 0;">
+                        <div style="padding:14px;color:#3a4560;font-size:12px;">
+                            Pick a type or search to browse items.
+                        </div>
+                    </div>
+                    <div id="ib-detail-panel"
+                         style="flex:1;overflow-y:auto;padding:18px 20px;">
+                        <p style="color:#3a4560;font-size:13px;">Select an item to see its details.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
 
         {# ── Unified Spells fieldset ──────────────────────────────────── #}
         <fieldset id="spells-fieldset">
@@ -394,8 +556,9 @@
                 {% if can_edit %}
                 <button type="button" id="spell-browser-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">🔍 Browse Spells</button>
                 <button type="button" id="add-custom-spell-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;">+ Custom</button>
-                <button type="button" id="hide-unprepared-btn" style="display:none;font-size:11px;padding:2px 8px;margin-left:4px;">🙈 Hide Unprepared</button>
                 {% endif %}
+                {# "Hide Unprepared" toggle is purely visual — available to readonly viewers too. #}
+                <button type="button" id="hide-unprepared-btn" style="display:none;font-size:11px;padding:2px 8px;margin-left:4px;" title="Toggle visibility of unprepared leveled spells">👁 Showing all</button>
             </legend>
 
             {# ── Spellcasting Info Bar ── #}
@@ -603,8 +766,8 @@
         })();
         </script>
 
-        <fieldset>
-            <legend>Class Proficiencies
+        <fieldset class="collapsible" data-collapse-key="class-prof">
+            <legend><span class="fs-chevron">▼</span>Class Proficiencies
                 {% if can_edit %}
                 <button type="button" id="sync-class-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;" title="Re-fetch class details from Open5e">↻ Sync</button>
                 <span id="sync-class-status" style="font-size:11px;margin-left:6px;"></span>
@@ -655,8 +818,8 @@
             {% endif %}
         </fieldset>
 
-        <fieldset>
-            <legend>Class, Subclass &amp; Race Features</legend>
+        <fieldset class="collapsible" data-collapse-key="features">
+            <legend><span class="fs-chevron">▼</span>Class, Subclass &amp; Race Features</legend>
 
             {% set cf = sheet.get('class_features','') %}
             {% set sf = sheet.get('subclass_features','') %}
@@ -702,17 +865,110 @@
             </div>
         </fieldset>
 
-        <label>Features
+        {# Features field is hidden in the UI but kept in the form so existing data round-trips on save. #}
+        <label style="display:none;" aria-hidden="true">Features
             <textarea name="features" rows="3" {% if not can_edit %}readonly{% endif %}>{{ sheet.get('features','') }}</textarea>
         </label>
 
-        <label>Inventory (one per line)
-            <textarea name="inventory" rows="3" {% if not can_edit %}readonly{% endif %}>{{ '\n'.join(sheet.get('inventory') or []) }}</textarea>
-        </label>
+        {# ── Inventory fieldset ───────────────────────────────────────── #}
+        <fieldset id="inventory-fieldset" class="collapsible" data-collapse-key="inventory">
+            <legend><span class="fs-chevron">▼</span>Inventory
+                {% if can_edit %}
+                <button type="button" id="browse-items-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">🔍 Browse Items</button>
+                <button type="button" id="add-custom-item-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;">+ Custom</button>
+                {% endif %}
+            </legend>
 
-        <label>Notes
-            <textarea name="notes" rows="3" {% if not can_edit %}readonly{% endif %}>{{ sheet.get('notes','') }}</textarea>
-        </label>
+            {# Currency tracker (GP-biased) + total weight #}
+            {% set _cur = sheet.get('currency') or {} %}
+            <div class="currency-bar" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#141720;border:1px solid #252840;border-radius:6px;padding:8px 12px;margin-bottom:10px;">
+                <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;flex-shrink:0;">💰 Currency</span>
+                <label class="cur-cell cur-cp" title="Copper pieces">
+                    <span class="cur-label">CP</span>
+                    <input type="number" name="currency.cp" min="0"
+                           value="{{ _cur.get('cp', 0) | int }}"
+                           {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label class="cur-cell cur-sp" title="Silver pieces (10 cp = 1 sp)">
+                    <span class="cur-label">SP</span>
+                    <input type="number" name="currency.sp" min="0"
+                           value="{{ _cur.get('sp', 0) | int }}"
+                           {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label class="cur-cell cur-ep" title="Electrum pieces (5 sp = 1 ep)">
+                    <span class="cur-label">EP</span>
+                    <input type="number" name="currency.ep" min="0"
+                           value="{{ _cur.get('ep', 0) | int }}"
+                           {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label class="cur-cell cur-gp" title="Gold pieces — primary currency">
+                    <span class="cur-label">GP</span>
+                    <input type="number" name="currency.gp" min="0"
+                           value="{{ _cur.get('gp', 0) | int }}"
+                           {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label class="cur-cell cur-pp" title="Platinum pieces (1 pp = 10 gp)">
+                    <span class="cur-label">PP</span>
+                    <input type="number" name="currency.pp" min="0"
+                           value="{{ _cur.get('pp', 0) | int }}"
+                           {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <span id="cur-total" style="font-size:11px;color:#7a8ab0;flex-shrink:0;"
+                      title="Total wealth converted to gold pieces (cp/100 + sp/10 + ep/2 + gp + pp×10)">≈ 0 gp</span>
+                <span style="margin-left:auto;font-size:11px;color:#7a8ab0;flex-shrink:0;">
+                    Weight: <span id="inv-total-weight" style="font-weight:700;color:#c0c8d8;">0</span> lb
+                </span>
+            </div>
+
+            {# Inventory data — JSON, hidden #}
+            <textarea id="inventory-data" name="inventory" style="display:none;" {% if not can_edit %}readonly{% endif %}>{{ (sheet.get('inventory') or []) | tojson }}</textarea>
+            <div id="inventory-list-container" style="min-height:20px;"></div>
+
+            {# Custom item panel #}
+            {% if can_edit %}
+            <div id="custom-item-panel" style="display:none;margin-top:10px;border:1px solid #2e3140;border-radius:5px;padding:10px;background:#191c24;">
+                <div class="row" style="margin-bottom:6px;flex-wrap:wrap;">
+                    <label style="flex:2;min-width:140px;">Name<input type="text" id="ci-name" placeholder="Item name" style="width:100%;"></label>
+                    <label style="min-width:110px;">Type<select id="ci-type" style="width:100%;">
+                        <option value="gear">Gear</option>
+                        <option value="weapon">Weapon</option>
+                        <option value="armor">Armor</option>
+                        <option value="shield">Shield</option>
+                        <option value="tool">Tool</option>
+                        <option value="consumable">Consumable</option>
+                    </select></label>
+                    <label style="width:60px;">Qty<input type="number" id="ci-qty" value="1" min="1" style="width:100%;"></label>
+                    <label style="width:80px;">Weight<input type="number" id="ci-weight" value="0" min="0" step="0.1" style="width:100%;" title="Weight per item, in pounds"></label>
+                </div>
+                <div class="row" id="ci-armor-row" style="margin-bottom:6px;flex-wrap:wrap;display:none;">
+                    <label style="min-width:120px;">Armor type
+                        <select id="ci-armor-type" style="width:100%;">
+                            <option value="light">Light (full DEX)</option>
+                            <option value="medium" selected>Medium (DEX cap +2)</option>
+                            <option value="heavy">Heavy (no DEX)</option>
+                        </select>
+                    </label>
+                    <label style="width:90px;">Base AC<input type="number" id="ci-ac-value" value="14" min="0" max="30" style="width:100%;" title="Armor base AC value (DEX is added based on armor type)"></label>
+                </div>
+                <div class="row" id="ci-shield-row" style="margin-bottom:6px;flex-wrap:wrap;display:none;">
+                    <label style="width:90px;">AC bonus<input type="number" id="ci-shield-bonus" value="2" min="0" max="10" style="width:100%;" title="AC bonus while equipped"></label>
+                </div>
+                <div class="row" id="ci-misc-row" style="margin-bottom:6px;flex-wrap:wrap;display:none;">
+                    <label style="width:90px;">AC bonus<input type="number" id="ci-misc-bonus" value="0" min="0" max="10" style="width:100%;" title="Optional AC bonus while equipped (e.g. Ring of Protection +1)"></label>
+                </div>
+                <label>Description<textarea id="ci-desc" rows="2" placeholder="Item details, properties, etc." style="width:100%;font-size:12px;"></textarea></label>
+                <div style="display:flex;gap:8px;margin-top:8px;">
+                    <button type="button" id="ci-add-btn">Add Item</button>
+                    <button type="button" id="ci-cancel-btn">Cancel</button>
+                </div>
+            </div>
+            {% endif %}
+        </fieldset>
+
+        <fieldset class="collapsible" data-collapse-key="notes">
+            <legend><span class="fs-chevron">▼</span>Notes</legend>
+            <textarea name="notes" rows="3" style="width:100%;" {% if not can_edit %}readonly{% endif %}>{{ sheet.get('notes','') }}</textarea>
+        </fieldset>
 
         {% if can_edit %}
             <div class="row">
@@ -1046,7 +1302,11 @@
         </div>`;
     }
 
-    let hideUnprepared = false;
+    // Restore last "Hide Unprepared" state from localStorage (per character)
+    const HIDE_UNPREP_KEY = `simplevtt_hide_unprep_{{ char.id }}`;
+    let hideUnprepared = (() => {
+        try { return localStorage.getItem(HIDE_UNPREP_KEY) === '1'; } catch { return false; }
+    })();
 
     function renderSpells() {
         if (!container) return;
@@ -1061,10 +1321,12 @@
         const isPreparedCaster = sc && sc.type === 'prepared';
 
         // ── Update "Hide Unprepared" button visibility & label ──
+        // The toggle is purely visual, so it works on readonly sheets too.
         const hideBtn = document.getElementById('hide-unprepared-btn');
         if (hideBtn) {
-            hideBtn.style.display = (isPreparedCaster && !isReadonly) ? '' : 'none';
-            hideBtn.textContent   = hideUnprepared ? '👁 Show All' : '🙈 Hide Unprepared';
+            hideBtn.style.display = isPreparedCaster ? '' : 'none';
+            // Eye-open = showing everything; eye-closed (see-no-evil) = hiding unprepared.
+            hideBtn.textContent   = hideUnprepared ? '🙈 Hiding unprepared' : '👁 Showing all';
             Object.assign(hideBtn.style, hideUnprepared
                 ? { background:'#1a2f50', borderColor:'#6ab', color:'#8cd' }
                 : { background:'', borderColor:'', color:'' });
@@ -1204,13 +1466,15 @@
     }
 
     renderSpells();
-    if (isReadonly) return;
 
-    // ── Hide Unprepared toggle ──
+    // ── Hide Unprepared toggle (works on readonly sheets too — purely visual) ──
     document.getElementById('hide-unprepared-btn')?.addEventListener('click', () => {
         hideUnprepared = !hideUnprepared;
+        try { localStorage.setItem(HIDE_UNPREP_KEY, hideUnprepared ? '1' : ''); } catch {}
         renderSpells();
     });
+
+    if (isReadonly) return;
 
     // ── Custom spell ──
     const customPanel = document.getElementById('custom-spell-panel');
@@ -1253,6 +1517,9 @@
         updateScInfo();
         // Also update the level-filter chip highlights in the browser
         if (typeof _updateLvlButtons === 'function') _updateLvlButtons();
+        // Re-render so the Hide Unprepared button visibility (which depends on
+        // whether the new class is a prepared caster) is re-evaluated.
+        renderSpells();
     }
     const _classSelectEl = document.getElementById('class-select') || document.querySelector('[name="class"]');
     const _levelInputEl  = document.querySelector('[name="level"]');
@@ -1276,7 +1543,13 @@
     let sbSelectedIdx = -1;
 
     function _classVal() {
-        return (document.getElementById('class-select') || document.querySelector('[name="class"]'))?.value?.toLowerCase().trim() || '';
+        const el = document.getElementById('class-select') || document.querySelector('[name="class"]');
+        if (!el) return '';
+        // The class <select> is populated asynchronously by sheet.js after
+        // Open5e returns the class list; until that finishes el.value is ''.
+        // The server stamps the saved class on data-current at render time
+        // so we have something to read immediately.
+        return ((el.value || el.dataset?.current || '') + '').toLowerCase().trim();
     }
 
     function _availableLevels() {
@@ -1495,5 +1768,860 @@
     // Search
     document.getElementById('sb-search-btn')?.addEventListener('click', _doSearch);
     sbSearchEl?.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); _doSearch(); } });
+})();
+</script>
+
+<script>
+/* ── Attacks framework ────────────────────────────────────────────────────── */
+(function () {
+    const atkData = document.getElementById('attacks-data');
+    if (!atkData || atkData.dataset.atkBound === '1') return;
+    atkData.dataset.atkBound = '1';
+
+    const isReadonly = atkData.hasAttribute('readonly');
+    const container  = document.getElementById('attacks-list-container');
+    const MY_CHAR_ID = {{ char.id }};
+
+    const _esc = s => String(s ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    // ── Load attacks (handle legacy {name, bonus, damage} list) ──
+    let attacks = [];
+    try {
+        const raw = atkData.value.trim();
+        if (raw.startsWith('[')) {
+            const parsed = JSON.parse(raw);
+            attacks = parsed.map(a => ({
+                name:         a.name || '',
+                attack_bonus: (a.attack_bonus ?? a.bonus ?? '').toString(),
+                damage:       a.damage || '',
+                damage_type:  a.damage_type || '',
+                range:        a.range || '',
+                save_dc:      parseInt(a.save_dc) || 0,
+                save_ability: a.save_ability || '',
+                desc:         a.desc || '',
+                _slug:        a._slug || ''
+            }));
+        }
+    } catch { attacks = []; }
+
+    function syncAttacks() { atkData.value = JSON.stringify(attacks); }
+
+    function rowHtml(a, idx) {
+        const isSave = a.save_dc > 0 && a.save_ability;
+        const rmBtn = isReadonly ? '' :
+            `<button type="button" class="atk-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:#966;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
+        const bits = [];
+        if (a.attack_bonus) bits.push(`<span style="color:#8cf;font-weight:600;">${_esc(a.attack_bonus)}</span>`);
+        if (a.damage) bits.push(`<span style="color:#e8a;font-weight:500;">${_esc(a.damage)}${a.damage_type ? ' ' + _esc(a.damage_type) : ''}</span>`);
+        if (a.range) bits.push(`<span class="muted" style="font-size:11px;">${_esc(a.range)}</span>`);
+        if (isSave) bits.push(`<span style="color:#fb6;font-weight:500;">DC ${a.save_dc} ${_esc(a.save_ability)}</span>`);
+
+        return `
+        <div class="atk-row" style="border:1px solid #2a2d3a;border-radius:4px;margin-bottom:3px;">
+            <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;">
+                <button type="button" class="atk-expand" data-idx="${idx}"
+                    style="background:none;border:none;color:#668;font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
+                <span style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                      title="${_esc(a.name)}">${_esc(a.name) || '(unnamed)'}</span>
+                <span style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;flex-shrink:0;">${bits.join('')}</span>
+                <button type="button" class="atk-strike" data-idx="${idx}"
+                        title="Strike with ${_esc(a.name)}"
+                        style="font-size:11px;color:#fbb88a;font-weight:600;background:rgba(251,184,138,.10);border:1px solid rgba(251,184,138,.4);border-radius:3px;padding:1px 8px;cursor:pointer;flex-shrink:0;"
+                    >🗡 Strike</button>
+                ${rmBtn}
+            </div>
+            <div class="atk-detail" data-idx="${idx}" style="display:none;padding:6px 10px;border-top:1px dashed #2e3140;font-size:12px;color:#9aa0aa;">
+                ${a.desc ? `<div style="line-height:1.5;color:#8a90a0;white-space:pre-wrap;">${_esc(a.desc)}</div>` : '<span class="muted">No description.</span>'}
+            </div>
+        </div>`;
+    }
+
+    function renderAttacks() {
+        if (!container) return;
+        if (!attacks.length) {
+            container.innerHTML = '<span class="muted" style="font-size:12px;">No attacks added yet.</span>';
+            return;
+        }
+        container.innerHTML = attacks.map((a, i) => rowHtml(a, i)).join('');
+
+        container.querySelectorAll('.atk-rm').forEach(btn =>
+            btn.addEventListener('click', () => { attacks.splice(+btn.dataset.idx, 1); syncAttacks(); renderAttacks(); }));
+        container.querySelectorAll('.atk-expand').forEach(btn =>
+            btn.addEventListener('click', () => {
+                const d = container.querySelector(`.atk-detail[data-idx="${btn.dataset.idx}"]`);
+                if (!d) return;
+                const open = d.style.display === 'none';
+                d.style.display = open ? '' : 'none';
+                btn.textContent = open ? '▼' : '▶';
+            }));
+        container.querySelectorAll('.atk-strike').forEach(btn =>
+            btn.addEventListener('click', async () => {
+                if (typeof CAMPAIGN_ID === 'undefined') return;
+                const idx = parseInt(btn.dataset.idx, 10);
+                btn.disabled = true;
+                try {
+                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ character_id: MY_CHAR_ID, attack_index: idx }),
+                    });
+                    if (!resp.ok) {
+                        let body; try { body = await resp.json(); } catch { body = null; }
+                        (window.showToast || function(m){ alert(m); })(
+                            'Strike failed: ' + (body ? JSON.stringify(body) : await resp.text()), 'error');
+                    }
+                } finally {
+                    btn.disabled = false;
+                }
+            }));
+    }
+
+    renderAttacks();
+    if (isReadonly) return;
+
+    // ── Custom attack panel ──
+    const panel = document.getElementById('custom-attack-panel');
+    document.getElementById('add-custom-attack-btn')?.addEventListener('click', () => {
+        if (panel) panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+    });
+    document.getElementById('ca-cancel-btn')?.addEventListener('click', () => { if (panel) panel.style.display = 'none'; });
+    document.getElementById('ca-add-btn')?.addEventListener('click', () => {
+        const name = (document.getElementById('ca-name')?.value || '').trim();
+        if (!name) return;
+        attacks.push({
+            name,
+            attack_bonus: (document.getElementById('ca-atk')?.value || '').trim(),
+            damage:       (document.getElementById('ca-damage')?.value || '').trim(),
+            damage_type:  (document.getElementById('ca-damage-type')?.value || '').trim(),
+            range:        (document.getElementById('ca-range')?.value || '').trim(),
+            save_dc:      parseInt(document.getElementById('ca-save-dc')?.value, 10) || 0,
+            save_ability: (document.getElementById('ca-save-ability')?.value || ''),
+            desc:         (document.getElementById('ca-desc')?.value || '').trim(),
+            _slug: ''
+        });
+        syncAttacks();
+        renderAttacks();
+        ['ca-name', 'ca-atk', 'ca-damage', 'ca-damage-type', 'ca-range', 'ca-save-dc', 'ca-desc']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        if (document.getElementById('ca-save-ability')) document.getElementById('ca-save-ability').value = '';
+        if (panel) panel.style.display = 'none';
+    });
+
+    // Expose a way for the item browser to add a parsed weapon attack
+    window._addAttackFromBrowser = function (a) {
+        attacks.push({
+            name: a.name || '',
+            attack_bonus: a.attack_bonus || '',
+            damage: a.damage || '',
+            damage_type: a.damage_type || '',
+            range: a.range || '',
+            save_dc: parseInt(a.save_dc) || 0,
+            save_ability: a.save_ability || '',
+            desc: a.desc || '',
+            _slug: a._slug || ''
+        });
+        syncAttacks();
+        renderAttacks();
+    };
+})();
+
+/* ── Item Browser (shared overlay for inventory + attacks) ────────────────── */
+(function () {
+    const overlay = document.getElementById('item-browser-overlay');
+    if (!overlay || overlay.dataset.bound === '1') return;
+    overlay.dataset.bound = '1';
+
+    const listEl   = document.getElementById('ib-list-panel');
+    const detailEl = document.getElementById('ib-detail-panel');
+    const searchEl = document.getElementById('ib-search');
+    const catBtns  = overlay.querySelectorAll('.ib-cat');
+
+    let curCat = 'weapons';
+    let results = [];
+    let selIdx = -1;
+
+    const _esc = s => String(s ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    // ── Class proficiency map (D&D 5e PHB) ──
+    // armor: subset of ['light','medium','heavy','shield']  (empty = no armor proficiency)
+    // weapons: subset of ['simple','martial']
+    // specific: extra weapon names a class is proficient with by name (lowercased substring match)
+    const CLASS_PROFS = {
+        barbarian:  { armor: ['light','medium','shield'], weapons: ['simple','martial'], specific: [] },
+        bard:       { armor: ['light'],                   weapons: ['simple'],            specific: ['hand crossbow','longsword','rapier','shortsword'] },
+        cleric:     { armor: ['light','medium','shield'], weapons: ['simple'],            specific: [] },
+        druid:      { armor: ['light','medium','shield'], weapons: [],                    specific: ['club','dagger','dart','javelin','mace','quarterstaff','scimitar','sickle','sling','spear'] },
+        fighter:    { armor: ['light','medium','heavy','shield'], weapons: ['simple','martial'], specific: [] },
+        monk:       { armor: [],                          weapons: ['simple'],            specific: ['shortsword'] },
+        paladin:    { armor: ['light','medium','heavy','shield'], weapons: ['simple','martial'], specific: [] },
+        ranger:     { armor: ['light','medium','shield'], weapons: ['simple','martial'], specific: [] },
+        rogue:      { armor: ['light'],                   weapons: ['simple'],            specific: ['hand crossbow','longsword','rapier','shortsword'] },
+        sorcerer:   { armor: [],                          weapons: [],                    specific: ['dagger','dart','sling','quarterstaff','light crossbow'] },
+        warlock:    { armor: ['light'],                   weapons: ['simple'],            specific: [] },
+        wizard:     { armor: [],                          weapons: [],                    specific: ['dagger','dart','sling','quarterstaff','light crossbow'] },
+        artificer:  { armor: ['light','medium','shield'], weapons: ['simple'],            specific: [] },
+    };
+
+    function _classSlug() {
+        const el = document.getElementById('class-select') || document.querySelector('[name="class"]');
+        return (el?.value || '').toLowerCase().trim();
+    }
+    function _classProfs() {
+        return CLASS_PROFS[_classSlug()] || null;
+    }
+
+    function _isProficient(it, cat) {
+        const prof = _classProfs();
+        // No class set, or magic items, or unknown class: don't filter
+        if (!prof || cat === 'magicitems') return true;
+        const itemCat = (it.category || '').toLowerCase();
+        if (cat === 'weapons') {
+            if (prof.weapons.some(w => itemCat.includes(w))) return true;
+            const itemName = (it.name || '').toLowerCase();
+            if ((prof.specific || []).some(w => itemName.includes(w))) return true;
+            return false;
+        }
+        if (cat === 'armor') {
+            // Open5e armor categories include the literal words "Light Armor",
+            // "Medium Armor", "Heavy Armor", or "Shield".
+            if (itemCat.includes('shield')) return prof.armor.includes('shield');
+            return prof.armor.some(a => itemCat.includes(a));
+        }
+        return true;
+    }
+
+    function _profOnly() {
+        return !!document.getElementById('ib-prof-only')?.checked;
+    }
+
+    function _filteredResults() {
+        if (!_profOnly()) return results;
+        return results.filter(it => _isProficient(it, curCat));
+    }
+
+    function _updateProfClassLabel() {
+        const slug = _classSlug();
+        const lbl  = document.getElementById('ib-prof-class');
+        if (!lbl) return;
+        if (!slug)                lbl.textContent = '(no class set)';
+        else if (!CLASS_PROFS[slug]) lbl.textContent = `(${slug} — unknown class, no filter)`;
+        else                      lbl.textContent = `(${slug})`;
+    }
+
+    function _setCat(cat) {
+        curCat = cat;
+        catBtns.forEach(b => {
+            const on = b.dataset.cat === cat;
+            b.style.background  = on ? '#2a3a5a' : 'transparent';
+            b.style.borderColor = on ? '#6ab' : '#2e3550';
+            b.style.color       = on ? '#6ab' : '#5a6080';
+        });
+        // Magic items aren't class-restricted — disable the toggle visually for them
+        const wrap = document.getElementById('ib-prof-only-wrap');
+        if (wrap) wrap.style.opacity = (cat === 'magicitems') ? '.4' : '1';
+    }
+
+    async function _doSearch() {
+        const q = (searchEl.value || '').trim();
+        listEl.innerHTML = '<div style="padding:14px;color:#3a4560;font-size:12px;">Searching…</div>';
+        try {
+            const resp = await fetch(`/api/open5e/items?type=${encodeURIComponent(curCat)}&search=${encodeURIComponent(q)}&limit=60`);
+            if (!resp.ok) throw new Error(await resp.text());
+            const data = await resp.json();
+            results = data.results || [];
+            selIdx = -1;
+            _renderList();
+            detailEl.innerHTML = '<p style="color:#3a4560;font-size:13px;">Select an item to see its details.</p>';
+        } catch (e) {
+            listEl.innerHTML = `<div style="padding:14px;color:#a55;font-size:12px;">Search failed: ${_esc(e.message)}</div>`;
+        }
+    }
+
+    function _renderList() {
+        if (!results.length) {
+            listEl.innerHTML = '<div style="padding:14px;color:#3a4560;font-size:12px;">No items found.</div>';
+            return;
+        }
+        const visible = _filteredResults();
+        const hidden = results.length - visible.length;
+
+        if (!visible.length) {
+            const slug = _classSlug();
+            const reason = slug
+                ? `Hiding ${hidden} item${hidden === 1 ? '' : 's'} not proficient for <strong>${_esc(slug)}</strong>.`
+                : `Hiding ${hidden} non-proficient item${hidden === 1 ? '' : 's'}.`;
+            listEl.innerHTML = `<div style="padding:14px;color:#3a4560;font-size:12px;line-height:1.6;">
+                ${reason}<br>Untick "Proficient only" above to show all.</div>`;
+            return;
+        }
+
+        const banner = hidden > 0
+            ? `<div style="padding:6px 12px;font-size:10px;color:#5a6080;background:#101318;border-bottom:1px solid #1a1d27;font-style:italic;">
+                   Hiding ${hidden} non-proficient item${hidden === 1 ? '' : 's'}.
+               </div>`
+            : '';
+
+        // Render against the original index so click handlers map back into `results`
+        const rows = visible.map(it => {
+            const i = results.indexOf(it);
+            return `<div class="ib-item" data-idx="${i}"
+                 style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;
+                        border-bottom:1px solid #1a1d27;${selIdx === i ? 'background:#1e2540;' : ''}">
+                <span style="flex:1;font-size:12px;color:#c0c8d8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                      title="${_esc(it.name)}">${_esc(it.name)}</span>
+                <span style="font-size:10px;color:#4a5870;flex-shrink:0;">${_esc(it.category || '')}</span>
+            </div>`;
+        }).join('');
+        listEl.innerHTML = banner + rows;
+
+        listEl.querySelectorAll('.ib-item').forEach(el => {
+            el.addEventListener('click', () => {
+                selIdx = parseInt(el.dataset.idx);
+                _renderList();
+                _showDetail(results[selIdx]);
+            });
+        });
+    }
+
+    function _showDetail(it) {
+        if (!it) return;
+        const fields = [];
+        if (it.category)    fields.push(['Category', it.category]);
+        if (it.damage_dice) fields.push(['Damage', it.damage_dice + (it.damage_type ? ' ' + it.damage_type : '')]);
+        if (it.properties)  fields.push(['Properties', it.properties]);
+        if (it.range)       fields.push(['Range', it.range]);
+        if (it.ac_string || it.ac) fields.push(['AC', it.ac_string || it.ac]);
+        if (it.armor_type)  fields.push(['Armor type', it.armor_type]);
+        if (it.weight)      fields.push(['Weight', it.weight + ' lb']);
+        if (it.cost)        fields.push(['Cost', it.cost]);
+        if (it.rarity)      fields.push(['Rarity', it.rarity]);
+
+        const fieldHtml = fields.map(([k, v]) =>
+            `<div style="margin-bottom:3px;"><span style="color:#5a6080;font-weight:700;">${_esc(k)}:</span> <span style="color:#c0c8d8;">${_esc(v)}</span></div>`).join('');
+
+        const desc = (it.desc || '').trim();
+        const isWeapon = curCat === 'weapons';
+        const isArmor  = curCat === 'armor';
+
+        const addInvBtn = `<button type="button" id="ib-add-inv" style="font-size:12px;padding:5px 14px;background:#1a2030;border:1px solid #3a4560;color:#aac;">+ Add to Inventory</button>`;
+        const addAtkBtn = isWeapon
+            ? `<button type="button" id="ib-add-atk" style="font-size:12px;padding:5px 14px;background:#2a1a30;border:1px solid #5a3a60;color:#fbb88a;">+ Add as Attack</button>`
+            : '';
+
+        detailEl.innerHTML = `
+            <div style="font-size:16px;font-weight:700;color:#dde2f0;margin-bottom:6px;">${_esc(it.name)}</div>
+            <div style="font-size:12px;line-height:1.6;color:#9aa0aa;margin-bottom:10px;">${fieldHtml}</div>
+            ${desc ? `<div style="font-size:12px;line-height:1.6;color:#aab;white-space:pre-wrap;border-top:1px solid #2e3140;padding-top:8px;">${_esc(desc)}</div>` : ''}
+            <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+                ${addInvBtn}
+                ${addAtkBtn}
+            </div>`;
+
+        document.getElementById('ib-add-inv')?.addEventListener('click', () => {
+            if (typeof window._addItemFromBrowser !== 'function') return;
+            const item = _itemToInventory(it, isArmor, isWeapon);
+            window._addItemFromBrowser(item);
+            (window.showToast || function(m){})(`Added "${it.name}" to inventory.`);
+        });
+        document.getElementById('ib-add-atk')?.addEventListener('click', () => {
+            if (typeof window._addAttackFromBrowser !== 'function') return;
+            const atk = _itemToAttack(it);
+            window._addAttackFromBrowser(atk);
+            (window.showToast || function(m){})(`Added "${it.name}" to attacks.`);
+        });
+    }
+
+    function _itemToInventory(it, isArmor, isWeapon) {
+        const o = {
+            name: it.name || '',
+            type: isWeapon ? 'weapon' : isArmor ? (it.category && /shield/i.test(it.category) ? 'shield' : 'armor') : 'gear',
+            qty: 1,
+            weight: parseFloat(it.weight) || 0,
+            equipped: false,
+            armor_type: '',
+            ac_value: 0,
+            ac_bonus: 0,
+            desc: (it.desc || '').trim(),
+            _slug: it.slug || ''
+        };
+        if (o.type === 'armor') {
+            // Open5e ac_string is e.g. "14 + Dex modifier"; ac is the base int
+            o.ac_value = parseInt(it.ac) || 0;
+            const cat = (it.category || '').toLowerCase();
+            o.armor_type = /heavy/.test(cat) ? 'heavy' : /medium/.test(cat) ? 'medium' : /light/.test(cat) ? 'light' : 'medium';
+        } else if (o.type === 'shield') {
+            o.ac_value = 2;
+        }
+        return o;
+    }
+
+    function _itemToAttack(it) {
+        // Open5e weapon: properties, damage_dice "1d8", damage_type, category "Martial Melee"
+        const cat = (it.category || '').toLowerCase();
+        const isRanged = /ranged/.test(cat) || /thrown/.test((it.properties || '').toLowerCase());
+        return {
+            name: it.name || '',
+            attack_bonus: '',  // user fills in based on their proficiency + ability mod
+            damage: it.damage_dice || '',
+            damage_type: it.damage_type || '',
+            range: isRanged ? 'Ranged' : 'Melee',
+            save_dc: 0,
+            save_ability: '',
+            desc: (it.properties ? `Properties: ${it.properties}\n` : '') + (it.desc || '').trim(),
+            _slug: it.slug || ''
+        };
+    }
+
+    catBtns.forEach(b => b.addEventListener('click', () => { _setCat(b.dataset.cat); _doSearch(); }));
+    document.getElementById('ib-search-btn')?.addEventListener('click', _doSearch);
+    searchEl?.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); _doSearch(); } });
+    document.getElementById('ib-close-btn')?.addEventListener('click', () => { overlay.style.display = 'none'; });
+
+    // Toggling "Proficient only" just re-filters the existing results — no refetch
+    document.getElementById('ib-prof-only')?.addEventListener('change', _renderList);
+
+    // If the user changes class while the browser is open, refresh the filter
+    const classSelEl = document.getElementById('class-select') || document.querySelector('[name="class"]');
+    classSelEl?.addEventListener('change', () => {
+        _updateProfClassLabel();
+        if (overlay.style.display !== 'none') _renderList();
+    });
+
+    function _open() {
+        overlay.style.display = '';
+        _updateProfClassLabel();
+        if (!results.length) _doSearch();
+        else _renderList();
+    }
+    document.getElementById('browse-weapons-btn')?.addEventListener('click', _open);
+    document.getElementById('browse-items-btn')?.addEventListener('click', _open);
+
+    _setCat('weapons');
+    _updateProfClassLabel();
+})();
+
+/* ── Inventory framework + AC modifier engine ─────────────────────────────── */
+(function () {
+    const invData = document.getElementById('inventory-data');
+    if (!invData || invData.dataset.invBound === '1') return;
+    invData.dataset.invBound = '1';
+
+    const isReadonly = invData.hasAttribute('readonly');
+    const container  = document.getElementById('inventory-list-container');
+    const acDisp     = document.getElementById('ac-disp');
+    const acHidden   = document.getElementById('ac-hidden');
+    const acBreakdown = document.getElementById('ac-breakdown-line');
+    const baseAcInp  = document.getElementById('base-ac-input');
+    const totalWeightEl = document.getElementById('inv-total-weight');
+
+    const _esc = s => String(s ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    // ── Load inventory (handle legacy string-array format) ──
+    let inventory = [];
+    try {
+        const raw = invData.value.trim();
+        if (raw.startsWith('[')) {
+            const parsed = JSON.parse(raw);
+            inventory = parsed.map(s => {
+                if (typeof s === 'string') {
+                    return {
+                        name: s, type: 'gear', qty: 1, weight: 0,
+                        equipped: false, equippable: false,
+                        armor_type: '', ac_value: 0, ac_bonus: 0,
+                        desc: '', _slug: ''
+                    };
+                }
+                const type = s.type || 'gear';
+                const equippable = s.equippable !== undefined
+                    ? !!s.equippable
+                    : ['armor', 'shield', 'weapon'].includes(type);
+                return {
+                    name: s.name || '',
+                    type,
+                    qty: parseInt(s.qty) || 1,
+                    weight: parseFloat(s.weight) || 0,
+                    equipped: !!s.equipped,
+                    equippable,
+                    armor_type: s.armor_type || '',
+                    ac_value: parseInt(s.ac_value) || 0,
+                    ac_bonus: parseInt(s.ac_bonus) || 0,
+                    desc: s.desc || '',
+                    _slug: s._slug || ''
+                };
+            });
+        }
+    } catch { inventory = []; }
+
+    function syncInventory() { invData.value = JSON.stringify(inventory); }
+
+    // ── AC modifier engine ──
+    function _dexMod() {
+        const dex = parseInt(document.querySelector('[name="abilities.DEX"]')?.value, 10) || 10;
+        return Math.floor((dex - 10) / 2);
+    }
+
+    function computeEffectiveAC() {
+        const baseAc = parseInt(baseAcInp?.value, 10) || 10;
+        const equipped = inventory.filter(i => i.equipped);
+        const armors = equipped.filter(i => i.type === 'armor');
+
+        let armorAc, armorNote;
+        if (armors.length === 0) {
+            armorAc = baseAc;
+            armorNote = `base ${baseAc}`;
+        } else {
+            // Highest base AC among equipped armors wins
+            const best = armors.reduce((a, b) =>
+                (parseInt(a.ac_value) || 0) >= (parseInt(b.ac_value) || 0) ? a : b);
+            const baseArmor = parseInt(best.ac_value) || 10;
+            const cap = best.armor_type === 'light'  ? Infinity
+                      : best.armor_type === 'heavy'  ? 0
+                      : 2; // medium default
+            const dex = _dexMod();
+            // Light: full DEX (can be negative). Medium: capped at +2 but a
+            // negative DEX still applies. Heavy: DEX is ignored entirely
+            // (RAW: no DEX modifier added, neither positive nor negative).
+            const dexAdd = best.armor_type === 'heavy'
+                ? 0
+                : cap === Infinity ? dex : Math.min(dex, cap);
+            armorAc = baseArmor + dexAdd;
+            const dexStr = dexAdd === 0 ? '' : (dexAdd > 0 ? ` + ${dexAdd} DEX` : ` ${dexAdd} DEX`);
+            armorNote = `${best.name} ${baseArmor}${dexStr}`;
+        }
+
+        const bonusParts = [];
+        let bonusTotal = 0;
+        equipped.forEach(i => {
+            if (i.type === 'shield') {
+                const b = parseInt(i.ac_value) || 2;
+                bonusTotal += b; bonusParts.push(`${i.name} +${b}`);
+            } else if (i.type !== 'armor') {
+                const b = parseInt(i.ac_bonus) || 0;
+                if (b !== 0) {
+                    bonusTotal += b;
+                    bonusParts.push(`${i.name} ${b > 0 ? '+' : ''}${b}`);
+                }
+            }
+        });
+
+        const total = armorAc + bonusTotal;
+        const breakdown = [armorNote, ...bonusParts].filter(Boolean).join(', ');
+        return { total, breakdown };
+    }
+
+    function updateACDisplay() {
+        const { total, breakdown } = computeEffectiveAC();
+        if (acDisp)   acDisp.textContent = total;
+        if (acHidden) acHidden.value     = total;
+        if (acBreakdown) acBreakdown.textContent = breakdown ? `AC ${total} = ${breakdown}` : `AC ${total}`;
+    }
+
+    function updateTotalWeight() {
+        if (!totalWeightEl) return;
+        const tot = inventory.reduce((sum, i) =>
+            sum + (parseFloat(i.weight) || 0) * (parseInt(i.qty) || 1), 0);
+        totalWeightEl.textContent = (Math.round(tot * 10) / 10).toString();
+    }
+
+    // ── Row rendering ──
+    function _isEquippableType(t) { return ['armor', 'shield', 'weapon'].includes(t); }
+
+    function _typeLabel(t) {
+        return ({
+            armor: '🛡 Armor', shield: '🛡 Shield', weapon: '⚔ Weapon',
+            gear: '🎒 Gear', tool: '🔧 Tool', consumable: '🧪 Consumable'
+        })[t] || t;
+    }
+
+    function rowHtml(item, idx) {
+        const equippable = item.equippable || _isEquippableType(item.type);
+        const equipCtrl = !equippable
+            ? '<span style="width:18px;flex-shrink:0;"></span>'
+            : isReadonly
+                ? `<span style="flex-shrink:0;color:${item.equipped ? '#6c6' : '#555'};font-size:13px;"
+                          title="${item.equipped ? 'Equipped' : 'Not equipped'}">${item.equipped ? '✓' : '○'}</span>`
+                : `<input type="checkbox" class="inv-equip" data-idx="${idx}" ${item.equipped ? 'checked' : ''}
+                          title="Equip / unequip" style="flex-shrink:0;cursor:pointer;">`;
+
+        const rmBtn = isReadonly ? '' :
+            `<button type="button" class="inv-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:#966;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
+
+        // Modifier badges shown only when equipped
+        const modBits = [];
+        if (item.type === 'armor' && item.ac_value) {
+            modBits.push(`AC ${item.ac_value}${item.armor_type ? ' (' + item.armor_type + ')' : ''}`);
+        } else if (item.type === 'shield' && item.ac_value) {
+            modBits.push(`+${item.ac_value} AC`);
+        } else if (item.ac_bonus) {
+            modBits.push(`${item.ac_bonus > 0 ? '+' : ''}${item.ac_bonus} AC`);
+        }
+        const modBadge = modBits.length
+            ? `<span style="font-size:10px;color:${item.equipped ? '#8cf' : '#3a4560'};flex-shrink:0;font-weight:500;">${_esc(modBits.join(' '))}</span>`
+            : '';
+
+        const qtyCtrl = isReadonly
+            ? `<span style="font-size:11px;color:#7a8ab0;width:24px;text-align:right;flex-shrink:0;">×${item.qty || 1}</span>`
+            : `<input type="number" class="inv-qty" data-idx="${idx}" value="${item.qty || 1}" min="1"
+                      style="width:42px;font-size:11px;text-align:center;flex-shrink:0;" title="Quantity">`;
+
+        return `
+        <div class="inv-row" data-idx="${idx}" style="border:1px solid #2a2d3a;border-radius:4px;margin-bottom:3px;
+                    background:${item.equipped ? '#1a2030' : '#191c24'};">
+            <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;">
+                ${equipCtrl}
+                <button type="button" class="inv-expand" data-idx="${idx}"
+                    style="background:none;border:none;color:#668;font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
+                <span style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                      title="${_esc(item.name)}">${_esc(item.name) || '(unnamed)'}</span>
+                ${modBadge}
+                ${qtyCtrl}
+                ${rmBtn}
+            </div>
+            <div class="inv-detail" data-idx="${idx}" style="display:none;padding:6px 10px;border-top:1px dashed #2e3140;font-size:12px;color:#9aa0aa;">
+                <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:${item.desc ? '5px' : '0'};">
+                    <span>${_esc(_typeLabel(item.type))}</span>
+                    ${item.weight ? `<span>${_esc(item.weight)} lb each</span>` : ''}
+                </div>
+                ${item.desc ? `<div style="line-height:1.5;color:#8a90a0;white-space:pre-wrap;">${_esc(item.desc)}</div>` : ''}
+            </div>
+        </div>`;
+    }
+
+    function renderInventory() {
+        if (!container) return;
+        container.innerHTML = '';
+        if (!inventory.length) {
+            container.innerHTML = '<span class="muted" style="font-size:12px;">No items yet.</span>';
+            updateTotalWeight();
+            updateACDisplay();
+            return;
+        }
+
+        // Group by type, in display order
+        const ORDER = ['weapon', 'armor', 'shield', 'gear', 'tool', 'consumable'];
+        const groups = {};
+        inventory.forEach((it, i) => {
+            (groups[it.type] = groups[it.type] || []).push(i);
+        });
+        ORDER.forEach(t => {
+            if (!groups[t]) return;
+            const heading = document.createElement('div');
+            heading.style.cssText = 'font-size:10px;color:#668;text-transform:uppercase;letter-spacing:.6px;margin:6px 0 3px;padding-left:2px;';
+            heading.textContent = _typeLabel(t);
+            container.appendChild(heading);
+            container.insertAdjacentHTML('beforeend',
+                groups[t].map(idx => rowHtml(inventory[idx], idx)).join(''));
+        });
+        // Any other types not in ORDER — render under "Other"
+        Object.keys(groups).filter(t => !ORDER.includes(t)).forEach(t => {
+            const heading = document.createElement('div');
+            heading.style.cssText = 'font-size:10px;color:#668;text-transform:uppercase;letter-spacing:.6px;margin:6px 0 3px;padding-left:2px;';
+            heading.textContent = t;
+            container.appendChild(heading);
+            container.insertAdjacentHTML('beforeend',
+                groups[t].map(idx => rowHtml(inventory[idx], idx)).join(''));
+        });
+
+        // Wire row events
+        container.querySelectorAll('.inv-equip').forEach(inp =>
+            inp.addEventListener('change', () => {
+                inventory[+inp.dataset.idx].equipped = inp.checked;
+                syncInventory();
+                renderInventory(); // re-render so modifier badge & background update
+            }));
+        container.querySelectorAll('.inv-rm').forEach(btn =>
+            btn.addEventListener('click', () => {
+                inventory.splice(+btn.dataset.idx, 1);
+                syncInventory();
+                renderInventory();
+            }));
+        container.querySelectorAll('.inv-qty').forEach(inp =>
+            inp.addEventListener('change', () => {
+                inventory[+inp.dataset.idx].qty = Math.max(1, parseInt(inp.value) || 1);
+                syncInventory();
+                updateTotalWeight();
+            }));
+        container.querySelectorAll('.inv-expand').forEach(btn =>
+            btn.addEventListener('click', () => {
+                const d = container.querySelector(`.inv-detail[data-idx="${btn.dataset.idx}"]`);
+                if (!d) return;
+                const open = d.style.display === 'none';
+                d.style.display = open ? '' : 'none';
+                btn.textContent = open ? '▼' : '▶';
+            }));
+
+        updateTotalWeight();
+        updateACDisplay();
+    }
+
+    renderInventory();
+
+    // Watch DEX & base_ac changes (recompute AC live)
+    document.querySelectorAll('[name="abilities.DEX"]').forEach(el =>
+        el.addEventListener('input', updateACDisplay));
+    baseAcInp?.addEventListener('input', updateACDisplay);
+
+    if (isReadonly) return;
+
+    // ── Custom item panel ──
+    const panel    = document.getElementById('custom-item-panel');
+    const typeSel  = document.getElementById('ci-type');
+    const armorRow = document.getElementById('ci-armor-row');
+    const shieldRow= document.getElementById('ci-shield-row');
+    const miscRow  = document.getElementById('ci-misc-row');
+
+    function _refreshTypeRows() {
+        const t = typeSel?.value || 'gear';
+        if (armorRow)  armorRow.style.display  = (t === 'armor')  ? '' : 'none';
+        if (shieldRow) shieldRow.style.display = (t === 'shield') ? '' : 'none';
+        if (miscRow)   miscRow.style.display   = (t === 'gear' || t === 'weapon' || t === 'tool' || t === 'consumable') ? '' : 'none';
+    }
+    typeSel?.addEventListener('change', _refreshTypeRows);
+    _refreshTypeRows();
+
+    document.getElementById('add-custom-item-btn')?.addEventListener('click', () => {
+        if (panel) panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
+    });
+    document.getElementById('ci-cancel-btn')?.addEventListener('click', () => { if (panel) panel.style.display = 'none'; });
+    document.getElementById('ci-add-btn')?.addEventListener('click', () => {
+        const name = (document.getElementById('ci-name')?.value || '').trim();
+        if (!name) return;
+        const t = typeSel?.value || 'gear';
+        const item = {
+            name,
+            type: t,
+            qty: parseInt(document.getElementById('ci-qty')?.value, 10) || 1,
+            weight: parseFloat(document.getElementById('ci-weight')?.value) || 0,
+            equipped: false,
+            equippable: _isEquippableType(t),
+            armor_type: '',
+            ac_value: 0,
+            ac_bonus: 0,
+            desc: (document.getElementById('ci-desc')?.value || '').trim(),
+            _slug: ''
+        };
+        if (t === 'armor') {
+            item.armor_type = document.getElementById('ci-armor-type')?.value || 'medium';
+            item.ac_value = parseInt(document.getElementById('ci-ac-value')?.value, 10) || 0;
+        } else if (t === 'shield') {
+            item.ac_value = parseInt(document.getElementById('ci-shield-bonus')?.value, 10) || 2;
+        } else {
+            item.ac_bonus = parseInt(document.getElementById('ci-misc-bonus')?.value, 10) || 0;
+        }
+        inventory.push(item);
+        syncInventory();
+        renderInventory();
+
+        // Reset form
+        ['ci-name', 'ci-desc'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        if (document.getElementById('ci-qty'))     document.getElementById('ci-qty').value = '1';
+        if (document.getElementById('ci-weight'))  document.getElementById('ci-weight').value = '0';
+        if (typeSel) typeSel.value = 'gear';
+        _refreshTypeRows();
+        if (panel) panel.style.display = 'none';
+    });
+
+    // Allow the item browser to add a parsed Open5e item to the inventory list
+    window._addItemFromBrowser = function (item) {
+        const o = {
+            name: item.name || '',
+            type: item.type || 'gear',
+            qty: parseInt(item.qty) || 1,
+            weight: parseFloat(item.weight) || 0,
+            equipped: false,
+            equippable: _isEquippableType(item.type || 'gear'),
+            armor_type: item.armor_type || '',
+            ac_value: parseInt(item.ac_value) || 0,
+            ac_bonus: parseInt(item.ac_bonus) || 0,
+            desc: item.desc || '',
+            _slug: item._slug || ''
+        };
+        inventory.push(o);
+        syncInventory();
+        renderInventory();
+    };
+})();
+
+/* ── Currency total (gold-equivalent across CP/SP/EP/GP/PP) ───────────────── */
+(function () {
+    const totalEl = document.getElementById('cur-total');
+    if (!totalEl) return;
+    const cp = document.querySelector('[name="currency.cp"]');
+    const sp = document.querySelector('[name="currency.sp"]');
+    const ep = document.querySelector('[name="currency.ep"]');
+    const gp = document.querySelector('[name="currency.gp"]');
+    const pp = document.querySelector('[name="currency.pp"]');
+    function _v(el) { return Math.max(0, parseInt(el?.value, 10) || 0); }
+    function update() {
+        // 100 cp = 10 sp = 2 ep = 1 gp = 0.1 pp
+        const total = _v(cp)/100 + _v(sp)/10 + _v(ep)/2 + _v(gp) + _v(pp)*10;
+        const fmt = total >= 100
+            ? Math.round(total).toLocaleString()
+            : (Math.round(total * 100) / 100).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+        totalEl.textContent = `≈ ${fmt} gp`;
+    }
+    [cp, sp, ep, gp, pp].forEach(el => el && el.addEventListener('input', update));
+    update();
+})();
+
+/* ── HP / Temp HP +/- step buttons (Shift = ×5) ───────────────────────────── */
+(function () {
+    const hpInp   = document.getElementById('hp-current-input');
+    const tempInp = document.getElementById('hp-temp-input');
+
+    function _step(inp, delta, allowNeg) {
+        if (!inp) return;
+        const cur = parseInt(inp.value, 10) || 0;
+        let next = cur + delta;
+        if (!allowNeg && next < 0) next = 0;
+        inp.value = next;
+        // Fire 'change' so any downstream listener (sheet form auto-saves, etc.) sees it
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+        inp.dispatchEvent(new Event('input',  { bubbles: true }));
+    }
+
+    document.querySelectorAll('[data-hp-step]').forEach(btn => {
+        btn.addEventListener('click', (ev) => {
+            const base = parseInt(btn.dataset.hpStep, 10) || 0;
+            const mult = ev.shiftKey ? 5 : 1;
+            _step(hpInp, base * mult, /*allowNeg=*/ true); // dropping below 0 is allowed (and clamps elsewhere if needed)
+        });
+    });
+    document.querySelectorAll('[data-temp-step]').forEach(btn => {
+        btn.addEventListener('click', (ev) => {
+            const base = parseInt(btn.dataset.tempStep, 10) || 0;
+            const mult = ev.shiftKey ? 5 : 1;
+            _step(tempInp, base * mult, /*allowNeg=*/ false);
+        });
+    });
+})();
+
+/* ── Collapsible fieldsets (state persists per character in localStorage) ─── */
+(function () {
+    const charId = {{ char.id }};
+    document.querySelectorAll('fieldset.collapsible').forEach(fs => {
+        const key = fs.dataset.collapseKey;
+        if (!key) return;
+        const storageKey = `simplevtt_collapse_${charId}_${key}`;
+        try {
+            if (localStorage.getItem(storageKey) === '1') fs.classList.add('collapsed');
+        } catch {}
+        const legend = fs.querySelector('legend');
+        if (!legend) return;
+        legend.addEventListener('click', (ev) => {
+            // Don't collapse when clicking buttons / links / inputs nested in the legend
+            if (ev.target.closest('button, a, input, select, textarea')) return;
+            fs.classList.toggle('collapsed');
+            try {
+                localStorage.setItem(storageKey, fs.classList.contains('collapsed') ? '1' : '');
+            } catch {}
+        });
+    });
 })();
 </script>

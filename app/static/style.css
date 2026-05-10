@@ -147,6 +147,20 @@
 * { box-sizing: border-box; }
 html, body { background: var(--bg); color: var(--fg); margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; height: 100%; }
 body { display: flex; flex-direction: column; }
+
+/* ── Display scale (per-user) ─────────────────────────────────────────────
+   `--ui-scale` and `--font-scale` are stamped on <html> by base.html.
+   ui-scale uses CSS `zoom` (supported in all modern browsers, Firefox 126+)
+   to scale layout + text together. font-scale separately adjusts the root
+   font size so rem/em-based sizes grow alongside.
+   Phones (≤ 640 px wide) reset both — phone layouts are already tuned.
+*/
+html { font-size: calc(100% * var(--font-scale, 1)); }
+body { zoom: var(--ui-scale, 1); }
+@media (max-width: 640px) {
+    html { font-size: 100%; }
+    body { zoom: 1; }
+}
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .muted { color: var(--fg-mute); }

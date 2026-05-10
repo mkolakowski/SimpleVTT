@@ -59,6 +59,11 @@ class User(Base):
     # Per-user tab tint colors for the tabletop sidebar
     battle_tab_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     player_tab_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # Per-user display scaling. ui_scale controls overall interface zoom;
+    # font_scale separately scales the root font-size. Both default to 1.0
+    # and are ignored on phones (≤ 640px viewport, see base.html).
+    ui_scale: Mapped[float] = mapped_column(Float, default=1.0, server_default="1.0")
+    font_scale: Mapped[float] = mapped_column(Float, default=1.0, server_default="1.0")
 
     characters: Mapped[list["Character"]] = relationship(
         back_populates="owner", foreign_keys="Character.owner_user_id"

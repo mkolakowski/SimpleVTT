@@ -1379,6 +1379,206 @@ async def cast_spell(
     return {"ok": True, "id": cast_id, "slot": updated_slot}
 
 
+# ----------- API: weapon / structured attacks -----------
+
+@router.post("/api/campaign/{campaign_id}/attack")
+async def use_attack(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Resolve a structured attack from a character's sheet.
+
+    For attack-roll based attacks: rolls 1d20 + attack_bonus AND damage at the
+    same time, persists both rolls (so they appear in the roll log if anyone
+    pops it out), and broadcasts a single ``weapon_attack`` WS message that
+    other clients render as an attack card.
+
+    For save-based attacks (save_dc > 0 and save_ability set): skips the d20
+    attack roll and broadcasts a card with a "Prompt save" button instead.
+    Damage is still pre-rolled so the GM can decide who takes it.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    attack_index = int(body.get("attack_index", -1))
+    if char_id <= 0 or attack_index < 0:
+        raise HTTPException(400, "character_id and attack_index are required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    attacks = list(sheet.get("attacks") or [])
+    if attack_index >= len(attacks):
+        raise HTTPException(404, "Attack not found")
+    attack = dict(attacks[attack_index] or {})
+
+    name = (attack.get("name") or "Attack").strip()
+    attack_bonus_raw = str(attack.get("attack_bonus") or "").strip()
+    damage_expr_raw = (attack.get("damage") or "").strip()
+    damage_type = (attack.get("damage_type") or "").strip()
+    range_str = (attack.get("range") or "").strip()
+    save_dc = int(attack.get("save_dc") or 0)
+    save_ability = (attack.get("save_ability") or "").strip().upper()
+    desc = (attack.get("desc") or "").strip()
+
+    is_save = save_dc > 0 and save_ability
+
+    # Build the to-hit expression. Accept "+5", "5", "1d4+3" etc.
+    attack_total = None
+    attack_breakdown = ""
+    if not is_save and attack_bonus_raw:
+        bonus_expr = attack_bonus_raw if attack_bonus_raw.startswith(("+", "-"))\
+            or any(c.isalpha() for c in attack_bonus_raw)\
+            else "+" + attack_bonus_raw
+        atk_expr = "1d20" + (bonus_expr if bonus_expr.startswith(("+", "-")) else "+" + bonus_expr)
+        try:
+            r = dice_mod.roll(atk_expr)
+            attack_total = r.total
+            attack_breakdown = r.breakdown
+        except dice_mod.DiceParseError:
+            attack_total = None
+            attack_breakdown = ""
+    elif not is_save:
+        # No bonus given — flat d20
+        try:
+            r = dice_mod.roll("1d20")
+            attack_total = r.total
+            attack_breakdown = r.breakdown
+        except dice_mod.DiceParseError:
+            attack_total = None
+            attack_breakdown = ""
+
+    # Pre-roll damage if a dice expression is provided.
+    damage_total = None
+    damage_breakdown = ""
+    if damage_expr_raw:
+        try:
+            r = dice_mod.roll(damage_expr_raw)
+            damage_total = r.total
+            damage_breakdown = r.breakdown
+        except dice_mod.DiceParseError:
+            damage_total = None
+            damage_breakdown = ""
+
+    # Resolve caster display info
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id, CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    attack_id = uuid.uuid4().hex[:12]
+    payload = {
+        "id": attack_id,
+        "caster_user_id": user.id,
+        "caster_user_name": user.display_name,
+        "caster_user_color": caster_color,
+        "caster_portrait_url": char.portrait_url,
+        "caster_char_id": char.id,
+        "caster_char_name": char.name,
+        "attack_index": attack_index,
+        "attack_name": name,
+        "attack_bonus": attack_bonus_raw,
+        "attack_total": attack_total,
+        "attack_breakdown": attack_breakdown,
+        "damage_expr": damage_expr_raw,
+        "damage_type": damage_type,
+        "damage_total": damage_total,
+        "damage_breakdown": damage_breakdown,
+        "range": range_str,
+        "save_dc": save_dc if is_save else 0,
+        "save_ability": save_ability if is_save else "",
+        "desc": desc,
+        "is_save": is_save,
+    }
+    await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
+    return {"ok": True, "id": attack_id}
+
+
+# ----------- API: Open5e item proxy (weapons / armor / magic items) -----------
+
+@router.get("/api/open5e/items")
+def open5e_items_proxy(type: str = "weapons", search: str = "", limit: int = 60):
+    """Search Open5e for weapons / armor / magic items.
+
+    Items aren't part of the local Open5e cache, so this always proxies the
+    public API. Type is one of "weapons", "armor", "magicitems".
+    """
+    cat = (type or "weapons").strip().lower()
+    if cat not in ("weapons", "armor", "magicitems"):
+        raise HTTPException(400, "type must be one of weapons, armor, magicitems")
+    cap = max(1, min(int(limit or 60), 200))
+
+    import json as _json
+    import urllib.parse as _urlparse
+    import urllib.request as _urlreq
+
+    qs = _urlparse.urlencode({"search": search or "", "limit": cap})
+    url = f"https://api.open5e.com/v1/{cat}/?{qs}"
+    try:
+        req = _urlreq.Request(url, headers={"User-Agent": "SimpleVTT/1.0"})
+        with _urlreq.urlopen(req, timeout=10) as r:
+            data = _json.loads(r.read())
+    except Exception as e:
+        raise HTTPException(502, f"Open5e fetch failed: {e}")
+
+    import re as _re
+    raw = data.get("results") or []
+    items = []
+    for it in raw:
+        # Open5e v1 armor stores AC in the `armor_class` field as a string
+        # like "16" or "11 + Dex modifier (max 2)" or "+2" for shields.
+        # Pull the leading integer (ignoring sign) out for `ac` and pass the
+        # original string through for the detail panel.
+        ac_string = it.get("armor_class") or it.get("ac_string") or it.get("ac_display") or ""
+        ac_int = 0
+        if ac_string:
+            m = _re.search(r"\d+", str(ac_string))
+            if m:
+                ac_int = int(m.group(0))
+        elif it.get("ac_base") or it.get("ac"):
+            try:
+                ac_int = int(it.get("ac_base") or it.get("ac") or 0)
+            except (TypeError, ValueError):
+                ac_int = 0
+
+        items.append({
+            "slug": it.get("slug") or it.get("key") or "",
+            "name": it.get("name") or "",
+            "category": it.get("category") or it.get("type") or it.get("rarity") or "",
+            "damage_dice": it.get("damage_dice") or "",
+            "damage_type": it.get("damage_type") or "",
+            "properties": ", ".join(it.get("properties") or []) if isinstance(it.get("properties"), list) else (it.get("properties") or ""),
+            "range": it.get("range") or "",
+            "ac": ac_int,
+            "ac_string": ac_string,
+            "armor_type": it.get("category") or "",
+            "stealth_disadvantage": bool(it.get("stealth_disadvantage")),
+            "strength_requirement": it.get("strength") or "",
+            "weight": it.get("weight") or "",
+            "cost": it.get("cost") or "",
+            "rarity": it.get("rarity") or "",
+            "desc": it.get("desc") or it.get("description") or "",
+        })
+    return {"results": items}
+
+
 # ----------- API: concentration tracking -----------
 
 @router.post("/api/campaign/{campaign_id}/concentration")

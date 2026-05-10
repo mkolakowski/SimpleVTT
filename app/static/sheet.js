@@ -283,12 +283,24 @@
             else v = el.value;
 
             if (n === 'inventory') {
-                v = String(v).split('\n').map(s => s.trim()).filter(Boolean);
+                const raw = String(v).trim();
+                if (raw.startsWith('[')) {
+                    try { v = JSON.parse(raw); } catch { v = []; }
+                } else {
+                    // Legacy newline format — preserve as plain-name items
+                    v = raw.split('\n').map(s => s.trim()).filter(Boolean);
+                }
             } else if (n === 'attacks' && template === 'dnd5e') {
-                v = String(v).split('\n').map(s => s.trim()).filter(Boolean).map(line => {
-                    const [name, bonus, damage] = line.split('|').map(s => (s||'').trim());
-                    return { name: name || '', bonus: bonus || '', damage: damage || '' };
-                });
+                const raw = String(v).trim();
+                if (raw.startsWith('[')) {
+                    try { v = JSON.parse(raw); } catch { v = []; }
+                } else {
+                    // Legacy pipe-delimited format: "Name | bonus | damage"
+                    v = raw.split('\n').map(s => s.trim()).filter(Boolean).map(line => {
+                        const [name, bonus, damage] = line.split('|').map(s => (s||'').trim());
+                        return { name: name || '', attack_bonus: bonus || '', damage: damage || '' };
+                    });
+                }
             } else if (n === 'spells' && template === 'dnd5e') {
                 const raw = String(v).trim();
                 if (raw.startsWith('[')) {

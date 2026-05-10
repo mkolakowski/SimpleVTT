@@ -86,6 +86,194 @@ Each release section must include all five of these, in this order:
 
 ---
 
+## [0.28.0] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Add per-user interface and font scale presets and remove HP number-input spinners
+
+**Description:** Two ergonomics improvements. **(1)** The HP and Temp HP number inputs on the D&D 5e sheet no longer show the browser's up/down spinner arrows — the explicit ± step buttons added in 0.27.0 are now the supported way to adjust those values, and the duplicate native controls were getting in the way. **(2)** A new **Display scale** section in user settings exposes two knobs — *Interface scale* (75/85/100/110/125/150 %) which applies CSS `zoom` to scale the entire layout, and *Font scale* (85/100/110/125 %) which adjusts the root `font-size` so rem-based text grows alongside. Both default to 100 %, save to your account, and apply on every device. Phone-sized viewports (≤ 640 px) ignore both settings since the phone layout is already tuned for small screens. Two new columns (`users.ui_scale`, `users.font_scale`, both `FLOAT NOT NULL DEFAULT 1.0`) are added by the inline migration; no operator action needed beyond a redeploy.
+
+### Added
+- `users.ui_scale` and `users.font_scale` columns (Float, default 1.0) — schema v21.
+- `POST /api/settings/scale` endpoint accepting `{ui_scale, font_scale}`. Server snaps incoming values to the closest allowed preset to prevent malformed sizes.
+- "🔍 Display scale" section in user settings with two `<select>`s and a status line. Changes apply live (sets `--ui-scale` / `--font-scale` on `<html>`) and persist via the new API.
+- Inline CSS variables stamped on `<html>` by `base.html` (`--ui-scale`, `--font-scale`) using the logged-in user's saved values; safely defaults to 1.0 when `user` is unavailable (login/register pages).
+- Global CSS rules in `style.css`: `body { zoom: var(--ui-scale, 1); }` and `html { font-size: calc(100% * var(--font-scale, 1)); }`. A `@media (max-width: 640px)` block resets both to 1 so phones keep the tuned layout.
+
+### Fixed
+- Browser spinner arrows on the HP and Temp HP number inputs are now suppressed in WebKit/Chromium and Firefox via per-input `appearance: textfield` and `::-webkit-{outer,inner}-spin-button` overrides.
+
+### Schema
+- Added `users.ui_scale` and `users.font_scale` columns. Migration block in `_apply_inline_migrations()` adds them on first boot of 0.28.0.
+
+---
+
+## [0.27.1] - 2026-05-10
+
+**Schema version:** 20
+
+**Commit summary:** Fix Hide Unprepared button missing on standalone character sheet pages
+
+**Description:** The "👁 Showing all / 🙈 Hiding unprepared" toggle on the D&D 5e Spells fieldset wasn't appearing on the standalone character page (`/character/{id}/sheet`). The button's visibility is decided by `_classVal()`, which read the class `<select>`'s `.value` — but that select is populated **asynchronously** by `sheet.js` after fetching the Open5e classes list, so when the Spells IIFE ran synchronously at page load, the select was still empty and the button stayed hidden. `_classVal()` now falls back to the `data-current` attribute (which the server stamps with the saved class slug at render time, so it's available immediately). Readonly sheets also gained a hidden `<input name="class">` so non-owner viewers can use the filter, and `_onClassLevelChange()` now also re-renders the spell list so swapping classes mid-session refreshes the button's visibility without a page reload.
+
+### Fixed
+- `_classVal()` reads the class slug from `data-current` when the dropdown's value is empty (i.e. before the async Open5e classes fetch completes). Restores the Hide Unprepared button on the standalone character sheet and any other view where the class select is async-populated.
+- Readonly sheets now ship a hidden `<input name="class">` so spellcasting-aware UI (Hide Unprepared button, spell-slot pip rendering, info bar) works for viewers who don't own the character.
+- Changing class via the dropdown now also re-renders the spell list, so the Hide Unprepared button appears/disappears immediately for prepared-caster swaps without needing a reload.
+
+---
+
+## [0.27.0] - 2026-05-10
+
+**Schema version:** 20
+
+**Commit summary:** Add currency tracker, surface AC breakdown on header card, add HP step buttons
+
+**Description:** Three sheet ergonomics improvements. **(1)** A gold-biased currency tracker now lives at the top of the Inventory section — five fields (CP, SP, EP, GP, PP) with GP visually emphasized (larger, gold-tinted, prominent), plus a live "≈ N gp" total computed from standard 5e conversions (`cp/100 + sp/10 + ep/2 + gp + pp×10`). Saved as `sheet.currency.{cp,sp,ep,gp,pp}`. **(2)** The Base AC editor + AC breakdown have moved out of the Inventory bar. Base AC is now an input in the character Edit panel alongside Class/Level/Max HP/Speed, and a small italic breakdown line ("AC 20 = Plate 18 + Dex 0, Shield +2") appears directly under the HP / AC / Speed / Init / Prof header row so the calculation is always visible without opening Inventory. **(3)** The HP and Temp HP fields gained +/- step buttons; clicking adjusts by 1, holding Shift adjusts by 5 (HP can drop to 0 or below; Temp HP clamps at 0). All three are no-op for read-only sheets so non-owners still see clean numbers without controls.
+
+### Added
+- Currency tracker fieldset at the top of Inventory with per-currency input cells and a live gold-equivalent total. GP cell uses a gold gradient and bumped font for the "biased" feel.
+- `Base AC` input in the existing Edit panel (replaces the inventory-section input). Readonly sheets still serialize `base_ac` via a hidden field.
+- `#ac-breakdown-line` under the header HP/AC/Speed/Init/Prof row showing "AC N = …" — the breakdown updates live when Base AC, DEX, or equipped items change.
+- `±` step buttons flanking the HP current and Temp HP inputs. Shift-click multiplies by 5. Buttons fire `input`/`change` events so any downstream auto-save logic sees the update.
+
+### Changed
+- Inventory header bar now contains the currency tracker + total weight. The Base AC input and the AC breakdown line that lived there in 0.24.0–0.26.0 are gone.
+- `#ac-breakdown` element renamed to `#ac-breakdown-line` and moved into the character header. The inventory framework JS now references the new id.
+
+---
+
+## [0.26.0] - 2026-05-10
+
+**Schema version:** 20
+
+**Commit summary:** Add collapsible sheet sections, persist Hide Unprepared toggle, and hide the legacy Features field
+
+**Description:** Four sections of the D&D 5e character sheet — Class Proficiencies, Class/Subclass/Race Features, Inventory, and Notes — can now be collapsed by clicking their legend (a chevron rotates to indicate state). Open/closed state is persisted per-character in `localStorage`, so opening the same sheet again restores your last layout. The legacy free-text Features field (separate from the auto-filled Class/Subclass/Race Features fieldset) is hidden from the UI but still round-trips through the form so existing data isn't lost. The Spells fieldset's "Hide Unprepared" button now uses an explicit eye-open / eye-closed (see-no-evil) icon pair, persists its state per-character in `localStorage`, and is available to readonly viewers (it's a purely visual filter).
+
+### Added
+- `fieldset.collapsible` CSS class plus a `.fs-chevron` indicator. Collapsing a section hides every child except the `<legend>`. Click handlers ignore button/anchor/input clicks inside the legend so the existing in-legend tools (`↻ Sync`, `🔍 Browse Items`, `+ Custom`) still work.
+- Per-character persistence keys: `simplevtt_collapse_{char_id}_{section_key}` (collapse state) and `simplevtt_hide_unprep_{char_id}` (Hide Unprepared toggle).
+- Notes is now wrapped in a proper `<fieldset>` (was a plain `<label>`) so it can collapse the same way as the others.
+
+### Changed
+- "Hide Unprepared" button: label switched to `👁 Showing all` ↔ `🙈 Hiding unprepared`, visible regardless of readonly status, and remembered across reloads. The button also moved out of the `{% if can_edit %}` block so non-owner viewers can filter their view too.
+- The legacy `<label>Features</label>` block is now `display:none`. Existing values still flow through the form on save so no data is dropped; the auto-filled Class/Subclass/Race Features fieldset remains the canonical place to view that information.
+
+---
+
+## [0.25.2] - 2026-05-10
+
+**Schema version:** 20
+
+**Commit summary:** Fix imported armor showing zero AC and ignore negative DEX in heavy armor
+
+**Description:** Two bugs in the AC modifier framework. **(1)** The `/api/open5e/items` proxy was reading `ac_base`/`ac` from Open5e armor objects, but Open5e v1's armor schema actually returns AC under the `armor_class` field (a string like "16" or "11 + Dex modifier (max 2)"). Every imported armor was therefore landing in the inventory with `ac_value: 0`, so equipping it dropped the effective AC instead of raising it. The proxy now reads `armor_class`, parses the leading integer for `ac`, and passes the original string through as `ac_string` for the detail panel. It also exposes `stealth_disadvantage` and `strength_requirement`. **(2)** The client-side AC computation was applying a negative DEX modifier inside heavy armor (e.g. DEX 8 wearing plate would lose 1 AC). Per RAW, heavy armor ignores DEX entirely — the math now floors at 0 for heavy armor regardless of DEX sign. **Note for existing characters:** items imported under 0.25.0–0.25.1 still have `ac_value: 0` saved on their sheet; remove and re-import them (or edit `ac_value` via the Custom panel) to pick up the correct value.
+
+### Fixed
+- `/api/open5e/items` proxy now reads `armor_class` from Open5e v1 armor results and parses the leading integer into the `ac` field, so imported armor lands in the inventory with the correct base AC.
+- Heavy armor no longer applies a negative DEX modifier to AC; DEX is ignored entirely as the rules require. Light and medium armor still use full DEX / DEX-cap-2 respectively.
+
+### Added
+- Open5e armor results now expose `stealth_disadvantage` (bool) and `strength_requirement` (string) on the proxied response so the detail panel can grow them later.
+
+---
+
+## [0.25.1] - 2026-05-10
+
+**Schema version:** 20
+
+**Commit summary:** Filter weapons and armor in the item browser to a character's class proficiencies
+
+**Description:** The Item Browser overlay (Browse Items on the Inventory and Attacks fieldsets) now defaults to showing only weapons and armor a character is proficient with, based on their D&D 5e class. A new "Proficient only" checkbox in the overlay header controls the filter — untick it to see the full Open5e catalog. The Magic Items tab is unaffected (magic items aren't class-restricted) and visually dims the toggle. A small italic banner above the list reports how many items were hidden so it's clear the filter is active. The proficiency map is the standard PHB list (e.g. wizards see daggers/darts/slings/quarterstaff/light crossbow even though they have no `simple/martial` proficiency; rogues see hand crossbows, longswords, rapiers, and shortswords on top of simple weapons; clerics see light + medium + shields). Unknown class slugs fall through to "no filter" so non-PHB classes still see everything. The list re-renders instantly when you toggle the checkbox or change class — no extra request to Open5e.
+
+### Added
+- `CLASS_PROFS` map and `_isProficient()` filter inside the Item Browser IIFE in `sheet_dnd5e.html`. Covers all 12 PHB classes plus artificer.
+- "Proficient only" checkbox + class-name hint in the overlay header. Toggling it re-renders the list locally; changing the character's class while the overlay is open also refreshes the filter.
+- "Hiding N non-proficient items" banner above the list when filtered, plus an explanatory empty-state when every result is hidden.
+
+---
+
+## [0.25.0] - 2026-05-10
+
+**Schema version:** 20
+
+**Commit summary:** Add structured Attacks framework with strike roll-log card and Open5e item browser
+
+**Description:** This is **Part 2** of the inventory/attacks effort. The freeform "Name | bonus | damage" attacks textarea on the D&D 5e sheet is replaced with a structured Attacks fieldset modelled on the Spells fieldset: name, attack bonus, damage dice + type, range, optional save DC + ability, and description, with a custom-add panel and a per-row 🗡 Strike button. Striking posts to a new `/api/campaign/{id}/attack` endpoint that rolls the attack and damage server-side and broadcasts a `weapon_attack` WebSocket message that all clients render as a peach-bordered attack card in the roll log. Save-based attacks (e.g. Dragon's Breath) skip the d20 to-hit and instead surface a "📋 Prompt save" button that reuses the existing roll-request framework — each player rolls their own save and the result appends to the originating attack card with ✓/✗ markers, exactly like spell-cast saves. A new shared **Item Browser** overlay (a single proxy to `api.open5e.com/v1/{weapons|armor|magicitems}`) is reachable from both the Inventory and Attacks fieldsets — picking a weapon offers "+ Add to Inventory" and "+ Add as Attack" buttons; armor and magic items add only to inventory and pre-populate AC fields where applicable. The Player drawer also gains a mini Attacks section with the same Strike action. Legacy pipe-format attacks load and re-save as the structured form. No operator action is needed beyond a redeploy.
+
+### Added
+- Structured **Attacks** fieldset on `sheet_dnd5e.html` with custom-add panel: name, range, attack bonus, damage dice, damage type, save DC + save ability, description, and a 🗡 Strike button per row.
+- `POST /api/campaign/{id}/attack` endpoint that validates campaign membership and character ownership, rolls the to-hit (`1d20 + attack_bonus`) and damage (the dice expression) server-side, and broadcasts a `weapon_attack` WS message. Save-based attacks skip the to-hit roll and carry `save_dc` + `save_ability` for the client to prompt.
+- `appendWeaponAttack(d)` in `tabletop.js` plus matching CSS — an attack card with caster avatar, attack name, to-hit total + breakdown, damage total + type + breakdown, optional description, and (for save attacks) a 📋 Prompt save button that posts a roll-request and correlates returning saves back onto the same card with ✓/✗.
+- Mini Attacks section in the tabletop Player drawer for D&D 5e characters: per-attack chip row with bonus/damage/save tags and a 🗡 Strike button hitting the same endpoint.
+- New `GET /api/open5e/items?type=weapons|armor|magicitems&search=…` proxy to `api.open5e.com/v1/`. Always proxies (no local cache yet) so it works without re-running the local sync.
+- Shared **Item Browser** overlay reachable from both the Inventory (`🔍 Browse Items`) and Attacks (`🔍 Browse Items`) fieldsets, with type filter chips, search, and a detail panel offering `+ Add to Inventory` (always) and `+ Add as Attack` (weapons only).
+- Open5e weapon → attack parsing fills in damage dice, damage type, range (Melee vs. Ranged inferred from category/properties), and properties description. Open5e armor → inventory parsing fills in `ac_value` and `armor_type` (light/medium/heavy inferred from category) so equipping the imported armor immediately recomputes effective AC.
+
+### Changed
+- `app/static/sheet.js` form serializer now parses `attacks` as JSON when the textarea begins with `[`, falling back to the legacy pipe format (which now writes `attack_bonus` instead of `bonus` for forward compat with the new card).
+- The Player-drawer mini-sheet attacks list tolerates both `attack_bonus` (new) and `bonus` (legacy) field names so existing characters render correctly without re-saving.
+
+---
+
+## [0.24.0] - 2026-05-10
+
+**Schema version:** 20
+
+**Commit summary:** Replace freeform inventory textarea with structured items list and equipment-driven AC modifier framework
+
+**Description:** The D&D 5e character sheet's Inventory section is now a structured list mirroring the Spells fieldset. Each item has a type (gear/weapon/armor/shield/tool/consumable), quantity, weight, optional description, and — for equippable items — an equip checkbox and optional AC modifier (armor base AC, shield AC bonus, or generic AC bonus for trinkets like Ring of Protection). The AC card on the sheet header is now derived: effective AC = (best equipped armor's base + DEX capped by armor type, or `base_ac` if unarmored) + sum of equipped shield/misc AC bonuses. A new `base_ac` field stores the unarmored value separately so equipping/unequipping armor produces the right effective AC. A breakdown line under "Base AC" explains how the displayed AC was computed (e.g. `= Plate 18 + Shield +2`). Existing characters' AC values migrate seamlessly: when no items are equipped, effective AC equals the previously stored `ac`. Legacy newline-style inventory strings are still accepted on save. This is **Part 1** of a larger inventory/attacks effort — Part 2 will add a structured Attacks framework with a roll-log "strike" card, plus an Open5e weapon/armor/magic-item browser. No operator action is needed beyond a redeploy.
+
+### Added
+- Structured **Inventory** fieldset on `sheet_dnd5e.html` with: per-item type select, qty, weight, equip toggle, expand/details, and a `+ Custom` panel mirroring the Spells custom-add UX.
+- **Modifier sub-framework** for AC: `ac_value` on armor (replaces base AC, with DEX capped by `armor_type` ∈ light/medium/heavy), `ac_value` on shields (additive bonus, default +2), and `ac_bonus` on miscellaneous equippable items (additive when equipped). Recomputes live as items are equipped/unequipped or DEX changes.
+- New `sheet.base_ac` field — the unarmored AC the user types, persisted alongside the computed `sheet.ac`. Default migrates from existing `sheet.ac` when missing so legacy characters render unchanged.
+- `#ac-breakdown` summary line under Base AC showing how the effective AC was assembled (e.g. `= Plate 18 + Shield +2`).
+- Total inventory weight summary alongside the Base AC bar.
+
+### Changed
+- AC card on the sheet header is now a derived display (read-only). The user-editable knob lives in the inventory section as **Base AC** and is recomputed continuously.
+- Form serialization in `app/static/sheet.js` now parses `inventory` as JSON when the textarea begins with `[`, falling back to the legacy newline format for backward compatibility.
+
+---
+
+## [0.23.0] - 2026-05-10
+
+**Schema version:** 20
+
+**Commit summary:** Hide map on phones to show only the side drawer and stop top-bar clickables from line-wrapping
+
+**Description:** On phone-sized viewports (≤ 640 px wide) the tabletop now hides the map/canvas pane entirely and renders the side drawer at full width with its tab bar at the top, so all interaction happens through the existing tabs (Roll Log, Player, Battle, Settings, GM Tools). iPads and larger screens are unaffected. The campaign top bar also now wraps the action group as a whole instead of allowing individual button labels (e.g. "▶ Start session", "⚙ Settings") to break across lines. No operator action is needed beyond a redeploy.
+
+### Added
+- Phone-only media query (`max-width: 640px`) in `tabletop.html` that hides `.map-pane`, expands `.drawer-sidebar` to fill the viewport, drops the slide-open animation, and hides the open-arrow and pin buttons.
+- Drawer init now auto-opens the first tab on phones so the panel area is never blank when the map is hidden.
+
+### Changed
+- Campaign top bar now uses dedicated CSS classes (`tt-topbar`, `tt-topbar-actions`, `tt-topbar-form`, etc.) with `flex-wrap: wrap` on the row and `white-space: nowrap` on every clickable button/link, so labels like "Start session" stay on one line and the whole action group wraps as a unit on narrow screens.
+
+---
+
+## [0.22.0] - 2026-05-10
+
+**Schema version:** 20
+
+**Commit summary:** Tighten Player tab to owned characters and add ability-labelled rolls plus mini spells panel
+
+**Description:** The tabletop Player tab now strictly shows characters the viewing user owns — GMs no longer see every character there (the Battle drawer remains the GM-wide view). Each ability check and saving throw button on the mini-sheet now shows the ability abbreviation alongside the modifier so the roll target is unambiguous at a glance. A new miniature spells section mirrors the D&D 5e sheet's spell list (with slot pips and a 🪄 Cast button) directly inside the Player drawer, omitting the spell browser and custom-spell creator and hiding unprepared spells for prepared casters (cleric, druid, paladin, wizard, artificer). No operator action is needed beyond a redeploy.
+
+### Added
+- Mini spells section in the Player drawer for D&D 5e characters: per-level spell rows with damage/save/concentration/ritual indicators, a 🪄 Cast button posting to `/api/campaign/{id}/cast_spell`, and slot pip rows that update optimistically and stay in sync via the existing `spell_slot_update` broadcast.
+- Ability label and modifier rendered inside each Check/Save button on the mini-sheet (e.g. `STR +2`).
+
+### Changed
+- Player drawer now lists only characters whose `owner_user_id` matches the viewing user, including for GMs. Use the Battle drawer for the GM-wide view.
+- Prepared casters (cleric, druid, paladin, wizard, artificer) hide unprepared leveled spells in the mini spells section automatically; cantrips remain visible.
+
+---
+
 ## [0.21.0] - 2026-05-10
 
 **Schema version:** 20

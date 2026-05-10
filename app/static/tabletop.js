@@ -348,6 +348,8 @@
                 appendRollRequest(msg.data);
             } else if (msg.type === 'spell_cast') {
                 appendSpellCast(msg.data);
+            } else if (msg.type === 'weapon_attack') {
+                appendWeaponAttack(msg.data);
             } else if (msg.type === 'spell_slot_update') {
                 // Forwarded as a CustomEvent above; the open mini-sheet listens
                 // for it to update its pip row in place.
@@ -609,6 +611,110 @@
         // Stash the cast metadata on the element so the roll listener can
         // correlate save responses back to this card (matches by note prefix).
         li._spellCast = { ...d, _saveLabel: null };
+    }
+
+    // ---------- Weapon-attack card ----------
+    function appendWeaponAttack(d) {
+        const ul = document.getElementById('roll-list');
+        if (!ul) return;
+        const now = new Date();
+        const h = now.getHours(), m = now.getMinutes();
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = (h % 12) || 12;
+        const timeStr = h12.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0') + ' ' + ampm;
+
+        const portrait = d.caster_portrait_url || USER_PORTRAITS[d.caster_user_id] || '';
+        const color = d.caster_user_color || USER_COLORS[d.caster_user_id] || '';
+        const dispName = d.caster_char_name || USER_CHAR_NAMES[d.caster_user_id] || d.caster_user_name;
+        const avatarInner = portrait ? `<img src="${escapeHTML(portrait)}" alt="">` : '🗡';
+
+        const metaBits = [];
+        if (d.range)       metaBits.push(escapeHTML(d.range));
+        if (d.damage_type) metaBits.push(escapeHTML(d.damage_type));
+
+        // Attack roll line (skipped for save-based attacks)
+        const atkLineHtml = !d.is_save && d.attack_total != null
+            ? `<div class="weapon-atk-line">
+                   <span class="weapon-atk-label">🎯 To hit</span>
+                   <span class="weapon-atk-total">${d.attack_total}</span>
+                   <span class="weapon-atk-breakdown">${formatBreakdown(d.attack_breakdown || '')}</span>
+               </div>`
+            : '';
+
+        // Damage line (always present if a damage expression was set)
+        const dmgLineHtml = d.damage_total != null
+            ? `<div class="weapon-atk-line">
+                   <span class="weapon-atk-label">💥 Damage</span>
+                   <span class="weapon-atk-total">${d.damage_total}${d.damage_type ? ' <span class="weapon-atk-dmgtype">' + escapeHTML(d.damage_type) + '</span>' : ''}</span>
+                   <span class="weapon-atk-breakdown">${formatBreakdown(d.damage_breakdown || '')}</span>
+               </div>`
+            : '';
+
+        const saveBtnHtml = d.is_save
+            ? `<button class="spell-cast-btn weapon-atk-save-btn" type="button" title="Prompt all players for a ${escapeHTML(d.save_ability)} save">📋 Prompt ${escapeHTML(d.save_ability)} save (DC ${d.save_dc})</button>`
+            : '';
+
+        const li = document.createElement('li');
+        li.dataset.attackId = d.id;
+        li.innerHTML = `
+            <div class="spell-cast-card weapon-atk-card">
+                <div class="roll-card-header">
+                    <div class="roll-card-avatar">${avatarInner}</div>
+                    <span class="roll-card-user" data-uid="${d.caster_user_id}"${color ? ` style="color:${escapeHTML(color)}"` : ''}>${escapeHTML(dispName)}</span>
+                    <span class="spell-cast-slot">⚔ Attack</span>
+                    <span class="roll-card-time">${timeStr}</span>
+                </div>
+                <div class="spell-cast-body">
+                    <div class="spell-cast-name">🗡 ${escapeHTML(d.attack_name || 'Attack')}</div>
+                    ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
+                    ${atkLineHtml}
+                    ${dmgLineHtml}
+                    ${d.desc ? `<div class="spell-cast-desc">${escapeHTML(d.desc)}</div>` : ''}
+                    ${saveBtnHtml ? `<div class="spell-cast-actions">${saveBtnHtml}</div>` : ''}
+                    <div class="spell-cast-results"></div>
+                </div>
+            </div>`;
+        ul.prepend(li);
+
+        const saveBtn = li.querySelector('.weapon-atk-save-btn');
+        if (saveBtn) saveBtn.addEventListener('click', () => promptAttackSave(d, li, saveBtn));
+
+        // Stash the attack metadata on the element so the roll listener can
+        // correlate save responses back to this card (matches by note prefix).
+        li._spellCast = {
+            // Reuse the spell-cast save-correlation field name so the existing
+            // roll listener appends pass/fail rows here without modification.
+            _saveLabel: null,
+            spell_save_ability: d.save_ability,
+            spell_name: d.attack_name,
+        };
+    }
+
+    async function promptAttackSave(d, li, btn) {
+        const dc = parseInt(d.save_dc, 10);
+        if (!Number.isFinite(dc)) { showToast('No DC set on attack.', 'error'); return; }
+        const label = `${d.attack_name} — ${d.save_ability} save`;
+        btn.disabled = true;
+        try {
+            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll_request`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    label,
+                    base_expression: '1d20',
+                    stat_key: `${d.save_ability.toLowerCase()}_save`,
+                    dc,
+                    visibility: 'public',
+                }),
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+            if (li._spellCast) li._spellCast._saveLabel = label;
+            btn.textContent = `📋 Save prompt sent (DC ${dc})`;
+        } catch (e) {
+            btn.disabled = false;
+            showToast('Could not post save prompt.', 'error');
+            console.error(e);
+        }
     }
 
     async function promptSpellSave(d, li, btn) {

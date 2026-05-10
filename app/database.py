@@ -196,6 +196,14 @@ def _apply_inline_migrations() -> None:
         if camp_cols_v20 and "font_override" not in camp_cols_v20:
             conn.execute(text("ALTER TABLE campaigns ADD COLUMN font_override VARCHAR(30)"))
 
+    # ---- Schema v21 (0.28.0): users.ui_scale + users.font_scale ----
+    user_cols_v21 = _column_names("users")
+    with engine.begin() as conn:
+        if user_cols_v21 and "ui_scale" not in user_cols_v21:
+            conn.execute(text("ALTER TABLE users ADD COLUMN ui_scale FLOAT NOT NULL DEFAULT 1.0"))
+        if user_cols_v21 and "font_scale" not in user_cols_v21:
+            conn.execute(text("ALTER TABLE users ADD COLUMN font_scale FLOAT NOT NULL DEFAULT 1.0"))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

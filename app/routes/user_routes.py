@@ -296,6 +296,36 @@ class _TabColorBody(BaseModel):
 _VALID_TAB_COLOR_KEYS = {"battle", "player"}
 
 
+# Allowed scale factors. Constrain server-side so a malicious client can't
+# DoS themselves by setting a 0 or 50× scale.
+_VALID_SCALES = (0.75, 0.85, 0.90, 1.00, 1.10, 1.25, 1.50)
+
+
+def _coerce_scale(v: float) -> float:
+    """Snap an incoming scale value to the closest allowed preset."""
+    return min(_VALID_SCALES, key=lambda s: abs(s - float(v)))
+
+
+class _ScaleBody(BaseModel):
+    ui_scale: float | None = None
+    font_scale: float | None = None
+
+
+@router.post("/api/settings/scale")
+def update_scale(
+    body: _ScaleBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Persist the user's chosen UI / font scale presets."""
+    if body.ui_scale is not None:
+        user.ui_scale = _coerce_scale(body.ui_scale)
+    if body.font_scale is not None:
+        user.font_scale = _coerce_scale(body.font_scale)
+    db.commit()
+    return {"ok": True, "ui_scale": user.ui_scale, "font_scale": user.font_scale}
+
+
 @router.post("/api/settings/tab_color")
 def update_tab_color(
     body: _TabColorBody,

@@ -312,6 +312,86 @@
 </section>
 
 <section>
+    <h2>🔍 Display scale</h2>
+    <p class="muted">Make the entire interface or just the text larger or smaller. Saved to your account and applied on every device. <strong>Phones (≤ 640&nbsp;px wide) ignore these settings</strong> — phone layouts are already tuned for small screens.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;margin-top:10px;">
+        <label style="display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fg-mute);">Interface scale</span>
+            <select id="ui-scale" data-current="{{ user.ui_scale or 1.0 }}" style="min-width:170px;">
+                <option value="0.85">85% — compact</option>
+                <option value="1.00">100% — default</option>
+                <option value="1.10">110% — comfortable</option>
+                <option value="1.25">125% — large</option>
+                <option value="1.50">150% — extra large</option>
+            </select>
+            <span class="muted" style="font-size:11px;">Zooms the whole layout (text + spacing).</span>
+        </label>
+        <label style="display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fg-mute);">Font scale</span>
+            <select id="font-scale" data-current="{{ user.font_scale or 1.0 }}" style="min-width:170px;">
+                <option value="0.85">85% — compact</option>
+                <option value="1.00">100% — default</option>
+                <option value="1.10">110% — comfortable</option>
+                <option value="1.25">125% — large</option>
+            </select>
+            <span class="muted" style="font-size:11px;">Adjusts root text size on top of the interface scale.</span>
+        </label>
+        <span id="scale-status" style="font-size:12px;color:var(--fg-mute);min-height:1.4em;"></span>
+    </div>
+    <script>
+    (function () {
+        const ui   = document.getElementById('ui-scale');
+        const font = document.getElementById('font-scale');
+        const status = document.getElementById('scale-status');
+
+        function _setSelected(sel) {
+            const cur = parseFloat(sel.dataset.current) || 1.0;
+            // Pick the option whose value is numerically closest to cur
+            let best = sel.options[0], bestDiff = Infinity;
+            for (const opt of sel.options) {
+                const d = Math.abs(parseFloat(opt.value) - cur);
+                if (d < bestDiff) { bestDiff = d; best = opt; }
+            }
+            best.selected = true;
+        }
+        _setSelected(ui);
+        _setSelected(font);
+
+        function _applyLive() {
+            // Apply immediately so the user sees the change right away,
+            // before the server round-trip completes.
+            const root = document.documentElement;
+            root.style.setProperty('--ui-scale',  ui.value);
+            root.style.setProperty('--font-scale', font.value);
+        }
+
+        async function save() {
+            status.textContent = 'Saving…';
+            try {
+                const resp = await fetch('/api/settings/scale', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ui_scale: parseFloat(ui.value),
+                        font_scale: parseFloat(font.value),
+                    }),
+                });
+                if (!resp.ok) throw new Error(await resp.text());
+                status.textContent = '✓ Saved';
+                setTimeout(() => { status.textContent = ''; }, 2000);
+            } catch (e) {
+                status.textContent = '✗ Failed — ' + e.message;
+                console.error(e);
+            }
+        }
+
+        ui.addEventListener('change',   () => { _applyLive(); save(); });
+        font.addEventListener('change', () => { _applyLive(); save(); });
+    })();
+    </script>
+</section>
+
+<section>
     <h2>🗂️ Tabletop tab colors</h2>
     <p class="muted">Tint specific sidebar tabs with a personal color. Only visible to you. Leave at the default grey to keep the standard look.</p>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
