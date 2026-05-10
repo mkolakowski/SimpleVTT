@@ -353,6 +353,8 @@
             } else if (msg.type === 'spell_slot_update') {
                 // Forwarded as a CustomEvent above; the open mini-sheet listens
                 // for it to update its pip row in place.
+            } else if (msg.type === 'heal_applied') {
+                _onHealApplied(msg.data);
             }
         };
         ws.onclose = () => setTimeout(connectWs, 2000);
@@ -571,6 +573,17 @@
         const damageBtnHtml = damageExpr
             ? `<button class="spell-cast-btn spell-cast-dmg-btn" type="button" title="Roll ${escapeHTML(d.spell_damage)}">🎲 Roll damage (${escapeHTML(d.spell_damage)})</button>`
             : '';
+        const healExpr = (d.spell_healing || '').trim();
+        const aoeTargets = d.spell_aoe_targets || 1;
+        const isAoe = aoeTargets > 1;
+        const chargeHtml = isAoe
+            ? ` <span class="heal-charge-tracker" data-claimed="0" data-max="${aoeTargets}">(0/${aoeTargets})</span>`
+            : '';
+        const healBtnHtml = healExpr
+            ? `<button class="spell-cast-btn spell-cast-heal-btn" type="button"
+                   data-cast-id="${escapeHTML(d.id)}" data-aoe="${isAoe ? '1' : '0'}"
+                   title="Roll ${escapeHTML(healExpr)} and apply to your character">🩹 Apply Healing (${escapeHTML(healExpr)})${chargeHtml}</button>`
+            : '';
 
         const metaBits = [];
         if (d.spell_school)        metaBits.push(escapeHTML(d.spell_school));
@@ -596,6 +609,7 @@
                     <div class="spell-cast-actions">
                         ${saveBtnHtml}
                         ${damageBtnHtml}
+                        ${healBtnHtml}
                     </div>
                     <div class="spell-cast-results"></div>
                 </div>
@@ -608,9 +622,68 @@
         const dmgBtn = li.querySelector('.spell-cast-dmg-btn');
         if (dmgBtn) dmgBtn.addEventListener('click', () => openDamagePicker(d, damageExpr, li));
 
+        const healBtn = li.querySelector('.spell-cast-heal-btn');
+        if (healBtn) healBtn.addEventListener('click', () => _applyHealing(d, li, healBtn));
+
         // Stash the cast metadata on the element so the roll listener can
         // correlate save responses back to this card (matches by note prefix).
         li._spellCast = { ...d, _saveLabel: null };
+    }
+
+    async function _applyHealing(d, li, btn) {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        try {
+            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/apply_healing`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cast_id: d.id }),
+            });
+            const body = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                const msg = body.detail || body.error || 'Healing failed';
+                showToast(msg, 'error');
+                btn.disabled = false;
+                return;
+            }
+            showToast(`🩹 +${body.rolled} HP applied to your character!`, 'info');
+            // UI update arrives via the heal_applied broadcast — no need to patch DOM here
+        } catch (e) {
+            showToast('Healing failed: ' + e.message, 'error');
+            btn.disabled = false;
+        }
+    }
+
+    function _onHealApplied(d) {
+        const ul = document.getElementById('roll-list');
+        if (ul) {
+            const li = ul.querySelector(`li[data-cast-id="${d.cast_id}"]`);
+            if (li) {
+                // Update charge tracker
+                const tracker = li.querySelector('.heal-charge-tracker');
+                if (tracker) {
+                    tracker.dataset.claimed = d.claimed_count;
+                    tracker.textContent = `(${d.claimed_count}/${d.max_targets})`;
+                }
+                // Append result row
+                const results = li.querySelector('.spell-cast-results');
+                if (results) {
+                    const row = document.createElement('div');
+                    row.className = 'spell-cast-result-row heal-result-row';
+                    row.innerHTML = `🩹 <strong>${escapeHTML(d.char_name)}</strong> +${d.rolled} HP`;
+                    results.appendChild(row);
+                }
+                // Disable button once all AOE charges are consumed
+                const healBtn = li.querySelector('.spell-cast-heal-btn');
+                if (healBtn && d.max_targets > 1 && d.claimed_count >= d.max_targets) {
+                    healBtn.disabled = true;
+                }
+            }
+        }
+        // Update the player-drawer mini-sheet HP if visible
+        if (typeof window._updateMiniHpDisplay === 'function') {
+            window._updateMiniHpDisplay(d.char_id, d.new_hp);
+        }
     }
 
     // ---------- Weapon-attack card ----------

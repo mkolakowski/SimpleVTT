@@ -11,13 +11,13 @@
                      style="width:96px;height:96px;object-fit:cover;border-radius:8px;display:block;">
                 {% else %}
                 <div id="char-portrait-placeholder"
-                     style="width:96px;height:96px;background:#1e2030;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:36px;color:#556;border:1px solid #2a2d3a;font-weight:700;">
+                     style="width:96px;height:96px;background:var(--s-card);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--s-mute);border:1px solid var(--s-border);font-weight:700;">
                     {{ char.name[:1]|upper }}
                 </div>
                 {% endif %}
                 {% if can_edit %}
                 <label title="Upload character art" data-portrait-url="{{ portrait_upload_url|default('') }}"
-                       style="position:absolute;bottom:4px;right:4px;background:#20232aee;border:1px solid #3a3d47;border-radius:3px;padding:2px 5px;cursor:pointer;font-size:12px;line-height:1;color:#9aa0aa;">
+                       style="position:absolute;bottom:4px;right:4px;background:var(--s-input);border:1px solid var(--s-border);border-radius:3px;padding:2px 5px;cursor:pointer;font-size:12px;line-height:1;color:var(--s-mute);">
                     📷<input type="file" id="portrait-upload-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;">
                 </label>
                 {% endif %}
@@ -29,15 +29,15 @@
                 {# Name + identity tags + Edit button #}
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;">
                     <div style="min-width:0;">
-                        <div id="char-name-disp" style="font-size:21px;font-weight:800;color:#e8ecf4;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ char.name }}</div>
-                        <div id="char-tags-row" style="display:flex;flex-wrap:wrap;gap:3px;align-items:center;font-size:12px;color:#7a8ab0;margin-top:3px;">
+                        <div id="char-name-disp" style="font-size:21px;font-weight:800;color:var(--s-fg);line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ char.name }}</div>
+                        <div id="char-tags-row" style="display:flex;flex-wrap:wrap;gap:3px;align-items:center;font-size:12px;color:var(--s-mute);margin-top:3px;">
                             <span id="tag-class">{{ sheet.get('class','') or '—' }}</span>
-                            <span id="sep-sub" style="color:#3a4560;{% if not sheet.get('subclass') %}display:none;{% endif %}">•</span>
+                            <span id="sep-sub" style="color:var(--s-mute);{% if not sheet.get('subclass') %}display:none;{% endif %}">•</span>
                             <span id="tag-subclass" style="{% if not sheet.get('subclass') %}display:none;{% endif %}">{{ sheet.get('subclass','') }}</span>
-                            <span id="sep-race" style="color:#3a4560;{% if not sheet.get('race') %}display:none;{% endif %}">•</span>
+                            <span id="sep-race" style="color:var(--s-mute);{% if not sheet.get('race') %}display:none;{% endif %}">•</span>
                             <span id="tag-race" style="{% if not sheet.get('race') %}display:none;{% endif %}">{{ sheet.get('race','') }}</span>
-                            <span style="color:#3a4560;">•</span>
-                            <span id="tag-level" style="color:#6ab;font-weight:700;">Level {{ sheet.get('level',1) }}</span>
+                            <span style="color:var(--s-mute);">•</span>
+                            <span id="tag-level" style="color:var(--s-accent);font-weight:700;">Level {{ sheet.get('level',1) }}</span>
                         </div>
                     </div>
                     {% if can_edit %}
@@ -45,118 +45,142 @@
                     {% endif %}
                 </div>
 
-                {# HP tracker + combat stat chips #}
+                {# HP tracker + hit die/recovery + combat stat chips #}
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
 
-                    {# HP block #}
-                    <div style="flex:1;min-width:155px;background:#1a1e2c;border:1px solid #2e3550;border-radius:8px;padding:10px 12px;">
-                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:5px;">❤ Hit Points</div>
+                    {# HP block — current/max + temp HP only #}
+                    {% set _hd = sheet.get('hit_dice') or {} %}
+                    {% set _hd_max = (_hd.get('max') or sheet.get('level', 1)) | int %}
+                    {% set _hd_cur = (_hd.get('current') if _hd.get('current') is not none else _hd_max) | int %}
+                    <div style="flex:1;min-width:150px;background:var(--s-card);border:1px solid var(--s-border);border-radius:8px;padding:10px 12px;">
+                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-mute);margin-bottom:5px;">❤ Hit Points</div>
                         <div style="display:flex;align-items:center;gap:5px;">
-                            {% if can_edit %}<button type="button" class="hp-step-btn minus" data-hp-step="-1" title="Lose 1 HP (Shift = -5)">−</button>{% endif %}
+                            {% if can_edit %}
+                            <div class="hp-step-stack">
+                                <button type="button" class="hp-step-btn plus" data-hp-step="1" title="Heal 1 HP (Shift = +5)">+</button>
+                                <button type="button" class="hp-step-btn minus" data-hp-step="-1" title="Lose 1 HP (Shift = -5)">−</button>
+                            </div>
+                            {% endif %}
                             <input type="number" name="hp.current" id="hp-current-input" value="{{ sheet.get('hp',{}).get('current',10) }}"
-                                   style="width:56px;font-size:30px;font-weight:800;color:#e4a0a0;text-align:center;background:transparent;border:none;border-bottom:2px solid #5a3040;padding:0 2px;-moz-appearance:textfield;"
+                                   style="width:70px;font-size:38px;font-weight:800;color:var(--s-hp);text-align:center;background:transparent;border:none;border-bottom:2px solid var(--s-hp-line);padding:0 2px;-moz-appearance:textfield;"
                                    {% if not can_edit %}readonly{% endif %}>
-                            {% if can_edit %}<button type="button" class="hp-step-btn plus" data-hp-step="1" title="Heal 1 HP (Shift = +5)">+</button>{% endif %}
-                            <span style="font-size:16px;color:#3a4560;">/</span>
-                            <span id="hp-max-disp" style="font-size:16px;font-weight:600;color:#7a8ab0;">{{ sheet.get('hp',{}).get('max',10) }}</span>
-                            <span style="font-size:10px;color:#3a4560;margin-left:1px;">max</span>
+                            <span style="font-size:16px;color:var(--s-mute);">/</span>
+                            <span id="hp-max-disp" style="font-size:16px;font-weight:600;color:var(--s-mute);">{{ sheet.get('hp',{}).get('max',10) }}</span>
+                            <span style="font-size:10px;color:var(--s-mute);margin-left:1px;">max</span>
                         </div>
-                        <div style="display:flex;align-items:center;gap:5px;margin-top:7px;padding-top:7px;border-top:1px solid #1e2436;">
-                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Temp</span>
-                            {% if can_edit %}<button type="button" class="hp-step-btn hp-step-btn-temp minus" data-temp-step="-1" title="-1 Temp HP">−</button>{% endif %}
+                        <div style="display:flex;align-items:center;gap:5px;margin-top:7px;padding-top:7px;border-top:1px solid var(--s-border);">
+                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Temp</span>
+                            {% if can_edit %}
+                            <div class="hp-step-stack">
+                                <button type="button" class="hp-step-btn hp-step-btn-temp plus" data-temp-step="1" title="+1 Temp HP">+</button>
+                                <button type="button" class="hp-step-btn hp-step-btn-temp minus" data-temp-step="-1" title="-1 Temp HP">−</button>
+                            </div>
+                            {% endif %}
                             <input type="number" name="hp.temp" id="hp-temp-input" value="{{ sheet.get('hp',{}).get('temp',0) }}"
-                                   style="width:44px;font-size:15px;font-weight:700;color:#8ecfe0;text-align:center;background:transparent;border:none;border-bottom:1px solid #1e3040;padding:0 2px;-moz-appearance:textfield;"
+                                   style="width:52px;font-size:19px;font-weight:700;color:var(--s-temp-hp);text-align:center;background:transparent;border:none;border-bottom:1px solid var(--s-border);padding:0 2px;-moz-appearance:textfield;"
                                    {% if not can_edit %}readonly{% endif %}>
-                            {% if can_edit %}<button type="button" class="hp-step-btn hp-step-btn-temp plus" data-temp-step="1" title="+1 Temp HP">+</button>{% endif %}
-                            <span style="font-size:10px;color:#3a4560;">HP</span>
+                            <span style="font-size:10px;color:var(--s-mute);">HP</span>
                         </div>
                     </div>
 
-                    {# Combat stat chips (2×2 grid) #}
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;flex-shrink:0;">
-                        {# AC — computed from base AC + equipped inventory items #}
-                        <div id="ac-card" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1e2c;border:1px solid #2e3550;border-radius:6px;padding:6px 8px;min-width:58px;min-height:56px;"
-                             title="Effective AC. Edit Base AC in the character details panel.">
-                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:2px;">AC</span>
-                            <span id="ac-disp" style="font-size:22px;font-weight:800;color:#e8ecf4;line-height:1;">{{ sheet.get('ac',10) }}</span>
-                            <input type="number" name="ac" id="ac-hidden" value="{{ sheet.get('ac',10) }}" style="display:none;" tabindex="-1" aria-hidden="true">
+                    {# Hit Die / Recovery block #}
+                    <div style="flex:1;min-width:150px;background:var(--s-card);border:1px solid var(--s-border);border-radius:8px;padding:10px 12px;">
+                        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-mute);margin-bottom:5px;" title="Hit dice — spent on a short rest to recover HP. Half max regained on a long rest.">🎲 Hit Die / Recovery</div>
+                        <div style="display:flex;align-items:center;gap:5px;">
+                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">HD</span>
+                            {% if can_edit %}<button type="button" class="hp-step-btn hp-step-btn-temp minus" data-hd-step="-1" title="Spend 1 hit die (no roll)">−</button>{% endif %}
+                            <input type="number" name="hit_dice.current" id="hd-current-input" value="{{ _hd_cur }}" min="0"
+                                   style="width:36px;font-size:22px;font-weight:800;color:var(--s-fg);text-align:center;background:transparent;border:none;border-bottom:2px solid var(--s-border);padding:0 2px;-moz-appearance:textfield;"
+                                   {% if not can_edit %}readonly{% endif %}>
+                            {% if can_edit %}<button type="button" class="hp-step-btn hp-step-btn-temp plus" data-hd-step="1" title="+1 hit die">+</button>{% endif %}
+                            <span style="font-size:14px;color:var(--s-mute);">/ <span id="hd-max-disp">{{ _hd_max }}</span></span>
+                            <span id="hd-die-disp" style="font-size:13px;color:var(--s-mute);font-weight:600;margin-left:auto;">{{ sheet.get('class_hit_die','') or 'd8' }}</span>
+                            <input type="hidden" name="hit_dice.max" id="hd-max-input" value="{{ _hd_max }}">
                         </div>
+                        {% if can_edit %}
+                        <div style="display:flex;gap:5px;margin-top:7px;padding-top:7px;border-top:1px solid var(--s-border);">
+                            <button type="button" id="short-rest-btn" title="Spend one hit die: roll d{die} + CON to recover HP" style="flex:1;font-size:11px;padding:4px 8px;background:var(--s-btn);border:1px solid var(--s-border);color:var(--s-fg);border-radius:4px;cursor:pointer;font-weight:600;">⚡ Short Rest</button>
+                            <button type="button" id="long-rest-btn" title="Restore HP to max, recover half max hit dice, reset spell slots" style="flex:1;font-size:11px;padding:4px 8px;background:var(--s-btn);border:1px solid var(--s-border);color:var(--s-fg);border-radius:4px;cursor:pointer;font-weight:600;">💤 Long Rest</button>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {# Combat stat chips (3-across: Speed / Init / Prof) #}
+                    {# AC is tracked in the Inventory / armor section below #}
+                    <input type="number" name="ac" id="ac-hidden" value="{{ sheet.get('ac',10) }}" style="display:none;" tabindex="-1" aria-hidden="true">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;flex-shrink:0;">
                         {# Speed — display; edit via panel #}
-                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1e2c;border:1px solid #2e3550;border-radius:6px;padding:6px 8px;min-width:58px;min-height:56px;">
-                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:2px;">Speed</span>
-                            <span id="speed-disp" style="font-size:22px;font-weight:800;color:#e8ecf4;">{{ sheet.get('speed',30) }}</span>
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:6px 8px;min-width:52px;min-height:56px;">
+                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-mute);margin-bottom:2px;">Speed</span>
+                            <span id="speed-disp" style="font-size:20px;font-weight:800;color:var(--s-fg);">{{ sheet.get('speed',30) }}</span>
                         </div>
                         {# Initiative — display; edit via panel #}
-                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1e2c;border:1px solid #2e3550;border-radius:6px;padding:6px 8px;min-width:58px;min-height:56px;">
-                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:2px;">Init</span>
-                            <span id="init-disp" style="font-size:22px;font-weight:800;color:#e8ecf4;">{{ '+' if sheet.get('initiative_bonus',0) >= 0 else '' }}{{ sheet.get('initiative_bonus',0) }}</span>
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:6px 8px;min-width:52px;min-height:56px;">
+                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-mute);margin-bottom:2px;">Init</span>
+                            <span id="init-disp" style="font-size:20px;font-weight:800;color:var(--s-fg);">{{ '+' if sheet.get('initiative_bonus',0) >= 0 else '' }}{{ sheet.get('initiative_bonus',0) }}</span>
                         </div>
                         {# Proficiency — display; edit via panel #}
-                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1e2c;border:1px solid #2e3550;border-radius:6px;padding:6px 8px;min-width:58px;min-height:56px;">
-                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:2px;">Prof</span>
-                            <span id="prof-disp" style="font-size:22px;font-weight:800;color:#e8ecf4;">{{ '+' if sheet.get('proficiency_bonus',2) >= 0 else '' }}{{ sheet.get('proficiency_bonus',2) }}</span>
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:6px 8px;min-width:52px;min-height:56px;">
+                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-mute);margin-bottom:2px;">Prof</span>
+                            <span id="prof-disp" style="font-size:20px;font-weight:800;color:var(--s-fg);">{{ '+' if sheet.get('proficiency_bonus',2) >= 0 else '' }}{{ sheet.get('proficiency_bonus',2) }}</span>
                         </div>
                     </div>
 
-                </div>{# end HP + chips #}
-                {# AC breakdown — explains how the AC card was computed #}
-                <div id="ac-breakdown-line" style="font-size:10px;color:#5a6080;font-style:italic;margin-top:2px;line-height:1.4;">
-                    AC = {{ sheet.get('ac', 10) }}
-                </div>
+                </div>{# end HP + hit die + chips #}
             </div>{# end identity+vitals column #}
         </div>{# end header flex #}
 
         {# ── Edit panel (hidden by default) ──────────────────────────── #}
         {% if can_edit %}
-        <div id="char-edit-panel" style="display:none;background:#191c24;border:1px solid #2e3140;border-radius:8px;padding:12px 14px;margin-bottom:12px;">
-            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a8ab0;margin-bottom:10px;">Character Details</div>
+        <div id="char-edit-panel" style="display:none;background:var(--s-input);border:1px solid var(--s-border);border-radius:8px;padding:12px 14px;margin-bottom:12px;">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-mute);margin-bottom:10px;">Character Details</div>
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:10px;">
                 <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Name</span>
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Name</span>
                     <input name="name" id="char-name-input" value="{{ char.name }}">
                 </label>
                 <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Class</span>
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Class</span>
                     <select name="class" id="class-select" data-current="{{ sheet.get('class','') }}">
                         <option value="">— loading… —</option>
                     </select>
                 </label>
                 <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Subclass</span>
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Subclass</span>
                     <select name="subclass" id="subclass-select" data-current="{{ sheet.get('subclass','') }}">
                         <option value="">— select class first —</option>
                     </select>
                 </label>
                 <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Race</span>
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Race</span>
                     <select name="race" id="race-select" data-current="{{ sheet.get('race','') }}">
                         <option value="">— loading… —</option>
                     </select>
                 </label>
                 <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Level</span>
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Level</span>
                     <input type="number" name="level" id="level-input" value="{{ sheet.get('level',1) }}" min="1" max="20">
                 </label>
                 <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Max HP</span>
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Max HP</span>
                     <input type="number" name="hp.max" id="hp-max-input" value="{{ sheet.get('hp',{}).get('max',10) }}">
                 </label>
                 <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;" title="Your AC when nothing AC-altering is equipped (unarmored).">Base AC</span>
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);" title="Your AC when nothing AC-altering is equipped (unarmored).">Base AC</span>
                     <input type="number" name="base_ac" id="base-ac-input"
                            value="{{ sheet.get('base_ac', sheet.get('ac', 10)) }}"
                            min="0" max="40">
                 </label>
                 <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Speed</span>
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Speed</span>
                     <input type="number" name="speed" id="speed-edit-input" value="{{ sheet.get('speed',30) }}">
                 </label>
                 <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Initiative</span>
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Initiative</span>
                     <input type="number" name="initiative_bonus" id="init-edit-input" value="{{ sheet.get('initiative_bonus',0) }}">
                 </label>
                 <label style="display:flex;flex-direction:column;gap:3px;">
-                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;">Prof Bonus</span>
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Prof Bonus</span>
                     <input type="number" name="proficiency_bonus" id="prof-edit-input" value="{{ sheet.get('proficiency_bonus',2) }}">
                 </label>
             </div>
@@ -173,15 +197,49 @@
         <input type="hidden" name="level"             value="{{ sheet.get('level',1) }}">
         <input type="hidden" name="class"             value="{{ sheet.get('class','') }}">
         <input type="hidden" name="base_ac" id="base-ac-input" value="{{ sheet.get('base_ac', sheet.get('ac', 10)) }}">
+        <input type="hidden" name="hit_dice.max"     value="{{ (sheet.get('hit_dice') or {}).get('max', sheet.get('level',1)) }}">
+        <input type="hidden" name="hit_dice.current" value="{{ (sheet.get('hit_dice') or {}).get('current', (sheet.get('hit_dice') or {}).get('max', sheet.get('level',1))) }}">
         {% endif %}
 
         <style>
-        .ab-roll-card:hover  { background:#243048!important; border-color:#3e4f70!important; }
-        .ab-roll-card:active { background:#18202e!important; transform:scale(.96); }
-        .st-roll-card:hover  { background:#243048!important; border-color:#3e4f70!important; }
-        .st-roll-card:active { background:#18202e!important; transform:scale(.96); }
-        .sk-roll-card:hover  { background:#243048!important; border-color:#3e4f70!important; }
-        .sk-roll-card:active { background:#18202e!important; transform:scale(.96); }
+        /* ── Sheet theme bridge ───────────────────────────────────────────
+           All hardcoded colours in this template are replaced by these
+           semantic custom-properties, which inherit from the active
+           [data-theme] token set defined in style.css.                   */
+        .sheet.dnd5e {
+            --s-card:     var(--bg-2);
+            --s-input:    var(--input-bg);
+            --s-border:   var(--border);
+            --s-fg:       var(--fg);
+            --s-mute:     var(--fg-mute);
+            --s-accent:   var(--accent);
+            --s-danger:   var(--danger);
+            --s-btn:      var(--btn-bg);
+            --s-btn-hov:  var(--btn-hover);
+            --s-err-bg:   var(--error-bg);
+            --s-err-fg:   var(--error-fg);
+            /* Sheet-specific semantic colours — intentionally not generic */
+            --s-hp:       #e4a0a0;   /* current HP (warm red) */
+            --s-temp-hp:  #8ecfe0;   /* temp HP (cyan) */
+            --s-hp-line:  color-mix(in srgb, var(--danger) 50%, var(--border));
+            --s-mod-bg:   color-mix(in srgb, var(--accent) 15%, var(--bg));
+            --s-gold:     #f5c842;
+            --s-copper:   #b87333;
+            --s-silver:   #c4c8cf;
+            --s-electrum: #b8bf8a;
+            --s-platinum: #d6e0ec;
+        }
+
+        /* Roll card hover effects */
+        .ab-roll-card:hover, .st-roll-card:hover, .sk-roll-card:hover {
+            background: var(--s-btn-hov) !important;
+            border-color: var(--accent-border) !important;
+        }
+        .ab-roll-card:active, .st-roll-card:active, .sk-roll-card:active {
+            background: var(--s-input) !important;
+            transform: scale(.96);
+        }
+
         /* Ability + saving throw grids: 6-across on tablet/desktop, 3-across on mobile */
         #ab-card-view, #st-card-view { grid-template-columns: repeat(6, 1fr); }
         @media (max-width: 599px) {
@@ -196,31 +254,40 @@
         /* Currency tracker — GP cell is emphasized */
         .currency-bar .cur-cell {
             display: flex; align-items: center; gap: 5px;
-            background: #1a1e2c; border: 1px solid #2e3550; border-radius: 5px;
+            background: var(--s-card); border: 1px solid var(--s-border); border-radius: 5px;
             padding: 3px 8px;
         }
         .currency-bar .cur-label {
             font-size: 10px; font-weight: 700; letter-spacing: .04em;
-            color: #7a8ab0; min-width: 18px;
+            color: var(--s-mute); min-width: 18px;
         }
         .currency-bar .cur-cell input {
-            width: 50px; font-size: 12px; font-weight: 600; color: #e8ecf4;
+            width: 50px; font-size: 12px; font-weight: 600; color: var(--s-fg);
             text-align: right; background: transparent; border: none; padding: 0 2px;
             -moz-appearance: textfield;
         }
         .currency-bar .cur-cell input::-webkit-outer-spin-button,
         .currency-bar .cur-cell input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-        .currency-bar .cur-cp .cur-label { color: #b87333; }   /* copper */
-        .currency-bar .cur-sp .cur-label { color: #c4c8cf; }   /* silver */
-        .currency-bar .cur-ep .cur-label { color: #b8bf8a; }   /* electrum */
-        .currency-bar .cur-pp .cur-label { color: #d6e0ec; }   /* platinum */
+        .currency-bar .cur-cp .cur-label { color: var(--s-copper); }
+        .currency-bar .cur-sp .cur-label { color: var(--s-silver); }
+        .currency-bar .cur-ep .cur-label { color: var(--s-electrum); }
+        .currency-bar .cur-pp .cur-label { color: var(--s-platinum); }
         .currency-bar .cur-gp {
-            background: linear-gradient(180deg, #2a230f, #1f1a0a);
-            border-color: #6a5418;
-            box-shadow: 0 0 0 1px rgba(218, 165, 32, .12) inset;
+            background: color-mix(in srgb, #daa520 18%, var(--s-card));
+            border-color: color-mix(in srgb, var(--s-gold) 55%, var(--s-border));
+            box-shadow: 0 0 0 1px rgba(218,165,32,.12) inset;
         }
-        .currency-bar .cur-gp .cur-label { color: #f5c842; font-size: 12px; }
-        .currency-bar .cur-gp input { font-size: 14px; font-weight: 700; color: #f5c842; width: 64px; }
+        .currency-bar .cur-gp .cur-label { color: var(--s-gold); font-size: 12px; }
+        .currency-bar .cur-gp input { font-size: 14px; font-weight: 700; color: var(--s-gold); width: 64px; }
+
+        /* Auto-attack badge (attack row generated from an equipped weapon) */
+        .atk-source {
+            font-size: 9px; font-weight: 600; letter-spacing: .04em;
+            color: var(--s-accent);
+            background: color-mix(in srgb, var(--s-accent) 12%, transparent);
+            border: 1px solid color-mix(in srgb, var(--s-accent) 30%, transparent);
+            border-radius: 9px; padding: 1px 7px; flex-shrink: 0;
+        }
 
         /* Suppress the browser's number-input spinner on HP / Temp HP — the
            explicit ± buttons are the supported way to adjust those values. */
@@ -235,16 +302,17 @@
         .hp-step-btn {
             width: 22px; height: 22px;
             display: inline-flex; align-items: center; justify-content: center;
-            background: #20242e; border: 1px solid #38415a; border-radius: 4px;
-            color: #c0c8d8; font-size: 13px; font-weight: 700; line-height: 1;
+            background: var(--s-input); border: 1px solid var(--s-border); border-radius: 4px;
+            color: var(--s-fg); font-size: 13px; font-weight: 700; line-height: 1;
             cursor: pointer; padding: 0; transition: background .12s, border-color .12s;
             -webkit-user-select: none; user-select: none;
         }
-        .hp-step-btn:hover  { background: #2a3046; border-color: #5a6886; }
+        .hp-step-btn:hover  { background: var(--s-btn-hov); border-color: var(--accent-border); }
         .hp-step-btn:active { transform: scale(.94); }
-        .hp-step-btn.minus  { color: #e4a0a0; }
+        .hp-step-btn.minus  { color: var(--s-hp); }
         .hp-step-btn.plus   { color: #a0e4a0; }
         .hp-step-btn-temp { width: 18px; height: 18px; font-size: 11px; }
+        .hp-step-stack { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
 
         /* Collapsible fieldsets — click the legend (or its chevron) to collapse */
         fieldset.collapsible > legend { cursor: pointer; user-select: none; }
@@ -252,7 +320,7 @@
             display: inline-block;
             margin-right: 6px;
             font-size: 9px;
-            color: var(--muted, #888);
+            color: var(--s-mute);
             transition: transform 0.15s ease;
             transform: rotate(0deg);
         }
@@ -277,11 +345,11 @@
                 <button type="button" class="roll-btn ab-roll-card"
                         data-roll-ability="{{ ab }}" data-ab="{{ ab }}"
                         title="Roll {{ ab }} check"
-                        style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:90px;padding:8px 4px;background:#1c2235;border:1px solid #2e3550;border-radius:8px;cursor:pointer;width:100%;">
-                    <span style="font-size:10px;font-weight:700;color:#7a8ab0;text-transform:uppercase;letter-spacing:.06em;">{{ ab }}</span>
-                    <span style="width:32px;height:1px;background:#2e3550;margin:1px 0;"></span>
-                    <span class="ab-score-disp" data-ab="{{ ab }}" style="font-size:22px;font-weight:700;color:#dde2f0;line-height:1.1;">{{ score }}</span>
-                    <span class="ab-mod-disp"   data-ab="{{ ab }}" style="font-size:12px;font-weight:600;color:#6ab;background:#1a3040;padding:1px 7px;border-radius:8px;min-width:32px;text-align:center;">{{ '+' if mod >= 0 else '' }}{{ mod }}</span>
+                        style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:90px;padding:8px 4px;background:var(--s-card);border:1px solid var(--s-border);border-radius:8px;cursor:pointer;width:100%;">
+                    <span style="font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;">{{ ab }}</span>
+                    <span style="width:32px;height:1px;background:var(--s-border);margin:1px 0;"></span>
+                    <span class="ab-score-disp" data-ab="{{ ab }}" style="font-size:22px;font-weight:700;color:var(--s-fg);line-height:1.1;">{{ score }}</span>
+                    <span class="ab-mod-disp"   data-ab="{{ ab }}" style="font-size:12px;font-weight:600;color:var(--s-accent);background:var(--s-mod-bg);padding:1px 7px;border-radius:8px;min-width:32px;text-align:center;">{{ '+' if mod >= 0 else '' }}{{ mod }}</span>
                 </button>
                 {% endfor %}
             </div>
@@ -292,7 +360,7 @@
                 {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
                 {% set score = sheet.get('abilities',{}).get(ab,10) %}
                 <div style="display:flex;flex-direction:column;align-items:center;gap:5px;">
-                    <span style="font-size:10px;font-weight:700;color:#7a8ab0;text-transform:uppercase;letter-spacing:.06em;">{{ ab }}</span>
+                    <span style="font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;">{{ ab }}</span>
                     <input type="number" name="abilities.{{ ab }}" id="ab-input-{{ ab }}"
                            value="{{ score }}" min="1" max="30" data-ab="{{ ab }}"
                            style="width:54px;text-align:center;font-size:18px;font-weight:700;padding:4px 2px;">
@@ -326,20 +394,20 @@
                 <button type="button" class="roll-btn st-roll-card"
                         data-roll-save="{{ ab }}" data-ab="{{ ab }}"
                         title="Roll {{ ab }} saving throw"
-                        style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:82px;padding:6px 4px;background:#1c2235;border:1px solid #2e3550;border-radius:8px;cursor:pointer;width:100%;">
+                        style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:82px;padding:6px 4px;background:var(--s-card);border:1px solid var(--s-border);border-radius:8px;cursor:pointer;width:100%;">
                     <span class="st-prof-dot" data-ab="{{ ab }}"
-                          style="width:9px;height:9px;border-radius:50%;border:2px solid #3e5a70;background:{{ '#6ab' if is_prof else 'transparent' }};"></span>
-                    <span style="font-size:10px;font-weight:700;color:#7a8ab0;text-transform:uppercase;letter-spacing:.06em;">{{ ab }}</span>
-                    <span style="width:32px;height:1px;background:#2e3550;margin:1px 0;"></span>
-                    <span class="st-mod-disp" data-ab="{{ ab }}" style="font-size:18px;font-weight:700;color:#dde2f0;line-height:1.1;">{{ '+' if total >= 0 else '' }}{{ total }}</span>
-                    <span style="font-size:9px;color:#5a7090;letter-spacing:.04em;">SAVE</span>
+                          style="width:9px;height:9px;border-radius:50%;border:2px solid var(--s-border);background:{{ 'var(--s-accent)' if is_prof else 'transparent' }};"></span>
+                    <span style="font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;">{{ ab }}</span>
+                    <span style="width:32px;height:1px;background:var(--s-border);margin:1px 0;"></span>
+                    <span class="st-mod-disp" data-ab="{{ ab }}" style="font-size:18px;font-weight:700;color:var(--s-fg);line-height:1.1;">{{ '+' if total >= 0 else '' }}{{ total }}</span>
+                    <span style="font-size:9px;color:var(--s-mute);letter-spacing:.04em;">SAVE</span>
                 </button>
                 {% endfor %}
             </div>
 
             {# ── Edit view (hidden; contains checkboxes for proficiency) ── #}
             {% if can_edit %}
-            <div id="st-edit-view" style="display:none;flex-wrap:wrap;gap:14px;margin-top:10px;padding:10px;background:#191c24;border-radius:6px;justify-content:center;">
+            <div id="st-edit-view" style="display:none;flex-wrap:wrap;gap:14px;margin-top:10px;padding:10px;background:var(--s-input);border-radius:6px;justify-content:center;">
                 {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
                 <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">
                     <input type="checkbox" name="saving_throws.{{ ab }}" data-ab="{{ ab }}"
@@ -379,14 +447,14 @@
                 <button type="button" class="roll-btn sk-roll-card"
                         data-roll-skill="{{ skill }}" data-skill-ability="{{ ab }}" data-skill="{{ skill }}"
                         title="Roll {{ skill }}"
-                        style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:#1c2235;border:1px solid #2e3550;border-radius:6px;cursor:pointer;text-align:left;min-height:34px;">
+                        style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:var(--s-card);border:{% if is_exp %}2px solid color-mix(in srgb,#daa520 70%,var(--s-accent)){% elif is_prof %}2px solid var(--s-accent){% else %}1px solid var(--s-border){% endif %};border-radius:6px;cursor:pointer;text-align:left;min-height:34px;">
                     <span class="sk-prof-dot" data-skill="{{ skill }}"
                           style="width:8px;height:8px;border-radius:50%;flex-shrink:0;
-                                 background:{{ '#e8a' if is_exp else ('#6ab' if is_prof else 'transparent') }};
-                                 border:2px solid {{ '#e8a' if is_exp else ('#3e5a70') }};"></span>
-                    <span style="flex:1;font-size:12px;font-weight:500;color:#dde2f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ skill }}</span>
-                    <span style="font-size:10px;color:#5a7090;flex-shrink:0;">{{ ab }}</span>
-                    <span class="sk-mod-disp" data-skill="{{ skill }}" style="font-size:13px;font-weight:700;color:#6ab;flex-shrink:0;min-width:26px;text-align:right;">{{ '+' if total >= 0 else '' }}{{ total }}</span>
+                                 background:{{ 'color-mix(in srgb,#daa520 70%,var(--s-accent))' if is_exp else ('var(--s-accent)' if is_prof else 'transparent') }};
+                                 border:2px solid {{ 'color-mix(in srgb,#daa520 70%,var(--s-accent))' if is_exp else 'var(--s-border)' }};"></span>
+                    <span style="flex:1;font-size:12px;font-weight:500;color:var(--s-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ skill }}</span>
+                    <span style="font-size:10px;color:var(--s-mute);flex-shrink:0;">{{ ab }}</span>
+                    <span class="sk-mod-disp" data-skill="{{ skill }}" style="font-size:13px;font-weight:700;color:var(--s-accent);flex-shrink:0;min-width:26px;text-align:right;">{{ '+' if total >= 0 else '' }}{{ total }}</span>
                 </button>
                 {% endfor %}
             </div>
@@ -452,16 +520,16 @@
                 <button type="button" class="cond-chip" data-slug="{{ slug }}"
                         style="padding:4px 11px;border-radius:12px;font-size:12px;cursor:pointer;
                                transition:background .15s,border-color .15s,color .15s;
-                               background:{{ '#4a1520' if is_active else '#1c2235' }};
-                               border:1px solid {{ '#c05070' if is_active else '#2e3550' }};
-                               color:{{ '#f0a0b8' if is_active else '#7a8ab0' }};
+                               background:{{ 'color-mix(in srgb,var(--s-danger) 30%,var(--bg))' if is_active else 'var(--s-card)' }};
+                               border:1px solid {{ 'var(--s-danger)' if is_active else 'var(--s-border)' }};
+                               color:{{ 'color-mix(in srgb,var(--s-danger) 60%,#fff)' if is_active else 'var(--s-mute)' }};
                                font-weight:{{ '700' if is_active else '500' }};">{{ label }}</button>
                 {% endfor %}
             </div>
             <div id="cond-desc-popover"
-                 style="display:none;margin-top:10px;padding:10px 12px;background:#191c24;
-                        border:1px solid #2e3140;border-radius:6px;font-size:12px;
-                        color:#b0b8cc;line-height:1.6;"></div>
+                 style="display:none;margin-top:10px;padding:10px 12px;background:var(--s-input);
+                        border:1px solid var(--s-border);border-radius:6px;font-size:12px;
+                        color:var(--s-mute);line-height:1.6;"></div>
         </fieldset>
 
         {# ── Attacks fieldset ─────────────────────────────────────────── #}
@@ -477,7 +545,7 @@
             <div id="attacks-list-container" style="min-height:20px;"></div>
 
             {% if can_edit %}
-            <div id="custom-attack-panel" style="display:none;margin-top:10px;border:1px solid #2e3140;border-radius:5px;padding:10px;background:#191c24;">
+            <div id="custom-attack-panel" style="display:none;margin-top:10px;border:1px solid var(--s-border);border-radius:5px;padding:10px;background:var(--s-input);">
                 <div class="row" style="margin-bottom:6px;flex-wrap:wrap;">
                     <label style="flex:2;min-width:140px;">Name<input type="text" id="ca-name" placeholder="e.g. Longsword" style="width:100%;"></label>
                     <label style="flex:1;min-width:90px;">Range<input type="text" id="ca-range" placeholder="Melee or 30/120 ft" style="width:100%;"></label>
@@ -509,42 +577,42 @@
         <div id="item-browser-overlay"
              style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(6,8,16,.82);overflow:hidden;">
             <div style="position:absolute;inset:16px;max-width:860px;margin:0 auto;
-                        background:#1a1d27;border:1px solid #2e3140;border-radius:10px;
+                        background:var(--bg);border:1px solid var(--s-border);border-radius:10px;
                         display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0009;">
                 <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;
-                            background:#191c24;border-bottom:1px solid #2e3140;flex-shrink:0;">
-                    <span style="font-size:14px;font-weight:700;color:#dde2f0;">🔍 Item Browser</span>
+                            background:var(--s-input);border-bottom:1px solid var(--s-border);flex-shrink:0;">
+                    <span style="font-size:14px;font-weight:700;color:var(--s-fg);">🔍 Item Browser</span>
                     <input type="text" id="ib-search" placeholder="Search items…"
                            style="flex:1;max-width:280px;font-size:12px;">
                     <button type="button" id="ib-search-btn" style="font-size:12px;padding:4px 12px;">Search</button>
                     <button type="button" id="ib-close-btn"
-                            style="margin-left:auto;font-size:12px;padding:4px 12px;background:#2a1010;border-color:#6a2020;color:#e0a0a0;">✕ Close</button>
+                            style="margin-left:auto;font-size:12px;padding:4px 12px;background:var(--s-err-bg);border-color:var(--s-danger);color:var(--s-err-fg);">✕ Close</button>
                 </div>
                 <div style="display:flex;gap:5px;flex-wrap:wrap;padding:8px 14px;
-                            background:#161820;border-bottom:1px solid #1e2130;flex-shrink:0;align-items:center;">
-                    <span style="font-size:10px;font-weight:700;color:#5a6080;text-transform:uppercase;letter-spacing:.06em;margin-right:4px;">Type</span>
+                            background:var(--bg);border-bottom:1px solid var(--s-border);flex-shrink:0;align-items:center;">
+                    <span style="font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;margin-right:4px;">Type</span>
                     <button type="button" class="ib-cat" data-cat="weapons"
-                            style="font-size:11px;padding:3px 12px;border-radius:10px;background:#2a3a5a;border-color:#6ab;color:#6ab;">Weapons</button>
+                            style="font-size:11px;padding:3px 12px;border-radius:10px;background:var(--accent-bg2);border-color:var(--s-accent);color:var(--s-accent);">Weapons</button>
                     <button type="button" class="ib-cat" data-cat="armor"
-                            style="font-size:11px;padding:3px 12px;border-radius:10px;background:transparent;border-color:#2e3550;color:#5a6080;">Armor</button>
+                            style="font-size:11px;padding:3px 12px;border-radius:10px;background:transparent;border-color:var(--s-border);color:var(--s-mute);">Armor</button>
                     <button type="button" class="ib-cat" data-cat="magicitems"
-                            style="font-size:11px;padding:3px 12px;border-radius:10px;background:transparent;border-color:#2e3550;color:#5a6080;">Magic Items</button>
-                    <label id="ib-prof-only-wrap" style="margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11px;color:#7a8ab0;cursor:pointer;">
+                            style="font-size:11px;padding:3px 12px;border-radius:10px;background:transparent;border-color:var(--s-border);color:var(--s-mute);">Magic Items</button>
+                    <label id="ib-prof-only-wrap" style="margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11px;color:var(--s-mute);cursor:pointer;">
                         <input type="checkbox" id="ib-prof-only" checked>
                         <span>Proficient only</span>
-                        <span id="ib-prof-class" style="font-size:10px;color:#5a6080;font-style:italic;"></span>
+                        <span id="ib-prof-class" style="font-size:10px;color:var(--s-mute);font-style:italic;"></span>
                     </label>
                 </div>
                 <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
                     <div id="ib-list-panel"
-                         style="width:260px;border-right:1px solid #1e2130;overflow-y:auto;flex-shrink:0;padding:6px 0;">
-                        <div style="padding:14px;color:#3a4560;font-size:12px;">
+                         style="width:260px;border-right:1px solid var(--s-border);overflow-y:auto;flex-shrink:0;padding:6px 0;">
+                        <div style="padding:14px;color:var(--s-mute);font-size:12px;">
                             Pick a type or search to browse items.
                         </div>
                     </div>
                     <div id="ib-detail-panel"
                          style="flex:1;overflow-y:auto;padding:18px 20px;">
-                        <p style="color:#3a4560;font-size:13px;">Select an item to see its details.</p>
+                        <p style="color:var(--s-mute);font-size:13px;">Select an item to see its details.</p>
                     </div>
                 </div>
             </div>
@@ -562,36 +630,36 @@
             </legend>
 
             {# ── Spellcasting Info Bar ── #}
-            <div id="sc-info-bar" style="display:none;background:#141720;border:1px solid #252840;border-radius:6px;padding:10px 14px;margin-bottom:10px;">
+            <div id="sc-info-bar" style="display:none;background:var(--bg);border:1px solid var(--s-border);border-radius:6px;padding:10px 14px;margin-bottom:10px;">
                 <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:flex-start;">
                     <div>
-                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#4a5870;margin-bottom:3px;">Type</div>
-                        <div id="sc-type" style="font-size:13px;font-weight:700;color:#c0c8d8;">—</div>
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);margin-bottom:3px;">Type</div>
+                        <div id="sc-type" style="font-size:13px;font-weight:700;color:var(--s-fg);">—</div>
                     </div>
                     <div>
-                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#4a5870;margin-bottom:3px;">Ability</div>
-                        <div id="sc-ability" style="font-size:13px;font-weight:700;color:#c0c8d8;">—</div>
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);margin-bottom:3px;">Ability</div>
+                        <div id="sc-ability" style="font-size:13px;font-weight:700;color:var(--s-fg);">—</div>
                     </div>
                     <div>
-                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#4a5870;margin-bottom:3px;">Save DC</div>
-                        <div id="sc-dc" style="font-size:13px;font-weight:700;color:#c0c8d8;">—</div>
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);margin-bottom:3px;">Save DC</div>
+                        <div id="sc-dc" style="font-size:13px;font-weight:700;color:var(--s-fg);">—</div>
                     </div>
                     <div>
-                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#4a5870;margin-bottom:3px;">Atk Bonus</div>
-                        <div id="sc-atk" style="font-size:13px;font-weight:700;color:#c0c8d8;">—</div>
+                        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);margin-bottom:3px;">Atk Bonus</div>
+                        <div id="sc-atk" style="font-size:13px;font-weight:700;color:var(--s-fg);">—</div>
                     </div>
                     <div id="sc-limit-wrap" style="margin-left:auto;text-align:right;">
-                        <div id="sc-limit-label" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#4a5870;margin-bottom:3px;">Prepared</div>
+                        <div id="sc-limit-label" style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);margin-bottom:3px;">Prepared</div>
                         <div style="font-size:13px;font-weight:700;">
-                            <span id="sc-limit-cur" style="color:#80e0a0;">0</span><span style="color:#3a4560;"> / </span><span id="sc-limit-max" style="color:#c0c8d8;">?</span>
+                            <span id="sc-limit-cur" style="color:#80e0a0;">0</span><span style="color:var(--s-mute);"> / </span><span id="sc-limit-max" style="color:var(--s-fg);">?</span>
                         </div>
                     </div>
                 </div>
                 {% if can_edit %}
-                <div style="margin-top:8px;display:flex;align-items:center;gap:8px;border-top:1px solid #1e2030;padding-top:8px;flex-wrap:wrap;">
+                <div style="margin-top:8px;display:flex;align-items:center;gap:8px;border-top:1px solid var(--s-border);padding-top:8px;flex-wrap:wrap;">
                     <button type="button" id="sc-autofill-btn"
-                            style="font-size:11px;padding:3px 10px;background:#162030;border:1px solid #2a4060;color:#6ab;border-radius:4px;cursor:pointer;">⚡ Auto-fill Slots</button>
-                    <span id="sc-autofill-note" style="font-size:11px;color:#4a6070;font-style:italic;"></span>
+                            style="font-size:11px;padding:3px 10px;background:var(--s-btn);border:1px solid var(--s-border);color:var(--s-accent);border-radius:4px;cursor:pointer;">⚡ Auto-fill Slots</button>
+                    <span id="sc-autofill-note" style="font-size:11px;color:var(--s-mute);font-style:italic;"></span>
                 </div>
                 {% endif %}
             </div>
@@ -604,13 +672,13 @@
                 {% set used = sd.get('used', 0) %}
                 <div class="ss-row" data-lvl="{{ lvl }}" data-total="{{ total }}" data-used="{{ used }}"
                      style="display:{% if total == 0 %}none{% else %}flex{% endif %};align-items:center;gap:8px;">
-                    <span style="font-size:11px;font-weight:600;width:38px;flex-shrink:0;color:#7a8ab0;letter-spacing:.03em;">Lv {{ lvl }}</span>
+                    <span style="font-size:11px;font-weight:600;width:38px;flex-shrink:0;color:var(--s-mute);letter-spacing:.03em;">Lv {{ lvl }}</span>
                     <div class="ss-pips" style="display:flex;gap:5px;flex-wrap:wrap;flex:1;"></div>
                     <input type="hidden" name="spell_slots.{{ lvl }}.total" class="ss-total-input" value="{{ total }}">
                     <input type="hidden" name="spell_slots.{{ lvl }}.used"  class="ss-used-input"  value="{{ used }}">
                 </div>
                 {% endfor %}
-                <p id="ss-empty-msg" style="font-size:12px;color:#3a4560;margin:2px 0 0;">Select a class and level to auto-fill spell slots.</p>
+                <p id="ss-empty-msg" style="font-size:12px;color:var(--s-mute);margin:2px 0 0;">Select a class and level to auto-fill spell slots.</p>
             </div>
 
             {# ── Spell list ── #}
@@ -619,7 +687,7 @@
 
             {# ── Custom spell panel ── #}
             {% if can_edit %}
-            <div id="custom-spell-panel" style="display:none;margin-top:10px;border:1px solid #2e3140;border-radius:5px;padding:10px;background:#191c24;">
+            <div id="custom-spell-panel" style="display:none;margin-top:10px;border:1px solid var(--s-border);border-radius:5px;padding:10px;background:var(--s-input);">
                 <div class="row" style="margin-bottom:6px;flex-wrap:wrap;">
                     <label style="flex:2;min-width:120px;">Name<input type="text" id="cs-name" placeholder="Spell name" style="width:100%;"></label>
                     <label>Level<input type="number" id="cs-level" value="1" min="0" max="9" style="width:46px;"></label>
@@ -631,6 +699,8 @@
                     <label style="flex:1;min-width:80px;">Duration<input type="text" id="cs-dur" placeholder="Instantaneous" style="width:100%;"></label>
                     <label style="flex:1;min-width:80px;">Components<input type="text" id="cs-comp" placeholder="V, S" style="width:100%;"></label>
                     <label style="flex:1;min-width:80px;">Damage<input type="text" id="cs-damage" placeholder="2d6 fire" style="width:100%;"></label>
+                    <label style="flex:1;min-width:80px;">Healing<input type="text" id="cs-healing" placeholder="1d8+3" style="width:100%;"></label>
+                    <label style="flex:0 0 auto;">AOE Targets<input type="number" id="cs-aoe-targets" value="1" min="1" max="20" style="width:52px;" title="Number of targets that can claim this healing (1 = single target)"></label>
                     <label style="flex:1;min-width:80px;">Save<select id="cs-save" style="width:100%;">
                         <option value="">None</option>
                         <option value="STR">STR</option><option value="DEX">DEX</option>
@@ -651,36 +721,36 @@
         <div id="spell-browser-overlay"
              style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(6,8,16,.82);overflow:hidden;">
             <div style="position:absolute;inset:16px;max-width:860px;margin:0 auto;
-                        background:#1a1d27;border:1px solid #2e3140;border-radius:10px;
+                        background:var(--bg);border:1px solid var(--s-border);border-radius:10px;
                         display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px #0009;">
 
                 {# Header #}
                 <div style="display:flex;align-items:center;gap:10px;padding:12px 16px;
-                            background:#191c24;border-bottom:1px solid #2e3140;flex-shrink:0;">
-                    <span style="font-size:14px;font-weight:700;color:#dde2f0;">🔍 Spell Browser</span>
+                            background:var(--s-input);border-bottom:1px solid var(--s-border);flex-shrink:0;">
+                    <span style="font-size:14px;font-weight:700;color:var(--s-fg);">🔍 Spell Browser</span>
                     <input type="text" id="sb-search" placeholder="Search spells…"
                            style="flex:1;max-width:280px;font-size:12px;">
                     <button type="button" id="sb-search-btn" style="font-size:12px;padding:4px 12px;">Search</button>
                     <button type="button" id="sb-close-btn"
-                            style="margin-left:auto;font-size:12px;padding:4px 12px;background:#2a1010;border-color:#6a2020;color:#e0a0a0;">✕ Close</button>
+                            style="margin-left:auto;font-size:12px;padding:4px 12px;background:var(--s-err-bg);border-color:var(--s-danger);color:var(--s-err-fg);">✕ Close</button>
                 </div>
 
                 {# Spell limit status bar #}
-                <div id="sb-limit-bar" style="display:none;padding:5px 16px;background:#101318;border-bottom:1px solid #1e2130;flex-shrink:0;font-size:11px;color:#5a6880;display:flex;align-items:center;gap:10px;">
+                <div id="sb-limit-bar" style="display:none;padding:5px 16px;background:var(--bg);border-bottom:1px solid var(--s-border);flex-shrink:0;font-size:11px;color:var(--s-mute);display:flex;align-items:center;gap:10px;">
                     <span id="sb-limit-text"></span>
                 </div>
 
                 {# Level filter chips #}
                 <div style="display:flex;gap:5px;flex-wrap:wrap;padding:8px 14px;
-                            background:#161820;border-bottom:1px solid #1e2130;flex-shrink:0;align-items:center;">
-                    <span style="font-size:10px;font-weight:700;color:#5a6080;text-transform:uppercase;letter-spacing:.06em;margin-right:4px;">Level</span>
+                            background:var(--bg);border-bottom:1px solid var(--s-border);flex-shrink:0;align-items:center;">
+                    <span style="font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;margin-right:4px;">Level</span>
                     <button type="button" class="sb-lvl" data-lvl="all"
-                            style="font-size:11px;padding:3px 10px;border-radius:10px;background:#2a3a5a;border-color:#6ab;color:#6ab;">All</button>
+                            style="font-size:11px;padding:3px 10px;border-radius:10px;background:var(--accent-bg2);border-color:var(--s-accent);color:var(--s-accent);">All</button>
                     <button type="button" class="sb-lvl" data-lvl="0"
-                            style="font-size:11px;padding:3px 10px;border-radius:10px;background:transparent;border-color:#2e3550;color:#5a6080;">Cantrip</button>
+                            style="font-size:11px;padding:3px 10px;border-radius:10px;background:transparent;border-color:var(--s-border);color:var(--s-mute);">Cantrip</button>
                     {% for lvl in range(1, 10) %}
                     <button type="button" class="sb-lvl" data-lvl="{{ lvl }}"
-                            style="font-size:11px;padding:3px 10px;border-radius:10px;background:transparent;border-color:#2e3550;color:#5a6080;">{{ lvl }}</button>
+                            style="font-size:11px;padding:3px 10px;border-radius:10px;background:transparent;border-color:var(--s-border);color:var(--s-mute);">{{ lvl }}</button>
                     {% endfor %}
                 </div>
 
@@ -688,15 +758,15 @@
                 <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
                     {# Spell list #}
                     <div id="sb-list-panel"
-                         style="width:260px;border-right:1px solid #1e2130;overflow-y:auto;flex-shrink:0;padding:6px 0;">
-                        <div style="padding:14px;color:#3a4560;font-size:12px;">
+                         style="width:260px;border-right:1px solid var(--s-border);overflow-y:auto;flex-shrink:0;padding:6px 0;">
+                        <div style="padding:14px;color:var(--s-mute);font-size:12px;">
                             Select a level filter or search to browse spells.
                         </div>
                     </div>
                     {# Spell detail #}
                     <div id="sb-detail-panel"
                          style="flex:1;overflow-y:auto;padding:18px 20px;">
-                        <p style="color:#3a4560;font-size:13px;">Select a spell to see its details.</p>
+                        <p style="color:var(--s-mute);font-size:13px;">Select a spell to see its details.</p>
                     </div>
                 </div>
             </div>
@@ -718,9 +788,11 @@
                     const isUsed = i < used;
                     pip.style.cssText = [
                         'width:18px','height:18px','border-radius:50%',
-                        'border:2px solid #7b8cde','padding:0','cursor:pointer',
-                        'transition:background .15s',
-                        isUsed ? 'background:#7b8cde' : 'background:transparent',
+                        'padding:0','cursor:pointer',
+                        'transition:background .15s,border-color .15s,opacity .15s',
+                        isUsed
+                            ? 'background:transparent;border:2px solid var(--s-border);opacity:0.35'
+                            : 'background:var(--s-accent);border:2px solid var(--s-accent)',
                     ].join(';');
                     pip.title = isUsed ? 'Click to restore' : 'Click to expend';
                     pip.dataset.idx = i;
@@ -766,55 +838,114 @@
         })();
         </script>
 
-        <fieldset class="collapsible" data-collapse-key="class-prof">
-            <legend><span class="fs-chevron">▼</span>Class Proficiencies
+        {# ── Inventory fieldset ───────────────────────────────────────── #}
+        <fieldset id="inventory-fieldset" class="collapsible" data-collapse-key="inventory">
+            <legend><span class="fs-chevron">▼</span>Inventory
                 {% if can_edit %}
-                <button type="button" id="sync-class-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;" title="Re-fetch class details from Open5e">↻ Sync</button>
-                <span id="sync-class-status" style="font-size:11px;margin-left:6px;"></span>
+                <button type="button" id="browse-items-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">🔍 Browse Items</button>
+                <button type="button" id="add-custom-item-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;">+ Custom</button>
                 {% endif %}
             </legend>
-            {% set _hd = sheet.get('class_hit_die','') %}
-            {% set _ar = sheet.get('class_armor','') %}
-            {% set _wp = sheet.get('class_weapons','') %}
-            {% set _tl = sheet.get('class_tools','') %}
-            {% set _st = sheet.get('class_saving_throws','') %}
-            {% set _sk = sheet.get('class_skills','') %}
-            {% set _sp = sheet.get('class_spellcasting','') %}
-            {% set _eq = sheet.get('class_equipment','') %}
-
-            {% macro prof_row(label, name, value) %}
-            <div style="display:flex;align-items:baseline;gap:8px;padding:4px 0;border-bottom:1px solid #1e2130;">
-                <span style="font-size:11px;font-weight:700;color:var(--muted,#888);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;min-width:110px;">{{ label }}</span>
-                {% if can_edit %}
-                <input type="text" name="{{ name }}" value="{{ value }}" style="flex:1;font-size:12px;" placeholder="—">
-                {% else %}
-                <span style="font-size:12px;color:var(--fg,#e0e0e0);">{{ value or '—' }}</span>
-                {% endif %}
-            </div>
-            {% endmacro %}
-
-            <div style="margin-top:6px;">
-                {% if _hd or can_edit %}{{ prof_row('Hit Die', 'class_hit_die', _hd) }}{% endif %}
-                {% if _ar or can_edit %}{{ prof_row('Armor', 'class_armor', _ar) }}{% endif %}
-                {% if _wp or can_edit %}{{ prof_row('Weapons', 'class_weapons', _wp) }}{% endif %}
-                {% if _tl or can_edit %}{{ prof_row('Tools', 'class_tools', _tl) }}{% endif %}
-                {% if _st or can_edit %}{{ prof_row('Saving Throws', 'class_saving_throws', _st) }}{% endif %}
-                {% if _sk or can_edit %}{{ prof_row('Skills', 'class_skills', _sk) }}{% endif %}
-                {% if _sp or can_edit %}{{ prof_row('Spellcasting', 'class_spellcasting', _sp) }}{% endif %}
+            {# AC breakdown — updated by the AC modifier engine whenever equip state changes #}
+            <div id="ac-breakdown-line" style="font-size:11px;color:var(--s-mute);font-style:italic;margin-bottom:8px;line-height:1.4;">
+                🛡 AC {{ sheet.get('ac', 10) }}
             </div>
 
-            {% if _eq or can_edit %}
-            <label style="margin-top:10px;display:block;">Starting Equipment
-                {% if can_edit %}
-                <textarea name="class_equipment" rows="3" style="font-size:12px;" placeholder="Auto-filled when you select a class">{{ _eq }}</textarea>
-                {% else %}
-                <div style="white-space:pre-wrap;font-size:12px;line-height:1.6;color:var(--fg,#e0e0e0);margin-top:4px;">{{ _eq }}</div>
-                {% endif %}
-            </label>
-            {% endif %}
+            {# Currency tracker (GP-biased) + total weight #}
+            {% set _cur = sheet.get('currency') or {} %}
+            <div class="currency-bar" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--bg);border:1px solid var(--s-border);border-radius:6px;padding:8px 12px;margin-bottom:10px;">
+                <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);flex-shrink:0;">💰 Currency</span>
+                <label class="cur-cell cur-cp" title="Copper pieces">
+                    <span class="cur-label">CP</span>
+                    <input type="number" name="currency.cp" min="0"
+                           value="{{ _cur.get('cp', 0) | int }}"
+                           {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label class="cur-cell cur-sp" title="Silver pieces (10 cp = 1 sp)">
+                    <span class="cur-label">SP</span>
+                    <input type="number" name="currency.sp" min="0"
+                           value="{{ _cur.get('sp', 0) | int }}"
+                           {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label class="cur-cell cur-ep" title="Electrum pieces (5 sp = 1 ep)">
+                    <span class="cur-label">EP</span>
+                    <input type="number" name="currency.ep" min="0"
+                           value="{{ _cur.get('ep', 0) | int }}"
+                           {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label class="cur-cell cur-gp" title="Gold pieces — primary currency">
+                    <span class="cur-label">GP</span>
+                    <input type="number" name="currency.gp" min="0"
+                           value="{{ _cur.get('gp', 0) | int }}"
+                           {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <label class="cur-cell cur-pp" title="Platinum pieces (1 pp = 10 gp)">
+                    <span class="cur-label">PP</span>
+                    <input type="number" name="currency.pp" min="0"
+                           value="{{ _cur.get('pp', 0) | int }}"
+                           {% if not can_edit %}readonly{% endif %}>
+                </label>
+                <span id="cur-total" style="font-size:11px;color:var(--s-mute);flex-shrink:0;"
+                      title="Total wealth converted to gold pieces (cp/100 + sp/10 + ep/2 + gp + pp×10)">≈ 0 gp</span>
+                <span style="margin-left:auto;font-size:11px;color:var(--s-mute);flex-shrink:0;">
+                    Weight: <span id="inv-total-weight" style="font-weight:700;color:var(--s-fg);">0</span> lb
+                </span>
+            </div>
 
-            {% if not _hd and not _ar and not _wp and not _tl and not _st and not _sk and not _sp and not _eq and not can_edit %}
-            <p class="muted" style="font-size:12px;margin:6px 0 0;">Select a class to auto-fill proficiencies.</p>
+            {# Inventory data — JSON, hidden #}
+            <textarea id="inventory-data" name="inventory" style="display:none;" {% if not can_edit %}readonly{% endif %}>{{ (sheet.get('inventory') or []) | tojson }}</textarea>
+            <div id="inventory-list-container" style="min-height:20px;"></div>
+
+            {# Custom item panel #}
+            {% if can_edit %}
+            <div id="custom-item-panel" style="display:none;margin-top:10px;border:1px solid var(--s-border);border-radius:5px;padding:10px;background:var(--s-input);">
+                <div class="row" style="margin-bottom:6px;flex-wrap:wrap;">
+                    <label style="flex:2;min-width:140px;">Name<input type="text" id="ci-name" placeholder="Item name" style="width:100%;"></label>
+                    <label style="min-width:110px;">Type<select id="ci-type" style="width:100%;">
+                        <option value="gear">Gear</option>
+                        <option value="weapon">Weapon</option>
+                        <option value="armor">Armor</option>
+                        <option value="shield">Shield</option>
+                        <option value="tool">Tool</option>
+                        <option value="consumable">Consumable</option>
+                    </select></label>
+                    <label style="width:60px;">Qty<input type="number" id="ci-qty" value="1" min="1" style="width:100%;"></label>
+                    <label style="width:80px;">Weight<input type="number" id="ci-weight" value="0" min="0" step="0.1" style="width:100%;" title="Weight per item, in pounds"></label>
+                </div>
+                <div class="row" id="ci-armor-row" style="margin-bottom:6px;flex-wrap:wrap;display:none;">
+                    <label style="min-width:120px;">Armor type
+                        <select id="ci-armor-type" style="width:100%;">
+                            <option value="light">Light (full DEX)</option>
+                            <option value="medium" selected>Medium (DEX cap +2)</option>
+                            <option value="heavy">Heavy (no DEX)</option>
+                        </select>
+                    </label>
+                    <label style="width:90px;">Base AC<input type="number" id="ci-ac-value" value="14" min="0" max="30" style="width:100%;" title="Armor base AC value (DEX is added based on armor type)"></label>
+                </div>
+                <div class="row" id="ci-weapon-row" style="margin-bottom:6px;flex-wrap:wrap;display:none;">
+                    <label style="width:110px;">Hands
+                        <select id="ci-hands" style="width:100%;" title="One- or two-handed. Versatile = 1H but uses higher damage if 2H.">
+                            <option value="1">One-handed</option>
+                            <option value="2">Two-handed</option>
+                            <option value="versatile">Versatile (1H)</option>
+                        </select>
+                    </label>
+                    <label style="flex:1;min-width:90px;">Damage<input type="text" id="ci-damage" placeholder="1d8" style="width:100%;" title="Damage dice, e.g. 1d8 or 2d6"></label>
+                    <label style="flex:1;min-width:90px;">Damage type<input type="text" id="ci-damage-type" placeholder="slashing" style="width:100%;"></label>
+                    <label style="flex:1;min-width:90px;">Range<input type="text" id="ci-range" placeholder="Melee or 30/120 ft" style="width:100%;"></label>
+                </div>
+                <div class="row" id="ci-shield-row" style="margin-bottom:6px;flex-wrap:wrap;display:none;">
+                    <label style="width:90px;">AC bonus<input type="number" id="ci-shield-bonus" value="2" min="0" max="10" style="width:100%;" title="AC bonus while equipped"></label>
+                </div>
+                <div class="row" id="ci-misc-row" style="margin-bottom:6px;flex-wrap:wrap;display:none;">
+                    <label style="width:90px;">AC bonus<input type="number" id="ci-misc-bonus" value="0" min="0" max="10" style="width:100%;" title="Optional AC bonus while equipped (e.g. Ring of Protection +1)"></label>
+                </div>
+                <label>Description<textarea id="ci-desc" rows="2" placeholder="Item details, properties, etc." style="width:100%;font-size:12px;"></textarea></label>
+                <div style="display:flex;gap:8px;margin-top:8px;">
+                    <button type="button" id="ci-add-btn">Add Item</button>
+                    <button type="button" id="ci-cancel-btn">Cancel</button>
+                </div>
+            </div>
             {% endif %}
         </fieldset>
 
@@ -865,105 +996,62 @@
             </div>
         </fieldset>
 
+        <fieldset class="collapsible" data-collapse-key="class-prof">
+            <legend><span class="fs-chevron">▼</span>Class Proficiencies
+                {% if can_edit %}
+                <button type="button" id="sync-class-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;" title="Re-fetch class details from Open5e">↻ Sync</button>
+                <span id="sync-class-status" style="font-size:11px;margin-left:6px;"></span>
+                {% endif %}
+            </legend>
+            {% set _hd = sheet.get('class_hit_die','') %}
+            {% set _ar = sheet.get('class_armor','') %}
+            {% set _wp = sheet.get('class_weapons','') %}
+            {% set _tl = sheet.get('class_tools','') %}
+            {% set _st = sheet.get('class_saving_throws','') %}
+            {% set _sk = sheet.get('class_skills','') %}
+            {% set _sp = sheet.get('class_spellcasting','') %}
+            {% set _eq = sheet.get('class_equipment','') %}
+
+            {% macro prof_row(label, name, value) %}
+            <div style="display:flex;align-items:baseline;gap:8px;padding:4px 0;border-bottom:1px solid var(--s-border);">
+                <span style="font-size:11px;font-weight:700;color:var(--muted,#888);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;min-width:110px;">{{ label }}</span>
+                {% if can_edit %}
+                <input type="text" name="{{ name }}" value="{{ value }}" style="flex:1;font-size:12px;" placeholder="—">
+                {% else %}
+                <span style="font-size:12px;color:var(--fg,#e0e0e0);">{{ value or '—' }}</span>
+                {% endif %}
+            </div>
+            {% endmacro %}
+
+            <div style="margin-top:6px;">
+                {% if _hd or can_edit %}{{ prof_row('Hit Die', 'class_hit_die', _hd) }}{% endif %}
+                {% if _ar or can_edit %}{{ prof_row('Armor', 'class_armor', _ar) }}{% endif %}
+                {% if _wp or can_edit %}{{ prof_row('Weapons', 'class_weapons', _wp) }}{% endif %}
+                {% if _tl or can_edit %}{{ prof_row('Tools', 'class_tools', _tl) }}{% endif %}
+                {% if _st or can_edit %}{{ prof_row('Saving Throws', 'class_saving_throws', _st) }}{% endif %}
+                {% if _sk or can_edit %}{{ prof_row('Skills', 'class_skills', _sk) }}{% endif %}
+                {% if _sp or can_edit %}{{ prof_row('Spellcasting', 'class_spellcasting', _sp) }}{% endif %}
+            </div>
+
+            {% if _eq or can_edit %}
+            <label style="margin-top:10px;display:block;">Starting Equipment
+                {% if can_edit %}
+                <textarea name="class_equipment" rows="3" style="font-size:12px;" placeholder="Auto-filled when you select a class">{{ _eq }}</textarea>
+                {% else %}
+                <div style="white-space:pre-wrap;font-size:12px;line-height:1.6;color:var(--fg,#e0e0e0);margin-top:4px;">{{ _eq }}</div>
+                {% endif %}
+            </label>
+            {% endif %}
+
+            {% if not _hd and not _ar and not _wp and not _tl and not _st and not _sk and not _sp and not _eq and not can_edit %}
+            <p class="muted" style="font-size:12px;margin:6px 0 0;">Select a class to auto-fill proficiencies.</p>
+            {% endif %}
+        </fieldset>
+
         {# Features field is hidden in the UI but kept in the form so existing data round-trips on save. #}
         <label style="display:none;" aria-hidden="true">Features
             <textarea name="features" rows="3" {% if not can_edit %}readonly{% endif %}>{{ sheet.get('features','') }}</textarea>
         </label>
-
-        {# ── Inventory fieldset ───────────────────────────────────────── #}
-        <fieldset id="inventory-fieldset" class="collapsible" data-collapse-key="inventory">
-            <legend><span class="fs-chevron">▼</span>Inventory
-                {% if can_edit %}
-                <button type="button" id="browse-items-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">🔍 Browse Items</button>
-                <button type="button" id="add-custom-item-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;">+ Custom</button>
-                {% endif %}
-            </legend>
-
-            {# Currency tracker (GP-biased) + total weight #}
-            {% set _cur = sheet.get('currency') or {} %}
-            <div class="currency-bar" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#141720;border:1px solid #252840;border-radius:6px;padding:8px 12px;margin-bottom:10px;">
-                <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#7a8ab0;flex-shrink:0;">💰 Currency</span>
-                <label class="cur-cell cur-cp" title="Copper pieces">
-                    <span class="cur-label">CP</span>
-                    <input type="number" name="currency.cp" min="0"
-                           value="{{ _cur.get('cp', 0) | int }}"
-                           {% if not can_edit %}readonly{% endif %}>
-                </label>
-                <label class="cur-cell cur-sp" title="Silver pieces (10 cp = 1 sp)">
-                    <span class="cur-label">SP</span>
-                    <input type="number" name="currency.sp" min="0"
-                           value="{{ _cur.get('sp', 0) | int }}"
-                           {% if not can_edit %}readonly{% endif %}>
-                </label>
-                <label class="cur-cell cur-ep" title="Electrum pieces (5 sp = 1 ep)">
-                    <span class="cur-label">EP</span>
-                    <input type="number" name="currency.ep" min="0"
-                           value="{{ _cur.get('ep', 0) | int }}"
-                           {% if not can_edit %}readonly{% endif %}>
-                </label>
-                <label class="cur-cell cur-gp" title="Gold pieces — primary currency">
-                    <span class="cur-label">GP</span>
-                    <input type="number" name="currency.gp" min="0"
-                           value="{{ _cur.get('gp', 0) | int }}"
-                           {% if not can_edit %}readonly{% endif %}>
-                </label>
-                <label class="cur-cell cur-pp" title="Platinum pieces (1 pp = 10 gp)">
-                    <span class="cur-label">PP</span>
-                    <input type="number" name="currency.pp" min="0"
-                           value="{{ _cur.get('pp', 0) | int }}"
-                           {% if not can_edit %}readonly{% endif %}>
-                </label>
-                <span id="cur-total" style="font-size:11px;color:#7a8ab0;flex-shrink:0;"
-                      title="Total wealth converted to gold pieces (cp/100 + sp/10 + ep/2 + gp + pp×10)">≈ 0 gp</span>
-                <span style="margin-left:auto;font-size:11px;color:#7a8ab0;flex-shrink:0;">
-                    Weight: <span id="inv-total-weight" style="font-weight:700;color:#c0c8d8;">0</span> lb
-                </span>
-            </div>
-
-            {# Inventory data — JSON, hidden #}
-            <textarea id="inventory-data" name="inventory" style="display:none;" {% if not can_edit %}readonly{% endif %}>{{ (sheet.get('inventory') or []) | tojson }}</textarea>
-            <div id="inventory-list-container" style="min-height:20px;"></div>
-
-            {# Custom item panel #}
-            {% if can_edit %}
-            <div id="custom-item-panel" style="display:none;margin-top:10px;border:1px solid #2e3140;border-radius:5px;padding:10px;background:#191c24;">
-                <div class="row" style="margin-bottom:6px;flex-wrap:wrap;">
-                    <label style="flex:2;min-width:140px;">Name<input type="text" id="ci-name" placeholder="Item name" style="width:100%;"></label>
-                    <label style="min-width:110px;">Type<select id="ci-type" style="width:100%;">
-                        <option value="gear">Gear</option>
-                        <option value="weapon">Weapon</option>
-                        <option value="armor">Armor</option>
-                        <option value="shield">Shield</option>
-                        <option value="tool">Tool</option>
-                        <option value="consumable">Consumable</option>
-                    </select></label>
-                    <label style="width:60px;">Qty<input type="number" id="ci-qty" value="1" min="1" style="width:100%;"></label>
-                    <label style="width:80px;">Weight<input type="number" id="ci-weight" value="0" min="0" step="0.1" style="width:100%;" title="Weight per item, in pounds"></label>
-                </div>
-                <div class="row" id="ci-armor-row" style="margin-bottom:6px;flex-wrap:wrap;display:none;">
-                    <label style="min-width:120px;">Armor type
-                        <select id="ci-armor-type" style="width:100%;">
-                            <option value="light">Light (full DEX)</option>
-                            <option value="medium" selected>Medium (DEX cap +2)</option>
-                            <option value="heavy">Heavy (no DEX)</option>
-                        </select>
-                    </label>
-                    <label style="width:90px;">Base AC<input type="number" id="ci-ac-value" value="14" min="0" max="30" style="width:100%;" title="Armor base AC value (DEX is added based on armor type)"></label>
-                </div>
-                <div class="row" id="ci-shield-row" style="margin-bottom:6px;flex-wrap:wrap;display:none;">
-                    <label style="width:90px;">AC bonus<input type="number" id="ci-shield-bonus" value="2" min="0" max="10" style="width:100%;" title="AC bonus while equipped"></label>
-                </div>
-                <div class="row" id="ci-misc-row" style="margin-bottom:6px;flex-wrap:wrap;display:none;">
-                    <label style="width:90px;">AC bonus<input type="number" id="ci-misc-bonus" value="0" min="0" max="10" style="width:100%;" title="Optional AC bonus while equipped (e.g. Ring of Protection +1)"></label>
-                </div>
-                <label>Description<textarea id="ci-desc" rows="2" placeholder="Item details, properties, etc." style="width:100%;font-size:12px;"></textarea></label>
-                <div style="display:flex;gap:8px;margin-top:8px;">
-                    <button type="button" id="ci-add-btn">Add Item</button>
-                    <button type="button" id="ci-cancel-btn">Cancel</button>
-                </div>
-            </div>
-            {% endif %}
-        </fieldset>
 
         <fieldset class="collapsible" data-collapse-key="notes">
             <legend><span class="fs-chevron">▼</span>Notes</legend>
@@ -1083,6 +1171,8 @@
             prepared:     s.prepared !== false,
             damage:       s.damage       || '',
             save_ability: s.save_ability || '',
+            healing:      s.healing      || '',
+            aoe_targets:  parseInt(s.aoe_targets, 10) || 1,
             desc:         s.desc || s.description || '',
             _slug:        s._slug        || '',
         }));
@@ -1197,7 +1287,7 @@
         if (el.label) el.label.textContent = sc.type === 'prepared' ? 'Prepared' : 'Known';
         if (el.cur) {
             el.cur.textContent = cur;
-            el.cur.style.color = overMax ? '#e07070' : (cur >= limit && limit > 0 ? '#e0c070' : '#80e0a0');
+            el.cur.style.color = overMax ? 'var(--s-danger)' : (cur >= limit && limit > 0 ? '#e0c070' : '#80e0a0');
         }
         if (el.max) el.max.textContent = limit ?? '?';
 
@@ -1261,25 +1351,25 @@
         const isCantrip = s.level === 0;
         const prepLabel = sc ? (sc.type === 'prepared' ? 'Prepared' : 'Known') : 'Prepared';
         const prepCtrl = isReadonly
-            ? `<span style="flex-shrink:0;color:${(isCantrip || s.prepared) ? '#6c6' : '#555'};"
+            ? `<span style="flex-shrink:0;color:${(isCantrip || s.prepared) ? 'var(--s-accent)' : 'var(--s-mute)'};"
                      title="${isCantrip ? 'Cantrip (always available)' : (s.prepared ? prepLabel : 'Not ' + prepLabel)}"
                      >${(isCantrip || s.prepared) ? '✓' : '○'}</span>`
             : isCantrip
-                ? `<span style="flex-shrink:0;color:#4a8a6a;font-size:11px;" title="Cantrip (always available)">✦</span>`
+                ? `<span style="flex-shrink:0;color:var(--s-accent);font-size:11px;" title="Cantrip (always available)">✦</span>`
                 : `<input type="checkbox" class="sp-prep" data-idx="${idx}" ${s.prepared ? 'checked' : ''}
                           title="${prepLabel}" style="flex-shrink:0;cursor:pointer;">`;
         const rmBtn = isReadonly ? '' :
-            `<button type="button" class="sp-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:#966;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
+            `<button type="button" class="sp-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:var(--s-danger);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
         const icons = (s.concentration ? ' ⏱' : '') + (s.ritual ? ' ®' : '');
         return `
-        <div class="sp-row" style="border:1px solid #2a2d3a;border-radius:4px;margin-bottom:3px;">
+        <div class="sp-row" style="border:1px solid var(--s-border);border-radius:4px;margin-bottom:3px;">
             <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;">
                 ${prepCtrl}
                 <button type="button" class="sp-expand" data-idx="${idx}"
-                    style="background:none;border:none;color:#668;font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
+                    style="background:none;border:none;color:var(--s-mute);font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
                 <span style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
-                    title="${_esc(s.name)}">${_esc(s.name)}${icons ? `<span style="font-size:11px;color:#888;"> ${icons.trim()}</span>` : ''}</span>
-                ${s.school       ? `<span style="font-size:11px;color:#6ab;flex-shrink:0;">${_esc(s.school)}</span>` : ''}
+                    title="${_esc(s.name)}">${_esc(s.name)}${icons ? `<span style="font-size:11px;color:var(--s-mute);"> ${icons.trim()}</span>` : ''}</span>
+                ${s.school       ? `<span style="font-size:11px;color:var(--s-accent);flex-shrink:0;">${_esc(s.school)}</span>` : ''}
                 ${s.casting_time ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.casting_time)}</span>` : ''}
                 ${s.range        ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.range)}</span>` : ''}
                 ${s.damage ? `<span style="font-size:11px;color:#e8a;flex-shrink:0;font-weight:500;">${_esc(s.damage)}</span>` : ''}
@@ -1290,14 +1380,14 @@
                     >🪄 Cast</button>
                 ${rmBtn}
             </div>
-            <div class="sp-detail" data-idx="${idx}" style="display:none;padding:6px 10px;border-top:1px dashed #2e3140;font-size:12px;color:#9aa0aa;">
+            <div class="sp-detail" data-idx="${idx}" style="display:none;padding:6px 10px;border-top:1px dashed var(--s-border);font-size:12px;color:var(--s-mute);">
                 <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:${s.desc ? '5px' : '0'};">
                     ${s.duration    ? `<span>Duration: ${_esc(s.duration)}</span>` : ''}
                     ${s.components  ? `<span>Components: ${_esc(s.components)}</span>` : ''}
                     ${s.concentration ? '<span style="color:#e8a;">Concentration</span>' : ''}
                     ${s.ritual       ? '<span style="color:#8ae;">Ritual</span>' : ''}
                 </div>
-                ${s.desc ? `<div style="line-height:1.5;color:#8a90a0;">${_esc(s.desc)}</div>` : ''}
+                ${s.desc ? `<div style="line-height:1.5;color:var(--s-mute);">${_esc(s.desc)}</div>` : ''}
             </div>
         </div>`;
     }
@@ -1328,7 +1418,7 @@
             // Eye-open = showing everything; eye-closed (see-no-evil) = hiding unprepared.
             hideBtn.textContent   = hideUnprepared ? '🙈 Hiding unprepared' : '👁 Showing all';
             Object.assign(hideBtn.style, hideUnprepared
-                ? { background:'#1a2f50', borderColor:'#6ab', color:'#8cd' }
+                ? { background:'var(--accent-bg2)', borderColor:'var(--s-accent)', color:'var(--s-accent)' }
                 : { background:'', borderColor:'', color:'' });
         }
 
@@ -1367,7 +1457,7 @@
                     slotRow.style.display       = 'flex';
                     slotRow.style.marginBottom  = '5px';
                     slotRow.style.paddingBottom = '5px';
-                    slotRow.style.borderBottom  = '1px solid #1e2130';
+                    slotRow.style.borderBottom  = '1px solid var(--s-border)';
                     groupDiv.appendChild(slotRow);
                     if (window._ssRenderPips) window._ssRenderPips(slotRow);
                 }
@@ -1375,7 +1465,7 @@
 
             // Level heading
             const heading = document.createElement('div');
-            heading.style.cssText = 'font-size:10px;color:#668;text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;padding-left:2px;';
+            heading.style.cssText = 'font-size:10px;color:var(--s-mute);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;padding-left:2px;';
             heading.textContent = +lvl === 0 ? 'Cantrips' : `Level ${lvl} Spells`;
             groupDiv.appendChild(heading);
 
@@ -1497,15 +1587,18 @@
             concentration: /concentration/i.test(dur),
             ritual: false, prepared: true,
             damage:       (document.getElementById('cs-damage')?.value || '').trim(),
+            healing:      (document.getElementById('cs-healing')?.value || '').trim(),
+            aoe_targets:  Math.max(1, parseInt(document.getElementById('cs-aoe-targets')?.value, 10) || 1),
             save_ability: (document.getElementById('cs-save')?.value  || ''),
             desc:         (document.getElementById('cs-desc')?.value  || '').trim(),
             _slug: '',
         });
         syncSpells(); renderSpells();
-        ['cs-name','cs-school','cs-cast','cs-range','cs-dur','cs-comp','cs-damage','cs-desc']
+        ['cs-name','cs-school','cs-cast','cs-range','cs-dur','cs-comp','cs-damage','cs-healing','cs-desc']
             .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-        if (document.getElementById('cs-level')) document.getElementById('cs-level').value = '1';
-        if (document.getElementById('cs-save'))  document.getElementById('cs-save').value  = '';
+        if (document.getElementById('cs-level'))       document.getElementById('cs-level').value = '1';
+        if (document.getElementById('cs-aoe-targets')) document.getElementById('cs-aoe-targets').value = '1';
+        if (document.getElementById('cs-save'))        document.getElementById('cs-save').value  = '';
         if (customPanel) customPanel.style.display = 'none';
     });
 
@@ -1565,9 +1658,9 @@
         document.querySelectorAll('.sb-lvl').forEach(btn => {
             const active    = btn.dataset.lvl === sbCurrentLvl;
             const hasSlots  = avail.has(btn.dataset.lvl);
-            btn.style.background  = active ? '#253050' : 'transparent';
-            btn.style.borderColor = active ? '#6ab' : (hasSlots ? '#3a5570' : '#2e3140');
-            btn.style.color       = active ? '#8cd' : (hasSlots ? '#8aa0c0' : '#3a4560');
+            btn.style.background  = active ? 'var(--accent-bg2)' : 'transparent';
+            btn.style.borderColor = active ? 'var(--s-accent)' : (hasSlots ? 'var(--accent-border)' : 'var(--s-border)');
+            btn.style.color       = active ? 'var(--s-accent)' : (hasSlots ? 'var(--s-fg)' : 'var(--s-mute)');
             btn.style.fontWeight  = active ? '700' : '400';
         });
     }
@@ -1579,7 +1672,7 @@
     function _renderList() {
         const items = sbCurrentResults;
         if (!items.length) {
-            sbListEl.innerHTML = '<div style="padding:14px;color:#3a4560;font-size:12px;">No spells found.</div>';
+            sbListEl.innerHTML = '<div style="padding:14px;color:var(--s-mute);font-size:12px;">No spells found.</div>';
             return;
         }
         sbListEl.innerHTML = items.map((s, i) => {
@@ -1587,13 +1680,13 @@
             const lvlLabel = s.level === 0 ? 'C' : s.level;
             return `<div class="sb-item" data-ridx="${i}"
                 style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;
-                       border-bottom:1px solid #1a1d27;
-                       ${sbSelectedIdx === i ? 'background:#1e2540;' : ''}">
-                <span style="font-size:10px;font-weight:700;color:#4a5870;min-width:14px;text-align:center;">${lvlLabel}</span>
+                       border-bottom:1px solid var(--s-border);
+                       ${sbSelectedIdx === i ? 'background:var(--accent-bg2);' : ''}">
+                <span style="font-size:10px;font-weight:700;color:var(--s-mute);min-width:14px;text-align:center;">${lvlLabel}</span>
                 <span style="flex:1;font-size:12px;font-weight:${onSheet ? '700' : '400'};
-                             color:${onSheet ? '#8cd' : '#c0c8d8'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                             color:${onSheet ? 'var(--s-accent)' : 'var(--s-fg)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                       title="${_esc(s.name)}">${onSheet ? '✓ ' : ''}${_esc(s.name)}</span>
-                <span style="font-size:10px;color:#4a5870;flex-shrink:0;">${_esc(s.school || '')}</span>
+                <span style="font-size:10px;color:var(--s-mute);flex-shrink:0;">${_esc(s.school || '')}</span>
             </div>`;
         }).join('');
 
@@ -1618,8 +1711,8 @@
         const over  = cur > limit;
         txt.innerHTML = `<b style="color:${over ? '#e07070' : '#80e0a0'};">${label}: ${cur} / ${limit}</b>`
             + (sc.type === 'prepared'
-                ? ` <span style="color:#3a4860;">· Cantrips are free · Prepared = ${sc.ability.toUpperCase()} mod + level</span>`
-                : ` <span style="color:#3a4860;">· Cantrips are free · From the ${_classVal()} spells known table</span>`);
+                ? ` <span style="color:var(--s-mute);">· Cantrips are free · Prepared = ${sc.ability.toUpperCase()} mod + level</span>`
+                : ` <span style="color:var(--s-mute);">· Cantrips are free · From the ${_classVal()} spells known table</span>`);
         bar.style.display = 'flex';
     }
 
@@ -1636,38 +1729,38 @@
         if (sc && !onSheet && s.level > 0) {
             const label = sc.type === 'prepared' ? 'prepare' : 'learn';
             if (wouldExceed) {
-                limitNote = `<div style="margin-bottom:12px;padding:6px 10px;background:#2a1010;border:1px solid #6a2020;border-radius:4px;font-size:11px;color:#e09090;">
+                limitNote = `<div style="margin-bottom:12px;padding:6px 10px;background:var(--s-err-bg);border:1px solid var(--s-danger);border-radius:4px;font-size:11px;color:var(--s-err-fg);">
                     ⚠ Adding this spell will exceed your ${sc.type === 'prepared' ? 'prepared' : 'known'} spell limit (${cur} / ${limit}).
                     Remove a spell first, or level up.
                 </div>`;
             } else if (limit !== null) {
                 const remaining = limit - cur;
-                limitNote = `<div style="margin-bottom:10px;font-size:11px;color:#4a6880;">
-                    You can ${label} <b style="color:#8aa0c0;">${remaining}</b> more spell${remaining !== 1 ? 's' : ''} (${cur} / ${limit}).
+                limitNote = `<div style="margin-bottom:10px;font-size:11px;color:var(--s-mute);">
+                    You can ${label} <b style="color:var(--s-fg);">${remaining}</b> more spell${remaining !== 1 ? 's' : ''} (${cur} / ${limit}).
                 </div>`;
             }
         }
 
         sbDetailEl.innerHTML = `
-            <div style="font-size:18px;font-weight:800;color:#dde2f0;margin-bottom:4px;">${_esc(s.name)}</div>
-            <div style="font-size:12px;color:#6ab;margin-bottom:12px;">${lvlText}${s.school ? ' · ' + _esc(s.school) : ''}</div>
-            <div style="font-size:12px;color:#8a9ab0;line-height:2;margin-bottom:12px;">
-                ${s.casting_time ? `<div><b style="color:#7a8ab0;">Casting Time</b> ${_esc(s.casting_time)}</div>` : ''}
-                ${s.range        ? `<div><b style="color:#7a8ab0;">Range</b> ${_esc(s.range)}</div>` : ''}
-                ${s.duration     ? `<div><b style="color:#7a8ab0;">Duration</b> ${_esc(s.duration)}</div>` : ''}
-                ${s.components   ? `<div><b style="color:#7a8ab0;">Components</b> ${_esc(s.components)}</div>` : ''}
-                ${s.damage       ? `<div><b style="color:#7a8ab0;">Damage</b> ${_esc(s.damage)}</div>` : ''}
-                ${s.save_ability ? `<div><b style="color:#7a8ab0;">Save</b> ${_esc(s.save_ability)}</div>` : ''}
+            <div style="font-size:18px;font-weight:800;color:var(--s-fg);margin-bottom:4px;">${_esc(s.name)}</div>
+            <div style="font-size:12px;color:var(--s-accent);margin-bottom:12px;">${lvlText}${s.school ? ' · ' + _esc(s.school) : ''}</div>
+            <div style="font-size:12px;color:var(--s-mute);line-height:2;margin-bottom:12px;">
+                ${s.casting_time ? `<div><b style="color:var(--s-mute);">Casting Time</b> ${_esc(s.casting_time)}</div>` : ''}
+                ${s.range        ? `<div><b style="color:var(--s-mute);">Range</b> ${_esc(s.range)}</div>` : ''}
+                ${s.duration     ? `<div><b style="color:var(--s-mute);">Duration</b> ${_esc(s.duration)}</div>` : ''}
+                ${s.components   ? `<div><b style="color:var(--s-mute);">Components</b> ${_esc(s.components)}</div>` : ''}
+                ${s.damage       ? `<div><b style="color:var(--s-mute);">Damage</b> ${_esc(s.damage)}</div>` : ''}
+                ${s.save_ability ? `<div><b style="color:var(--s-mute);">Save</b> ${_esc(s.save_ability)}</div>` : ''}
                 ${s.concentration ? '<div style="color:#e8a;">⏱ Concentration</div>' : ''}
                 ${s.ritual       ? '<div style="color:#8ae;">® Ritual</div>' : ''}
             </div>
-            ${s.desc ? `<div style="font-size:12px;color:#8a90a0;line-height:1.7;margin-bottom:16px;">${_esc(s.desc)}</div>` : ''}
+            ${s.desc ? `<div style="font-size:12px;color:var(--s-mute);line-height:1.7;margin-bottom:16px;">${_esc(s.desc)}</div>` : ''}
             ${limitNote}
             <button type="button" id="sb-toggle-btn"
                 style="padding:6px 16px;font-size:13px;font-weight:600;border-radius:6px;
-                       background:${onSheet ? '#2a1010' : '#102a1a'};
-                       border:1px solid ${onSheet ? '#a04040' : '#40a060'};
-                       color:${onSheet ? '#e08080' : '#80e0a0'};">
+                       background:${onSheet ? 'var(--s-err-bg)' : 'var(--s-btn)'};
+                       border:1px solid ${onSheet ? 'var(--s-danger)' : 'var(--s-border)'};
+                       color:${onSheet ? 'var(--s-err-fg)' : 'var(--s-accent)'};">
                 ${onSheet ? '− Remove from Sheet' : '+ Add to Sheet'}
             </button>`;
 
@@ -1687,6 +1780,7 @@
                     concentration: /concentration/i.test(s.duration || ''),
                     ritual: false, prepared: startPrepared,
                     damage: s.damage || '', save_ability: s.save_ability || '',
+                    healing: s.healing || '', aoe_targets: s.aoe_targets || 1,
                     desc: s.desc, _slug: s.slug || '',
                 });
                 syncSpells(); renderSpells();
@@ -1700,9 +1794,9 @@
     function _showPrompt() {
         const cv = _classVal();
         const hint = cv
-            ? `Showing spells for <strong style="color:#8cd;">${_esc(cv.charAt(0).toUpperCase() + cv.slice(1))}</strong> — select a level or search by name.`
+            ? `Showing spells for <strong style="color:var(--s-accent);">${_esc(cv.charAt(0).toUpperCase() + cv.slice(1))}</strong> — select a level or search by name.`
             : 'Select a level filter or search by name to browse spells.';
-        sbListEl.innerHTML = `<div style="padding:14px;font-size:12px;color:#5a6880;line-height:1.6;">${hint}</div>`;
+        sbListEl.innerHTML = `<div style="padding:14px;font-size:12px;color:var(--s-mute);line-height:1.6;">${hint}</div>`;
     }
 
     async function _doSearch() {
@@ -1711,8 +1805,8 @@
         // If nothing to filter on, just show the prompt
         if (!q && sbCurrentLvl === 'all' && !cv) { _showPrompt(); return; }
 
-        sbListEl.innerHTML = '<div style="padding:14px;color:#3a4560;font-size:12px;">Loading…</div>';
-        sbDetailEl.innerHTML = '<p style="color:#3a4560;font-size:13px;">Select a spell to see its details.</p>';
+        sbListEl.innerHTML = '<div style="padding:14px;color:var(--s-mute);font-size:12px;">Loading…</div>';
+        sbDetailEl.innerHTML = '<p style="color:var(--s-mute);font-size:13px;">Select a spell to see its details.</p>';
         sbSelectedIdx = -1;
 
         const qs = new URLSearchParams({ limit: '80' });
@@ -1733,9 +1827,9 @@
         } catch (err) {
             clearTimeout(timer);
             const reason = err?.name === 'AbortError' ? 'Request timed out' : (err?.message || 'Unknown error');
-            sbListEl.innerHTML = `<div style="padding:14px;color:#c07070;font-size:12px;">
+            sbListEl.innerHTML = `<div style="padding:14px;color:var(--s-danger);font-size:12px;">
                 ⚠ Spell lookup failed: <em>${_esc(reason)}</em><br>
-                <span style="color:#5a6880;font-size:11px;margin-top:4px;display:block;">Open5e may be slow or unavailable — try again in a moment.</span>
+                <span style="color:var(--s-mute);font-size:11px;margin-top:4px;display:block;">Open5e may be slow or unavailable — try again in a moment.</span>
             </div>`;
             return;
         }
@@ -1749,7 +1843,7 @@
         _updateLvlButtons();
         _sbUpdateLimitBar();
         _showPrompt();
-        sbDetailEl.innerHTML = '<p style="color:#3a4560;font-size:13px;">Select a spell to see its details.</p>';
+        sbDetailEl.innerHTML = '<p style="color:var(--s-mute);font-size:13px;">Select a spell to see its details.</p>';
         if (sbSearchEl) sbSearchEl.value = '';
         sbCurrentResults = [];
         sbSelectedIdx = -1;
@@ -1801,7 +1895,10 @@
                 save_dc:      parseInt(a.save_dc) || 0,
                 save_ability: a.save_ability || '',
                 desc:         a.desc || '',
-                _slug:        a._slug || ''
+                _slug:        a._slug || '',
+                // Auto-generated entries from equipped weapons carry the
+                // weapon's _uid here so we can sync them later.
+                _from_weapon_uid: a._from_weapon_uid || ''
             }));
         }
     } catch { attacks = []; }
@@ -1810,8 +1907,14 @@
 
     function rowHtml(a, idx) {
         const isSave = a.save_dc > 0 && a.save_ability;
-        const rmBtn = isReadonly ? '' :
-            `<button type="button" class="atk-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:#966;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
+        const isAuto = !!a._from_weapon_uid;
+        // Auto-attacks are managed by equip toggles; you can't remove them
+        // from this list — only by unequipping the weapon.
+        const rmBtn = (isReadonly || isAuto) ? '' :
+            `<button type="button" class="atk-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:var(--s-danger);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
+        const sourceBadge = isAuto
+            ? `<span class="atk-source" title="Auto-generated from an equipped weapon. Unequip the weapon to remove it from your attacks.">🛡 equipped</span>`
+            : '';
         const bits = [];
         if (a.attack_bonus) bits.push(`<span style="color:#8cf;font-weight:600;">${_esc(a.attack_bonus)}</span>`);
         if (a.damage) bits.push(`<span style="color:#e8a;font-weight:500;">${_esc(a.damage)}${a.damage_type ? ' ' + _esc(a.damage_type) : ''}</span>`);
@@ -1819,12 +1922,13 @@
         if (isSave) bits.push(`<span style="color:#fb6;font-weight:500;">DC ${a.save_dc} ${_esc(a.save_ability)}</span>`);
 
         return `
-        <div class="atk-row" style="border:1px solid #2a2d3a;border-radius:4px;margin-bottom:3px;">
+        <div class="atk-row${isAuto ? ' atk-row-auto' : ''}" style="border:1px solid var(--s-border);border-radius:4px;margin-bottom:3px;${isAuto ? 'background:var(--s-card);' : ''}">
             <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;">
                 <button type="button" class="atk-expand" data-idx="${idx}"
-                    style="background:none;border:none;color:#668;font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
+                    style="background:none;border:none;color:var(--s-mute);font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
                 <span style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                       title="${_esc(a.name)}">${_esc(a.name) || '(unnamed)'}</span>
+                ${sourceBadge}
                 <span style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;flex-shrink:0;">${bits.join('')}</span>
                 <button type="button" class="atk-strike" data-idx="${idx}"
                         title="Strike with ${_esc(a.name)}"
@@ -1832,8 +1936,8 @@
                     >🗡 Strike</button>
                 ${rmBtn}
             </div>
-            <div class="atk-detail" data-idx="${idx}" style="display:none;padding:6px 10px;border-top:1px dashed #2e3140;font-size:12px;color:#9aa0aa;">
-                ${a.desc ? `<div style="line-height:1.5;color:#8a90a0;white-space:pre-wrap;">${_esc(a.desc)}</div>` : '<span class="muted">No description.</span>'}
+            <div class="atk-detail" data-idx="${idx}" style="display:none;padding:6px 10px;border-top:1px dashed var(--s-border);font-size:12px;color:var(--s-mute);">
+                ${a.desc ? `<div style="line-height:1.5;color:var(--s-mute);white-space:pre-wrap;">${_esc(a.desc)}</div>` : '<span class="muted">No description.</span>'}
             </div>
         </div>`;
     }
@@ -1841,7 +1945,7 @@
     function renderAttacks() {
         if (!container) return;
         if (!attacks.length) {
-            container.innerHTML = '<span class="muted" style="font-size:12px;">No attacks added yet.</span>';
+            container.innerHTML = '<span class="muted" style="font-size:12px;">No attacks yet — equip a weapon in your Inventory to add one.</span>';
             return;
         }
         container.innerHTML = attacks.map((a, i) => rowHtml(a, i)).join('');
@@ -1878,53 +1982,83 @@
             }));
     }
 
+    // ── Build an attack entry from an equipped weapon item ──
+    function _attackFromWeapon(item) {
+        return {
+            name: item.name || '',
+            attack_bonus: '',
+            damage: item.damage || '',
+            damage_type: item.damage_type || '',
+            range: item.range || (item.hands === 2 ? 'Melee (two-handed)' : 'Melee'),
+            save_dc: 0,
+            save_ability: '',
+            desc: (item.properties ? `Properties: ${item.properties}\n` : '') + (item.desc || ''),
+            _slug: item._slug || '',
+            _from_weapon_uid: item._uid
+        };
+    }
+
+    // Called by the inventory IIFE after every equip change. Adds attack
+    // entries for newly-equipped weapons and removes entries whose source
+    // weapon has been unequipped or deleted.
+    window._syncWeaponAttacks = function (equippedWeaponItems) {
+        const wantUids = new Set((equippedWeaponItems || []).map(w => w._uid).filter(Boolean));
+        let dirty = false;
+
+        // Remove auto-attacks whose source weapon is no longer equipped
+        for (let i = attacks.length - 1; i >= 0; i--) {
+            const uid = attacks[i]._from_weapon_uid;
+            if (uid && !wantUids.has(uid)) {
+                attacks.splice(i, 1);
+                dirty = true;
+            }
+        }
+        // Add auto-attacks for equipped weapons not yet represented
+        const haveUids = new Set(attacks.map(a => a._from_weapon_uid).filter(Boolean));
+        (equippedWeaponItems || []).forEach(item => {
+            if (!item._uid) return;
+            if (haveUids.has(item._uid)) return;
+            attacks.push(_attackFromWeapon(item));
+            dirty = true;
+        });
+        if (dirty) {
+            syncAttacks();
+            renderAttacks();
+        }
+    };
+
     renderAttacks();
-    if (isReadonly) return;
 
     // ── Custom attack panel ──
-    const panel = document.getElementById('custom-attack-panel');
-    document.getElementById('add-custom-attack-btn')?.addEventListener('click', () => {
-        if (panel) panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
-    });
-    document.getElementById('ca-cancel-btn')?.addEventListener('click', () => { if (panel) panel.style.display = 'none'; });
-    document.getElementById('ca-add-btn')?.addEventListener('click', () => {
-        const name = (document.getElementById('ca-name')?.value || '').trim();
-        if (!name) return;
-        attacks.push({
-            name,
-            attack_bonus: (document.getElementById('ca-atk')?.value || '').trim(),
-            damage:       (document.getElementById('ca-damage')?.value || '').trim(),
-            damage_type:  (document.getElementById('ca-damage-type')?.value || '').trim(),
-            range:        (document.getElementById('ca-range')?.value || '').trim(),
-            save_dc:      parseInt(document.getElementById('ca-save-dc')?.value, 10) || 0,
-            save_ability: (document.getElementById('ca-save-ability')?.value || ''),
-            desc:         (document.getElementById('ca-desc')?.value || '').trim(),
-            _slug: ''
+    if (!isReadonly) {
+        const panel = document.getElementById('custom-attack-panel');
+        document.getElementById('add-custom-attack-btn')?.addEventListener('click', () => {
+            if (panel) panel.style.display = panel.style.display === 'block' ? 'none' : 'block';
         });
-        syncAttacks();
-        renderAttacks();
-        ['ca-name', 'ca-atk', 'ca-damage', 'ca-damage-type', 'ca-range', 'ca-save-dc', 'ca-desc']
-            .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
-        if (document.getElementById('ca-save-ability')) document.getElementById('ca-save-ability').value = '';
-        if (panel) panel.style.display = 'none';
-    });
-
-    // Expose a way for the item browser to add a parsed weapon attack
-    window._addAttackFromBrowser = function (a) {
-        attacks.push({
-            name: a.name || '',
-            attack_bonus: a.attack_bonus || '',
-            damage: a.damage || '',
-            damage_type: a.damage_type || '',
-            range: a.range || '',
-            save_dc: parseInt(a.save_dc) || 0,
-            save_ability: a.save_ability || '',
-            desc: a.desc || '',
-            _slug: a._slug || ''
+        document.getElementById('ca-cancel-btn')?.addEventListener('click', () => { if (panel) panel.style.display = 'none'; });
+        document.getElementById('ca-add-btn')?.addEventListener('click', () => {
+            const name = (document.getElementById('ca-name')?.value || '').trim();
+            if (!name) return;
+            attacks.push({
+                name,
+                attack_bonus: (document.getElementById('ca-atk')?.value || '').trim(),
+                damage:       (document.getElementById('ca-damage')?.value || '').trim(),
+                damage_type:  (document.getElementById('ca-damage-type')?.value || '').trim(),
+                range:        (document.getElementById('ca-range')?.value || '').trim(),
+                save_dc:      parseInt(document.getElementById('ca-save-dc')?.value, 10) || 0,
+                save_ability: (document.getElementById('ca-save-ability')?.value || ''),
+                desc:         (document.getElementById('ca-desc')?.value || '').trim(),
+                _slug: '',
+                _from_weapon_uid: ''
+            });
+            syncAttacks();
+            renderAttacks();
+            ['ca-name', 'ca-atk', 'ca-damage', 'ca-damage-type', 'ca-range', 'ca-save-dc', 'ca-desc']
+                .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+            if (document.getElementById('ca-save-ability')) document.getElementById('ca-save-ability').value = '';
+            if (panel) panel.style.display = 'none';
         });
-        syncAttacks();
-        renderAttacks();
-    };
+    }
 })();
 
 /* ── Item Browser (shared overlay for inventory + attacks) ────────────────── */
@@ -2016,9 +2150,9 @@
         curCat = cat;
         catBtns.forEach(b => {
             const on = b.dataset.cat === cat;
-            b.style.background  = on ? '#2a3a5a' : 'transparent';
-            b.style.borderColor = on ? '#6ab' : '#2e3550';
-            b.style.color       = on ? '#6ab' : '#5a6080';
+            b.style.background  = on ? 'var(--accent-bg2)' : 'transparent';
+            b.style.borderColor = on ? 'var(--s-accent)' : 'var(--s-border)';
+            b.style.color       = on ? 'var(--s-accent)' : 'var(--s-mute)';
         });
         // Magic items aren't class-restricted — disable the toggle visually for them
         const wrap = document.getElementById('ib-prof-only-wrap');
@@ -2027,7 +2161,7 @@
 
     async function _doSearch() {
         const q = (searchEl.value || '').trim();
-        listEl.innerHTML = '<div style="padding:14px;color:#3a4560;font-size:12px;">Searching…</div>';
+        listEl.innerHTML = '<div style="padding:14px;color:var(--s-mute);font-size:12px;">Searching…</div>';
         try {
             const resp = await fetch(`/api/open5e/items?type=${encodeURIComponent(curCat)}&search=${encodeURIComponent(q)}&limit=60`);
             if (!resp.ok) throw new Error(await resp.text());
@@ -2035,15 +2169,15 @@
             results = data.results || [];
             selIdx = -1;
             _renderList();
-            detailEl.innerHTML = '<p style="color:#3a4560;font-size:13px;">Select an item to see its details.</p>';
+            detailEl.innerHTML = '<p style="color:var(--s-mute);font-size:13px;">Select an item to see its details.</p>';
         } catch (e) {
-            listEl.innerHTML = `<div style="padding:14px;color:#a55;font-size:12px;">Search failed: ${_esc(e.message)}</div>`;
+            listEl.innerHTML = `<div style="padding:14px;color:var(--s-danger);font-size:12px;">Search failed: ${_esc(e.message)}</div>`;
         }
     }
 
     function _renderList() {
         if (!results.length) {
-            listEl.innerHTML = '<div style="padding:14px;color:#3a4560;font-size:12px;">No items found.</div>';
+            listEl.innerHTML = '<div style="padding:14px;color:var(--s-mute);font-size:12px;">No items found.</div>';
             return;
         }
         const visible = _filteredResults();
@@ -2054,13 +2188,13 @@
             const reason = slug
                 ? `Hiding ${hidden} item${hidden === 1 ? '' : 's'} not proficient for <strong>${_esc(slug)}</strong>.`
                 : `Hiding ${hidden} non-proficient item${hidden === 1 ? '' : 's'}.`;
-            listEl.innerHTML = `<div style="padding:14px;color:#3a4560;font-size:12px;line-height:1.6;">
+            listEl.innerHTML = `<div style="padding:14px;color:var(--s-mute);font-size:12px;line-height:1.6;">
                 ${reason}<br>Untick "Proficient only" above to show all.</div>`;
             return;
         }
 
         const banner = hidden > 0
-            ? `<div style="padding:6px 12px;font-size:10px;color:#5a6080;background:#101318;border-bottom:1px solid #1a1d27;font-style:italic;">
+            ? `<div style="padding:6px 12px;font-size:10px;color:var(--s-mute);background:var(--bg);border-bottom:1px solid var(--s-border);font-style:italic;">
                    Hiding ${hidden} non-proficient item${hidden === 1 ? '' : 's'}.
                </div>`
             : '';
@@ -2070,10 +2204,10 @@
             const i = results.indexOf(it);
             return `<div class="ib-item" data-idx="${i}"
                  style="display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;
-                        border-bottom:1px solid #1a1d27;${selIdx === i ? 'background:#1e2540;' : ''}">
-                <span style="flex:1;font-size:12px;color:#c0c8d8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
+                        border-bottom:1px solid var(--s-border);${selIdx === i ? 'background:var(--accent-bg2);' : ''}">
+                <span style="flex:1;font-size:12px;color:var(--s-fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                       title="${_esc(it.name)}">${_esc(it.name)}</span>
-                <span style="font-size:10px;color:#4a5870;flex-shrink:0;">${_esc(it.category || '')}</span>
+                <span style="font-size:10px;color:var(--s-mute);flex-shrink:0;">${_esc(it.category || '')}</span>
             </div>`;
         }).join('');
         listEl.innerHTML = banner + rows;
@@ -2101,37 +2235,33 @@
         if (it.rarity)      fields.push(['Rarity', it.rarity]);
 
         const fieldHtml = fields.map(([k, v]) =>
-            `<div style="margin-bottom:3px;"><span style="color:#5a6080;font-weight:700;">${_esc(k)}:</span> <span style="color:#c0c8d8;">${_esc(v)}</span></div>`).join('');
+            `<div style="margin-bottom:3px;"><span style="color:var(--s-mute);font-weight:700;">${_esc(k)}:</span> <span style="color:var(--s-fg);">${_esc(v)}</span></div>`).join('');
 
         const desc = (it.desc || '').trim();
         const isWeapon = curCat === 'weapons';
         const isArmor  = curCat === 'armor';
 
-        const addInvBtn = `<button type="button" id="ib-add-inv" style="font-size:12px;padding:5px 14px;background:#1a2030;border:1px solid #3a4560;color:#aac;">+ Add to Inventory</button>`;
-        const addAtkBtn = isWeapon
-            ? `<button type="button" id="ib-add-atk" style="font-size:12px;padding:5px 14px;background:#2a1a30;border:1px solid #5a3a60;color:#fbb88a;">+ Add as Attack</button>`
+        const addInvBtn = `<button type="button" id="ib-add-inv" style="font-size:12px;padding:5px 14px;background:var(--s-card);border:1px solid var(--s-border);color:var(--s-accent);">+ Add to Inventory</button>`;
+        const weaponHint = isWeapon
+            ? `<div style="font-size:11px;color:var(--s-mute);font-style:italic;margin-top:8px;">
+                   Weapons appear in your Attacks list automatically when equipped.
+               </div>`
             : '';
 
         detailEl.innerHTML = `
-            <div style="font-size:16px;font-weight:700;color:#dde2f0;margin-bottom:6px;">${_esc(it.name)}</div>
-            <div style="font-size:12px;line-height:1.6;color:#9aa0aa;margin-bottom:10px;">${fieldHtml}</div>
-            ${desc ? `<div style="font-size:12px;line-height:1.6;color:#aab;white-space:pre-wrap;border-top:1px solid #2e3140;padding-top:8px;">${_esc(desc)}</div>` : ''}
+            <div style="font-size:16px;font-weight:700;color:var(--s-fg);margin-bottom:6px;">${_esc(it.name)}</div>
+            <div style="font-size:12px;line-height:1.6;color:var(--s-mute);margin-bottom:10px;">${fieldHtml}</div>
+            ${desc ? `<div style="font-size:12px;line-height:1.6;color:var(--s-mute);white-space:pre-wrap;border-top:1px solid var(--s-border);padding-top:8px;">${_esc(desc)}</div>` : ''}
             <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
                 ${addInvBtn}
-                ${addAtkBtn}
-            </div>`;
+            </div>
+            ${weaponHint}`;
 
         document.getElementById('ib-add-inv')?.addEventListener('click', () => {
             if (typeof window._addItemFromBrowser !== 'function') return;
             const item = _itemToInventory(it, isArmor, isWeapon);
             window._addItemFromBrowser(item);
             (window.showToast || function(m){})(`Added "${it.name}" to inventory.`);
-        });
-        document.getElementById('ib-add-atk')?.addEventListener('click', () => {
-            if (typeof window._addAttackFromBrowser !== 'function') return;
-            const atk = _itemToAttack(it);
-            window._addAttackFromBrowser(atk);
-            (window.showToast || function(m){})(`Added "${it.name}" to attacks.`);
         });
     }
 
@@ -2145,6 +2275,13 @@
             armor_type: '',
             ac_value: 0,
             ac_bonus: 0,
+            // Weapon-specific fields (used to auto-generate attack entries on equip)
+            hands: 1,
+            versatile: false,
+            damage: '',
+            damage_type: '',
+            range: '',
+            properties: '',
             desc: (it.desc || '').trim(),
             _slug: it.slug || ''
         };
@@ -2155,25 +2292,17 @@
             o.armor_type = /heavy/.test(cat) ? 'heavy' : /medium/.test(cat) ? 'medium' : /light/.test(cat) ? 'light' : 'medium';
         } else if (o.type === 'shield') {
             o.ac_value = 2;
+        } else if (o.type === 'weapon') {
+            const props = (it.properties || '').toLowerCase();
+            const cat = (it.category || '').toLowerCase();
+            o.hands = /two-?handed/.test(props) ? 2 : 1;
+            o.versatile = /versatile/.test(props);
+            o.damage = it.damage_dice || '';
+            o.damage_type = it.damage_type || '';
+            o.range = /ranged/.test(cat) || /thrown/.test(props) ? 'Ranged' : 'Melee';
+            o.properties = it.properties || '';
         }
         return o;
-    }
-
-    function _itemToAttack(it) {
-        // Open5e weapon: properties, damage_dice "1d8", damage_type, category "Martial Melee"
-        const cat = (it.category || '').toLowerCase();
-        const isRanged = /ranged/.test(cat) || /thrown/.test((it.properties || '').toLowerCase());
-        return {
-            name: it.name || '',
-            attack_bonus: '',  // user fills in based on their proficiency + ability mod
-            damage: it.damage_dice || '',
-            damage_type: it.damage_type || '',
-            range: isRanged ? 'Ranged' : 'Melee',
-            save_dc: 0,
-            save_ability: '',
-            desc: (it.properties ? `Properties: ${it.properties}\n` : '') + (it.desc || '').trim(),
-            _slug: it.slug || ''
-        };
     }
 
     catBtns.forEach(b => b.addEventListener('click', () => { _setCat(b.dataset.cat); _doSearch(); }));
@@ -2223,6 +2352,10 @@
         .replace(/"/g, '&quot;');
 
     // ── Load inventory (handle legacy string-array format) ──
+    // Cheap stable ID for inventory items so attacks can reference equipped
+    // weapons without relying on array indices (which shift on add/remove).
+    function _newUid() { return 'iv_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
+
     let inventory = [];
     try {
         const raw = invData.value.trim();
@@ -2231,9 +2364,12 @@
             inventory = parsed.map(s => {
                 if (typeof s === 'string') {
                     return {
+                        _uid: _newUid(),
                         name: s, type: 'gear', qty: 1, weight: 0,
                         equipped: false, equippable: false,
                         armor_type: '', ac_value: 0, ac_bonus: 0,
+                        hands: 1, versatile: false,
+                        damage: '', damage_type: '', range: '', properties: '',
                         desc: '', _slug: ''
                     };
                 }
@@ -2242,6 +2378,7 @@
                     ? !!s.equippable
                     : ['armor', 'shield', 'weapon'].includes(type);
                 return {
+                    _uid: s._uid || _newUid(),
                     name: s.name || '',
                     type,
                     qty: parseInt(s.qty) || 1,
@@ -2251,6 +2388,13 @@
                     armor_type: s.armor_type || '',
                     ac_value: parseInt(s.ac_value) || 0,
                     ac_bonus: parseInt(s.ac_bonus) || 0,
+                    // Weapon-specific
+                    hands: parseInt(s.hands) === 2 ? 2 : 1,
+                    versatile: !!s.versatile,
+                    damage: s.damage || '',
+                    damage_type: s.damage_type || '',
+                    range: s.range || '',
+                    properties: s.properties || '',
                     desc: s.desc || '',
                     _slug: s._slug || ''
                 };
@@ -2319,7 +2463,7 @@
         const { total, breakdown } = computeEffectiveAC();
         if (acDisp)   acDisp.textContent = total;
         if (acHidden) acHidden.value     = total;
-        if (acBreakdown) acBreakdown.textContent = breakdown ? `AC ${total} = ${breakdown}` : `AC ${total}`;
+        if (acBreakdown) acBreakdown.textContent = breakdown ? `🛡 AC ${total} = ${breakdown}` : `🛡 AC ${total}`;
     }
 
     function updateTotalWeight() {
@@ -2344,13 +2488,13 @@
         const equipCtrl = !equippable
             ? '<span style="width:18px;flex-shrink:0;"></span>'
             : isReadonly
-                ? `<span style="flex-shrink:0;color:${item.equipped ? '#6c6' : '#555'};font-size:13px;"
+                ? `<span style="flex-shrink:0;color:${item.equipped ? 'var(--s-accent)' : 'var(--s-mute)'};font-size:13px;"
                           title="${item.equipped ? 'Equipped' : 'Not equipped'}">${item.equipped ? '✓' : '○'}</span>`
                 : `<input type="checkbox" class="inv-equip" data-idx="${idx}" ${item.equipped ? 'checked' : ''}
                           title="Equip / unequip" style="flex-shrink:0;cursor:pointer;">`;
 
         const rmBtn = isReadonly ? '' :
-            `<button type="button" class="inv-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:#966;cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
+            `<button type="button" class="inv-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:var(--s-danger);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
 
         // Modifier badges shown only when equipped
         const modBits = [];
@@ -2362,35 +2506,125 @@
             modBits.push(`${item.ac_bonus > 0 ? '+' : ''}${item.ac_bonus} AC`);
         }
         const modBadge = modBits.length
-            ? `<span style="font-size:10px;color:${item.equipped ? '#8cf' : '#3a4560'};flex-shrink:0;font-weight:500;">${_esc(modBits.join(' '))}</span>`
+            ? `<span style="font-size:10px;color:${item.equipped ? 'var(--s-accent)' : 'var(--s-mute)'};flex-shrink:0;font-weight:500;">${_esc(modBits.join(' '))}</span>`
             : '';
 
         const qtyCtrl = isReadonly
-            ? `<span style="font-size:11px;color:#7a8ab0;width:24px;text-align:right;flex-shrink:0;">×${item.qty || 1}</span>`
+            ? `<span style="font-size:11px;color:var(--s-mute);width:24px;text-align:right;flex-shrink:0;">×${item.qty || 1}</span>`
             : `<input type="number" class="inv-qty" data-idx="${idx}" value="${item.qty || 1}" min="1"
                       style="width:42px;font-size:11px;text-align:center;flex-shrink:0;" title="Quantity">`;
 
         return `
-        <div class="inv-row" data-idx="${idx}" style="border:1px solid #2a2d3a;border-radius:4px;margin-bottom:3px;
-                    background:${item.equipped ? '#1a2030' : '#191c24'};">
+        <div class="inv-row" data-idx="${idx}" style="border:1px solid var(--s-border);border-radius:4px;margin-bottom:3px;
+                    background:${item.equipped ? 'var(--accent-bg)' : 'var(--s-card)'};">
             <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;">
                 ${equipCtrl}
                 <button type="button" class="inv-expand" data-idx="${idx}"
-                    style="background:none;border:none;color:#668;font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
+                    style="background:none;border:none;color:var(--s-mute);font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
                 <span style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                       title="${_esc(item.name)}">${_esc(item.name) || '(unnamed)'}</span>
                 ${modBadge}
                 ${qtyCtrl}
                 ${rmBtn}
             </div>
-            <div class="inv-detail" data-idx="${idx}" style="display:none;padding:6px 10px;border-top:1px dashed #2e3140;font-size:12px;color:#9aa0aa;">
+            <div class="inv-detail" data-idx="${idx}" style="display:none;padding:6px 10px;border-top:1px dashed var(--s-border);font-size:12px;color:var(--s-mute);">
                 <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:${item.desc ? '5px' : '0'};">
                     <span>${_esc(_typeLabel(item.type))}</span>
                     ${item.weight ? `<span>${_esc(item.weight)} lb each</span>` : ''}
                 </div>
-                ${item.desc ? `<div style="line-height:1.5;color:#8a90a0;white-space:pre-wrap;">${_esc(item.desc)}</div>` : ''}
+                ${item.desc ? `<div style="line-height:1.5;color:var(--s-mute);white-space:pre-wrap;">${_esc(item.desc)}</div>` : ''}
             </div>
         </div>`;
+    }
+
+    // ── Equip-slot enforcement ──
+    // Two-handed weapons take both hands. One-handed weapons and shields
+    // each take one hand. Only one armor at a time. When a new item would
+    // exceed those budgets, auto-unequip the conflicts (oldest first) and
+    // return the list of unequipped items for the toast.
+    function _handsCost(item) {
+        if (item.type === 'shield') return 1;
+        if (item.type === 'weapon') return (parseInt(item.hands) === 2 ? 2 : 1);
+        return 0;
+    }
+
+    function _enforceEquipSlots(newItem) {
+        const conflicts = [];
+
+        if (newItem.type === 'armor') {
+            // Only one armor at a time
+            inventory.forEach(i => {
+                if (i !== newItem && i.equipped && i.type === 'armor') {
+                    i.equipped = false;
+                    conflicts.push(i);
+                }
+            });
+            return conflicts;
+        }
+
+        if (newItem.type !== 'weapon' && newItem.type !== 'shield') {
+            return conflicts; // misc items (rings, cloaks) have no slot pressure
+        }
+
+        // Hands budget: max 2. Walk inventory in array order and unequip
+        // older hand-occupiers until the new item fits.
+        const need = _handsCost(newItem);
+
+        // 2H weapons require both hands free → unequip every other weapon/shield
+        if (newItem.type === 'weapon' && parseInt(newItem.hands) === 2) {
+            inventory.forEach(i => {
+                if (i !== newItem && i.equipped && (i.type === 'weapon' || i.type === 'shield')) {
+                    i.equipped = false;
+                    conflicts.push(i);
+                }
+            });
+            return conflicts;
+        }
+
+        // Shield: only one shield at a time, and it's incompatible with 2H weapons
+        if (newItem.type === 'shield') {
+            inventory.forEach(i => {
+                if (i === newItem || !i.equipped) return;
+                if (i.type === 'shield' || (i.type === 'weapon' && parseInt(i.hands) === 2)) {
+                    i.equipped = false;
+                    conflicts.push(i);
+                }
+            });
+        }
+
+        // After the type-specific clearouts, ensure total hands ≤ 2
+        const used = () => inventory.filter(i => i !== newItem && i.equipped)
+                                    .reduce((s, i) => s + _handsCost(i), 0);
+        for (const i of inventory) {
+            if (used() + need <= 2) break;
+            if (i === newItem) continue;
+            if (!i.equipped) continue;
+            if (i.type !== 'weapon' && i.type !== 'shield') continue;
+            i.equipped = false;
+            conflicts.push(i);
+        }
+
+        return conflicts;
+    }
+
+    function _toastConflicts(newItem, conflicts) {
+        if (!conflicts || !conflicts.length) return;
+        const names = conflicts.map(c => c.name || '(unnamed)').join(', ');
+        const msg = `Unequipped ${names} to equip ${newItem.name || 'this item'}.`;
+        if (typeof window.showToast === 'function') {
+            window.showToast(msg, 'info');
+        } else {
+            // Standalone sheet page may not have a toast helper — fall back to alert.
+            try { alert(msg); } catch {}
+        }
+    }
+
+    // Tell the attacks IIFE which weapons are currently equipped so it can
+    // sync its auto-attack rows. No-op if the attacks framework hasn't loaded.
+    function _syncEquippedWeaponAttacks() {
+        if (typeof window._syncWeaponAttacks !== 'function') return;
+        const equippedWeapons = inventory.filter(i => i.equipped && i.type === 'weapon');
+        window._syncWeaponAttacks(equippedWeapons);
     }
 
     function renderInventory() {
@@ -2412,7 +2646,7 @@
         ORDER.forEach(t => {
             if (!groups[t]) return;
             const heading = document.createElement('div');
-            heading.style.cssText = 'font-size:10px;color:#668;text-transform:uppercase;letter-spacing:.6px;margin:6px 0 3px;padding-left:2px;';
+            heading.style.cssText = 'font-size:10px;color:var(--s-mute);text-transform:uppercase;letter-spacing:.6px;margin:6px 0 3px;padding-left:2px;';
             heading.textContent = _typeLabel(t);
             container.appendChild(heading);
             container.insertAdjacentHTML('beforeend',
@@ -2421,7 +2655,7 @@
         // Any other types not in ORDER — render under "Other"
         Object.keys(groups).filter(t => !ORDER.includes(t)).forEach(t => {
             const heading = document.createElement('div');
-            heading.style.cssText = 'font-size:10px;color:#668;text-transform:uppercase;letter-spacing:.6px;margin:6px 0 3px;padding-left:2px;';
+            heading.style.cssText = 'font-size:10px;color:var(--s-mute);text-transform:uppercase;letter-spacing:.6px;margin:6px 0 3px;padding-left:2px;';
             heading.textContent = t;
             container.appendChild(heading);
             container.insertAdjacentHTML('beforeend',
@@ -2431,14 +2665,20 @@
         // Wire row events
         container.querySelectorAll('.inv-equip').forEach(inp =>
             inp.addEventListener('change', () => {
-                inventory[+inp.dataset.idx].equipped = inp.checked;
+                const item = inventory[+inp.dataset.idx];
+                item.equipped = inp.checked;
+                let conflicts = [];
+                if (item.equipped) conflicts = _enforceEquipSlots(item);
+                _toastConflicts(item, conflicts);
                 syncInventory();
+                _syncEquippedWeaponAttacks();
                 renderInventory(); // re-render so modifier badge & background update
             }));
         container.querySelectorAll('.inv-rm').forEach(btn =>
             btn.addEventListener('click', () => {
                 inventory.splice(+btn.dataset.idx, 1);
                 syncInventory();
+                _syncEquippedWeaponAttacks();
                 renderInventory();
             }));
         container.querySelectorAll('.inv-qty').forEach(inp =>
@@ -2461,6 +2701,9 @@
     }
 
     renderInventory();
+    // On first paint, push any already-equipped weapons into the attacks
+    // list (handles characters created before this feature shipped).
+    _syncEquippedWeaponAttacks();
 
     // Watch DEX & base_ac changes (recompute AC live)
     document.querySelectorAll('[name="abilities.DEX"]').forEach(el =>
@@ -2473,14 +2716,16 @@
     const panel    = document.getElementById('custom-item-panel');
     const typeSel  = document.getElementById('ci-type');
     const armorRow = document.getElementById('ci-armor-row');
+    const weaponRow= document.getElementById('ci-weapon-row');
     const shieldRow= document.getElementById('ci-shield-row');
     const miscRow  = document.getElementById('ci-misc-row');
 
     function _refreshTypeRows() {
         const t = typeSel?.value || 'gear';
         if (armorRow)  armorRow.style.display  = (t === 'armor')  ? '' : 'none';
+        if (weaponRow) weaponRow.style.display = (t === 'weapon') ? '' : 'none';
         if (shieldRow) shieldRow.style.display = (t === 'shield') ? '' : 'none';
-        if (miscRow)   miscRow.style.display   = (t === 'gear' || t === 'weapon' || t === 'tool' || t === 'consumable') ? '' : 'none';
+        if (miscRow)   miscRow.style.display   = (t === 'gear' || t === 'tool' || t === 'consumable') ? '' : 'none';
     }
     typeSel?.addEventListener('change', _refreshTypeRows);
     _refreshTypeRows();
@@ -2494,6 +2739,7 @@
         if (!name) return;
         const t = typeSel?.value || 'gear';
         const item = {
+            _uid: _newUid(),
             name,
             type: t,
             qty: parseInt(document.getElementById('ci-qty')?.value, 10) || 1,
@@ -2503,6 +2749,12 @@
             armor_type: '',
             ac_value: 0,
             ac_bonus: 0,
+            hands: 1,
+            versatile: false,
+            damage: '',
+            damage_type: '',
+            range: '',
+            properties: '',
             desc: (document.getElementById('ci-desc')?.value || '').trim(),
             _slug: ''
         };
@@ -2511,6 +2763,13 @@
             item.ac_value = parseInt(document.getElementById('ci-ac-value')?.value, 10) || 0;
         } else if (t === 'shield') {
             item.ac_value = parseInt(document.getElementById('ci-shield-bonus')?.value, 10) || 2;
+        } else if (t === 'weapon') {
+            const handsVal = document.getElementById('ci-hands')?.value || '1';
+            item.hands = handsVal === '2' ? 2 : 1;
+            item.versatile = handsVal === 'versatile';
+            item.damage = (document.getElementById('ci-damage')?.value || '').trim();
+            item.damage_type = (document.getElementById('ci-damage-type')?.value || '').trim();
+            item.range = (document.getElementById('ci-range')?.value || '').trim();
         } else {
             item.ac_bonus = parseInt(document.getElementById('ci-misc-bonus')?.value, 10) || 0;
         }
@@ -2519,9 +2778,11 @@
         renderInventory();
 
         // Reset form
-        ['ci-name', 'ci-desc'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        ['ci-name', 'ci-desc', 'ci-damage', 'ci-damage-type', 'ci-range']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         if (document.getElementById('ci-qty'))     document.getElementById('ci-qty').value = '1';
         if (document.getElementById('ci-weight'))  document.getElementById('ci-weight').value = '0';
+        if (document.getElementById('ci-hands'))   document.getElementById('ci-hands').value = '1';
         if (typeSel) typeSel.value = 'gear';
         _refreshTypeRows();
         if (panel) panel.style.display = 'none';
@@ -2530,6 +2791,7 @@
     // Allow the item browser to add a parsed Open5e item to the inventory list
     window._addItemFromBrowser = function (item) {
         const o = {
+            _uid: _newUid(),
             name: item.name || '',
             type: item.type || 'gear',
             qty: parseInt(item.qty) || 1,
@@ -2539,6 +2801,12 @@
             armor_type: item.armor_type || '',
             ac_value: parseInt(item.ac_value) || 0,
             ac_bonus: parseInt(item.ac_bonus) || 0,
+            hands: parseInt(item.hands) === 2 ? 2 : 1,
+            versatile: !!item.versatile,
+            damage: item.damage || '',
+            damage_type: item.damage_type || '',
+            range: item.range || '',
+            properties: item.properties || '',
             desc: item.desc || '',
             _slug: item._slug || ''
         };
@@ -2570,10 +2838,13 @@
     update();
 })();
 
-/* ── HP / Temp HP +/- step buttons (Shift = ×5) ───────────────────────────── */
+/* ── HP / Temp HP / HD +/- step buttons + Short / Long Rest ───────────────── */
 (function () {
     const hpInp   = document.getElementById('hp-current-input');
     const tempInp = document.getElementById('hp-temp-input');
+    const hdInp   = document.getElementById('hd-current-input');
+    const hdMaxInp = document.getElementById('hd-max-input');
+    const form     = document.getElementById('sheet-form');
 
     function _step(inp, delta, allowNeg) {
         if (!inp) return;
@@ -2599,6 +2870,123 @@
             const mult = ev.shiftKey ? 5 : 1;
             _step(tempInp, base * mult, /*allowNeg=*/ false);
         });
+    });
+    document.querySelectorAll('[data-hd-step]').forEach(btn => {
+        btn.addEventListener('click', (ev) => {
+            const base = parseInt(btn.dataset.hdStep, 10) || 0;
+            const mult = ev.shiftKey ? 5 : 1;
+            const cur = parseInt(hdInp?.value, 10) || 0;
+            const max = parseInt(hdMaxInp?.value, 10) || 0;
+            const next = Math.max(0, Math.min(max || 999, cur + base * mult));
+            if (hdInp) {
+                hdInp.value = next;
+                hdInp.dispatchEvent(new Event('change', { bubbles: true }));
+                hdInp.dispatchEvent(new Event('input',  { bubbles: true }));
+            }
+        });
+    });
+
+    function _toast(msg, kind) {
+        if (typeof window.showToast === 'function') return window.showToast(msg, kind);
+        try { alert(msg); } catch {}
+    }
+
+    function _hitDieSize() {
+        const raw = (form?.querySelector('[name="class_hit_die"]')?.value || '').trim();
+        const m = /d(\d+)/i.exec(raw);
+        return m ? parseInt(m[1], 10) : 8;
+    }
+
+    function _conMod() {
+        const con = parseInt(form?.querySelector('[name="abilities.CON"]')?.value, 10) || 10;
+        return Math.floor((con - 10) / 2);
+    }
+
+    /* ── Short Rest: spend one hit die, roll d{HD}+CON, heal ── */
+    document.getElementById('short-rest-btn')?.addEventListener('click', async () => {
+        const hdCur = parseInt(hdInp?.value, 10) || 0;
+        if (hdCur <= 0) { _toast('No hit dice remaining.', 'error'); return; }
+
+        const dieSize = _hitDieSize();
+        const conMod  = _conMod();
+        const dieRoll = 1 + Math.floor(Math.random() * dieSize);
+        const recover = Math.max(1, dieRoll + conMod);  // RAW: at least 1 HP
+
+        const hpMax = parseInt(form?.querySelector('[name="hp.max"]')?.value, 10) || 0;
+        const hpCur = parseInt(hpInp?.value, 10) || 0;
+        const newHp = hpMax > 0 ? Math.min(hpMax, hpCur + recover) : hpCur + recover;
+
+        if (hpInp) {
+            hpInp.value = newHp;
+            hpInp.dispatchEvent(new Event('change', { bubbles: true }));
+            hpInp.dispatchEvent(new Event('input',  { bubbles: true }));
+        }
+        if (hdInp) {
+            hdInp.value = hdCur - 1;
+            hdInp.dispatchEvent(new Event('change', { bubbles: true }));
+            hdInp.dispatchEvent(new Event('input',  { bubbles: true }));
+        }
+
+        const conStr = (conMod >= 0 ? '+' : '') + conMod;
+        _toast(`⚡ Short rest: 1d${dieSize}=${dieRoll} ${conStr} = +${recover} HP`, 'info');
+
+        // Also broadcast to the campaign roll log so the table sees it
+        if (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) {
+            try {
+                await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        expression: `1d${dieSize}${conStr}`,
+                        visibility: 'public',
+                        note: '⚡ Short rest hit die',
+                    }),
+                });
+            } catch {}
+        }
+    });
+
+    /* ── Long Rest: HP→max, Temp→0, regain half max HD, reset spell slots ── */
+    document.getElementById('long-rest-btn')?.addEventListener('click', () => {
+        const ok = confirm(
+            'Take a long rest?\n\n' +
+            '• HP restored to max\n' +
+            '• Temp HP cleared\n' +
+            '• Recover up to half max hit dice\n' +
+            '• All spell slots restored\n\n' +
+            'Remember to Save the sheet afterward.'
+        );
+        if (!ok) return;
+
+        const hpMax = parseInt(form?.querySelector('[name="hp.max"]')?.value, 10) || 0;
+        const hdMax = parseInt(hdMaxInp?.value, 10) || 0;
+        const hdCur = parseInt(hdInp?.value, 10) || 0;
+        const regain = Math.max(1, Math.floor(hdMax / 2));
+
+        if (hpInp && hpMax > 0) {
+            hpInp.value = hpMax;
+            hpInp.dispatchEvent(new Event('change', { bubbles: true }));
+            hpInp.dispatchEvent(new Event('input',  { bubbles: true }));
+        }
+        if (tempInp) {
+            tempInp.value = 0;
+            tempInp.dispatchEvent(new Event('change', { bubbles: true }));
+            tempInp.dispatchEvent(new Event('input',  { bubbles: true }));
+        }
+        if (hdInp && hdMax > 0) {
+            hdInp.value = Math.min(hdMax, hdCur + regain);
+            hdInp.dispatchEvent(new Event('change', { bubbles: true }));
+            hdInp.dispatchEvent(new Event('input',  { bubbles: true }));
+        }
+
+        // Reset every spell-slot row's used pip count to 0
+        document.querySelectorAll('.ss-row').forEach(row => {
+            row.dataset.used = 0;
+            if (window._ssSyncInputs) window._ssSyncInputs(row);
+            if (window._ssRenderPips) window._ssRenderPips(row);
+        });
+
+        _toast('💤 Long rest complete — HP, hit dice, and spell slots refreshed. Save to persist.', 'info');
     });
 })();
 

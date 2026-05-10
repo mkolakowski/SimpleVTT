@@ -446,6 +446,22 @@
         return [];
     }
 
+    const _LSC_TTL = 86400000; // 24 hours
+    async function fetchListCached(url, cacheKey) {
+        try {
+            const raw = localStorage.getItem(cacheKey);
+            if (raw) {
+                const { ts, data } = JSON.parse(raw);
+                if (Date.now() - ts < _LSC_TTL && data.length) return data;
+            }
+        } catch {}
+        const items = await fetchList(url);
+        if (items.length) {
+            try { localStorage.setItem(cacheKey, JSON.stringify({ ts: Date.now(), data: items })); } catch {}
+        }
+        return items;
+    }
+
     async function fetchDetailText(endpoint, slug) {
         if (!slug) return '';
         try {
@@ -487,7 +503,7 @@
             return;
         }
         const slug = className.trim().toLowerCase().replace(/\s+/g, '-');
-        const items = await fetchList('/api/open5e/subclasses?limit=100&class_slug=' + encodeURIComponent(slug));
+        const items = await fetchListCached('/api/open5e/subclasses?limit=100&class_slug=' + encodeURIComponent(slug), 'simplevtt_subclasses_' + slug);
         const current = subSelect.dataset.current || '';
         populateSelect(subSelect, items, current);
         subSelect.dataset.current = '';
@@ -892,8 +908,8 @@
 
     async function init() {
         const [classes, races] = await Promise.all([
-            classSelect ? fetchList('/api/open5e/classes?limit=30') : Promise.resolve([]),
-            raceSelect  ? fetchList('/api/open5e/races?limit=30')   : Promise.resolve([]),
+            classSelect ? fetchListCached('/api/open5e/classes?limit=30', 'simplevtt_classes_list') : Promise.resolve([]),
+            raceSelect  ? fetchListCached('/api/open5e/races?limit=30',   'simplevtt_races_list')   : Promise.resolve([]),
         ]);
         if (classSelect) {
             populateSelect(classSelect, classes, classSelect.dataset.current || '');

@@ -217,6 +217,17 @@
     .spell-cast-result-row strong { color: var(--fg); margin-right: 4px; }
     .spell-cast-pass { color: #4ade80; font-weight: 600; }
     .spell-cast-fail { color: var(--danger); font-weight: 600; }
+    .spell-cast-heal-btn {
+        background: rgba(74,222,128,.10);
+        color: #4ade80;
+        border-color: rgba(74,222,128,.4);
+    }
+    .spell-cast-heal-btn:hover { background: rgba(74,222,128,.22); }
+    .spell-cast-heal-btn:disabled { opacity: .55; cursor: default; }
+    .heal-charge-tracker {
+        font-size: 10px; font-weight: 400; opacity: .8; margin-left: 4px;
+    }
+    .heal-result-row { color: #4ade80 !important; }
 
     /* ── Weapon-attack card (variant of spell-cast card) ── */
     .weapon-atk-card { border-left-color: #fbb88a; }
@@ -343,7 +354,10 @@
     .mini-sheet { font-size: 12px; }
     .mini-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 7px; }
     .mini-tag { background: var(--accent-bg); color: var(--accent); border-radius: 3px; padding: 1px 6px; font-size: 11px; }
-    .mini-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 6px; }
+    .mini-stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 6px; }
+    .mini-cell-hp { display: flex; flex-direction: column; align-items: center; }
+    .mini-cell-hp .mc-value { font-size: 30px; }
+    .mini-cell-hp-body { display: flex; align-items: center; gap: 3px; margin-top: 1px; }
     .mini-grid-6 { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; margin-bottom: 6px; }
     .mini-cell { background: var(--bg); border-radius: 4px; padding: 4px 3px; text-align: center; }
     .mini-cell .mc-label { font-size: 9px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.4px; display: block; }
@@ -363,11 +377,17 @@
     .mini-prof-dot { font-size: 9px; width: 14px; text-align: center; flex-shrink: 0; color: var(--border); }
     .mini-prof-dot.is-prof { color: var(--accent); }
     .mini-prof-dot.is-exp { color: #f5c542; }
-    .mini-skill-name { font-size: 11px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .mini-skill-name.is-prof { color: var(--accent); }
-    .mini-skill-name.is-exp { color: #f5c542; }
-    .mini-skill-ab { font-size: 9px; color: var(--fg-mute); width: 26px; flex-shrink: 0; text-align: right; }
-    .mini-skills-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 6px; }
+    .mini-skills-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 6px; }
+    .mini-sk-btn { display: flex; align-items: center; gap: 5px; width: 100%; padding: 3px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; text-align: left; }
+    .mini-sk-btn.is-prof { border: 2px solid var(--accent); }
+    .mini-sk-btn.is-exp { border: 2px solid color-mix(in srgb, #daa520 70%, var(--accent)); }
+    .mini-sk-btn:hover { background: var(--surface-hover); }
+    .mini-sk-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: transparent; border: 1px solid var(--border); }
+    .mini-sk-btn.is-prof .mini-sk-dot { background: var(--accent); border-color: var(--accent); }
+    .mini-sk-btn.is-exp .mini-sk-dot { background: color-mix(in srgb, #daa520 70%, var(--accent)); border-color: color-mix(in srgb, #daa520 70%, var(--accent)); }
+    .mini-sk-name { flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg); }
+    .mini-sk-ab { font-size: 9px; color: var(--fg-mute); flex-shrink: 0; }
+    .mini-sk-mod { font-size: 12px; font-weight: 700; color: var(--accent); min-width: 22px; text-align: right; flex-shrink: 0; }
     /* Ability grid (horizontal layout) */
     .mini-ab-grid { display: grid; grid-template-columns: repeat(6, 1fr); text-align: center; margin-bottom: 4px; gap: 2px 0; }
     .mac-name { font-size: 9px; color: var(--fg-mute); font-weight: 700; letter-spacing: 0.3px; padding: 4px 0 1px; display: flex; flex-direction: column; align-items: center; gap: 1px; }
@@ -392,8 +412,46 @@
     .mini-cast-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .mini-slot-row { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--fg-mute); padding: 1px 2px; }
     .mini-slot-row .mini-slot-label { width: 28px; flex-shrink: 0; }
-    .mini-slot-pip { display: inline-block; width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--accent-border); background: var(--accent-bg2); margin-right: 2px; }
-    .mini-slot-pip.used { background: transparent; opacity: 0.45; }
+    .mini-slot-pip { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--accent); background: var(--accent); margin-right: 2px; transition: background .12s, border-color .12s, opacity .12s; }
+    .mini-slot-pip.used { background: transparent; border-color: var(--border); opacity: 0.4; }
+    /* Mini HP +/- buttons (used inside mini-stat-row HP/Temp cells) */
+    .mini-hp-max { font-size: 10px; color: var(--fg-mute); }
+    .mini-hp-step-stack { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+    .mini-hp-step { background: none; border: 1px solid var(--border); border-radius: 3px;
+                    color: var(--fg-mute); font-size: 11px; line-height: 1; padding: 1px 5px;
+                    cursor: pointer; font-weight: 700; }
+    .mini-hp-step:hover { background: var(--btn-hover); color: var(--fg); border-color: var(--accent); }
+
+    /* Mini rest bar (HD tracker + Short / Long Rest buttons) */
+    .mini-rest-bar {
+        display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        margin: 4px 0 6px;
+        padding: 7px 10px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        font-size: 13px;
+    }
+    .mini-rest-hd { color: var(--fg-mute); flex-shrink: 0; }
+    .mini-rest-hd .mini-rest-hd-cur,
+    .mini-rest-hd .mini-rest-hd-max { color: var(--fg); font-weight: 600; }
+    .mini-rest-hd .mini-rest-hd-die { color: var(--fg-mute); font-style: italic; margin-left: 2px; }
+    .mini-rest-btn {
+        font-size: 12px; font-weight: 600; cursor: pointer;
+        padding: 4px 12px; border-radius: 4px; flex-shrink: 0;
+        line-height: 1.5;
+    }
+    .mini-rest-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .mini-short-rest-btn {
+        background: rgba(108,180,255,.10); border: 1px solid rgba(108,180,255,.4); color: #9cd0e0;
+    }
+    .mini-short-rest-btn:hover { background: rgba(108,180,255,.22); }
+    .mini-long-rest-btn {
+        background: rgba(167,139,250,.10); border: 1px solid rgba(167,139,250,.4); color: #c0a4e0;
+        margin-left: auto;
+    }
+    .mini-long-rest-btn:hover { background: rgba(167,139,250,.22); }
+
     /* Mini attacks */
     .mini-attacks { display: flex; flex-direction: column; gap: 2px; }
     .mini-attack-row { display: flex; align-items: center; gap: 5px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); }
@@ -703,10 +761,36 @@
                     {% if sh.get('level') %}<span class="mini-tag">Lv {{ sh.get('level') }}</span>{% endif %}
                     {% if sh.get('race') %}<span class="mini-tag">{{ sh.get('race') }}</span>{% endif %}
                 </div>
-                <div class="mini-grid-3">
-                    <div class="mini-cell">
+                {# ── HP / Temp / AC / Speed unified stat row ── #}
+                {% set _hp = sh.get('hp') or {} %}
+                <div class="mini-stat-row" data-char-id="{{ c.id }}"
+                     data-hp-cur="{{ (_hp.get('current') or 0) | int }}"
+                     data-hp-max="{{ (_hp.get('max') or 0) | int }}"
+                     data-hp-temp="{{ (_hp.get('temp') or 0) | int }}">
+                    <div class="mini-cell mini-cell-hp">
                         <span class="mc-label">HP</span>
-                        <span class="mc-value">{{ (sh.get('hp') or {}).get('current','—') }}<span style="font-size:10px;color:var(--fg-mute);">/{{ (sh.get('hp') or {}).get('max','—') }}</span></span>
+                        <div class="mini-cell-hp-body">
+                            {% if c.owner_user_id == user.id or is_gm %}
+                            <div class="mini-hp-step-stack">
+                                <button type="button" class="mini-hp-step mini-hp-plus" data-char-id="{{ c.id }}" data-field="hp">+</button>
+                                <button type="button" class="mini-hp-step mini-hp-minus" data-char-id="{{ c.id }}" data-field="hp">−</button>
+                            </div>
+                            {% endif %}
+                            <span class="mc-value mini-hp-cur">{{ (_hp.get('current') or 0) | int }}</span>
+                            <span class="mini-hp-max">/ {{ (_hp.get('max') or 0) | int }}</span>
+                        </div>
+                    </div>
+                    <div class="mini-cell mini-cell-hp">
+                        <span class="mc-label">Temp</span>
+                        <div class="mini-cell-hp-body">
+                            {% if c.owner_user_id == user.id or is_gm %}
+                            <div class="mini-hp-step-stack">
+                                <button type="button" class="mini-hp-step mini-hp-plus" data-char-id="{{ c.id }}" data-field="temp">+</button>
+                                <button type="button" class="mini-hp-step mini-hp-minus" data-char-id="{{ c.id }}" data-field="temp">−</button>
+                            </div>
+                            {% endif %}
+                            <span class="mc-value mini-hp-temp">{{ (_hp.get('temp') or 0) | int }}</span>
+                        </div>
                     </div>
                     <div class="mini-cell">
                         <span class="mc-label">AC</span>
@@ -716,6 +800,20 @@
                         <span class="mc-label">Speed</span>
                         <span class="mc-value">{{ sh.get('speed','—') }}</span>
                     </div>
+                </div>
+                {# ── Hit dice + rest buttons ── #}
+                {% set _hd_obj = sh.get('hit_dice') or {} %}
+                {% set _hd_max_v = (_hd_obj.get('max') if _hd_obj.get('max') is not none else sh.get('level', 1)) | int %}
+                {% set _hd_cur_v = (_hd_obj.get('current') if _hd_obj.get('current') is not none else _hd_max_v) | int %}
+                {% set _hd_die = sh.get('class_hit_die','') or 'd8' %}
+                <div class="mini-rest-bar" data-char-id="{{ c.id }}">
+                    <span class="mini-rest-hd" title="Hit dice — spend on a short rest, regain half-max on a long rest">
+                        🎲 Hit Dice <span class="mini-rest-hd-cur">{{ _hd_cur_v }}</span>/<span class="mini-rest-hd-max">{{ _hd_max_v }}</span> <span class="mini-rest-hd-die">{{ _hd_die }}</span>
+                    </span>
+                    {% if c.owner_user_id == user.id or is_gm %}
+                    <button type="button" class="mini-rest-btn mini-short-rest-btn" data-char-id="{{ c.id }}" data-char-name="{{ c.name }}" title="Spend one hit die: roll d{{ _hd_die }}+CON to recover HP">⚡ Short</button>
+                    <button type="button" class="mini-rest-btn mini-long-rest-btn" data-char-id="{{ c.id }}" data-char-name="{{ c.name }}" title="Restore HP, recover half max hit dice, reset spell slots">💤 Long</button>
+                    {% endif %}
                 </div>
                 {# ── Abilities & Saves ── #}
                 <div class="mini-section-label">Abilities &amp; Saves</div>
@@ -774,11 +872,15 @@
                 {% set is_sk_exp = sk.get('expertise', false) %}
                 {% set sk_bonus = s_mod + (prof * 2 if is_sk_exp else prof if is_sk_prof else 0) %}
                 {% set sk_str = (('+' if sk_bonus >= 0 else '') ~ (sk_bonus | string)) %}
-                <div class="mini-roll-row">
-                    <span class="mini-skill-name{{ ' is-exp' if is_sk_exp else ' is-prof' if is_sk_prof else '' }}" title="{{ 'Expertise' if is_sk_exp else 'Proficient' if is_sk_prof else '' }}">{{ sname }}</span>
-                    <span class="mini-skill-ab">{{ sab }}</span>
-                    <button class="mini-roll-btn" data-expr="1d20{{ sk_str }}" data-note="{{ c.name }}: {{ sname }}{{ ' (expertise)' if is_sk_exp else ' (prof)' if is_sk_prof else '' }}">🎲 {{ sk_str }}</button>
-                </div>
+                <button class="mini-sk-btn{{ ' is-exp' if is_sk_exp else ' is-prof' if is_sk_prof else '' }}"
+                        data-expr="1d20{{ sk_str }}"
+                        data-note="{{ c.name }}: {{ sname }}{{ ' (expertise)' if is_sk_exp else ' (prof)' if is_sk_prof else '' }}"
+                        title="{{ 'Expertise' if is_sk_exp else 'Proficient' if is_sk_prof else '' }}">
+                    <span class="mini-sk-dot"></span>
+                    <span class="mini-sk-name">{{ sname }}</span>
+                    <span class="mini-sk-ab">{{ sab }}</span>
+                    <span class="mini-sk-mod">{{ sk_str }}</span>
+                </button>
                 {% endfor %}
                 </div>
                 {# ── Mini Attacks ── #}
@@ -1434,6 +1536,125 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 }
             } finally {
                 btn.disabled = false;
+            }
+        });
+
+        /* Mini-sheet rest buttons — post to /rest */
+        async function _miniRest(btn, restType) {
+            const charId = parseInt(btn.dataset.charId, 10);
+            const charName = btn.dataset.charName || 'character';
+            if (!charId) return;
+
+            if (restType === 'long') {
+                const ok = confirm(
+                    `Take a long rest for ${charName}?\n\n` +
+                    '• HP restored to max\n' +
+                    '• Temp HP cleared\n' +
+                    '• Recover up to half max hit dice\n' +
+                    '• All spell slots restored');
+                if (!ok) return;
+            }
+
+            btn.disabled = true;
+            try {
+                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/character/${charId}/rest`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: restType }),
+                });
+                if (!resp.ok) {
+                    let body; try { body = await resp.json(); } catch { body = null; }
+                    if (resp.status === 409 && body && body.error === 'no_hit_dice') {
+                        (window.showToast || function (m) { alert(m); })(
+                            `${charName} has no hit dice remaining.`, 'error');
+                    } else {
+                        (window.showToast || function (m) { alert(m); })(
+                            'Rest failed: ' + (body ? JSON.stringify(body) : await resp.text()), 'error');
+                    }
+                    return;
+                }
+                const data = await resp.json();
+                _applyRestToMini(charId, data);
+                if (restType === 'long') {
+                    (window.showToast || function (m) { alert(m); })(
+                        `💤 ${charName}: long rest complete.`, 'info');
+                } else {
+                    (window.showToast || function (m) { alert(m); })(
+                        `⚡ ${charName}: ${data.expression || 'short rest'} = +${data.recovered} HP`, 'info');
+                }
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        function _applyRestToMini(charId, data) {
+            if (data.hp) _updateMiniHpDisplay(charId, data.hp);
+            // Hit-dice tracker line
+            const bar = document.querySelector(`.mini-rest-bar[data-char-id="${charId}"]`);
+            if (bar && data.hit_dice) {
+                const curEl = bar.querySelector('.mini-rest-hd-cur');
+                const maxEl = bar.querySelector('.mini-rest-hd-max');
+                if (curEl) curEl.textContent = data.hit_dice.current ?? curEl.textContent;
+                if (maxEl) maxEl.textContent = data.hit_dice.max ?? maxEl.textContent;
+            }
+            // Spell-slot pips on this mini-sheet (long rest sends one
+            // spell_slot_update broadcast per level — the existing handler
+            // below picks those up. Nothing to do here for short rest.)
+        }
+
+        window._updateMiniHpDisplay = function(charId, hp) { _updateMiniHpDisplay(charId, hp); };
+        function _updateMiniHpDisplay(charId, hp) {
+            const cur = hp.current ?? 0;
+            const max = hp.max ?? 0;
+            const temp = hp.temp ?? 0;
+            const row = document.querySelector(`.mini-stat-row[data-char-id="${charId}"]`);
+            if (row) {
+                row.dataset.hpCur  = cur;
+                row.dataset.hpMax  = max;
+                row.dataset.hpTemp = temp;
+                const curEl  = row.querySelector('.mini-hp-cur');
+                const maxEl  = row.querySelector('.mini-hp-max');
+                const tmpEl  = row.querySelector('.mini-hp-temp');
+                if (curEl) curEl.textContent = cur;
+                if (maxEl) maxEl.textContent = `/ ${max}`;
+                if (tmpEl) tmpEl.textContent = temp;
+            }
+        }
+
+        async function _miniHpStep(charId, field, delta) {
+            const row = document.querySelector(`.mini-stat-row[data-char-id="${charId}"]`);
+            if (!row) return;
+            let cur  = parseInt(row.dataset.hpCur,  10) || 0;
+            const max  = parseInt(row.dataset.hpMax,  10) || 0;
+            let temp = parseInt(row.dataset.hpTemp, 10) || 0;
+            if (field === 'hp') {
+                cur = Math.max(0, Math.min(max || 9999, cur + delta));
+            } else {
+                temp = Math.max(0, temp + delta);
+            }
+            const hp = { current: cur, max, temp };
+            _updateMiniHpDisplay(charId, hp);
+            try {
+                await fetch(`/api/campaign/${CAMPAIGN_ID}/character/${charId}/sheet-fields`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ hp }),
+                });
+            } catch { /* silent — display already updated */ }
+        }
+
+        document.getElementById('player-char-list').addEventListener('click', (ev) => {
+            const sBtn = ev.target.closest('.mini-short-rest-btn');
+            if (sBtn) { _miniRest(sBtn, 'short'); return; }
+            const lBtn = ev.target.closest('.mini-long-rest-btn');
+            if (lBtn) { _miniRest(lBtn, 'long'); return; }
+            const hpBtn = ev.target.closest('.mini-hp-step');
+            if (hpBtn) {
+                const charId = parseInt(hpBtn.dataset.charId, 10);
+                const field  = hpBtn.dataset.field;
+                const delta  = hpBtn.classList.contains('mini-hp-plus') ? 1 : -1;
+                _miniHpStep(charId, field, delta);
+                return;
             }
         });
 

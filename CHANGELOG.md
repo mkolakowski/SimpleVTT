@@ -86,6 +86,183 @@ Each release section must include all five of these, in this order:
 
 ---
 
+## [0.31.3] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Move Class Proficiencies below Features and cache class/race/subclass dropdown lists
+
+**Description:** The Class Proficiencies fieldset now appears after Class, Subclass & Race Features in the character sheet sidebar. The class, subclass, and race dropdown lists are cached in `localStorage` for 24 hours so the three Open5e API calls are skipped on repeat sheet opens — only the first load (or a cache-miss after 24 h) hits the network.
+
+### Changed
+- Reordered fieldsets: Class, Subclass & Race Features now appears before Class Proficiencies
+- `sheet.js`: added `fetchListCached()` wrapping `fetchList()` with a 24-hour `localStorage` cache keyed `simplevtt_classes_list`, `simplevtt_races_list`, and `simplevtt_subclasses_{slug}`
+- Dropdown lists for class, race, and per-class subclasses are served from cache on subsequent opens; cache is written only when the API returns results, so a failed fetch never pollutes the cache
+
+---
+
+## [0.31.2] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Unify skill buttons and spell slot pips across full and mini character sheets
+
+**Description:** Skill buttons on both the full D&D 5e sheet and the tabletop mini-sheet now share the same design: proficiency dot, skill name, ability abbreviation, and modifier, with a teal border for proficient skills and a gold border for expertise. Spell slot pips on both sheets now use a consistent convention — filled accent circle = available slot, hollow dim circle = spent slot — replacing the previous inconsistent and hard-to-read designs.
+
+### Changed
+- Full sheet skill buttons: border is now `2px solid accent` for proficient, `2px solid gold-mix` for expertise, default `1px solid border` otherwise
+- Full sheet spell slot pips: flipped to available = filled accent, used = hollow dim (was reversed)
+- Mini-sheet skills: replaced flat `mini-roll-row` layout with `mini-sk-btn` buttons matching the full sheet style (dot · name · ability · modifier); proficient and expert skills get a colored border
+- Mini-sheet spell slot pips: updated to match full sheet — filled = available, hollow dim = used; pip size increased from 8px to 10px for clarity
+
+---
+
+## [0.31.1] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Merge tabletop mini-sheet HP tracker into unified four-column stat row
+
+**Description:** The player drawer previously showed HP twice — once in a static three-column grid and again in a separate +/- control row. Both are now replaced by a single four-column row (HP | Temp | AC | Speed) where the HP and Temp cells embed the +/- step buttons inline for owners and GMs. No schema or API changes.
+
+### Changed
+- Replaced `mini-grid-3` (HP/AC/Speed) and the separate `mini-hp-row` with a single `mini-stat-row` grid (HP · Temp · AC · Speed)
+- HP and Temp cells embed stacked +/− step buttons inline; buttons only render for character owners and GMs
+- Removed now-unused CSS rules: `.mini-hp-row`, `.mini-hp-ctrl`, `.mini-temp-ctrl`, `.mini-hp-label`, `.mini-hp-val`
+- Updated `_updateMiniHpDisplay` and `_miniHpStep` JS selectors to target `.mini-stat-row` instead of `.mini-hp-row` and `.mini-hp-display-*`
+
+---
+
+## [0.31.0] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Add Apply Healing button to spell roll-log cards with AOE charge tracking
+
+**Description:** Spells with a healing expression now show a green **🩹 Apply Healing** button in the campaign roll-log card after casting. Any player in the campaign can click it; the server rolls the healing dice, applies the result to that player's character (capped at max HP), and broadcasts the outcome to all clients — the result row and mini-sheet HP both update live. AOE healing spells (e.g. Mass Cure Wounds) show a charge tracker `(0/6)` on the button; each user may claim once and the button locks once all charges are consumed. The spell data model gains `healing` (dice string) and `aoe_targets` (int) fields, exposed in the custom-spell form and auto-detected when importing from the Open5e browser. No schema change; no operator action needed.
+
+### Added
+- `healing` (dice string, e.g. `"3d8+5"`) and `aoe_targets` (int, default 1) fields on spell objects; preserved through the spell loader, custom-spell form, Open5e import, and the `cast_spell` broadcast payload.
+- **Healing** and **AOE Targets** inputs in the custom spell panel on the character sheet.
+- Auto-detection of healing dice and AOE target count from Open5e spell descriptions in `_fmt_spell()` (skips spells that already have a damage expression to avoid false matches on spells like Vampiric Touch).
+- `POST /api/campaign/{id}/apply_healing` endpoint: validates campaign membership, enforces per-user claim limits, rolls dice server-side via `dice_mod.roll()`, patches `sheet.hp`, broadcasts `heal_applied`.
+- In-memory `_heal_claims` dict in `tabletop_routes.py` (keyed by `cast_id`, 8-hour TTL, purged on each new healing cast).
+- `_applyHealing()` and `_onHealApplied()` functions in `tabletop.js`; `heal_applied` case in the WebSocket dispatcher.
+- `.spell-cast-heal-btn` (green tint), `.heal-charge-tracker`, and `.heal-result-row` CSS in `tabletop.html`.
+- `window._updateMiniHpDisplay` exposed from `tabletop.html` so `tabletop.js` can update the player-drawer mini-sheet HP after healing.
+
+---
+
+## [0.30.4] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Enlarge HP numbers and move step buttons left with vertical stacking
+
+**Description:** On both the full D&D 5e character sheet and the tabletop player-drawer mini-sheet, the current HP number is now two font sizes larger for easier reading at a glance. The +/− step buttons have been moved to the left of the HP and Temp HP values and are stacked vertically with + on top and − on the bottom. No schema change; no operator action needed.
+
+### Changed
+- `sheet_dnd5e.html`: HP input font-size increased from 30 px to 38 px (width 56 px → 70 px); Temp HP input from 15 px to 19 px (width 44 px → 52 px). +/− buttons now wrap in a `.hp-step-stack` column div placed to the left of each number.
+- `tabletop.html`: `.mini-hp-val` font-size increased from 13 px to 17 px. +/− buttons wrapped in `.mini-hp-step-stack` column div placed left of the value; button font reduced slightly to 11 px to suit the compact stacked layout.
+
+---
+
+## [0.30.3] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Move AC display from header chip grid into the Inventory fieldset
+
+**Description:** The AC chip has been removed from the top combat-stat grid on the D&D 5e character sheet. The three remaining stats (Speed, Init, Prof) are now laid out in a single row of equal-width chips. The AC value and its armor breakdown (`🛡 AC 16 = Chain Mail 16, Shield +2`) now live at the top of the Inventory fieldset, where it is directly adjacent to the equipped armor and shields that determine it. The hidden `ac` form input is preserved so the computed value continues to be saved with the sheet. No schema change; no operator action needed.
+
+### Changed
+- Top combat-stat grid reshaped from a 2×2 grid (AC / Speed / Init / Prof) to a single 3-chip row (Speed / Init / Prof).
+- `#ac-breakdown-line` moved from below the character header into the Inventory fieldset header, prefixed with 🛡.
+- `updateACDisplay()` format updated to `🛡 AC N = …` to match the new location.
+
+---
+
+## [0.30.2] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Enlarge mini-sheet rest controls and add HP/Temp HP step buttons
+
+**Description:** In the tabletop player drawer, the hit dice tracker and Short/Long Rest buttons are now visually larger (bigger font, padding, and spacing) so they're easier to tap. Owners and GMs also get a new HP row below the combat stats grid with − and + step buttons for current HP and Temp HP. Clicking a step button immediately updates the display and PATCHes the character's `hp` object via the existing `/sheet-fields` endpoint (which now accepts the `hp` key). No schema change; no operator action needed.
+
+### Added
+- HP +/− and Temp HP +/− step buttons on the mini-sheet in the player drawer, visible to the character's owner and the GM.
+- `"hp"` added to `_SHEET_PATCH_KEYS` so the lightweight PATCH endpoint can accept HP updates.
+- `_miniHpStep()` JS function: clamps HP to `[0, max]`, temp to `≥ 0`, updates the DOM optimistically, then PATCHes the server.
+- `_updateMiniHpDisplay()` helper shared between rest responses and the new step buttons — keeps the top grid readout and the +/− row in sync.
+
+### Changed
+- `.mini-rest-bar` padding increased from `5px 7px` to `7px 10px`; font-size from `11px` to `13px`.
+- `.mini-rest-btn` padding increased from `2px 7px` to `4px 12px`; font-size from `10px` to `12px`; border-radius from `3px` to `4px`.
+
+---
+
+## [0.30.1] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Replace hardcoded dark-theme hex colors in D&D 5e sheet with CSS custom properties
+
+**Description:** The D&D 5e character sheet contained roughly 200+ hardcoded hex colors in both its Jinja2 HTML and JavaScript `innerHTML` template strings, causing it to always render with dark-blue chrome regardless of the active theme. A semantic CSS variable bridge (`--s-*` properties scoped to `.sheet.dnd5e`) was added to map theme tokens, and all structural hex colors were replaced with `var(--s-*)` references. Intentional game-semantic colors (damage orange `#e8a`, attack cyan `#8cf`, spell purple `#a78bfa`, etc.) were left as-is. No operator action needed.
+
+### Fixed
+- Character sheet header, inputs, buttons, overlays, and roll-log cards now respect all eight themes (dark, midnight, dim, light, forest, bubblegum, oled, fire) instead of always rendering in dark-blue.
+- Spell browser, item browser, attack rows, inventory rows, condition chips, proficiency dots, and rest buttons now use theme-aware colors.
+- Remove (×) buttons, error states, and "Add to Sheet / Remove from Sheet" toggles all use CSS variable colors instead of hardcoded dark hex values.
+
+---
+
+## [0.30.0] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Add hit dice tracker plus Short and Long Rest actions to character sheet and Player drawer mini-sheet
+
+**Description:** The HP block on the D&D 5e sheet now includes a **hit dice tracker** (current/max with ± buttons, plus the die size pulled from the class) and two action buttons — **⚡ Short Rest** and **💤 Long Rest**. Short Rest spends one hit die, rolls `1d{HD} + CON` client-side, heals up to max HP, decrements the hit-die counter, and (when in a campaign) logs the roll to the public roll log. Long Rest restores HP to max, clears Temp HP, recovers up to half max hit dice (RAW: `max(1, ⌊max/2⌋)`), and resets every spell-slot row's used pip count to 0. A matching mini version lives in the Player drawer of the tabletop: each character row now shows `🎲 HD x/y dN` and `⚡ Short` / `💤 Long` buttons that POST to a new `/api/campaign/{id}/character/{char_id}/rest` endpoint. The endpoint applies the same math server-side, persists to the DB, and broadcasts a `spell_slot_update` per restored slot level so any open sheet rerenders its pips. The mini bar also updates its own HP and HD numbers from the response without a page reload. Hit-dice state is stored under `sheet.hit_dice = {current, max}`; characters without prior values default to current=max=level. No operator action is needed beyond a redeploy.
+
+### Added
+- HP block on `sheet_dnd5e.html` gained a hit-dice row (`HD x/y dN` with ± step buttons), and two rest buttons under it. Hit-dice die size is read live from the existing `class_hit_die` field. Readonly sheets get hidden `hit_dice.current` / `hit_dice.max` inputs so non-owner viewers still serialize the values.
+- Client-side Short Rest: rolls `1d{die}+CON` locally, heals (capped at max), decrements hit dice. When `CAMPAIGN_ID` is defined it also POSTs to `/roll` so the campaign log records it; on the standalone `/character/{id}/sheet` page it rolls silently.
+- Client-side Long Rest: HP→max, Temp→0, hit dice +max(1, ⌊max/2⌋) capped at max, every `.ss-row`'s used pips reset via the existing `_ssSyncInputs` / `_ssRenderPips` hooks. Confirmation prompt before applying.
+- `POST /api/campaign/{campaign_id}/character/{char_id}/rest` endpoint accepting `{type: "short" | "long"}`. Membership and ownership/GM checks, server-side dice roll via the existing `dice` module for short rest, returns the updated `hp` / `hit_dice` plus the rolled expression and breakdown for short rest. Long rest also broadcasts `spell_slot_update` for every level so other clients sync immediately.
+- Mini hit-dice + rest bar on every Player-drawer character expansion. Owners and GMs see the buttons; spectators see only the HD readout. The mini view re-renders its HP cell and HD numbers from the API response after each rest.
+
+### Changed
+- HP block min-width raised from 155 px to 170 px to fit the HD line and rest buttons without forcing the combat-stat chips to wrap.
+
+---
+
+## [0.29.0] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Auto-derive attacks from equipped weapons and enforce equip-slot rules with conflict toasts
+
+**Description:** Three connected sheet changes. **(1)** The Inventory fieldset moved up to sit immediately after the spells block, above Class Proficiencies and the Class/Subclass/Race Features panel — inventory is the section players touch most during play. **(2)** Weapon attacks are no longer added manually. The "+ Add as Attack" button in the Open5e item browser is gone, and the Attacks list now auto-populates from equipped weapons in the Inventory: equip a longsword and a "Longsword" attack appears with the right damage/range pulled from the item; unequip it and the attack vanishes. Auto-attacks render with a small "🛡 equipped" badge and have no remove button — to remove one you unequip the weapon. The custom-attack panel still exists for non-weapon attacks (breath weapons, monk strikes, etc.). **(3)** Equip-slot enforcement: at most one armor at a time, and the hand budget caps at 2 (1H weapon = 1 hand, shield = 1 hand, 2H weapon = 2 hands). Equipping something that exceeds the budget auto-unequips conflicts (oldest first) and shows a toast like "Unequipped Plate Armor to equip Studded Leather" — the player isn't blocked, just informed. The 2H/shield/dual-wield combinations the user requested are enforced: equipping a 2H weapon clears all hands; equipping a shield clears any 2H weapon and any second shield; equipping a third weapon when both hands are full unequips the oldest. Inventory items now carry stable `_uid` ids (lazily assigned to legacy items on next save) so attacks can reliably reference their source weapon across reorderings. No operator action beyond a redeploy.
+
+### Added
+- Weapon-specific fields on inventory items: `hands` (1 or 2), `versatile`, `damage`, `damage_type`, `range`, `properties`. The custom-add panel exposes all of these in a Weapon-row that appears only when the item type is "weapon". The Open5e import parser fills them automatically from the API's `damage_dice`, `damage_type`, `category`, and `properties` fields (parses "Two-Handed" / "Versatile" / "Ranged" / "Thrown").
+- Stable `_uid` on every inventory item, generated when missing on load. Attacks created from equipped weapons carry the source `_uid` in `_from_weapon_uid` so unequip / delete / reorder doesn't break the link.
+- `_enforceEquipSlots(item)` in the inventory IIFE: one armor cap; 2-hand budget; 2H weapons unequip everything else in hand; shields unequip 2H weapons and other shields; oldest 1H weapon makes room when both hands are full. Returns the list of auto-unequipped items.
+- `_syncWeaponAttacks(equippedWeapons)` exposed by the attacks IIFE: adds an attack entry per equipped weapon (using its damage/range/properties/desc), removes entries whose source weapon is no longer equipped or no longer present. Called by the inventory IIFE after every equip toggle and item delete, plus once on initial render.
+- Conflict toast: "Unequipped X, Y to equip Z." Uses `window.showToast` when available (campaign tabletop view) and falls back to `alert()` on the standalone sheet.
+
+### Changed
+- Inventory fieldset is now positioned above Class Proficiencies and the Class/Subclass/Race Features fieldset. The Notes fieldset stays at the bottom.
+- The Open5e item browser detail panel no longer offers "+ Add as Attack". Weapons get a small italic note: "Weapons appear in your Attacks list automatically when equipped." The "+ Add to Inventory" path is unchanged.
+- Auto-attack rows in the Attacks fieldset render with a tinted background, a small "🛡 equipped" pill in their header, and no × remove button. Strike still works the same. Custom attacks render exactly as before.
+- Empty-state message in Attacks updated to "No attacks yet — equip a weapon in your Inventory to add one."
+
+### Removed
+- `window._addAttackFromBrowser` and `_itemToAttack()` in the item browser — both are no longer reachable now that the only way a weapon enters the Attacks list is via equip.
+
+---
+
 ## [0.28.0] - 2026-05-10
 
 **Schema version:** 21

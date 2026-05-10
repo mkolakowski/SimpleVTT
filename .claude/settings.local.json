@@ -17,7 +17,9 @@
       "Bash(xargs grep *)",
       "Bash(python -c \"from app.models import User, Campaign, VALID_THEMES; print\\('VALID_THEMES:', sorted\\(VALID_THEMES\\)\\); u = User.__table__.columns.keys\\(\\); print\\('User cols with font:', 'font_preference' in u\\); c = Campaign.__table__.columns.keys\\(\\); print\\('Campaign cols with font:', 'font_override' in c\\)\")",
       "Bash(python -c \"import ast, sys; ast.parse\\(open\\('app/models.py'\\).read\\(\\)\\); print\\('models.py: OK'\\); ast.parse\\(open\\('app/database.py'\\).read\\(\\)\\); print\\('database.py: OK'\\); ast.parse\\(open\\('app/routes/user_routes.py'\\).read\\(\\)\\); print\\('user_routes.py: OK'\\); ast.parse\\(open\\('app/routes/tabletop_routes.py'\\).read\\(\\)\\); print\\('tabletop_routes.py: OK'\\)\")",
-      "Bash(python -c \"import ast; ast.parse\\(open\\('app/models.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\('app/models.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\mkolakowski\\\\GitHub\\\\SimpleVTT\" -Recurse -Include \"*.html\", \"*.css\", \"*.js\")",
+      "Bash(Select-Object FullName)"
     ]
   }
 }

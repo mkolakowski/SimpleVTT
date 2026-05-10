@@ -6,6 +6,7 @@ The WebSocket pushes those changes to other connected clients.
 from __future__ import annotations
 
 import logging
+import time as _time
 import uuid
 from datetime import timezone
 from pathlib import Path
@@ -53,6 +54,14 @@ from ..templates import templates
 
 router = APIRouter()
 log = logging.getLogger(__name__)
+
+# In-memory heal-claim store (cast_id → claim dict). Entries expire after 8 h.
+_heal_claims: dict[str, dict] = {}
+
+def _purge_heal_claims() -> None:
+    now = _time.time()
+    for k in [k for k, v in _heal_claims.items() if v["expires"] < now]:
+        del _heal_claims[k]
 
 
 # ----------- helpers -----------
@@ -1362,8 +1371,21 @@ async def cast_spell(
         "spell_ritual": bool(spell.get("ritual")),
         "spell_damage": spell.get("damage", ""),
         "spell_save_ability": spell.get("save_ability", ""),
+        "spell_healing": spell.get("healing", ""),
+        "spell_aoe_targets": max(1, int(spell.get("aoe_targets") or 1)),
         "spell_desc": spell.get("desc", "") or spell.get("description", ""),
     }
+
+    # Register heal claims so /apply_healing can validate and roll server-side
+    if payload["spell_healing"]:
+        _purge_heal_claims()
+        _heal_claims[cast_id] = {
+            "dice": payload["spell_healing"],
+            "max_targets": payload["spell_aoe_targets"],
+            "claimed": set(),        # user_ids who have already claimed
+            "campaign_id": campaign_id,
+            "expires": _time.time() + 8 * 3600,
+        }
 
     await hub.broadcast(campaign_id, {"type": "spell_cast", "data": payload})
     if updated_slot is not None:
@@ -1377,6 +1399,219 @@ async def cast_spell(
             },
         })
     return {"ok": True, "id": cast_id, "slot": updated_slot}
+
+
+# ----------- API: apply healing from roll-log card -----------
+
+@router.post("/api/campaign/{campaign_id}/apply_healing")
+async def apply_healing(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Roll healing dice for a spell cast and apply the result to the calling
+    user's character.  For AOE spells each user may only claim once; the
+    charge counter is enforced server-side via ``_heal_claims``."""
+    body = await request.json()
+    cast_id = str(body.get("cast_id") or "")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    claim = _heal_claims.get(cast_id)
+    if not claim or claim["campaign_id"] != campaign_id:
+        raise HTTPException(404, "Unknown spell cast — it may have expired")
+
+    claimed: set = claim["claimed"]
+    max_targets: int = claim["max_targets"]
+
+    if user.id in claimed:
+        raise HTTPException(409, "You have already claimed healing from this spell")
+    if max_targets > 1 and len(claimed) >= max_targets:
+        raise HTTPException(409, "All healing charges have been used")
+
+    # Find the user's character in this campaign (first owned character)
+    char = (
+        db.query(Character)
+        .filter(Character.campaign_id == campaign_id, Character.owner_user_id == user.id)
+        .first()
+    )
+    if not char:
+        raise HTTPException(404, "You have no character in this campaign")
+
+    # Roll the healing dice server-side
+    try:
+        r = dice_mod.roll(claim["dice"])
+        rolled = r.total
+        breakdown = r.breakdown
+    except Exception:
+        rolled = 0
+        breakdown = ""
+
+    # Apply HP (capped at max)
+    sheet = dict(char.sheet or {})
+    hp = dict(sheet.get("hp") or {})
+    hp_cur = int(hp.get("current") or 0)
+    hp_max = int(hp.get("max") or 0)
+    new_cur = min(hp_max, hp_cur + rolled) if hp_max > 0 else (hp_cur + rolled)
+    hp["current"] = new_cur
+    sheet["hp"] = hp
+    char.sheet = sheet
+    db.commit()
+
+    # Track claim
+    claimed.add(user.id)
+    claimed_count = len(claimed)
+
+    new_hp = {"current": new_cur, "max": hp_max, "temp": int(hp.get("temp") or 0)}
+    await hub.broadcast(campaign_id, {
+        "type": "heal_applied",
+        "data": {
+            "cast_id": cast_id,
+            "char_id": char.id,
+            "char_name": char.name,
+            "healer_name": user.display_name,
+            "dice": claim["dice"],
+            "rolled": rolled,
+            "breakdown": breakdown,
+            "new_hp": new_hp,
+            "claimed_count": claimed_count,
+            "max_targets": max_targets,
+        },
+    })
+    return {"ok": True, "rolled": rolled, "breakdown": breakdown, "new_hp": new_hp,
+            "claimed_count": claimed_count, "max_targets": max_targets}
+
+
+# ----------- API: short / long rest -----------
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/rest")
+async def rest_character(
+    campaign_id: int,
+    char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Apply a short or long rest to a character.
+
+    Body: ``{"type": "short" | "long"}``.
+
+    Short rest: spend one hit die, roll d{HD}+CON, recover that much HP
+    (capped at max), decrement hit_dice.current. Returns 409 if no hit
+    dice are left.
+
+    Long rest: HP→max, Temp HP cleared, hit_dice.current += max(1, ⌊max/2⌋)
+    capped at max, every spell_slots[*].used reset to 0. Broadcasts a
+    spell_slot_update WS message per slot level so any open mini-sheet or
+    full sheet rerenders its pips.
+    """
+    body = await request.json()
+    rest_type = str(body.get("type", "")).strip().lower()
+    if rest_type not in ("short", "long"):
+        raise HTTPException(400, "type must be 'short' or 'long'")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    hp = dict(sheet.get("hp") or {})
+    hp_max = int(hp.get("max") or 0)
+    hp_cur = int(hp.get("current") or 0)
+    hd = dict(sheet.get("hit_dice") or {})
+    hd_max = int(hd.get("max") if hd.get("max") is not None else (sheet.get("level") or 1))
+    hd_cur = int(hd.get("current") if hd.get("current") is not None else hd_max)
+
+    if rest_type == "long":
+        hp["current"] = hp_max if hp_max > 0 else hp_cur
+        hp["temp"] = 0
+        hd["max"] = hd_max
+        hd["current"] = min(hd_max, hd_cur + max(1, hd_max // 2)) if hd_max > 0 else hd_cur
+        slots = dict(sheet.get("spell_slots") or {})
+        new_slots = {}
+        for k, v in slots.items():
+            if isinstance(v, dict):
+                new_slots[k] = {**v, "used": 0}
+            else:
+                new_slots[k] = v
+        sheet["spell_slots"] = new_slots
+        sheet["hp"] = hp
+        sheet["hit_dice"] = hd
+        char.sheet = sheet
+        db.commit()
+
+        # Broadcast slot-pip updates so any open sheet / mini-sheet re-renders
+        for k, v in new_slots.items():
+            if isinstance(v, dict) and int(v.get("total") or 0) > 0:
+                try:
+                    await hub.broadcast(campaign_id, {
+                        "type": "spell_slot_update",
+                        "data": {
+                            "character_id": char.id,
+                            "level": int(k),
+                            "total": int(v.get("total") or 0),
+                            "used": 0,
+                        },
+                    })
+                except Exception:
+                    pass
+
+        return {"ok": True, "type": "long", "hp": hp, "hit_dice": hd}
+
+    # Short rest
+    if hd_cur <= 0:
+        return JSONResponse(
+            status_code=409, content={"error": "no_hit_dice", "hit_dice": hd}
+        )
+
+    import re as _re
+    die_str = (sheet.get("class_hit_die") or "").strip() or "d8"
+    m = _re.search(r"d(\d+)", die_str, _re.IGNORECASE)
+    die_size = int(m.group(1)) if m else 8
+
+    abilities = sheet.get("abilities") or {}
+    con_score = int(abilities.get("CON") or 10)
+    con_mod = (con_score - 10) // 2
+
+    sign = "+" if con_mod >= 0 else ""
+    expr = f"1d{die_size}{sign}{con_mod}" if con_mod != 0 else f"1d{die_size}"
+    try:
+        result = dice_mod.roll(expr)
+        recovered = max(1, result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        recovered = 1
+        breakdown = ""
+
+    new_hp = min(hp_max, hp_cur + recovered) if hp_max > 0 else (hp_cur + recovered)
+    hp["current"] = new_hp
+    hd["current"] = hd_cur - 1
+    hd["max"] = hd_max
+    sheet["hp"] = hp
+    sheet["hit_dice"] = hd
+    char.sheet = sheet
+    db.commit()
+
+    return {
+        "ok": True,
+        "type": "short",
+        "hp": hp,
+        "hit_dice": hd,
+        "expression": expr,
+        "recovered": recovered,
+        "breakdown": breakdown,
+    }
 
 
 # ----------- API: weapon / structured attacks -----------
@@ -2276,6 +2511,23 @@ def open5e_spells_proxy(search: str = "", limit: int = 20, spell_list: str = "",
             r"\b(strength|dexterity|constitution|intelligence|wisdom|charisma)\s+saving\s+throw",
             desc, _re.IGNORECASE)
         save_ability = _save_map.get(save_m.group(1).lower(), "") if save_m else ""
+
+        # Healing detection (only on non-damage spells to avoid Vampiric Touch etc.)
+        healing = ""
+        aoe_targets = 1
+        if not damage:
+            heal_m = _re.search(
+                r"(?:regain|restore|heal)s?\s+(\d+d\d+(?:\s*[+-]\s*\d+)?)\s+hit\s+points",
+                desc, _re.IGNORECASE)
+            if not heal_m:
+                heal_m = _re.search(r"(\d+d\d+(?:\s*[+-]\s*\d+)?)\s+hit\s+points", desc, _re.IGNORECASE)
+            if heal_m:
+                healing = heal_m.group(1).replace(" ", "")
+                aoe_m = _re.search(
+                    r"up\s+to\s+(\d+)\s+(?:creatures?|targets?|willing\s+creatures?)",
+                    desc, _re.IGNORECASE)
+                aoe_targets = int(aoe_m.group(1)) if aoe_m else 1
+
         return {
             "slug": s.get("slug", ""),
             "name": s.get("name", ""),
@@ -2287,6 +2539,8 @@ def open5e_spells_proxy(search: str = "", limit: int = 20, spell_list: str = "",
             "components": s.get("components", ""),
             "damage": damage,
             "save_ability": save_ability,
+            "healing": healing,
+            "aoe_targets": aoe_targets,
             "desc": desc,
         }
 
@@ -2633,6 +2887,8 @@ async def update_sheet(
 # subclass_features_data kept for backward-compat; the three individual keys let
 # each feature be stored and queried without re-parsing the whole blob.
 _SHEET_PATCH_KEYS = {
+    # HP object {current, max, temp}
+    "hp",
     # Subclass features (new per-feature format + legacy blob)
     "subclass_features_data",   # legacy blob (kept for backwards compat)
     "subclass_name",
