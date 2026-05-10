@@ -1256,6 +1256,129 @@ async def respond_roll_request(
     return {"ok": True, "total": rec.total, "breakdown": rec.breakdown}
 
 
+# ----------- API: cast spell -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_spell")
+async def cast_spell(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Cast a spell from a character's sheet.
+
+    Decrements the matching spell slot (when ``spell_level >= 1``) and
+    broadcasts a ``spell_cast`` WebSocket message that other clients render
+    as an interactive card in the roll log. Cantrips (level 0) skip the
+    slot check entirely.
+
+    Returns 409 ``{"error": "no_slot", ...}`` when the slot is empty so the
+    caller can show a non-blocking toast instead of a roll-log entry.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    spell_index = int(body.get("spell_index", -1))
+    if char_id <= 0 or spell_index < 0:
+        raise HTTPException(400, "character_id and spell_index are required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id,
+        Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    spells = list(sheet.get("spells") or [])
+    if spell_index >= len(spells):
+        raise HTTPException(404, "Spell not found")
+    spell = dict(spells[spell_index] or {})
+    spell_level = int(spell.get("level") or 0)
+
+    # Allow upcasting via an optional slot_level override; default to spell.level
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw is not None and str(slot_level_raw).strip() else spell_level
+    if slot_level < spell_level:
+        slot_level = spell_level
+
+    # Decrement slot when this is a leveled spell (cantrips are free)
+    updated_slot = None
+    if spell_level >= 1:
+        slots = dict(sheet.get("spell_slots") or {})
+        slot_key = str(slot_level)
+        slot = dict(slots.get(slot_key) or {"total": 0, "used": 0})
+        total = int(slot.get("total") or 0)
+        used = int(slot.get("used") or 0)
+        if total <= 0 or used >= total:
+            return JSONResponse(
+                status_code=409,
+                content={"error": "no_slot", "level": slot_level, "spell_name": spell.get("name", "")},
+            )
+        slot["used"] = used + 1
+        slots[slot_key] = slot
+        sheet["spell_slots"] = slots
+        char.sheet = sheet
+        db.commit()
+        updated_slot = {"level": slot_level, "total": total, "used": slot["used"]}
+
+    # Resolve caster display info (same shape as roll broadcasts)
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id, CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    cast_id = uuid.uuid4().hex[:12]
+
+    payload = {
+        "id": cast_id,
+        "caster_user_id": user.id,
+        "caster_user_name": user.display_name,
+        "caster_user_color": caster_color,
+        "caster_portrait_url": char.portrait_url,
+        "caster_char_id": char.id,
+        "caster_char_name": char.name,
+        "spell_index": spell_index,
+        "spell_name": spell.get("name", ""),
+        "spell_level": spell_level,
+        "slot_level": slot_level,
+        "spell_school": spell.get("school", ""),
+        "spell_casting_time": spell.get("casting_time", ""),
+        "spell_range": spell.get("range", ""),
+        "spell_duration": spell.get("duration", ""),
+        "spell_components": spell.get("components", ""),
+        "spell_concentration": bool(spell.get("concentration")),
+        "spell_ritual": bool(spell.get("ritual")),
+        "spell_damage": spell.get("damage", ""),
+        "spell_save_ability": spell.get("save_ability", ""),
+        "spell_desc": spell.get("desc", "") or spell.get("description", ""),
+    }
+
+    await hub.broadcast(campaign_id, {"type": "spell_cast", "data": payload})
+    if updated_slot is not None:
+        await hub.broadcast(campaign_id, {
+            "type": "spell_slot_update",
+            "data": {
+                "character_id": char.id,
+                "level": updated_slot["level"],
+                "total": updated_slot["total"],
+                "used": updated_slot["used"],
+            },
+        })
+    return {"ok": True, "id": cast_id, "slot": updated_slot}
+
+
 # ----------- API: concentration tracking -----------
 
 @router.post("/api/campaign/{campaign_id}/concentration")

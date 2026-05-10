@@ -86,6 +86,27 @@ Each release section must include all five of these, in this order:
 
 ---
 
+## [0.21.0] - 2026-05-10
+
+**Schema version:** 20
+
+**Commit summary:** Replace per-spell damage and save buttons with a single Cast button driving roll-log spell cards
+
+**Description:** Each D&D 5e spell row now shows one **🪄 Cast** button instead of separate damage/save buttons. Casting consumes the matching spell slot server-side (cantrips are free) and posts a rich spell-cast card to the roll log containing the spell description plus action buttons. Anyone can press the damage button — they're shown a token picker so a GM can attribute the roll to whichever NPC/PC token they want. The save button uses the existing roll-requests framework to prompt all players for their saving throw, and incoming responses are appended to the spell card with pass/fail markers. When a slot is empty the cast is rejected with a transient toast (no roll-log spam). All schema-free; no operator action needed beyond a redeploy.
+
+### Added
+- `POST /api/campaign/{id}/cast_spell` endpoint that validates membership and slot availability, decrements the slot in the character sheet, and broadcasts a `spell_cast` WebSocket message (plus a `spell_slot_update` so other open sheets stay in sync).
+- Spell-cast cards in the roll log: caster avatar/name, slot used, full spell description, optional save-prompt button, and a damage roll button visible to all clients.
+- Token picker popup that lets the clicker choose which character/token rolls the spell damage. GMs see every map-placed character; players see their own.
+- `showToast(msg, kind)` helper exposed on `window` for transient overlay notifications. Used for "no spell slot available" feedback among other things.
+- Live `spell_slot_update` propagation: open D&D 5e sheets re-render their slot pips when the matching character casts a spell from another client.
+
+### Changed
+- D&D 5e spell rows in the character sheet replace the separate `🎲 damage` and `🎲 SAVE save` buttons with a single `🪄 Cast` button. The damage and save metadata are still shown as labels next to the button.
+- Casting now decrements spell slots automatically. The pip row updates optimistically on click and reverts if the server rejects the cast.
+
+---
+
 ## [0.20.0] - 2026-05-09
 
 **Schema version:** 20

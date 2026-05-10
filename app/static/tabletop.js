@@ -346,11 +346,43 @@
                 });
             } else if (msg.type === 'roll_request') {
                 appendRollRequest(msg.data);
+            } else if (msg.type === 'spell_cast') {
+                appendSpellCast(msg.data);
+            } else if (msg.type === 'spell_slot_update') {
+                // Forwarded as a CustomEvent above; the open mini-sheet listens
+                // for it to update its pip row in place.
             }
         };
         ws.onclose = () => setTimeout(connectWs, 2000);
     }
     connectWs();
+
+    function _appendSaveResultToSpellCard(r) {
+        // If this roll's note is a response to one of our spell-cast save
+        // prompts, append a "<roller>: <total> ✓/✗" line to that card.
+        if (!r || !r.note) return;
+        const ul = document.getElementById('roll-list');
+        if (!ul) return;
+        for (const li of ul.querySelectorAll('li[data-cast-id]')) {
+            const meta = li._spellCast;
+            if (!meta || !meta._saveLabel) continue;
+            const prefix = `→ ${meta._saveLabel}`;
+            if (!r.note.startsWith(prefix)) continue;
+            const results = li.querySelector('.spell-cast-results');
+            if (!results) continue;
+            const dispName = r.char_name || USER_CHAR_NAMES[r.user_id] || r.user_name || 'Player';
+            const passed = /✓ Pass/.test(r.note);
+            const failed = /✗ Fail/.test(r.note);
+            const outcome = passed ? '<span class="spell-cast-pass">✓ Save</span>'
+                          : failed ? '<span class="spell-cast-fail">✗ Failed save</span>'
+                          : '';
+            const row = document.createElement('div');
+            row.className = 'spell-cast-result-row';
+            row.innerHTML = `<strong>${escapeHTML(dispName)}</strong>: ${r.total} &nbsp; ${outcome}`;
+            results.appendChild(row);
+            return;
+        }
+    }
 
     function appendRoll(r) {
         // Re-apply visibility filter on the client (server already does this
@@ -359,6 +391,7 @@
             if (r.visibility === 'gm_only') return;
             if (r.visibility === 'gm_and_roller' && r.user_id !== ME.id) return;
         }
+        _appendSaveResultToSpellCard(r);
         const visClass  = r.visibility === 'gm_only'      ? 'vis-gm-only'
                         : r.visibility === 'gm_and_roller' ? 'vis-gm-roller'
                         : '';
@@ -480,6 +513,208 @@
         });
 
         ul.prepend(li);
+    }
+
+    // ---------- Toast (transient overlay notification) ----------
+    function showToast(msg, kind) {
+        let stack = document.getElementById('vtt-toast-stack');
+        if (!stack) {
+            stack = document.createElement('div');
+            stack.id = 'vtt-toast-stack';
+            document.body.appendChild(stack);
+        }
+        const t = document.createElement('div');
+        t.className = 'vtt-toast' + (kind ? ' vtt-toast-' + kind : '');
+        t.textContent = msg;
+        stack.appendChild(t);
+        // Force reflow so the fade-in transition runs
+        // eslint-disable-next-line no-unused-expressions
+        t.offsetHeight;
+        t.classList.add('vtt-toast-show');
+        setTimeout(() => {
+            t.classList.remove('vtt-toast-show');
+            setTimeout(() => t.remove(), 260);
+        }, 3200);
+    }
+    window.showToast = showToast;
+
+    // ---------- Spell-cast card ----------
+    function _diceExprFromDamage(dmgStr) {
+        const m = /(\d+d\d+(?:\s*[+-]\s*\d+)?)/.exec(dmgStr || '');
+        return m ? m[1].replace(/\s+/g, '') : '';
+    }
+
+    function appendSpellCast(d) {
+        const ul = document.getElementById('roll-list');
+        if (!ul) return;
+        const now = new Date();
+        const h = now.getHours(), m = now.getMinutes();
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12 = (h % 12) || 12;
+        const timeStr = h12.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0') + ' ' + ampm;
+
+        const portrait = d.caster_portrait_url || USER_PORTRAITS[d.caster_user_id] || '';
+        const color = d.caster_user_color || USER_COLORS[d.caster_user_id] || '';
+        const dispName = d.caster_char_name || USER_CHAR_NAMES[d.caster_user_id] || d.caster_user_name;
+        const avatarInner = portrait ? `<img src="${escapeHTML(portrait)}" alt="">` : '🪄';
+
+        const slotLabel = d.spell_level === 0
+            ? 'Cantrip'
+            : `Lv ${d.slot_level}${d.slot_level > d.spell_level ? ' (upcast)' : ''} slot`;
+
+        const damageExpr = _diceExprFromDamage(d.spell_damage || '');
+        const saveBtnHtml = d.spell_save_ability
+            ? `<button class="spell-cast-btn spell-cast-save-btn" type="button" title="Prompt all players for a ${escapeHTML(d.spell_save_ability)} save">📋 Prompt ${escapeHTML(d.spell_save_ability)} save</button>`
+            : '';
+        const damageBtnHtml = damageExpr
+            ? `<button class="spell-cast-btn spell-cast-dmg-btn" type="button" title="Roll ${escapeHTML(d.spell_damage)}">🎲 Roll damage (${escapeHTML(d.spell_damage)})</button>`
+            : '';
+
+        const metaBits = [];
+        if (d.spell_school)        metaBits.push(escapeHTML(d.spell_school));
+        if (d.spell_casting_time)  metaBits.push(escapeHTML(d.spell_casting_time));
+        if (d.spell_range)         metaBits.push(escapeHTML(d.spell_range));
+        if (d.spell_concentration) metaBits.push('<span style="color:var(--accent)">Concentration</span>');
+        if (d.spell_ritual)        metaBits.push('<span style="color:var(--accent)">Ritual</span>');
+
+        const li = document.createElement('li');
+        li.dataset.castId = d.id;
+        li.innerHTML = `
+            <div class="spell-cast-card">
+                <div class="roll-card-header">
+                    <div class="roll-card-avatar">${avatarInner}</div>
+                    <span class="roll-card-user" data-uid="${d.caster_user_id}"${color ? ` style="color:${escapeHTML(color)}"` : ''}>${escapeHTML(dispName)}</span>
+                    <span class="spell-cast-slot">${escapeHTML(slotLabel)}</span>
+                    <span class="roll-card-time">${timeStr}</span>
+                </div>
+                <div class="spell-cast-body">
+                    <div class="spell-cast-name">🪄 ${escapeHTML(d.spell_name || 'Spell')}</div>
+                    ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
+                    ${d.spell_desc ? `<div class="spell-cast-desc">${escapeHTML(d.spell_desc)}</div>` : ''}
+                    <div class="spell-cast-actions">
+                        ${saveBtnHtml}
+                        ${damageBtnHtml}
+                    </div>
+                    <div class="spell-cast-results"></div>
+                </div>
+            </div>`;
+        ul.prepend(li);
+
+        const saveBtn = li.querySelector('.spell-cast-save-btn');
+        if (saveBtn) saveBtn.addEventListener('click', () => promptSpellSave(d, li, saveBtn));
+
+        const dmgBtn = li.querySelector('.spell-cast-dmg-btn');
+        if (dmgBtn) dmgBtn.addEventListener('click', () => openDamagePicker(d, damageExpr, li));
+
+        // Stash the cast metadata on the element so the roll listener can
+        // correlate save responses back to this card (matches by note prefix).
+        li._spellCast = { ...d, _saveLabel: null };
+    }
+
+    async function promptSpellSave(d, li, btn) {
+        const dcStr = window.prompt(
+            `${d.spell_save_ability} save DC for "${d.spell_name}"?`,
+            '13'
+        );
+        if (dcStr === null) return;
+        const dc = parseInt(dcStr, 10);
+        if (!Number.isFinite(dc)) { showToast('Enter a numeric DC.', 'error'); return; }
+        const label = `${d.spell_name} — ${d.spell_save_ability} save`;
+        btn.disabled = true;
+        try {
+            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll_request`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    label,
+                    base_expression: '1d20',
+                    stat_key: `${d.spell_save_ability.toLowerCase()}_save`,
+                    dc,
+                    visibility: 'public',
+                }),
+            });
+            if (!resp.ok) throw new Error(await resp.text());
+            // Remember the label so we can match incoming roll notes back to this card
+            if (li._spellCast) li._spellCast._saveLabel = label;
+            btn.textContent = `📋 Save prompt sent (DC ${dc})`;
+        } catch (e) {
+            btn.disabled = false;
+            showToast('Could not post save prompt.', 'error');
+            console.error(e);
+        }
+    }
+
+    function _myCharsForCast(d) {
+        // GM may roll as any token; players only as their own characters/tokens
+        if (ME.isGm) {
+            const tokenChars = tokens
+                .filter(t => t.character_id)
+                .map(t => characters.find(c => c.id === t.character_id))
+                .filter(Boolean);
+            // De-duplicate while preserving order
+            const seen = new Set();
+            const uniq = [];
+            for (const c of tokenChars) {
+                if (!seen.has(c.id)) { seen.add(c.id); uniq.push(c); }
+            }
+            // Always include the caster's own character at the top
+            const caster = characters.find(c => c.id === d.caster_char_id);
+            if (caster && !seen.has(caster.id)) uniq.unshift(caster);
+            return uniq.length ? uniq : characters.filter(c => c.owner_user_id != null);
+        }
+        return characters.filter(c => c.owner_user_id === ME.id);
+    }
+
+    function openDamagePicker(d, damageExpr, li) {
+        const choices = _myCharsForCast(d);
+        if (!choices.length) {
+            showToast('No tokens available to roll damage as.', 'error');
+            return;
+        }
+        // If the user only has one option, skip the picker and roll immediately
+        if (choices.length === 1) {
+            return rollSpellDamage(d, damageExpr, choices[0], li);
+        }
+        const overlay = document.createElement('div');
+        overlay.className = 'token-picker-overlay';
+        overlay.innerHTML = `
+            <div class="token-picker">
+                <div class="token-picker-title">Roll ${escapeHTML(d.spell_name)} damage as…</div>
+                <div class="token-picker-list">${
+                    choices.map(c => `<button type="button" class="token-picker-item" data-cid="${c.id}">${escapeHTML(c.name)}</button>`).join('')
+                }</div>
+                <div class="token-picker-foot">
+                    <button type="button" class="token-picker-cancel">Cancel</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
+        overlay.addEventListener('click', (ev) => {
+            if (ev.target === overlay) overlay.remove();
+        });
+        overlay.querySelector('.token-picker-cancel').addEventListener('click', () => overlay.remove());
+        overlay.querySelectorAll('.token-picker-item').forEach(b => {
+            b.addEventListener('click', () => {
+                const cid = parseInt(b.dataset.cid, 10);
+                const c = choices.find(c => c.id === cid);
+                overlay.remove();
+                if (c) rollSpellDamage(d, damageExpr, c, li);
+            });
+        });
+    }
+
+    async function rollSpellDamage(d, damageExpr, asChar, _li) {
+        const note = `${d.spell_name} damage (as ${asChar.name})`;
+        // The /roll endpoint uses the caller's user_id, but we override the
+        // displayed character via the note. The portrait/color in the broadcast
+        // come from the user's first character, so the note carries the chosen
+        // token's name explicitly so other players can tell which token rolled.
+        const visibility = (document.getElementById('roll-vis')?.value) || 'public';
+        const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ expression: damageExpr, visibility, note }),
+        });
+        if (!resp.ok) showToast('Damage roll failed: ' + await resp.text(), 'error');
     }
 
     function formatBreakdown(s) {

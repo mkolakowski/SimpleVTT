@@ -584,6 +584,22 @@
             document.querySelectorAll('.ss-row').forEach(renderPips);
             window._ssRenderPips  = renderPips;
             window._ssSyncInputs  = syncInputs;
+
+            // Live update from /cast_spell broadcasts: when this character's
+            // slot changes on another client, mirror it into the open sheet.
+            const MY_CHAR_ID = {{ char.id }};
+            document.addEventListener('vtt:ws-message', function (ev) {
+                const msg = ev.detail;
+                if (!msg || msg.type !== 'spell_slot_update') return;
+                const d = msg.data || {};
+                if (d.character_id !== MY_CHAR_ID) return;
+                const row = document.querySelector(`.ss-row[data-lvl="${d.level}"]`);
+                if (!row) return;
+                row.dataset.total = d.total;
+                row.dataset.used  = d.used;
+                syncInputs(row);
+                renderPips(row);
+            });
         })();
         </script>
 
@@ -1010,20 +1026,12 @@
                 ${s.school       ? `<span style="font-size:11px;color:#6ab;flex-shrink:0;">${_esc(s.school)}</span>` : ''}
                 ${s.casting_time ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.casting_time)}</span>` : ''}
                 ${s.range        ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.range)}</span>` : ''}
-                ${s.damage && _diceExpr(s.damage)
-                    ? `<button type="button" class="sp-dmg-roll" data-idx="${idx}"
-                           data-expr="${_esc(_diceExpr(s.damage))}" data-label="${_esc(s.name + ' damage')}"
-                           title="Roll ${_esc(s.damage)}"
-                           style="font-size:11px;color:#e8a;font-weight:500;background:none;border:1px solid #a86;border-radius:3px;padding:1px 6px;cursor:pointer;flex-shrink:0;"
-                       >🎲 ${_esc(s.damage)}</button>`
-                    : s.damage ? `<span style="font-size:11px;color:#e8a;flex-shrink:0;font-weight:500;">${_esc(s.damage)}</span>` : ''}
-                ${s.save_ability
-                    ? `<button type="button" class="sp-save-roll" data-idx="${idx}"
-                           data-ability="${_esc(s.save_ability)}" data-label="${_esc(s.name + ' — ' + s.save_ability + ' save')}"
-                           title="Roll ${_esc(s.save_ability)} saving throw"
-                           style="font-size:11px;color:#8cf;font-weight:500;background:none;border:1px solid #468;border-radius:3px;padding:1px 6px;cursor:pointer;flex-shrink:0;"
-                       >🎲 ${_esc(s.save_ability)} save</button>`
-                    : ''}
+                ${s.damage ? `<span style="font-size:11px;color:#e8a;flex-shrink:0;font-weight:500;">${_esc(s.damage)}</span>` : ''}
+                ${s.save_ability ? `<span style="font-size:11px;color:#8cf;flex-shrink:0;font-weight:500;">${_esc(s.save_ability)} save</span>` : ''}
+                <button type="button" class="sp-cast" data-idx="${idx}"
+                        title="Cast ${_esc(s.name)}${s.level > 0 ? ' (uses a Lv ' + s.level + ' slot)' : ''}"
+                        style="font-size:11px;color:#a78bfa;font-weight:600;background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.4);border-radius:3px;padding:1px 8px;cursor:pointer;flex-shrink:0;"
+                    >🪄 Cast</button>
                 ${rmBtn}
             </div>
             <div class="sp-detail" data-idx="${idx}" style="display:none;padding:6px 10px;border-top:1px dashed #2e3140;font-size:12px;color:#9aa0aa;">
@@ -1135,33 +1143,63 @@
                 d.style.display = open ? '' : 'none';
                 btn.textContent = open ? '▼' : '▶';
             }));
-        container.querySelectorAll('.sp-dmg-roll').forEach(btn =>
+        container.querySelectorAll('.sp-cast').forEach(btn =>
             btn.addEventListener('click', async () => {
-                const expr = btn.dataset.expr, note = btn.dataset.label;
-                if (!expr || typeof CAMPAIGN_ID === 'undefined') return;
-                const vis = (document.getElementById('roll-vis')?.value) || 'public';
-                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ expression: expr, visibility: vis, note }),
-                });
-                if (!resp.ok) alert('Roll failed: ' + await resp.text());
-            }));
-        container.querySelectorAll('.sp-save-roll').forEach(btn =>
-            btn.addEventListener('click', async () => {
-                const ab = btn.dataset.ability, note = btn.dataset.label;
-                if (!ab || typeof CAMPAIGN_ID === 'undefined') return;
-                const sf = document.getElementById('sheet-form');
-                const _rf = n => { const el = sf?.querySelector(`[name="${CSS.escape(n)}"]`); return el ? (el.type === 'checkbox' ? el.checked : el.value) : null; };
-                const mod = Math.floor((Number(_rf(`abilities.${ab}`) || 10) - 10) / 2);
-                const prof = Number(_rf('proficiency_bonus') || 2);
-                const total = mod + (!!_rf(`saving_throws.${ab}`) ? prof : 0);
-                const expr = `1d20${total >= 0 ? '+' + total : total}`;
-                const vis = (document.getElementById('roll-vis')?.value) || 'public';
-                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ expression: expr, visibility: vis, note }),
-                });
-                if (!resp.ok) alert('Roll failed: ' + await resp.text());
+                if (typeof CAMPAIGN_ID === 'undefined') return;
+                const idx = parseInt(btn.dataset.idx, 10);
+                const s = spells[idx];
+                if (!s) return;
+                const lvl = parseInt(s.level, 10) || 0;
+
+                // Optimistically decrement the matching slot pip (cantrips skip this)
+                let slotRow = null, prevUsed = 0;
+                if (lvl >= 1) {
+                    slotRow = document.querySelector(`.ss-row[data-lvl="${lvl}"]`);
+                    if (slotRow) {
+                        const total = parseInt(slotRow.dataset.total) || 0;
+                        prevUsed = parseInt(slotRow.dataset.used) || 0;
+                        if (total <= 0 || prevUsed >= total) {
+                            (window.showToast || function(m){ alert(m); })(
+                                `No Lv ${lvl} spell slot available for ${s.name}.`, 'error');
+                            return;
+                        }
+                        slotRow.dataset.used = prevUsed + 1;
+                        if (window._ssSyncInputs) window._ssSyncInputs(slotRow);
+                        if (window._ssRenderPips) window._ssRenderPips(slotRow);
+                    }
+                }
+                btn.disabled = true;
+                try {
+                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            character_id: {{ char.id }},
+                            spell_index: idx,
+                            slot_level: lvl,
+                        }),
+                    });
+                    if (!resp.ok) {
+                        // Revert optimistic update on failure
+                        if (slotRow) {
+                            slotRow.dataset.used = prevUsed;
+                            if (window._ssSyncInputs) window._ssSyncInputs(slotRow);
+                            if (window._ssRenderPips) window._ssRenderPips(slotRow);
+                        }
+                        let body;
+                        try { body = await resp.json(); } catch { body = null; }
+                        if (resp.status === 409 && body && body.error === 'no_slot') {
+                            (window.showToast || function(m){ alert(m); })(
+                                `No Lv ${body.level} spell slot available for ${s.name}.`, 'error');
+                        } else {
+                            (window.showToast || function(m){ alert(m); })(
+                                'Cast failed: ' + (body ? JSON.stringify(body) : await resp.text()),
+                                'error');
+                        }
+                    }
+                } finally {
+                    btn.disabled = false;
+                }
             }));
     }
 
