@@ -10,3 +10,7 @@ app/static/uploads/
 *.sqlite
 *.db
 .DS_Store
+
+# Claude Code local state (per-machine, should not be shared)
+.claude/settings.local.json
+.claude/worktrees/

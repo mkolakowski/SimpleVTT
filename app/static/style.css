@@ -164,6 +164,18 @@ body { zoom: var(--ui-scale, 1); }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .muted { color: var(--fg-mute); }
+
+/* ── Version footer (suppressed on the tabletop page via a block override). */
+.site-footer {
+    margin-top: auto;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--fg-mute);
+    font-size: 11px;
+    text-align: center;
+    letter-spacing: 0.04em;
+}
 .error { background: var(--error-bg); color: var(--error-fg); padding: 6px 10px; border-radius: 4px; }
 .danger { color: var(--danger); }
 button.danger { background: var(--danger); color: #fff; border-color: var(--danger); }

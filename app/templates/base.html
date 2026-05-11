@@ -33,5 +33,11 @@
     <main class="container">
         {% block content %}{% endblock %}
     </main>
+    {# Version footer — pages can override this block (see tabletop.html). #}
+    {% block footer %}
+    <footer class="site-footer" aria-label="Application version">
+        SimpleVTT v{{ APP_VERSION }} · schema v{{ SCHEMA_VERSION }}
+    </footer>
+    {% endblock %}
 </body>
 </html>

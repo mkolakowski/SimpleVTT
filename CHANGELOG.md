@@ -86,6 +86,340 @@ Each release section must include all five of these, in this order:
 
 ---
 
+## [0.33.19] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Fix subclass picker not showing on load by deferring render until inline helpers exist
+
+**Description:** Class/subclass interactive pickers (Bonus Cantrip dropdown, Circle Spells / Domain Spells / Oath Spells panel with its variant chooser like Land Type) no longer require pressing the ↻ Sync button to appear. The root cause was a script execution-order race. The picker render path in `sheet.js` (`_renderSubclassBlock`) reads three `window.*` helpers — `_lookupSubclassData`, `_renderSubclassSpellPanel`, `_renderFeatureGrantsPanel` — that are defined inside an **inline** `<script>` block further down in `sheet_dnd5e.html`. When localStorage already had Open5e class/subclass lists cached from a prior visit, `sheet.js`'s async `_renderEditor()` resolved its `await`s on the microtask queue and ran `_renderAllSubclassBlocks()` to completion *before* the HTML parser advanced to that inline block. The helpers were still `undefined`, so the inline picker branches silently fell through and rendered the cards without their pickers. Clicking ↻ Sync triggered a fresh re-render after every script had run, which is why it appeared to "fix" things. The fix exposes `_renderAllSubclassBlocks` as `window._mcRenderSubclassBlocks` and adds a tiny inline `<script>` immediately after the helper-defining block that calls it once — by then everything is wired up and the pickers render on cold load. As a follow-on, when the player chooses a variant (e.g. picks "Coast" from Land Type) the choice now PATCHes to the server immediately, so it survives a refresh without an explicit Save click — previously the value only lived in the hidden roster textarea and was lost on reload.
+
+### Fixed
+- Subclass picker render race: `_renderAllSubclassBlocks` is now invoked a second time at the end of `sheet_dnd5e.html`, immediately after the inline `<script>` block that defines `window._lookupSubclassData` / `_renderSubclassSpellPanel` / `_renderFeatureGrantsPanel`. Previously, on warm-localStorage loads the initial render happened in microtasks during sheet.js execution, before the HTML parser had reached the inline block — so the helpers were undefined and the inline pickers (Bonus Cantrip dropdown, variant chooser inside Circle Spells / Domain Spells / Oath Spells) silently skipped. The renderer is exposed on `window` from `sheet.js` so the trigger script in the template can find it. Curated `dnd5e_subclass_spells.js` is also now loaded before `sheet.js` (a second contributing race condition with `window._SUBCLASS_SPELLS` undefined at lookup time).
+- Land Type / variant chooser selections inside the Subclass Spells panel auto-save via a fire-and-forget PATCH to `/sheet-fields` on `change`, mirroring how granted-spell picks already persist. The pick now survives a refresh without an explicit Save click.
+
+### Changed
+- `_SHEET_PATCH_KEYS` and `_CLASS_SCOPED_KEYS` in `app/routes/tabletop_routes.py` now include `subclass_choice`, so the per-class variant pick is routed into the right `classes[]` entry by the existing `class_slug`-aware patch logic.
+- Renamed the no-arg helper formerly named `_classSlug()` at the bottom of `sheet_dnd5e.html` to `_primaryClassSlug()` and added a comment warning that the original name would shadow the 1-arg slugify helper at the top of the file. Both lived in different IIFEs so this was a defensive cleanup, not a bug fix — the actual picker issue was the render race above.
+
+---
+
+## [0.33.18] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Combine multiclass spells under one heading per level with inline per-class slot pills
+
+**Description:** The previous build grouped multiclass spells by class first and then by level — so a Druid 5 / Wizard 3 / Warlock 1 sheet had three "DRUID" / "WIZARD" / "WARLOCK" section headers, each repeating "Cantrips - Druid", "Level 1 Spells - Druid", etc. Empty levels still rendered "No spells learned at this level yet." with their slot pips. That was a lot of vertical space for a layout where every spell row already carries a class-tag pill identifying its source. The renderer now combines spells by level across every class — one "Cantrips" section, one "Level 1 Spells" section, etc. — and inlines each contributing class's slot pips on the heading line. Spells inside each level sort by class-roster order then alphabetically. Collapse state moves with the new structure: keyed on `simplevtt_spgrp_<charId>_lvl<N>` instead of per (class, level).
+
+### Changed
+- `renderSpells` builds a single `byLvl` map across all classes (no longer one bucket per class). The per-class section header (the old "── DRUID ──" divider) is gone — the class-tag pill on each spell row identifies the source.
+- Each level heading now renders multiple inline slot pills: one per class with slots at that level (e.g. "Level 1 Spells   Druid ●●●●   Wizard ●●●●   Warlock ●○"). Each slot row keeps its `data-cslug` / `data-lvl` attrs so the pip click handlers still post the correct (class, level) to `/cast_spell`.
+- Spells within a level group sort by class roster order then alphabetically by name.
+- Collapse state key migrated from per-(class, level) to per-level (`simplevtt_spgrp_<charId>_lvl<N>`); old per-class keys remain dormant in `localStorage` but are ignored.
+
+---
+
+## [0.33.17] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Class tag on spell rows, inline slot pips, and collapsible spell-level groups
+
+**Description:** Each spell row in the D&D 5e sheet now carries a small class pill (e.g. "Druid", "Wizard") for multiclass characters so the player can tell at a glance which class list a given spell came from. The slot pip row no longer sits on its own line above each spell-level group — the pips are now inline with the level heading (`▼ Level 1 Spells - Druid  ●●●○`), giving a tighter layout. Clicking the level heading collapses the spells underneath it; collapse state is persisted per (character, class, level) in localStorage.
+
+### Added
+- Class-tag pill on spell rows in `_spellRowHtml`, gated on `_rosterIsMulticlass()` so single-class characters don't see a redundant tag on every row. Tag text is the display-name from the multiclass roster, falling back to a title-cased slug.
+- `_classDisplayName(slug)` and `_rosterIsMulticlass()` helpers in the spell binder.
+- ▼ chevron + click handler on each spell-level group heading. Toggling persists to `localStorage` under `simplevtt_spgrp_<charId>_<classSlug>_<level>` so a player's collapse choices survive reloads.
+
+### Changed
+- Spell-level heading layout switched from a label-only div to a flex row that owns the chevron, the label, AND the relocated slot row. The slot row's own "Lv N" label is hidden (the heading already names the level) and its border-bottom + margins are stripped so it integrates flush. Pip clicks `stopPropagation` so toggling a slot doesn't accidentally collapse the group.
+
+---
+
+## [0.33.16] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Strip Open5e's verbatim spell tables and surface the picker's starting class level
+
+**Description:** After ↻ Sync, the old "Circle Spells" tables were still visible — they live in `entry.subclass_flavor`, which renders as italic prose at the top of the subclass-features block, so the picker swap inside the matching feature card didn't touch them. The flavor is now run through a markdown-table stripper whenever the curated picker table has data for the subclass, so the duplicate tables stop appearing next to the interactive picker. The Subclass Spells panel subtitle also now shows the feature's starting class level (the minimum `classLvl` across all grants and variants), e.g. "⭐ Always prepared (starts at class Lv 3) — does not count against your limits."
+
+### Added
+- `_stripTables(text)` helper in `sheet.js` — drops markdown-style table rows (`| col | col |`) and separator rows (`---|---`) while leaving prose intact.
+
+### Changed
+- `_renderSubclassBlock` runs `entry.subclass_flavor` through `_stripTables` before `_cleanMd` when a curated picker is in play, so the verbatim PHB spell tables stop showing alongside the picker.
+- `_renderSubclassSpellPanel` computes a starting class level (min `classLvl` across `grants` and all `variants`) and appends a "(starts at class Lv N)" note to its subtitle — visible in both inline and panel-wrapper modes.
+
+---
+
+## [0.33.15] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Synthesize Circle Spells and Bonus Cantrip cards offline so the pickers always render
+
+**Description:** The Subclass Spells and Feature Grants pickers lived inside Open5e-sourced feature cards. If those cards weren't cached — no sync, offline, Open5e errored — the pickers were nowhere to show. The renderer now synthesizes missing curated picker cards from the curated `_SUBCLASS_SPELLS` table alone: a Druid set to Circle of the Land sees "Circle Spells" + "Bonus Cantrip" cards (with their pickers inside) on first paint, even with no network. When Open5e eventually returns the real prose, the existing dedupe merges it into the synthesized card so descriptions appear alongside the same picker.
+
+### Changed
+- `_renderSubclassBlock` in `sheet.js` looks up `subclassData` at the top of the function and pushes synthesized entries for the main subclass-spells feature and every `bonusFeatures` entry whose name isn't already present in `entry.subclass_features`. The synthesized features carry the class-level computed from the curated grant data (lowest `classLvl` across `grants` and all `variants`) so the existing card-level badge reflects the unlock.
+- The visible / locked feature split now keeps curated-picker features in the visible list regardless of class level — the picker stays reachable even when the player hasn't reached the unlock level yet (the "Class Lv N" labels inside the picker already communicate that).
+- Removed the duplicate `subclassMainFeature` / `bonusFeaturesByName` block; both are now declared once near the top of the function and shared across the visible/locked filter and the inline-rendering loop.
+
+---
+
+## [0.33.14] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Fetch full spell details for granted subclass / feature spells
+
+**Description:** Spells added through the Subclass Spells or Feature Grants pickers used to land in the spell list with just a name, level, and class slug — the curated table doesn't carry the full rules text, and the picker wasn't hitting Open5e. So when a player expanded a "+ Add"-ed spell row, the body was empty. The grant helpers now fire a fire-and-forget fetch against `/api/open5e/spells?search=<name>` after each add, fill in every missing field on the matching spell record (description, school, casting time, range, duration, components, damage, save ability, healing, AOE targets, concentration, `_slug`), and persist via the existing debounced spell save. A one-time backfill on initial sheet load enriches any granted spells that pre-date this fix.
+
+### Added
+- `_fetchSpellDetail(name)` helper in `sheet_dnd5e.html` — searches Open5e by name with an in-memory cache keyed by lowercased name (one fetch per unique spell per session).
+- `_enrichGrantedSpell(name, classSlug)` — locates the matching granted spell record and fills any missing fields from the Open5e detail. Auto-detects concentration from the duration string. Triggers `syncSpells`, `renderSpells`, and the debounced server save so the picker dropdown / spell list / DB stay in sync.
+- A one-shot backfill pass after the initial `renderSpells()` that calls `_enrichGrantedSpell` for every existing granted spell whose `desc` is empty — covers characters saved before this change.
+
+### Changed
+- `_addGrantedSpell` now fires `_enrichGrantedSpell` after pushing the spell, so descriptions appear within a moment of the player clicking +.
+
+---
+
+## [0.33.13] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Add a version footer to every page except the tabletop
+
+**Description:** `base.html` now ends with a small "SimpleVTT vX.Y.Z · schema vN" footer so the running version is visible at a glance on every page that extends the base layout. The tabletop screen overrides the new `{% block footer %}` to empty so the canvas can keep filling the viewport without a footer eating into it. The version constants are exposed as Jinja globals from `app/templates.py`, so no route has to thread them through its context dict.
+
+### Added
+- `.site-footer` style in `style.css` — a thin top-bordered strip using `--bg-2` background and `--fg-mute` text that pins to the bottom via `margin-top:auto` on the existing flex-column body.
+- `{% block footer %}` in `base.html` containing the version + schema line, plus an empty override in `tabletop.html`.
+
+### Changed
+- `app/templates.py` registers `APP_VERSION` and `SCHEMA_VERSION` as `templates.env.globals`, so every template can reference them without route context plumbing.
+
+---
+
+## [0.33.12] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Move bonus-cantrip / feature-grant picker inside the feature card body
+
+**Description:** The Bonus Cantrip picker (and any other Feature Grants row) used to render below its feature card as a separate strip. It now lives inside the matching card body, right under the description text, separated by a thin dashed line. The card opens expanded by default so the dropdown is visible without an extra click, and the redundant "🌟 Bonus Cantrip" label that used to sit next to the dropdown is dropped (the card header already names the feature).
+
+### Changed
+- `makeCard` in `sheet.js` gains a `bodyAppend` argument that adds an extra element to the bottom of the card body. When a description is also present, a thin dashed separator divides the prose from the appended content.
+- `_renderFeatureGrantsPanel` in `sheet_dnd5e.html` suppresses the per-row feature-name label when `inline: true` AND `onlyFeature` are both set — the surrounding card header carries the name already.
+- `_renderSubclassBlock` visible-features loop builds the Feature Grants picker for curated `bonusFeatures` or parser-detected grants and passes it to `makeCard` as `bodyAppend`, with `startsOpen: true`.
+
+---
+
+## [0.33.11] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Replace the Subclass-Spells card body with the interactive picker
+
+**Description:** The "Circle Spells" / "Domain Spells" / "Oath Spells" / "Psionic Spells" / "Clockwork Magic" / "Star Map" feature cards used to expand to show Open5e's verbatim PHB tables (one per terrain / domain / etc.) sitting right next to the interactive Subclass Spells picker that already had + / ✓ buttons for every spell. The card body now IS the picker — the duplicate prose tables are gone, and the card opens expanded by default so the player sees the picker without having to click. Every other feature card keeps its description as before.
+
+### Changed
+- `makeCard` in `sheet.js` gains two optional arguments: `customBody` (an element to use in place of the description text) and `startsOpen` (renders the card with its body already expanded).
+- `_renderSubclassBlock` visible-features loop builds the Subclass Spells picker into a div and passes it as `customBody` for the card whose name matches `subclassData.feature`, with `startsOpen: true`. The separate inline panel previously rendered beneath that card is now gone (the picker IS the body).
+- `_renderSubclassSpellPanel` inline-mode wrap is now `margin:0;padding:0;` so it sits flush inside whatever container (e.g. a feature card body) the caller appended it to.
+
+---
+
+## [0.33.10] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Fully render every class-level row in the Subclass Spells panel
+
+**Description:** The previous build hid Subclass Spells rows the player hadn't reached yet and suppressed the panel entirely when nothing was unlocked. The class roster already has a Level picker, and the buttons themselves label their unlock ("Class Lv 3 → + Barkskin (Lv 2)"), so the gating got in the way without adding information. Every class-level row now renders with its buttons fully interactive — the player can pick whichever spells they want and the existing level picker is the source of truth for what's actually accessible.
+
+### Changed
+- `_renderSubclassSpellPanel` in `sheet_dnd5e.html` no longer splits grants into unlocked/upcoming. Every row renders, every button is enabled (subject to `readonly`), and the "unlocks at class level N" hint / "Next at class Lv N" footer are removed.
+
+---
+
+## [0.33.9] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Dedupe duplicate subclass-feature cards and level-gate the Subclass Spells panel
+
+**Description:** Open5e occasionally returns the same subclass feature twice — typically a "Circle Spells" description paired with a separate "Circle Spells" entry holding the per-level spell tables — which surfaced as two adjacent identical cards on the sheet. Same-named features are now merged into one card before render, combining their descriptions and keeping the earliest unlock level. The Subclass Spells panel also no longer shows spells the player hasn't reached: only unlocked class-level rows render, and the whole panel is suppressed when nothing's been unlocked yet (e.g. a Lv 1 Druid with Circle of the Land set sees no Circle Spells panel because the first row unlocks at Lv 3). A compact "Next at class Lv N: …" hint replaces the dimmed locked rows so players still see what's coming.
+
+### Changed
+- `_renderSubclassBlock` in `sheet.js` runs feature lists through a new `_dedupeFeatures()` helper that merges same-named entries, concatenates non-overlapping descriptions, and keeps the earliest unlock level.
+- `_renderSubclassSpellPanel` in `sheet_dnd5e.html` splits grants into unlocked / upcoming by class level. Only unlocked rows render. The panel suppresses itself entirely when no rows are unlocked (or, in inline mode, shows a single "<Feature> unlocks at class level N" hint). A single-line "Next at class Lv N: <names>" note replaces the dimmed locked rows.
+
+---
+
+## [0.33.8] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Inline Subclass Spells and Feature Grants controls beneath their describing feature cards
+
+**Description:** The interactive Subclass Spells panel (Land Type dropdown + spell add buttons) and Feature Grants panel (cantrip choosers + fixed-grant buttons) used to render in two big blocks at the bottom of the subclass-features section, disconnected from the feature descriptions that explained them. They now render directly underneath each matching feature card — the Subclass Spells controls sit under the "Circle Spells" / "Domain Spells" / "Oath Spells" / "Psionic Spells" / "Clockwork Magic" / "Star Map" card, and individual cantrip-grant rows sit under their own "Bonus Cantrip" / "Acolyte of Nature" feature cards. Anything that can't be matched to a visible card (e.g. subclass set but features not yet synced) still falls back to the bottom panels so it's never hidden.
+
+### Changed
+- `_renderSubclassSpellPanel` accepts an `{ inline: true }` option that strips the dashed wrapper + heading so it integrates visually under the feature card.
+- `_renderFeatureGrantsPanel` accepts `{ inline: true, onlyFeature: <name>, excludeFeatures: <Set> }` options — `onlyFeature` renders just one matching row inline, `excludeFeatures` filters out feature names already rendered inline so the bottom fallback never doubles up.
+- `_renderSubclassBlock` in `sheet.js` now walks the visible-features loop and, after appending each card, checks whether the card matches the curated subclass-spells feature, a curated `bonusFeatures` entry, or a parser-detected grant — and inlines the right panel right after the card. A bottom-of-block fallback still renders anything left unmatched.
+
+---
+
+## [0.33.7] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Preserve granted-spell markers on refresh and surface Feature Grants without syncing
+
+**Description:** Two bugs in the always-prepared subclass-spell flow. The spell-load mapper on `sheet_dnd5e.html` was an explicit allow-list that didn't include `class`, `_subclass_granted`, or `_granted_by` — so every refresh stripped those fields off saved spells, the ⭐ Granted pill disappeared, and the spell started counting against the prepared limit again. That's fixed; the load mapper now preserves all three. The Feature Grants panel also relied on the heuristic parser scanning Open5e-synced feature descriptions to detect "Bonus Cantrip" / "Acolyte of Nature" / etc., so it stayed empty until the player clicked ↻ Sync. A new curated `bonusFeatures` field on `_SUBCLASS_SPELLS` entries lets the panel render those grants instantly — Circle of the Land's Druid "Bonus Cantrip", Light Domain's "Bonus Cantrip" (fixed Light), and Nature Domain's "Acolyte of Nature" all appear the moment you set the subclass.
+
+### Fixed
+- Spell-load mapper in `sheet_dnd5e.html` now preserves `class`, `_subclass_granted`, and `_granted_by` so granted spells stay granted across save+refresh (the ⭐ Granted pill, prepared-skip behavior, and Feature-Grant dropdown selection now all survive a reload).
+
+### Added
+- Curated `bonusFeatures` on `_SUBCLASS_SPELLS`:
+    - `circle-of-the-land`: Bonus Cantrip — choose a druid cantrip (Lv 2).
+    - `light`: Bonus Cantrip — fixed Light (Lv 1).
+    - `nature`: Acolyte of Nature — choose a druid cantrip (Lv 1).
+- Locked-row support in the Feature Grants panel — rows whose `classLvl` is higher than the player's current class level now render dimmed with a `(Lv N)` suffix and a locked tooltip, mirroring the Subclass Spells panel.
+
+### Changed
+- `_renderFeatureGrantsPanel` reads curated `bonusFeatures` first, then runs the heuristic parser on synced features as a fallback. Deduplication is by feature name so the parser never doubles up on a curated entry.
+
+---
+
+## [0.33.6] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Show Subclass Spells and Feature Grants panels immediately and auto-sync missing subclass details
+
+**Description:** The Subclass Spells panel (Circle / Domain / Oath Spells) was wedged behind a "no features cached yet" early-return inside the per-class subclass-features renderer, so a Druid with Circle of the Land set but unsynced features saw nothing until the player clicked ↻ Sync. The Feature Grants panel's heuristic parser also needs feature data to find "Bonus Cantrip" etc., so without Sync it found nothing. The renderer no longer returns early — Subclass Spells shows up the moment a subclass is picked (since it's driven by the curated table keyed off the subclass slug), and a background auto-sync kicks off on initial editor render for any class entry with missing subclass features or missing class features so the Feature Grants parser has something to scan within seconds of page load.
+
+### Changed
+- `_renderSubclassBlock` in `sheet.js` no longer returns when `subclass_features` is empty — it shows a quiet "Fetching subclass features from Open5e…" hint and falls through to the panel renderers, so the Subclass Spells panel always appears as soon as the subclass is set.
+- New `_autoSyncMissingDetails()` runs at the end of `_renderEditor()` and walks the roster: for any class entry with a subclass set but no cached subclass features, it calls `_fillSubclassDetail`; for any entry with no `class_features` blob, it calls `_fillClassDetail`. Once each completes, the roster is re-written, the subclass blocks re-render with the freshly-fetched data, and `_saveSubclassCacheRow` persists the cache so the next refresh has it immediately.
+- Tries are tracked in a session-local Set keyed by `class|subclass` so a single Open5e outage doesn't loop, but a refresh re-attempts.
+
+---
+
+## [0.33.5] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Auto-save subclass and feature granted-spell picks so they persist across refresh
+
+**Description:** Previously a player who picked a cantrip in the Bonus Cantrip dropdown (or added a Circle / Domain / Oath spell, or removed one) had to hit Save before refreshing — otherwise their pick was lost and the dropdown reset to "— pick a cantrip —". The grant helpers now fire a debounced PATCH to `/sheet-fields` immediately after every add/remove/swap, so the dropdown's selection survives a refresh without an explicit Save click. The PATCH whitelist gains `"spells"` so the panel can write back through the existing endpoint.
+
+### Changed
+- `_addGrantedSpell` / `_removeGrantedSpell` / `_removeGrantedByFeature` in `sheet_dnd5e.html` each call a new `_saveSpellsToServer()` helper that debounces (200 ms) and PATCHes the full spells list. Dropdown swaps fire add+remove back-to-back; the debounce collapses them into one network call.
+- `_SHEET_PATCH_KEYS` in `tabletop_routes.py` gains `"spells"` so the lightweight sheet-fields PATCH endpoint accepts the spells list. The campaign route's `_apply_sheet_patch` helper (which the standalone-character route also uses) routes the key through unchanged.
+
+---
+
+## [0.33.4] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Double the full character sheet portrait from 96px to 192px
+
+**Description:** The full D&D 5e character sheet portrait was 96×96; doubled to 192×192 so the art is actually readable. The placeholder initial scales too (font-size 36px → 72px). The post-upload JS that hot-swaps a new image into the placeholder was also off — it set the new element to 90px while the surrounding markup used 96px — fixed to match the new 192px while it was being touched.
+
+### Changed
+- `sheet_dnd5e.html` portrait column width, the `<img>`/placeholder dimensions, and the placeholder's first-letter font-size all doubled.
+- Portrait-upload swap-in JS now applies the doubled 192×192 dimensions (was a stale 90px).
+
+---
+
+## [0.33.3] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Re-theme subclass features, race traits, and granted-spell badges to use CSS variables
+
+**Description:** The subclass feature cards (and their flavor text, expand chevrons, level pills, and "Future features" locked rows) were hardcoded to the dark theme's exact palette so they looked off on light, hobbiton, forge, and other themes regardless of how many times the player hit ↻ Sync. The same was true of the race-traits cards and the ⭐ Granted spell pill. All of those now use CSS variables (`var(--bg)`, `var(--bg-2)`, `var(--fg)`, `var(--fg-mute)`, `var(--border)`, `var(--accent)`, `var(--accent-bg2)`, `var(--accent-border)`) so they re-tint correctly when the player switches themes. The spell browser's "over your prepared limit" warning now uses `var(--s-danger)` instead of a fixed red.
+
+### Changed
+- `_renderSubclassBlock` in `sheet.js` — feature cards (headers, name, expand arrow, level badge, body, dimmed locked variant), the flavor block, and the "Future features" label all switched from hex literals (`#c8cce8`, `#252c45`, `#1c3040`, `#191c2b`, `#b0b4cc`, `#445`, `#3a6a50`, …) to theme tokens.
+- `renderRaceTraits` and `makeTraitCard` in `sheet.js` swapped to the same set of theme tokens; the blob-paragraph fallback also picks up `--bg` / `--border` / `--fg-mute`.
+- ⭐ Granted pill in the spell list now uses `--accent-bg2` background and `--accent` text so it tints with the theme rather than living in fixed pastel green.
+- Spell Browser limit-bar "over cap" coloring uses `var(--s-danger)` instead of `#e07070`.
+
+---
+
+## [0.33.2] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Cover every always-prepared subclass spell list across PHB, DMG, XGtE, and TCoE
+
+**Description:** The curated subclass-spells table now covers every D&D 5e subclass that grants always-prepared spells: all 12 cleric domains (PHB + XGtE + TCoE), all 8 druid Circle of the Land terrains plus Tasha's Circle of Spores / Circle of Wildfire / Circle of Stars, all 7 paladin oaths across PHB / DMG Oathbreaker / XGtE Conquest & Redemption / TCoE Glory & Watchers, and Tasha's Aberrant Mind and Clockwork Soul sorcerer origins (whose extra spells are "always known and don't count against your sorcerer spells known"). A slug-variation lookup means the panel now resolves whether Open5e returns the bare slug (e.g. `knowledge`) or the suffixed form (`knowledge-domain`), and the same for `oath-of-X` / `circle-of-X` prefixed slugs.
+
+### Added
+- 19 new subclass entries in `_SUBCLASS_SPELLS`: Forge, Grave, Order, Peace, Twilight (cleric domains); Circle of Spores, Circle of Wildfire, Circle of Stars (druid); Oathbreaker, Oath of Conquest, Oath of Redemption, Oath of Glory, Oath of the Watchers (paladin); Aberrant Mind, Clockwork Soul (sorcerer).
+- `_lookupSubclassData(entry)` slug-variation helper that tries `<slug>`, `<slug>-domain`, `<slug-without-domain>`, `oath-of-<slug>`, `circle-of-<slug>`, and the same with optional `-the-` so the curated table matches whichever shape Open5e returns.
+
+### Changed
+- The variant-chooser save path now matches the class entry by `class` slug + display-name rather than by subclass slug, so writing a Land Type back works regardless of which slug shape the panel resolved through.
+- Curated coverage is now 26 subclasses (up from 11).
+
+---
+
+## [0.33.1] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Parse class and subclass features for bonus cantrip grants and offer a chooser
+
+**Description:** A new heuristic parser scans every class- and subclass-feature description on a character for bonus-cantrip language (e.g. Druid Circle of the Land "Bonus Cantrip — you learn one additional druid cantrip of your choice", Cleric Light Domain "Bonus Cantrip — you gain the light cantrip"). Detected grants surface in a Feature Grants panel beneath each class's subclass-features block. Choose grants render as a dropdown populated from the appropriate class's cantrip list (fetched from Open5e and cached); fixed grants render as a single + Add button. The chosen cantrip is added with `_subclass_granted: true` and tagged with the originating feature name, so swapping picks cleanly replaces the old entry without touching unrelated grants.
+
+### Added
+- `_parseCantripGrant(featureName, featureDesc, parentClassSlug)` heuristic parser recognising fixed grants ("you learn the X cantrip"), choose-from-class grants ("additional druid cantrip"), and generic "cantrip of your choice" patterns; numeric counts (one/two/three/digit) are also extracted.
+- `_renderFeatureGrantsPanel(target, entry)` panel that walks `entry.subclass_features` plus the parsed `entry.class_features` blob, runs each through the parser, and renders a chooser/button per detected grant.
+- Per-feature granted-spell bookkeeping: spells now carry an optional `_granted_by` tag with the source feature name; `_findGrantedByFeature` and `_removeGrantedByFeature` helpers let the chooser swap or clear a single feature's pick without touching other grants on the same class.
+- Cached cantrip lookup per class slug so changing dropdowns within the same session doesn't re-hit Open5e.
+- Multiclass subclass-block now also renders the Feature Grants panel alongside the existing Subclass Spells panel.
+
+### Changed
+- `_addGrantedSpell` accepts an optional 4th argument `grantedBy` and stamps it onto the spell so the chooser can re-locate the right entry.
+- `window._parseFeaturesFromText` is now exposed from `sheet.js` so the spellcasting framework can scan class-features blobs without re-implementing the heading-detection logic.
+
+---
+
+## [0.33.0] - 2026-05-10
+
+**Schema version:** 21
+
+**Commit summary:** Add subclass-granted spells framework with variant chooser and always-prepared bonus spells
+
+**Description:** Each per-class subclass-features block now renders a "Subclass Spells" panel driven by a curated table of D&D 5e PHB grants. Cleric domains, paladin oaths, and druid Circle of the Land all surface their bonus spells with [+ Add] / [✓ Added] buttons grouped by the class level at which each spell unlocks. Locked rows are dimmed until the player reaches the required class level. Druid Circle of the Land includes a Land Type dropdown (Arctic, Coast, Desert, Forest, Grassland, Mountain, Swamp, Underdark) cached on the class entry. Granted spells are tagged with `_subclass_granted: true`, render in the spell list with a ⭐ Granted pill and a locked-prepared mark, and are explicitly excluded from both the prepared/known and cantrips-known counters so they're a true bonus on top of the player's normal selections.
+
+### Added
+- `app/static/dnd5e_subclass_spells.js` — curated `_SUBCLASS_SPELLS` table covering Knowledge / Life / Light / Nature / Tempest / Trickery / War cleric domains, Devotion / Ancients / Vengeance paladin oaths, and Circle of the Land druid (with all 8 terrain variants).
+- `_renderSubclassSpellPanel(target, entry)` panel renderer with grouped per-class-level [+ Add] / [✓ Added] buttons, locked rows for unmet level prerequisites, and a variant dropdown for subclasses that ask the player to pick a flavour.
+- `_addGrantedSpell` / `_removeGrantedSpell` / `_hasGrantedSpell` JS helpers that tag the spell with `_subclass_granted: true` and `prepared: true`, upgrading any existing same-name entry rather than duplicating.
+- ⭐ Granted pill on spell rows for at-a-glance recognition.
+- Per-entry `subclass_choice` field on `sheet["classes"][i]` so the variant dropdown's selection persists across reloads.
+- Multiclass subclass-features block calls into the panel renderer so each class on a multiclass sheet gets its own subclass-spells panel.
+
+### Changed
+- `_spellCountFor` and `_cantripCountFor` now skip any spell with `_subclass_granted: true`, so subclass grants do not count against prepared/known or cantrips-known limits.
+- Spell row rendering treats `_subclass_granted` like a cantrip for the prepared-state visual: locked-✦ icon, no checkbox, and the always-prepared title.
+
+---
+
 ## [0.32.3] - 2026-05-10
 
 **Schema version:** 21

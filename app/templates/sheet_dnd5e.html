@@ -4,14 +4,14 @@
         {# ── Character header ─────────────────────────────────────────── #}
         <div style="display:flex;gap:14px;margin-bottom:12px;align-items:flex-start;">
 
-            {# Portrait column #}
-            <div style="flex-shrink:0;position:relative;width:96px;">
+            {# Portrait column — doubled from 96px to 192px for the full sheet #}
+            <div style="flex-shrink:0;position:relative;width:192px;">
                 {% if char.portrait_url %}
                 <img id="char-portrait-img" src="{{ char.portrait_url }}" alt="{{ char.name }}"
-                     style="width:96px;height:96px;object-fit:cover;border-radius:8px;display:block;">
+                     style="width:192px;height:192px;object-fit:cover;border-radius:8px;display:block;">
                 {% else %}
                 <div id="char-portrait-placeholder"
-                     style="width:96px;height:96px;background:var(--s-card);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:36px;color:var(--s-mute);border:1px solid var(--s-border);font-weight:700;">
+                     style="width:192px;height:192px;background:var(--s-card);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:72px;color:var(--s-mute);border:1px solid var(--s-border);font-weight:700;">
                     {{ char.name[:1]|upper }}
                 </div>
                 {% endif %}
@@ -1138,6 +1138,12 @@
     }
 })();
 </script>
+<!-- Curated subclass data MUST load before sheet.js — when localStorage has
+     cached subclass lists, sheet.js's init flow runs to completion in
+     microtasks before the next <script> tag is parsed, and the subclass
+     picker's _lookupSubclassData reads window._SUBCLASS_SPELLS at that
+     moment. Loading the data file first guarantees it's populated. -->
+<script src="/static/dnd5e_subclass_spells.js"></script>
 <script src="/static/sheet.js"></script>
 <script>
 (function () {
@@ -1163,7 +1169,7 @@
             } else if (ph) {
                 const newImg = document.createElement('img');
                 newImg.id = 'char-portrait-img';
-                Object.assign(newImg.style, { width:'90px', height:'90px', objectFit:'cover', borderRadius:'8px', display:'block' });
+                Object.assign(newImg.style, { width:'192px', height:'192px', objectFit:'cover', borderRadius:'8px', display:'block' });
                 newImg.src = url;
                 ph.replaceWith(newImg);
             }
@@ -1189,7 +1195,11 @@
         return m ? m[1].replace(/\s+/g, '') : '';
     }
 
-    // Load spells
+    // Load spells. Note: we MUST keep ``class`` (multiclass tag),
+    // ``_subclass_granted`` (always-prepared flag from a Circle/Domain/Oath
+    // panel or Feature Grant), and ``_granted_by`` (origin-feature name for
+    // the chooser). Without these the ⭐ Granted pill disappears on refresh
+    // and the spell starts counting against the prepared limit again.
     let spells = [];
     try {
         const parsed = JSON.parse(spellsData.value.trim() || '[]');
@@ -1210,6 +1220,10 @@
             aoe_targets:  parseInt(s.aoe_targets, 10) || 1,
             desc:         s.desc || s.description || '',
             _slug:        s._slug        || '',
+            // Multiclass / subclass-granted bookkeeping — preserved across save+load
+            class:             s.class             || '',
+            _subclass_granted: !!s._subclass_granted,
+            _granted_by:       s._granted_by       || '',
         }));
     } catch { spells = []; }
 
@@ -1331,13 +1345,16 @@
     }
 
     // Count spells *tagged with this class* toward its limit. Untagged
-    // spells are charged to the primary class.
+    // spells are charged to the primary class. Subclass-granted spells
+    // (Domain Spells / Circle Spells / Oath Spells / etc.) are always
+    // prepared and never count against the player's prepared/known cap.
     function _spellCountFor(entry) {
         const sc = _scForEntry(entry);
         if (!sc) return 0;
         const cslug = _classSlug(entry.class || '');
         const primarySlug = _classVal();
         const matches = (s) => {
+            if (s._subclass_granted) return false;
             const tag = (s.class || '').toLowerCase();
             return tag === cslug || (!tag && cslug === primarySlug);
         };
@@ -1360,9 +1377,11 @@
         if (!entry) return 0;
         const cslug = _classSlug(entry.class || '');
         const primarySlug = _classVal();
-        // Cantrips tagged with this class — untagged ones charge to primary
+        // Cantrips tagged with this class — untagged ones charge to primary.
+        // Subclass-granted cantrips don't count toward the cantrips-known cap.
         return spells.filter(s => {
             if ((s.level || 0) !== 0) return false;
+            if (s._subclass_granted) return false;
             const tag = (s.class || '').toLowerCase();
             return tag === cslug || (!tag && cslug === primarySlug);
         }).length;
@@ -1549,19 +1568,64 @@
     window._mcAutoFillSlots = _autoFillSlotsAll;
     // ── End Spellcasting Framework ─────────────────────────────────────────────
 
+    // Resolve a class slug back to its display name so the per-row class tag
+    // matches what the player sees in the multiclass editor. Falls back to a
+    // title-cased version of the slug when the roster doesn't recognise it.
+    function _classDisplayName(slug) {
+        if (!slug) return '';
+        try {
+            if (typeof window._mcRoster === 'function') {
+                const roster = window._mcRoster() || [];
+                const match = roster.find(c =>
+                    (c.class || '').toLowerCase().replace(/\s+/g, '-') === slug);
+                if (match && match.class) return match.class;
+            }
+        } catch {}
+        return slug.split('-').map(w => w ? w[0].toUpperCase() + w.slice(1) : '').join(' ');
+    }
+    function _rosterIsMulticlass() {
+        try {
+            if (typeof window._mcRoster === 'function') {
+                return (window._mcRoster() || []).length > 1;
+            }
+        } catch {}
+        return false;
+    }
+
     function spellRowHtml(s, idx) {
         const sc = _scData();
-        // Cantrips are always available — show a fixed icon; no checkbox needed
+        // Cantrips are always available — show a fixed icon; no checkbox needed.
+        // Subclass-granted spells are always prepared (locked checkbox) and get
+        // a small ⭐ badge so the player can spot them at a glance.
         const isCantrip = s.level === 0;
+        const isGranted = !!s._subclass_granted;
         const prepLabel = sc ? (sc.type === 'prepared' ? 'Prepared' : 'Known') : 'Prepared';
+        const grantedBadge = isGranted
+            ? `<span title="Granted by your subclass — always prepared and free of any limits."
+                     style="flex-shrink:0;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;
+                            background:var(--accent-bg2);border:1px solid var(--accent-border,var(--s-accent));
+                            color:var(--s-accent);letter-spacing:.04em;">⭐ Granted</span>`
+            : '';
+        // Class tag — only render when the character has more than one class,
+        // otherwise it's just visual noise since every spell would carry the
+        // same tag.
+        const classDisp = _rosterIsMulticlass() ? _classDisplayName((s.class || '').toLowerCase()) : '';
+        const classTag = classDisp
+            ? `<span title="From ${_esc(classDisp)} spell list"
+                     style="flex-shrink:0;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;
+                            background:var(--bg-2);border:1px solid var(--s-border);color:var(--s-mute);
+                            letter-spacing:.04em;">${_esc(classDisp)}</span>`
+            : '';
         const prepCtrl = isReadonly
-            ? `<span style="flex-shrink:0;color:${(isCantrip || s.prepared) ? 'var(--s-accent)' : 'var(--s-mute)'};"
-                     title="${isCantrip ? 'Cantrip (always available)' : (s.prepared ? prepLabel : 'Not ' + prepLabel)}"
-                     >${(isCantrip || s.prepared) ? '✓' : '○'}</span>`
+            ? `<span style="flex-shrink:0;color:${(isCantrip || isGranted || s.prepared) ? 'var(--s-accent)' : 'var(--s-mute)'};"
+                     title="${isCantrip ? 'Cantrip (always available)' : (isGranted ? 'Granted by subclass — always prepared' : (s.prepared ? prepLabel : 'Not ' + prepLabel))}"
+                     >${(isCantrip || isGranted || s.prepared) ? '✓' : '○'}</span>`
             : isCantrip
                 ? `<span style="flex-shrink:0;color:var(--s-accent);font-size:11px;" title="Cantrip (always available)">✦</span>`
-                : `<input type="checkbox" class="sp-prep" data-idx="${idx}" ${s.prepared ? 'checked' : ''}
-                          title="${prepLabel}" style="flex-shrink:0;cursor:pointer;">`;
+                : isGranted
+                    ? `<span style="flex-shrink:0;color:var(--s-accent);font-size:11px;" title="Subclass grants this spell — always prepared">✦</span>`
+                    : `<input type="checkbox" class="sp-prep" data-idx="${idx}" ${s.prepared ? 'checked' : ''}
+                              title="${prepLabel}" style="flex-shrink:0;cursor:pointer;">`;
         const rmBtn = isReadonly ? '' :
             `<button type="button" class="sp-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:var(--s-danger);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
         const icons = (s.concentration ? ' ⏱' : '') + (s.ritual ? ' ®' : '');
@@ -1573,6 +1637,8 @@
                     style="background:none;border:none;color:var(--s-mute);font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
                 <span style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                     title="${_esc(s.name)}">${_esc(s.name)}${icons ? `<span style="font-size:11px;color:var(--s-mute);"> ${icons.trim()}</span>` : ''}</span>
+                ${classTag}
+                ${grantedBadge}
                 ${s.school       ? `<span style="font-size:11px;color:var(--s-accent);flex-shrink:0;">${_esc(s.school)}</span>` : ''}
                 ${s.casting_time ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.casting_time)}</span>` : ''}
                 ${s.range        ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.range)}</span>` : ''}
@@ -1636,27 +1702,25 @@
         // ── Clear container ──
         container.innerHTML = '';
 
-        // ── Build (class -> level -> spell indices) map. Untagged spells go
-        //     under the primary class. Use the order of the roster for class
-        //     iteration so the highest-level class shows first.            ──
+        // ── Build a single by-level map across ALL classes ───────────────
+        //     Spells from different classes share a "Level N Spells" heading.
+        //     The class-tag pill on each spell row identifies the source so
+        //     the layout stays compact for multiclass characters instead of
+        //     repeating "Level 1 Spells - Druid / Wizard / Warlock" headings.
         const classOrder = arr.length ? arr.map(e => _classSlug(e.class || ''))
                                       : [primarySlug || '__none__'];
         const classLabel = {};
         arr.forEach(e => { classLabel[_classSlug(e.class)] = e.class; });
-        const groups = {};                                  // {cslug: {lvl: [idx,...]}}
-        classOrder.forEach(cs => { groups[cs] = {}; });
 
+        const byLvl = {};                                // { lvl: [spellIdx, …] }
         spells.forEach((s, i) => {
-            const isPreparedHere = (() => {
-                const e = arr.find(en => _classSlug(en.class) === ((s.class || primarySlug || '').toLowerCase()));
-                const sc = _scForEntry(e);
-                return sc && sc.type === 'prepared';
-            })();
+            const spellClass = (s.class || primarySlug || '').toLowerCase();
+            const e = arr.find(en => _classSlug(en.class) === spellClass);
+            const sc = _scForEntry(e);
+            const isPreparedHere = sc && sc.type === 'prepared';
             if (hideUnprepared && isPreparedHere && s.level > 0 && !s.prepared) return;
-            const cs = (s.class || primarySlug || '__none__').toLowerCase();
-            const bucket = groups[cs] || (groups[cs] = {});
             const l = s.level || 0;
-            (bucket[l] = bucket[l] || []).push(i);
+            (byLvl[l] = byLvl[l] || []).push(i);
         });
 
         // Helper: list slot levels (1-9) where this class has total > 0
@@ -1670,80 +1734,105 @@
             return out;
         }
 
-        // ── Render each class's section ──
-        // Iterate every roster class, then any spell-tagged slugs that don't
-        // appear on the roster. Each class gets its own header card so the
-        // "Cantrips - Druid", "Level 1 Spells - Druid", … sections live under
-        // a clearly-labelled section, and each class's slot rows always show
-        // (even at levels with no spells yet).
-        const stray = Object.keys(groups).filter(cs =>
-            classOrder.indexOf(cs) < 0
-            && Object.values(groups[cs] || {}).some(arr2 => arr2.length > 0)
-        );
-        const orderedClasses = classOrder.concat(stray);
-        let rendered = 0;
-        orderedClasses.forEach(cs => {
-            const byLvl = groups[cs] || {};
-            const slotLvls = _slotLevelsFor(cs);
-            const spellLvls = Object.keys(byLvl).filter(l => byLvl[l].length).map(l => +l);
-            const allLvls = Array.from(new Set([...spellLvls, ...slotLvls])).sort((a, b) => a - b);
-            if (!allLvls.length) return;
-            rendered++;
-            const niceClass = classLabel[cs] || (cs === '__none__' ? '' : cs);
+        // Every level we need to render: any level a class has slots at, or
+        // any level we have at least one spell tagged at.
+        const allLvlsSet = new Set();
+        Object.keys(byLvl).forEach(l => allLvlsSet.add(+l));
+        classOrder.forEach(cs => _slotLevelsFor(cs).forEach(l => allLvlsSet.add(l)));
+        const allLvls = Array.from(allLvlsSet).sort((a, b) => a - b);
 
-            // Class section header — divider + class name (e.g. "── Druid ──")
-            if (niceClass) {
-                const sectionHdr = document.createElement('div');
-                sectionHdr.style.cssText = 'display:flex;align-items:center;gap:8px;margin:8px 0 4px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-accent);';
-                sectionHdr.innerHTML = `<span style="flex:0 0 auto;">${niceClass}</span><span style="flex:1;height:1px;background:var(--s-border);"></span>`;
-                container.appendChild(sectionHdr);
-            }
-
-            allLvls.forEach(lvl => {
-                const groupDiv = document.createElement('div');
-                groupDiv.style.marginBottom = '10px';
-
-                // Slot row for (class, level) — always shown when total > 0
-                if (lvl >= 1 && slotsUi) {
-                    const slotRow = slotsUi.querySelector(
-                        `.ss-row[data-cslug="${CSS.escape(cs)}"][data-lvl="${lvl}"]`
-                    );
-                    if (slotRow && parseInt(slotRow.dataset.total) > 0) {
-                        slotRow.style.display       = 'flex';
-                        slotRow.style.marginBottom  = '5px';
-                        slotRow.style.paddingBottom = '5px';
-                        slotRow.style.borderBottom  = '1px solid var(--s-border)';
-                        groupDiv.appendChild(slotRow);
-                        if (window._ssRenderPips) window._ssRenderPips(slotRow);
-                    }
-                }
-
-                // "Level N Spells - <Class>" heading
-                const heading = document.createElement('div');
-                heading.style.cssText = 'font-size:10px;color:var(--s-mute);text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px;padding-left:2px;';
-                const baseLabel = lvl === 0 ? 'Cantrips' : `Level ${lvl} Spells`;
-                heading.textContent = niceClass ? `${baseLabel} - ${niceClass}` : baseLabel;
-                groupDiv.appendChild(heading);
-
-                const spellIdxs = byLvl[lvl] || [];
-                if (spellIdxs.length) {
-                    groupDiv.insertAdjacentHTML('beforeend',
-                        spellIdxs.map(idx => spellRowHtml(spells[idx], idx)).join(''));
-                } else {
-                    // Level has slots but no spells yet — show a hint instead.
-                    groupDiv.insertAdjacentHTML('beforeend',
-                        `<div class="muted" style="font-size:11px;font-style:italic;padding:2px 4px;">No ${lvl === 0 ? 'cantrips' : 'spells'} learned at this level yet.</div>`);
-                }
-                container.appendChild(groupDiv);
-            });
-        });
-
-        if (!rendered) {
+        if (!allLvls.length) {
             container.insertAdjacentHTML('beforeend',
                 spells.length
                     ? '<span class="muted" style="font-size:12px;">No prepared spells — uncheck "Hide Unprepared" to see all.</span>'
                     : '<span class="muted" style="font-size:12px;">No spells added yet.</span>');
+            return;
         }
+
+        // Sort comparator: by class-roster order, then alphabetical by name.
+        function _sortSpells(a, b) {
+            const sa = spells[a], sb = spells[b];
+            const ca = (sa.class || '').toLowerCase();
+            const cb = (sb.class || '').toLowerCase();
+            const ia = classOrder.indexOf(ca);
+            const ib = classOrder.indexOf(cb);
+            const ra = ia < 0 ? 999 : ia;
+            const rb = ib < 0 ? 999 : ib;
+            if (ra !== rb) return ra - rb;
+            return (sa.name || '').localeCompare(sb.name || '');
+        }
+
+        allLvls.forEach(lvl => {
+            const groupDiv = document.createElement('div');
+            groupDiv.style.marginBottom = '10px';
+
+            // ── Heading row: chevron + level label + per-class slot pills ──
+            const COLLAPSE_KEY = `simplevtt_spgrp_{{ char.id }}_lvl${lvl}`;
+            let startsCollapsed = false;
+            try { startsCollapsed = localStorage.getItem(COLLAPSE_KEY) === '1'; } catch {}
+
+            const headingRow = document.createElement('div');
+            headingRow.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:3px;padding-left:2px;cursor:pointer;user-select:none;flex-wrap:wrap;';
+
+            const chevron = document.createElement('span');
+            chevron.style.cssText = 'font-size:9px;color:var(--s-mute);flex-shrink:0;transition:transform .15s;'
+                + (startsCollapsed ? 'transform:rotate(-90deg);' : '');
+            chevron.textContent = '▼';
+            headingRow.appendChild(chevron);
+
+            const label = document.createElement('span');
+            label.style.cssText = 'font-size:10px;color:var(--s-mute);text-transform:uppercase;letter-spacing:.6px;flex-shrink:0;';
+            label.textContent = lvl === 0 ? 'Cantrips' : `Level ${lvl} Spells`;
+            headingRow.appendChild(label);
+
+            // One pill per class with slots at this level: "Druid ●●●●  Wizard ●●●●".
+            if (lvl >= 1) {
+                classOrder.forEach(cs => {
+                    if (cs === '__none__') return;
+                    const slotRow = slotsUi && slotsUi.querySelector(
+                        `.ss-row[data-cslug="${CSS.escape(cs)}"][data-lvl="${lvl}"]`);
+                    if (!slotRow || parseInt(slotRow.dataset.total) <= 0) return;
+                    if (window._ssRenderPips) window._ssRenderPips(slotRow);
+                    const niceClass = classLabel[cs] || cs;
+                    slotRow.style.cssText = 'display:flex;align-items:center;gap:5px;margin:0;padding:0;border:none;flex:0 0 auto;';
+                    // Replace the existing "Lv N" label with the class name.
+                    const innerLbl = slotRow.querySelector(':scope > span');
+                    if (innerLbl) {
+                        innerLbl.style.cssText = 'font-size:10px;font-weight:600;color:var(--s-mute);text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;width:auto;';
+                        innerLbl.textContent = niceClass;
+                    }
+                    // Clicking the pips should toggle slots, not collapse.
+                    slotRow.addEventListener('click', (e) => e.stopPropagation());
+                    headingRow.appendChild(slotRow);
+                });
+            }
+
+            groupDiv.appendChild(headingRow);
+
+            // ── Spells container (collapsible) ──
+            const spellsContainer = document.createElement('div');
+            spellsContainer.style.display = startsCollapsed ? 'none' : 'block';
+
+            const spellIdxs = (byLvl[lvl] || []).slice().sort(_sortSpells);
+            if (spellIdxs.length) {
+                spellsContainer.insertAdjacentHTML('beforeend',
+                    spellIdxs.map(idx => spellRowHtml(spells[idx], idx)).join(''));
+            } else {
+                spellsContainer.insertAdjacentHTML('beforeend',
+                    `<div class="muted" style="font-size:11px;font-style:italic;padding:2px 4px;">No ${lvl === 0 ? 'cantrips' : 'spells'} learned at this level yet.</div>`);
+            }
+            groupDiv.appendChild(spellsContainer);
+
+            // Toggle collapse on heading click, persisted per (char, level).
+            headingRow.addEventListener('click', () => {
+                const collapsed = spellsContainer.style.display === 'none';
+                spellsContainer.style.display = collapsed ? 'block' : 'none';
+                chevron.style.transform = collapsed ? 'rotate(0deg)' : 'rotate(-90deg)';
+                try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '' : '1'); } catch {}
+            });
+
+            container.appendChild(groupDiv);
+        });
 
         // ── Wire event listeners ──
         container.querySelectorAll('.sp-prep').forEach(inp =>
@@ -1831,6 +1920,700 @@
     // Expose so the multiclass module can re-render when the roster changes
     window._mcRenderSpells = renderSpells;
     renderSpells();
+
+    // Backfill descriptions for granted spells saved before the enrichment
+    // hook landed (and any that managed to slip through). Runs once per page
+    // load, deduplicated by (class, name) via the spell-detail cache.
+    (function _backfillGrantedSpellDescriptions() {
+        const missing = spells.filter(s =>
+            s._subclass_granted
+            && (!s.desc || !s.desc.trim())
+            && (s.name || '').trim()
+            && (s.class || '').trim()
+        );
+        if (!missing.length) return;
+        // Fan out in parallel; _enrichGrantedSpell is internally idempotent
+        // and the save call is debounced so we won't spam the server.
+        missing.forEach(s => { _enrichGrantedSpell(s.name, s.class); });
+    })();
+
+    // ── Spell-detail fetch with in-memory cache ─────────────────────────
+    // Granted spells start life with just a name (the curated table doesn't
+    // store full spell records). After they're added we hit Open5e to fill
+    // in description, school, casting time, components, damage, etc., so
+    // expanding the spell row shows the full rules text instead of an empty
+    // body. Cached by lowercased name for the session.
+    const _spellDetailCache = {};
+    async function _fetchSpellDetail(name) {
+        const key = (name || '').toLowerCase().trim();
+        if (!key) return null;
+        if (_spellDetailCache[key]) return _spellDetailCache[key];
+        try {
+            const r = await fetch('/api/open5e/spells?search=' + encodeURIComponent(name) + '&limit=10');
+            if (!r.ok) return null;
+            const data = await r.json();
+            const list = data.results || [];
+            const exact = list.find(s => (s.name || '').toLowerCase() === key);
+            const hit = exact || list[0] || null;
+            if (hit) _spellDetailCache[key] = hit;
+            return hit;
+        } catch { return null; }
+    }
+
+    async function _enrichGrantedSpell(name, classSlug) {
+        const detail = await _fetchSpellDetail(name);
+        if (!detail) return false;
+        const cslug = (classSlug || '').toLowerCase();
+        const s = spells.find(sp =>
+            sp._subclass_granted
+            && (sp.class || '').toLowerCase() === cslug
+            && sp.name === name);
+        if (!s) return false;
+        let changed = false;
+        const fill = (key, value) => {
+            if ((s[key] == null || s[key] === '' || s[key] === 0) && value != null && value !== '') {
+                s[key] = value;
+                changed = true;
+            }
+        };
+        fill('school',       detail.school);
+        fill('casting_time', detail.casting_time);
+        fill('range',        detail.range);
+        fill('duration',     detail.duration);
+        fill('components',   detail.components);
+        fill('desc',         detail.desc);
+        fill('damage',       detail.damage);
+        fill('save_ability', detail.save_ability);
+        fill('healing',      detail.healing);
+        fill('aoe_targets',  detail.aoe_targets);
+        fill('_slug',        detail.slug);
+        // Concentration detection (Open5e bakes "Concentration, up to …" into duration)
+        if (!s.concentration && /concentration/i.test(detail.duration || '')) {
+            s.concentration = true;
+            changed = true;
+        }
+        if (changed) {
+            syncSpells();
+            renderSpells();
+            _saveSpellsToServer();
+        }
+        return changed;
+    }
+    window._enrichGrantedSpell = _enrichGrantedSpell;
+
+    // ── Subclass-granted spell helpers ───────────────────────────────────
+    // Spells added through this path are tagged with ``_subclass_granted: true``
+    // so the prepared/known counters skip them — they're "always prepared"
+    // bonuses on top of the player's normal selections.
+    //
+    // The optional ``grantedBy`` argument records WHICH feature provided the
+    // spell (e.g. "Bonus Cantrip"). The feature-grants panel uses it to
+    // detect, replace, or remove the spell when the player swaps choices
+    // without affecting unrelated grants on the same class.
+    //
+    // Auto-save: every grant change fires a fire-and-forget PATCH so the
+    // pick survives a refresh without an explicit Save click.
+    let _saveSpellsTimer = null;
+    function _saveSpellsToServer() {
+        if (typeof CHAR_ID === 'undefined') return;
+        // Debounce rapid changes (e.g. dropdown swaps fire add+remove)
+        if (_saveSpellsTimer) clearTimeout(_saveSpellsTimer);
+        _saveSpellsTimer = setTimeout(() => {
+            const url = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID)
+                ? '/api/campaign/' + CAMPAIGN_ID + '/character/' + CHAR_ID + '/sheet-fields'
+                : '/api/character/' + CHAR_ID + '/sheet-fields';
+            fetch(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ spells: spells }),
+            }).catch(() => {});
+        }, 200);
+    }
+
+    function _addGrantedSpell(name, spellLvl, classSlug, grantedBy) {
+        if (!name || !classSlug) return false;
+        const cslug = classSlug.toLowerCase();
+        const tag = grantedBy || '';
+        // If the same-named spell already exists for this class, upgrade the
+        // existing entry rather than producing a duplicate.
+        const existing = spells.find(s =>
+            (s.class || '').toLowerCase() === cslug && s.name === name);
+        if (existing) {
+            existing._subclass_granted = true;
+            existing.prepared = true;
+            existing.level = parseInt(spellLvl, 10) || existing.level || 0;
+            if (tag) existing._granted_by = tag;
+        } else {
+            const obj = {
+                name,
+                level: parseInt(spellLvl, 10) || 0,
+                class: cslug,
+                prepared: true,
+                _subclass_granted: true,
+                _slug: '',
+            };
+            if (tag) obj._granted_by = tag;
+            spells.push(obj);
+        }
+        syncSpells();
+        renderSpells();
+        _saveSpellsToServer();
+        // Fire-and-forget enrichment so the description / casting time /
+        // components etc. fill in as soon as Open5e responds.
+        _enrichGrantedSpell(name, cslug);
+        return true;
+    }
+    function _removeGrantedSpell(name, classSlug) {
+        if (!name || !classSlug) return;
+        const cslug = classSlug.toLowerCase();
+        const i = spells.findIndex(s =>
+            s._subclass_granted && (s.class || '').toLowerCase() === cslug && s.name === name);
+        if (i >= 0) {
+            spells.splice(i, 1);
+            syncSpells();
+            renderSpells();
+            _saveSpellsToServer();
+        }
+    }
+    function _hasGrantedSpell(name, classSlug) {
+        const cslug = (classSlug || '').toLowerCase();
+        return spells.some(s =>
+            s._subclass_granted && (s.class || '').toLowerCase() === cslug && s.name === name);
+    }
+    function _findGrantedByFeature(grantedBy, classSlug) {
+        if (!grantedBy || !classSlug) return null;
+        const cslug = classSlug.toLowerCase();
+        return spells.find(s =>
+            s._subclass_granted && s._granted_by === grantedBy
+            && (s.class || '').toLowerCase() === cslug) || null;
+    }
+    function _removeGrantedByFeature(grantedBy, classSlug) {
+        if (!grantedBy || !classSlug) return;
+        const cslug = classSlug.toLowerCase();
+        const i = spells.findIndex(s =>
+            s._subclass_granted && s._granted_by === grantedBy
+            && (s.class || '').toLowerCase() === cslug);
+        if (i >= 0) {
+            spells.splice(i, 1);
+            syncSpells();
+            renderSpells();
+            _saveSpellsToServer();
+        }
+    }
+    window._addGrantedSpell        = _addGrantedSpell;
+    window._removeGrantedSpell     = _removeGrantedSpell;
+    window._hasGrantedSpell        = _hasGrantedSpell;
+    window._findGrantedByFeature   = _findGrantedByFeature;
+    window._removeGrantedByFeature = _removeGrantedByFeature;
+
+    // ── Cantrip-grant feature parser ────────────────────────────────────
+    // Scans a class/subclass feature description for cantrip grants. Returns
+    //   null                                             — no grant detected
+    //   { type:'fixed',  names:['Light'],  spellLevel:0 } — specific cantrip(s)
+    //   { type:'choose', fromClass:'druid',count:1, spellLevel:0 } — player picks
+    //
+    // Detection is heuristic: "you (learn|gain|know) the X cantrip" → fixed;
+    // "additional/bonus/extra <class> cantrip[s]" → choose-from-class;
+    // generic "cantrip of your choice" with no class → choose from parent class.
+    function _parseCantripGrant(featureName, featureDesc, parentClassSlug) {
+        const name = (featureName || '').toLowerCase();
+        const desc = (featureDesc || '').replace(/\s+/g, ' ').trim();
+        if (!desc) return null;
+
+        // Quick filter: must mention "cantrip"
+        if (!/cantrip/i.test(name) && !/cantrip/i.test(desc)) return null;
+
+        // Pattern A — fixed grant: "you (learn|gain|know) the <NAME> cantrip"
+        const fixedRe = /you\s+(?:learn|gain|know)\s+the\s+([A-Za-z][A-Za-z0-9'\-]*(?:\s+[A-Za-z][A-Za-z0-9'\-]*){0,3}?)\s+cantrip\b/i;
+        const fixedMatch = desc.match(fixedRe);
+        if (fixedMatch) {
+            const cantripName = fixedMatch[1]
+                .trim()
+                .split(/\s+/)
+                .map(w => w[0].toUpperCase() + w.slice(1).toLowerCase())
+                .join(' ');
+            return { type: 'fixed', names: [cantripName], spellLevel: 0 };
+        }
+
+        // Pattern B — choose from a specific class's spell list:
+        //   "additional druid cantrip", "cantrip of your choice from the wizard spell list"
+        const fromClassRe = /(druid|cleric|wizard|sorcerer|warlock|bard|artificer|paladin|ranger)\s+(?:cantrip|spell\s+list)/i;
+        const fromMatch = desc.match(fromClassRe);
+        if (fromMatch) {
+            const fromClass = fromMatch[1].toLowerCase();
+            // Try to count: written-out 1–4 or numeric
+            let count = 1;
+            const cm = desc.match(/(?:learn|gain|know|choose|pick|select)\s+(one|two|three|four|\d+)\s+(?:additional|bonus|extra|more)?\s*(?:druid|cleric|wizard|sorcerer|warlock|bard|artificer|paladin|ranger)?\s*cantrip/i);
+            if (cm) {
+                const c = cm[1].toLowerCase();
+                count = ({one:1,two:2,three:3,four:4}[c]) || parseInt(c, 10) || 1;
+            }
+            return { type: 'choose', fromClass, count, spellLevel: 0 };
+        }
+
+        // Pattern C — generic "cantrip of your choice" with no class
+        if (/cantrip[s]?\s+of\s+your\s+choice/i.test(desc)
+            || /(additional|bonus|extra|more)\s+cantrip/i.test(desc)) {
+            return { type: 'choose', fromClass: parentClassSlug, count: 1, spellLevel: 0 };
+        }
+
+        return null;
+    }
+    window._parseCantripGrant = _parseCantripGrant;
+
+    // ── Cached cantrip lookup per class ─────────────────────────────────
+    // The choose-a-cantrip dropdowns hit Open5e once per class slug and
+    // reuse the result for the remainder of the session.
+    const _cantripListCache = {};
+    function _fetchCantripsForClass(classSlug) {
+        if (!classSlug) return Promise.resolve([]);
+        const slug = classSlug.toLowerCase();
+        if (_cantripListCache[slug]) return Promise.resolve(_cantripListCache[slug]);
+        const url = '/api/open5e/spells?spell_list=' + encodeURIComponent(slug) + '&level=0&limit=80';
+        return fetch(url).then(r => r.ok ? r.json() : { results: [] })
+            .then(d => {
+                const list = (d.results || []).map(s => ({ name: s.name, slug: s.slug || '' }));
+                _cantripListCache[slug] = list;
+                return list;
+            })
+            .catch(() => []);
+    }
+
+    // ── Feature-grants panel renderer ───────────────────────────────────
+    // Walks a class entry's class_features blob (parsed via the same helper
+    // used by the subclass-features list) and its structured subclass_features
+    // list, runs each through _parseCantripGrant, and renders an interactive
+    // sub-panel for every detected grant. Each grant is keyed by its source
+    // feature name so the player can change/clear their pick at any time.
+    window._renderFeatureGrantsPanel = function (target, entry, options) {
+        if (!target || !entry) return;
+        target.innerHTML = '';
+        options = options || {};
+        const inline = !!options.inline;
+        // When ``onlyFeature`` is supplied the panel renders ONLY the grant
+        // matching that feature name (case-insensitive). When ``excludeFeatures``
+        // is supplied (Set of names) those grants are skipped — used by the
+        // bottom-of-block fallback so it doesn't re-render anything already
+        // inlined above.
+        const onlyFeature = options.onlyFeature
+            ? options.onlyFeature.toLowerCase() : '';
+        const excludeFeatures = options.excludeFeatures || null;
+        const cslug = _classSlug(entry.class || '');
+        if (!cslug) return;
+        const cLvl = parseInt(entry.level, 10) || 1;
+
+        const grants = [];
+        const seenNames = new Set();
+
+        // 1. Curated bonusFeatures from the subclass-spells table — these
+        //    render immediately, no Open5e features cache required.
+        const subclassData = (typeof window._lookupSubclassData === 'function')
+            ? window._lookupSubclassData(entry)
+            : null;
+        if (subclassData && Array.isArray(subclassData.bonusFeatures)) {
+            subclassData.bonusFeatures.forEach(bf => {
+                if (!bf || !bf.feature || !bf.grant) return;
+                const fNameLc = bf.feature.toLowerCase();
+                if (onlyFeature && fNameLc !== onlyFeature) return;
+                if (excludeFeatures && excludeFeatures.has(fNameLc)) return;
+                seenNames.add(fNameLc);
+                grants.push({
+                    feature: bf.feature,
+                    source:  'sub',
+                    grant:   bf.grant,
+                    classLvl: bf.classLvl || 1,
+                    unlocked: (bf.classLvl || 1) <= cLvl,
+                });
+            });
+        }
+
+        // 2. Parser fallback over synced subclass features + class-features blob.
+        //    Only adds entries the curated data didn't already cover.
+        const candidates = [];
+        (entry.subclass_features || []).forEach(f => {
+            if (f && f.name) candidates.push({
+                name: f.name, desc: f.desc || '', source: 'sub', classLvl: f.level || 1,
+            });
+        });
+        const blob = entry.class_features || '';
+        if (blob && typeof window._parseFeaturesFromText === 'function') {
+            const parsed = window._parseFeaturesFromText(blob);
+            (parsed.features || []).forEach(f => {
+                if (f && f.name) candidates.push({
+                    name: f.name, desc: f.desc || '', source: 'cls', classLvl: f.level || 1,
+                });
+            });
+        }
+        candidates.forEach(c => {
+            const fNameLc = c.name.toLowerCase();
+            if (seenNames.has(fNameLc)) return;
+            if (onlyFeature && fNameLc !== onlyFeature) return;
+            if (excludeFeatures && excludeFeatures.has(fNameLc)) return;
+            const g = _parseCantripGrant(c.name, c.desc, cslug);
+            if (g) {
+                seenNames.add(fNameLc);
+                grants.push({
+                    feature: c.name,
+                    source:  c.source,
+                    grant:   g,
+                    classLvl: c.classLvl,
+                    unlocked: (c.classLvl || 1) <= cLvl,
+                });
+            }
+        });
+
+        if (!grants.length) return;
+
+        // Inline mode: skip the panel border + heading, since the parent
+        // feature card already provides the visual context.
+        const wrap = document.createElement('div');
+        wrap.className = 'feature-grants-panel';
+        wrap.style.cssText = inline
+            ? 'margin:4px 0 10px;padding:0 4px;'
+            : 'margin-top:8px;padding:8px 10px;border:1px dashed var(--s-border);border-radius:4px;background:var(--bg);';
+
+        if (!inline) {
+            const hdr = document.createElement('div');
+            hdr.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;';
+            const lbl = document.createElement('span');
+            lbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--s-accent);text-transform:uppercase;letter-spacing:.05em;';
+            lbl.textContent = 'Feature Grants';
+            hdr.appendChild(lbl);
+            const sub = document.createElement('span');
+            sub.style.cssText = 'font-size:10px;color:var(--s-mute);font-style:italic;';
+            sub.textContent = '⭐ Always prepared — does not count against your limits.';
+            hdr.appendChild(sub);
+            wrap.appendChild(hdr);
+        }
+
+        // Skip the redundant "🌟 Feature Name" label when the panel is
+        // inline-scoped to a single feature — the surrounding feature card
+        // header already names it.
+        const skipFeatureLabel = inline && !!onlyFeature;
+
+        grants.forEach(({ feature, source, grant, classLvl, unlocked }) => {
+            const locked = unlocked === false;
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:6px;'
+                + (locked ? 'opacity:0.5;' : '');
+
+            if (!skipFeatureLabel) {
+                const featLbl = document.createElement('span');
+                featLbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--s-fg);min-width:140px;';
+                featLbl.title = (source === 'cls' ? 'Class feature' : 'Subclass feature')
+                    + (classLvl ? ` (Lv ${classLvl}+)` : '');
+                featLbl.textContent = `${source === 'cls' ? '🎓' : '🌟'} ${feature}`
+                    + (locked ? ` (Lv ${classLvl})` : '');
+                row.appendChild(featLbl);
+            }
+
+            if (grant.type === 'fixed') {
+                grant.names.forEach(name => {
+                    const has = _hasGrantedSpell(name, cslug);
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.style.cssText = 'font-size:11px;padding:3px 9px;border-radius:10px;cursor:pointer;'
+                        + (has
+                            ? 'background:var(--accent-bg2);border:1px solid var(--s-accent);color:var(--s-accent);'
+                            : 'background:transparent;border:1px solid var(--s-border);color:var(--s-fg);');
+                    btn.textContent = `${has ? '✓ ' : '+ '}${name} (Cantrip)`;
+                    btn.title = locked
+                        ? `Requires class level ${classLvl} — locked.`
+                        : (has ? 'Click to remove' : 'Add as a granted cantrip');
+                    btn.disabled = isReadonly || locked;
+                    if (!isReadonly && !locked) {
+                        btn.addEventListener('click', () => {
+                            if (has) _removeGrantedSpell(name, cslug);
+                            else _addGrantedSpell(name, 0, cslug, feature);
+                            window._renderFeatureGrantsPanel(target, entry);
+                        });
+                    }
+                    row.appendChild(btn);
+                });
+            } else if (grant.type === 'choose') {
+                const current = _findGrantedByFeature(feature, cslug);
+                const note = document.createElement('span');
+                note.style.cssText = 'font-size:11px;color:var(--s-mute);';
+                note.textContent = `Pick ${grant.count > 1 ? grant.count + ' ' : ''}` +
+                    (grant.fromClass ? grant.fromClass : 'class') + ' cantrip' + (grant.count > 1 ? 's' : '');
+                row.appendChild(note);
+
+                const sel = document.createElement('select');
+                sel.style.cssText = 'font-size:12px;flex:0 0 auto;min-width:180px;';
+                sel.disabled = true;
+                sel.appendChild(Object.assign(document.createElement('option'), {
+                    value: '', textContent: locked ? `(Locked until Lv ${classLvl})` : 'Loading cantrips…',
+                }));
+                row.appendChild(sel);
+
+                const clearBtn = document.createElement('button');
+                clearBtn.type = 'button';
+                clearBtn.textContent = '✕';
+                clearBtn.title = 'Clear this pick';
+                clearBtn.style.cssText = 'background:transparent;border:1px solid var(--s-border);color:var(--s-danger);width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:12px;line-height:1;';
+                clearBtn.disabled = !current || isReadonly || locked;
+                if (!locked) {
+                    clearBtn.addEventListener('click', () => {
+                        _removeGrantedByFeature(feature, cslug);
+                        window._renderFeatureGrantsPanel(target, entry);
+                    });
+                }
+                row.appendChild(clearBtn);
+
+                if (!locked) {
+                    _fetchCantripsForClass(grant.fromClass).then(list => {
+                        sel.innerHTML = '';
+                        sel.disabled = isReadonly;
+                        sel.appendChild(Object.assign(document.createElement('option'), {
+                            value: '', textContent: '— pick a cantrip —',
+                        }));
+                        list.forEach(c => {
+                            const o = document.createElement('option');
+                            o.value = c.name; o.textContent = c.name;
+                            if (current && current.name === c.name) o.selected = true;
+                            sel.appendChild(o);
+                        });
+                        sel.addEventListener('change', () => {
+                            if (current) _removeGrantedByFeature(feature, cslug);
+                            if (sel.value) _addGrantedSpell(sel.value, 0, cslug, feature);
+                            window._renderFeatureGrantsPanel(target, entry);
+                        });
+                    });
+                }
+            }
+
+            wrap.appendChild(row);
+        });
+
+        target.appendChild(wrap);
+    };
+
+    // ── Subclass-spells panel renderer ──────────────────────────────────
+    // Looks up the curated grant table by subclass slug and builds an
+    // interactive panel of [+ Add] / [✓ Added] buttons grouped by the class
+    // level at which each spell unlocks. When the subclass has variants
+    // (Druid Circle of the Land's Land Type), the panel shows a dropdown
+    // and persists the choice on entry.subclass_choice.
+    // Lookup helper — tries multiple slug variations so the curated table
+    // matches whichever shape Open5e returns ("knowledge" vs "knowledge-domain",
+    // "oath-of-the-watchers" vs "watchers", etc.).
+    function _lookupSubclassData(entry) {
+        if (!entry) return null;
+        const table = window._SUBCLASS_SPELLS || {};
+        const seeds = [
+            (entry._subclass_slug || '').toLowerCase(),
+            _classSlug(entry.subclass || ''),
+        ].filter(Boolean);
+        const tried = new Set();
+        for (const seed of seeds) {
+            const variations = [
+                seed,
+                seed.replace(/-domain$/, ''),
+                seed + '-domain',
+                seed.replace(/^oath-of-(?:the-)?/, ''),
+                seed.replace(/^circle-of-(?:the-)?/, ''),
+                'oath-of-' + seed,
+                'oath-of-the-' + seed,
+                'circle-of-' + seed,
+                'circle-of-the-' + seed,
+            ];
+            for (const v of variations) {
+                if (v && !tried.has(v)) {
+                    tried.add(v);
+                    if (table[v]) return table[v];
+                }
+            }
+        }
+        return null;
+    }
+    window._lookupSubclassData = _lookupSubclassData;
+
+    window._renderSubclassSpellPanel = function (target, entry, options) {
+        if (!target || !entry) return;
+        target.innerHTML = '';
+        options = options || {};
+        const inline = !!options.inline;
+        const subSlug = (entry._subclass_slug || _classSlug(entry.subclass || '')).toLowerCase();
+        const data = _lookupSubclassData(entry);
+
+        if (!data) {
+            // Fallback: detect a subclass-spell-style feature by name and
+            // hint the player to add granted spells manually.
+            const feats = entry.subclass_features || [];
+            const looksLikeSpellGrant = feats.some(f => /spell/i.test(f.name || ''));
+            if (looksLikeSpellGrant && entry.subclass) {
+                const hint = document.createElement('p');
+                hint.className = 'muted';
+                hint.style.cssText = 'font-size:11px;font-style:italic;margin:4px 0 0;';
+                hint.textContent = `${entry.subclass} appears to grant spells, but it isn't in the curated table yet — add them via the Spell Browser, then mark them as granted by editing the JSON.`;
+                target.appendChild(hint);
+            }
+            return;
+        }
+
+        const cslug = _classSlug(entry.class || '');
+        const cLvl  = parseInt(entry.level, 10) || 1;
+
+        // Compute the feature's starting class level — the lowest classLvl
+        // across all grants and (if variant-based) variant tables. Surfaced
+        // in the subtitle so the player can see when the feature unlocks
+        // without having to scan the row labels.
+        const _allGrantsForStart = [];
+        if (Array.isArray(data.grants)) _allGrantsForStart.push(...data.grants);
+        if (data.variants) Object.values(data.variants).forEach(arr => {
+            if (Array.isArray(arr)) _allGrantsForStart.push(...arr);
+        });
+        let startingClassLvl = null;
+        _allGrantsForStart.forEach(g => {
+            if (g && g.classLvl && (startingClassLvl == null || g.classLvl < startingClassLvl)) {
+                startingClassLvl = g.classLvl;
+            }
+        });
+        const startingNote = startingClassLvl
+            ? ` (starts at class Lv ${startingClassLvl})`
+            : '';
+
+        // The "wrap" is the visible container for the panel. In inline mode
+        // we drop the border + padding + heading because the parent feature
+        // card already provides the visual context — and we set margin:0 so
+        // it sits flush inside whatever container the caller appended us to
+        // (e.g. a feature-card body, which already has its own padding).
+        const wrap = document.createElement('div');
+        wrap.className = 'subclass-spells-panel';
+        wrap.style.cssText = inline
+            ? 'margin:0;padding:0;'
+            : 'margin-top:8px;padding:8px 10px;border:1px dashed var(--s-border);border-radius:4px;background:var(--bg);';
+
+        if (!inline) {
+            const hdr = document.createElement('div');
+            hdr.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;';
+            const lbl = document.createElement('span');
+            lbl.style.cssText = 'font-size:11px;font-weight:700;color:var(--s-accent);text-transform:uppercase;letter-spacing:.05em;';
+            lbl.textContent = (data.feature || 'Subclass Spells') + startingNote;
+            hdr.appendChild(lbl);
+            const sub = document.createElement('span');
+            sub.style.cssText = 'font-size:10px;color:var(--s-mute);font-style:italic;';
+            sub.textContent = '⭐ Always prepared — does not count against your limits.';
+            hdr.appendChild(sub);
+            wrap.appendChild(hdr);
+        } else {
+            // Compact inline subtitle so the player still sees the always-prepared cue.
+            const sub = document.createElement('div');
+            sub.style.cssText = 'font-size:10px;color:var(--s-mute);font-style:italic;margin-bottom:6px;';
+            sub.textContent = '⭐ Always prepared' + startingNote
+                + ' — does not count against your limits.';
+            wrap.appendChild(sub);
+        }
+
+        // Variant chooser (e.g. Druid Land Type)
+        let grants = data.grants || [];
+        if (data.variants) {
+            const variants = Object.keys(data.variants);
+            const choiceWrap = document.createElement('label');
+            choiceWrap.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:11px;color:var(--s-mute);';
+            const choiceLbl = document.createElement('span');
+            choiceLbl.textContent = (data.chooseLabel || 'Choice') + ':';
+            choiceWrap.appendChild(choiceLbl);
+            const sel = document.createElement('select');
+            sel.style.cssText = 'font-size:12px;flex:0 0 auto;';
+            sel.disabled = isReadonly;
+            sel.appendChild(Object.assign(document.createElement('option'), { value: '', textContent: '— pick one —' }));
+            variants.forEach(v => {
+                const o = document.createElement('option');
+                o.value = v; o.textContent = v;
+                if (entry.subclass_choice === v) o.selected = true;
+                sel.appendChild(o);
+            });
+            sel.addEventListener('change', () => {
+                if (typeof window._mcRoster !== 'function' || typeof window._mcWriteRoster !== 'function') return;
+                const arr2 = window._mcRoster();
+                // Find this entry by class slug + same display name; subclass
+                // slugs can vary across Open5e shapes so we don't compare them
+                // directly here.
+                const idx = arr2.findIndex(c =>
+                    _classSlug(c.class) === cslug
+                    && (c.subclass || '') === (entry.subclass || ''));
+                if (idx < 0) return;
+                arr2[idx].subclass_choice = sel.value;
+                window._mcWriteRoster(arr2);
+                window._renderSubclassSpellPanel(target, arr2[idx]);
+                // Fire-and-forget PATCH so the pick survives a refresh
+                // without an explicit Save click. Server routes this into
+                // the matching ``classes[]`` entry via ``class_slug``.
+                if (typeof CHAR_ID !== 'undefined') {
+                    const url = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID)
+                        ? '/api/campaign/' + CAMPAIGN_ID + '/character/' + CHAR_ID + '/sheet-fields'
+                        : '/api/character/' + CHAR_ID + '/sheet-fields';
+                    fetch(url, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            class_slug: cslug,
+                            subclass_choice: sel.value,
+                        }),
+                    }).catch(() => {});
+                }
+            });
+            choiceWrap.appendChild(sel);
+            wrap.appendChild(choiceWrap);
+
+            if (entry.subclass_choice && data.variants[entry.subclass_choice]) {
+                grants = data.variants[entry.subclass_choice];
+            } else {
+                const note = document.createElement('p');
+                note.className = 'muted';
+                note.style.cssText = 'font-size:11px;font-style:italic;margin:0;';
+                note.textContent = 'Pick a ' + (data.chooseLabel || 'choice') + ' to see the granted spells.';
+                wrap.appendChild(note);
+                target.appendChild(wrap);
+                return;
+            }
+        }
+
+        // Render every class-level row. The player decides their level via
+        // the multiclass editor at the top of the sheet, so we just show the
+        // full list — every button is interactive and the spell-level label
+        // on each one ("(Lv 2)" / "Class Lv 3") tells them when it unlocks.
+        const byLvl = {};
+        grants.forEach(g => { (byLvl[g.classLvl] = byLvl[g.classLvl] || []).push(g); });
+        const lvls = Object.keys(byLvl).map(Number).sort((a, b) => a - b);
+
+        lvls.forEach(lvl => {
+            const row = document.createElement('div');
+            row.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:5px;';
+            const tag = document.createElement('span');
+            tag.style.cssText = 'font-size:10px;font-weight:700;text-transform:uppercase;color:var(--s-mute);min-width:78px;letter-spacing:.04em;';
+            tag.textContent = `Class Lv ${lvl}`;
+            row.appendChild(tag);
+
+            byLvl[lvl].forEach(g => {
+                const has = _hasGrantedSpell(g.name, cslug);
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'subclass-grant-btn';
+                btn.style.cssText = 'font-size:11px;padding:3px 9px;border-radius:10px;cursor:pointer;'
+                    + (has
+                        ? 'background:var(--accent-bg2);border:1px solid var(--s-accent);color:var(--s-accent);'
+                        : 'background:transparent;border:1px solid var(--s-border);color:var(--s-fg);');
+                btn.textContent = `${has ? '✓ ' : '+ '}${g.name} (Lv ${g.spellLvl})`;
+                btn.title = has
+                    ? 'Click to remove from your spell list'
+                    : 'Add to your always-prepared spells';
+                btn.disabled = isReadonly;
+                if (!isReadonly) {
+                    btn.addEventListener('click', () => {
+                        if (has) _removeGrantedSpell(g.name, cslug);
+                        else _addGrantedSpell(g.name, g.spellLvl, cslug);
+                        window._renderSubclassSpellPanel(target, entry, options);
+                    });
+                }
+                row.appendChild(btn);
+            });
+            wrap.appendChild(row);
+        });
+
+        target.appendChild(wrap);
+    };
 
     // ── Hide Unprepared toggle (works on readonly sheets too — purely visual) ──
     document.getElementById('hide-unprepared-btn')?.addEventListener('click', () => {
@@ -2038,9 +2821,9 @@
         const cantripCur   = cantripLimit !== null ? _cantripCountFor(entry) : 0;
         const cantripOver  = cantripLimit !== null && cantripCur > cantripLimit;
         const cantripChip = cantripLimit !== null
-            ? ` <span style="color:var(--s-border);">·</span> <b style="color:${cantripOver ? '#e07070' : '#80e0a0'};">Cantrips: ${cantripCur} / ${cantripLimit}</b>`
+            ? ` <span style="color:var(--s-border);">·</span> <b style="color:${cantripOver ? 'var(--s-danger)' : '#80e0a0'};">Cantrips: ${cantripCur} / ${cantripLimit}</b>`
             : '';
-        txt.innerHTML = `<b style="color:${over ? '#e07070' : '#80e0a0'};">${className} — ${label}: ${cur} / ${limit}</b>${cantripChip}`
+        txt.innerHTML = `<b style="color:${over ? 'var(--s-danger)' : '#80e0a0'};">${className} — ${label}: ${cur} / ${limit}</b>${cantripChip}`
             + (sc.type === 'prepared'
                 ? ` <span style="color:var(--s-mute);">· Prepared = ${sc.ability.toUpperCase()} mod + class level</span>`
                 : ` <span style="color:var(--s-mute);">· From the ${className} spells known table</span>`);
@@ -2221,6 +3004,21 @@
     document.getElementById('sb-search-btn')?.addEventListener('click', _doSearch);
     sbSearchEl?.addEventListener('keydown', ev => { if (ev.key === 'Enter') { ev.preventDefault(); _doSearch(); } });
 })();
+</script>
+
+<script>
+    // This block runs AFTER the IIFE above has finished setting up
+    // window._lookupSubclassData / _renderSubclassSpellPanel / _renderFeatureGrantsPanel.
+    // sheet.js's initial _renderAllSubclassBlocks() may have already run
+    // during its async init flow, BEFORE those helpers were defined —
+    // in which case the inline subclass pickers (Bonus Cantrip dropdown,
+    // Circle Spells / Domain Spells / Oath Spells panel) silently skipped
+    // rendering because the helper lookups returned null/undefined.
+    // Trigger one more render now that everything is wired up, so the
+    // pickers appear on cold load without requiring a ↻ Sync click.
+    if (typeof window._mcRenderSubclassBlocks === 'function') {
+        try { window._mcRenderSubclassBlocks(); } catch (e) {}
+    }
 </script>
 
 <script>
@@ -2468,8 +3266,12 @@
         const v = (el?.value || '').toLowerCase().trim();
         return v ? [v] : [];
     }
-    // Legacy single-slug helper for the label
-    function _classSlug() { return _classSlugs()[0] || ''; }
+    // Legacy single-slug helper for the label. NOTE: do NOT name this
+    // ``_classSlug`` — there's already a 1-arg slugify function with that
+    // name at the top of this module; a second top-level declaration would
+    // shadow it and silently break every ``_classSlug(name)`` call site
+    // (Open5e subclass lookups, multiclass spell binding, etc.).
+    function _primaryClassSlug() { return _classSlugs()[0] || ''; }
 
     function _classProfsList() {
         return _classSlugs().map(s => CLASS_PROFS[s]).filter(Boolean);
@@ -2558,7 +3360,7 @@
         const hidden = results.length - visible.length;
 
         if (!visible.length) {
-            const slug = _classSlug();
+            const slug = _primaryClassSlug();
             const reason = slug
                 ? `Hiding ${hidden} item${hidden === 1 ? '' : 's'} not proficient for <strong>${_esc(slug)}</strong>.`
                 : `Hiding ${hidden} non-proficient item${hidden === 1 ? '' : 's'}.`;

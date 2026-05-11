@@ -2958,6 +2958,14 @@ _SHEET_PATCH_KEYS = {
     "race_parsed_data",         # legacy blob
     "race_flavor",
     "race_trait_items",         # list[{name, desc}]
+    # Full spells list — used by the Subclass Spells / Feature Grants panels
+    # to persist a player's granted-spell pick the moment they choose one,
+    # so the dropdown's selection survives a refresh without an explicit Save.
+    "spells",
+    # Per-class subclass-variant pick (Circle of the Land → Land Type,
+    # Knowledge Domain → Skill, …).  Auto-saved when the player selects
+    # from the variant dropdown so the picker re-hydrates on reload.
+    "subclass_choice",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the
@@ -2967,6 +2975,7 @@ _CLASS_SCOPED_KEYS = {
     "subclass_name",
     "subclass_flavor",
     "subclass_features",
+    "subclass_choice",
 }
 
 

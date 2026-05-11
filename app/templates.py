@@ -7,8 +7,16 @@ from pathlib import Path
 
 from fastapi.templating import Jinja2Templates
 
+from .version import APP_VERSION, SCHEMA_VERSION
+
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
+
+# Expose version constants as Jinja globals so the base-template footer (and
+# any other template that wants them) can reach them without each route
+# passing them in its context dict.
+templates.env.globals["APP_VERSION"] = APP_VERSION
+templates.env.globals["SCHEMA_VERSION"] = SCHEMA_VERSION
 
 
 def _bold_dice_in_breakdown(value: str) -> Markup:

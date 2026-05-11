@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ campaign.name }} — SimpleVTT{% endblock %}
+{# Suppress the version footer on the tabletop page — the screen is meant
+   to be full-bleed and the footer would push the canvas into a scrollbar. #}
+{% block footer %}{% endblock %}
 {% block head %}
 <style>
     body { overflow: hidden; }

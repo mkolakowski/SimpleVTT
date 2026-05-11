@@ -557,7 +557,10 @@
         return m ? parseInt(m[1], 10) : null;
     }
 
-    // Client-side fallback: parse a flat text blob into {intro, features}
+    // Client-side fallback: parse a flat text blob into {intro, features}.
+    // Exposed on window so the spellcasting framework can re-use it to scan
+    // class_features blobs for cantrip-granting features.
+    window._parseFeaturesFromText = _parseFeaturesFromText;
     function _parseFeaturesFromText(text) {
         if (!text) return { intro: '', features: [] };
         text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -789,7 +792,7 @@
         // Race name heading
         if (data.name) {
             const h = document.createElement('div');
-            h.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:4px;color:var(--fg,#e0e0e0);';
+            h.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:4px;color:var(--fg);';
             h.textContent = data.name;
             container.appendChild(h);
         }
@@ -798,25 +801,25 @@
         const cleanedFlavor = _cleanMd(flavor);
         if (cleanedFlavor) {
             const f = document.createElement('div');
-            f.style.cssText = 'font-size:12px;color:#8a9;font-style:italic;margin-bottom:12px;line-height:1.55;border-left:2px solid #3a5a6a;padding-left:8px;';
+            f.style.cssText = 'font-size:12px;color:var(--fg-mute);font-style:italic;margin-bottom:12px;line-height:1.55;border-left:2px solid var(--accent-border,var(--accent));padding-left:8px;';
             f.textContent = cleanedFlavor;
             container.appendChild(f);
         }
 
         function makeTraitCard(trait) {
             const card = document.createElement('div');
-            card.style.cssText = 'margin-bottom:5px;border-radius:5px;overflow:hidden;border:1px solid #2e3250;';
+            card.style.cssText = 'margin-bottom:5px;border-radius:5px;overflow:hidden;border:1px solid var(--border);';
 
             const hdr = document.createElement('div');
-            hdr.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 10px;background:#252c45;cursor:pointer;user-select:none;';
+            hdr.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg-2);cursor:pointer;user-select:none;';
 
             const arrow = document.createElement('span');
-            arrow.style.cssText = 'font-size:9px;color:#667;flex-shrink:0;transition:transform .15s;transform:rotate(-90deg);';
+            arrow.style.cssText = 'font-size:9px;color:var(--fg-mute);flex-shrink:0;transition:transform .15s;transform:rotate(-90deg);';
             arrow.textContent = '▼';
             hdr.appendChild(arrow);
 
             const nameSpan = document.createElement('span');
-            nameSpan.style.cssText = 'font-size:12px;font-weight:600;color:#c8cce8;flex:1;';
+            nameSpan.style.cssText = 'font-size:12px;font-weight:600;color:var(--fg);flex:1;';
             nameSpan.textContent = trait.name || 'Trait';
             hdr.appendChild(nameSpan);
 
@@ -824,7 +827,7 @@
 
             if (trait.desc) {
                 const body = document.createElement('div');
-                body.style.cssText = 'display:none;padding:10px 12px;font-size:12px;line-height:1.65;color:#b0b4cc;background:#191c2b;';
+                body.style.cssText = 'display:none;padding:10px 12px;font-size:12px;line-height:1.65;color:var(--fg-mute);background:var(--bg);border-top:1px solid var(--border);';
                 _cleanMd(trait.desc).split('\n\n').forEach(function (para) {
                     para = para.trim();
                     if (!para) return;
@@ -855,12 +858,12 @@
         } else if (cleanedFlavor) {
             // No traits parsed — render the blob as paragraphs
             const wrap = document.createElement('div');
-            wrap.style.cssText = 'background:#191c2b;border-radius:4px;padding:10px 12px;border:1px solid #2a2d3a;';
+            wrap.style.cssText = 'background:var(--bg);border-radius:4px;padding:10px 12px;border:1px solid var(--border);';
             cleanedFlavor.split('\n\n').forEach(function (para) {
                 para = para.trim();
                 if (!para) return;
                 const p = document.createElement('p');
-                p.style.cssText = 'margin:0 0 8px;font-size:12px;line-height:1.65;color:#b0b4cc;';
+                p.style.cssText = 'margin:0 0 8px;font-size:12px;line-height:1.65;color:var(--fg-mute);';
                 p.textContent = para;
                 wrap.appendChild(p);
             });
@@ -1520,14 +1523,142 @@
             .replace(/\n{3,}/g, '\n\n').trim();
     }
 
+    // Strip markdown-style tables (lines with two or more pipes, plus the
+    // `---|---` separator rows) so we don't render Open5e's verbatim PHB
+    // spell tables next to our interactive picker. Header lines like
+    // "Druid Level | Circle Spells" also disappear because they're table
+    // rows themselves.
+    function _stripTables(text) {
+        if (!text) return '';
+        return String(text)
+            .replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+            .split('\n')
+            .filter(line => {
+                if ((line.match(/\|/g) || []).length >= 2) return false;
+                if (/^[\s\-:|]+$/.test(line) && line.includes('-')) return false;
+                return true;
+            })
+            .join('\n')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
+    // Open5e sometimes returns the same subclass feature multiple times
+    // (e.g. "Circle Spells" as both a descriptive entry AND a separate per-
+    // level spell table). Merge any same-named features into one card so the
+    // player doesn't see duplicate "Circle Spells" headings.
+    function _dedupeFeatures(features) {
+        const order = [];
+        const byName = new Map();
+        features.forEach(f => {
+            if (!f || typeof f !== 'object') return;
+            const name = (f.name || '').trim();
+            const key = name.toLowerCase();
+            if (!key) { order.push(f); return; }
+            if (byName.has(key)) {
+                const existing = byName.get(key);
+                const fdesc = (f.desc || '').trim();
+                if (fdesc && (existing.desc || '').indexOf(fdesc) === -1) {
+                    existing.desc = ((existing.desc || '') + '\n\n' + fdesc).trim();
+                }
+                // Keep the EARLIEST unlock level — that's when the player first
+                // gets access to anything mentioned by this feature.
+                if (f.level != null && (existing.level == null || f.level < existing.level)) {
+                    existing.level = f.level;
+                }
+            } else {
+                const copy = { name: name, desc: (f.desc || ''), level: f.level };
+                byName.set(key, copy);
+                order.push(copy);
+            }
+        });
+        return order;
+    }
+
     function _renderSubclassBlock(target, entry) {
         target.innerHTML = '';
 
         const className = entry.class || '';
         const subName   = entry.subclass_name || entry.subclass || '';
-        const features  = (entry.subclass_features || []).slice();
-        const flavor    = entry.subclass_flavor || '';
+        const rawFlavor = entry.subclass_flavor || '';
         const lvl       = parseInt(entry.level, 10) || 0;
+
+        // Look the subclass up in the curated picker table — used both for
+        // deciding which features carry a picker AND for synthesizing
+        // feature cards offline (when Open5e hasn't been hit yet or is
+        // unreachable). The cards themselves come from Open5e for prose
+        // when available, but the pickers are always renderable from the
+        // curated data alone.
+        const subclassData = (typeof window._lookupSubclassData === 'function')
+            ? window._lookupSubclassData(entry)
+            : null;
+
+        // ── Synthesize missing curated picker cards ────────────────────
+        // For any curated feature (main subclass-spells feature like "Circle
+        // Spells" / "Domain Spells", or a bonusFeature like "Bonus Cantrip"
+        // / "Acolyte of Nature") that Open5e didn't return, push a synthetic
+        // feature into the list with no description. The dedupe + visible /
+        // locked split below treats it like any other feature, and the
+        // existing inline-picker logic gives it the matching picker as its
+        // body. When Open5e later returns the real feature, the dedupe
+        // merges them so the prose appears alongside the same picker.
+        let rawFeatures = (entry.subclass_features || []).slice();
+        if (subclassData) {
+            const existingNames = new Set();
+            rawFeatures.forEach(f => {
+                if (f && f.name) existingNames.add(f.name.toLowerCase());
+            });
+            // Main subclass-spells feature (Circle Spells / Domain Spells / …)
+            if (subclassData.feature && !existingNames.has(subclassData.feature.toLowerCase())) {
+                const grants = [];
+                if (Array.isArray(subclassData.grants)) grants.push(...subclassData.grants);
+                if (subclassData.variants) Object.values(subclassData.variants).forEach(arr => {
+                    if (Array.isArray(arr)) grants.push(...arr);
+                });
+                let minLvl = null;
+                grants.forEach(g => {
+                    if (g && g.classLvl && (minLvl == null || g.classLvl < minLvl)) minLvl = g.classLvl;
+                });
+                rawFeatures.push({
+                    name: subclassData.feature,
+                    desc: '',
+                    level: minLvl,
+                });
+                existingNames.add(subclassData.feature.toLowerCase());
+            }
+            // bonusFeatures (Bonus Cantrip / Acolyte of Nature / …)
+            if (Array.isArray(subclassData.bonusFeatures)) {
+                subclassData.bonusFeatures.forEach(bf => {
+                    if (bf && bf.feature && !existingNames.has(bf.feature.toLowerCase())) {
+                        rawFeatures.push({
+                            name: bf.feature,
+                            desc: '',
+                            level: bf.classLvl || null,
+                        });
+                        existingNames.add(bf.feature.toLowerCase());
+                    }
+                });
+            }
+        }
+        const features = _dedupeFeatures(rawFeatures);
+
+        // Pre-compute the lookups the visible-features loop will use below
+        // so we can also reference them in the visible/locked split.
+        const subclassMainFeature = (subclassData && subclassData.feature)
+            ? subclassData.feature.toLowerCase()
+            : null;
+        const bonusFeaturesByName = new Map();
+        if (subclassData && Array.isArray(subclassData.bonusFeatures)) {
+            subclassData.bonusFeatures.forEach(bf => {
+                if (bf && bf.feature) bonusFeaturesByName.set(bf.feature.toLowerCase(), bf);
+            });
+        }
+        function _isPickerFeature(f) {
+            if (!f || !f.name) return false;
+            const lc = f.name.toLowerCase();
+            return (subclassMainFeature && lc === subclassMainFeature)
+                || bonusFeaturesByName.has(lc);
+        }
 
         // Heading: "<Class> - <Subclass>"
         const heading = document.createElement('div');
@@ -1548,52 +1679,81 @@
         }
         target.appendChild(heading);
 
-        if (!features.length && !flavor) {
+        // If the subclass is set but its features haven't been cached yet,
+        // show a quiet hint but DON'T return early — we still want the
+        // Subclass Spells panel (Circle / Domain / Oath spells) to render
+        // immediately, since it's driven by the curated table keyed off the
+        // subclass slug and doesn't need the features blob.
+        if (!features.length && !rawFlavor) {
             const p = document.createElement('p');
             p.className = 'muted';
             p.style.cssText = 'font-size:12px;margin:4px 0 0;';
             p.textContent = subName
-                ? 'No features cached yet. Click ↻ Sync to load.'
+                ? 'Fetching subclass features from Open5e…'
                 : 'Pick a subclass on this class to see its features.';
             target.appendChild(p);
-            return;
         }
 
+        // When we have a curated picker for this subclass, strip out
+        // markdown-style tables from the flavor before rendering — Open5e
+        // stuffs the verbatim PHB spell tables into the subclass blurb and
+        // we don't want them next to our interactive picker.
+        const flavor = subclassData ? _stripTables(rawFlavor) : rawFlavor;
         const cleanedFlavor = _cleanMd(flavor);
         if (cleanedFlavor) {
             const f = document.createElement('div');
-            f.style.cssText = 'font-size:12px;color:#8a9;font-style:italic;margin-bottom:10px;line-height:1.55;border-left:2px solid #3a6a50;padding-left:8px;';
+            f.style.cssText = 'font-size:12px;color:var(--fg-mute);font-style:italic;margin-bottom:10px;line-height:1.55;border-left:2px solid var(--accent-border,var(--accent));padding-left:8px;';
             f.textContent = cleanedFlavor;
             target.appendChild(f);
         }
 
-        const visible = features.filter(f => f.level == null || f.level <= lvl);
-        const locked  = features.filter(f => f.level != null && f.level >  lvl);
+        // Curated-picker features (Circle Spells, Bonus Cantrip, …) always
+        // render in the visible list — even when their unlock level is
+        // above the player's current class level — so the picker is always
+        // reachable. The "Class Lv N" label inside the picker still tells
+        // the player when each row unlocks.
+        const visible = features.filter(f => f.level == null || f.level <= lvl || _isPickerFeature(f));
+        const locked  = features.filter(f => f.level != null && f.level >  lvl && !_isPickerFeature(f));
 
-        function makeCard(feat, dimmed) {
+        // ``customBody`` replaces the description body with whatever element
+        // the caller supplies — used to put the Subclass Spells picker
+        // inside the "Circle Spells" / "Domain Spells" / "Oath Spells" card
+        // so the verbatim PHB tables don't show up next to the interactive
+        // picker. ``startsOpen`` opens the body without a click; useful when
+        // the body IS the interactive control. ``bodyAppend`` is an extra
+        // element tacked onto the bottom of the body (after the description
+        // or customBody) — used to slot a Feature Grants picker into a
+        // "Bonus Cantrip" card right under its description text.
+        function makeCard(feat, dimmed, customBody, startsOpen, bodyAppend) {
             const card = document.createElement('div');
-            card.style.cssText = 'margin-bottom:5px;border-radius:5px;overflow:hidden;border:1px solid ' + (dimmed ? '#252530' : '#2e3250') + ';opacity:' + (dimmed ? '0.45' : '1') + ';';
+            card.style.cssText = 'margin-bottom:5px;border-radius:5px;overflow:hidden;border:1px solid var(--border);opacity:' + (dimmed ? '0.5' : '1') + ';';
             const hdr = document.createElement('div');
-            hdr.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 10px;background:' + (dimmed ? '#1c1e2a' : '#252c45') + ';cursor:pointer;user-select:none;';
+            hdr.style.cssText = 'display:flex;align-items:center;gap:8px;padding:7px 10px;background:' + (dimmed ? 'var(--bg)' : 'var(--bg-2)') + ';cursor:pointer;user-select:none;';
             const arrow = document.createElement('span');
-            arrow.style.cssText = 'font-size:9px;color:#667;flex-shrink:0;transition:transform .15s;transform:rotate(-90deg);';
+            arrow.style.cssText = 'font-size:9px;color:var(--fg-mute);flex-shrink:0;transition:transform .15s;transform:' + (startsOpen ? 'rotate(0deg)' : 'rotate(-90deg)') + ';';
             arrow.textContent = '▼';
             hdr.appendChild(arrow);
             const nameSpan = document.createElement('span');
-            nameSpan.style.cssText = 'font-size:12px;font-weight:600;color:' + (dimmed ? '#667' : '#c8cce8') + ';flex:1;';
+            nameSpan.style.cssText = 'font-size:12px;font-weight:600;color:' + (dimmed ? 'var(--fg-mute)' : 'var(--fg)') + ';flex:1;';
             nameSpan.textContent = feat.name || 'Feature';
             hdr.appendChild(nameSpan);
             if (feat.level != null) {
                 const badge = document.createElement('span');
-                badge.style.cssText = 'font-size:10px;padding:1px 7px;border-radius:10px;white-space:nowrap;flex-shrink:0;' +
-                    (dimmed ? 'background:#1e1e28;color:#445;' : 'background:#1c3040;color:#6ab;');
+                badge.style.cssText = 'font-size:10px;padding:1px 7px;border-radius:10px;white-space:nowrap;flex-shrink:0;border:1px solid var(--accent-border,var(--border));' +
+                    (dimmed ? 'background:transparent;color:var(--fg-mute);' : 'background:var(--accent-bg2);color:var(--accent);');
                 badge.textContent = 'Lvl ' + feat.level;
                 hdr.appendChild(badge);
             }
             card.appendChild(hdr);
-            if (feat.desc) {
-                const body = document.createElement('div');
-                body.style.cssText = 'display:none;padding:10px 12px;font-size:12px;line-height:1.65;color:#b0b4cc;background:#191c2b;';
+            let body = null;
+            if (customBody) {
+                body = document.createElement('div');
+                body.style.cssText = 'display:' + (startsOpen ? '' : 'none') + ';padding:10px 12px;background:var(--bg);border-top:1px solid var(--border);';
+                body.appendChild(customBody);
+                card.appendChild(body);
+            } else if (feat.desc) {
+                body = document.createElement('div');
+                body.style.cssText = 'display:' + (startsOpen ? '' : 'none') + ';padding:10px 12px;font-size:12px;line-height:1.65;color:var(--fg-mute);background:var(--bg);border-top:1px solid var(--border);';
                 _cleanMd(feat.desc).split('\n\n').forEach(para => {
                     para = para.trim(); if (!para) return;
                     const p = document.createElement('p');
@@ -1607,6 +1767,21 @@
                     body.appendChild(p);
                 });
                 card.appendChild(body);
+            }
+            if (bodyAppend) {
+                if (!body) {
+                    body = document.createElement('div');
+                    body.style.cssText = 'display:' + (startsOpen ? '' : 'none') + ';padding:10px 12px;background:var(--bg);border-top:1px solid var(--border);';
+                    card.appendChild(body);
+                } else if (body.firstChild) {
+                    // Thin divider between description text and the picker.
+                    const sep = document.createElement('div');
+                    sep.style.cssText = 'margin:8px 0 6px;border-top:1px dashed var(--border);';
+                    body.appendChild(sep);
+                }
+                body.appendChild(bodyAppend);
+            }
+            if (body) {
                 hdr.addEventListener('click', () => {
                     const open = body.style.display !== 'none';
                     body.style.display = open ? 'none' : '';
@@ -1616,16 +1791,106 @@
             return card;
         }
 
-        visible.forEach(f => target.appendChild(makeCard(f, false)));
+        // ── Render visible feature cards. Each card may have an interactive
+        //    panel inlined directly under it — the main Subclass Spells panel
+        //    sits under the matching "Circle Spells" / "Domain Spells" /
+        //    "Oath Spells" card; individual cantrip grants ("Bonus Cantrip",
+        //    "Acolyte of Nature") sit under their own feature cards. The
+        //    inlined name is tracked so the fallback panels at the bottom
+        //    don't render anything twice. ──
+        // (``subclassData``, ``subclassMainFeature``, and ``bonusFeaturesByName``
+        //  were all set up at the top of this function so the visible/locked
+        //  split could also reference them.)
+        const inlinedSubclassPanel = { done: false };
+        const inlinedGrantNames = new Set();
+        const cslug = _slug(entry.class || '');
+
+        visible.forEach(f => {
+            const fNameLc = (f.name || '').toLowerCase();
+
+            // The main subclass-spells panel ("Circle Spells", "Domain Spells", …)
+            // — REPLACE the verbatim PHB tables in the card body with the
+            // interactive picker. Card starts expanded so the picker is
+            // visible without a click.
+            if (fNameLc && !inlinedSubclassPanel.done
+                && subclassMainFeature && fNameLc === subclassMainFeature
+                && typeof window._renderSubclassSpellPanel === 'function') {
+                const pickerBody = document.createElement('div');
+                window._renderSubclassSpellPanel(pickerBody, entry, { inline: true });
+                target.appendChild(makeCard(f, false, pickerBody, true));
+                inlinedSubclassPanel.done = true;
+                return;
+            }
+
+            if (!fNameLc) {
+                target.appendChild(makeCard(f, false));
+                return;
+            }
+
+            // A curated bonusFeatures entry matching this card — render the
+            // card with its description AND the Feature Grants picker inside
+            // the body (the card opens expanded so the picker is visible).
+            if (bonusFeaturesByName.has(fNameLc)
+                && typeof window._renderFeatureGrantsPanel === 'function') {
+                const pickerExtra = document.createElement('div');
+                window._renderFeatureGrantsPanel(pickerExtra, entry, {
+                    inline: true,
+                    onlyFeature: f.name,
+                });
+                target.appendChild(makeCard(f, false, null, true, pickerExtra));
+                inlinedGrantNames.add(fNameLc);
+                return;
+            }
+
+            // Otherwise let the parser have a look at this card's description.
+            if (typeof window._parseCantripGrant === 'function'
+                && typeof window._renderFeatureGrantsPanel === 'function') {
+                const g = window._parseCantripGrant(f.name || '', f.desc || '', cslug);
+                if (g) {
+                    const pickerExtra = document.createElement('div');
+                    window._renderFeatureGrantsPanel(pickerExtra, entry, {
+                        inline: true,
+                        onlyFeature: f.name,
+                    });
+                    target.appendChild(makeCard(f, false, null, true, pickerExtra));
+                    inlinedGrantNames.add(fNameLc);
+                    return;
+                }
+            }
+
+            // No grant — render the normal description card.
+            target.appendChild(makeCard(f, false));
+        });
+
         if (locked.length) {
             const lockedWrap = document.createElement('div');
             lockedWrap.style.cssText = 'margin-top:6px;';
             const lockedLabel = document.createElement('div');
-            lockedLabel.style.cssText = 'font-size:10px;color:#445;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;padding-left:2px;';
+            lockedLabel.style.cssText = 'font-size:10px;color:var(--fg-mute);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;padding-left:2px;';
             lockedLabel.textContent = 'Future features';
             lockedWrap.appendChild(lockedLabel);
             locked.forEach(f => lockedWrap.appendChild(makeCard(f, true)));
             target.appendChild(lockedWrap);
+        }
+
+        // ── Fallback: grants that couldn't be matched to a visible feature
+        //    card (e.g. subclass set but features not yet synced). Render
+        //    them at the bottom inside the usual panel wrapper. Anything
+        //    already inlined above is filtered out. ──
+        if (!inlinedSubclassPanel.done && subclassData
+            && typeof window._renderSubclassSpellPanel === 'function') {
+            const fallback = document.createElement('div');
+            target.appendChild(fallback);
+            window._renderSubclassSpellPanel(fallback, entry);
+        }
+        if (typeof window._renderFeatureGrantsPanel === 'function') {
+            const fallback = document.createElement('div');
+            target.appendChild(fallback);
+            window._renderFeatureGrantsPanel(fallback, entry, {
+                excludeFeatures: inlinedGrantNames,
+            });
+            // Strip the element if the panel rendered nothing
+            if (!fallback.children.length) fallback.remove();
         }
     }
 
@@ -1861,6 +2126,42 @@
         _renderAllSubclassBlocks();
         _refreshProfTable();
         _refreshSpellSlots(true);
+        // Auto-fetch any missing subclass/class details so the Subclass Spells
+        // and Feature Grants panels populate without the player having to
+        // click the ↻ Sync button on each class.
+        _autoSyncMissingDetails();
+    }
+
+    // Background fetch for entries whose subclass features or class features
+    // haven't been cached yet. Each entry is tried at most once per session
+    // (tracked by a stable key) so we never thrash Open5e.
+    const _autoSyncedKeys = new Set();
+    async function _autoSyncMissingDetails() {
+        const arr = _readRoster();
+        if (!arr.length) return;
+        let changed = false;
+        for (const entry of arr) {
+            const key = (entry.class || '') + '|' + (entry.subclass || '');
+            if (_autoSyncedKeys.has(key)) continue;
+            const needsSub = (entry.subclass || '') && !((entry.subclass_features || []).length) && !(entry.subclass_flavor || '').trim();
+            const needsCls = (entry.class || '')    && !((entry.class_features || '') + '').trim();
+            if (!needsSub && !needsCls) continue;
+            _autoSyncedKeys.add(key);
+            try {
+                if (needsSub) await _fillSubclassDetail(entry);
+                if (needsCls) await _fillClassDetail(entry, false);
+                changed = true;
+            } catch {}
+        }
+        if (changed) {
+            _writeRoster(arr);
+            _renderAllSubclassBlocks();
+            _refreshProfTable();
+            // Persist subclass cache (per-class PATCH) so refresh sticks.
+            arr.forEach(e => {
+                if (e.subclass && (e.subclass_features || []).length) _saveSubclassCacheRow(e);
+            });
+        }
     }
 
     // ── Class proficiency table sync ──
@@ -2059,6 +2360,16 @@
     window._mcWriteRoster = _writeRoster;
     window._mcPrimary     = () => _primary(_readRoster());
     window._mcClassSlug   = _slug;
+    // The subclass picker helpers (_lookupSubclassData, _renderSubclassSpellPanel,
+    // _renderFeatureGrantsPanel) are defined in an inline <script> block inside
+    // sheet_dnd5e.html that loads AFTER this file. When localStorage has the
+    // Open5e class/subclass lists cached, our initial _renderEditor() flow
+    // resolves its awaits on the microtask queue and runs _renderAllSubclassBlocks
+    // BEFORE the browser parses that inline block — at which point those window.*
+    // helpers are still undefined and the per-feature inline pickers never render.
+    // Exposing the renderer here lets the helper-defining block trigger one
+    // re-render once it finishes setting up.
+    window._mcRenderSubclassBlocks = _renderAllSubclassBlocks;
 
     // Initial render
     _renderEditor();
