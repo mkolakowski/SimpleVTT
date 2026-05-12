@@ -2,17 +2,50 @@
 {% block title %}{{ campaign.name }} — Settings{% endblock %}
 {% block content %}
 <style>
-.settings-nav {
-    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 20px;
-    padding-bottom: 12px; border-bottom: 1px solid var(--border);
+/* ── Tabbed settings layout ────────────────────────────────────────────
+   The page used to be one long scroll with an anchor-link strip at the
+   top; once homebrew arrived (6 content types) it grew unwieldy. The
+   nav strip is now a real tab switcher: clicking a tab hides every
+   section that doesn't belong to it. Within the Homebrew tab a second
+   strip narrows further to one content type at a time. Hash-aware on
+   load so deep links and the CRUD redirect targets (e.g.
+   ``#custom-monsters``) still land on the right tab. */
+.settings-tabs {
+    display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--border);
 }
-.settings-nav a {
-    padding: 5px 12px; background: var(--bg-2); border: 1px solid var(--border);
-    border-radius: 4px; font-size: 13px; color: var(--fg-mute); text-decoration: none;
+.settings-tabs button.settings-tab {
+    padding: 6px 14px; background: var(--bg-2); border: 1px solid var(--border);
+    border-radius: 4px 4px 0 0; font-size: 13px; color: var(--fg-mute);
+    cursor: pointer; font-weight: 600; letter-spacing: .02em;
+    border-bottom-color: transparent; margin-bottom: -1px;
 }
-.settings-nav a:hover { color: var(--fg); border-color: #555; }
+.settings-tabs button.settings-tab:hover { color: var(--fg); border-color: #555; }
+.settings-tabs button.settings-tab.is-active {
+    background: var(--bg); color: var(--fg); border-color: var(--border);
+    border-bottom-color: var(--bg);
+}
+.settings-tabs button.settings-tab.is-danger { color: var(--danger); }
 
-.settings-section { margin-bottom: 36px; scroll-margin-top: 12px; }
+.settings-subtabs {
+    display: none; gap: 4px; flex-wrap: wrap; margin-bottom: 20px;
+    padding: 8px 4px 10px; border-bottom: 1px solid var(--border);
+}
+.settings-subtabs.is-shown { display: flex; }
+.settings-subtabs button.settings-subtab {
+    padding: 4px 10px; background: transparent; border: 1px solid transparent;
+    border-radius: 4px; font-size: 12px; color: var(--fg-mute); cursor: pointer;
+}
+.settings-subtabs button.settings-subtab:hover { color: var(--fg); background: var(--bg-2); }
+.settings-subtabs button.settings-subtab.is-active {
+    color: var(--fg); background: var(--bg-2); border-color: var(--border);
+}
+
+/* Sections are hidden by default — the tab JS shows the matching set on
+   load and on every tab switch. Plain anchor scrolling still works
+   thanks to the scroll-margin-top below. */
+.settings-section { margin-bottom: 36px; scroll-margin-top: 12px; display: none; }
+.settings-section.is-shown { display: block; }
 .settings-section h2 { margin-top: 0; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 
 .playlist-card {
@@ -72,18 +105,27 @@
     </div>
 </div>
 
-<nav class="settings-nav">
-    <a href="#basic">Basic info</a>
-    <a href="#members">Members</a>
-    <a href="#characters">Characters</a>
-    <a href="#maps">Maps</a>
-    <a href="#audio">Audio</a>
-    <a href="#tmpl">Token Templates</a>
-    {% if user.is_admin %}<a href="#danger" style="color:var(--danger);">Danger zone</a>{% endif %}
+<nav class="settings-tabs" role="tablist" aria-label="Campaign settings tabs">
+    <button type="button" class="settings-tab" data-tab="basic">Basic info</button>
+    <button type="button" class="settings-tab" data-tab="people">People</button>
+    <button type="button" class="settings-tab" data-tab="world">World</button>
+    <button type="button" class="settings-tab" data-tab="homebrew">Homebrew</button>
+    {% if user.is_admin %}
+    <button type="button" class="settings-tab is-danger" data-tab="danger">Danger zone</button>
+    {% endif %}
+</nav>
+<nav class="settings-subtabs" id="homebrew-subtabs" role="tablist" aria-label="Homebrew sub-tabs">
+    <button type="button" class="settings-subtab" data-sub="classes">Classes</button>
+    <button type="button" class="settings-subtab" data-sub="subclasses">Subclasses</button>
+    <button type="button" class="settings-subtab" data-sub="races">Races</button>
+    <button type="button" class="settings-subtab" data-sub="monsters">Monsters</button>
+    <button type="button" class="settings-subtab" data-sub="backgrounds">Backgrounds</button>
+    <button type="button" class="settings-subtab" data-sub="feats">Feats</button>
+    <button type="button" class="settings-subtab" data-sub="io">Import &amp; export</button>
 </nav>
 
 <!-- ── Basic info ── -->
-<section class="settings-section" id="basic">
+<section class="settings-section" id="basic" data-tab="basic">
     <h2>Basic info</h2>
     <form method="post" action="/campaign/{{ campaign.id }}/settings" enctype="multipart/form-data" class="stacked">
         <label>Name <input name="name" value="{{ campaign.name }}" required></label>
@@ -126,7 +168,7 @@
 </section>
 
 <!-- ── Members ── -->
-<section class="settings-section" id="members">
+<section class="settings-section" id="members" data-tab="people">
     <h2>Members</h2>
     <p class="muted">The primary GM (campaign owner) cannot be demoted here. Use the color swatch to set a roll-log highlight color for each member.</p>
     <table class="data">
@@ -220,7 +262,7 @@
 </section>
 
 <!-- ── Characters ── -->
-<section class="settings-section" id="characters">
+<section class="settings-section" id="characters" data-tab="people">
     <h2>Characters</h2>
     {% if characters %}
     <table class="data">
@@ -332,7 +374,7 @@
 </section>
 
 <!-- ── Maps ── -->
-<section class="settings-section" id="maps">
+<section class="settings-section" id="maps" data-tab="world">
     <h2>Maps</h2>
     {% if maps %}
     <table class="data">
@@ -384,7 +426,7 @@
 </section>
 
 <!-- ── Audio ── -->
-<section class="settings-section" id="audio">
+<section class="settings-section" id="audio" data-tab="world">
     <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;margin-bottom:6px;">
         <h2 style="margin:0;">🎵 Audio playlists</h2>
         <span style="display:flex;gap:8px;">
@@ -480,7 +522,7 @@
 </section>
 
 <!-- ── Token Templates ── -->
-<section class="settings-section" id="tmpl">
+<section class="settings-section" id="tmpl" data-tab="world">
     <h2>🎭 Token Templates</h2>
     <p class="muted">Create reusable tokens for NPCs, monsters, and recurring characters. Templates can be placed directly from the GM Tools panel during play.</p>
 
@@ -631,9 +673,825 @@
     </div>
 </div>
 
+<!-- ── Custom classes (homebrew base classes) ── -->
+<section class="settings-section" id="custom-classes" data-tab="homebrew" data-sub="classes">
+    <h2>Custom classes</h2>
+    <p class="muted">
+        Author homebrew base classes for this campaign. Each carries a hit
+        die, the six proficiency strings, an optional spellcasting ability,
+        starting equipment, and a structured features list. Slugs are
+        generated from the class name and fixed once created. <em>First-pass MVP</em>:
+        no spell list, no per-rest resource tables, no multiclass prereqs —
+        these arrive in later iterations.
+    </p>
+
+    {% if custom_classes %}
+        {% for cc in custom_classes %}
+        <details class="playlist-card" style="margin-top:14px;">
+            <summary>
+                <span class="pl-chevron">▸</span>
+                <span class="pl-name"><strong>{{ cc.name }}</strong></span>
+                <span class="pl-count muted">(d{{ cc.hit_die }} · {{ (cc.features or [])|length }} feature{{ '' if (cc.features or [])|length == 1 else 's' }})</span>
+                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cc.class_slug }}</code></span>
+            </summary>
+            <div class="playlist-body">
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-classes/{{ cc.id }}" class="stacked">
+                    <label>Name <input name="name" value="{{ cc.name }}" required maxlength="120"></label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <label>Hit die (4–12)
+                            <input type="number" name="hit_die" value="{{ cc.hit_die }}" min="4" max="12" required>
+                        </label>
+                        <label>Spellcasting ability
+                            <select name="spellcasting_ability">
+                                {% for ab in ['', 'str', 'dex', 'con', 'int', 'wis', 'cha'] %}
+                                <option value="{{ ab }}" {% if cc.spellcasting_ability == ab %}selected{% endif %}>{{ ab.upper() if ab else 'None (non-spellcaster)' }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                    </div>
+                    <label>Armor proficiencies
+                        <input name="prof_armor" value="{{ cc.prof_armor or '' }}" maxlength="500" placeholder="Light armor, medium armor, shields">
+                    </label>
+                    <label>Weapon proficiencies
+                        <input name="prof_weapons" value="{{ cc.prof_weapons or '' }}" maxlength="500" placeholder="Simple weapons, martial weapons">
+                    </label>
+                    <label>Tool proficiencies
+                        <input name="prof_tools" value="{{ cc.prof_tools or '' }}" maxlength="500" placeholder="Thieves' tools">
+                    </label>
+                    <label>Saving throws
+                        <input name="prof_saving_throws" value="{{ cc.prof_saving_throws or '' }}" maxlength="120" placeholder="Strength, Constitution">
+                    </label>
+                    <label>Skills
+                        <input name="prof_skills" value="{{ cc.prof_skills or '' }}" maxlength="500" placeholder="Choose two from Athletics, Intimidation, …">
+                    </label>
+                    <label>Starting equipment
+                        <textarea name="equipment" rows="3" maxlength="4000">{{ cc.equipment or '' }}</textarea>
+                    </label>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Features</legend>
+                        <div data-features-editor data-features='{{ cc.features | tojson | forceescape }}'></div>
+                        <input type="hidden" name="features_json" />
+                    </fieldset>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Spell list ({{ (cc.spell_list or [])|length }})</legend>
+                        <div data-spell-picker data-spells='{{ cc.spell_list | tojson | forceescape }}'></div>
+                        <input type="hidden" name="spell_list_json" />
+                        <p class="muted" style="font-size:12px;margin:8px 0 0;">
+                            Spells available to characters of this class. The picker only narrows live results — existing entries above remain even when search is closed. Saves as a list of Open5e slugs.
+                        </p>
+                    </fieldset>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Class resources ({{ (cc.resources or [])|length }})</legend>
+                        <p class="muted" style="font-size:12px;margin:0 0 8px;">
+                            Per-rest counters (Channel Divinity, Bardic Inspiration, Ki, …). Each row defines one resource — its max uses are computed from the chosen kind at runtime against the character's class level / ability scores / proficiency bonus.
+                        </p>
+                        <div data-resources-editor data-resources='{{ cc.resources | tojson | forceescape }}'></div>
+                        <input type="hidden" name="resources_json" />
+                    </fieldset>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Multiclass prerequisites</legend>
+                        <p class="muted" style="font-size:12px;margin:0 0 8px;">
+                            Minimum ability scores required to multiclass into or out of this class. Leave a field blank to skip that ability. Mode "All" requires every listed minimum; "Any" requires at least one (Fighter's STR-or-DEX rule).
+                        </p>
+                        {% set mca = cc.multiclass_prereq_abilities or {} %}
+                        <div style="display:grid;grid-template-columns:repeat(6, 1fr);gap:6px;margin-bottom:8px;">
+                            {% for ab in ['str', 'dex', 'con', 'int', 'wis', 'cha'] %}
+                            <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;text-align:center;">
+                                <span class="muted">{{ ab.upper() }}</span>
+                                <input type="number" name="mc_prereq_{{ ab }}" min="1" max="30" value="{{ mca.get(ab) or '' }}" style="text-align:center;">
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                            <label>Mode
+                                <select name="mc_prereq_mode">
+                                    <option value="all" {% if (cc.multiclass_prereq_mode or 'all') == 'all' %}selected{% endif %}>All listed (AND)</option>
+                                    <option value="any" {% if cc.multiclass_prereq_mode == 'any' %}selected{% endif %}>Any one (OR)</option>
+                                </select>
+                            </label>
+                            <label>Multiclass proficiencies gained
+                                <input name="multiclass_proficiencies" maxlength="500" value="{{ cc.multiclass_proficiencies or '' }}" placeholder="Light armor, simple weapons">
+                            </label>
+                        </div>
+                    </fieldset>
+                    <div style="display:flex;gap:8px;">
+                        <button type="submit">Save changes</button>
+                    </div>
+                </form>
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-classes/{{ cc.id }}/delete"
+                      onsubmit="return confirm('Delete homebrew class &quot;{{ cc.name }}&quot;? Character sheets that reference its slug will fall back to the built-in SRD content of the same slug (if any).')"
+                      style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
+                    <button type="submit" class="danger">Delete this class</button>
+                </form>
+            </div>
+        </details>
+        {% endfor %}
+    {% else %}
+        <p class="muted"><em>No custom classes yet.</em></p>
+    {% endif %}
+
+    <details class="playlist-card" style="margin-top:14px;">
+        <summary>
+            <span class="pl-chevron">▸</span>
+            <span class="pl-name"><strong>+ New custom class</strong></span>
+        </summary>
+        <div class="playlist-body">
+            <form method="post" action="/campaign/{{ campaign.id }}/custom-classes" class="stacked">
+                <label>Name <input name="name" required maxlength="120" placeholder="Artificer"></label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <label>Hit die (4–12)
+                        <input type="number" name="hit_die" value="8" min="4" max="12" required>
+                    </label>
+                    <label>Spellcasting ability
+                        <select name="spellcasting_ability">
+                            <option value="" selected>None (non-spellcaster)</option>
+                            <option value="str">STR</option>
+                            <option value="dex">DEX</option>
+                            <option value="con">CON</option>
+                            <option value="int">INT</option>
+                            <option value="wis">WIS</option>
+                            <option value="cha">CHA</option>
+                        </select>
+                    </label>
+                </div>
+                <label>Armor proficiencies <input name="prof_armor" maxlength="500" placeholder="Light armor, medium armor, shields"></label>
+                <label>Weapon proficiencies <input name="prof_weapons" maxlength="500" placeholder="Simple weapons"></label>
+                <label>Tool proficiencies <input name="prof_tools" maxlength="500" placeholder="Thieves' tools, tinker's tools"></label>
+                <label>Saving throws <input name="prof_saving_throws" maxlength="120" placeholder="Constitution, Intelligence"></label>
+                <label>Skills <input name="prof_skills" maxlength="500" placeholder="Choose two from Arcana, History, …"></label>
+                <label>Starting equipment
+                    <textarea name="equipment" rows="3" maxlength="4000" placeholder="(a) any simple weapon or (b) a light crossbow and 20 bolts&#10;(a) studded leather or (b) scale mail&#10;Dungeoneer's pack and thieves' tools"></textarea>
+                </label>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Features</legend>
+                    <div data-features-editor data-features="[]"></div>
+                    <input type="hidden" name="features_json" />
+                    <p class="muted" style="font-size:12px;margin:8px 0 0;">
+                        Each row needs at least a name. Level can be left blank for features with no level prerequisite.
+                    </p>
+                </fieldset>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Spell list</legend>
+                    <div data-spell-picker data-spells="[]"></div>
+                    <input type="hidden" name="spell_list_json" />
+                    <p class="muted" style="font-size:12px;margin:8px 0 0;">
+                        Optional. Add the spells available to this class — characters with this class will see them in their spell picker. Leave empty for non-casters.
+                    </p>
+                </fieldset>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Class resources</legend>
+                    <p class="muted" style="font-size:12px;margin:0 0 8px;">
+                        Optional. Per-rest counters like Channel Divinity, Bardic Inspiration, Ki, Action Surge. Leave empty for classes without trackable resources.
+                    </p>
+                    <div data-resources-editor data-resources="[]"></div>
+                    <input type="hidden" name="resources_json" />
+                </fieldset>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Multiclass prerequisites</legend>
+                    <p class="muted" style="font-size:12px;margin:0 0 8px;">
+                        Minimum ability scores required to multiclass into or out of this class. Leave a field blank to skip that ability. Mode "All" requires every listed minimum; "Any" requires at least one (Fighter's STR-or-DEX rule).
+                    </p>
+                    <div style="display:grid;grid-template-columns:repeat(6, 1fr);gap:6px;margin-bottom:8px;">
+                        {% for ab in ['str', 'dex', 'con', 'int', 'wis', 'cha'] %}
+                        <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;text-align:center;">
+                            <span class="muted">{{ ab.upper() }}</span>
+                            <input type="number" name="mc_prereq_{{ ab }}" min="1" max="30" placeholder="—" style="text-align:center;">
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <label>Mode
+                            <select name="mc_prereq_mode">
+                                <option value="all" selected>All listed (AND)</option>
+                                <option value="any">Any one (OR)</option>
+                            </select>
+                        </label>
+                        <label>Multiclass proficiencies gained
+                            <input name="multiclass_proficiencies" maxlength="500" placeholder="Light armor, simple weapons">
+                        </label>
+                    </div>
+                </fieldset>
+                <div><button type="submit">Create custom class</button></div>
+            </form>
+        </div>
+    </details>
+</section>
+
+<!-- ── Custom subclasses (homebrew) ── -->
+<section class="settings-section" id="custom-subclasses" data-tab="homebrew" data-sub="subclasses">
+    <h2>Custom subclasses</h2>
+    <p class="muted">
+        Author homebrew subclasses for this campaign. They appear in the
+        subclass picker only for characters in <em>this</em> campaign, and
+        shadow the built-in SRD content if the slug collides. Slugs are
+        generated from the subclass name and are fixed once created —
+        rename freely, but to change the slug you must delete and recreate.
+    </p>
+
+    {% if custom_subclasses %}
+        {% for cs in custom_subclasses %}
+        <details class="playlist-card" style="margin-top:14px;">
+            <summary>
+                <span class="pl-chevron">▸</span>
+                <span class="pl-name"><strong>{{ cs.name }}</strong></span>
+                <span class="pl-count muted">({{ cs.class_slug }} · {{ (cs.features or [])|length }} feature{{ '' if (cs.features or [])|length == 1 else 's' }})</span>
+                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cs.sub_slug }}</code></span>
+            </summary>
+            <div class="playlist-body">
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-subclasses/{{ cs.id }}" class="stacked">
+                    <label>Name <input name="name" value="{{ cs.name }}" required maxlength="120"></label>
+                    <label>Parent class slug <input name="class_slug" value="{{ cs.class_slug }}" required maxlength="60" pattern="[a-z0-9-]+"
+                           title="Lowercase letters, numbers, dashes — typically the Open5e class slug, e.g. 'druid' or 'fighter'"></label>
+                    <label>Flavor (introductory description)
+                        <textarea name="flavor" rows="3" maxlength="4000">{{ cs.flavor or '' }}</textarea>
+                    </label>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Features</legend>
+                        <div data-features-editor data-features='{{ cs.features | tojson | forceescape }}'></div>
+                        <input type="hidden" name="features_json" />
+                    </fieldset>
+                    <div style="display:flex;gap:8px;">
+                        <button type="submit">Save changes</button>
+                    </div>
+                </form>
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-subclasses/{{ cs.id }}/delete"
+                      onsubmit="return confirm('Delete homebrew subclass &quot;{{ cs.name }}&quot;? Character sheets that reference its slug will fall back to the built-in SRD content of the same slug (if any), or render empty features.')"
+                      style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
+                    <button type="submit" class="danger">Delete this subclass</button>
+                </form>
+            </div>
+        </details>
+        {% endfor %}
+    {% else %}
+        <p class="muted"><em>No custom subclasses yet.</em></p>
+    {% endif %}
+
+    <details class="playlist-card" style="margin-top:14px;">
+        <summary>
+            <span class="pl-chevron">▸</span>
+            <span class="pl-name"><strong>+ New custom subclass</strong></span>
+        </summary>
+        <div class="playlist-body">
+            <form method="post" action="/campaign/{{ campaign.id }}/custom-subclasses" class="stacked">
+                <label>Name <input name="name" required maxlength="120" placeholder="Circle of the Deep"></label>
+                <label>Parent class slug
+                    <input name="class_slug" required maxlength="60" pattern="[a-z0-9-]+" placeholder="druid"
+                           title="Lowercase letters, numbers, dashes — typically the Open5e class slug, e.g. 'druid' or 'fighter'">
+                </label>
+                <label>Flavor (introductory description)
+                    <textarea name="flavor" rows="3" maxlength="4000" placeholder="Druids of the abyssal trench, sworn to the silent dark..."></textarea>
+                </label>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Features</legend>
+                    <div data-features-editor data-features="[]"></div>
+                    <input type="hidden" name="features_json" />
+                    <p class="muted" style="font-size:12px;margin:8px 0 0;">
+                        Each row needs at least a name. Level can be left blank for features with no level prerequisite. Empty rows are dropped on save.
+                    </p>
+                </fieldset>
+                <div><button type="submit">Create custom subclass</button></div>
+            </form>
+        </div>
+    </details>
+</section>
+
+<!-- ── Custom races (homebrew) ── -->
+{% set _ab_map = {} %}
+<section class="settings-section" id="custom-races" data-tab="homebrew" data-sub="races">
+    <h2>Custom races</h2>
+    <p class="muted">
+        Author homebrew races for this campaign. Each carries ability
+        bonuses, size, speed, age / alignment / language descriptions,
+        and a structured traits list. Slugs are generated from the name
+        and fixed once created — rename freely, but to change the slug
+        delete and recreate.
+    </p>
+
+    {% if custom_races %}
+        {% for cr in custom_races %}
+        {% set ab_map = {} %}
+        {% for ab in (cr.ability_bonuses or []) %}
+            {% set _ = ab_map.update({(ab.attribute or '')[:3].lower(): ab.bonus}) %}
+        {% endfor %}
+        <details class="playlist-card" style="margin-top:14px;">
+            <summary>
+                <span class="pl-chevron">▸</span>
+                <span class="pl-name"><strong>{{ cr.name }}</strong></span>
+                <span class="pl-count muted">({{ cr.size or '—' }} · {{ cr.speed }} ft · {{ (cr.traits or [])|length }} trait{{ '' if (cr.traits or [])|length == 1 else 's' }})</span>
+                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cr.race_slug }}</code></span>
+            </summary>
+            <div class="playlist-body">
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-races/{{ cr.id }}" class="stacked">
+                    <label>Name <input name="name" value="{{ cr.name }}" required maxlength="120"></label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <label>Size
+                            <select name="size">
+                                {% for s in ['', 'Tiny', 'Small', 'Medium', 'Large', 'Huge', 'Gargantuan'] %}
+                                <option value="{{ s }}" {% if cr.size == s %}selected{% endif %}>{{ s or '— (unset)' }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label>Speed (ft/round)
+                            <input type="number" name="speed" min="0" max="200" value="{{ cr.speed }}" required>
+                        </label>
+                    </div>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Ability bonuses</legend>
+                        <p class="muted" style="font-size:12px;margin:0 0 8px;">
+                            Per-ability bonuses (e.g. <em>+2 DEX, +1 CHA</em>). Leave blank or zero for no bonus.
+                        </p>
+                        <div style="display:grid;grid-template-columns:repeat(6, 1fr);gap:6px;">
+                            {% for ab in ['str', 'dex', 'con', 'int', 'wis', 'cha'] %}
+                            <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;text-align:center;">
+                                <span class="muted">{{ ab.upper() }}</span>
+                                <input type="number" name="ab_{{ ab }}" min="-10" max="10" value="{{ ab_map.get(ab) or '' }}" style="text-align:center;">
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+                    <label>Age <textarea name="age" rows="2" maxlength="1000">{{ cr.age or '' }}</textarea></label>
+                    <label>Alignment <textarea name="alignment" rows="2" maxlength="1000">{{ cr.alignment or '' }}</textarea></label>
+                    <label>Languages <textarea name="languages" rows="2" maxlength="1000">{{ cr.languages or '' }}</textarea></label>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Racial traits</legend>
+                        <div data-features-editor data-features='{{ cr.traits | tojson | forceescape }}'></div>
+                        <input type="hidden" name="traits_json" />
+                        <p class="muted" style="font-size:12px;margin:8px 0 0;">
+                            Each trait needs at least a name. Level can be left blank — races usually grant traits at level 1 (the renderer treats blank level as "always available").
+                        </p>
+                    </fieldset>
+                    <div style="display:flex;gap:8px;">
+                        <button type="submit">Save changes</button>
+                    </div>
+                </form>
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-races/{{ cr.id }}/delete"
+                      onsubmit="return confirm('Delete homebrew race &quot;{{ cr.name }}&quot;? Character sheets that reference its slug will fall back to the SRD race of the same slug (if any), or render empty.')"
+                      style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
+                    <button type="submit" class="danger">Delete this race</button>
+                </form>
+            </div>
+        </details>
+        {% endfor %}
+    {% else %}
+        <p class="muted"><em>No custom races yet.</em></p>
+    {% endif %}
+
+    <details class="playlist-card" style="margin-top:14px;">
+        <summary>
+            <span class="pl-chevron">▸</span>
+            <span class="pl-name"><strong>+ New custom race</strong></span>
+        </summary>
+        <div class="playlist-body">
+            <form method="post" action="/campaign/{{ campaign.id }}/custom-races" class="stacked">
+                <label>Name <input name="name" required maxlength="120" placeholder="Deep Gnome"></label>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <label>Size
+                        <select name="size">
+                            <option value="">— (unset)</option>
+                            <option value="Tiny">Tiny</option>
+                            <option value="Small">Small</option>
+                            <option value="Medium" selected>Medium</option>
+                            <option value="Large">Large</option>
+                            <option value="Huge">Huge</option>
+                            <option value="Gargantuan">Gargantuan</option>
+                        </select>
+                    </label>
+                    <label>Speed (ft/round)
+                        <input type="number" name="speed" min="0" max="200" value="30" required>
+                    </label>
+                </div>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Ability bonuses</legend>
+                    <div style="display:grid;grid-template-columns:repeat(6, 1fr);gap:6px;">
+                        {% for ab in ['str', 'dex', 'con', 'int', 'wis', 'cha'] %}
+                        <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;text-align:center;">
+                            <span class="muted">{{ ab.upper() }}</span>
+                            <input type="number" name="ab_{{ ab }}" min="-10" max="10" placeholder="—" style="text-align:center;">
+                        </label>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+                <label>Age <textarea name="age" rows="2" maxlength="1000" placeholder="Deep gnomes mature at the same rate as humans and live about 250 years."></textarea></label>
+                <label>Alignment <textarea name="alignment" rows="2" maxlength="1000" placeholder="Most deep gnomes are neutral good..."></textarea></label>
+                <label>Languages <textarea name="languages" rows="2" maxlength="1000" placeholder="You can speak, read, and write Common, Gnomish, and Undercommon."></textarea></label>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Racial traits</legend>
+                    <div data-features-editor data-features="[]"></div>
+                    <input type="hidden" name="traits_json" />
+                    <p class="muted" style="font-size:12px;margin:8px 0 0;">
+                        Add one row per trait (Darkvision, Stone Camouflage, Gnome Cunning, …). Level usually blank for races.
+                    </p>
+                </fieldset>
+                <div><button type="submit">Create custom race</button></div>
+            </form>
+        </div>
+    </details>
+</section>
+
+<!-- ── Custom monsters (homebrew stat blocks) ── -->
+{% set _monster_types = ['aberration', 'beast', 'celestial', 'construct', 'dragon', 'elemental', 'fey', 'fiend', 'giant', 'humanoid', 'monstrosity', 'ooze', 'plant', 'undead'] %}
+{% set _sizes = ['Tiny', 'Small', 'Medium', 'Large', 'Huge', 'Gargantuan'] %}
+{% set _cr_options = ['0', '1/8', '1/4', '1/2', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30'] %}
+<section class="settings-section" id="custom-monsters" data-tab="homebrew" data-sub="monsters">
+    <h2>Custom monsters</h2>
+    <p class="muted">
+        Author homebrew monsters and NPCs for this campaign. They appear in
+        the Wild Shape / Polymorph beast picker (when type=<code>beast</code>)
+        and in any other monster-search flow inside this campaign, shadowing
+        any Open5e entry with the same slug. <em>MVP scope</em>: stats +
+        four action lists. Structured skills/saves, spell lists, and
+        legendary lair effects are deferred to a later iteration.
+    </p>
+
+    {% if custom_monsters %}
+        {% for cm in custom_monsters %}
+        <details class="playlist-card" style="margin-top:14px;">
+            <summary>
+                <span class="pl-chevron">▸</span>
+                <span class="pl-name"><strong>{{ cm.name }}</strong></span>
+                <span class="pl-count muted">({{ cm.size }} {{ cm.type }} · CR {{ cm.challenge_rating }} · AC {{ cm.armor_class }} · HP {{ cm.hit_points }})</span>
+                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cm.monster_slug }}</code></span>
+            </summary>
+            <div class="playlist-body">
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-monsters/{{ cm.id }}" class="stacked">
+                    <label>Name <input name="name" value="{{ cm.name }}" required maxlength="120"></label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                        <label>Size
+                            <select name="size">
+                                {% for s in _sizes %}
+                                <option value="{{ s }}" {% if cm.size == s %}selected{% endif %}>{{ s }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label>Type
+                            <select name="type">
+                                {% for t in _monster_types %}
+                                <option value="{{ t }}" {% if cm.type == t %}selected{% endif %}>{{ t }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label>Alignment <input name="alignment" value="{{ cm.alignment or 'unaligned' }}" maxlength="120"></label>
+                    </div>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Combat</legend>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:8px;align-items:end;">
+                            <label>AC <input type="number" name="armor_class" min="1" max="40" value="{{ cm.armor_class }}" required></label>
+                            <label>Armor desc <input name="armor_desc" value="{{ cm.armor_desc or '' }}" maxlength="120" placeholder="natural armor"></label>
+                            <label>HP <input type="number" name="hit_points" min="1" max="9999" value="{{ cm.hit_points }}" required></label>
+                            <label>Hit dice <input name="hit_dice" value="{{ cm.hit_dice or '' }}" maxlength="40" placeholder="3d8+6"></label>
+                            <label>CR
+                                <select name="challenge_rating">
+                                    {% for opt in _cr_options %}
+                                    <option value="{{ opt }}" {% if cm.challenge_rating == opt %}selected{% endif %}>{{ opt }}</option>
+                                    {% endfor %}
+                                </select>
+                            </label>
+                        </div>
+                        <p class="muted" style="font-size:11px;margin:8px 0 4px;">Speed (ft/round, leave blank for "none")</p>
+                        <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:6px;">
+                            {% for k in ['walk', 'fly', 'swim', 'climb', 'burrow'] %}
+                            <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;text-align:center;">
+                                <span class="muted">{{ k }}</span>
+                                <input type="number" name="speed_{{ k }}" min="0" max="999" value="{{ (cm.speed or {}).get(k) or '' }}" style="text-align:center;">
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Ability scores</legend>
+                        <div style="display:grid;grid-template-columns:repeat(6, 1fr);gap:6px;">
+                            {% for ab in [('strength','STR'), ('dexterity','DEX'), ('constitution','CON'), ('intelligence','INT'), ('wisdom','WIS'), ('charisma','CHA')] %}
+                            <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;text-align:center;">
+                                <span class="muted">{{ ab[1] }}</span>
+                                <input type="number" name="{{ ab[0] }}" min="1" max="40" value="{{ cm[ab[0]] }}" style="text-align:center;">
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </fieldset>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Defenses & senses</legend>
+                        <label>Damage vulnerabilities <input name="damage_vulnerabilities" value="{{ cm.damage_vulnerabilities or '' }}" maxlength="500" placeholder="fire"></label>
+                        <label>Damage resistances <input name="damage_resistances" value="{{ cm.damage_resistances or '' }}" maxlength="500" placeholder="bludgeoning, piercing from nonmagical attacks"></label>
+                        <label>Damage immunities <input name="damage_immunities" value="{{ cm.damage_immunities or '' }}" maxlength="500" placeholder="poison"></label>
+                        <label>Condition immunities <input name="condition_immunities" value="{{ cm.condition_immunities or '' }}" maxlength="500" placeholder="charmed, frightened, poisoned"></label>
+                        <label>Senses <input name="senses" value="{{ cm.senses or '' }}" maxlength="500" placeholder="darkvision 60 ft., passive Perception 14"></label>
+                        <label>Languages <input name="languages" value="{{ cm.languages or '' }}" maxlength="500" placeholder="Common, Draconic"></label>
+                    </fieldset>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Actions ({{ (cm.actions or [])|length }})</legend>
+                        <div data-features-editor data-features='{{ cm.actions | tojson | forceescape }}'></div>
+                        <input type="hidden" name="actions_json" />
+                    </fieldset>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Special abilities ({{ (cm.special_abilities or [])|length }})</legend>
+                        <div data-features-editor data-features='{{ cm.special_abilities | tojson | forceescape }}'></div>
+                        <input type="hidden" name="special_abilities_json" />
+                    </fieldset>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Reactions ({{ (cm.reactions or [])|length }})</legend>
+                        <div data-features-editor data-features='{{ cm.reactions | tojson | forceescape }}'></div>
+                        <input type="hidden" name="reactions_json" />
+                    </fieldset>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Legendary actions ({{ (cm.legendary_actions or [])|length }})</legend>
+                        <div data-features-editor data-features='{{ cm.legendary_actions | tojson | forceescape }}'></div>
+                        <input type="hidden" name="legendary_actions_json" />
+                    </fieldset>
+                    <div style="display:flex;gap:8px;">
+                        <button type="submit">Save changes</button>
+                    </div>
+                </form>
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-monsters/{{ cm.id }}/delete"
+                      onsubmit="return confirm('Delete homebrew monster &quot;{{ cm.name }}&quot;? Token templates and beast favorites that reference its slug will lose the link.')"
+                      style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
+                    <button type="submit" class="danger">Delete this monster</button>
+                </form>
+            </div>
+        </details>
+        {% endfor %}
+    {% else %}
+        <p class="muted"><em>No custom monsters yet.</em></p>
+    {% endif %}
+
+    <details class="playlist-card" style="margin-top:14px;">
+        <summary>
+            <span class="pl-chevron">▸</span>
+            <span class="pl-name"><strong>+ New custom monster</strong></span>
+        </summary>
+        <div class="playlist-body">
+            <form method="post" action="/campaign/{{ campaign.id }}/custom-monsters" class="stacked">
+                <label>Name <input name="name" required maxlength="120" placeholder="Awakened Boulder"></label>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
+                    <label>Size
+                        <select name="size">
+                            {% for s in _sizes %}
+                            <option value="{{ s }}" {% if s == 'Medium' %}selected{% endif %}>{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>Type
+                        <select name="type">
+                            {% for t in _monster_types %}
+                            <option value="{{ t }}" {% if t == 'beast' %}selected{% endif %}>{{ t }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>Alignment <input name="alignment" value="unaligned" maxlength="120"></label>
+                </div>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Combat</legend>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:8px;align-items:end;">
+                        <label>AC <input type="number" name="armor_class" min="1" max="40" value="10" required></label>
+                        <label>Armor desc <input name="armor_desc" maxlength="120" placeholder="natural armor"></label>
+                        <label>HP <input type="number" name="hit_points" min="1" max="9999" value="1" required></label>
+                        <label>Hit dice <input name="hit_dice" maxlength="40" placeholder="3d8+6"></label>
+                        <label>CR
+                            <select name="challenge_rating">
+                                {% for opt in _cr_options %}
+                                <option value="{{ opt }}" {% if opt == '0' %}selected{% endif %}>{{ opt }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                    </div>
+                    <p class="muted" style="font-size:11px;margin:8px 0 4px;">Speed (ft/round, leave blank for "none")</p>
+                    <div style="display:grid;grid-template-columns:repeat(5, 1fr);gap:6px;">
+                        {% for k in ['walk', 'fly', 'swim', 'climb', 'burrow'] %}
+                        <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;text-align:center;">
+                            <span class="muted">{{ k }}</span>
+                            <input type="number" name="speed_{{ k }}" min="0" max="999" value="{% if k == 'walk' %}30{% endif %}" style="text-align:center;">
+                        </label>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Ability scores</legend>
+                    <div style="display:grid;grid-template-columns:repeat(6, 1fr);gap:6px;">
+                        {% for ab in [('strength','STR'), ('dexterity','DEX'), ('constitution','CON'), ('intelligence','INT'), ('wisdom','WIS'), ('charisma','CHA')] %}
+                        <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;text-align:center;">
+                            <span class="muted">{{ ab[1] }}</span>
+                            <input type="number" name="{{ ab[0] }}" min="1" max="40" value="10" style="text-align:center;">
+                        </label>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Defenses & senses</legend>
+                    <label>Damage vulnerabilities <input name="damage_vulnerabilities" maxlength="500" placeholder="fire"></label>
+                    <label>Damage resistances <input name="damage_resistances" maxlength="500" placeholder="bludgeoning, piercing from nonmagical attacks"></label>
+                    <label>Damage immunities <input name="damage_immunities" maxlength="500" placeholder="poison"></label>
+                    <label>Condition immunities <input name="condition_immunities" maxlength="500" placeholder="charmed, frightened, poisoned"></label>
+                    <label>Senses <input name="senses" maxlength="500" placeholder="darkvision 60 ft., passive Perception 14"></label>
+                    <label>Languages <input name="languages" maxlength="500" placeholder="Common, Draconic"></label>
+                </fieldset>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Actions</legend>
+                    <div data-features-editor data-features="[]"></div>
+                    <input type="hidden" name="actions_json" />
+                </fieldset>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Special abilities</legend>
+                    <div data-features-editor data-features="[]"></div>
+                    <input type="hidden" name="special_abilities_json" />
+                </fieldset>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Reactions</legend>
+                    <div data-features-editor data-features="[]"></div>
+                    <input type="hidden" name="reactions_json" />
+                </fieldset>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Legendary actions</legend>
+                    <div data-features-editor data-features="[]"></div>
+                    <input type="hidden" name="legendary_actions_json" />
+                </fieldset>
+                <div><button type="submit">Create custom monster</button></div>
+            </form>
+        </div>
+    </details>
+</section>
+
+<!-- ── Custom backgrounds (homebrew) ── -->
+<section class="settings-section" id="custom-backgrounds" data-tab="homebrew" data-sub="backgrounds">
+    <h2>Custom backgrounds</h2>
+    <p class="muted">
+        Author homebrew character backgrounds for this campaign. Each carries
+        the four proficiency strings, starting equipment, and one signature
+        feature (the "Background Feature" most published backgrounds include).
+        Slugs are generated from the name and fixed once created.
+    </p>
+
+    {% if custom_backgrounds %}
+        {% for cb in custom_backgrounds %}
+        <details class="playlist-card" style="margin-top:14px;">
+            <summary>
+                <span class="pl-chevron">▸</span>
+                <span class="pl-name"><strong>{{ cb.name }}</strong></span>
+                <span class="pl-count muted">{% if cb.feature_name %}({{ cb.feature_name }}){% endif %}</span>
+                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cb.background_slug }}</code></span>
+            </summary>
+            <div class="playlist-body">
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-backgrounds/{{ cb.id }}" class="stacked">
+                    <label>Name <input name="name" value="{{ cb.name }}" required maxlength="120"></label>
+                    <label>Description <textarea name="description" rows="3" maxlength="8000">{{ cb.description or '' }}</textarea></label>
+                    <label>Skill proficiencies <input name="skill_proficiencies" value="{{ cb.skill_proficiencies or '' }}" maxlength="500" placeholder="Insight, Religion"></label>
+                    <label>Tool proficiencies <input name="tool_proficiencies" value="{{ cb.tool_proficiencies or '' }}" maxlength="500" placeholder="One type of artisan's tools"></label>
+                    <label>Languages <input name="languages" value="{{ cb.languages or '' }}" maxlength="500" placeholder="Two of your choice"></label>
+                    <label>Starting equipment <textarea name="equipment" rows="2" maxlength="4000">{{ cb.equipment or '' }}</textarea></label>
+                    <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Signature feature</legend>
+                        <label>Feature name <input name="feature_name" value="{{ cb.feature_name or '' }}" maxlength="160" placeholder="Shelter of the Faithful"></label>
+                        <label>Feature description <textarea name="feature_desc" rows="3" maxlength="4000">{{ cb.feature_desc or '' }}</textarea></label>
+                    </fieldset>
+                    <div style="display:flex;gap:8px;">
+                        <button type="submit">Save changes</button>
+                    </div>
+                </form>
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-backgrounds/{{ cb.id }}/delete"
+                      onsubmit="return confirm('Delete homebrew background &quot;{{ cb.name }}&quot;?')"
+                      style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
+                    <button type="submit" class="danger">Delete this background</button>
+                </form>
+            </div>
+        </details>
+        {% endfor %}
+    {% else %}
+        <p class="muted"><em>No custom backgrounds yet.</em></p>
+    {% endif %}
+
+    <details class="playlist-card" style="margin-top:14px;">
+        <summary>
+            <span class="pl-chevron">▸</span>
+            <span class="pl-name"><strong>+ New custom background</strong></span>
+        </summary>
+        <div class="playlist-body">
+            <form method="post" action="/campaign/{{ campaign.id }}/custom-backgrounds" class="stacked">
+                <label>Name <input name="name" required maxlength="120" placeholder="Ashen Wanderer"></label>
+                <label>Description <textarea name="description" rows="3" maxlength="8000" placeholder="You grew up amid the ruins of a city consumed by dragonfire..."></textarea></label>
+                <label>Skill proficiencies <input name="skill_proficiencies" maxlength="500" placeholder="Survival, History"></label>
+                <label>Tool proficiencies <input name="tool_proficiencies" maxlength="500" placeholder="Cartographer's tools"></label>
+                <label>Languages <input name="languages" maxlength="500" placeholder="One of your choice"></label>
+                <label>Starting equipment <textarea name="equipment" rows="2" maxlength="4000" placeholder="A traveler's compass, a journal of ash-rubbings, a set of common clothes..."></textarea></label>
+                <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
+                    <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Signature feature</legend>
+                    <label>Feature name <input name="feature_name" maxlength="160" placeholder="Ruin-Sense"></label>
+                    <label>Feature description <textarea name="feature_desc" rows="3" maxlength="4000" placeholder="You can always tell when a settlement was destroyed by fire..."></textarea></label>
+                </fieldset>
+                <div><button type="submit">Create custom background</button></div>
+            </form>
+        </div>
+    </details>
+</section>
+
+<!-- ── Custom feats (homebrew) ── -->
+<section class="settings-section" id="custom-feats" data-tab="homebrew" data-sub="feats">
+    <h2>Custom feats</h2>
+    <p class="muted">
+        Author homebrew feats for this campaign. Smallest of the content
+        types — just a name, a prerequisite (free text — e.g. "Strength 13 or
+        higher" or "Spellcasting ability"), and the full description.
+        Mechanical effects live in the description body.
+    </p>
+
+    {% if custom_feats %}
+        {% for cf in custom_feats %}
+        <details class="playlist-card" style="margin-top:14px;">
+            <summary>
+                <span class="pl-chevron">▸</span>
+                <span class="pl-name"><strong>{{ cf.name }}</strong></span>
+                <span class="pl-count muted">{% if cf.prerequisite %}(Prereq: {{ cf.prerequisite }}){% endif %}</span>
+                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cf.feat_slug }}</code></span>
+            </summary>
+            <div class="playlist-body">
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-feats/{{ cf.id }}" class="stacked">
+                    <label>Name <input name="name" value="{{ cf.name }}" required maxlength="120"></label>
+                    <label>Prerequisite <input name="prerequisite" value="{{ cf.prerequisite or '' }}" maxlength="500" placeholder="Strength 13 or higher"></label>
+                    <label>Description <textarea name="desc" rows="6" maxlength="8000">{{ cf.desc or '' }}</textarea></label>
+                    <div style="display:flex;gap:8px;">
+                        <button type="submit">Save changes</button>
+                    </div>
+                </form>
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-feats/{{ cf.id }}/delete"
+                      onsubmit="return confirm('Delete homebrew feat &quot;{{ cf.name }}&quot;?')"
+                      style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
+                    <button type="submit" class="danger">Delete this feat</button>
+                </form>
+            </div>
+        </details>
+        {% endfor %}
+    {% else %}
+        <p class="muted"><em>No custom feats yet.</em></p>
+    {% endif %}
+
+    <details class="playlist-card" style="margin-top:14px;">
+        <summary>
+            <span class="pl-chevron">▸</span>
+            <span class="pl-name"><strong>+ New custom feat</strong></span>
+        </summary>
+        <div class="playlist-body">
+            <form method="post" action="/campaign/{{ campaign.id }}/custom-feats" class="stacked">
+                <label>Name <input name="name" required maxlength="120" placeholder="Ashen Aegis"></label>
+                <label>Prerequisite <input name="prerequisite" maxlength="500" placeholder="Resistance to fire damage from another source"></label>
+                <label>Description <textarea name="desc" rows="6" maxlength="8000" placeholder="You have learned to harness the lingering heat of dying flames. You gain the following benefits:&#10;&#10;• Increase your Constitution by 1, to a maximum of 20.&#10;• Once per long rest, when reduced to 0 HP by fire damage..."></textarea></label>
+                <div><button type="submit">Create custom feat</button></div>
+            </form>
+        </div>
+    </details>
+</section>
+
+<!-- ── Homebrew import / export ── -->
+<section class="settings-section" id="custom-io" data-tab="homebrew" data-sub="io">
+    <h2>Import &amp; export</h2>
+    <p class="muted">
+        Move every homebrew row in this campaign to or from a single JSON
+        file. Useful for cloning a setup into a new campaign, sharing a
+        pack with another GM, or backing up before a risky bulk edit.
+        Imports add only — rows whose slug already exists in <em>this</em>
+        campaign are silently skipped (so re-importing a pack you've
+        already loaded is a safe no-op).
+    </p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:14px;">
+        <div class="playlist-card">
+            <div class="playlist-body">
+                <h3 style="margin-top:0;font-size:14px;">Export pack</h3>
+                <p class="muted" style="font-size:12px;margin:0 0 10px;">
+                    Download every homebrew row for this campaign as a single
+                    JSON file. Includes classes, subclasses, races, monsters,
+                    backgrounds, and feats.
+                </p>
+                <button type="button" id="homebrew-export-btn">⬇ Download {{ campaign.name }} homebrew pack</button>
+            </div>
+        </div>
+        <div class="playlist-card">
+            <div class="playlist-body">
+                <h3 style="margin-top:0;font-size:14px;">Template</h3>
+                <p class="muted" style="font-size:12px;margin:0 0 10px;">
+                    Download a JSON template with one example row per content
+                    type. Edit the file (any text editor), then re-upload to
+                    bulk-add custom content.
+                </p>
+                <button type="button" id="homebrew-template-btn">⬇ Download empty template</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="playlist-card" style="margin-top:14px;">
+        <div class="playlist-body">
+            <h3 style="margin-top:0;font-size:14px;">Import pack</h3>
+            <p class="muted" style="font-size:12px;margin:0 0 10px;">
+                Upload a JSON file produced by the export or template above
+                (or hand-edited following that shape). Every row creates a
+                new homebrew entry; collisions on slug are skipped.
+            </p>
+            <input type="file" id="homebrew-import-file" accept="application/json,.json">
+            <button type="button" id="homebrew-import-btn" style="margin-left:8px;">↑ Import</button>
+            <div id="homebrew-import-status" style="margin-top:10px;font-size:12px;"></div>
+        </div>
+    </div>
+</section>
+
 <!-- ── Danger zone (admin only) ── -->
 {% if user.is_admin %}
-<section class="settings-section" id="danger">
+<section class="settings-section" id="danger" data-tab="danger">
     <div class="danger-zone">
         <h2>Danger zone</h2>
         <p class="muted">These actions are permanent and cannot be undone.</p>
@@ -1178,4 +2036,231 @@ document.querySelectorAll('.tmpl-card[data-tmpl-id]').forEach(card => {
     }
 });
 </script>
+
+<script>
+/* ── Homebrew import / export wiring ─────────────────────────────────
+   Three buttons inside the Homebrew → Import & export sub-tab:
+
+     • Export → fetches /homebrew/export, saves as a JSON download.
+     • Template → fetches /homebrew/template, saves a starter file with
+       one example row per content type.
+     • Import → reads the chosen file, POSTs it to /homebrew/import,
+       and renders the returned per-type stats so the GM can see
+       created / skipped / errors at a glance.
+
+   All three are no-ops when CAMPAIGN_ID isn't defined (shouldn't happen
+   here since this template only renders inside a campaign context). */
+(function () {
+    const expBtn = document.getElementById('homebrew-export-btn');
+    const tplBtn = document.getElementById('homebrew-template-btn');
+    const impBtn = document.getElementById('homebrew-import-btn');
+    const impFile = document.getElementById('homebrew-import-file');
+    const statusEl = document.getElementById('homebrew-import-status');
+    if (!expBtn || !tplBtn || !impBtn) return;
+    const _cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+    if (!_cid) return;
+
+    function _downloadJson(filename, obj) {
+        const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        a.href = url; a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function _slugifyName(s) {
+        return String(s || 'campaign').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    }
+
+    async function _fetchJson(url) {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return await r.json();
+    }
+
+    expBtn.addEventListener('click', async () => {
+        expBtn.disabled = true;
+        const orig = expBtn.textContent;
+        expBtn.textContent = '⬇ Exporting…';
+        try {
+            const data = await _fetchJson('/api/campaign/' + _cid + '/homebrew/export');
+            const campSlug = _slugifyName(data.campaign || 'campaign');
+            const date = new Date().toISOString().slice(0, 10);
+            _downloadJson(`simplevtt-homebrew-${campSlug}-${date}.json`, data);
+        } catch (e) {
+            alert('Export failed: ' + e.message);
+        } finally {
+            expBtn.disabled = false; expBtn.textContent = orig;
+        }
+    });
+
+    tplBtn.addEventListener('click', async () => {
+        tplBtn.disabled = true;
+        const orig = tplBtn.textContent;
+        tplBtn.textContent = '⬇ Loading…';
+        try {
+            const data = await _fetchJson('/api/campaign/' + _cid + '/homebrew/template');
+            _downloadJson('simplevtt-homebrew-template.json', data);
+        } catch (e) {
+            alert('Template fetch failed: ' + e.message);
+        } finally {
+            tplBtn.disabled = false; tplBtn.textContent = orig;
+        }
+    });
+
+    impBtn.addEventListener('click', async () => {
+        const file = impFile && impFile.files && impFile.files[0];
+        if (!file) { statusEl.textContent = 'Pick a JSON file first.'; statusEl.style.color = 'var(--danger)'; return; }
+        impBtn.disabled = true;
+        statusEl.style.color = 'var(--fg-mute)';
+        statusEl.textContent = 'Reading file…';
+        try {
+            const text = await file.text();
+            let body;
+            try { body = JSON.parse(text); }
+            catch (e) { throw new Error('File is not valid JSON: ' + e.message); }
+            statusEl.textContent = 'Uploading…';
+            const r = await fetch('/api/campaign/' + _cid + '/homebrew/import', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!r.ok) {
+                let detail = '';
+                try { detail = (await r.json()).detail || ''; } catch {}
+                throw new Error('HTTP ' + r.status + (detail ? ': ' + detail : ''));
+            }
+            const result = await r.json();
+            statusEl.style.color = '#7cb87c';
+            const totals = result.totals || {};
+            const parts = [];
+            for (const [kind, s] of Object.entries(result.stats || {})) {
+                if (s.created || s.skipped || s.errors) {
+                    parts.push(`${kind}: +${s.created} created, ${s.skipped} skipped${s.errors ? ', ' + s.errors + ' errors' : ''}`);
+                }
+            }
+            statusEl.innerHTML = `✓ Import complete — <strong>${totals.created || 0}</strong> created, ${totals.skipped || 0} skipped${totals.errors ? ', ' + totals.errors + ' errors' : ''}.`
+                + (parts.length ? '<br><span style="color:var(--fg-mute);font-size:11px;">' + parts.join(' · ') + '</span>' : '')
+                + '<br><a href="" style="font-size:11px;color:#6cb;">Reload to see the new entries.</a>';
+        } catch (e) {
+            statusEl.style.color = 'var(--danger)';
+            statusEl.textContent = '✕ ' + e.message;
+        } finally {
+            impBtn.disabled = false;
+        }
+    });
+})();
+</script>
+
+<script>
+/* ── Settings tab switcher ────────────────────────────────────────────
+   Toggles ``.is-shown`` on `.settings-section` elements based on the
+   currently selected tab (and the sub-tab when on the Homebrew tab).
+   Hash-aware so:
+     - ``#basic`` / ``#people`` / ``#world`` / ``#homebrew`` / ``#danger``
+       jump directly to the matching tab.
+     - ``#custom-monsters`` (and any other section id) infer the parent
+       tab from the section's ``data-tab`` attribute and the sub-tab
+       from ``data-sub``. The CRUD redirects (POST → 303 →
+       ``…/settings#custom-monsters``) land on the right tab without
+       a code change in the route handlers.
+     - On switch, the URL hash is updated to the tab name (or section id
+       when one was supplied) so reload preserves the view.
+   Lazy editors inside `<details>` cards (features-editor, spell-picker,
+   resources-editor) initialise on `<details>` open, so opening one tab
+   doesn't pay the init cost for sections in other tabs. */
+(function () {
+    const tabs = document.querySelectorAll('.settings-tab');
+    const subtabs = document.querySelectorAll('.settings-subtab');
+    const subtabsStrip = document.getElementById('homebrew-subtabs');
+    const sections = document.querySelectorAll('.settings-section');
+    if (!tabs.length || !sections.length) return;
+
+    function _sectionById(id) {
+        return Array.from(sections).find(s => s.id === id);
+    }
+
+    function _applySelection(tab, sub) {
+        // 1. Highlight the active tab; reveal sub-tab strip on Homebrew.
+        tabs.forEach(t => t.classList.toggle('is-active', t.dataset.tab === tab));
+        if (subtabsStrip) {
+            subtabsStrip.classList.toggle('is-shown', tab === 'homebrew');
+        }
+        subtabs.forEach(t => t.classList.toggle('is-active', t.dataset.sub === sub));
+
+        // 2. Show only matching sections.
+        sections.forEach(sec => {
+            const matchesTab = sec.dataset.tab === tab;
+            const matchesSub = (tab !== 'homebrew') || (sec.dataset.sub === sub);
+            sec.classList.toggle('is-shown', matchesTab && matchesSub);
+        });
+    }
+
+    function _resolveFromHash() {
+        const h = (location.hash || '').replace(/^#/, '');
+        const known = {basic:1, people:1, world:1, homebrew:1, danger:1};
+        // Direct tab name in the hash wins.
+        if (known[h]) {
+            return { tab: h, sub: h === 'homebrew' ? 'classes' : null };
+        }
+        // Otherwise see if the hash names a section we know about.
+        const sec = h ? _sectionById(h) : null;
+        if (sec) {
+            return { tab: sec.dataset.tab, sub: sec.dataset.sub || (sec.dataset.tab === 'homebrew' ? 'classes' : null) };
+        }
+        // Default landing tab.
+        return { tab: 'basic', sub: null };
+    }
+
+    function _updateUrlHash(tab, sub) {
+        // Use the sub-tab anchor on Homebrew so the URL is more
+        // informative (and so CRUD redirects naturally re-land on the
+        // matching sub-tab). Otherwise use the tab name itself.
+        let h = tab;
+        if (tab === 'homebrew' && sub) {
+            const subToSectionId = {
+                classes: 'custom-classes',
+                subclasses: 'custom-subclasses',
+                races: 'custom-races',
+                monsters: 'custom-monsters',
+                backgrounds: 'custom-backgrounds',
+                feats: 'custom-feats',
+            };
+            h = subToSectionId[sub] || tab;
+        }
+        if (location.hash !== '#' + h) {
+            history.replaceState(null, '', '#' + h);
+        }
+    }
+
+    tabs.forEach(btn => btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        const sub = tab === 'homebrew' ? 'classes' : null;
+        _applySelection(tab, sub);
+        _updateUrlHash(tab, sub);
+    }));
+
+    subtabs.forEach(btn => btn.addEventListener('click', () => {
+        const sub = btn.dataset.sub;
+        _applySelection('homebrew', sub);
+        _updateUrlHash('homebrew', sub);
+    }));
+
+    // React to the back/forward button + any external hashchange (e.g.
+    // a CRUD redirect arriving at ``…/settings#custom-monsters``).
+    window.addEventListener('hashchange', () => {
+        const { tab, sub } = _resolveFromHash();
+        _applySelection(tab, sub);
+    });
+
+    const { tab, sub } = _resolveFromHash();
+    _applySelection(tab, sub);
+})();
+</script>
+
+<script src="/static/features_editor.js"></script>
+<script src="/static/spell_picker.js"></script>
+<script src="/static/resources_editor.js"></script>
 {% endblock %}

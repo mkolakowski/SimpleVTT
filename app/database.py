@@ -204,6 +204,70 @@ def _apply_inline_migrations() -> None:
         if user_cols_v21 and "font_scale" not in user_cols_v21:
             conn.execute(text("ALTER TABLE users ADD COLUMN font_scale FLOAT NOT NULL DEFAULT 1.0"))
 
+    # ---- Schema v22 (0.42.0): custom_subclasses table ----
+    from .models import CustomSubclass
+    CustomSubclass.__table__.create(bind=engine, checkfirst=True)
+
+    # ---- Schema v23 (0.45.0): custom_classes table ----
+    from .models import CustomClass
+    CustomClass.__table__.create(bind=engine, checkfirst=True)
+
+    # ---- Schema v24 (0.46.0): custom_classes.spell_list ----
+    cc_cols = _column_names("custom_classes")
+    with engine.begin() as conn:
+        if cc_cols and "spell_list" not in cc_cols:
+            # JSON column type varies by dialect — use TEXT and rely on
+            # SQLAlchemy's JSON serialisation on read/write. Default to an
+            # empty list literal so existing rows don't need a backfill.
+            if engine.dialect.name == "postgresql":
+                conn.execute(text("ALTER TABLE custom_classes ADD COLUMN spell_list JSON NOT NULL DEFAULT '[]'"))
+            else:
+                conn.execute(text("ALTER TABLE custom_classes ADD COLUMN spell_list TEXT NOT NULL DEFAULT '[]'"))
+
+    # ---- Schema v25 (0.47.0): custom_classes multiclass prerequisite fields ----
+    cc_cols_v25 = _column_names("custom_classes")
+    with engine.begin() as conn:
+        if cc_cols_v25 and "multiclass_prereq_abilities" not in cc_cols_v25:
+            if engine.dialect.name == "postgresql":
+                conn.execute(text("ALTER TABLE custom_classes ADD COLUMN multiclass_prereq_abilities JSON NOT NULL DEFAULT '{}'"))
+            else:
+                conn.execute(text("ALTER TABLE custom_classes ADD COLUMN multiclass_prereq_abilities TEXT NOT NULL DEFAULT '{}'"))
+        if cc_cols_v25 and "multiclass_prereq_mode" not in cc_cols_v25:
+            conn.execute(text("ALTER TABLE custom_classes ADD COLUMN multiclass_prereq_mode VARCHAR(8) NOT NULL DEFAULT 'all'"))
+        if cc_cols_v25 and "multiclass_proficiencies" not in cc_cols_v25:
+            conn.execute(text("ALTER TABLE custom_classes ADD COLUMN multiclass_proficiencies VARCHAR(500) NOT NULL DEFAULT ''"))
+
+    # ---- Schema v26 (0.48.0): custom_classes.resources ----
+    cc_cols_v26 = _column_names("custom_classes")
+    with engine.begin() as conn:
+        if cc_cols_v26 and "resources" not in cc_cols_v26:
+            if engine.dialect.name == "postgresql":
+                conn.execute(text("ALTER TABLE custom_classes ADD COLUMN resources JSON NOT NULL DEFAULT '[]'"))
+            else:
+                conn.execute(text("ALTER TABLE custom_classes ADD COLUMN resources TEXT NOT NULL DEFAULT '[]'"))
+
+    # ---- Schema v27 (0.49.0): custom_races table ----
+    from .models import CustomRace
+    CustomRace.__table__.create(bind=engine, checkfirst=True)
+
+    # ---- Schema v28 (0.50.0): custom_monsters table ----
+    from .models import CustomMonster
+    CustomMonster.__table__.create(bind=engine, checkfirst=True)
+
+    # ---- Schema v29 (0.51.0): custom_backgrounds table ----
+    from .models import CustomBackground
+    CustomBackground.__table__.create(bind=engine, checkfirst=True)
+
+    # ---- Schema v30 (0.51.0): custom_feats table ----
+    from .models import CustomFeat
+    CustomFeat.__table__.create(bind=engine, checkfirst=True)
+
+    # ---- Schema v31 (0.54.0): users.animate_gifs preference ----
+    user_cols_v31 = _column_names("users")
+    with engine.begin() as conn:
+        if user_cols_v31 and "animate_gifs" not in user_cols_v31:
+            conn.execute(text("ALTER TABLE users ADD COLUMN animate_gifs BOOLEAN NOT NULL DEFAULT TRUE"))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

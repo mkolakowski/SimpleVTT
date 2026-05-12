@@ -288,6 +288,15 @@
                 sheet.classes = arr;
                 return;
             }
+            // Class-resources list — same pattern as classes_json.
+            if (n === 'resources_json' && template === 'dnd5e') {
+                const raw = (el.value || '').trim();
+                let arr = [];
+                if (raw) { try { arr = JSON.parse(raw); } catch { arr = []; } }
+                if (!Array.isArray(arr)) arr = [];
+                sheet.resources = arr;
+                return;
+            }
             let v;
             if (el.type === 'checkbox') v = el.checked;
             else if (el.type === 'number') v = el.value === '' ? 0 : Number(el.value);
@@ -326,6 +335,15 @@
             } else if (n === 'conditions' && template === 'dnd5e') {
                 const raw = String(v).trim();
                 try { v = raw ? JSON.parse(raw) : []; } catch { v = []; }
+            } else if ((n === 'damage_resistances' || n === 'damage_immunities'
+                     || n === 'damage_vulnerabilities' || n === 'condition_immunities')
+                     && template === 'dnd5e') {
+                // Same shape as ``conditions``: hidden input carries a
+                // JSON-encoded array kept in sync by the Defenses chip
+                // toggle. Empty or unparseable values fall back to [].
+                const raw = String(v).trim();
+                try { v = raw ? JSON.parse(raw) : []; } catch { v = []; }
+                if (!Array.isArray(v)) v = [];
             }
             setNested(sheet, n, v);
         });
@@ -519,7 +537,13 @@
             return;
         }
         const slug = className.trim().toLowerCase().replace(/\s+/g, '-');
-        const items = await fetchListCached('/api/open5e/subclasses?limit=100&class_slug=' + encodeURIComponent(slug), 'simplevtt_subclasses_' + slug);
+        // Campaign-scoped homebrew is merged into the list server-side; the
+        // cache key embeds the campaign id so one campaign's homebrew doesn't
+        // bleed into another via localStorage.
+        const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+        const url = '/api/open5e/subclasses?limit=100&class_slug=' + encodeURIComponent(slug)
+            + (cid ? '&campaign_id=' + cid : '');
+        const items = await fetchListCached(url, 'simplevtt_subclasses_' + slug + '_c' + (cid || 'none'));
         const current = subSelect.dataset.current || '';
         populateSelect(subSelect, items, current);
         subSelect.dataset.current = '';
@@ -650,11 +674,22 @@
         container.style.display = '';
         if (emptyEl) emptyEl.style.display = 'none';
 
-        // Subclass name + flavor
+        // Subclass name + source badge ("Custom" for homebrew, otherwise hidden).
+        // ``data.source`` is set by the resolver — "local-custom" indicates a
+        // campaign-scoped homebrew record from the custom_subclasses table.
         if (data.name) {
             const h = document.createElement('div');
-            h.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:4px;color:var(--fg,#e0e0e0);';
-            h.textContent = data.name;
+            h.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:4px;color:var(--fg,#e0e0e0);display:flex;align-items:center;gap:8px;';
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = data.name;
+            h.appendChild(nameSpan);
+            if (data.source === 'local-custom') {
+                const badge = document.createElement('span');
+                badge.textContent = 'Custom';
+                badge.title = 'Campaign-authored homebrew (Custom subclasses → campaign settings).';
+                badge.style.cssText = 'font-size:10px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#d4a84a;background:#3a2f15;border:1px solid #6e5828;border-radius:3px;padding:1px 6px;';
+                h.appendChild(badge);
+            }
             container.appendChild(h);
         }
         const cleanedFlavor = _cleanMd(flavor);
@@ -789,11 +824,22 @@
         container.style.display = '';
         if (emptyEl) emptyEl.style.display = 'none';
 
-        // Race name heading
+        // Race name heading + source badge (matches the subclass renderer
+        // pattern). data.source comes from the resolver — "local-custom"
+        // for campaign-authored homebrew, otherwise we render no badge.
         if (data.name) {
             const h = document.createElement('div');
-            h.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:4px;color:var(--fg);';
-            h.textContent = data.name;
+            h.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:4px;color:var(--fg);display:flex;align-items:center;gap:8px;';
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = data.name;
+            h.appendChild(nameSpan);
+            if (data.source === 'local-custom') {
+                const badge = document.createElement('span');
+                badge.textContent = 'Custom';
+                badge.title = 'Campaign-authored homebrew (Custom races → campaign settings).';
+                badge.style.cssText = 'font-size:10px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#d4a84a;background:#3a2f15;border:1px solid #6e5828;border-radius:3px;padding:1px 6px;';
+                h.appendChild(badge);
+            }
             container.appendChild(h);
         }
 
@@ -926,9 +972,14 @@
     }
 
     async function init() {
+        const _cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+        const _classesUrl = '/api/open5e/classes?limit=30' + (_cid ? '&campaign_id=' + _cid : '');
+        const _classesKey = 'simplevtt_classes_list_c' + (_cid || 'none');
+        const _racesUrl   = '/api/open5e/races?limit=30'   + (_cid ? '&campaign_id=' + _cid : '');
+        const _racesKey   = 'simplevtt_races_list_c'   + (_cid || 'none');
         const [classes, races] = await Promise.all([
-            classSelect ? fetchListCached('/api/open5e/classes?limit=30', 'simplevtt_classes_list') : Promise.resolve([]),
-            raceSelect  ? fetchListCached('/api/open5e/races?limit=30',   'simplevtt_races_list')   : Promise.resolve([]),
+            classSelect ? fetchListCached(_classesUrl, _classesKey) : Promise.resolve([]),
+            raceSelect  ? fetchListCached(_racesUrl,   _racesKey)   : Promise.resolve([]),
         ]);
         if (classSelect) {
             populateSelect(classSelect, classes, classSelect.dataset.current || '');
@@ -953,7 +1004,10 @@
                 } else if (raceSelect.value) {
                     const rSlug = selectedSlug(raceSelect) || raceSelect.value.trim().toLowerCase().replace(/\s+/g, '-');
                     if (rSlug) {
-                        fetch('/api/open5e/race-detail?slug=' + encodeURIComponent(rSlug))
+                        const _cid2 = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+                        const _rUrl = '/api/open5e/race-detail?slug=' + encodeURIComponent(rSlug)
+                            + (_cid2 ? '&campaign_id=' + _cid2 : '');
+                        fetch(_rUrl)
                             .then(r => r.ok ? r.json() : null)
                             .then(d => { if (d) { renderRaceTraits(d); _saveRaceCache(d); } })
                             .catch(() => {});
@@ -972,8 +1026,10 @@
                     const classSlug = classSelect
                         ? (selectedSlug(classSelect) || classSelect.value.trim().toLowerCase().replace(/\s+/g, '-'))
                         : '';
+                    const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
                     const url = '/api/open5e/subclass-detail?slug=' + encodeURIComponent(subSlug)
-                        + (classSlug ? '&class_slug=' + encodeURIComponent(classSlug) : '');
+                        + (classSlug ? '&class_slug=' + encodeURIComponent(classSlug) : '')
+                        + (cid ? '&campaign_id=' + cid : '');
                     fetch(url).then(r => r.ok ? r.json() : null).then(d => {
                         if (d) { renderSubclassFeatures(d); _saveSubclassCache(d); }
                     }).catch(() => {});
@@ -1005,7 +1061,9 @@
         if (btn) { btn.disabled = true; btn.textContent = '↻ Syncing…'; }
         setSyncStatus('');
         try {
-            const r = await fetch('/api/open5e/class-detail?slug=' + encodeURIComponent(slug));
+            const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+            const r = await fetch('/api/open5e/class-detail?slug=' + encodeURIComponent(slug)
+                + (cid ? '&campaign_id=' + cid : ''));
             if (!r.ok) {
                 setSyncStatus('Lookup failed (' + r.status + ')', '#e07070');
                 return;
@@ -1078,8 +1136,10 @@
             const classSlug = classSelect
                 ? (selectedSlug(classSelect) || classSelect.value.trim().toLowerCase().replace(/\s+/g, '-'))
                 : '';
+            const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
             const url = '/api/open5e/subclass-detail?slug=' + encodeURIComponent(subSlug)
-                + (classSlug ? '&class_slug=' + encodeURIComponent(classSlug) : '');
+                + (classSlug ? '&class_slug=' + encodeURIComponent(classSlug) : '')
+                + (cid ? '&campaign_id=' + cid : '');
             try {
                 const r = await fetch(url);
                 if (r.ok) {
@@ -1102,7 +1162,9 @@
             const slug = selectedSlug(raceSelect);
             if (slug) {
                 try {
-                    const r = await fetch('/api/open5e/race-detail?slug=' + encodeURIComponent(slug));
+                    const _cidR = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+                    const r = await fetch('/api/open5e/race-detail?slug=' + encodeURIComponent(slug)
+                        + (_cidR ? '&campaign_id=' + _cidR : ''));
                     if (r.ok) {
                         const d = await r.json();
                         if (rtTa && d.text) rtTa.value = d.text;
@@ -1124,8 +1186,10 @@
             const classSlug = classSelect
                 ? (selectedSlug(classSelect) || classSelect.value.trim().toLowerCase().replace(/\s+/g, '-'))
                 : '';
+            const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
             const url = '/api/open5e/subclass-detail?slug=' + encodeURIComponent(subSlug)
-                + (classSlug ? '&class_slug=' + encodeURIComponent(classSlug) : '');
+                + (classSlug ? '&class_slug=' + encodeURIComponent(classSlug) : '')
+                + (cid ? '&campaign_id=' + cid : '');
             try {
                 const r = await fetch(url);
                 if (!r.ok) { setSyncMsg('sync-subclass-status', 'Lookup failed (' + r.status + ')', '#e07070'); return; }
@@ -1150,7 +1214,9 @@
             if (!slug) { setSyncMsg('sync-race-status', 'No race selected', '#e07070'); return; }
             syncRaceBtn.disabled = true; syncRaceBtn.textContent = '↻ Syncing…';
             try {
-                const r = await fetch('/api/open5e/race-detail?slug=' + encodeURIComponent(slug));
+                const _cidS = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+                const r = await fetch('/api/open5e/race-detail?slug=' + encodeURIComponent(slug)
+                    + (_cidS ? '&campaign_id=' + _cidS : ''));
                 if (!r.ok) throw new Error('HTTP ' + r.status);
                 const d = await r.json();
                 const ta = document.querySelector('textarea[name="race_traits"]');
@@ -1400,15 +1466,21 @@
     let _classesPromise = null;
     function _classList() {
         if (!_classesPromise) {
-            _classesPromise = _fetchListCached('/api/open5e/classes?limit=30', 'simplevtt_classes_list');
+            const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+            _classesPromise = _fetchListCached(
+                '/api/open5e/classes?limit=30' + (cid ? '&campaign_id=' + cid : ''),
+                'simplevtt_classes_list_c' + (cid || 'none'),
+            );
         }
         return _classesPromise;
     }
     async function _subclassList(classSlug) {
         if (!classSlug) return [];
+        const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
         return _fetchListCached(
-            '/api/open5e/subclasses?limit=100&class_slug=' + encodeURIComponent(classSlug),
-            'simplevtt_subclasses_' + classSlug,
+            '/api/open5e/subclasses?limit=100&class_slug=' + encodeURIComponent(classSlug)
+                + (cid ? '&campaign_id=' + cid : ''),
+            'simplevtt_subclasses_' + classSlug + '_c' + (cid || 'none'),
         );
     }
 
@@ -1442,7 +1514,9 @@
         const slug = _slug(entry.class || '');
         if (!slug) return entry;
         try {
-            const r = await fetch('/api/open5e/class-detail?slug=' + encodeURIComponent(slug));
+            const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+            const r = await fetch('/api/open5e/class-detail?slug=' + encodeURIComponent(slug)
+                + (cid ? '&campaign_id=' + cid : ''));
             if (!r.ok) return entry;
             const d = await r.json();
             const map = {
@@ -1473,8 +1547,10 @@
             entry.subclass_flavor = '';
             return entry;
         }
+        const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
         const url = '/api/open5e/subclass-detail?slug=' + encodeURIComponent(sslug)
-            + (cslug ? '&class_slug=' + encodeURIComponent(cslug) : '');
+            + (cslug ? '&class_slug=' + encodeURIComponent(cslug) : '')
+            + (cid ? '&campaign_id=' + cid : '');
         try {
             const r = await fetch(url);
             if (!r.ok) return entry;
@@ -1910,6 +1986,42 @@
         });
     }
 
+    // ── Multiclass prereq check ──
+    // Non-blocking warning: if the character's ability scores don't meet
+    // the target class's multiclass minimums (as defined either in the
+    // shipped class JSON or in a campaign-scoped homebrew row), surface
+    // the reasons in a banner appended below the class row.  Skipped on
+    // standalone (no CHAR_ID) and read-only sheet views.
+    async function _checkAndRenderMulticlassPrereq(idx, className, classSel) {
+        if (typeof CHAR_ID === 'undefined' || !CHAR_ID) return;
+        // Find the row in the DOM so we can attach the banner.
+        const row = classSel.closest('.mc-row');
+        if (!row) return;
+        // Always clear the previous banner first.
+        const old = row.querySelector('.mc-prereq-warning');
+        if (old) old.remove();
+        const slug = _slug(className || '');
+        if (!slug) return;
+        try {
+            const r = await fetch('/api/character/' + CHAR_ID + '/multiclass-check?target_class=' + encodeURIComponent(slug));
+            if (!r.ok) return;
+            const check = await r.json();
+            if (check.ok || !(check.reasons && check.reasons.length)) return;
+            const warn = document.createElement('div');
+            warn.className = 'mc-prereq-warning';
+            warn.style.cssText =
+                'grid-column:1 / -1;padding:6px 10px;background:#3a2f15;' +
+                'border:1px solid #6e5828;border-radius:4px;color:#e0c478;' +
+                'font-size:11px;line-height:1.4;margin-top:2px;';
+            const label = document.createElement('strong');
+            label.style.cssText = 'color:#f0d088;margin-right:6px;';
+            label.textContent = '⚠ Multiclass:';
+            warn.appendChild(label);
+            warn.appendChild(document.createTextNode(check.reasons.join(' • ')));
+            row.appendChild(warn);
+        } catch {}
+    }
+
     // ── Multiclass list editor ──
     function _row(entry, idx, classOptions) {
         const row = document.createElement('div');
@@ -2030,6 +2142,9 @@
                 _renderAllSubclassBlocks();
                 _refreshProfTable(true);
                 _refreshSpellSlots(false);
+                // Multiclass prereq check — non-blocking warning if the
+                // character doesn't meet ability minimums for this class.
+                _checkAndRenderMulticlassPrereq(idx, e.class, sel);
             });
         });
 

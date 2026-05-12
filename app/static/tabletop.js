@@ -100,6 +100,54 @@
 
     const _tokenImgCache = {};
 
+    function _loadTokenImage(url) {
+        if (_tokenImgCache[url]) return _tokenImgCache[url];
+        const img = new Image();
+        img.onload = render;
+        img.src = url;
+        _tokenImgCache[url] = img;
+        return img;
+    }
+
+    // GIF token overlay — browsers won't advance GIF frames for off-screen or
+    // canvas-drawn images. Instead we place real <img> elements in a div that
+    // shares the canvas's pan/zoom transform; CSS border-radius clips them to
+    // circles. The canvas still draws the colour-ring border on top.
+    const _gifOverlay = document.getElementById('gif-token-overlay');
+    const _gifImgMap  = {};   // token.id → <img>
+
+    function _updateGifOverlay() {
+        if (!_gifOverlay) return;
+        const keep = new Set();
+        tokens.forEach(t => {
+            if (!ME.animateGifs || !t.image_url || !t.image_url.toLowerCase().includes('.gif')) return;
+            if (t.is_hidden && !ME.isGm) return;
+            keep.add(t.id);
+            const cx = t.x + gridSize / 2;
+            const cy = t.y + gridSize / 2;
+            const r  = (gridSize * t.size) / 2 - 4;
+            if (!_gifImgMap[t.id]) {
+                const img = document.createElement('img');
+                img.style.cssText = 'position:absolute;border-radius:50%;object-fit:cover;pointer-events:none;';
+                _gifOverlay.appendChild(img);
+                _gifImgMap[t.id] = img;
+            }
+            const img = _gifImgMap[t.id];
+            if (img.src !== t.image_url) img.src = t.image_url;
+            img.style.left    = (cx - r) + 'px';
+            img.style.top     = (cy - r) + 'px';
+            img.style.width   = (r * 2)  + 'px';
+            img.style.height  = (r * 2)  + 'px';
+            img.style.opacity = t.is_hidden ? '0.4' : '1';
+        });
+        Object.keys(_gifImgMap).forEach(id => {
+            if (!keep.has(parseInt(id))) {
+                _gifImgMap[id].remove();
+                delete _gifImgMap[id];
+            }
+        });
+    }
+
     function _drawCircleToken(t, cx, cy, r) {
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -122,14 +170,16 @@
         const r = (gridSize * t.size) / 2 - 4;
         ctx.save();
         if (t.is_hidden) ctx.globalAlpha = 0.4;
-        if (t.image_url) {
-            if (!_tokenImgCache[t.image_url]) {
-                const img = new Image();
-                img.src = t.image_url;
-                img.onload = render;
-                _tokenImgCache[t.image_url] = img;
-            }
-            const img = _tokenImgCache[t.image_url];
+        const isGif = ME.animateGifs && t.image_url && t.image_url.toLowerCase().includes('.gif');
+        if (isGif) {
+            // GIF: the overlay <img> renders the image; just draw the colour ring here.
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = t.color || '#000';
+            ctx.stroke();
+        } else if (t.image_url) {
+            const img = _loadTokenImage(t.image_url);
             if (img.complete && img.naturalWidth > 0) {
                 ctx.beginPath();
                 ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -160,6 +210,7 @@
         if (gridType === 'square') drawSquareGrid();
         else if (gridType === 'hex') drawHexGrid();
         tokens.forEach(drawToken);
+        _updateGifOverlay();
     }
     render();
 
@@ -172,7 +223,9 @@
     canvas.style.transformOrigin = '0 0';
 
     function applyTransform() {
-        canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+        const t = `translate(${panX}px, ${panY}px) scale(${scale})`;
+        canvas.style.transform = t;
+        if (_gifOverlay) { _gifOverlay.style.transform = t; _gifOverlay.style.transformOrigin = '0 0'; }
     }
 
     mapPane.addEventListener('wheel', (ev) => {
@@ -355,6 +408,8 @@
                 // for it to update its pip row in place.
             } else if (msg.type === 'heal_applied') {
                 _onHealApplied(msg.data);
+            } else if (msg.type === 'feature_used') {
+                _appendFeatureUsed(msg.data);
             }
         };
         ws.onclose = () => setTimeout(connectWs, 2000);
@@ -684,6 +739,50 @@
         if (typeof window._updateMiniHpDisplay === 'function') {
             window._updateMiniHpDisplay(d.char_id, d.new_hp);
         }
+    }
+
+    // ---------- Class-feature use card ----------
+    // Compact roll-log card announcing that a character used a class /
+    // subclass feature (Rage, Channel Divinity, Action Surge, …). Posted
+    // by the backend when ``POST /resource`` is called with a negative
+    // delta. The card has no roll — it's purely an announcement so the
+    // rest of the table sees who fired what.
+    function _appendFeatureUsed(d) {
+        const ul = document.getElementById('roll-list');
+        if (!ul) return;
+        const now = new Date();
+        const h = now.getHours(), m = now.getMinutes();
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12  = (h % 12) || 12;
+        const hhmm = h12.toString().padStart(2,'0') + ':' + m.toString().padStart(2,'0') + ' ' + ampm;
+        const color = d.user_color || '';
+        const name  = d.character_name || 'Player';
+        const feat  = d.feature_name || 'feature';
+        const src   = d.source || '';
+        const remaining = (d.max && d.max > 0)
+            ? `<span style="font-size:11px;color:var(--muted,#888);">(${d.remaining}/${d.max} left)</span>`
+            : '';
+        const desc = d.feature_desc
+            ? `<div style="font-size:11px;color:var(--muted,#888);margin-top:3px;line-height:1.35;">${escapeHTML(d.feature_desc)}</div>`
+            : '';
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <div class="roll-card feature-used-card">
+                <div class="roll-card-header">
+                    <div class="roll-card-avatar">✨</div>
+                    <span class="roll-card-user" data-uid="${d.character_id || ''}"${color ? ` style="color:${escapeHTML(color)}"` : ''}>${escapeHTML(name)}</span>
+                    <span class="roll-card-time">${hhmm}</span>
+                </div>
+                <div class="roll-card-body" style="padding:6px 10px 8px;">
+                    <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
+                        <strong style="font-size:13px;">${escapeHTML(feat)}</strong>
+                        ${remaining}
+                        ${src ? `<span style="font-size:10px;color:var(--muted,#888);">${escapeHTML(src)}</span>` : ''}
+                    </div>
+                    ${desc}
+                </div>
+            </div>`;
+        ul.insertBefore(li, ul.firstChild);
     }
 
     // ---------- Weapon-attack card ----------
@@ -1385,37 +1484,21 @@
 
     refreshPlaceButtons();
 
-    // ---------- Sheet modal ----------
-    let _sheetJs = null;   // cached text of sheet.js so we only fetch it once
-
-    window.openSheet = async function (charId) {
-        const [sheetResp] = await Promise.all([
-            fetch(`/api/campaign/${CAMPAIGN_ID}/character/${charId}`),
-        ]);
-        if (!sheetResp.ok) { alert('Could not load character'); return; }
-        const html = await sheetResp.text();
-
-        // Strip <script> tags before injecting — innerHTML never executes them
-        // and createContextualFragment behavior for external src varies by browser.
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        doc.querySelectorAll('script').forEach(s => s.remove());
-
-        const root = document.getElementById('modal-root');
-        root.innerHTML = '<div class="modal-bg"><div class="modal"></div></div>';
-        root.firstChild.onclick = (ev) => { if (ev.target === ev.currentTarget) closeSheet(); };
-        root.querySelector('.modal').innerHTML = doc.body.innerHTML;
-
-        // Explicitly fetch and run sheet.js so the form is always bound.
-        // We use a real <script> element rather than new Function() because
-        // new Function() only sees window properties, not const/let top-level
-        // bindings (e.g. CAMPAIGN_ID) that live in the declarative record.
-        if (!_sheetJs) _sheetJs = await fetch('/static/sheet.js').then(r => r.text());
-        const _s = document.createElement('script');
-        _s.textContent = _sheetJs;
-        document.head.appendChild(_s);
-        _s.remove();
-    };
-    window.closeSheet = function () {
-        document.getElementById('modal-root').innerHTML = '';
+    // ---------- Sheet opener ----------
+    // The full D&D 5e sheet is now always opened in a separate browser tab
+    // pointed at the standalone /sheet route. The previous in-page modal
+    // path (DOMParser + script-stripping + manual sheet.js re-injection)
+    // was retired in v0.35.3 because every inline <script> block inside
+    // sheet_dnd5e.html (Wild Shape buttons, Class Resources panel, rest
+    // handlers, …) was being stripped during injection — leaving those
+    // features silently broken in the modal context. A new tab gets the
+    // full standalone page with every inline script intact.
+    window.openSheet = function (charId) {
+        if (!charId) return;
+        window.open(
+            `/campaign/${CAMPAIGN_ID}/character/${charId}/sheet`,
+            '_blank',
+            'noopener'
+        );
     };
 })();

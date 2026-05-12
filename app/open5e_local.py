@@ -139,6 +139,31 @@ def search_spells(q: str = "", limit: int = 20, spell_list: str = "", level: int
     return items[:limit], len(items)
 
 
+def get_spells_by_slugs(slugs: list[str]) -> list[dict]:
+    """Bulk lookup spells by their Open5e slugs from the local mirror.
+
+    Used by the homebrew class spell-list flow: when a player picks spells
+    available to their custom class, the resolver looks each curated slug up
+    here so the picker doesn't have to round-trip to Open5e per spell.
+    Returns spells in the order their slugs appeared in ``slugs``; unknown
+    slugs are silently dropped.
+    """
+    if not slugs:
+        return []
+    by_slug = {(s.get("slug") or "").lower(): s for s in _db.get("spells", [])}
+    out: list[dict] = []
+    seen: set[str] = set()
+    for raw in slugs:
+        key = (raw or "").strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        spell = by_slug.get(key)
+        if spell:
+            out.append(spell)
+    return out
+
+
 # ── Detail formatters (shared by both local and remote code paths) ─────────────
 
 def format_class_text(c: dict) -> str:

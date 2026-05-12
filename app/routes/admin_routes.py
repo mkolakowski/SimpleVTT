@@ -23,10 +23,17 @@ from ..auth import hash_password, require_admin
 from ..config import get_settings
 from ..database import get_db
 from ..game_systems import get_system, system_choices
+from .. import local_features
 from ..models import (
     Campaign,
     CampaignMembership,
     Character,
+    CustomBackground,
+    CustomClass,
+    CustomFeat,
+    CustomMonster,
+    CustomRace,
+    CustomSubclass,
     GridType,
     Map,
     Token,
@@ -372,3 +379,314 @@ def admin_delete_campaign(campaign_id: int, db: Session = Depends(get_db), user:
     db.delete(c)
     db.commit()
     return RedirectResponse("/admin", status_code=303)
+
+
+# ---------- Local-features stubs panel ----------
+#
+# Surfaces (a) what's currently authored as local overrides and (b) the
+# in-memory miss registry — class / subclass lookups that fell through to
+# Open5e since the process started.  Lets an operator see, sorted by hit
+# count, which content is worth promoting to a local file next.
+
+import datetime as _dt
+
+
+def _fmt_ts(ts: float | None) -> str:
+    if not ts:
+        return ""
+    return _dt.datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M UTC")
+
+
+@router.get("/stubs", response_class=HTMLResponse)
+def admin_stubs(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    misses_raw = local_features.list_misses()
+    misses = [
+        {
+            **m,
+            "first_seen_fmt": _fmt_ts(m.get("first_seen")),
+            "last_seen_fmt": _fmt_ts(m.get("last_seen")),
+        }
+        for m in misses_raw
+    ]
+    # DB-backed homebrew (CustomSubclass rows) — campaign-scoped overrides
+    # authored via the GM settings form. Joined to Campaign so the table
+    # can show "which campaign" and "by whom" without N+1 lookups in the
+    # template.
+    custom_rows = (
+        db.query(CustomSubclass, Campaign, User)
+        .join(Campaign, Campaign.id == CustomSubclass.campaign_id)
+        .outerjoin(User, User.id == CustomSubclass.created_by_user_id)
+        .order_by(Campaign.name, CustomSubclass.class_slug, CustomSubclass.name)
+        .all()
+    )
+    custom_subclasses_db = [
+        {
+            "id": cs.id,
+            "campaign_id": cs.campaign_id,
+            "campaign_name": camp.name,
+            "class_slug": cs.class_slug,
+            "sub_slug": cs.sub_slug,
+            "name": cs.name,
+            "feature_count": len(cs.features or []),
+            "created_by": creator.display_name if creator else None,
+            "updated_at_fmt": cs.updated_at.strftime("%Y-%m-%d %H:%M UTC") if cs.updated_at else "",
+        }
+        for cs, camp, creator in custom_rows
+    ]
+    custom_class_rows = (
+        db.query(CustomClass, Campaign, User)
+        .join(Campaign, Campaign.id == CustomClass.campaign_id)
+        .outerjoin(User, User.id == CustomClass.created_by_user_id)
+        .order_by(Campaign.name, CustomClass.name)
+        .all()
+    )
+    def _prereq_summary(cc) -> str:
+        mca = cc.multiclass_prereq_abilities or {}
+        if not mca:
+            return "—"
+        parts = [f"{k.upper()} {v}" for k, v in mca.items()]
+        joiner = " or " if (cc.multiclass_prereq_mode or "all") == "any" else ", "
+        return joiner.join(parts)
+
+    custom_classes_db = [
+        {
+            "id": cc.id,
+            "campaign_id": cc.campaign_id,
+            "campaign_name": camp.name,
+            "class_slug": cc.class_slug,
+            "name": cc.name,
+            "hit_die": cc.hit_die,
+            "spellcasting_ability": cc.spellcasting_ability or "",
+            "feature_count": len(cc.features or []),
+            "spell_count": len(cc.spell_list or []),
+            "resource_count": len(cc.resources or []),
+            "multiclass_summary": _prereq_summary(cc),
+            "created_by": creator.display_name if creator else None,
+            "updated_at_fmt": cc.updated_at.strftime("%Y-%m-%d %H:%M UTC") if cc.updated_at else "",
+        }
+        for cc, camp, creator in custom_class_rows
+    ]
+    custom_race_rows = (
+        db.query(CustomRace, Campaign, User)
+        .join(Campaign, Campaign.id == CustomRace.campaign_id)
+        .outerjoin(User, User.id == CustomRace.created_by_user_id)
+        .order_by(Campaign.name, CustomRace.name)
+        .all()
+    )
+
+    def _ab_summary(cr) -> str:
+        bonuses = cr.ability_bonuses or []
+        if not bonuses:
+            return "—"
+        return ", ".join(
+            f"{(b.get('attribute') or '')[:3].upper()} {'+' if b.get('bonus', 0) >= 0 else ''}{b.get('bonus', 0)}"
+            for b in bonuses if isinstance(b, dict)
+        )
+
+    custom_races_db = [
+        {
+            "id": cr.id,
+            "campaign_id": cr.campaign_id,
+            "campaign_name": camp.name,
+            "race_slug": cr.race_slug,
+            "name": cr.name,
+            "size": cr.size or "—",
+            "speed": cr.speed,
+            "ability_summary": _ab_summary(cr),
+            "trait_count": len(cr.traits or []),
+            "created_by": creator.display_name if creator else None,
+            "updated_at_fmt": cr.updated_at.strftime("%Y-%m-%d %H:%M UTC") if cr.updated_at else "",
+        }
+        for cr, camp, creator in custom_race_rows
+    ]
+
+    custom_monster_rows = (
+        db.query(CustomMonster, Campaign, User)
+        .join(Campaign, Campaign.id == CustomMonster.campaign_id)
+        .outerjoin(User, User.id == CustomMonster.created_by_user_id)
+        .order_by(Campaign.name, CustomMonster.name)
+        .all()
+    )
+
+    custom_monsters_db = [
+        {
+            "id": cm.id,
+            "campaign_id": cm.campaign_id,
+            "campaign_name": camp.name,
+            "monster_slug": cm.monster_slug,
+            "name": cm.name,
+            "size": cm.size or "—",
+            "type": cm.type or "—",
+            "cr": cm.challenge_rating or "0",
+            "ac": cm.armor_class,
+            "hp": cm.hit_points,
+            "action_count": len(cm.actions or []) + len(cm.reactions or []) + len(cm.special_abilities or []) + len(cm.legendary_actions or []),
+            "created_by": creator.display_name if creator else None,
+            "updated_at_fmt": cm.updated_at.strftime("%Y-%m-%d %H:%M UTC") if cm.updated_at else "",
+        }
+        for cm, camp, creator in custom_monster_rows
+    ]
+
+    custom_background_rows = (
+        db.query(CustomBackground, Campaign, User)
+        .join(Campaign, Campaign.id == CustomBackground.campaign_id)
+        .outerjoin(User, User.id == CustomBackground.created_by_user_id)
+        .order_by(Campaign.name, CustomBackground.name)
+        .all()
+    )
+    custom_backgrounds_db = [
+        {
+            "id": cb.id,
+            "campaign_id": cb.campaign_id,
+            "campaign_name": camp.name,
+            "background_slug": cb.background_slug,
+            "name": cb.name,
+            "feature_name": cb.feature_name or "—",
+            "skill_proficiencies": cb.skill_proficiencies or "",
+            "created_by": creator.display_name if creator else None,
+            "updated_at_fmt": cb.updated_at.strftime("%Y-%m-%d %H:%M UTC") if cb.updated_at else "",
+        }
+        for cb, camp, creator in custom_background_rows
+    ]
+    custom_feat_rows = (
+        db.query(CustomFeat, Campaign, User)
+        .join(Campaign, Campaign.id == CustomFeat.campaign_id)
+        .outerjoin(User, User.id == CustomFeat.created_by_user_id)
+        .order_by(Campaign.name, CustomFeat.name)
+        .all()
+    )
+    custom_feats_db = [
+        {
+            "id": cf.id,
+            "campaign_id": cf.campaign_id,
+            "campaign_name": camp.name,
+            "feat_slug": cf.feat_slug,
+            "name": cf.name,
+            "prerequisite": cf.prerequisite or "—",
+            "created_by": creator.display_name if creator else None,
+            "updated_at_fmt": cf.updated_at.strftime("%Y-%m-%d %H:%M UTC") if cf.updated_at else "",
+        }
+        for cf, camp, creator in custom_feat_rows
+    ]
+
+    return templates.TemplateResponse(
+        "admin_stubs.html",
+        {
+            "request": request,
+            "user": user,
+            "local_classes": local_features.list_local_classes(),
+            "local_subclasses": local_features.list_local_subclasses(),
+            "custom_classes_db": custom_classes_db,
+            "custom_subclasses_db": custom_subclasses_db,
+            "custom_races_db": custom_races_db,
+            "custom_monsters_db": custom_monsters_db,
+            "custom_backgrounds_db": custom_backgrounds_db,
+            "custom_feats_db": custom_feats_db,
+            "misses": misses,
+        },
+    )
+
+
+@router.post("/stubs/clear")
+def admin_stubs_clear(user: User = Depends(require_admin)):
+    local_features.clear_misses()
+    return RedirectResponse("/admin/stubs", status_code=303)
+
+
+@router.get("/stubs.json")
+def admin_stubs_json(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """JSON snapshot of the same data the HTML view renders. Useful for
+    scripted authoring pipelines (e.g. a script that diffs misses against
+    on-disk overrides to suggest the next file to write)."""
+    return {
+        "local_classes": local_features.list_local_classes(),
+        "local_subclasses": local_features.list_local_subclasses(),
+        "custom_classes_db": [
+            {
+                "id": cc.id,
+                "campaign_id": cc.campaign_id,
+                "class_slug": cc.class_slug,
+                "name": cc.name,
+                "hit_die": cc.hit_die,
+                "spellcasting_ability": cc.spellcasting_ability or "",
+                "feature_count": len(cc.features or []),
+                "spell_count": len(cc.spell_list or []),
+                "resource_count": len(cc.resources or []),
+                "multiclass_prereq_abilities": cc.multiclass_prereq_abilities or {},
+                "multiclass_prereq_mode": cc.multiclass_prereq_mode or "all",
+                "multiclass_proficiencies": cc.multiclass_proficiencies or "",
+            }
+            for cc in db.query(CustomClass).order_by(CustomClass.campaign_id, CustomClass.name).all()
+        ],
+        "custom_subclasses_db": [
+            {
+                "id": cs.id,
+                "campaign_id": cs.campaign_id,
+                "class_slug": cs.class_slug,
+                "sub_slug": cs.sub_slug,
+                "name": cs.name,
+                "feature_count": len(cs.features or []),
+            }
+            for cs in db.query(CustomSubclass).order_by(CustomSubclass.campaign_id, CustomSubclass.name).all()
+        ],
+        "custom_races_db": [
+            {
+                "id": cr.id,
+                "campaign_id": cr.campaign_id,
+                "race_slug": cr.race_slug,
+                "name": cr.name,
+                "size": cr.size or "",
+                "speed": cr.speed,
+                "ability_bonuses": cr.ability_bonuses or [],
+                "trait_count": len(cr.traits or []),
+            }
+            for cr in db.query(CustomRace).order_by(CustomRace.campaign_id, CustomRace.name).all()
+        ],
+        "custom_monsters_db": [
+            {
+                "id": cm.id,
+                "campaign_id": cm.campaign_id,
+                "monster_slug": cm.monster_slug,
+                "name": cm.name,
+                "size": cm.size or "",
+                "type": cm.type or "",
+                "cr": cm.challenge_rating or "0",
+                "ac": cm.armor_class,
+                "hp": cm.hit_points,
+                "action_count": len(cm.actions or []),
+                "reaction_count": len(cm.reactions or []),
+                "special_count": len(cm.special_abilities or []),
+                "legendary_count": len(cm.legendary_actions or []),
+            }
+            for cm in db.query(CustomMonster).order_by(CustomMonster.campaign_id, CustomMonster.name).all()
+        ],
+        "custom_backgrounds_db": [
+            {
+                "id": cb.id,
+                "campaign_id": cb.campaign_id,
+                "background_slug": cb.background_slug,
+                "name": cb.name,
+                "feature_name": cb.feature_name or "",
+                "skill_proficiencies": cb.skill_proficiencies or "",
+            }
+            for cb in db.query(CustomBackground).order_by(CustomBackground.campaign_id, CustomBackground.name).all()
+        ],
+        "custom_feats_db": [
+            {
+                "id": cf.id,
+                "campaign_id": cf.campaign_id,
+                "feat_slug": cf.feat_slug,
+                "name": cf.name,
+                "prerequisite": cf.prerequisite or "",
+            }
+            for cf in db.query(CustomFeat).order_by(CustomFeat.campaign_id, CustomFeat.name).all()
+        ],
+        "misses": local_features.list_misses(),
+    }

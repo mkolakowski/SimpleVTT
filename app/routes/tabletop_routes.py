@@ -36,6 +36,12 @@ from ..models import (
     CampaignMembership,
     Character,
     ConcentrationEffect,
+    CustomBackground,
+    CustomClass,
+    CustomFeat,
+    CustomMonster,
+    CustomRace,
+    CustomSubclass,
     DiceRoll,
     GridType,
     Map,
@@ -440,6 +446,42 @@ def campaign_settings(
         .all()
     )
     tmpl_objs = db.query(TokenTemplate).filter(TokenTemplate.campaign_id == campaign_id).order_by(TokenTemplate.name).all()
+    custom_subclasses = (
+        db.query(CustomSubclass)
+        .filter(CustomSubclass.campaign_id == campaign_id)
+        .order_by(CustomSubclass.class_slug, CustomSubclass.name)
+        .all()
+    )
+    custom_classes = (
+        db.query(CustomClass)
+        .filter(CustomClass.campaign_id == campaign_id)
+        .order_by(CustomClass.name)
+        .all()
+    )
+    custom_races = (
+        db.query(CustomRace)
+        .filter(CustomRace.campaign_id == campaign_id)
+        .order_by(CustomRace.name)
+        .all()
+    )
+    custom_monsters = (
+        db.query(CustomMonster)
+        .filter(CustomMonster.campaign_id == campaign_id)
+        .order_by(CustomMonster.name)
+        .all()
+    )
+    custom_backgrounds = (
+        db.query(CustomBackground)
+        .filter(CustomBackground.campaign_id == campaign_id)
+        .order_by(CustomBackground.name)
+        .all()
+    )
+    custom_feats = (
+        db.query(CustomFeat)
+        .filter(CustomFeat.campaign_id == campaign_id)
+        .order_by(CustomFeat.name)
+        .all()
+    )
 
     # Characters owned by campaign members (from any campaign) that aren't already here
     all_member_ids = list(member_user_ids | {campaign.gm_user_id})
@@ -476,6 +518,12 @@ def campaign_settings(
             "playlists": playlists,
             "templates": tmpl_objs,
             "importable": importable,
+            "custom_subclasses": custom_subclasses,
+            "custom_classes": custom_classes,
+            "custom_races": custom_races,
+            "custom_monsters": custom_monsters,
+            "custom_backgrounds": custom_backgrounds,
+            "custom_feats": custom_feats,
         },
     )
 
@@ -515,6 +563,1906 @@ async def campaign_settings_save(
         campaign.thumbnail_url = await _save_thumbnail(thumbnail)
     db.commit()
     return RedirectResponse(f"/campaign/{campaign_id}/settings", status_code=303)
+
+
+# ── Custom subclasses (GM-authored homebrew) ─────────────────────────────────
+#
+# GM-only CRUD for rows in the ``custom_subclasses`` table introduced in
+# v0.42.0.  The resolver in app/local_features.py picks these up under
+# scope ``campaign:<id>`` and returns them in place of the shipped global
+# SRD content when a player opens a subclass detail panel for a character
+# in this campaign.
+
+import re as _re_csub
+
+_SLUG_CLEAN = _re_csub.compile(r"[^a-z0-9]+")
+
+
+def _slugify_for_subclass(value: str, max_len: int = 80) -> str:
+    """Lowercase, replace runs of non-alphanumerics with single dashes, trim.
+
+    Used for both the parent class slug (e.g. "Fighter" -> "fighter") and
+    the subclass slug derived from its display name (e.g. "Circle of the
+    Deep" -> "circle-of-the-deep").
+    """
+    s = (value or "").strip().lower()
+    s = _SLUG_CLEAN.sub("-", s).strip("-")
+    return s[:max_len]
+
+
+def _parse_custom_subclass_features(raw: str) -> list:
+    """Parse and normalise the features JSON textarea.
+
+    Required shape::
+
+        [
+          {"name": "Combat Wild Shape", "level": 2, "desc": "..."},
+          {"name": "Primal Strike",     "level": 6, "desc": "..."}
+        ]
+
+    ``level`` may be null/missing. ``desc`` may be empty. Raises
+    ``HTTPException(400, ...)`` with a human-readable message on any
+    structural problem so the form can render it back to the GM.
+    """
+    if not raw or not raw.strip():
+        return []
+    import json as _json
+    try:
+        parsed = _json.loads(raw)
+    except _json.JSONDecodeError as e:
+        raise HTTPException(400, f"Features JSON: invalid syntax — {e.msg} (line {e.lineno})")
+    if not isinstance(parsed, list):
+        raise HTTPException(
+            400,
+            'Features JSON: must be a list, e.g. [{"name":"...","level":2,"desc":"..."}]',
+        )
+    out: list = []
+    for i, item in enumerate(parsed, start=1):
+        if not isinstance(item, dict):
+            raise HTTPException(400, f"Features JSON: entry #{i} must be an object")
+        name = (item.get("name") or "").strip()
+        if not name:
+            raise HTTPException(400, f"Features JSON: entry #{i} is missing a non-empty 'name'")
+        lvl_raw = item.get("level")
+        if lvl_raw is None or lvl_raw == "":
+            level_norm: int | None = None
+        else:
+            try:
+                level_norm = int(lvl_raw)
+            except (TypeError, ValueError):
+                raise HTTPException(
+                    400, f"Features JSON: entry #{i} 'level' must be an integer (got {lvl_raw!r})"
+                )
+        desc = (item.get("desc") or "").strip()
+        out.append({"name": name[:160], "level": level_norm, "desc": desc[:4000]})
+    return out
+
+
+def _require_gm_for_campaign(campaign_id: int, user: User, db: Session) -> Campaign:
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    return campaign
+
+
+@router.post("/campaign/{campaign_id}/custom-subclasses")
+def create_custom_subclass(
+    campaign_id: int,
+    name: str = Form(...),
+    class_slug: str = Form(...),
+    flavor: str = Form(""),
+    features_json: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    name_n = (name or "").strip()[:120]
+    cls_slug = _slugify_for_subclass(class_slug, max_len=60)
+    sub_slug = _slugify_for_subclass(name_n)
+    if not name_n:
+        raise HTTPException(400, "Name is required")
+    if not cls_slug:
+        raise HTTPException(400, "Parent class is required")
+    if not sub_slug:
+        raise HTTPException(400, "Name does not yield a valid slug — use letters or numbers")
+    features = _parse_custom_subclass_features(features_json)
+
+    if db.query(CustomSubclass).filter(
+        CustomSubclass.campaign_id == campaign_id,
+        CustomSubclass.class_slug == cls_slug,
+        CustomSubclass.sub_slug == sub_slug,
+    ).first():
+        raise HTTPException(
+            400,
+            f"A homebrew subclass with slug '{sub_slug}' already exists for class '{cls_slug}' in this campaign",
+        )
+
+    row = CustomSubclass(
+        campaign_id=campaign_id,
+        class_slug=cls_slug,
+        sub_slug=sub_slug,
+        name=name_n,
+        flavor=(flavor or "").strip()[:4000],
+        features=features,
+        created_by_user_id=user.id,
+    )
+    db.add(row)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-subclasses", status_code=303
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-subclasses/{sub_id}")
+def update_custom_subclass(
+    campaign_id: int,
+    sub_id: int,
+    name: str = Form(...),
+    class_slug: str = Form(...),
+    flavor: str = Form(""),
+    features_json: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Update name / class / flavor / features in place.
+
+    The ``sub_slug`` is intentionally NOT regenerated from the new name —
+    character sheets reference it, so renaming a subclass changes its
+    display name but keeps the saved slug. To rename the slug, delete and
+    recreate (and re-pick on affected sheets).
+    """
+    _require_gm_for_campaign(campaign_id, user, db)
+    row = db.query(CustomSubclass).filter(
+        CustomSubclass.id == sub_id,
+        CustomSubclass.campaign_id == campaign_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Custom subclass not found")
+
+    name_n = (name or "").strip()[:120]
+    new_cls = _slugify_for_subclass(class_slug, max_len=60)
+    if not name_n:
+        raise HTTPException(400, "Name is required")
+    if not new_cls:
+        raise HTTPException(400, "Parent class is required")
+    features = _parse_custom_subclass_features(features_json)
+
+    if new_cls != row.class_slug:
+        # Class reassignment could collide if another homebrew already uses
+        # this sub_slug under the new parent class. Reject rather than
+        # auto-rename.
+        collision = db.query(CustomSubclass).filter(
+            CustomSubclass.campaign_id == campaign_id,
+            CustomSubclass.class_slug == new_cls,
+            CustomSubclass.sub_slug == row.sub_slug,
+            CustomSubclass.id != sub_id,
+        ).first()
+        if collision:
+            raise HTTPException(
+                400,
+                f"Class '{new_cls}' already has a homebrew subclass with slug '{row.sub_slug}'",
+            )
+
+    row.name = name_n
+    row.class_slug = new_cls
+    row.flavor = (flavor or "").strip()[:4000]
+    row.features = features
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-subclasses", status_code=303
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-subclasses/{sub_id}/delete")
+def delete_custom_subclass(
+    campaign_id: int,
+    sub_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    row = db.query(CustomSubclass).filter(
+        CustomSubclass.id == sub_id,
+        CustomSubclass.campaign_id == campaign_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Custom subclass not found")
+    db.delete(row)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-subclasses", status_code=303
+    )
+
+
+# ── Custom classes (GM-authored homebrew base classes) ───────────────────────
+#
+# Mirror of the custom-subclass routes above but for the parent class itself.
+# Slug is fixed at creation (character sheets reference it); proficiency
+# fields are bounded strings; features re-use the same JSON shape parser as
+# subclasses.  MVP scope: no spell list, no class-resource counters, no
+# multiclass-prereq fields.
+
+_VALID_SPELLCASTING_ABILITIES = {"", "str", "dex", "con", "int", "wis", "cha"}
+
+
+def _normalize_spellcasting_ability(raw: str) -> str:
+    v = (raw or "").strip().lower()
+    if v not in _VALID_SPELLCASTING_ABILITIES:
+        raise HTTPException(400, "Spellcasting ability must be one of: str, dex, con, int, wis, cha (or blank)")
+    return v
+
+
+def _normalize_hit_die(raw) -> int:
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Hit die must be an integer between 4 and 12")
+    if n < 4 or n > 12:
+        raise HTTPException(400, "Hit die must be between 4 and 12")
+    return n
+
+
+_ABILITY_KEYS = ("str", "dex", "con", "int", "wis", "cha")
+
+
+def _parse_multiclass_prereq_abilities(values: dict) -> dict:
+    """Coerce six ability-minimum form fields into a clean ``{ability: int}``
+    dict.  Empty strings are dropped (no requirement on that ability).
+    Pass in ``{"str": form_str, "dex": form_dex, …}``.
+    """
+    out: dict = {}
+    for ab, raw in values.items():
+        v = (raw or "").strip()
+        if not v:
+            continue
+        try:
+            n = int(v)
+        except ValueError:
+            raise HTTPException(400, f"Multiclass prereq for {ab.upper()} must be an integer (got {raw!r})")
+        if n < 1 or n > 30:
+            raise HTTPException(400, f"Multiclass prereq for {ab.upper()} must be between 1 and 30")
+        out[ab] = n
+    return out
+
+
+def _normalize_multiclass_mode(raw: str) -> str:
+    v = (raw or "all").strip().lower()
+    if v not in ("all", "any"):
+        raise HTTPException(400, "Multiclass mode must be 'all' or 'any'")
+    return v
+
+
+_VALID_RESOURCE_KINDS = {"static", "ability_mod", "proficiency", "level_table"}
+_VALID_RESOURCE_RESETS = {"short", "long", "none"}
+
+
+def _parse_class_resources_json(raw: str) -> list:
+    """Parse and normalise the resources JSON field on the custom class form.
+
+    Each entry shape::
+
+        {
+          "key": "channel-divinity",          # optional — auto-derived from name
+          "name": "Channel Divinity",
+          "min_level": 2,
+          "max_kind": "static" | "ability_mod" | "proficiency" | "level_table",
+          "max_static": 1,                    # required when max_kind = "static"
+          "max_ability": "cha",               # required when max_kind = "ability_mod"
+          "max_table": {"2":1, "6":2, "18":3},# required when max_kind = "level_table"
+          "reset": "short" | "long" | "none",
+          "desc": "..."
+        }
+
+    Drops rows where ``name`` is empty (treated as an abandoned editor row).
+    Generates a stable ``key`` from the name when one isn't provided, and
+    dedupes by key so the frontend doesn't see two recipes with the same
+    identifier (which would break its uses-tracking state).
+    """
+    if not raw or not raw.strip():
+        return []
+    import json as _json
+    try:
+        parsed = _json.loads(raw)
+    except _json.JSONDecodeError as e:
+        raise HTTPException(400, f"Resources JSON: invalid syntax — {e.msg} (line {e.lineno})")
+    if not isinstance(parsed, list):
+        raise HTTPException(400, "Resources JSON: must be a list of resource objects")
+
+    out: list = []
+    used_keys: set[str] = set()
+    for i, item in enumerate(parsed, start=1):
+        if not isinstance(item, dict):
+            raise HTTPException(400, f"Resources JSON: entry #{i} must be an object")
+        name = (item.get("name") or "").strip()
+        if not name:
+            continue  # quietly drop abandoned rows
+        kind = (item.get("max_kind") or "static").strip().lower()
+        if kind not in _VALID_RESOURCE_KINDS:
+            raise HTTPException(
+                400,
+                f"Resources JSON: entry #{i} 'max_kind' must be one of {sorted(_VALID_RESOURCE_KINDS)}",
+            )
+        reset = (item.get("reset") or "long").strip().lower()
+        if reset not in _VALID_RESOURCE_RESETS:
+            raise HTTPException(
+                400,
+                f"Resources JSON: entry #{i} 'reset' must be one of {sorted(_VALID_RESOURCE_RESETS)}",
+            )
+        try:
+            min_level = int(item.get("min_level", 1))
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"Resources JSON: entry #{i} 'min_level' must be an integer")
+        if min_level < 1 or min_level > 20:
+            raise HTTPException(400, f"Resources JSON: entry #{i} 'min_level' must be between 1 and 20")
+
+        rec: dict = {
+            "name": name[:120],
+            "min_level": min_level,
+            "max_kind": kind,
+            "reset": reset,
+            "desc": (item.get("desc") or "").strip()[:1000],
+        }
+
+        if kind == "static":
+            try:
+                rec["max_static"] = int(item.get("max_static", 1))
+            except (TypeError, ValueError):
+                raise HTTPException(400, f"Resources JSON: entry #{i} 'max_static' must be an integer")
+            if rec["max_static"] < 0 or rec["max_static"] > 999:
+                raise HTTPException(400, f"Resources JSON: entry #{i} 'max_static' out of range")
+        elif kind == "ability_mod":
+            ab = (item.get("max_ability") or "").strip().lower()
+            if ab not in ("str", "dex", "con", "int", "wis", "cha"):
+                raise HTTPException(
+                    400, f"Resources JSON: entry #{i} 'max_ability' must be one of str/dex/con/int/wis/cha"
+                )
+            rec["max_ability"] = ab
+        elif kind == "level_table":
+            tbl_raw = item.get("max_table") or {}
+            if not isinstance(tbl_raw, dict):
+                raise HTTPException(400, f"Resources JSON: entry #{i} 'max_table' must be an object")
+            clean: dict = {}
+            for k, v in tbl_raw.items():
+                try:
+                    kk = int(k)
+                    vv = int(v)
+                except (TypeError, ValueError):
+                    raise HTTPException(
+                        400, f"Resources JSON: entry #{i} 'max_table' must map integer level → integer count"
+                    )
+                if kk < 1 or kk > 20:
+                    continue
+                clean[str(kk)] = vv
+            if not clean:
+                raise HTTPException(400, f"Resources JSON: entry #{i} 'max_table' is empty")
+            rec["max_table"] = clean
+        # "proficiency" needs no extra fields.
+
+        # Derive a stable key. Prefer explicit, then slugify the name, then
+        # fall back to "resource-<index>" so we never collide on empty keys.
+        key = (item.get("key") or "").strip().lower() or _slugify_for_subclass(name, max_len=60) or f"resource-{i}"
+        if key in used_keys:
+            key = f"{key}-{i}"
+        used_keys.add(key)
+        rec["key"] = key
+        out.append(rec)
+
+    return out[:50]  # cap so we don't let GMs paste hundreds
+
+
+def _parse_spell_list_json(raw: str) -> list:
+    """Parse + dedupe + normalise the spell_list JSON field on the custom
+    class form. Accepts either a list of slug strings or a list of objects
+    with a ``slug`` field (the picker emits the latter for convenience)."""
+    if not raw or not raw.strip():
+        return []
+    import json as _json
+    try:
+        parsed = _json.loads(raw)
+    except _json.JSONDecodeError as e:
+        raise HTTPException(400, f"Spell list JSON: invalid syntax — {e.msg} (line {e.lineno})")
+    if not isinstance(parsed, list):
+        raise HTTPException(400, 'Spell list JSON: must be a list of spell slugs')
+    out: list[str] = []
+    seen: set[str] = set()
+    for i, item in enumerate(parsed, start=1):
+        if isinstance(item, str):
+            slug = item.strip().lower()
+        elif isinstance(item, dict):
+            slug = (item.get("slug") or "").strip().lower()
+        else:
+            raise HTTPException(400, f"Spell list entry #{i} must be a slug string or {{slug: ...}} object")
+        if not slug:
+            continue
+        # Allow only lowercase letters / digits / dashes — matches Open5e slugs.
+        if not _re_csub.match(r'^[a-z0-9-]+$', slug):
+            raise HTTPException(400, f"Spell list entry #{i} contains invalid slug characters: {slug!r}")
+        if slug in seen:
+            continue
+        seen.add(slug)
+        out.append(slug)
+    return out[:500]  # cap so we don't let GMs paste tens-of-thousands
+
+
+@router.post("/campaign/{campaign_id}/custom-classes")
+def create_custom_class(
+    campaign_id: int,
+    name: str = Form(...),
+    hit_die: str = Form("8"),
+    prof_armor: str = Form(""),
+    prof_weapons: str = Form(""),
+    prof_tools: str = Form(""),
+    prof_saving_throws: str = Form(""),
+    prof_skills: str = Form(""),
+    spellcasting_ability: str = Form(""),
+    equipment: str = Form(""),
+    features_json: str = Form(""),
+    spell_list_json: str = Form(""),
+    resources_json: str = Form(""),
+    mc_prereq_str: str = Form(""),
+    mc_prereq_dex: str = Form(""),
+    mc_prereq_con: str = Form(""),
+    mc_prereq_int: str = Form(""),
+    mc_prereq_wis: str = Form(""),
+    mc_prereq_cha: str = Form(""),
+    mc_prereq_mode: str = Form("all"),
+    multiclass_proficiencies: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    name_n = (name or "").strip()[:120]
+    if not name_n:
+        raise HTTPException(400, "Name is required")
+    cls_slug = _slugify_for_subclass(name_n, max_len=60)
+    if not cls_slug:
+        raise HTTPException(400, "Name does not yield a valid slug — use letters or numbers")
+    hd = _normalize_hit_die(hit_die)
+    spc = _normalize_spellcasting_ability(spellcasting_ability)
+    features = _parse_custom_subclass_features(features_json)
+    spell_list = _parse_spell_list_json(spell_list_json)
+    resources = _parse_class_resources_json(resources_json)
+    mc_prereqs = _parse_multiclass_prereq_abilities({
+        "str": mc_prereq_str, "dex": mc_prereq_dex, "con": mc_prereq_con,
+        "int": mc_prereq_int, "wis": mc_prereq_wis, "cha": mc_prereq_cha,
+    })
+    mc_mode = _normalize_multiclass_mode(mc_prereq_mode)
+
+    if db.query(CustomClass).filter(
+        CustomClass.campaign_id == campaign_id,
+        CustomClass.class_slug == cls_slug,
+    ).first():
+        raise HTTPException(400, f"A homebrew class with slug '{cls_slug}' already exists in this campaign")
+
+    row = CustomClass(
+        campaign_id=campaign_id,
+        class_slug=cls_slug,
+        name=name_n,
+        hit_die=hd,
+        prof_armor=(prof_armor or "").strip()[:500],
+        prof_weapons=(prof_weapons or "").strip()[:500],
+        prof_tools=(prof_tools or "").strip()[:500],
+        prof_saving_throws=(prof_saving_throws or "").strip()[:120],
+        prof_skills=(prof_skills or "").strip()[:500],
+        spellcasting_ability=spc,
+        equipment=(equipment or "").strip()[:4000],
+        features=features,
+        spell_list=spell_list,
+        resources=resources,
+        multiclass_prereq_abilities=mc_prereqs,
+        multiclass_prereq_mode=mc_mode,
+        multiclass_proficiencies=(multiclass_proficiencies or "").strip()[:500],
+        created_by_user_id=user.id,
+    )
+    db.add(row)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-classes", status_code=303
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-classes/{class_id}")
+def update_custom_class(
+    campaign_id: int,
+    class_id: int,
+    name: str = Form(...),
+    hit_die: str = Form("8"),
+    prof_armor: str = Form(""),
+    prof_weapons: str = Form(""),
+    prof_tools: str = Form(""),
+    prof_saving_throws: str = Form(""),
+    prof_skills: str = Form(""),
+    spellcasting_ability: str = Form(""),
+    equipment: str = Form(""),
+    features_json: str = Form(""),
+    spell_list_json: str = Form(""),
+    resources_json: str = Form(""),
+    mc_prereq_str: str = Form(""),
+    mc_prereq_dex: str = Form(""),
+    mc_prereq_con: str = Form(""),
+    mc_prereq_int: str = Form(""),
+    mc_prereq_wis: str = Form(""),
+    mc_prereq_cha: str = Form(""),
+    mc_prereq_mode: str = Form("all"),
+    multiclass_proficiencies: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Update everything but ``class_slug``. Sheets reference it; renames
+    change the display name only. Delete + recreate to change the slug."""
+    _require_gm_for_campaign(campaign_id, user, db)
+    row = db.query(CustomClass).filter(
+        CustomClass.id == class_id,
+        CustomClass.campaign_id == campaign_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Custom class not found")
+
+    name_n = (name or "").strip()[:120]
+    if not name_n:
+        raise HTTPException(400, "Name is required")
+    hd = _normalize_hit_die(hit_die)
+    spc = _normalize_spellcasting_ability(spellcasting_ability)
+    features = _parse_custom_subclass_features(features_json)
+    spell_list = _parse_spell_list_json(spell_list_json)
+    resources = _parse_class_resources_json(resources_json)
+    mc_prereqs = _parse_multiclass_prereq_abilities({
+        "str": mc_prereq_str, "dex": mc_prereq_dex, "con": mc_prereq_con,
+        "int": mc_prereq_int, "wis": mc_prereq_wis, "cha": mc_prereq_cha,
+    })
+    mc_mode = _normalize_multiclass_mode(mc_prereq_mode)
+
+    row.name = name_n
+    row.hit_die = hd
+    row.prof_armor = (prof_armor or "").strip()[:500]
+    row.prof_weapons = (prof_weapons or "").strip()[:500]
+    row.prof_tools = (prof_tools or "").strip()[:500]
+    row.prof_saving_throws = (prof_saving_throws or "").strip()[:120]
+    row.prof_skills = (prof_skills or "").strip()[:500]
+    row.spellcasting_ability = spc
+    row.equipment = (equipment or "").strip()[:4000]
+    row.features = features
+    row.spell_list = spell_list
+    row.resources = resources
+    row.multiclass_prereq_abilities = mc_prereqs
+    row.multiclass_prereq_mode = mc_mode
+    row.multiclass_proficiencies = (multiclass_proficiencies or "").strip()[:500]
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-classes", status_code=303
+    )
+
+
+@router.get("/api/campaign/{campaign_id}/custom-class-resources")
+def custom_class_resources(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Return every homebrew class resource recipe for this campaign.
+
+    The sheet merges these into ``window._CLASS_RESOURCES`` at load time
+    so the existing Class Resources panel surfaces homebrew counters
+    alongside the curated SRD ones. Each record carries the ``class``
+    slug it belongs to so the panel's existing filter-by-class logic
+    works unchanged.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    # Any campaign member can read this (it's static homebrew data — the
+    # GM authored it so the players could see it). Admins always allowed.
+    if not user.is_admin and not _user_is_gm(user, campaign, db):
+        is_member = db.query(CampaignMembership).filter(
+            CampaignMembership.campaign_id == campaign_id,
+            CampaignMembership.user_id == user.id,
+        ).first()
+        if not is_member:
+            raise HTTPException(403, "Not a member of this campaign")
+
+    rows = db.query(CustomClass).filter(CustomClass.campaign_id == campaign_id).all()
+    results: list[dict] = []
+    for cc in rows:
+        for rec in (cc.resources or []):
+            if not isinstance(rec, dict):
+                continue
+            results.append({**rec, "class": cc.class_slug, "subclass": None})
+    return {"results": results}
+
+
+@router.get("/api/character/{char_id}/multiclass-check")
+def multiclass_check(
+    char_id: int,
+    target_class: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Check whether a character meets the multiclass prerequisites to add
+    a level in ``target_class``.
+
+    Resolution: campaign-scoped homebrew classes win over the shipped FS
+    overrides, just like every other class lookup. If the target class has
+    no prereq data, returns ``ok=true`` with an explanatory ``note`` —
+    callers should treat that as "framework doesn't know the rules; trust
+    the GM."
+    """
+    if not target_class:
+        raise HTTPException(400, "target_class required")
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+
+    # Auth: owner OR GM/admin of the campaign.
+    campaign = None
+    if char.campaign_id:
+        campaign = db.query(Campaign).filter(Campaign.id == char.campaign_id).first()
+    if not (char.owner_user_id == user.id
+            or user.is_admin
+            or (campaign and _user_is_gm(user, campaign, db))):
+        raise HTTPException(403, "No access to this character")
+
+    target_slug = target_class.strip().lower()
+    scopes = [f"campaign:{char.campaign_id}", "global"] if char.campaign_id else ["global"]
+    from .. import local_features
+    record, _source = local_features.resolve_class(target_slug, scopes=scopes, db=db)
+
+    if not record:
+        return {
+            "ok": True,
+            "target_name": target_class,
+            "reasons": [],
+            "prereqs": {"abilities": {}, "mode": "all"},
+            "proficiencies": "",
+            "note": "No prerequisite data found for this class — no checks enforced.",
+        }
+
+    prereqs = record.get("multiclass_prereq_abilities") or {}
+    mode = (record.get("multiclass_prereq_mode") or "all").lower()
+    profs = record.get("multiclass_proficiencies") or ""
+    target_name = record.get("name") or target_class
+
+    if not prereqs:
+        return {
+            "ok": True,
+            "target_name": target_name,
+            "reasons": [],
+            "prereqs": {"abilities": {}, "mode": mode},
+            "proficiencies": profs,
+            "note": f"{target_name} has no defined multiclass prerequisites.",
+        }
+
+    # Sheets store ability scores as uppercase 3-letter keys under
+    # ``sheet.abilities`` (STR, DEX, …).  Fall through to lowercase and
+    # default to 10 so partially-built sheets don't crash the check.
+    abilities = (char.sheet or {}).get("abilities") or {}
+
+    def _score(ab: str) -> int:
+        v = abilities.get(ab.upper())
+        if v is None:
+            v = abilities.get(ab.lower())
+        try:
+            return int(v) if v is not None else 10
+        except (TypeError, ValueError):
+            return 10
+
+    failed: list[str] = []
+    passed: list[str] = []
+    for ab, min_score in prereqs.items():
+        cur = _score(ab)
+        if cur < int(min_score):
+            failed.append(f"{ab.upper()} {cur} (needs {min_score})")
+        else:
+            passed.append(f"{ab.upper()} {cur} >= {min_score}")
+
+    if mode == "any":
+        ok = bool(passed)
+        if ok:
+            reasons: list[str] = []
+        else:
+            reasons = [
+                "At least one ability minimum must be met (mode: any). "
+                "All failed: " + ", ".join(failed)
+            ]
+    else:  # "all"
+        ok = not failed
+        reasons = [f"Missing required minimum: {r}" for r in failed]
+
+    return {
+        "ok": ok,
+        "target_name": target_name,
+        "reasons": reasons,
+        "prereqs": {"abilities": prereqs, "mode": mode},
+        "proficiencies": profs,
+    }
+
+
+@router.post("/campaign/{campaign_id}/custom-classes/{class_id}/delete")
+def delete_custom_class(
+    campaign_id: int,
+    class_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    row = db.query(CustomClass).filter(
+        CustomClass.id == class_id,
+        CustomClass.campaign_id == campaign_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Custom class not found")
+    db.delete(row)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-classes", status_code=303
+    )
+
+
+# ── Custom races (GM-authored homebrew) ─────────────────────────────────────
+#
+# Mirror of the custom-class routes for races.  Shape closely matches the
+# Open5e v1 race object so the existing ``format_race_text`` /
+# ``parse_race_traits`` helpers in ``open5e_local.py`` can render homebrew
+# without any code changes.
+
+_VALID_SIZES = {"", "Tiny", "Small", "Medium", "Large", "Huge", "Gargantuan"}
+
+
+def _normalize_race_size(raw: str) -> str:
+    v = (raw or "").strip()
+    if not v:
+        return ""
+    # Accept any-case input but persist the canonical capitalisation.
+    canon = v.title()
+    if canon not in _VALID_SIZES:
+        raise HTTPException(400, f"Race size must be one of: {', '.join(s for s in sorted(_VALID_SIZES) if s)}")
+    return canon
+
+
+def _parse_ability_bonuses(values: dict) -> list:
+    """Build the Open5e-shaped ``ability_bonuses`` list from six form fields.
+
+    Returns a list of ``{"attribute": "Strength", "bonus": 2}`` records.
+    Empty fields are dropped; zero is treated as "no bonus" rather than
+    explicitly storing a +0.
+    """
+    canonical = {
+        "str": "Strength", "dex": "Dexterity", "con": "Constitution",
+        "int": "Intelligence", "wis": "Wisdom", "cha": "Charisma",
+    }
+    out: list = []
+    for ab, raw in values.items():
+        v = (raw or "").strip()
+        if not v:
+            continue
+        try:
+            n = int(v)
+        except ValueError:
+            raise HTTPException(400, f"Ability bonus for {ab.upper()} must be an integer (got {raw!r})")
+        if n == 0:
+            continue
+        if n < -10 or n > 10:
+            raise HTTPException(400, f"Ability bonus for {ab.upper()} out of range (-10 to 10)")
+        out.append({"attribute": canonical.get(ab, ab.title()), "bonus": n})
+    return out
+
+
+@router.post("/campaign/{campaign_id}/custom-races")
+def create_custom_race(
+    campaign_id: int,
+    name: str = Form(...),
+    size: str = Form(""),
+    speed: str = Form("30"),
+    age: str = Form(""),
+    alignment: str = Form(""),
+    languages: str = Form(""),
+    ab_str: str = Form(""),
+    ab_dex: str = Form(""),
+    ab_con: str = Form(""),
+    ab_int: str = Form(""),
+    ab_wis: str = Form(""),
+    ab_cha: str = Form(""),
+    traits_json: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    name_n = (name or "").strip()[:120]
+    if not name_n:
+        raise HTTPException(400, "Name is required")
+    race_slug = _slugify_for_subclass(name_n, max_len=60)
+    if not race_slug:
+        raise HTTPException(400, "Name does not yield a valid slug — use letters or numbers")
+    size_n = _normalize_race_size(size)
+    try:
+        speed_n = int(speed or "30")
+    except ValueError:
+        raise HTTPException(400, "Speed must be an integer (feet per round)")
+    if speed_n < 0 or speed_n > 200:
+        raise HTTPException(400, "Speed out of range (0–200)")
+    ab_bonuses = _parse_ability_bonuses({
+        "str": ab_str, "dex": ab_dex, "con": ab_con,
+        "int": ab_int, "wis": ab_wis, "cha": ab_cha,
+    })
+    # Traits share the features list shape — same parser, same rules.
+    traits = _parse_custom_subclass_features(traits_json)
+
+    if db.query(CustomRace).filter(
+        CustomRace.campaign_id == campaign_id,
+        CustomRace.race_slug == race_slug,
+    ).first():
+        raise HTTPException(400, f"A homebrew race with slug '{race_slug}' already exists in this campaign")
+
+    row = CustomRace(
+        campaign_id=campaign_id,
+        race_slug=race_slug,
+        name=name_n,
+        ability_bonuses=ab_bonuses,
+        size=size_n,
+        speed=speed_n,
+        age=(age or "").strip()[:1000],
+        alignment=(alignment or "").strip()[:1000],
+        languages=(languages or "").strip()[:1000],
+        traits=traits,
+        created_by_user_id=user.id,
+    )
+    db.add(row)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-races", status_code=303
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-races/{race_id}")
+def update_custom_race(
+    campaign_id: int,
+    race_id: int,
+    name: str = Form(...),
+    size: str = Form(""),
+    speed: str = Form("30"),
+    age: str = Form(""),
+    alignment: str = Form(""),
+    languages: str = Form(""),
+    ab_str: str = Form(""),
+    ab_dex: str = Form(""),
+    ab_con: str = Form(""),
+    ab_int: str = Form(""),
+    ab_wis: str = Form(""),
+    ab_cha: str = Form(""),
+    traits_json: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Update everything but ``race_slug``. Sheets reference it; renames
+    change display name only."""
+    _require_gm_for_campaign(campaign_id, user, db)
+    row = db.query(CustomRace).filter(
+        CustomRace.id == race_id,
+        CustomRace.campaign_id == campaign_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Custom race not found")
+
+    name_n = (name or "").strip()[:120]
+    if not name_n:
+        raise HTTPException(400, "Name is required")
+    size_n = _normalize_race_size(size)
+    try:
+        speed_n = int(speed or "30")
+    except ValueError:
+        raise HTTPException(400, "Speed must be an integer (feet per round)")
+    if speed_n < 0 or speed_n > 200:
+        raise HTTPException(400, "Speed out of range (0–200)")
+    ab_bonuses = _parse_ability_bonuses({
+        "str": ab_str, "dex": ab_dex, "con": ab_con,
+        "int": ab_int, "wis": ab_wis, "cha": ab_cha,
+    })
+    traits = _parse_custom_subclass_features(traits_json)
+
+    row.name = name_n
+    row.ability_bonuses = ab_bonuses
+    row.size = size_n
+    row.speed = speed_n
+    row.age = (age or "").strip()[:1000]
+    row.alignment = (alignment or "").strip()[:1000]
+    row.languages = (languages or "").strip()[:1000]
+    row.traits = traits
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-races", status_code=303
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-races/{race_id}/delete")
+def delete_custom_race(
+    campaign_id: int,
+    race_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    row = db.query(CustomRace).filter(
+        CustomRace.id == race_id,
+        CustomRace.campaign_id == campaign_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Custom race not found")
+    db.delete(row)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-races", status_code=303
+    )
+
+
+# ── Custom monsters (GM-authored homebrew stat blocks) ──────────────────────
+#
+# Mirror of the other custom-content routes. The beast picker filters by
+# ``type=beast`` for Wild Shape / Polymorph; other types (humanoid, fiend,
+# undead, …) surface in the picker only when "Free pick" is checked.
+
+_VALID_MONSTER_TYPES = {
+    "aberration", "beast", "celestial", "construct", "dragon", "elemental",
+    "fey", "fiend", "giant", "humanoid", "monstrosity", "ooze", "plant",
+    "undead",
+}
+
+
+def _normalize_monster_type(raw: str) -> str:
+    v = (raw or "").strip().lower()
+    if not v:
+        return "beast"
+    if v not in _VALID_MONSTER_TYPES:
+        raise HTTPException(
+            400,
+            f"Monster type must be one of: {', '.join(sorted(_VALID_MONSTER_TYPES))}",
+        )
+    return v
+
+
+def _parse_monster_speed(form: dict) -> dict:
+    """Six optional speed fields (walk/fly/swim/climb/burrow/hover-as-flag)
+    → dict suitable for the Open5e shape. Drops zeros. Walk defaults to 30
+    if every field is blank so the monster isn't accidentally rooted."""
+    out: dict = {}
+    for kind in ("walk", "fly", "swim", "climb", "burrow"):
+        raw = (form.get(f"speed_{kind}") or "").strip()
+        if not raw:
+            continue
+        try:
+            n = int(raw)
+        except ValueError:
+            raise HTTPException(400, f"Speed.{kind} must be an integer (got {raw!r})")
+        if n < 0 or n > 999:
+            raise HTTPException(400, f"Speed.{kind} out of range (0–999)")
+        if n > 0:
+            out[kind] = n
+    if not out:
+        out["walk"] = 30
+    return out
+
+
+def _parse_cr(raw: str) -> str:
+    """Accept "0", "1/8", "1/4", "1/2", or any integer 1–30. Stored as
+    text to preserve fractional notation."""
+    v = (raw or "0").strip()
+    fractions = {"0", "1/8", "1/4", "1/2"}
+    if v in fractions:
+        return v
+    try:
+        n = int(v)
+    except ValueError:
+        raise HTTPException(400, "Challenge rating must be 0, 1/8, 1/4, 1/2, or an integer 1–30")
+    if n < 0 or n > 30:
+        raise HTTPException(400, "Challenge rating out of range (0–30)")
+    return str(n)
+
+
+def _parse_ability_score(label: str, raw: str) -> int:
+    try:
+        n = int(raw or "10")
+    except ValueError:
+        raise HTTPException(400, f"{label} must be an integer (got {raw!r})")
+    if n < 1 or n > 40:
+        raise HTTPException(400, f"{label} out of range (1–40)")
+    return n
+
+
+@router.post("/campaign/{campaign_id}/custom-monsters")
+def create_custom_monster(
+    campaign_id: int,
+    name: str = Form(...),
+    size: str = Form("Medium"),
+    type: str = Form("beast"),
+    alignment: str = Form("unaligned"),
+    armor_class: str = Form("10"),
+    armor_desc: str = Form(""),
+    hit_points: str = Form("1"),
+    hit_dice: str = Form(""),
+    speed_walk: str = Form(""),
+    speed_fly: str = Form(""),
+    speed_swim: str = Form(""),
+    speed_climb: str = Form(""),
+    speed_burrow: str = Form(""),
+    strength: str = Form("10"),
+    dexterity: str = Form("10"),
+    constitution: str = Form("10"),
+    intelligence: str = Form("10"),
+    wisdom: str = Form("10"),
+    charisma: str = Form("10"),
+    damage_vulnerabilities: str = Form(""),
+    damage_resistances: str = Form(""),
+    damage_immunities: str = Form(""),
+    condition_immunities: str = Form(""),
+    senses: str = Form(""),
+    languages: str = Form(""),
+    challenge_rating: str = Form("0"),
+    actions_json: str = Form(""),
+    reactions_json: str = Form(""),
+    special_abilities_json: str = Form(""),
+    legendary_actions_json: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    name_n = (name or "").strip()[:120]
+    if not name_n:
+        raise HTTPException(400, "Name is required")
+    monster_slug = _slugify_for_subclass(name_n, max_len=80)
+    if not monster_slug:
+        raise HTTPException(400, "Name does not yield a valid slug — use letters or numbers")
+    size_n = _normalize_race_size(size) or "Medium"  # reuse the size validator
+    type_n = _normalize_monster_type(type)
+    try:
+        ac = int(armor_class or "10")
+    except ValueError:
+        raise HTTPException(400, "Armor class must be an integer")
+    if ac < 1 or ac > 40:
+        raise HTTPException(400, "Armor class out of range (1–40)")
+    try:
+        hp = int(hit_points or "1")
+    except ValueError:
+        raise HTTPException(400, "Hit points must be an integer")
+    if hp < 1 or hp > 9999:
+        raise HTTPException(400, "Hit points out of range (1–9999)")
+    speed = _parse_monster_speed({
+        "speed_walk": speed_walk, "speed_fly": speed_fly, "speed_swim": speed_swim,
+        "speed_climb": speed_climb, "speed_burrow": speed_burrow,
+    })
+    cr = _parse_cr(challenge_rating)
+
+    if db.query(CustomMonster).filter(
+        CustomMonster.campaign_id == campaign_id,
+        CustomMonster.monster_slug == monster_slug,
+    ).first():
+        raise HTTPException(400, f"A homebrew monster with slug '{monster_slug}' already exists in this campaign")
+
+    row = CustomMonster(
+        campaign_id=campaign_id,
+        monster_slug=monster_slug,
+        name=name_n,
+        size=size_n,
+        type=type_n,
+        alignment=(alignment or "").strip()[:120],
+        armor_class=ac,
+        armor_desc=(armor_desc or "").strip()[:120],
+        hit_points=hp,
+        hit_dice=(hit_dice or "").strip()[:40],
+        speed=speed,
+        strength=_parse_ability_score("STR", strength),
+        dexterity=_parse_ability_score("DEX", dexterity),
+        constitution=_parse_ability_score("CON", constitution),
+        intelligence=_parse_ability_score("INT", intelligence),
+        wisdom=_parse_ability_score("WIS", wisdom),
+        charisma=_parse_ability_score("CHA", charisma),
+        damage_vulnerabilities=(damage_vulnerabilities or "").strip()[:500],
+        damage_resistances=(damage_resistances or "").strip()[:500],
+        damage_immunities=(damage_immunities or "").strip()[:500],
+        condition_immunities=(condition_immunities or "").strip()[:500],
+        senses=(senses or "").strip()[:500],
+        languages=(languages or "").strip()[:500],
+        challenge_rating=cr,
+        actions=_parse_custom_subclass_features(actions_json),
+        reactions=_parse_custom_subclass_features(reactions_json),
+        special_abilities=_parse_custom_subclass_features(special_abilities_json),
+        legendary_actions=_parse_custom_subclass_features(legendary_actions_json),
+        created_by_user_id=user.id,
+    )
+    db.add(row)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-monsters", status_code=303
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-monsters/{monster_id}")
+def update_custom_monster(
+    campaign_id: int,
+    monster_id: int,
+    name: str = Form(...),
+    size: str = Form("Medium"),
+    type: str = Form("beast"),
+    alignment: str = Form("unaligned"),
+    armor_class: str = Form("10"),
+    armor_desc: str = Form(""),
+    hit_points: str = Form("1"),
+    hit_dice: str = Form(""),
+    speed_walk: str = Form(""),
+    speed_fly: str = Form(""),
+    speed_swim: str = Form(""),
+    speed_climb: str = Form(""),
+    speed_burrow: str = Form(""),
+    strength: str = Form("10"),
+    dexterity: str = Form("10"),
+    constitution: str = Form("10"),
+    intelligence: str = Form("10"),
+    wisdom: str = Form("10"),
+    charisma: str = Form("10"),
+    damage_vulnerabilities: str = Form(""),
+    damage_resistances: str = Form(""),
+    damage_immunities: str = Form(""),
+    condition_immunities: str = Form(""),
+    senses: str = Form(""),
+    languages: str = Form(""),
+    challenge_rating: str = Form("0"),
+    actions_json: str = Form(""),
+    reactions_json: str = Form(""),
+    special_abilities_json: str = Form(""),
+    legendary_actions_json: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Update everything but ``monster_slug``. Token templates and beast
+    favorites reference it; renames change display name only."""
+    _require_gm_for_campaign(campaign_id, user, db)
+    row = db.query(CustomMonster).filter(
+        CustomMonster.id == monster_id,
+        CustomMonster.campaign_id == campaign_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Custom monster not found")
+
+    name_n = (name or "").strip()[:120]
+    if not name_n:
+        raise HTTPException(400, "Name is required")
+    size_n = _normalize_race_size(size) or "Medium"
+    type_n = _normalize_monster_type(type)
+    try:
+        ac = int(armor_class or "10")
+    except ValueError:
+        raise HTTPException(400, "Armor class must be an integer")
+    if ac < 1 or ac > 40:
+        raise HTTPException(400, "Armor class out of range (1–40)")
+    try:
+        hp = int(hit_points or "1")
+    except ValueError:
+        raise HTTPException(400, "Hit points must be an integer")
+    if hp < 1 or hp > 9999:
+        raise HTTPException(400, "Hit points out of range (1–9999)")
+    speed = _parse_monster_speed({
+        "speed_walk": speed_walk, "speed_fly": speed_fly, "speed_swim": speed_swim,
+        "speed_climb": speed_climb, "speed_burrow": speed_burrow,
+    })
+    cr = _parse_cr(challenge_rating)
+
+    row.name = name_n
+    row.size = size_n
+    row.type = type_n
+    row.alignment = (alignment or "").strip()[:120]
+    row.armor_class = ac
+    row.armor_desc = (armor_desc or "").strip()[:120]
+    row.hit_points = hp
+    row.hit_dice = (hit_dice or "").strip()[:40]
+    row.speed = speed
+    row.strength = _parse_ability_score("STR", strength)
+    row.dexterity = _parse_ability_score("DEX", dexterity)
+    row.constitution = _parse_ability_score("CON", constitution)
+    row.intelligence = _parse_ability_score("INT", intelligence)
+    row.wisdom = _parse_ability_score("WIS", wisdom)
+    row.charisma = _parse_ability_score("CHA", charisma)
+    row.damage_vulnerabilities = (damage_vulnerabilities or "").strip()[:500]
+    row.damage_resistances = (damage_resistances or "").strip()[:500]
+    row.damage_immunities = (damage_immunities or "").strip()[:500]
+    row.condition_immunities = (condition_immunities or "").strip()[:500]
+    row.senses = (senses or "").strip()[:500]
+    row.languages = (languages or "").strip()[:500]
+    row.challenge_rating = cr
+    row.actions = _parse_custom_subclass_features(actions_json)
+    row.reactions = _parse_custom_subclass_features(reactions_json)
+    row.special_abilities = _parse_custom_subclass_features(special_abilities_json)
+    row.legendary_actions = _parse_custom_subclass_features(legendary_actions_json)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-monsters", status_code=303
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-monsters/{monster_id}/delete")
+def delete_custom_monster(
+    campaign_id: int,
+    monster_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    row = db.query(CustomMonster).filter(
+        CustomMonster.id == monster_id,
+        CustomMonster.campaign_id == campaign_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Custom monster not found")
+    db.delete(row)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-monsters", status_code=303
+    )
+
+
+# ── Custom backgrounds (GM-authored homebrew) ───────────────────────────────
+
+@router.post("/campaign/{campaign_id}/custom-backgrounds")
+def create_custom_background(
+    campaign_id: int,
+    name: str = Form(...),
+    description: str = Form(""),
+    skill_proficiencies: str = Form(""),
+    tool_proficiencies: str = Form(""),
+    languages: str = Form(""),
+    equipment: str = Form(""),
+    feature_name: str = Form(""),
+    feature_desc: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    name_n = (name or "").strip()[:120]
+    if not name_n:
+        raise HTTPException(400, "Name is required")
+    slug = _slugify_for_subclass(name_n, max_len=60)
+    if not slug:
+        raise HTTPException(400, "Name does not yield a valid slug — use letters or numbers")
+    if db.query(CustomBackground).filter(
+        CustomBackground.campaign_id == campaign_id,
+        CustomBackground.background_slug == slug,
+    ).first():
+        raise HTTPException(400, f"A homebrew background with slug '{slug}' already exists in this campaign")
+    row = CustomBackground(
+        campaign_id=campaign_id,
+        background_slug=slug,
+        name=name_n,
+        description=(description or "").strip()[:8000],
+        skill_proficiencies=(skill_proficiencies or "").strip()[:500],
+        tool_proficiencies=(tool_proficiencies or "").strip()[:500],
+        languages=(languages or "").strip()[:500],
+        equipment=(equipment or "").strip()[:4000],
+        feature_name=(feature_name or "").strip()[:160],
+        feature_desc=(feature_desc or "").strip()[:4000],
+        created_by_user_id=user.id,
+    )
+    db.add(row)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-backgrounds", status_code=303
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-backgrounds/{bg_id}")
+def update_custom_background(
+    campaign_id: int,
+    bg_id: int,
+    name: str = Form(...),
+    description: str = Form(""),
+    skill_proficiencies: str = Form(""),
+    tool_proficiencies: str = Form(""),
+    languages: str = Form(""),
+    equipment: str = Form(""),
+    feature_name: str = Form(""),
+    feature_desc: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    row = db.query(CustomBackground).filter(
+        CustomBackground.id == bg_id,
+        CustomBackground.campaign_id == campaign_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Custom background not found")
+    name_n = (name or "").strip()[:120]
+    if not name_n:
+        raise HTTPException(400, "Name is required")
+    row.name = name_n
+    row.description = (description or "").strip()[:8000]
+    row.skill_proficiencies = (skill_proficiencies or "").strip()[:500]
+    row.tool_proficiencies = (tool_proficiencies or "").strip()[:500]
+    row.languages = (languages or "").strip()[:500]
+    row.equipment = (equipment or "").strip()[:4000]
+    row.feature_name = (feature_name or "").strip()[:160]
+    row.feature_desc = (feature_desc or "").strip()[:4000]
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-backgrounds", status_code=303
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-backgrounds/{bg_id}/delete")
+def delete_custom_background(
+    campaign_id: int,
+    bg_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    row = db.query(CustomBackground).filter(
+        CustomBackground.id == bg_id,
+        CustomBackground.campaign_id == campaign_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Custom background not found")
+    db.delete(row)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-backgrounds", status_code=303
+    )
+
+
+# ── Custom feats (GM-authored homebrew) ─────────────────────────────────────
+
+@router.post("/campaign/{campaign_id}/custom-feats")
+def create_custom_feat(
+    campaign_id: int,
+    name: str = Form(...),
+    prerequisite: str = Form(""),
+    desc: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    name_n = (name or "").strip()[:120]
+    if not name_n:
+        raise HTTPException(400, "Name is required")
+    slug = _slugify_for_subclass(name_n, max_len=80)
+    if not slug:
+        raise HTTPException(400, "Name does not yield a valid slug — use letters or numbers")
+    if db.query(CustomFeat).filter(
+        CustomFeat.campaign_id == campaign_id,
+        CustomFeat.feat_slug == slug,
+    ).first():
+        raise HTTPException(400, f"A homebrew feat with slug '{slug}' already exists in this campaign")
+    row = CustomFeat(
+        campaign_id=campaign_id,
+        feat_slug=slug,
+        name=name_n,
+        prerequisite=(prerequisite or "").strip()[:500],
+        desc=(desc or "").strip()[:8000],
+        created_by_user_id=user.id,
+    )
+    db.add(row)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-feats", status_code=303
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-feats/{feat_id}")
+def update_custom_feat(
+    campaign_id: int,
+    feat_id: int,
+    name: str = Form(...),
+    prerequisite: str = Form(""),
+    desc: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    row = db.query(CustomFeat).filter(
+        CustomFeat.id == feat_id,
+        CustomFeat.campaign_id == campaign_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Custom feat not found")
+    name_n = (name or "").strip()[:120]
+    if not name_n:
+        raise HTTPException(400, "Name is required")
+    row.name = name_n
+    row.prerequisite = (prerequisite or "").strip()[:500]
+    row.desc = (desc or "").strip()[:8000]
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-feats", status_code=303
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-feats/{feat_id}/delete")
+def delete_custom_feat(
+    campaign_id: int,
+    feat_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    _require_gm_for_campaign(campaign_id, user, db)
+    row = db.query(CustomFeat).filter(
+        CustomFeat.id == feat_id,
+        CustomFeat.campaign_id == campaign_id,
+    ).first()
+    if not row:
+        raise HTTPException(404, "Custom feat not found")
+    db.delete(row)
+    db.commit()
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-feats", status_code=303
+    )
+
+
+# ── Homebrew import / export / template ─────────────────────────────────────
+#
+# Bulk JSON I/O for every homebrew content type in one combined file. The
+# file format is intentionally a near-mirror of the DB column names per row
+# so a hand-edited template (downloaded from ``/homebrew/template``) goes
+# straight back in without any client-side massaging. Import deduplicates
+# on slug — existing rows in the destination campaign are skipped rather
+# than overwritten, matching the safer default of "import only adds".
+
+HOMEBREW_EXPORT_VERSION = 1
+
+
+def _class_to_dict(c: CustomClass) -> dict:
+    return {
+        "class_slug": c.class_slug, "name": c.name, "hit_die": c.hit_die,
+        "prof_armor": c.prof_armor or "", "prof_weapons": c.prof_weapons or "",
+        "prof_tools": c.prof_tools or "", "prof_saving_throws": c.prof_saving_throws or "",
+        "prof_skills": c.prof_skills or "", "spellcasting_ability": c.spellcasting_ability or "",
+        "equipment": c.equipment or "", "features": c.features or [],
+        "spell_list": c.spell_list or [],
+        "multiclass_prereq_abilities": c.multiclass_prereq_abilities or {},
+        "multiclass_prereq_mode": c.multiclass_prereq_mode or "all",
+        "multiclass_proficiencies": c.multiclass_proficiencies or "",
+        "resources": c.resources or [],
+    }
+
+
+def _subclass_to_dict(s: CustomSubclass) -> dict:
+    return {
+        "class_slug": s.class_slug, "sub_slug": s.sub_slug, "name": s.name,
+        "flavor": s.flavor or "", "features": s.features or [],
+    }
+
+
+def _race_to_dict(r: CustomRace) -> dict:
+    return {
+        "race_slug": r.race_slug, "name": r.name,
+        "ability_bonuses": r.ability_bonuses or [],
+        "size": r.size or "", "speed": r.speed, "age": r.age or "",
+        "alignment": r.alignment or "", "languages": r.languages or "",
+        "traits": r.traits or [],
+    }
+
+
+def _monster_to_dict(m: CustomMonster) -> dict:
+    return {
+        "monster_slug": m.monster_slug, "name": m.name, "size": m.size or "Medium",
+        "type": m.type or "beast", "alignment": m.alignment or "unaligned",
+        "armor_class": m.armor_class, "armor_desc": m.armor_desc or "",
+        "hit_points": m.hit_points, "hit_dice": m.hit_dice or "",
+        "speed": m.speed or {"walk": 30},
+        "strength": m.strength, "dexterity": m.dexterity, "constitution": m.constitution,
+        "intelligence": m.intelligence, "wisdom": m.wisdom, "charisma": m.charisma,
+        "damage_vulnerabilities": m.damage_vulnerabilities or "",
+        "damage_resistances": m.damage_resistances or "",
+        "damage_immunities": m.damage_immunities or "",
+        "condition_immunities": m.condition_immunities or "",
+        "senses": m.senses or "", "languages": m.languages or "",
+        "challenge_rating": m.challenge_rating or "0",
+        "actions": m.actions or [], "reactions": m.reactions or [],
+        "special_abilities": m.special_abilities or [],
+        "legendary_actions": m.legendary_actions or [],
+    }
+
+
+def _background_to_dict(b: CustomBackground) -> dict:
+    return {
+        "background_slug": b.background_slug, "name": b.name,
+        "description": b.description or "",
+        "skill_proficiencies": b.skill_proficiencies or "",
+        "tool_proficiencies": b.tool_proficiencies or "",
+        "languages": b.languages or "", "equipment": b.equipment or "",
+        "feature_name": b.feature_name or "", "feature_desc": b.feature_desc or "",
+    }
+
+
+def _feat_to_dict(f: CustomFeat) -> dict:
+    return {
+        "feat_slug": f.feat_slug, "name": f.name,
+        "prerequisite": f.prerequisite or "", "desc": f.desc or "",
+    }
+
+
+@router.get("/api/campaign/{campaign_id}/homebrew/export")
+def export_homebrew(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Return every homebrew row for this campaign in one combined JSON
+    pack. GM only. The shape matches what /homebrew/import accepts so
+    round-tripping export → import into another campaign works without
+    edits."""
+    campaign = _require_gm_for_campaign(campaign_id, user, db)
+    from datetime import datetime as _dt
+    return {
+        "format": "simplevtt-homebrew",
+        "version": HOMEBREW_EXPORT_VERSION,
+        "campaign": campaign.name,
+        "exported_at": _dt.utcnow().isoformat() + "Z",
+        "classes":      [_class_to_dict(c)      for c in db.query(CustomClass).filter(CustomClass.campaign_id == campaign_id).order_by(CustomClass.name).all()],
+        "subclasses":   [_subclass_to_dict(s)   for s in db.query(CustomSubclass).filter(CustomSubclass.campaign_id == campaign_id).order_by(CustomSubclass.name).all()],
+        "races":        [_race_to_dict(r)       for r in db.query(CustomRace).filter(CustomRace.campaign_id == campaign_id).order_by(CustomRace.name).all()],
+        "monsters":     [_monster_to_dict(m)    for m in db.query(CustomMonster).filter(CustomMonster.campaign_id == campaign_id).order_by(CustomMonster.name).all()],
+        "backgrounds":  [_background_to_dict(b) for b in db.query(CustomBackground).filter(CustomBackground.campaign_id == campaign_id).order_by(CustomBackground.name).all()],
+        "feats":        [_feat_to_dict(f)       for f in db.query(CustomFeat).filter(CustomFeat.campaign_id == campaign_id).order_by(CustomFeat.name).all()],
+    }
+
+
+@router.get("/api/campaign/{campaign_id}/homebrew/template")
+def homebrew_template(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Return an annotated JSON template with one example row per content
+    type. Slugs use the ``example-…`` prefix so a hand-edited template
+    that's accidentally imported as-is is easy to spot and clean up."""
+    _require_gm_for_campaign(campaign_id, user, db)
+    return {
+        "format": "simplevtt-homebrew",
+        "version": HOMEBREW_EXPORT_VERSION,
+        "_doc": [
+            "One example row per content type. Fill in or delete each list as needed.",
+            "Slugs are auto-generated from name on import — the slug field is informational.",
+            "Import skips any row whose slug already exists in the destination campaign.",
+        ],
+        "classes": [{
+            "class_slug": "example-class",
+            "name": "Example Class",
+            "hit_die": 8,
+            "prof_armor": "Light armor",
+            "prof_weapons": "Simple weapons",
+            "prof_tools": "",
+            "prof_saving_throws": "Dexterity, Intelligence",
+            "prof_skills": "Choose two from Arcana, Investigation, Perception",
+            "spellcasting_ability": "int",
+            "equipment": "Starting equipment here",
+            "features": [{"name": "Example Feature", "level": 1, "desc": "What it does."}],
+            "spell_list": ["fire-bolt", "mage-hand"],
+            "multiclass_prereq_abilities": {"int": 13},
+            "multiclass_prereq_mode": "all",
+            "multiclass_proficiencies": "Light armor",
+            "resources": [{
+                "key": "example-resource", "name": "Example Resource", "min_level": 2,
+                "max_kind": "level_table", "max_table": {"2": 1, "10": 2},
+                "reset": "short", "desc": "Refills on a short rest."
+            }],
+        }],
+        "subclasses": [{
+            "class_slug": "druid", "sub_slug": "example-circle",
+            "name": "Example Circle",
+            "flavor": "Druids of the example circle...",
+            "features": [{"name": "Bonus Cantrip", "level": 2, "desc": "You learn one extra druid cantrip."}],
+        }],
+        "races": [{
+            "race_slug": "example-race", "name": "Example Race",
+            "ability_bonuses": [{"attribute": "Dexterity", "bonus": 2}, {"attribute": "Intelligence", "bonus": 1}],
+            "size": "Medium", "speed": 30,
+            "age": "Mature like humans; live 200 years.",
+            "alignment": "Most are neutral.",
+            "languages": "Common, one of your choice.",
+            "traits": [{"name": "Darkvision", "desc": "You see in dim light within 60 feet."}],
+        }],
+        "monsters": [{
+            "monster_slug": "example-monster", "name": "Example Monster",
+            "size": "Medium", "type": "beast", "alignment": "unaligned",
+            "armor_class": 13, "armor_desc": "natural armor",
+            "hit_points": 22, "hit_dice": "4d8+4",
+            "speed": {"walk": 40},
+            "strength": 15, "dexterity": 14, "constitution": 13,
+            "intelligence": 3, "wisdom": 12, "charisma": 6,
+            "damage_resistances": "", "damage_immunities": "",
+            "damage_vulnerabilities": "", "condition_immunities": "",
+            "senses": "darkvision 60 ft., passive Perception 12",
+            "languages": "",
+            "challenge_rating": "1",
+            "actions": [{"name": "Bite", "desc": "Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 7 (1d8 + 2) piercing damage."}],
+            "reactions": [], "special_abilities": [], "legendary_actions": [],
+        }],
+        "backgrounds": [{
+            "background_slug": "example-background", "name": "Example Background",
+            "description": "Short narrative description.",
+            "skill_proficiencies": "Survival, History",
+            "tool_proficiencies": "Cartographer's tools",
+            "languages": "One of your choice",
+            "equipment": "A traveler's pack and 10 gp",
+            "feature_name": "Signature Feature",
+            "feature_desc": "What this background's signature feature does.",
+        }],
+        "feats": [{
+            "feat_slug": "example-feat", "name": "Example Feat",
+            "prerequisite": "Strength 13 or higher",
+            "desc": "What the feat does.\n\n• Bullet one.\n• Bullet two.",
+        }],
+    }
+
+
+def _safe_int(v, default=0) -> int:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_str(v, max_len: int = 500) -> str:
+    s = str(v or "").strip()
+    return s[:max_len]
+
+
+@router.post("/api/campaign/{campaign_id}/homebrew/import")
+async def import_homebrew(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Bulk-import homebrew rows from a JSON pack (matching the
+    ``/homebrew/export`` shape).
+
+    Rows whose slug already exists in this campaign are silently skipped
+    so re-importing a pack you've already pulled in is a no-op. Each
+    content type is processed independently — a malformed entry in one
+    list doesn't kill the rest of the import. Returns per-type counts of
+    ``created`` / ``skipped`` / ``errors`` so the GM can see what landed.
+    """
+    _require_gm_for_campaign(campaign_id, user, db)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Expected a JSON object — the export format root.")
+    if body.get("format") and body["format"] != "simplevtt-homebrew":
+        raise HTTPException(400, "Wrong format — expected ``simplevtt-homebrew``.")
+    if body.get("version") and int(body.get("version", 0)) > HOMEBREW_EXPORT_VERSION:
+        raise HTTPException(400, f"Pack version {body.get('version')} is newer than this server supports ({HOMEBREW_EXPORT_VERSION}). Upgrade first.")
+
+    stats: dict[str, dict] = {
+        k: {"created": 0, "skipped": 0, "errors": 0}
+        for k in ("classes", "subclasses", "races", "monsters", "backgrounds", "feats")
+    }
+
+    def _existing_class(slug: str) -> bool:
+        return db.query(CustomClass).filter(
+            CustomClass.campaign_id == campaign_id, CustomClass.class_slug == slug
+        ).first() is not None
+
+    def _existing_subclass(class_slug: str, sub_slug: str) -> bool:
+        return db.query(CustomSubclass).filter(
+            CustomSubclass.campaign_id == campaign_id,
+            CustomSubclass.class_slug == class_slug,
+            CustomSubclass.sub_slug == sub_slug,
+        ).first() is not None
+
+    def _existing_race(slug: str) -> bool:
+        return db.query(CustomRace).filter(
+            CustomRace.campaign_id == campaign_id, CustomRace.race_slug == slug
+        ).first() is not None
+
+    def _existing_monster(slug: str) -> bool:
+        return db.query(CustomMonster).filter(
+            CustomMonster.campaign_id == campaign_id, CustomMonster.monster_slug == slug
+        ).first() is not None
+
+    def _existing_background(slug: str) -> bool:
+        return db.query(CustomBackground).filter(
+            CustomBackground.campaign_id == campaign_id, CustomBackground.background_slug == slug
+        ).first() is not None
+
+    def _existing_feat(slug: str) -> bool:
+        return db.query(CustomFeat).filter(
+            CustomFeat.campaign_id == campaign_id, CustomFeat.feat_slug == slug
+        ).first() is not None
+
+    # ── Classes ─────────────────────────────────────────────────────────
+    for row in (body.get("classes") or [])[:200]:
+        if not isinstance(row, dict):
+            stats["classes"]["errors"] += 1
+            continue
+        try:
+            name = _safe_str(row.get("name"), 120)
+            slug = _slugify_for_subclass(name, max_len=60) or _safe_str(row.get("class_slug"), 60)
+            if not name or not slug:
+                stats["classes"]["errors"] += 1
+                continue
+            if _existing_class(slug):
+                stats["classes"]["skipped"] += 1
+                continue
+            db.add(CustomClass(
+                campaign_id=campaign_id, class_slug=slug, name=name,
+                hit_die=_safe_int(row.get("hit_die"), 8),
+                prof_armor=_safe_str(row.get("prof_armor"), 500),
+                prof_weapons=_safe_str(row.get("prof_weapons"), 500),
+                prof_tools=_safe_str(row.get("prof_tools"), 500),
+                prof_saving_throws=_safe_str(row.get("prof_saving_throws"), 120),
+                prof_skills=_safe_str(row.get("prof_skills"), 500),
+                spellcasting_ability=_safe_str(row.get("spellcasting_ability"), 10).lower(),
+                equipment=_safe_str(row.get("equipment"), 4000),
+                features=row.get("features") if isinstance(row.get("features"), list) else [],
+                spell_list=row.get("spell_list") if isinstance(row.get("spell_list"), list) else [],
+                multiclass_prereq_abilities=row.get("multiclass_prereq_abilities") if isinstance(row.get("multiclass_prereq_abilities"), dict) else {},
+                multiclass_prereq_mode=_safe_str(row.get("multiclass_prereq_mode") or "all", 8),
+                multiclass_proficiencies=_safe_str(row.get("multiclass_proficiencies"), 500),
+                resources=row.get("resources") if isinstance(row.get("resources"), list) else [],
+                created_by_user_id=user.id,
+            ))
+            stats["classes"]["created"] += 1
+        except Exception:
+            stats["classes"]["errors"] += 1
+
+    # ── Subclasses ──────────────────────────────────────────────────────
+    for row in (body.get("subclasses") or [])[:500]:
+        if not isinstance(row, dict):
+            stats["subclasses"]["errors"] += 1
+            continue
+        try:
+            name = _safe_str(row.get("name"), 120)
+            class_slug = _slugify_for_subclass(_safe_str(row.get("class_slug"), 60), max_len=60)
+            sub_slug = _slugify_for_subclass(name, max_len=80) or _safe_str(row.get("sub_slug"), 80)
+            if not name or not class_slug or not sub_slug:
+                stats["subclasses"]["errors"] += 1
+                continue
+            if _existing_subclass(class_slug, sub_slug):
+                stats["subclasses"]["skipped"] += 1
+                continue
+            db.add(CustomSubclass(
+                campaign_id=campaign_id, class_slug=class_slug, sub_slug=sub_slug,
+                name=name, flavor=_safe_str(row.get("flavor"), 4000),
+                features=row.get("features") if isinstance(row.get("features"), list) else [],
+                created_by_user_id=user.id,
+            ))
+            stats["subclasses"]["created"] += 1
+        except Exception:
+            stats["subclasses"]["errors"] += 1
+
+    # ── Races ───────────────────────────────────────────────────────────
+    for row in (body.get("races") or [])[:200]:
+        if not isinstance(row, dict):
+            stats["races"]["errors"] += 1
+            continue
+        try:
+            name = _safe_str(row.get("name"), 120)
+            slug = _slugify_for_subclass(name, max_len=60) or _safe_str(row.get("race_slug"), 60)
+            if not name or not slug:
+                stats["races"]["errors"] += 1
+                continue
+            if _existing_race(slug):
+                stats["races"]["skipped"] += 1
+                continue
+            db.add(CustomRace(
+                campaign_id=campaign_id, race_slug=slug, name=name,
+                ability_bonuses=row.get("ability_bonuses") if isinstance(row.get("ability_bonuses"), list) else [],
+                size=_safe_str(row.get("size"), 40),
+                speed=_safe_int(row.get("speed"), 30),
+                age=_safe_str(row.get("age"), 1000),
+                alignment=_safe_str(row.get("alignment"), 1000),
+                languages=_safe_str(row.get("languages"), 1000),
+                traits=row.get("traits") if isinstance(row.get("traits"), list) else [],
+                created_by_user_id=user.id,
+            ))
+            stats["races"]["created"] += 1
+        except Exception:
+            stats["races"]["errors"] += 1
+
+    # ── Monsters ────────────────────────────────────────────────────────
+    for row in (body.get("monsters") or [])[:500]:
+        if not isinstance(row, dict):
+            stats["monsters"]["errors"] += 1
+            continue
+        try:
+            name = _safe_str(row.get("name"), 120)
+            slug = _slugify_for_subclass(name, max_len=80) or _safe_str(row.get("monster_slug"), 80)
+            if not name or not slug:
+                stats["monsters"]["errors"] += 1
+                continue
+            if _existing_monster(slug):
+                stats["monsters"]["skipped"] += 1
+                continue
+            db.add(CustomMonster(
+                campaign_id=campaign_id, monster_slug=slug, name=name,
+                size=_safe_str(row.get("size") or "Medium", 40),
+                type=_safe_str(row.get("type") or "beast", 60).lower(),
+                alignment=_safe_str(row.get("alignment"), 120),
+                armor_class=_safe_int(row.get("armor_class"), 10),
+                armor_desc=_safe_str(row.get("armor_desc"), 120),
+                hit_points=_safe_int(row.get("hit_points"), 1),
+                hit_dice=_safe_str(row.get("hit_dice"), 40),
+                speed=row.get("speed") if isinstance(row.get("speed"), dict) else {"walk": 30},
+                strength=_safe_int(row.get("strength"), 10),
+                dexterity=_safe_int(row.get("dexterity"), 10),
+                constitution=_safe_int(row.get("constitution"), 10),
+                intelligence=_safe_int(row.get("intelligence"), 10),
+                wisdom=_safe_int(row.get("wisdom"), 10),
+                charisma=_safe_int(row.get("charisma"), 10),
+                damage_vulnerabilities=_safe_str(row.get("damage_vulnerabilities"), 500),
+                damage_resistances=_safe_str(row.get("damage_resistances"), 500),
+                damage_immunities=_safe_str(row.get("damage_immunities"), 500),
+                condition_immunities=_safe_str(row.get("condition_immunities"), 500),
+                senses=_safe_str(row.get("senses"), 500),
+                languages=_safe_str(row.get("languages"), 500),
+                challenge_rating=_safe_str(row.get("challenge_rating") or "0", 20),
+                actions=row.get("actions") if isinstance(row.get("actions"), list) else [],
+                reactions=row.get("reactions") if isinstance(row.get("reactions"), list) else [],
+                special_abilities=row.get("special_abilities") if isinstance(row.get("special_abilities"), list) else [],
+                legendary_actions=row.get("legendary_actions") if isinstance(row.get("legendary_actions"), list) else [],
+                created_by_user_id=user.id,
+            ))
+            stats["monsters"]["created"] += 1
+        except Exception:
+            stats["monsters"]["errors"] += 1
+
+    # ── Backgrounds ─────────────────────────────────────────────────────
+    for row in (body.get("backgrounds") or [])[:200]:
+        if not isinstance(row, dict):
+            stats["backgrounds"]["errors"] += 1
+            continue
+        try:
+            name = _safe_str(row.get("name"), 120)
+            slug = _slugify_for_subclass(name, max_len=60) or _safe_str(row.get("background_slug"), 60)
+            if not name or not slug:
+                stats["backgrounds"]["errors"] += 1
+                continue
+            if _existing_background(slug):
+                stats["backgrounds"]["skipped"] += 1
+                continue
+            db.add(CustomBackground(
+                campaign_id=campaign_id, background_slug=slug, name=name,
+                description=_safe_str(row.get("description"), 8000),
+                skill_proficiencies=_safe_str(row.get("skill_proficiencies"), 500),
+                tool_proficiencies=_safe_str(row.get("tool_proficiencies"), 500),
+                languages=_safe_str(row.get("languages"), 500),
+                equipment=_safe_str(row.get("equipment"), 4000),
+                feature_name=_safe_str(row.get("feature_name"), 160),
+                feature_desc=_safe_str(row.get("feature_desc"), 4000),
+                created_by_user_id=user.id,
+            ))
+            stats["backgrounds"]["created"] += 1
+        except Exception:
+            stats["backgrounds"]["errors"] += 1
+
+    # ── Feats ───────────────────────────────────────────────────────────
+    for row in (body.get("feats") or [])[:500]:
+        if not isinstance(row, dict):
+            stats["feats"]["errors"] += 1
+            continue
+        try:
+            name = _safe_str(row.get("name"), 120)
+            slug = _slugify_for_subclass(name, max_len=80) or _safe_str(row.get("feat_slug"), 80)
+            if not name or not slug:
+                stats["feats"]["errors"] += 1
+                continue
+            if _existing_feat(slug):
+                stats["feats"]["skipped"] += 1
+                continue
+            db.add(CustomFeat(
+                campaign_id=campaign_id, feat_slug=slug, name=name,
+                prerequisite=_safe_str(row.get("prerequisite"), 500),
+                desc=_safe_str(row.get("desc"), 8000),
+                created_by_user_id=user.id,
+            ))
+            stats["feats"]["created"] += 1
+        except Exception:
+            stats["feats"]["errors"] += 1
+
+    db.commit()
+    totals = {
+        "created": sum(s["created"] for s in stats.values()),
+        "skipped": sum(s["skipped"] for s in stats.values()),
+        "errors":  sum(s["errors"]  for s in stats.values()),
+    }
+    return {"ok": True, "stats": stats, "totals": totals}
 
 
 @router.post("/campaign/{campaign_id}/members/{membership_id}/set_gm")
@@ -1568,6 +3516,30 @@ async def rest_character(
     hd_max = int(hd.get("max") if hd.get("max") is not None else (sheet.get("level") or 1))
     hd_cur = int(hd.get("current") if hd.get("current") is not None else hd_max)
 
+    # Refill matching trackable resources. Long rest refills 'short' + 'long';
+    # short rest only refills 'short'. Resources with reset='none' (manual
+    # chat-only feature with a counter) are never auto-refilled.
+    resources_before = list(sheet.get("resources") or [])
+    refilled_resources: list[dict] = []
+    new_resources: list[dict] = []
+    for r in resources_before:
+        if not isinstance(r, dict):
+            new_resources.append(r)
+            continue
+        reset_kind = str(r.get("reset") or "").strip().lower()
+        should_refill = (
+            reset_kind == "short" and rest_type in ("short", "long")
+        ) or (
+            reset_kind == "long" and rest_type == "long"
+        )
+        if should_refill and int(r.get("max") or 0) > 0:
+            updated = {**r, "current": int(r.get("max") or 0)}
+            new_resources.append(updated)
+            refilled_resources.append(updated)
+        else:
+            new_resources.append(r)
+    sheet["resources"] = new_resources
+
     if rest_type == "long":
         hp["current"] = hp_max if hp_max > 0 else hp_cur
         hp["temp"] = 0
@@ -1619,7 +3591,22 @@ async def rest_character(
             except Exception:
                 pass
 
-        return {"ok": True, "type": "long", "hp": hp, "hit_dice": hd}
+        # Broadcast resource refills for any open Class Resources panel
+        for r in refilled_resources:
+            try:
+                await hub.broadcast(campaign_id, {
+                    "type": "resource_update",
+                    "data": {
+                        "character_id": char.id,
+                        "key": r.get("key"),
+                        "current": int(r.get("current") or 0),
+                        "max": int(r.get("max") or 0),
+                    },
+                })
+            except Exception:
+                pass
+
+        return {"ok": True, "type": "long", "hp": hp, "hit_dice": hd, "resources": refilled_resources}
 
     # Short rest
     if hd_cur <= 0:
@@ -1655,6 +3642,22 @@ async def rest_character(
     char.sheet = sheet
     db.commit()
 
+    # Broadcast resource refills for any short-rest resources (Action Surge,
+    # Channel Divinity, Ki, Superiority Dice, …) so live panels re-pip.
+    for r in refilled_resources:
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "resource_update",
+                "data": {
+                    "character_id": char.id,
+                    "key": r.get("key"),
+                    "current": int(r.get("current") or 0),
+                    "max": int(r.get("max") or 0),
+                },
+            })
+        except Exception:
+            pass
+
     return {
         "ok": True,
         "type": "short",
@@ -1663,7 +3666,579 @@ async def rest_character(
         "expression": expr,
         "recovered": recovered,
         "breakdown": breakdown,
+        "resources": refilled_resources,
     }
+
+
+# ----------- API: class / subclass resource use -----------
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/resource")
+async def use_resource(
+    campaign_id: int,
+    char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend or restore a trackable class/subclass resource.
+
+    Body:
+        {"key": "<resource key>", "delta": -1}     # spend (negative)
+        {"key": "<resource key>", "delta": +1}     # restore by N
+        {"key": "<resource key>", "set": N}        # set current absolute
+        {"key": "<resource key>", "reset": true}   # refill to max
+
+    Returns 409 ``{"error": "no_uses", ...}`` when a spend would go below 0
+    so the caller can show a non-blocking toast instead of mutating state.
+
+    Broadcasts a ``resource_update`` WS message so other connected clients
+    (mini-sheet, popped-out roll log) can re-render the pip count.
+    """
+    body = await request.json()
+    key = str(body.get("key") or "").strip()
+    if not key:
+        raise HTTPException(400, "key is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if char.template == "dnd5e":
+        normalize_dnd5e_sheet(sheet)
+    resources = list(sheet.get("resources") or [])
+    idx = next(
+        (i for i, r in enumerate(resources)
+         if isinstance(r, dict) and (r.get("key") or "") == key),
+        None,
+    )
+    if idx is None:
+        raise HTTPException(404, "Resource not found on this sheet")
+
+    res = dict(resources[idx])
+    mx = int(res.get("max") or 0)
+    cur = int(res.get("current") or 0)
+
+    if body.get("reset"):
+        # Refill to max
+        new_cur = mx
+        announce = False
+    elif body.get("set") is not None:
+        try:
+            new_cur = int(body.get("set"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "'set' must be an integer")
+        announce = False
+    else:
+        try:
+            delta = int(body.get("delta", -1))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "'delta' must be an integer")
+        # Chat-only features (max == 0) never have insufficient uses;
+        # we just announce on negative delta and keep current at 0.
+        if mx <= 0:
+            new_cur = 0
+            announce = delta < 0
+        else:
+            new_cur = cur + delta
+            if new_cur < 0:
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "error": "no_uses",
+                        "key": key,
+                        "name": res.get("name", ""),
+                        "current": cur,
+                        "max": mx,
+                    },
+                )
+            announce = delta < 0
+
+    # Clamp [0, max] when max > 0
+    if mx > 0:
+        new_cur = max(0, min(mx, new_cur))
+    else:
+        new_cur = max(0, new_cur)
+
+    res["current"] = new_cur
+    resources[idx] = res
+    sheet["resources"] = resources
+    char.sheet = sheet
+    db.commit()
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": key,
+            "current": new_cur,
+            "max": mx,
+        },
+    })
+
+    # If the caller explicitly asks for a chat announcement (or this was a
+    # chat-only feature being "used"), drop a note into the roll log so the
+    # rest of the table sees that the feature fired.
+    note_label = ""
+    if announce and (body.get("announce") is not False):
+        membership = (
+            db.query(CampaignMembership)
+            .filter(CampaignMembership.campaign_id == campaign_id,
+                    CampaignMembership.user_id == user.id)
+            .first()
+        )
+        player_color = (
+            membership.color if membership and membership.color
+            else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+        )
+        caster_color = char.color or player_color
+        note_label = res.get("name", "feature")
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": char.id,
+                "character_name": char.name,
+                "user_color": caster_color,
+                "feature_name": note_label,
+                "feature_desc": res.get("desc", ""),
+                "source": res.get("source", ""),
+                "remaining": new_cur,
+                "max": mx,
+            },
+        })
+
+    return {
+        "ok": True,
+        "key": key,
+        "current": new_cur,
+        "max": mx,
+        "announced": bool(note_label),
+    }
+
+
+# ----------- API: Wild Shape / Polymorph transform -----------
+
+# Wild Shape CR cap by druid level (RAW). Moon Druid escalates faster.
+_WS_CR_DEFAULT = [
+    (2, 0.25), (4, 0.5), (8, 1.0),   # lv2: 1/4, lv4: 1/2, lv8: 1
+]
+_WS_CR_MOON = [
+    (2, 1.0), (4, 2.0), (6, 3.0), (8, 4.0), (10, 5.0), (12, 6.0),
+]
+
+def _ws_cr_cap(druid_level: int, is_moon: bool) -> float:
+    """Max CR a druid of the given level can Wild Shape into (RAW)."""
+    table = _WS_CR_MOON if is_moon else _WS_CR_DEFAULT
+    cap = 0.0
+    for lvl, cr in table:
+        if druid_level >= lvl:
+            cap = cr
+    return cap
+
+
+def _cr_to_float(cr_raw) -> float:
+    """Parse '1/4' / '0' / '2' / '1/2' / '' into a float. Returns 0.0 on
+    anything unparseable."""
+    if cr_raw is None:
+        return 0.0
+    s = str(cr_raw).strip()
+    if not s:
+        return 0.0
+    if "/" in s:
+        try:
+            a, b = s.split("/", 1)
+            return float(a) / float(b) if float(b) else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _fetch_open5e_creature(slug: str) -> dict:
+    """Pull a creature stat block from the Open5e v2 API. Raises HTTPException
+    on failure. Future work: prefer a local cache (``app/data/open5e``) when
+    available, falling back to the live API."""
+    import json as _json
+    import urllib.request as _urlreq
+    try:
+        req = _urlreq.Request(
+            f"https://api.open5e.com/v2/creatures/{slug}/",
+            headers={"User-Agent": "SimpleVTT/1.0"},
+        )
+        with _urlreq.urlopen(req, timeout=10) as r:
+            return _json.loads(r.read())
+    except Exception as exc:
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/transform")
+async def transform_character(
+    campaign_id: int,
+    char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Apply a Wild Shape / Polymorph transformation to a character.
+
+    Body:
+        {
+          "slug":      "wolf",                       # required
+          "source":    "wild-shape" | "polymorph",   # required
+          "free_pick": false                         # bypass CR cap if True
+        }
+
+    On success: snapshots the character's current HP/AC/speed/abilities/
+    attacks/skills/saves into ``sheet["prior_form"]``, replaces those
+    fields with the beast's stats (Wild Shape: keeps INT/WIS/CHA;
+    Polymorph: replaces all six), sets ``sheet["active_form"]``, and
+    decrements the ``wild-shape`` resource if ``source == "wild-shape"``.
+
+    Returns 409 if the character is already transformed, or if the beast's
+    CR exceeds the cap for this source/level (and ``free_pick`` is false).
+    """
+    body = await request.json()
+    slug = str(body.get("slug") or "").strip()
+    source = str(body.get("source") or "wild-shape").strip().lower()
+    free_pick = bool(body.get("free_pick"))
+    if not slug:
+        raise HTTPException(400, "slug is required")
+    if source not in ("wild-shape", "polymorph"):
+        raise HTTPException(400, "source must be 'wild-shape' or 'polymorph'")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if char.template == "dnd5e":
+        normalize_dnd5e_sheet(sheet)
+
+    if sheet.get("active_form"):
+        existing = sheet["active_form"]
+        raise HTTPException(409, f"Already transformed into {existing.get('name', 'a form')}. Revert first.")
+
+    # Fetch beast
+    monster = _fetch_open5e_creature(slug)
+    creature_type = _o5e_str(monster.get("type")).strip().lower()
+    creature_name = (monster.get("name") or slug).strip()
+    creature_cr = _cr_to_float(_o5e_cr(monster))
+
+    # Source-specific eligibility checks
+    if not free_pick:
+        if source == "wild-shape":
+            if creature_type != "beast":
+                raise HTTPException(409, f"Wild Shape only allows beasts (got '{creature_type or 'unknown'}'). Try 'Free pick (homebrew)' to override.")
+            # Find druid level on the roster + detect Moon Druid by subclass
+            classes = sheet.get("classes") or []
+            druid_lv = 0
+            is_moon = False
+            for c in classes:
+                if isinstance(c, dict) and (c.get("class") or "").strip().lower() == "druid":
+                    druid_lv = max(druid_lv, int(c.get("level") or 0))
+                    sub = (c.get("subclass") or "").strip().lower()
+                    if "moon" in sub:
+                        is_moon = True
+            if druid_lv < 2:
+                raise HTTPException(409, "Wild Shape requires Druid level 2+. Use 'Free pick (homebrew)' to override.")
+            cap = _ws_cr_cap(druid_lv, is_moon)
+            if creature_cr > cap:
+                raise HTTPException(
+                    409,
+                    f"{creature_name} (CR {_o5e_cr(monster)}) exceeds your Wild Shape CR cap of {cap}. "
+                    f"Use 'Free pick (homebrew)' to override.",
+                )
+        else:  # polymorph
+            # Polymorph targets the *target*; for a player polymorphing
+            # themselves, the cap is character_level / 4 (rounded down).
+            char_level = int(sheet.get("level") or 1)
+            cap = max(0.0, char_level / 4.0)
+            if creature_cr > cap:
+                raise HTTPException(
+                    409,
+                    f"{creature_name} (CR {_o5e_cr(monster)}) exceeds the Polymorph CR cap of {cap} "
+                    f"(target level / 4). Use 'Free pick (homebrew)' to override.",
+                )
+            if creature_type != "beast":
+                raise HTTPException(409, f"Polymorph only targets beasts (got '{creature_type or 'unknown'}'). Try 'Free pick (homebrew)' to override.")
+
+    # Build the beast sheet shape (reuses the GM monster importer helper)
+    form_sheet = _open5e_to_dnd5e_sheet(monster)
+
+    # Snapshot prior_form
+    prior_form = {
+        "hp": dict(sheet.get("hp") or {}),
+        "ac": sheet.get("ac"),
+        "speed": sheet.get("speed"),
+        "abilities": dict(sheet.get("abilities") or {}),
+        "skills": dict(sheet.get("skills") or {}),
+        "saving_throws": dict(sheet.get("saving_throws") or {}),
+        "attacks": list(sheet.get("attacks") or []),
+        "race": sheet.get("race"),
+        "initiative_bonus": sheet.get("initiative_bonus"),
+        "proficiency_bonus": sheet.get("proficiency_bonus"),
+        # Defenses follow the beast for the duration of the form — RAW
+        # for both Wild Shape and Polymorph (beast stats replace the
+        # PC's; Wild Shape preserves the PC's INT/WIS/CHA + class
+        # features but not defenses). Snapshot the PC's real-form
+        # defenses so revert restores them cleanly.
+        "damage_resistances":     list(sheet.get("damage_resistances") or []),
+        "damage_immunities":      list(sheet.get("damage_immunities") or []),
+        "damage_vulnerabilities": list(sheet.get("damage_vulnerabilities") or []),
+        "condition_immunities":   list(sheet.get("condition_immunities") or []),
+    }
+
+    # Apply beast stats
+    new_abilities = dict(sheet.get("abilities") or {})
+    if source == "wild-shape":
+        # RAW: keep INT/WIS/CHA, swap STR/DEX/CON
+        for ab in ("STR", "DEX", "CON"):
+            if ab in form_sheet.get("abilities", {}):
+                new_abilities[ab] = form_sheet["abilities"][ab]
+    else:
+        # Polymorph: full replace per RAW
+        new_abilities = dict(form_sheet.get("abilities") or new_abilities)
+
+    sheet["abilities"] = new_abilities
+    sheet["hp"] = form_sheet.get("hp") or sheet.get("hp")
+    sheet["ac"] = form_sheet.get("ac", sheet.get("ac"))
+    sheet["speed"] = form_sheet.get("speed", sheet.get("speed"))
+    sheet["skills"] = form_sheet.get("skills") or sheet.get("skills")
+    sheet["saving_throws"] = form_sheet.get("saving_throws") or sheet.get("saving_throws")
+    sheet["attacks"] = form_sheet.get("attacks") or []
+    sheet["race"] = f"{creature_name} (transformed)"
+    # Replace the PC's defenses with the beast's for the duration of the
+    # form. ``_open5e_to_dnd5e_sheet`` already split Open5e's free-text
+    # strings into lists for us; just copy them straight in.
+    sheet["damage_resistances"]     = list(form_sheet.get("damage_resistances") or [])
+    sheet["damage_immunities"]      = list(form_sheet.get("damage_immunities") or [])
+    sheet["damage_vulnerabilities"] = list(form_sheet.get("damage_vulnerabilities") or [])
+    sheet["condition_immunities"]   = list(form_sheet.get("condition_immunities") or [])
+    # Initiative bonus = DEX mod under the new abilities; keep simple
+    try:
+        dex = int(new_abilities.get("DEX") or 10)
+        sheet["initiative_bonus"] = (dex - 10) // 2
+    except (TypeError, ValueError):
+        pass
+
+    from datetime import datetime as _dt
+    sheet["active_form"] = {
+        "slug": slug,
+        "name": creature_name,
+        "source": source,
+        "cr": _o5e_cr(monster),
+        "creature_type": creature_type,
+        "started_at": _dt.now(timezone.utc).isoformat(),
+        "form_sheet": form_sheet,   # full snapshot for reference / future re-apply
+    }
+    sheet["prior_form"] = prior_form
+
+    # Decrement wild-shape resource if applicable
+    resource_update = None
+    if source == "wild-shape":
+        resources = list(sheet.get("resources") or [])
+        for i, r in enumerate(resources):
+            if isinstance(r, dict) and (r.get("key") or "") == "wild-shape":
+                if int(r.get("max") or 0) > 0:
+                    new_cur = max(0, int(r.get("current") or 0) - 1)
+                    resources[i] = {**r, "current": new_cur}
+                    resource_update = {"key": "wild-shape", "current": new_cur, "max": int(r.get("max") or 0)}
+                break
+        sheet["resources"] = resources
+
+    char.sheet = sheet
+    db.commit()
+
+    await hub.broadcast(campaign_id, {
+        "type": "transform_update",
+        "data": {
+            "character_id": char.id,
+            "active_form": sheet["active_form"],
+            "hp": sheet["hp"],
+            "ac": sheet["ac"],
+            "speed": sheet["speed"],
+        },
+    })
+    if resource_update is not None:
+        await hub.broadcast(campaign_id, {
+            "type": "resource_update",
+            "data": {"character_id": char.id, **resource_update},
+        })
+
+    # Announce in the roll log so the table sees the transformation
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    icon = "🐺" if source == "wild-shape" else "🦌"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"{icon} Transformed into {creature_name}",
+            "feature_desc": f"CR {_o5e_cr(monster) or '?'} {creature_type or 'creature'}. "
+                            f"Form HP {sheet['hp'].get('current')}/{sheet['hp'].get('max')}, AC {sheet['ac']}.",
+            "source": "Wild Shape" if source == "wild-shape" else "Polymorph",
+            "remaining": 0,
+            "max": 0,
+        },
+    })
+
+    return {"ok": True, "active_form": sheet["active_form"], "sheet": sheet}
+
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/revert")
+async def revert_character(
+    campaign_id: int,
+    char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Revert a Wild Shape / Polymorph back to the character's true form.
+
+    Restores ``sheet["prior_form"]`` onto the live sheet and clears
+    ``active_form`` / ``prior_form``.
+
+    Tolerant of "stuck" characters: if ``active_form`` is set but
+    ``prior_form`` was lost (e.g. cleared by a pre-v0.35.4 sheet save
+    that didn't preserve server-managed fields), the endpoint still
+    clears ``active_form`` so the player can edit their sheet back to
+    normal. The response carries ``stats_restored: false`` so the UI
+    can warn that stats need manual fix-up. Returns 409 only when the
+    character is genuinely not transformed (no active_form either).
+
+    RAW Wild Shape: damage that drops the form to 0 HP "overflows" to
+    the character's real HP. If the caller passes
+    ``{"overflow_damage": N}``, that amount is subtracted from the
+    restored real-form HP (clamped to 0).
+    """
+    body = await request.json() if (await request.body()) else {}
+    try:
+        overflow = max(0, int(body.get("overflow_damage") or 0))
+    except (TypeError, ValueError):
+        overflow = 0
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    if char.template == "dnd5e":
+        normalize_dnd5e_sheet(sheet)
+
+    prior = sheet.get("prior_form")
+    active = sheet.get("active_form") or {}
+
+    # Neither set → genuinely not transformed.
+    if not isinstance(prior, dict) and not active:
+        raise HTTPException(409, "Character is not currently transformed")
+
+    # Rescue path: active_form is set but prior_form was wiped (typically
+    # by a save that didn't carry it forward). Clear active_form so the
+    # player can edit out of the beast form; warn via stats_restored=False.
+    stats_restored = isinstance(prior, dict)
+
+    if stats_restored:
+        # Restore prior_form fields onto the live sheet
+        for key in ("hp", "ac", "speed", "abilities", "skills", "saving_throws",
+                    "attacks", "race", "initiative_bonus", "proficiency_bonus",
+                    "damage_resistances", "damage_immunities",
+                    "damage_vulnerabilities", "condition_immunities"):
+            if key in prior and prior[key] is not None:
+                sheet[key] = prior[key]
+
+        # Apply RAW Wild Shape HP overflow: any damage that dropped the
+        # form below 0 carries over to the character's real HP.
+        if overflow > 0 and isinstance(sheet.get("hp"), dict):
+            hp = dict(sheet["hp"])
+            hp["current"] = max(0, int(hp.get("current") or 0) - overflow)
+            sheet["hp"] = hp
+
+    sheet["active_form"] = None
+    sheet["prior_form"] = None
+
+    char.sheet = sheet
+    db.commit()
+
+    await hub.broadcast(campaign_id, {
+        "type": "transform_update",
+        "data": {
+            "character_id": char.id,
+            "active_form": None,
+            "hp": sheet.get("hp"),
+            "ac": sheet.get("ac"),
+            "speed": sheet.get("speed"),
+        },
+    })
+
+    # Announce the revert in the roll log
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    prev_name = active.get("name") or "form"
+    note = f"Reverted from {prev_name}"
+    if overflow > 0:
+        note += f" — {overflow} overflow damage to real HP"
+    if not stats_restored:
+        note += " — prior stats not restored, please edit manually"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "✨ Reverted to true form",
+            "feature_desc": note,
+            "source": active.get("source", "transform"),
+            "remaining": 0, "max": 0,
+        },
+    })
+
+    return {"ok": True, "sheet": sheet, "stats_restored": stats_restored}
 
 
 # ----------- API: weapon / structured attacks -----------
@@ -2215,7 +4790,7 @@ async def import_open5e_monster(
     except Exception as exc:
         raise HTTPException(502, f"Open5e unavailable: {exc}")
     sheet = _open5e_to_dnd5e_sheet(monster)
-    tags = [t for t in [monster.get("type", ""), monster.get("size", ""), f"CR {monster.get('challenge_rating', '0')}"] if t]
+    tags = [t for t in [_o5e_str(monster.get("type")), _o5e_str(monster.get("size")), f"CR {_o5e_cr(monster)}"] if t]
     tmpl = TokenTemplate(
         campaign_id=campaign_id,
         name=monster.get("name", slug)[:200],
@@ -2247,35 +4822,243 @@ def user_gm_campaigns(
     return [{"id": c.id, "name": c.name} for c in primary + [c for c in co_gm if c.id not in seen]]
 
 
+def _custom_monster_lite(row: CustomMonster) -> dict:
+    """Return a homebrew monster in the same lite shape the beast picker
+    receives from Open5e v2 (after normalisation). ``is_custom`` is a
+    forward-compatible flag the picker can use to render a badge.
+    """
+    return {
+        "slug": row.monster_slug,
+        "name": row.name,
+        "cr": row.challenge_rating or "0",
+        "type": row.type or "",
+        "size": row.size or "",
+        "hp": row.hit_points,
+        "ac": row.armor_class,
+        "source": "Custom",
+        "is_custom": True,
+    }
+
+
+def _cr_to_float(raw: str) -> float:
+    """Convert a CR text ("1/4", "5", "0") to a float for ``cr_max``
+    filtering. Unknown forms yield 0."""
+    s = (raw or "").strip()
+    if "/" in s:
+        try:
+            a, b = s.split("/", 1)
+            return float(a) / float(b)
+        except (ValueError, ZeroDivisionError):
+            return 0.0
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
 @router.get("/api/open5e/monsters")
-def open5e_monsters_proxy(search: str = "", limit: int = 20):
+def open5e_monsters_proxy(
+    search: str = "",
+    limit: int = 20,
+    type_filter: str = "",
+    cr_max: str = "",
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    """Proxy for the Open5e v2 creatures endpoint.
+
+    Query params:
+        search      — text match on creature name (passed through).
+        limit       — page size, capped at 50.
+        type_filter — when non-empty, narrows to one creature type
+                      (e.g. ``beast``). Forwarded to v2 as
+                      ``type__key={type_filter}``.
+        cr_max      — when non-empty, narrows to creatures of CR <= the
+                      given value. Accepts ``"1/4"`` etc.; converted to
+                      a decimal and passed as ``cr__lte=``.
+
+    The v2 endpoint uses different field names than v1 (``cr`` rather
+    than ``challenge_rating``, ``type`` / ``size`` as ``{key,name}``
+    dicts). Output is normalized so the client can rely on the legacy
+    flat-string shape regardless of upstream version.
+
+    On a 4xx from v2 (e.g. a filter param the API doesn't accept), we
+    retry once without the filter so the picker stays usable.
+    """
     import json as _json
     import urllib.parse as _urlparse
     import urllib.request as _urlreq
-    qs = _urlparse.urlencode({"search": search, "limit": min(abs(limit), 50)})
-    url = f"https://api.open5e.com/v2/creatures/?{qs}"
-    try:
+    import urllib.error as _urlerr
+
+    # ── Campaign-scoped homebrew monsters prepend the list ───────────────
+    # Apply the same filters the client wanted upstream (type, cr_max,
+    # search) so a homebrew "Awakened Boulder" only shows up when the
+    # picker is in beast / Free pick mode.
+    custom_rows: list[dict] = []
+    custom_slugs: set[str] = set()
+    if campaign_id:
+        q = db.query(CustomMonster).filter(CustomMonster.campaign_id == campaign_id)
+        if search:
+            q = q.filter(CustomMonster.name.ilike(f"%{search}%"))
+        if type_filter:
+            q = q.filter(CustomMonster.type == type_filter.strip().lower())
+        rows = q.order_by(CustomMonster.name).limit(min(abs(limit), 50)).all()
+        if cr_max:
+            cap = _cr_to_float(cr_max)
+            rows = [r for r in rows if _cr_to_float(r.challenge_rating) <= cap]
+        for r in rows:
+            custom_rows.append(_custom_monster_lite(r))
+            custom_slugs.add(r.monster_slug)
+
+    def _build_url(use_filters: bool) -> str:
+        # Open5e v2 is django-filter based and silently ignores DRF's
+        # ``?search=`` — name matching uses ``?name__icontains=foo``
+        # instead. The v1 endpoints (still used by the spell / class
+        # proxies elsewhere in this file) DO honour ``?search=``, so
+        # keep that pattern there but send the v2 idiom here.
+        params: dict[str, str] = {
+            "limit": str(min(abs(limit), 50)),
+        }
+        if search:
+            params["name__icontains"] = search
+        if use_filters and type_filter:
+            params["type__key"] = type_filter.strip().lower()
+        if use_filters and cr_max:
+            try:
+                raw = cr_max.strip()
+                cr_val = (float(raw.split("/")[0]) / float(raw.split("/")[1])) if "/" in raw else float(raw)
+                params["cr__lte"] = str(cr_val)
+            except (TypeError, ValueError):
+                pass
+        return f"https://api.open5e.com/v2/creatures/?{_urlparse.urlencode(params)}"
+
+    def _fetch(url: str) -> dict:
         req = _urlreq.Request(url, headers={"User-Agent": "SimpleVTT/1.0"})
         with _urlreq.urlopen(req, timeout=8) as r:
-            data = _json.loads(r.read())
+            return _json.loads(r.read())
+
+    data: dict
+    try:
+        data = _fetch(_build_url(use_filters=True))
+    except _urlerr.HTTPError as exc:
+        if 400 <= exc.code < 500:
+            # Filter param the API doesn't accept (or schema drift) —
+            # retry once with the plain search so the picker still works.
+            try:
+                data = _fetch(_build_url(use_filters=False))
+            except Exception as exc2:
+                # If we have homebrew, prefer returning just that over a 502.
+                if custom_rows:
+                    return {"count": len(custom_rows), "results": custom_rows}
+                raise HTTPException(502, f"Open5e unavailable: {exc2}")
+        else:
+            if custom_rows:
+                return {"count": len(custom_rows), "results": custom_rows}
+            raise HTTPException(502, f"Open5e unavailable: {exc}")
     except Exception as exc:
+        if custom_rows:
+            return {"count": len(custom_rows), "results": custom_rows}
         raise HTTPException(502, f"Open5e unavailable: {exc}")
+
     results = []
     for m in data.get("results", []):
+        slug = m.get("key", m.get("slug", ""))
+        # Homebrew with the same slug shadows the Open5e entry.
+        if slug in custom_slugs:
+            continue
         ac = m.get("armor_class", 10)
         if isinstance(ac, list) and ac:
             ac = ac[0].get("value", 10) if isinstance(ac[0], dict) else ac[0]
         results.append({
-            "slug": m.get("key", m.get("slug", "")),
+            "slug": slug,
             "name": m.get("name", ""),
-            "cr": str(m.get("challenge_rating", "0")),
-            "type": m.get("type", ""),
-            "size": m.get("size", ""),
+            # v2 uses ``cr`` (string); v1 used ``challenge_rating``. _o5e_cr
+            # handles both.
+            "cr": _o5e_cr(m),
+            # ``type`` / ``size`` arrive as either plain strings (v1) or
+            # ``{"key", "name"}`` dicts (v2) — coerce to a string so the
+            # client's ``.toLowerCase()`` filter doesn't blow up.
+            "type": _o5e_str(m.get("type")),
+            "size": _o5e_str(m.get("size")),
             "hp": m.get("hit_points", 0),
             "ac": ac,
             "source": m.get("document__title", m.get("document", {}).get("title", "") if isinstance(m.get("document"), dict) else ""),
         })
-    return {"count": data.get("count", 0), "results": results}
+    return {
+        "count": len(custom_rows) + data.get("count", 0),
+        "results": custom_rows + results,
+    }
+
+
+def _creature_lite(m: dict) -> dict:
+    """Slim an Open5e creature record down to the same shape returned by
+    the monsters list proxy. Used by ``/api/open5e/creature/{slug}`` so
+    the picker's Favorites section can render rows that look identical
+    to the search results."""
+    ac = m.get("armor_class", 10)
+    if isinstance(ac, list) and ac:
+        ac = ac[0].get("value", 10) if isinstance(ac[0], dict) else ac[0]
+    return {
+        "slug": m.get("key", m.get("slug", "")),
+        "name": m.get("name", ""),
+        "cr": _o5e_cr(m),
+        "type": _o5e_str(m.get("type")),
+        "size": _o5e_str(m.get("size")),
+        "hp": m.get("hit_points", 0),
+        "ac": ac,
+        "source": m.get("document__title", m.get("document", {}).get("title", "") if isinstance(m.get("document"), dict) else ""),
+    }
+
+
+@router.get("/api/open5e/creature/{slug}")
+def open5e_creature_detail(
+    slug: str,
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    """Lite creature lookup by slug. The Wild Shape picker hits this
+    once per favorite when it opens so the ★ Favorites section can
+    render rows in the same shape as search results.
+
+    When ``campaign_id`` is supplied, a homebrew monster with this slug
+    in that campaign takes precedence over the Open5e fetch. Otherwise
+    the existing v2 lookup runs. Returns 404 when neither source has the
+    slug so the client can quietly skip dead favorites without breaking
+    the whole picker.
+    """
+    slug = (slug or "").strip()
+    if not slug:
+        raise HTTPException(400, "slug required")
+    # 1. Campaign homebrew first.
+    if campaign_id:
+        row = (
+            db.query(CustomMonster)
+            .filter(
+                CustomMonster.campaign_id == campaign_id,
+                CustomMonster.monster_slug == slug.lower(),
+            )
+            .first()
+        )
+        if row:
+            return _custom_monster_lite(row)
+    # 2. Live Open5e v2.
+    import json as _json
+    import urllib.request as _urlreq
+    import urllib.error as _urlerr
+    try:
+        req = _urlreq.Request(
+            f"https://api.open5e.com/v2/creatures/{slug}/",
+            headers={"User-Agent": "SimpleVTT/1.0"},
+        )
+        with _urlreq.urlopen(req, timeout=8) as r:
+            monster = _json.loads(r.read())
+    except _urlerr.HTTPError as exc:
+        if exc.code == 404:
+            raise HTTPException(404, f"Creature '{slug}' not found")
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    except Exception as exc:
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    return _creature_lite(monster)
 
 
 @router.get("/api/open5e/update-check")
@@ -2327,14 +5110,28 @@ def _class_detail_response(c: dict) -> dict:
 
 
 @router.get("/api/open5e/class-detail")
-def open5e_class_detail(slug: str = ""):
+def open5e_class_detail(
+    slug: str = "",
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
     from ..open5e_local import is_ready, get_class
+    from .. import local_features
     if not slug:
         raise HTTPException(400, "slug required")
+    # 1. Local-first provider chain. DB-backed homebrew (custom_classes)
+    # wins over the shipped FS overrides; both shadow Open5e fallbacks.
+    scopes = [f"campaign:{campaign_id}", "global"] if campaign_id else ["global"]
+    record, source = local_features.resolve_class(slug, scopes=scopes, db=db)
+    if record:
+        return {**_class_detail_response(record), "source": source}
+    # 2. Local Open5e mirror (LOCAL_OPEN5E=true).
     if is_ready():
         c = get_class(slug)
         if c:
-            return _class_detail_response(c)
+            local_features.record_miss("class", slug, source="open5e_mirror")
+            return {**_class_detail_response(c), "source": "open5e_mirror"}
+    # 3. Live Open5e fallback.
     import json as _json, urllib.request as _urlreq
     try:
         req = _urlreq.Request(f"https://api.open5e.com/v1/classes/{slug}/",
@@ -2342,8 +5139,10 @@ def open5e_class_detail(slug: str = ""):
         with _urlreq.urlopen(req, timeout=8) as r:
             c = _json.loads(r.read())
     except Exception as exc:
+        local_features.record_miss("class", slug, source="open5e_unreachable")
         raise HTTPException(502, f"Open5e unavailable: {exc}")
-    return _class_detail_response(c)
+    local_features.record_miss("class", slug, source="open5e_live")
+    return {**_class_detail_response(c), "source": "open5e_live"}
 
 
 def _subclass_response(s: dict) -> dict:
@@ -2358,14 +5157,43 @@ def _subclass_response(s: dict) -> dict:
 
 
 @router.get("/api/open5e/subclass-detail")
-def open5e_subclass_detail(slug: str = "", class_slug: str = ""):
-    from ..open5e_local import is_ready, get_subclass
+def open5e_subclass_detail(
+    slug: str = "",
+    class_slug: str = "",
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    from ..open5e_local import is_ready, get_subclass, format_subclass_text
+    from .. import local_features
     if not slug:
         raise HTTPException(400, "slug required")
+    # Build the scope priority list.  Campaign-scoped homebrew (DB
+    # provider) wins over the shipped global SRD content (FS provider).
+    # Caller may omit ``campaign_id`` — then only global content is
+    # considered, preserving the v0.40.1 contract.
+    scopes = [f"campaign:{campaign_id}", "global"] if campaign_id else ["global"]
+    # 1. Local-first provider chain.  Files already match the response
+    # shape; synthesise the legacy "text" summary if absent.
+    record, source = local_features.resolve_subclass(class_slug, slug, scopes=scopes, db=db)
+    if record:
+        features = record.get("features") or []
+        return {
+            "text": record.get("text") or format_subclass_text({
+                "name": record.get("name", ""),
+                "subclass_flavor": record.get("flavor", ""),
+                "feature_items": features,
+            }),
+            "name": record.get("name", ""),
+            "flavor": record.get("flavor", ""),
+            "features": features,
+            "source": source,
+        }
+    # 2. Local Open5e mirror.
     if is_ready():
         s = get_subclass(slug)
         if s:
-            return _subclass_response(s)
+            local_features.record_miss("subclass", slug, class_slug=class_slug, source="open5e_mirror")
+            return {**_subclass_response(s), "source": "open5e_mirror"}
     import json as _json, urllib.request as _urlreq
 
     def _req(url: str) -> dict:
@@ -2373,42 +5201,92 @@ def open5e_subclass_detail(slug: str = "", class_slug: str = ""):
         with _urlreq.urlopen(r, timeout=8) as resp:
             return _json.loads(resp.read())
 
-    # Primary: v1/subclasses/{slug}/
+    # 3. Live Open5e — primary: v1/subclasses/{slug}/
     try:
         s = _req(f"https://api.open5e.com/v1/subclasses/{slug}/")
-        return _subclass_response(s)
+        local_features.record_miss("subclass", slug, class_slug=class_slug, source="open5e_live")
+        return {**_subclass_response(s), "source": "open5e_live"}
     except Exception:
         pass
 
-    # Fallback: find the archetype inside the parent class detail
+    # 4. Live Open5e — fallback: archetype inside the parent class detail
     if class_slug:
         try:
             data = _req(f"https://api.open5e.com/v1/classes/{class_slug}/")
             archetypes = data.get("archetypes") or data.get("subclasses") or []
             for a in archetypes:
                 if a.get("slug") == slug or a.get("name", "").lower() == slug.replace("-", " "):
-                    return _subclass_response(a)
+                    local_features.record_miss("subclass", slug, class_slug=class_slug, source="open5e_live")
+                    return {**_subclass_response(a), "source": "open5e_live"}
         except Exception:
             pass
 
-    return {"text": "", "name": "", "flavor": "", "features": []}
+    local_features.record_miss("subclass", slug, class_slug=class_slug, source="open5e_unreachable")
+    return {"text": "", "name": "", "flavor": "", "features": [], "source": "open5e_unreachable"}
 
 
 @router.get("/api/open5e/race-detail")
-def open5e_race_detail(slug: str = ""):
+def open5e_race_detail(
+    slug: str = "",
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
     from ..open5e_local import is_ready, get_race, format_race_text, parse_race_traits
+    from .. import local_features
     if not slug:
         raise HTTPException(400, "slug required")
+
+    # 1. Local-first provider chain (DB + reserved FS slot).
+    scopes = [f"campaign:{campaign_id}", "global"] if campaign_id else ["global"]
+    record, source = local_features.resolve_race(slug, scopes=scopes, db=db)
+    if record:
+        # Synthesise the legacy Open5e fields the renderers expect.
+        synth: dict = {
+            "name": record.get("name", ""),
+            "ability_bonuses": record.get("ability_bonuses") or [],
+            "size": record.get("size") or "",
+            "speed": record.get("speed") or {"walk": 30},
+            "age": record.get("age") or "",
+            "alignment": record.get("alignment") or "",
+            "languages": record.get("languages") or "",
+        }
+        flavor = format_race_text({**synth})  # not used — overwritten below
+        # Build the structured response using the existing helpers; pass
+        # the same fields ``parse_race_traits`` expects, plus a synthetic
+        # ``traits`` markdown blob derived from the structured trait list
+        # so the parser round-trips.
+        traits_list = record.get("traits_list") or []
+        traits_blob = "\n\n".join(
+            f"### {t.get('name','').strip()}\n{(t.get('desc') or '').strip()}"
+            for t in traits_list if isinstance(t, dict) and t.get("name")
+        )
+        parsed = parse_race_traits({**synth, "traits": traits_blob})
+        # If parse_race_traits fell back to a single "Racial Traits" card
+        # because no markdown headings were found (which won't happen with
+        # our synthesised blob), prefer the structured list directly.
+        return {
+            "text":   format_race_text({**synth, "traits": traits_blob}),
+            "name":   parsed["name"] or record.get("name", ""),
+            "flavor": parsed["flavor"],
+            "traits": traits_list or parsed["traits"],
+            "source": source,
+        }
+
+    # 2. Local Open5e mirror.
     if is_ready():
         r_data = get_race(slug)
         if r_data:
+            local_features.record_miss("race", slug, source="open5e_mirror")
             parsed = parse_race_traits(r_data)
             return {
                 "text":   format_race_text(r_data),
                 "name":   parsed["name"],
                 "flavor": parsed["flavor"],
                 "traits": parsed["traits"],
+                "source": "open5e_mirror",
             }
+
+    # 3. Live Open5e fallback.
     import json as _json, urllib.request as _urlreq
     try:
         req = _urlreq.Request(f"https://api.open5e.com/v1/races/{slug}/",
@@ -2416,27 +5294,66 @@ def open5e_race_detail(slug: str = ""):
         with _urlreq.urlopen(req, timeout=8) as r:
             r_data = _json.loads(r.read())
     except Exception as exc:
+        local_features.record_miss("race", slug, source="open5e_unreachable")
         raise HTTPException(502, f"Open5e unavailable: {exc}")
+    local_features.record_miss("race", slug, source="open5e_live")
     parsed = parse_race_traits(r_data)
     return {
         "text":   format_race_text(r_data),
         "name":   parsed["name"],
         "flavor": parsed["flavor"],
         "traits": parsed["traits"],
+        "source": "open5e_live",
     }
 
 
 @router.get("/api/open5e/subclasses")
-def open5e_subclasses_proxy(search: str = "", class_slug: str = "", limit: int = 20):
+def open5e_subclasses_proxy(
+    search: str = "",
+    class_slug: str = "",
+    limit: int = 20,
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
     from ..open5e_local import is_ready, search_subclasses, _source
     cap = min(abs(limit), 100)
+
+    # ── Campaign-scoped homebrew (DB-backed) takes the top of the list ───────
+    # and shadows any Open5e / mirror entry with the same slug.  Carries
+    # ``is_custom: true`` so the picker can render an authoring affordance.
+    custom_results: list[dict] = []
+    custom_slugs: set[str] = set()
+    if campaign_id:
+        q = db.query(CustomSubclass).filter(CustomSubclass.campaign_id == campaign_id)
+        if class_slug:
+            q = q.filter(CustomSubclass.class_slug == class_slug)
+        if search:
+            q = q.filter(CustomSubclass.name.ilike(f"%{search}%"))
+        for row in q.order_by(CustomSubclass.name).limit(cap).all():
+            custom_results.append({
+                "name": row.name,
+                "slug": row.sub_slug,
+                "flavor": (row.flavor or "")[:300],
+                "source": "Custom",
+                "is_custom": True,
+            })
+            custom_slugs.add(row.sub_slug)
+
+    def _dedupe(results: list[dict]) -> list[dict]:
+        return [r for r in results if r.get("slug") not in custom_slugs]
+
     if is_ready():
         items, total = search_subclasses(q=search, class_slug=class_slug, limit=cap)
-        return {"count": total, "results": [
+        open5e_rows = [
             {"name": s.get("name", ""), "slug": s.get("slug", ""),
              "flavor": s.get("subclass_flavor", ""), "source": _source(s)}
             for s in items
-        ]}
+        ]
+        open5e_rows = _dedupe(open5e_rows)
+        return {
+            "count": len(custom_results) + total - (len(items) - len(open5e_rows)),
+            "results": custom_results + open5e_rows,
+        }
     import json as _json, urllib.parse as _urlparse, urllib.request as _urlreq
 
     def _req(url: str) -> dict:
@@ -2460,7 +5377,11 @@ def open5e_subclasses_proxy(search: str = "", class_slug: str = "", limit: int =
             )
             results.append({"name": s.get("name", ""), "slug": s.get("slug", ""),
                              "flavor": s.get("subclass_flavor", ""), "source": src})
-        return {"count": data.get("count", 0), "results": results}
+        results = _dedupe(results)
+        return {
+            "count": len(custom_results) + data.get("count", 0),
+            "results": custom_results + results,
+        }
     except Exception:
         pass
 
@@ -2482,25 +5403,61 @@ def open5e_subclasses_proxy(search: str = "", class_slug: str = "", limit: int =
                     "flavor": a.get("subtypes_name", "") or "",
                     "source": a.get("document__title", ""),
                 })
-            return {"count": len(results), "results": results[:cap]}
+            results = _dedupe(results)
+            return {
+                "count": len(custom_results) + len(results),
+                "results": (custom_results + results)[:cap],
+            }
         except Exception:
             pass
 
-    # ── Both sources failed — return empty rather than 502 ───────────────────
-    return {"count": 0, "results": []}
+    # ── Both Open5e sources failed — still return any homebrew we found. ─────
+    return {"count": len(custom_results), "results": custom_results}
 
 
 @router.get("/api/open5e/classes")
-def open5e_classes_proxy(search: str = "", limit: int = 20):
+def open5e_classes_proxy(
+    search: str = "",
+    limit: int = 20,
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
     from ..open5e_local import is_ready, search_classes, _source
     cap = min(abs(limit), 30)
+
+    # Campaign-scoped homebrew classes prepend the list and shadow any
+    # Open5e/mirror entry with the same slug, mirroring the subclass behavior.
+    custom_results: list[dict] = []
+    custom_slugs: set[str] = set()
+    if campaign_id:
+        q = db.query(CustomClass).filter(CustomClass.campaign_id == campaign_id)
+        if search:
+            q = q.filter(CustomClass.name.ilike(f"%{search}%"))
+        for row in q.order_by(CustomClass.name).limit(cap).all():
+            custom_results.append({
+                "name": row.name,
+                "slug": row.class_slug,
+                "hit_die": row.hit_die,
+                "source": "Custom",
+                "is_custom": True,
+            })
+            custom_slugs.add(row.class_slug)
+
+    def _dedupe(results: list[dict]) -> list[dict]:
+        return [r for r in results if r.get("slug") not in custom_slugs]
+
     if is_ready():
         items, total = search_classes(q=search, limit=cap)
-        return {"count": total, "results": [
+        rows = [
             {"name": c.get("name", ""), "slug": c.get("slug", ""),
              "hit_die": c.get("hit_die", ""), "source": _source(c)}
             for c in items
-        ]}
+        ]
+        rows = _dedupe(rows)
+        return {
+            "count": len(custom_results) + total - (len(items) - len(rows)),
+            "results": custom_results + rows,
+        }
     import json as _json, urllib.parse as _urlparse, urllib.request as _urlreq
     url = f"https://api.open5e.com/v1/classes/?{_urlparse.urlencode({'search': search, 'limit': cap})}"
     try:
@@ -2508,6 +5465,9 @@ def open5e_classes_proxy(search: str = "", limit: int = 20):
         with _urlreq.urlopen(req, timeout=8) as r:
             data = _json.loads(r.read())
     except Exception as exc:
+        # If Open5e is down but we have homebrew, still return that.
+        if custom_results:
+            return {"count": len(custom_results), "results": custom_results}
         raise HTTPException(502, f"Open5e unavailable: {exc}")
     results = []
     for c in data.get("results", []):
@@ -2516,20 +5476,57 @@ def open5e_classes_proxy(search: str = "", limit: int = 20):
         )
         results.append({"name": c.get("name", ""), "slug": c.get("slug", ""),
                          "hit_die": c.get("hit_die", ""), "source": src})
-    return {"count": data.get("count", 0), "results": results}
+    results = _dedupe(results)
+    return {
+        "count": len(custom_results) + data.get("count", 0),
+        "results": custom_results + results,
+    }
 
 
 @router.get("/api/open5e/races")
-def open5e_races_proxy(search: str = "", limit: int = 20):
+def open5e_races_proxy(
+    search: str = "",
+    limit: int = 20,
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
     from ..open5e_local import is_ready, search_races, _source
     cap = min(abs(limit), 30)
+
+    # Campaign-scoped homebrew races prepend the list and shadow any
+    # Open5e / mirror entry with the same slug, mirroring how classes and
+    # subclasses already behave.
+    custom_results: list[dict] = []
+    custom_slugs: set[str] = set()
+    if campaign_id:
+        q = db.query(CustomRace).filter(CustomRace.campaign_id == campaign_id)
+        if search:
+            q = q.filter(CustomRace.name.ilike(f"%{search}%"))
+        for row in q.order_by(CustomRace.name).limit(cap).all():
+            custom_results.append({
+                "name": row.name,
+                "slug": row.race_slug,
+                "size": row.size or "",
+                "source": "Custom",
+                "is_custom": True,
+            })
+            custom_slugs.add(row.race_slug)
+
+    def _dedupe(results: list[dict]) -> list[dict]:
+        return [r for r in results if r.get("slug") not in custom_slugs]
+
     if is_ready():
         items, total = search_races(q=search, limit=cap)
-        return {"count": total, "results": [
+        rows = [
             {"name": r.get("name", ""), "slug": r.get("slug", ""),
              "size": r.get("size", ""), "source": _source(r)}
             for r in items
-        ]}
+        ]
+        rows = _dedupe(rows)
+        return {
+            "count": len(custom_results) + total - (len(items) - len(rows)),
+            "results": custom_results + rows,
+        }
     import json as _json, urllib.parse as _urlparse, urllib.request as _urlreq
     url = f"https://api.open5e.com/v1/races/?{_urlparse.urlencode({'search': search, 'limit': cap})}"
     try:
@@ -2537,6 +5534,8 @@ def open5e_races_proxy(search: str = "", limit: int = 20):
         with _urlreq.urlopen(req, timeout=8) as r:
             data = _json.loads(r.read())
     except Exception as exc:
+        if custom_results:
+            return {"count": len(custom_results), "results": custom_results}
         raise HTTPException(502, f"Open5e unavailable: {exc}")
     results = []
     for r in data.get("results", []):
@@ -2545,11 +5544,232 @@ def open5e_races_proxy(search: str = "", limit: int = 20):
         )
         results.append({"name": r.get("name", ""), "slug": r.get("slug", ""),
                          "size": r.get("size", ""), "source": src})
-    return {"count": data.get("count", 0), "results": results}
+    results = _dedupe(results)
+    return {
+        "count": len(custom_results) + data.get("count", 0),
+        "results": custom_results + results,
+    }
+
+
+# ── Backgrounds proxy (with homebrew merge) ─────────────────────────────────
+#
+# Open5e v1 ships a ``/v1/backgrounds/`` endpoint with name, desc, the four
+# proficiency strings, equipment, and feature/feature_desc. We expose two
+# routes mirroring the class / subclass pattern: a list endpoint that
+# searches by name and a per-slug detail endpoint, both honouring
+# ``campaign_id`` to prepend / shadow with homebrew.
+
+
+@router.get("/api/open5e/backgrounds")
+def open5e_backgrounds_proxy(
+    search: str = "",
+    limit: int = 20,
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    cap = min(abs(limit), 50)
+    custom_results: list[dict] = []
+    custom_slugs: set[str] = set()
+    if campaign_id:
+        q = db.query(CustomBackground).filter(CustomBackground.campaign_id == campaign_id)
+        if search:
+            q = q.filter(CustomBackground.name.ilike(f"%{search}%"))
+        for row in q.order_by(CustomBackground.name).limit(cap).all():
+            custom_results.append({
+                "name": row.name,
+                "slug": row.background_slug,
+                "feature": row.feature_name or "",
+                "source": "Custom",
+                "is_custom": True,
+            })
+            custom_slugs.add(row.background_slug)
+
+    def _dedupe(results: list[dict]) -> list[dict]:
+        return [r for r in results if r.get("slug") not in custom_slugs]
+
+    import json as _json, urllib.parse as _urlparse, urllib.request as _urlreq
+    params: dict = {"limit": cap}
+    if search:
+        params["search"] = search
+    url = f"https://api.open5e.com/v1/backgrounds/?{_urlparse.urlencode(params)}"
+    try:
+        req = _urlreq.Request(url, headers={"User-Agent": "SimpleVTT/1.0"})
+        with _urlreq.urlopen(req, timeout=8) as r:
+            data = _json.loads(r.read())
+    except Exception as exc:
+        # Homebrew-only when Open5e is down.
+        if custom_results:
+            return {"count": len(custom_results), "results": custom_results}
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+
+    results = []
+    for b in data.get("results", []):
+        src = b.get("document__title", "") or (
+            b.get("document", {}).get("title", "") if isinstance(b.get("document"), dict) else ""
+        )
+        results.append({
+            "name": b.get("name", ""),
+            "slug": b.get("slug", ""),
+            "feature": b.get("feature", ""),
+            "source": src,
+        })
+    results = _dedupe(results)
+    return {
+        "count": len(custom_results) + data.get("count", 0),
+        "results": custom_results + results,
+    }
+
+
+@router.get("/api/open5e/background/{slug}")
+def open5e_background_detail(
+    slug: str,
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    slug = (slug or "").strip()
+    if not slug:
+        raise HTTPException(400, "slug required")
+    from .. import local_features
+    scopes = [f"campaign:{campaign_id}", "global"] if campaign_id else ["global"]
+    record, source = local_features.resolve_background(slug, scopes=scopes, db=db)
+    if record:
+        return {**record, "source": source}
+    import json as _json, urllib.request as _urlreq, urllib.error as _urlerr
+    try:
+        req = _urlreq.Request(
+            f"https://api.open5e.com/v1/backgrounds/{slug}/",
+            headers={"User-Agent": "SimpleVTT/1.0"},
+        )
+        with _urlreq.urlopen(req, timeout=8) as r:
+            data = _json.loads(r.read())
+    except _urlerr.HTTPError as exc:
+        if exc.code == 404:
+            raise HTTPException(404, f"Background '{slug}' not found")
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    except Exception as exc:
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    return {
+        "slug": data.get("slug", slug),
+        "name": data.get("name", ""),
+        "desc": data.get("desc", ""),
+        "skill_proficiencies": data.get("skill_proficiencies", ""),
+        "tool_proficiencies": data.get("tool_proficiencies", ""),
+        "languages": data.get("languages", ""),
+        "equipment": data.get("equipment", ""),
+        "feature": data.get("feature", ""),
+        "feature_desc": data.get("feature_desc", ""),
+        "source": "open5e_live",
+    }
+
+
+# ── Feats proxy (with homebrew merge) ───────────────────────────────────────
+
+
+@router.get("/api/open5e/feats")
+def open5e_feats_proxy(
+    search: str = "",
+    limit: int = 20,
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    cap = min(abs(limit), 50)
+    custom_results: list[dict] = []
+    custom_slugs: set[str] = set()
+    if campaign_id:
+        q = db.query(CustomFeat).filter(CustomFeat.campaign_id == campaign_id)
+        if search:
+            q = q.filter(CustomFeat.name.ilike(f"%{search}%"))
+        for row in q.order_by(CustomFeat.name).limit(cap).all():
+            custom_results.append({
+                "name": row.name,
+                "slug": row.feat_slug,
+                "prerequisite": row.prerequisite or "",
+                "source": "Custom",
+                "is_custom": True,
+            })
+            custom_slugs.add(row.feat_slug)
+
+    def _dedupe(results: list[dict]) -> list[dict]:
+        return [r for r in results if r.get("slug") not in custom_slugs]
+
+    import json as _json, urllib.parse as _urlparse, urllib.request as _urlreq
+    params: dict = {"limit": cap}
+    if search:
+        params["search"] = search
+    url = f"https://api.open5e.com/v1/feats/?{_urlparse.urlencode(params)}"
+    try:
+        req = _urlreq.Request(url, headers={"User-Agent": "SimpleVTT/1.0"})
+        with _urlreq.urlopen(req, timeout=8) as r:
+            data = _json.loads(r.read())
+    except Exception as exc:
+        if custom_results:
+            return {"count": len(custom_results), "results": custom_results}
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+
+    results = []
+    for f in data.get("results", []):
+        src = f.get("document__title", "") or (
+            f.get("document", {}).get("title", "") if isinstance(f.get("document"), dict) else ""
+        )
+        results.append({
+            "name": f.get("name", ""),
+            "slug": f.get("slug", ""),
+            "prerequisite": f.get("prerequisite", ""),
+            "source": src,
+        })
+    results = _dedupe(results)
+    return {
+        "count": len(custom_results) + data.get("count", 0),
+        "results": custom_results + results,
+    }
+
+
+@router.get("/api/open5e/feat/{slug}")
+def open5e_feat_detail(
+    slug: str,
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    slug = (slug or "").strip()
+    if not slug:
+        raise HTTPException(400, "slug required")
+    from .. import local_features
+    scopes = [f"campaign:{campaign_id}", "global"] if campaign_id else ["global"]
+    record, source = local_features.resolve_feat(slug, scopes=scopes, db=db)
+    if record:
+        return {**record, "source": source}
+    import json as _json, urllib.request as _urlreq, urllib.error as _urlerr
+    try:
+        req = _urlreq.Request(
+            f"https://api.open5e.com/v1/feats/{slug}/",
+            headers={"User-Agent": "SimpleVTT/1.0"},
+        )
+        with _urlreq.urlopen(req, timeout=8) as r:
+            data = _json.loads(r.read())
+    except _urlerr.HTTPError as exc:
+        if exc.code == 404:
+            raise HTTPException(404, f"Feat '{slug}' not found")
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    except Exception as exc:
+        raise HTTPException(502, f"Open5e unavailable: {exc}")
+    return {
+        "slug": data.get("slug", slug),
+        "name": data.get("name", ""),
+        "prerequisite": data.get("prerequisite", ""),
+        "desc": data.get("desc", ""),
+        "source": "open5e_live",
+    }
 
 
 @router.get("/api/open5e/spells")
-def open5e_spells_proxy(search: str = "", limit: int = 20, spell_list: str = "", level: int = -1):
+def open5e_spells_proxy(
+    search: str = "",
+    limit: int = 20,
+    spell_list: str = "",
+    level: int = -1,
+    campaign_id: int | None = None,
+    db: Session = Depends(get_db),
+):
     import re as _re
 
     def _fmt_spell(s: dict) -> dict:
@@ -2596,11 +5816,74 @@ def open5e_spells_proxy(search: str = "", limit: int = 20, spell_list: str = "",
             "desc": desc,
         }
 
-    from ..open5e_local import is_ready, search_spells
+    from ..open5e_local import is_ready, search_spells, get_spells_by_slugs
     cap = min(abs(limit), 100)
+
+    # ── Homebrew-class spell list ────────────────────────────────────────────
+    # When the picker filters by class slug AND a campaign is supplied AND
+    # that (campaign, slug) names a homebrew class, return the spells from
+    # the GM's curated list rather than asking Open5e for "spells whose
+    # spell_lists field contains <homebrew slug>" (which would always be
+    # empty — Open5e doesn't know about the homebrew).
+    if spell_list and campaign_id:
+        homebrew = (
+            db.query(CustomClass)
+            .filter(
+                CustomClass.campaign_id == campaign_id,
+                CustomClass.class_slug == spell_list.lower(),
+            )
+            .first()
+        )
+        if homebrew:
+            curated = homebrew.spell_list or []
+            if not curated:
+                return {"count": 0, "results": []}
+            # Local mirror is preferred — single in-memory lookup.  Without
+            # it we'd need N parallel HTTP fetches, which is slow enough to
+            # warrant requiring the mirror for homebrew lookups.
+            if is_ready():
+                spells = get_spells_by_slugs(curated)
+            else:
+                # Fall back to sequential Open5e fetches with a short
+                # timeout each; tolerate individual failures.
+                import json as _json, urllib.request as _urlreq
+                spells = []
+                for slug in curated[:cap * 2]:  # cap to a sane upper bound
+                    try:
+                        req = _urlreq.Request(
+                            f"https://api.open5e.com/v1/spells/{slug}/",
+                            headers={"User-Agent": "SimpleVTT/1.0"},
+                        )
+                        with _urlreq.urlopen(req, timeout=4) as r:
+                            spells.append(_json.loads(r.read()))
+                    except Exception:
+                        continue
+            # Apply search + level filters in memory.
+            if search:
+                q = search.lower()
+                spells = [s for s in spells if q in (s.get("name") or "").lower()]
+            if level >= 0:
+                spells = [
+                    s for s in spells
+                    if (s.get("level_int") or s.get("spell_level") or 0) == level
+                ]
+            total = len(spells)
+            return {"count": total, "results": [_fmt_spell(s) for s in spells[:cap]]}
+
+    # Try the local mirror first when enabled. If it returns zero results
+    # for a class+level filter (e.g. the sync ran before a content drop,
+    # or the mirror is incomplete) fall through to the live API instead
+    # of silently leaving the picker empty.
     if is_ready():
         items, total = search_spells(q=search, limit=cap, spell_list=spell_list, level=level)
-        return {"count": total, "results": [_fmt_spell(s) for s in items]}
+        if total > 0:
+            return {"count": total, "results": [_fmt_spell(s) for s in items]}
+        # Local returned nothing — log + try live as a fallback.
+        log.info(
+            "Local Open5e spells returned 0 results (spell_list=%r, level=%r, search=%r); "
+            "falling back to live API.",
+            spell_list, level, search,
+        )
     import json as _json, urllib.parse as _urlparse, urllib.request as _urlreq
     params: dict = {"limit": cap}
     if search:     params["search"]      = search
@@ -2640,6 +5923,91 @@ def open5e_conditions_proxy():
     return {"results": [_fmt(c) for c in data.get("results", [])]}
 
 
+def _o5e_str(v) -> str:
+    """Coerce an Open5e v1/v2 attribute to a plain string.
+
+    v2 returns ``type`` and ``size`` (and several other taxonomy-ish
+    fields) as ``{"key": "beast", "name": "Beast"}`` objects rather
+    than the v1 plain-string form. Anything that calls
+    ``.toLowerCase()`` / ``.strip()`` on the raw value crashes on v2
+    data. This helper normalizes both shapes to a display string;
+    callers downstream can ``.lower()`` / ``.strip()`` it freely.
+    """
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v
+    if isinstance(v, dict):
+        return str(v.get("name") or v.get("key") or "")
+    return str(v)
+
+
+def _o5e_cr(m: dict) -> str:
+    """Read the challenge rating regardless of v1/v2 shape.
+
+    v2 (creatures endpoint) uses ``cr`` — a string like ``"1/4"`` or
+    ``"5"``. v1 uses ``challenge_rating``. Returns the raw string so
+    callers can decide whether to render or parse to a float.
+    """
+    raw = m.get("cr")
+    if raw is None or raw == "":
+        raw = m.get("challenge_rating")
+    if raw is None:
+        return "0"
+    return str(raw)
+
+
+def _o5e_ability(m: dict, ability_key: str, full_key: str) -> int | None:
+    """Read a single ability score in a way that works for both API versions.
+
+    - v1 puts each score at the top level: ``m["strength"] = 12``.
+    - v2 nests them under ``ability_scores``: ``m["ability_scores"]["str"] = 12``.
+
+    Returns the score as an int, or None if not present. Caller decides
+    the default.
+    """
+    nested = m.get("ability_scores")
+    if isinstance(nested, dict):
+        val = nested.get(ability_key)
+        if val is not None:
+            try:
+                return int(val)
+            except (TypeError, ValueError):
+                pass
+    val = m.get(full_key)
+    if val is not None:
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def _o5e_save_prof(m: dict, ability_key: str, full_save_key: str) -> bool:
+    """True when the creature is proficient with a given saving throw.
+
+    v1 exposes ``strength_save = 4`` (a final bonus, presence implies
+    proficiency). v2 nests them under ``saving_throws`` keyed by
+    short ability name (``str``, ``dex``, …) with a numeric value when
+    proficient.
+    """
+    nested = m.get("saving_throws")
+    if isinstance(nested, dict) and nested.get(ability_key) is not None:
+        return True
+    return m.get(full_save_key) is not None
+
+
+def _o5e_skill_prof(m: dict, snake_key: str) -> bool:
+    """True when the creature is proficient with a skill.
+
+    v1 surfaces e.g. ``perception = 5`` at the top level. v2 nests
+    them under ``skill_bonuses``."""
+    nested = m.get("skill_bonuses")
+    if isinstance(nested, dict) and nested.get(snake_key) is not None:
+        return True
+    return m.get(snake_key) is not None
+
+
 def _open5e_to_dnd5e_sheet(m: dict) -> dict:
     import copy
     import re
@@ -2674,15 +6042,23 @@ def _open5e_to_dnd5e_sheet(m: dict) -> dict:
         digs = re.search(r"\d+", str(speed_raw))
         sheet["speed"] = int(digs.group()) if digs else 30
 
-    # Ability scores
-    for ab, key in [("STR", "strength"), ("DEX", "dexterity"), ("CON", "constitution"),
-                    ("INT", "intelligence"), ("WIS", "wisdom"), ("CHA", "charisma")]:
-        val = m.get(key)
+    # Ability scores — handle both v1 (top-level) and v2 (nested under
+    # ``ability_scores``). v2 uses 3-letter keys (``str``, ``dex``, …);
+    # v1 uses the full names.
+    for ab, short, full in [
+        ("STR", "str", "strength"),
+        ("DEX", "dex", "dexterity"),
+        ("CON", "con", "constitution"),
+        ("INT", "int", "intelligence"),
+        ("WIS", "wis", "wisdom"),
+        ("CHA", "cha", "charisma"),
+    ]:
+        val = _o5e_ability(m, short, full)
         if val is not None:
-            sheet["abilities"][ab] = int(val)
+            sheet["abilities"][ab] = val
 
     # CR → proficiency bonus
-    cr_str = str(m.get("challenge_rating", "0"))
+    cr_str = _o5e_cr(m)
     try:
         cr_val = float(cr_str.split("/")[0]) / float(cr_str.split("/")[1]) if "/" in cr_str else float(cr_str)
     except Exception:
@@ -2694,16 +6070,24 @@ def _open5e_to_dnd5e_sheet(m: dict) -> dict:
     )
 
     # Creature meta
-    sheet["race"] = f"{m.get('size', '')} {m.get('type', '')}".strip()
-    sheet["background"] = m.get("alignment", "")
+    sheet["race"] = f"{_o5e_str(m.get('size'))} {_o5e_str(m.get('type'))}".strip()
+    sheet["background"] = _o5e_str(m.get("alignment"))
 
-    # Saving throw proficiencies (open5e fields: strength_save etc.)
-    for ab, key in [("STR", "strength_save"), ("DEX", "dexterity_save"), ("CON", "constitution_save"),
-                    ("INT", "intelligence_save"), ("WIS", "wisdom_save"), ("CHA", "charisma_save")]:
-        if m.get(key) is not None:
+    # Saving throw proficiencies — v1 has ``strength_save`` etc. at the top
+    # level; v2 nests under ``saving_throws.{short}``.
+    for ab, short, full in [
+        ("STR", "str", "strength_save"),
+        ("DEX", "dex", "dexterity_save"),
+        ("CON", "con", "constitution_save"),
+        ("INT", "int", "intelligence_save"),
+        ("WIS", "wis", "wisdom_save"),
+        ("CHA", "cha", "charisma_save"),
+    ]:
+        if _o5e_save_prof(m, short, full):
             sheet["saving_throws"][ab] = True
 
-    # Skill proficiencies
+    # Skill proficiencies — v1 has ``perception`` etc. at top level; v2
+    # nests under ``skill_bonuses.<snake>``.
     skill_map = {
         "acrobatics": "Acrobatics", "animal_handling": "Animal Handling", "arcana": "Arcana",
         "athletics": "Athletics", "deception": "Deception", "history": "History",
@@ -2713,7 +6097,7 @@ def _open5e_to_dnd5e_sheet(m: dict) -> dict:
         "sleight_of_hand": "Sleight of Hand", "stealth": "Stealth", "survival": "Survival",
     }
     for api_key, skill_name in skill_map.items():
-        if m.get(api_key) is not None and skill_name in sheet["skills"]:
+        if _o5e_skill_prof(m, api_key) and skill_name in sheet["skills"]:
             sheet["skills"][skill_name]["proficient"] = True
 
     # Actions → attacks
@@ -2738,14 +6122,37 @@ def _open5e_to_dnd5e_sheet(m: dict) -> dict:
             features.append(f"{name}: {desc}" if name else desc)
     sheet["features"] = "\n\n".join(features)
 
-    # Notes: stat block meta
+    # Defenses — Open5e returns these as free-text strings (e.g.
+    # ``"fire, cold"`` or ``"bludgeoning, piercing, and slashing from
+    # nonmagical attacks not made with silvered weapons"``). Split on
+    # commas and " and " for the common simple-list cases; anything
+    # more complex lands as a single custom chip the player can clean
+    # up after transforming. ``normalize_dnd5e_sheet`` later dedupes
+    # case-insensitively and caps the lists.
+    def _split_defense(raw: object) -> list[str]:
+        if not raw:
+            return []
+        if isinstance(raw, list):
+            parts = [str(p) for p in raw]
+        else:
+            text = str(raw)
+            # Replace " and " with comma to merge into a single split below.
+            text = re.sub(r"\s+and\s+", ", ", text)
+            parts = re.split(r"[,;]", text)
+        return [p.strip() for p in parts if p and p.strip()]
+
+    sheet["damage_resistances"]     = _split_defense(m.get("damage_resistances"))
+    sheet["damage_immunities"]      = _split_defense(m.get("damage_immunities"))
+    sheet["damage_vulnerabilities"] = _split_defense(m.get("damage_vulnerabilities"))
+    sheet["condition_immunities"]   = _split_defense(m.get("condition_immunities"))
+
+    # Notes: stat block meta (defenses are now first-class fields above,
+    # so we don't dump them into Notes — leaves room for languages /
+    # senses / hit dice / CR).
     parts = []
     for label, key in [
         ("Hit Dice", "hit_dice"), ("CR", "challenge_rating"),
         ("Languages", "languages"), ("Senses", "senses"),
-        ("Damage Immunities", "damage_immunities"),
-        ("Damage Resistances", "damage_resistances"),
-        ("Condition Immunities", "condition_immunities"),
     ]:
         if m.get(key):
             parts.append(f"{label}: {m[key]}")
@@ -2877,6 +6284,7 @@ def get_template_sheet(
         "sheet_save_method": "PATCH",
         "portrait_upload_url": f"/api/campaign/{campaign_id}/templates/{tmpl_id}/image",
         "class_roster": class_levels_summary(tmpl_sheet) if tmpl.template == "dnd5e" else [],
+        "animate_gifs": user.animate_gifs,
     })
 
 
@@ -2910,6 +6318,7 @@ def get_sheet(
             "can_edit": can_edit,
             "campaign": campaign,
             "class_roster": class_levels_summary(sheet) if char.template == "dnd5e" else [],
+            "animate_gifs": user.animate_gifs,
         },
     )
 
@@ -2932,7 +6341,22 @@ async def update_sheet(
     if "name" in body:
         char.name = str(body["name"])[:120]
     if "sheet" in body and isinstance(body["sheet"], dict):
-        char.sheet = body["sheet"]
+        incoming = body["sheet"]
+        existing = dict(char.sheet or {})
+        # Server-managed fields that have no form inputs on the sheet. The
+        # client's buildSheet() can't include them in its payload, so a
+        # naive replace would strand any transformed character (active_form
+        # set, prior_form lost — see bug repro in v0.35.4). Carry these
+        # forward from the persisted sheet whenever the client didn't send
+        # them explicitly. hp_rolls is in the same category — populated
+        # exclusively through the /sheet-fields PATCH from the edit panel
+        # picker.
+        for k in ("active_form", "prior_form", "hp_rolls", "favorite_beasts",
+                  "damage_resistances", "damage_immunities",
+                  "damage_vulnerabilities", "condition_immunities"):
+            if k in existing and k not in incoming:
+                incoming[k] = existing[k]
+        char.sheet = incoming
     if "template" in body and body["template"] in ("generic", "dnd5e"):
         char.template = body["template"]
     db.commit()
@@ -2966,6 +6390,25 @@ _SHEET_PATCH_KEYS = {
     # Knowledge Domain → Skill, …).  Auto-saved when the player selects
     # from the variant dropdown so the picker re-hydrates on reload.
     "subclass_choice",
+    # Per-class HP gain per level — { class_slug: [int, …] }. Edited via
+    # the "HP per Level" table inside the sheet edit panel.
+    "hp_rolls",
+    # Beast picker favorites — list of Open5e creature slugs starred by
+    # the player. Toggled via the ★ button on every picker row.
+    "favorite_beasts",
+    # Defenses — four string lists. Edited via the chip-toggle UI in
+    # the Defenses fieldset; each toggle PATCHes immediately so the
+    # state persists without an explicit Save.
+    "damage_resistances",
+    "damage_immunities",
+    "damage_vulnerabilities",
+    "condition_immunities",
+    # Cached background detail (signature feature etc.) so the sheet's
+    # background display block survives a reload without re-fetching.
+    "background_data",
+    # Feats list — auto-saved on add/remove so the player's selection
+    # persists across refreshes without an explicit Save.
+    "feats",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the
@@ -3148,6 +6591,7 @@ def character_sheet_page(
             "sheet_template": sheet_template,
             "system": get_system(campaign.game_system),
             "class_roster": class_levels_summary(page_sheet) if char.template == "dnd5e" else [],
+            "animate_gifs": user.animate_gifs,
         },
     )
 

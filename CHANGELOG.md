@@ -86,6 +86,741 @@ Each release section must include all five of these, in this order:
 
 ---
 
+## [0.57.1] - 2026-05-12
+
+**Schema version:** 31
+
+**Commit summary:** Make the Bonus Cantrip dropdown self-diagnose when Open5e returns empty + add local-to-live fallback in the spells proxy
+
+**Description:** The "Bonus Cantrip" cantrip-picker dropdown that appears for Druid Circle of the Land (and for Light Cleric, Nature Cleric, etc.) was rendering as a permanently-blank select when `/api/open5e/spells?spell_list=druid&level=0&limit=80` returned nothing — which can happen if Open5e is unreachable, if the local mirror is stale, or if the v1 spell-list filter ever changes shape. The dropdown silently ate the failure and the player just saw an unclickable widget. Two fixes: (1) the dropdown now visibly shows the failure with the underlying reason (HTTP status, "empty-result", network message) and a small ↻ Retry button that drops the failed cache entry and re-hits the server without a page reload; (2) the spells proxy now falls back to the live Open5e API when `LOCAL_OPEN5E=true` is set but the local mirror returns zero results for the given filter — so a partial/stale local sync no longer silently breaks pickers. Also logs the empty-local case so deployments running the mirror can spot which filters are missing data.
+
+### Fixed
+- Bonus Cantrip dropdown (and any other curated `type: 'choose'` grant on a subclass) no longer renders as an empty widget on Open5e failure. The select now shows the underlying error message, and a small ↻ Retry button sits next to it to re-try without reloading the page.
+- `_fetchCantripsForClass` only caches successful, non-empty responses. A transient failure used to be cached for the rest of the session, leaving the dropdown broken until reload.
+- `/api/open5e/spells` falls back to the live API when the local mirror returns zero results — previously a stale mirror would lock the picker empty even when Open5e would have returned data. Also logs an `INFO` line when the fallback fires.
+
+### Added
+- `[bonus-cantrip]` console warnings in the cantrip fetcher pinpointing the failed URL and the underlying reason, so the developer console immediately shows why a dropdown is empty.
+
+## [0.57.0] - 2026-05-11
+
+**Schema version:** 31
+
+**Commit summary:** Add Halfling auto-defenses and an Open5eCoverage diagnostic for curated-table gaps
+
+**Description:** Adds the Halfling family to the innate-defenses curated table — Halfling, Lightfoot Halfling, Ghostwise Halfling get Frightened condition immunity (Brave, modelled the same flexible-reading way as Fey Ancestry), and Stout / Strongheart Halflings additionally get Poison damage resistance (Stout Resilience — a RAW-accurate Dwarven Resilience analog). Also introduces a small developer framework for spotting "Open5e item with no local curated coverage" gaps. Three curated tables ship alongside the sheet — `_INNATE_DEFENSES` (race/class/subclass → auto-applied damage and condition immunities), `_CLASS_RESOURCES` (class/subclass → trackable feature counters), `_SUBCLASS_SPELLS` (subclass → always-prepared spell grants). The new `window.Open5eCoverage` queries all three uniformly and reports which selected items have local entries vs. which don't. Intended as a dev tool, not a user-facing UI: open the JS console on any D&D 5e sheet and run `Open5eCoverage.summarize()` to see the report, or set `localStorage.setItem('simplevtt_coverage_debug', '1')` once to auto-print on every sheet load until cleared. As we add more curated entries the report will get shorter — it's the to-do list of "Open5e content we know about but haven't taught the rules engine yet."
+
+### Added
+- Halfling race entries in `app/static/dnd5e_innate_defenses.js`: `halfling`, `lightfoot-halfling`, `ghostwise-halfling`, `stout-halfling`, `strongheart-halfling`. All share the Brave → Frightened immunity reading; Stout / Strongheart additionally include Poison damage resistance.
+- New `app/static/open5e_coverage.js` module exposing `window.Open5eCoverage` with three methods:
+  - `inspect(sheet?)` — returns a structured report of curated/missing coverage for the live sheet (or any sheet-shaped object).
+  - `summarize(sheet?)` — prints a one-screen console report (race + class/subclass coverage tags + missing list).
+  - `isCurated(kind, slug)` — single boolean for one item; `kind` is one of `race-defenses`, `class-defenses`, `subclass-defenses`, `class-resources`, `subclass-resources`, `subclass-spells`.
+- Opt-in auto-print on sheet load when `localStorage.simplevtt_coverage_debug === '1'`. Wraps the output in a `console.groupCollapsed` so it doesn't dominate the console.
+- Coverage script loaded alongside the other curated tables on the D&D 5e sheet.
+
+## [0.56.1] - 2026-05-11
+
+**Schema version:** 31
+
+**Commit summary:** Add Elf Fey Ancestry to the innate-defenses curated table for all elf subraces
+
+**Description:** The Defenses fieldset wasn't auto-flagging Charmed immunity for Elves because no Elf entries were in the curated `dnd5e_innate_defenses.js` table. Fixed by adding all PHB Elf subraces — Elf, High Elf, Wood Elf, Drow, Eladrin — pointing at a shared `_FEY_ANCESTRY` constant that lights the Charmed condition chip. The two existing elf subraces with extra resistances (Shadar-kai, Sea Elf) now combine both grants under a single tooltip label so the player sees their full racial defense package on one row. Note on the rules: RAW Fey Ancestry is "advantage on saves against being charmed, and magic can't put you to sleep" — i.e. a save-side advantage, not flat Charmed immunity. We model it as a Charmed chip because (a) the chip is a useful visible reminder of the trait, and (b) many tables already play Fey Ancestry as effective charm immunity; the chip's hover tooltip names the trait explicitly so players whose tables play it stricter can read it as "advantage" instead. Sleep-magic immunity isn't a chip type in the standard list and is omitted.
+
+### Added
+- Elf race entries in `app/static/dnd5e_innate_defenses.js`: `elf`, `high-elf`, `wood-elf`, `drow`, `eladrin`. All share Fey Ancestry → Charmed condition immunity chip.
+- Updated Shadar-kai and Sea Elf entries to also carry Fey Ancestry on top of their existing Necrotic / Cold resistance — they're elf subraces too.
+
+## [0.56.0] - 2026-05-11
+
+**Schema version:** 31
+
+**Commit summary:** Auto-apply race and class defenses on the D&D 5e sheet via a curated lookup
+
+**Description:** The D&D 5e Defenses fieldset now auto-applies defenses granted by the character's race and class. A Tiefling automatically shows Fire Resistance, a Mountain Dwarf shows Poison Resistance, an Aasimar shows Necrotic + Radiant Resistance, and a Monk crossing level 10 picks up Poison Damage Immunity + Poisoned Condition Immunity from Purity of Body. Auto-applied chips render with a ✨ badge and a locked appearance — hovering shows the source ("Auto-applied from Dwarven Resilience"), clicking surfaces the same hint via toast rather than toggling. The player's manual chip selections remain editable and independent. When race / class level / subclass changes the auto chips refresh immediately (no save needed). Coverage is conservative on purpose: only always-on defenses from sources I can verify (PHB races, Aasimar, Genasi, Triton, Yuan-ti, Shadar-kai, Sea Elf, Monk Lv 10). Conditional features (Rage's BPS resistance, Aura of Protection) are deliberately excluded since they're not really sheet-state — those are tracked via the existing resource counters / aura UI. Dragonborn is also skipped pending an ancestry sub-field.
+
+### Added
+- New `app/static/dnd5e_innate_defenses.js` curated table mapping Open5e race / class / subclass slugs to defense grants. Each grant is `{damage_resistances, damage_immunities, damage_vulnerabilities, condition_immunities, source}`; class/subclass entries can be level-tiered arrays so Monk Lv 10 Purity of Body only activates at the right level.
+- `window._computeInnateDefenses(sheet)` helper that walks the race + class roster and returns a unified map of granted defenses with their source labels for tooltips.
+- `_applyAutoDefenses()` inside the Defenses IIFE in `sheet_dnd5e.html`. Marks any standard chip whose label matches a grant with `data-auto="1"`, a ✨ prefix, a locked-color style, and a hover tooltip. Reverts cleanly when the grant goes away (race swap, subclass change, level drop below threshold). Re-runs on initial load, on `vtt:mc-changed`, and on race-select `change`.
+- Click handler short-circuits on auto chips — pops a toast showing the source instead of toggling, so players understand why the chip won't deselect.
+
+### Coverage (initial pass)
+- **Races**: Tiefling, Dwarf (+ Hill, Mountain, Duergar variants), Aasimar (+ Protector, Scourge, Fallen), Fire Genasi, Water Genasi, Triton, Yuan-ti Pureblood, Shadar-kai, Sea Elf.
+- **Classes**: Monk Lv 10 (Purity of Body — poison immunity + poisoned condition immunity).
+- **Subclasses**: empty for now (PHB subclass defenses are mostly conditional; add to `SUB` in the curated table when a clean case arises).
+
+## [0.55.0] - 2026-05-11
+
+**Schema version:** 31
+
+**Commit summary:** Track damage resistances, immunities, vulnerabilities, and condition immunities on character sheets
+
+**Description:** Both D&D 5e and generic character sheets now track defenses as first-class fields. The D&D 5e sheet gets a new collapsible **Defenses** fieldset (between Conditions and Attacks) with four chip-toggle rows — Damage Resistances, Damage Immunities, Damage Vulnerabilities, and Condition Immunities. Each row pre-fills the 13 PHB damage types or 15 condition types as toggleable chips and provides a "+ Custom" input for edge cases like *"bludgeoning, piercing, and slashing from nonmagical attacks not made with silvered weapons"*. Each toggle PATCHes `/sheet-fields` immediately, so changes survive a refresh without an explicit Save. The generic sheet gets a simpler Defenses fieldset with two free-text fields (`resistances`, `immunities`). Wild Shape and Polymorph now snapshot the player's real-form defenses into `prior_form` and apply the beast's defenses to the active form — so a Druid wild-shaping into a creature with poison immunity actually gets it, and reverts cleanly to their own defenses. Open5e's free-text defense strings are parsed at import time (splitting on commas, semicolons, and " and ") into chip lists; complex tail clauses like "from nonmagical attacks" land as a single custom chip the player can clean up. Schema is JSON-only on `Character.sheet` — no SQL migration.
+
+### Added
+- New D&D 5e sheet fields: `damage_resistances`, `damage_immunities`, `damage_vulnerabilities`, `condition_immunities` (each a list of label strings). Names match the existing `LocalCreature` model and Open5e shape for consistency.
+- New generic sheet fields: `resistances` and `immunities` (free-text strings — generic systems get a single line each rather than chip-toggle since they don't have a fixed taxonomy).
+- New **Defenses** collapsible fieldset on the D&D 5e sheet with four chip-toggle rows. Each row colour-codes its accent (gold for resistance, teal for immunity, red for vulnerability, blue for condition immunity), a "+ Custom" input for non-standard entries, and an × button on each custom chip to remove.
+- `_open5e_to_dnd5e_sheet` now parses Open5e's free-text defense strings into chip lists. Splits on commas, semicolons, and " and ". Complex tail clauses ("from nonmagical attacks", "not made with silvered weapons") land as a single custom chip rather than being mangled.
+- The four new fields are whitelisted in `_SHEET_PATCH_KEYS` (so chip toggles persist via `/sheet-fields` PATCH) and added to the `update_sheet` preserve list (so a full Save without them doesn't wipe the chip state — same belt-and-braces pattern as `active_form`, `hp_rolls`, `favorite_beasts`).
+
+### Changed
+- `transform_character` snapshots all four defense lists into `prior_form` and applies the beast's defenses to the active sheet. `revert_character` restores them. Previously beast defenses were dumped into the unstructured `notes` text and not preserved across revert.
+- `_open5e_to_dnd5e_sheet` no longer dumps Damage Immunities / Resistances / Condition Immunities into `notes` — they're first-class fields now. Notes still carries Hit Dice, CR, Languages, and Senses.
+- `sheet.js` form-submit parses the four new JSON-array fields on save (same pattern as the existing `conditions` field).
+
+## [0.54.1] - 2026-05-11
+
+**Schema version:** 31
+
+**Commit summary:** Improve full sheet readability with clearer label vs value contrast
+
+**Description:** Labels and section headings on the full character sheet were difficult to distinguish from their associated values — both used similar font sizes and the same foreground colour family. Section legends are now larger and accent-coloured. A new `--s-label` CSS variable provides a mid-tone between `--s-fg` and `--s-mute` used for all field labels, making them clearly subordinate to values without disappearing. Stat chip labels (AC, Speed, Init, Prof) grow from 9 px to 11 px, ability/saving-throw abbreviations from 10 px to 11 px, and the background feature title/description pair gains distinct `.ft-title` / `.ft-desc` classes with matching styles.
+
+### Changed
+- `fieldset > legend` headings are now 14 px, bold, and accent-coloured.
+- Added `--s-label` CSS variable (60 % fg / 40 % mute) used for field labels throughout the sheet.
+- Stat chip labels (AC, Speed, Init, Prof) increased from 9 px to 11 px.
+- Ability and saving-throw abbreviation labels increased to 11 px via CSS selector.
+- Skill-card ability abbreviation tag increased to 11 px via CSS selector.
+- Background feature title and description use new `.ft-title` / `.ft-desc` CSS classes for clear visual separation.
+
+---
+
+## [0.54.0] - 2026-05-11
+
+**Schema version:** 31
+
+**Commit summary:** Add per-user animated GIF toggle for portraits and tabletop tokens
+
+**Description:** GIF uploads were already accepted but animated GIFs never played — canvas `drawImage()` only captures a single frame and the portrait `<img>` tag was not conditional. Portraits now render as an animated `<img>` (GIFs loop naturally) or, when animation is disabled, as a `<canvas>` that captures the first frame as a static thumbnail. Tabletop tokens with `.gif` image URLs start a `requestAnimationFrame` loop so GIF frames advance on the canvas; the loop stops automatically when no GIF tokens are present. A new "Animate GIFs" checkbox in user settings (⚙ → Animated GIFs) persists the preference server-side and applies across all devices. No operator action needed beyond redeploy.
+
+### Added
+- `users.animate_gifs` boolean column (schema v31, default `TRUE`).
+- `POST /api/settings/animate_gifs` endpoint to persist the preference.
+- "Animated GIFs" toggle section in user settings.
+- `requestAnimationFrame` loop in `tabletop.js` that activates only while GIF tokens are on the canvas (`_syncGifLoop`).
+
+### Changed
+- Portrait on full character sheet renders as `<img>` (animated) or `<canvas>` (static first frame) depending on `animate_gifs` preference and whether the URL is a GIF.
+- Portrait upload handler replaces a static canvas element with a fresh `<img>` immediately after upload so the new file is visible without a reload.
+- `ME.animateGifs` flag added to the tabletop JavaScript context.
+- All `sheet_dnd5e.html` render calls now receive `animate_gifs` in their template context.
+
+### Schema
+- `ALTER TABLE users ADD COLUMN animate_gifs BOOLEAN NOT NULL DEFAULT TRUE`
+
+---
+
+## [0.53.3] - 2026-05-11
+
+**Schema version:** 30
+
+**Commit summary:** Reorganize combat stat chips into 2x2 grid with AC on full sheet
+
+**Description:** The Speed, Initiative, and Proficiency Bonus chips were displayed in a single 3-wide row. AC was only visible in the inventory section. The chips are now arranged in a 2×2 grid (AC, Speed, Initiative, Prof) so all four key combat stats are immediately visible at the top of the sheet. The AC chip is wired to the existing armor engine and updates live when equipment changes.
+
+### Changed
+- Combat stat chips on the full character sheet reorganized from 3-column row to 2×2 grid.
+- AC chip added to the grid; reads the initial value from `sheet.ac` and updates live via the inventory armor engine (`id="ac-disp"`).
+
+---
+
+## [0.53.2] - 2026-05-11
+
+**Schema version:** 30
+
+**Commit summary:** Group tabletop mini-sheet spells by level across all classes
+
+**Description:** The tabletop sidebar spell list previously showed a separate section per class per level (e.g. "Level 1 Spells - Druid", "Level 1 Spells - Wizard"), which was noisy for multiclass characters. Spells are now combined under a single "Level N Spells" heading per level, matching the full character sheet layout. For multiclass characters, each spell row gains a small italic class tag so the source is still visible. Slot pip rows remain per-class within each level group.
+
+### Changed
+- Tabletop mini-sheet spell list now groups by level (not by class × level), matching the full sheet.
+- Slot pip rows are still rendered per class within each level group, labelled with the class name when multiclass.
+- Each spell row shows a small italic class tag when the character is multiclass.
+
+---
+
+## [0.53.1] - 2026-05-11
+
+**Schema version:** 30
+
+**Commit summary:** Increase spell level label font size for improved readability on character sheet
+
+**Description:** The "Cantrips" and "Level N Spells" group headings in the spell section of the full character sheet were rendered at 10px in a muted color, making them hard to read at a glance. They are now 13px and use the standard foreground color so spell level groups are clearly scannable.
+
+### Changed
+- Increased spell level group label font size from 10px to 13px and changed color from muted to foreground in the character sheet spell list.
+
+---
+
+## [0.53.0] - 2026-05-11
+
+**Schema version:** 30
+
+**Commit summary:** Add homebrew import / export with starter template download
+
+**Description:** GMs can now move every homebrew row in a campaign — classes, subclasses, races, monsters, backgrounds, feats — into or out of a single JSON pack. Three new endpoints under `/api/campaign/{id}/homebrew/`: `export` produces a combined download, `template` returns an annotated starter file with one example row per content type, and `import` accepts the same shape and bulk-creates rows. Imports are slug-deduplicating per campaign — re-importing a pack you've already loaded is a safe no-op rather than an overwrite or an error. Each content type is processed independently so a malformed entry in one list doesn't kill the rest of the import; the response carries per-type `created` / `skipped` / `errors` counts so the GM can see what landed. New "Import & export" sub-tab inside the Homebrew tab on the campaign settings page wires three buttons: download pack, download template, and upload-to-import with status readout.
+
+### Added
+- `GET /api/campaign/{id}/homebrew/export` — returns `{format: "simplevtt-homebrew", version: 1, campaign, exported_at, classes, subclasses, races, monsters, backgrounds, feats}`. GM-only.
+- `GET /api/campaign/{id}/homebrew/template` — returns the same shape pre-populated with one annotated example row per content type. GM-only.
+- `POST /api/campaign/{id}/homebrew/import` — accepts a pack matching the export shape and bulk-creates rows. Skips any row whose slug already exists in this campaign. Per-type caps (200 classes / 500 subclasses / etc.) protect against pathological uploads. Returns `{ok, stats: {classes: {created, skipped, errors}, …}, totals}`. GM-only.
+- Six per-type `_<content>_to_dict()` helpers in `app/routes/tabletop_routes.py` so each row's full DB shape round-trips through JSON without data loss (features, spell lists, resources, abilities, prereqs, action lists, multiclass info — all preserved).
+- `HOMEBREW_EXPORT_VERSION = 1` constant. The import endpoint rejects packs whose `version` is higher than the running server supports so a future v2 schema can't silently corrupt a v1 server's data.
+- "Import & export" sub-tab in the Homebrew tab on `campaign_settings.html` with three cards: Export pack, Template, and Import pack. The import card surfaces per-type stats inline after upload so a GM sees exactly which rows landed and which were skipped on slug collision.
+
+### Schema
+- No schema changes — the new endpoints operate purely on existing tables. `SCHEMA_VERSION` unchanged at 30.
+
+## [0.52.1] - 2026-05-11
+
+**Schema version:** 30
+
+**Commit summary:** Reorganise campaign settings page into tabs with Homebrew sub-tabs
+
+**Description:** The campaign settings page had grown a 13-item anchor strip after six homebrew content types landed, with every section visible at once making it slow to scroll and visually noisy. The page now uses real tabs: Basic info / People / World / Homebrew / Danger zone, with the Homebrew tab opening a second strip for the six content sub-types (Classes / Subclasses / Races / Monsters / Backgrounds / Feats). Tab state is URL-hash-aware in both directions — typing `#homebrew` or `#custom-monsters` in the address bar lands on the matching tab, and the CRUD redirect targets (`POST → 303 → …/settings#custom-monsters`) continue to land on the right tab without any change to the route handlers. Switching tabs updates the hash with `history.replaceState` so reload preserves the view but the back button doesn't fill up with intermediate tab switches.
+
+### Added
+- Tab strip (`.settings-tabs`) and Homebrew sub-tab strip (`.settings-subtabs`) replacing the old `.settings-nav` anchor links. Active state on hover/click; the danger tab is tinted red and only renders for admins (same as the old anchor).
+- `data-tab` and (for Homebrew sections) `data-sub` attributes on every `<section class="settings-section">` so the switcher knows which sections belong to which tab.
+- Inline switcher script at the end of the template — hash-aware on load and on every `hashchange`, falls back to `basic` when no hash is supplied.
+
+### Changed
+- `.settings-section` defaults to `display: none` and only sections with `.is-shown` render. Editors inside `<details>` cards (features-editor, spell-picker, resources-editor) keep their existing lazy-init-on-open behavior, so opening one tab doesn't pay the init cost for sections in other tabs.
+
+## [0.52.0] - 2026-05-11
+
+**Schema version:** 30
+
+**Commit summary:** Wire backgrounds and feats into the D&D 5e sheet as in-place pickers
+
+**Description:** Sheet-side consumers for the background + feat content types that landed in v0.51.0. A new "Background" select sits in the existing character-edit grid (right after Prof Bonus); on change it fetches `/api/open5e/background/<slug>?campaign_id=N`, caches the result in `sheet["background_data"]`, and renders the signature feature in a display block below the multiclass editor. A new "Feats" section above the multiclass editor renders the character's feats as collapsible cards showing name + prerequisite in the summary and the full description when expanded; a "+ Add feat" button reveals an inline typeahead search that calls `/api/open5e/feats?search=…&campaign_id=N` and adds the chosen feat (with cached prereq + desc) as a new card. Both flows persist automatically via `/sheet-fields` PATCH on every change — no explicit Save required. The "Custom" gold pill surfaces on both display paths when the resolver returns `source: "local-custom"`, matching the subclass / race / monster badge style.
+
+### Added
+- `sheet["background_data"]` (cached `{slug, name, feature, feature_desc, desc, source}` blob) and `sheet["feats"]` (list of cached feat records `{slug, name, prerequisite, desc, source}`) on `DND5E_TEMPLATE` in `app/sheet_templates.py`. Defaults: `{}` and `[]`. Existing sheets without these fields tolerate their absence since the inline picker JS treats null / undefined as empty.
+- "Background" select on the character-edit panel (after the Prof Bonus input) populated from `/api/open5e/backgrounds` at sheet load. Preserves the saved display name even when the upstream API doesn't list it (legacy free-text values or homebrew the GM later deleted) by inserting a synthetic option.
+- "Background" display block below the multiclass editor showing the chosen background's name, signature feature (name + description), and overall description. Hidden when nothing is picked. "↻ Sync" button re-fetches detail on demand.
+- "Feats" section above the multiclass editor with collapsible `<details>` cards per feat. Each card's summary shows the feat name, a Custom pill (when applicable), and the prerequisite text inline. The body shows the full description. "✕" button removes the feat; "+ Add feat" opens an inline search panel.
+- Inline IIFE at the end of `sheet_dnd5e.html` wiring both pickers — debounced search, dedupe on add, auto-persist via `/sheet-fields` PATCH on every change, source-badge rendering when `source === "local-custom"`. Threads `CAMPAIGN_ID` into every fetch when defined (sheet outside a campaign uses global-only resolution).
+
+### Changed
+- `_SHEET_PATCH_KEYS` in `app/routes/tabletop_routes.py` allows `"background_data"` and `"feats"` so the picker auto-save calls land successfully.
+
+### Schema
+- No schema changes — existing JSON `Character.sheet` column carries the new keys. `SCHEMA_VERSION` unchanged at 30.
+
+## [0.51.0] - 2026-05-11
+
+**Schema version:** 30
+
+**Commit summary:** Add custom backgrounds and feats with Open5e proxy endpoints and admin surfacing
+
+**Description:** Two new content types in one release — character backgrounds and feats. Both follow the same pattern as classes / subclasses / races / monsters: campaign-scoped DB table, dedicated resolver function with DB + reserved FS providers, GM-only CRUD routes, new authoring sections on the campaign settings page, and a section on the admin stubs panel. Two new pairs of Open5e proxy endpoints (`/api/open5e/backgrounds` + `/background/{slug}`, `/api/open5e/feats` + `/feat/{slug}`) join the existing class / subclass / race / monster proxies — each accepts `campaign_id` and prepends campaign homebrew at the top of list results, with homebrew shadowing any Open5e entry whose slug it collides with. Frontend pickers for these two content types don't exist on the sheet yet — the framework infrastructure is in place so the next iteration can add them without backend work. Both schema migrations auto-apply on next boot.
+
+### Added
+- `CustomBackground` model (campaign-scoped, unique `(campaign_id, background_slug)`): description, four proficiency strings (skills / tools / languages / equipment), and a signature feature (name + description). MVP intentionally omits Open5e's `suggested_characteristics` text since it's roleplaying flavor with no mechanical effect.
+- `CustomFeat` model (campaign-scoped, unique `(campaign_id, feat_slug)`): name, prerequisite text, and the full description. Smallest model in the framework — mechanical effects live in the description rather than encoded rules.
+- `resolve_background` / `resolve_feat` + DB providers + reserved FS-provider slots in `app/local_features.py`. Same chain-ordering pattern as the other resolvers.
+- GM-only CRUD routes: `POST /campaign/{id}/custom-backgrounds`, `…/{bg_id}`, `…/{bg_id}/delete`, and the parallel set for `/custom-feats/…`.
+- Four new Open5e proxy endpoints: `GET /api/open5e/backgrounds` (list, paginated, prepends homebrew when `campaign_id` is supplied), `GET /api/open5e/background/{slug}` (detail, resolver-first), and the parallel pair for feats. Homebrew-only response when Open5e is unreachable and there's homebrew to surface.
+- "Custom backgrounds" and "Custom feats" sections on `app/templates/campaign_settings.html` with appropriate fields (proficiency strings + signature feature for backgrounds; prerequisite + description for feats). Both sections linked from the settings nav.
+- Two new tables on `/admin/stubs` — campaign / name / slug / signature-feature / skill profs / author / updated for backgrounds, and campaign / name / slug / prerequisite / author / updated for feats. Same data exposed under `/admin/stubs.json` as `custom_backgrounds_db` and `custom_feats_db`.
+
+### Schema
+- New table `custom_backgrounds` (id, campaign_id, background_slug, name, description, skill_proficiencies, tool_proficiencies, languages, equipment, feature_name, feature_desc, created_by_user_id, created_at, updated_at) with `uq_custom_background(campaign_id, background_slug)`.
+- New table `custom_feats` (id, campaign_id, feat_slug, name, prerequisite, desc, created_by_user_id, created_at, updated_at) with `uq_custom_feat(campaign_id, feat_slug)`.
+- `SCHEMA_VERSION` bumped from 28 to 30 (one per new table).
+
+## [0.50.0] - 2026-05-11
+
+**Schema version:** 28
+
+**Commit summary:** Add custom monsters with beast picker integration and source badge
+
+**Description:** Monsters complete the local-first content framework. A new `custom_monsters` table stores per-campaign homebrew stat blocks: identity (name, size, type, alignment), combat (AC + desc, HP + hit dice, speed dict), six ability scores, defenses + senses + languages as plain text, CR (supports fractions), and four parallel action lists (actions / reactions / special abilities / legendary actions) using the same shape the features editor already supports. The Wild Shape / Polymorph beast picker (`beast_picker.js`) threads `campaign_id` into both fetches it makes — the `/api/open5e/monsters` search and the per-favorite `/api/open5e/creature/{slug}` lookup — so homebrew rows prepend the results and shadow any Open5e creature with the same slug. Each row in the picker shows a small gold "Custom" pill so GMs can tell shipped content from their own at a glance. MVP scope intentionally cuts structured skills/saves with proficient flags, spell lists, lair/regional actions, and multi-form stats; the four-list pattern reuses the existing `features_editor.js` widget so the authoring form stays consistent with classes / subclasses / races. Schema migration auto-applies on next boot.
+
+### Added
+- `CustomMonster` ORM model with unique `(campaign_id, monster_slug)`, cascade delete from campaign, `SET NULL` on creator deletion. 27 columns covering identity, combat stats, six abilities, defenses + senses, CR, and four `[{name, desc, level}]` action lists.
+- `resolve_monster` + `_db_monster_provider` + `_fs_monster_provider` (reserved slot) in `app/local_features.py`. Same chain pattern as classes, subclasses, and races.
+- Three GM-only routes: `POST /campaign/{id}/custom-monsters`, `POST /campaign/{id}/custom-monsters/{monster_id}`, `POST /campaign/{id}/custom-monsters/{monster_id}/delete`. Helpers: `_normalize_monster_type` (14 standard types, case-tolerant), `_parse_monster_speed` (five movement kinds, drops zeros, defaults walk=30 when all blank), `_parse_cr` (accepts "0", "1/8", "1/4", "1/2", or integer 1–30), `_parse_ability_score` (bounded 1–40), `_custom_monster_lite` (homebrew → picker lite shape with `is_custom: true`), `_cr_to_float` (CR text → float for filter comparisons).
+- "Custom monsters" section on `app/templates/campaign_settings.html` with size + type + alignment row, combat fieldset (AC, AC desc, HP, hit dice, CR dropdown), five-cell speed grid (walk/fly/swim/climb/burrow), six-cell ability grid, defenses + senses fieldset, and four `[data-features-editor]` widgets for the action lists. Settings-nav link added.
+- "Custom" pill badge on every homebrew row in the beast picker (gold background, matches the subclass / race badges).
+- `custom_monsters_db` table on `/admin/stubs` with campaign / monster / slug / size / type / CR / AC / HP / total-actions / author / updated columns; same data plus per-list counts under `/admin/stubs.json`.
+
+### Changed
+- `/api/open5e/monsters` accepts optional `campaign_id` parameter. With it, the endpoint queries `CustomMonster` for matching homebrew (applying the same `search`, `type_filter`, and `cr_max` filters the client sent upstream), prepends them with `is_custom: true`, and drops any Open5e result whose slug collides. When Open5e is unreachable and we have homebrew, return that rather than 502.
+- `/api/open5e/creature/{slug}` accepts optional `campaign_id`. Homebrew with this slug takes precedence over the Open5e fetch; Open5e is only consulted when no homebrew match exists. 404 propagates as before when neither source has the slug.
+- `app/static/beast_picker.js` threads `_state.opts.campaignId` into the monsters search, the single-creature backfill, and the favorites-init parallel fetch. Picker `_rowHtml` renders a "Custom" pill when `r.is_custom === true`.
+
+### Schema
+- New table `custom_monsters` (id, campaign_id, monster_slug, name, size, type, alignment, armor_class, armor_desc, hit_points, hit_dice, speed JSON, strength, dexterity, constitution, intelligence, wisdom, charisma, damage_vulnerabilities, damage_resistances, damage_immunities, condition_immunities, senses, languages, challenge_rating, actions JSON, reactions JSON, special_abilities JSON, legendary_actions JSON, created_by_user_id, created_at, updated_at) with `uq_custom_monster(campaign_id, monster_slug)`.
+- `SCHEMA_VERSION` bumped from 27 to 28.
+
+## [0.49.0] - 2026-05-11
+
+**Schema version:** 27
+
+**Commit summary:** Add custom races to the local-first framework with GM authoring form and sheet badge
+
+**Description:** Races become the third content type to plug into the resolver framework after classes and subclasses. A new `custom_races` table stores per-campaign homebrew races (slug, ability bonuses, size, speed, age / alignment / languages text, structured traits list). `_db_race_provider` registered ahead of a reserved filesystem provider; the existing `resolve_class` / `resolve_subclass` get a `resolve_race` sibling with the same signature. The `/api/open5e/race-detail` endpoint accepts `campaign_id` and threads it through the resolver, synthesising the `flavor` summary block from structured stat fields via the existing `format_race_text` / `parse_race_traits` helpers so the frontend renderer sees the same shape it does for SRD races. `/api/open5e/races` (list) accepts `campaign_id` and prepends homebrew with `is_custom: true`, deduping any collision. The sheet's three race-detail fetch sites + the races list fetch thread `CAMPAIGN_ID`, and `renderRaceTraits` now renders a "Custom" badge next to the race name when `data.source === "local-custom"`. New "Custom races" section on the campaign settings page with ability-bonus grid, size dropdown, speed input, three multi-line description fields, and the existing features-editor for traits. Admin stubs panel grows a homebrew-races section with deep-link to each owning campaign. Schema migration auto-applies on next boot.
+
+### Added
+- `CustomRace` ORM model with unique `(campaign_id, race_slug)`, cascade delete from campaign, `SET NULL` on creator deletion.
+- `resolve_race` + `_db_race_provider` + `_fs_race_provider` (reserved slot, no shipped files yet) in `app/local_features.py`. Provider chain ordering mirrors classes and subclasses — DB before FS.
+- Three GM-only routes: `POST /campaign/{id}/custom-races`, `POST /campaign/{id}/custom-races/{race_id}`, `POST /campaign/{id}/custom-races/{race_id}/delete`. Helpers: `_normalize_race_size` (Tiny/Small/Medium/Large/Huge/Gargantuan, case-tolerant), `_parse_ability_bonuses` (Open5e shape `{attribute, bonus}`, drops zeros, bounded -10..10).
+- "Custom races" section on `app/templates/campaign_settings.html` with name, size dropdown, speed input, ability-bonus grid (six STR..CHA fields), age/alignment/languages textareas, and the existing features-editor widget repurposed for traits.
+- "Custom" badge on the race-traits renderer (`renderRaceTraits` in `app/static/sheet.js`) when the response carries `source === "local-custom"`. Visual style matches the subclass badge for consistency.
+- `custom_races_db` section on `/admin/stubs` with campaign / race / slug / size / speed / ability summary / trait count / author / updated columns; same data exposed under `/admin/stubs.json`.
+
+### Changed
+- `/api/open5e/race-detail` accepts an optional `campaign_id` parameter. With it the resolver runs `scopes=["campaign:N", "global"]` first; campaign homebrew shadows any SRD race with the same slug. Without it behavior is identical to v0.48.0. Response always carries a `source` string (mirrors the class and subclass endpoints).
+- `/api/open5e/races` accepts `campaign_id` and merges campaign homebrew at the top with `is_custom: true`, deduping any Open5e/mirror entry whose slug is already covered.
+- All four race-related fetches in `app/static/sheet.js` (races list + three race-detail sites: initial load, change handler, sync button) now thread `CAMPAIGN_ID`. localStorage cache key for the races list embeds the campaign id so one campaign's homebrew doesn't leak into another's picker.
+
+### Schema
+- New table `custom_races` (id, campaign_id, race_slug, name, ability_bonuses JSON, size, speed, age, alignment, languages, traits JSON, created_by_user_id, created_at, updated_at) with `uq_custom_race(campaign_id, race_slug)`.
+- `SCHEMA_VERSION` bumped from 26 to 27.
+
+## [0.48.0] - 2026-05-11
+
+**Schema version:** 26
+
+**Commit summary:** Add per-rest resource counters to homebrew classes with sheet panel merge
+
+**Description:** Phase B — the deepest of the deferred custom-class follow-ups. Homebrew classes can now define per-rest resource counters (Channel Divinity, Bardic Inspiration, Ki, Action Surge, Wild Shape, …) using the same shape the curated SRD table uses. A new `resources` JSON column on `custom_classes` stores declarative recipes; a repeatable-rows editor on the campaign settings form lets the GM author them with conditional inputs per "max kind" — static values, ability modifiers, proficiency bonus, or a level → count threshold table. A new authenticated read endpoint exposes a campaign's homebrew recipes; the D&D 5e sheet fetches them at load time, translates each `max_kind` into a runtime function matching the existing curated table's shape, and appends them to `window._CLASS_RESOURCES`. The existing Class Resources panel surfaces homebrew counters automatically since its filter is purely on class slug. Schema migration auto-applies on next boot.
+
+### Added
+- `CustomClass.resources` JSON column (default `[]`).
+- `_parse_class_resources_json` in `app/routes/tabletop_routes.py` — validates `max_kind` ∈ {static, ability_mod, proficiency, level_table}, `reset` ∈ {short, long, none}, per-kind required fields, level-table integer range (1–20), and `min_level` (1–20). Auto-derives stable `key` from each entry's name, dedupes collisions, drops empty rows, caps at 50 entries.
+- `GET /api/campaign/{id}/custom-class-resources` — returns every homebrew resource recipe across all custom classes in the campaign. Auth: campaign member, GM, or admin. Each record carries `class` and `subclass: null` so the existing `resourcesFor` filter on the frontend works unchanged.
+- `app/static/resources_editor.js` — reusable repeatable-rows widget. Each row has name, min level, max-kind dropdown, conditional field (number / ability dropdown / proficiency note / per-level-pair grid), reset dropdown, description, and a delete button. The level-table inputs are individual `level → count` chip pairs with their own "+ level" button. Auto-inits on `[data-resources-editor]` and `<details>` open, syncs to a hidden `resources_json` input on submit.
+- "Class resources" fieldset on every custom-class form (create + edit), with a per-class count badge in the legend for existing rows.
+- Inline merge script in `sheet_dnd5e.html` after `dnd5e_class_resources.js` loads. Fetches the campaign's homebrew resources, translates `max_kind` into a runtime `max` function matching the curated table's contract, and appends to `window._CLASS_RESOURCES`. Dispatches a `simplevtt:homebrew-resources-merged` event for any subsequent listener. No-op outside a campaign.
+- "Resources" column on `/admin/stubs` showing per-class resource count; matching `resource_count` field in `/admin/stubs.json`.
+
+### Schema
+- New column `custom_classes.resources` (JSON on Postgres, TEXT-with-JSON-default on SQLite, default `'[]'`). `NOT NULL`; existing rows backfilled by the column default.
+- `SCHEMA_VERSION` bumped from 25 to 26.
+
+### Known limitation
+- The Class Resources panel's initial render runs before the homebrew fetch resolves, so newly-added homebrew counters surface on the *next* re-render (level change, roster change, ↻ Auto-fill, or reload). This will tighten in a follow-up that has the panel listen for `simplevtt:homebrew-resources-merged` directly.
+
+## [0.47.0] - 2026-05-11
+
+**Schema version:** 25
+
+**Commit summary:** Add multiclass prerequisites with a non-blocking sheet warning and admin surfacing
+
+**Description:** Phase C of the deferred custom-class follow-ups: classes (both shipped SRD and campaign homebrew) now carry multiclass prerequisites — minimum ability scores plus the "all listed" vs "any one" mode that distinguishes Paladin's STR+CHA from Fighter's STR-or-DEX. A new `GET /api/character/{id}/multiclass-check?target_class=<slug>` endpoint resolves the target class through the same provider chain the rest of the framework uses (campaign homebrew wins over shipped FS overrides), reads the character's ability scores from `sheet.abilities`, and returns a structured pass/fail with per-ability reasons. The sheet's multiclass row hooks the check into its class-select change handler and renders a non-blocking amber banner inline when the character doesn't qualify; rules can still be ignored at the table's discretion. Three new columns on `custom_classes`, plus matching fields in `druid.json` (WIS 13) so the shipped Druid surfaces the same warning when a low-WIS character tries to dip. Schema migration auto-applies on next boot.
+
+### Added
+- `CustomClass` fields: `multiclass_prereq_abilities` (JSON dict, e.g. `{"str": 13}`), `multiclass_prereq_mode` (`"all"`/`"any"`, default `"all"`), `multiclass_proficiencies` (free-text description of profs gained on multiclassing in).
+- Resolver returns all three fields on every class record (DB-backed and filesystem) so any class can carry prereqs without a code change.
+- `GET /api/character/{char_id}/multiclass-check` — auth-gated (owner or GM/admin); returns `{ok, target_name, reasons, prereqs, proficiencies, note?}`. Unknown target class or target with empty prereqs both return `ok=true` with an explanatory `note`.
+- "Multiclass prerequisites" fieldset on the custom-class form: six ability minimums in a tight grid, mode dropdown, proficiencies-gained text input. Mirrored on both edit and create cards.
+- Inline `⚠ Multiclass: ...` banner appended below the multiclass row when prereqs fail. Re-checks on every class-select change; previous banner cleared first so stale warnings can't accumulate.
+- `multiclass_prereq_abilities` / `multiclass_prereq_mode` / `multiclass_proficiencies` on the shipped `app/data/local/class_features/druid.json` (WIS 13, all mode, druid armor proficiencies).
+- "Multiclass" column on `/admin/stubs` showing the requirement summary (e.g. "STR 13, CHA 13" or "STR 13 or DEX 13"); same fields exposed under `/admin/stubs.json`.
+
+### Changed
+- The class-select change handler in `app/static/sheet.js` now fires a prereq check after the existing `_fillClassDetail` / `_refreshProfTable` sequence. Skipped on read-only views and standalone (no `CHAR_ID`) renders.
+
+### Schema
+- New columns on `custom_classes`: `multiclass_prereq_abilities` (JSON on Postgres, TEXT-with-JSON-default on SQLite, default `'{}'`), `multiclass_prereq_mode` (`VARCHAR(8)` default `'all'`), `multiclass_proficiencies` (`VARCHAR(500)` default `''`). All `NOT NULL`; existing rows backfilled by the column defaults.
+- `SCHEMA_VERSION` bumped from 24 to 25.
+
+## [0.46.0] - 2026-05-11
+
+**Schema version:** 24
+
+**Commit summary:** Add class spell lists to homebrew classes with picker widget and player-side resolution
+
+**Description:** Phase A of the deferred custom-class follow-ups: homebrew classes now carry a curated spell list, and the player's spell picker honors it. A new `spell_list` JSON column on `custom_classes` stores Open5e slugs; a search-as-you-type picker widget (`spell_picker.js`) lets the GM build the list from chips on the campaign settings form. On the player side, all three spell-picker fetch sites in `sheet_dnd5e.html` now thread `campaign_id`, and the `/api/open5e/spells` endpoint detects when `spell_list=<homebrew_class_slug>` is paired with `campaign_id`: it resolves the curated list via the local Open5e mirror when available, falling back to per-spell Open5e fetches when not. Both paths apply the request's search and level filters in memory before responding. Schema migration auto-applies on next boot.
+
+### Added
+- `app/static/spell_picker.js` — reusable typeahead + chip widget. Auto-inits every `[data-spell-picker]` on `DOMContentLoaded` and on `<details>` open. Initial state from `data-spells` (objects or bare slugs); syncs to a hidden `spell_list_json` input on form submit.
+- `get_spells_by_slugs(slugs)` helper in `app/open5e_local.py` — single-pass in-memory bulk lookup against the local mirror; returns spells in the requested order, skips unknown slugs.
+- `_parse_spell_list_json` in `app/routes/tabletop_routes.py` — accepts either bare slug strings or `{slug: ...}` objects (so the picker's chip format round-trips cleanly), validates against the `[a-z0-9-]+` slug pattern, dedupes, caps at 500 entries.
+- "Spell list" fieldset on every custom-class form (create + edit). Shows current count in the legend.
+- `spell_count` field on `custom_classes_db` rows in both `/admin/stubs` (new table column) and `/admin/stubs.json`.
+
+### Changed
+- `CustomClass` model gains a `spell_list` JSON column (default `[]`). The DB-backed resolver provider now surfaces it in the returned record so future endpoints can read it without re-querying.
+- `/api/open5e/spells` accepts an optional `campaign_id` parameter. When supplied alongside `spell_list=<class_slug>` that matches a homebrew class, the endpoint returns spells from the curated list rather than asking Open5e for "spells whose `spell_lists` field contains a non-existent homebrew slug." Local mirror path is single-pass; mirror-less fallback does sequential Open5e fetches with a 4s timeout each (lossy by design — individual failures are skipped).
+- All three spell-picker fetch sites in `app/templates/sheet_dnd5e.html` (top-of-sheet search-by-name, per-class cantrip loader, and the spellbook search panel) now thread `CAMPAIGN_ID` when defined.
+
+### Schema
+- New column `custom_classes.spell_list` (JSON on Postgres, TEXT-with-JSON-default on SQLite). Default `[]`; existing rows backfilled by the `ALTER TABLE … NOT NULL DEFAULT '[]'` so no per-row migration is needed.
+- `SCHEMA_VERSION` bumped from 23 to 24.
+
+## [0.45.0] - 2026-05-11
+
+**Schema version:** 23
+
+**Commit summary:** Add custom base classes, repeatable-rows features editor, and admin surfacing
+
+**Description:** Two parallel landings. First, a vanilla-JS features editor replaces the JSON textarea on every homebrew form — repeatable rows for name/level/desc with add+delete buttons, serialized to a hidden `features_json` input on submit so the server-side validator and 400-message machinery are unchanged. Second, GM-authored base classes mirror the subclass framework end-to-end: a new `custom_classes` table (slug, hit die, six proficiency strings, optional spellcasting ability, equipment, structured features) joined by a `_db_class_provider` registered ahead of the filesystem provider in the resolver chain; `/api/open5e/class-detail` and `/api/open5e/classes` accept `campaign_id` and merge campaign homebrew at the top with `is_custom: true`; GM-only CRUD form on the campaign settings page with the new features editor; admin stubs panel grows a "Campaign homebrew classes" section deep-linking to each owning campaign. MVP scope intentionally cuts class spell lists, per-rest resource counters, and multiclass prereqs — those are big enough surfaces to deserve their own iterations later. Schema migration auto-applies on next boot.
+
+### Added
+- `app/static/features_editor.js` — reusable rows widget. Auto-initialises every `[data-features-editor]` element on `DOMContentLoaded` and on any `<details>` open so the editor inside collapsed cards inits lazily. Each editor reads its initial state from `data-features` (JSON list) and syncs to the form's hidden `features_json` input on submit.
+- `CustomClass` ORM model with unique constraint on `(campaign_id, class_slug)`, cascade delete from campaign, `SET NULL` on creator deletion.
+- `_db_class_provider` + `_features_to_markdown` helper in `app/local_features.py` — the list-shaped features are flattened to a markdown blob with `### Heading` per feature so existing frontend consumers see the same shape they get from Open5e. Structured form is also exposed as `features_list` for future renderers.
+- Three GM-only routes: `POST /campaign/{id}/custom-classes`, `POST /campaign/{id}/custom-classes/{class_id}`, `POST /campaign/{id}/custom-classes/{class_id}/delete`. Helpers: `_normalize_hit_die` (4–12 range), `_normalize_spellcasting_ability` (str/dex/con/int/wis/cha or blank).
+- "Custom classes" section on the campaign settings page, settings-nav link, and corresponding section on `/admin/stubs` and `/admin/stubs.json` (`custom_classes_db` key).
+
+### Changed
+- Custom-subclass forms (both create and edit cards) now use the features editor instead of the raw JSON textarea. Server-side parsing is unchanged because the editor serializes to the same JSON shape on submit.
+- `/api/open5e/class-detail` accepts an optional `campaign_id` parameter and threads it through the resolver as `scopes=["campaign:N", "global"]`. Campaign homebrew shadows the shipped SRD class with the same slug; without `campaign_id` behavior is identical to v0.44.0.
+- `/api/open5e/classes` accepts `campaign_id` and merges campaign homebrew with `is_custom: true` at the top, deduping any Open5e/mirror entry whose slug a homebrew already covers.
+- All four class-related fetches in `app/static/sheet.js` (class list × 2, class-detail × 2) now thread `CAMPAIGN_ID` when defined. localStorage cache keys for the class list embed the campaign id so homebrew doesn't bleed across campaigns.
+
+### Schema
+- New table `custom_classes` (id, campaign_id, class_slug, name, hit_die, prof_armor, prof_weapons, prof_tools, prof_saving_throws, prof_skills, spellcasting_ability, equipment, features JSON, created_by_user_id, created_at, updated_at) with `uq_custom_class(campaign_id, class_slug)`.
+- `SCHEMA_VERSION` bumped from 22 to 23. Migration creates the table via `CustomClass.__table__.create(checkfirst=True)`.
+
+## [0.44.0] - 2026-05-11
+
+**Schema version:** 22
+
+**Commit summary:** Surface campaign homebrew subclasses in the picker, the detail panel, and the admin stubs view
+
+**Description:** Phase 3 of homebrew subclasses — the final wiring that makes GM-authored content actually appear to players. The sheet's subclass picker now passes `campaign_id` on both list (`/api/open5e/subclasses`) and detail (`/api/open5e/subclass-detail`) fetches; the list endpoint merges campaign homebrew at the top and dedupes any Open5e entry whose slug matches a homebrew row, so a campaign-authored `circle-of-the-moon` shadows the SRD one. The detail panel shows a small "Custom" badge next to the subclass name when the response source is `local-custom`. The localStorage cache key for subclass lists now embeds the campaign id so homebrew never bleeds across campaigns. The `/admin/stubs` panel grows a new "Campaign homebrew (DB-backed)" table listing every row in `custom_subclasses` with a deep-link to its campaign's settings page.
+
+### Added
+- `is_custom: true` flag on rows in `/api/open5e/subclasses` responses for campaign homebrew (when `campaign_id` is passed).
+- "Custom" pill badge next to the subclass name in `renderSubclassFeatures()`, shown only when `data.source === "local-custom"`.
+- "Campaign homebrew (DB-backed)" section on `/admin/stubs` showing every `custom_subclasses` row with campaign, class, slug, feature count, author, and last-updated. Same data exposed under `/admin/stubs.json` as `custom_subclasses_db`.
+
+### Changed
+- `/api/open5e/subclasses` now accepts an optional `campaign_id` parameter. Custom rows for that campaign (filtered by `class_slug` and `search` when present) prepend the Open5e results, and any Open5e entry with a slug already covered by homebrew is filtered out so the picker doesn't show duplicates. Behavior without `campaign_id` is unchanged.
+- All six `subclass-detail` / `subclasses` fetches in `app/static/sheet.js` now thread `CAMPAIGN_ID` (when defined) into the query string. Standalone-character sheets outside a campaign continue to call the global-only resolution path.
+- localStorage cache keys for subclass lists are suffixed with `_c<id>` so one campaign's homebrew can't surface in another campaign's picker via a stale cache entry.
+
+## [0.43.0] - 2026-05-11
+
+**Schema version:** 22
+
+**Commit summary:** Add GM-only authoring UI for custom subclasses on the campaign settings page
+
+**Description:** Phase 2 of homebrew subclasses — a GM-facing form for the table v0.42.0 introduced. The campaign settings page now has a "Custom subclasses" section listing every homebrew authored for this campaign (collapsible per-row edit cards) plus a "+ New custom subclass" form. Each row carries a name, parent class slug, flavor description, and a features list authored as JSON (`[{"name","level","desc"}, ...]`). The server slugifies the parent class and derives the subclass slug from its display name; the slug is fixed at creation so character sheets referencing it survive renames. JSON parse errors and structural problems (missing name, non-int level, list-vs-object) come back as 400s with messages naming the offending entry. Three new POST routes — create / update / delete — all gated by the existing `_user_is_gm` check; non-GMs get 403 on every path. Frontend wiring to surface the homebrew in the subclass picker lands in phase 3.
+
+### Added
+- `POST /campaign/{id}/custom-subclasses` (create), `POST /campaign/{id}/custom-subclasses/{sub_id}` (update), `POST /campaign/{id}/custom-subclasses/{sub_id}/delete` — all GM-only, all redirect 303 to `/campaign/{id}/settings#custom-subclasses`.
+- Helpers in `app/routes/tabletop_routes.py`: `_slugify_for_subclass` (shared by class and sub slug normalization), `_parse_custom_subclass_features` (returns a normalised list or raises HTTPException(400) with a human-readable message), `_require_gm_for_campaign` (single guard used by all three mutation routes).
+- "Custom subclasses" section in `app/templates/campaign_settings.html` with one `<details>` edit card per existing row plus a separate `+ New` create form. Each row's features render via Jinja's `tojson(indent=2)` filter into a monospaced textarea so the GM can edit them as-is and Save.
+- Settings-nav link for the new section.
+
+### Changed
+- `GET /campaign/{id}/settings` now queries `CustomSubclass` for the campaign and threads the rows into the template context as `custom_subclasses`.
+
+## [0.42.0] - 2026-05-11
+
+**Schema version:** 22
+
+**Commit summary:** Add custom_subclasses table and DB-backed resolver provider for campaign homebrew
+
+**Description:** Phase 1 of GM-authored homebrew subclasses — backend only, no authoring UI yet. A new `custom_subclasses` table stores per-campaign homebrew (parent class slug, sub slug, name, flavor, features JSON, creator). The local-features resolver gains a `_db_subclass_provider` ahead of the filesystem provider, so a row matching the active campaign shadows any shipped SRD content with the same slug. `/api/open5e/subclass-detail` now accepts an optional `campaign_id` query parameter — when present, the resolver is called with `scopes=["campaign:N", "global"]` and the response's `source` is `"local-custom"` for homebrew or `"local-srd"`/`"open5e_*"` as before. Frontend callers don't pass `campaign_id` yet, so homebrew won't surface until phase 3 wires that through — for now, rows can be inserted by SQL for testing. Schema bump auto-applies on next boot via a new `_apply_inline_migrations()` block.
+
+### Added
+- `CustomSubclass` ORM model in `app/models.py` with unique constraint on `(campaign_id, class_slug, sub_slug)` and cascade delete from the parent campaign. Creator FK is `SET NULL` so deleting a user doesn't lose their homebrew.
+- `_db_subclass_provider` in `app/local_features.py` registered ahead of the filesystem provider. Walks `campaign:<id>` scope strings in caller-supplied order, returns the matching row as `(record, "local-custom")` or `None` so the next provider takes over.
+- Optional `campaign_id` query parameter on `/api/open5e/subclass-detail`. When supplied, the resolver scopes are `["campaign:N", "global"]`; when absent, behavior is identical to v0.41.0.
+- `db` keyword on `resolve_class` / `resolve_subclass` (and threaded into provider signatures). FS providers ignore it; the DB provider returns `None` when `db` is absent so the resolver is safe to call without a session.
+
+### Schema
+- New table `custom_subclasses` (id, campaign_id, class_slug, sub_slug, name, flavor, features JSON, created_by_user_id, created_at, updated_at) with `uq_custom_subclass(campaign_id, class_slug, sub_slug)`.
+- `SCHEMA_VERSION` bumped from 21 to 22. Migration creates the table via `CustomSubclass.__table__.create(checkfirst=True)` — additive, no manual operator action.
+
+## [0.41.0] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Add admin stubs panel listing local overrides and Open5e-fallback misses
+
+**Description:** New admin page at `/admin/stubs` shows the inverse views of the local-first resolver: (a) every class / subclass file currently authored under `app/data/local/` and (b) the in-memory miss registry — every class / subclass lookup since process start that fell through to Open5e — sorted by hit count so the most-requested content surfaces first. Each miss row shows the upstream source it landed on (`open5e_mirror`, `open5e_live`, `open5e_unreachable`), first/last seen timestamps, and the class context for subclass lookups. Operators get a "Clear registry" button (in-memory only) and a `GET /admin/stubs.json` snapshot for scripted authoring pipelines that want to diff misses against on-disk overrides. Linked from the admin home under a new "Content tools" section.
+
+### Added
+- `GET /admin/stubs` (HTML), `POST /admin/stubs/clear` (clears the registry), `GET /admin/stubs.json` (JSON snapshot) — all gated by `require_admin`.
+- `app/templates/admin_stubs.html` — two-section layout (Local overrides on disk · Stubbed content from Open5e).
+- "Content tools" section on the admin home linking to the new panel.
+
+## [0.40.1] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Restructure local_features for future custom-subclass support with provider chain and scopes
+
+**Description:** Groundwork for per-campaign / per-user custom subclasses without committing to a specific authoring UX yet. The resolver in `local_features.py` is now a provider chain that returns `(record, source)`; adding a DB-backed provider for custom content later is a single list entry. Records carry an optional `scope` (default `"global"`) and `owner` (default `null`); resolver callers may pass a `scopes` priority list, and only matching records are returned — so a future endpoint can call `resolve_class(slug, scopes=["campaign:42", "global"])` to surface campaign-specific homebrew before the shipped SRD content. The proxy responses now echo `source` (e.g. `"local-srd"`, `"local-custom"`, `"open5e_mirror"`, `"open5e_live"`, `"open5e_unreachable"`) so the frontend can later render edit affordances only on custom content. Frontend ignores the field today — fully backward compatible, no operator action required.
+
+### Changed
+- `app/local_features.py` switched from a direct file-open API to a provider chain. New entry points `resolve_class(slug, *, scopes=None)` and `resolve_subclass(class_slug, sub_slug, *, scopes=None)` return `(record, source)` tuples; old `get_class` / `get_subclass` removed (only two callers in the just-shipped v0.40.0 — no compat shim needed).
+- `_fs_class_provider` and `_fs_subclass_provider` are the only registered providers today. Each filters records by scope and derives a source label from the file's `source` field (`"srd"` → `"local-srd"`, `"custom"` → `"local-custom"`).
+- `/api/open5e/class-detail` and `/api/open5e/subclass-detail` now include a `source` string on every response. Local hits report `"local-srd"`/`"local-custom"`; fallbacks report the upstream label that was already being recorded in the miss registry.
+- Druid class + Land/Moon subclass JSON files gain `scope: "global"`, `source: "srd"`, `owner: null`. Replaces the previous `_local: true` marker. Old marker removed.
+
+## [0.40.0] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Add local-first resolver for class and subclass feature data with miss tracking
+
+**Description:** Class and subclass detail lookups now consult `app/data/local/` before reaching for Open5e. If a matching JSON file exists, it's returned verbatim and no upstream call is made; otherwise the previous resolution chain (LOCAL_OPEN5E mirror → live `api.open5e.com` → empty stub) still runs, and the fallback is recorded in an in-memory miss registry so an admin panel (forthcoming) can list "still stubbed from Open5e" entries by request frequency. The first authored example is the Druid class plus Circle of the Land and Circle of the Moon subclasses — picking these because the live `v1/subclasses/` endpoint has been unreliable. No operator action required; with no local files on disk, behavior is identical to v0.39.0.
+
+### Added
+- New module `app/local_features.py` with `get_class`, `get_subclass`, `record_miss`, `list_misses`, `list_local_classes`, `list_local_subclasses`. Files live under `app/data/local/class_features/<slug>.json` and `app/data/local/subclass_features/<class_slug>__<sub_slug>.json` (class-prefixed naming disambiguates same-named subclasses).
+- Local override files: `druid.json` (class, full SRD-style features blob + proficiencies), `druid__circle-of-the-land.json`, `druid__circle-of-the-moon.json` (structured `[{name, level, desc}]` features matching the shape `parse_subclass_features` already produces).
+- Slug validation in the resolver rejects path-traversal attempts (`..`, slashes) before touching the filesystem.
+
+### Changed
+- `/api/open5e/class-detail` and `/api/open5e/subclass-detail` now check `local_features` first. Misses are tagged by source (`open5e_mirror`, `open5e_live`, `open5e_unreachable`) so the upcoming admin view can prioritise authoring work by usage.
+
+## [0.39.0] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Cache beast favorites locally so the picker works offline and skips Open5e on open
+
+**Description:** Beast favorites added in v0.38.0 were stored as bare Open5e slugs, which meant the picker had to make one live `/api/open5e/creature/{slug}` call per favorite every time it opened. That broke the ★ Favorites section whenever Open5e was unreachable, and added unnecessary round-trips on every Wild Shape. Each favorite is now stored as a full lite stat block (`{slug, name, cr, type, size, hp, ac, source}`) right on the sheet, so the picker renders the Favorites section from local data with zero network calls. Legacy v0.38.0 favorites (bare slug strings) keep working — the picker backfills them on first open and persists the resolved data, so any second open is a cache-hit even if Open5e goes down between sessions. Star-toggling a creature now snapshots its lite shape from the current search results (the row the user just clicked has all the data we need), so adding new favorites is also network-free.
+
+### Changed
+- `sheet["favorite_beasts"]` schema changes from `["wolf", "brown-bear"]` to `[{slug, name, cr, type, size, hp, ac, source}, …]`. JSON-only on `Character.sheet`, no SQL migration. Normalization in `app/sheet_templates.py` accepts both shapes and coerces bare strings to `{slug: s}` so legacy data round-trips cleanly.
+- `BeastPicker` no longer fetches favorites on open when every entry has a complete cache (the common case after a single use). Backfills only happen for entries missing `name`/`cr` — i.e. legacy slug-only entries or favorites added when Free pick was on and the row had partial data. Backfilled data is persisted so the next open is a cache-hit.
+- Star toggle now snapshots the picker row's lite shape directly into the saved array rather than just the slug, so new favorites are immediately offline-ready.
+
+### Added
+- Top-of-file JSDoc on `beast_picker.js` documents the new `favorites` shape with example data + the offline-rendering guarantee.
+
+### Fixed
+- Open5e being unreachable no longer hides the ★ Favorites section. Slug-only entries that fail to backfill still render with the slug as the row label so the user can see and unstar them.
+
+**Schema version:** 21
+
+**Commit summary:** Add favorite beast forms with a ★ Favorites section at the top of the picker
+
+**Description:** Players can now star creatures in the Wild Shape / Polymorph beast picker. Starred forms render in a "★ Favorites" section pinned to the top of the list panel — above the live search results — so the player's go-to forms are one click away no matter what the current search returns. Click the ☆ on any row to favorite, ★ to unfavorite. The list is persisted per-character at `sheet["favorite_beasts"]` (a list of Open5e creature slugs) and synced via `/sheet-fields` PATCH so refreshes don't lose it. When the picker opens, every favorite is fetched in parallel from a new `/api/open5e/creature/{slug}` lite-shape endpoint so the Favorites section renders the same rows (name, CR, type) as the search results. Works from both the full sheet's Wild Shape / Polymorph buttons and the tabletop mini-sheet's transform bar; favorites that match the current search term stay visible in both sections so they're never hidden behind a typo. Dead favorites (slugs that 404 upstream — e.g. renamed creatures) are silently skipped instead of breaking the picker.
+
+### Added
+- `sheet["favorite_beasts"]` field on the D&D 5e template — list of Open5e creature slugs. Default `[]`. Normalizer in `app/sheet_templates.py` coerces non-strings to drop, strips whitespace, dedupes, and caps at 50 entries.
+- New endpoint `GET /api/open5e/creature/{slug}` returning the lite shape (`{slug, name, cr, type, size, hp, ac, source}`) shared with the monsters list proxy. 404 propagates so the picker can quietly skip dead favorites without crashing.
+- `favorite_beasts` added to `_SHEET_PATCH_KEYS` (so the picker's persist call works) and to the server-managed preserve list in `update_sheet` (so a full sheet Save without it doesn't wipe the list).
+- ★ toggle button on every picker row. Clicks intercepted before the row-select handler via `stopPropagation` so toggling never accidentally picks the beast. The picker PATCHes `/sheet-fields` on every toggle and calls an optional `onFavoritesChange` callback so the caller can refresh its cached copy.
+- `window._savedBeastFavorites` injected into `sheet_dnd5e.html` and passed to `BeastPicker.open(...)` from both the legend "🐺 Wild Shape" / "🦌 Polymorph" buttons and the Class Resources "Use" button special-case.
+- `data-favorites` JSON attribute on the tabletop mini-sheet's `mini-transform-bar`, plumbed into `BeastPicker.open(...)`. The `onFavoritesChange` callback writes back to the same attribute so a re-open without page reload sees the new list.
+
+### Changed
+- Beast picker list panel renders two sections instead of one — `★ Favorites` (always at top when populated) and `All beasts` (the live search results). When a search term is active and any favorite matches the term, the header switches to `Other matches` for the bottom section to make the relationship explicit.
+- Status bar count now leads with `★ N favorites` when any are present, e.g. `★ 3 favorites · 12 of 50 on this page match the beast / CR filter`.
+
+## [0.37.4] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Fix beast picker name search by using Open5e v2's name__icontains filter
+
+**Description:** Typing "wolf" in the Wild Shape beast picker returned the same list as an empty search. Root cause: the proxy was sending `?search=wolf` to Open5e v2, but v2 is django-filter based and silently ignores DRF's `SearchFilter` parameter — case-insensitive name matching uses `?name__icontains=wolf` instead. The proxy now sends the v2 idiom. To insulate the picker against any future API change that might rename or drop the filter, the client also re-applies the name filter locally — so even if the server forwards an unrecognized param, the visible list still narrows to what the user typed.
+
+### Fixed
+- `/api/open5e/monsters` proxy now forwards search terms as `name__icontains=` instead of `search=` so Open5e v2 actually applies them. v1 endpoints elsewhere in the codebase (spells, classes, races, conditions) continue using `search=` since v1 supports it.
+- `beast_picker.js` adds a client-side `name.includes(query)` filter on top of the server results, so the search box narrows the list even when the upstream filter is ignored, and also narrows results when Free pick is enabled (which intentionally drops the server-side filter).
+
+## [0.37.3] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Parse Open5e v2 creature shape end-to-end, server-filter beasts by type and CR
+
+**Description:** The Wild Shape / Polymorph beast picker was talking to the Open5e v2 creatures API but parsing every response with v1 field names. v2 renames `challenge_rating` to `cr`, nests ability scores under `ability_scores.{short}`, saving throw proficiencies under `saving_throws`, and skill proficiencies under `skill_bonuses` — so every transformed beast was getting template-default stats (10/10/10/10/10/10, no CR-derived proficiency bonus, no save or skill proficiencies). On top of that, the picker fetched 50 random creatures of all types and filtered client-side, which routinely left a Druid Lv 2 player staring at "No matches" because no beasts within their CR cap happened to land on page one. This release rewrites the integration to handle both API versions and to push the type / CR filter into the upstream query so the page returned is actually useful.
+
+### Added
+- New server-side helpers in `app/routes/tabletop_routes.py`: `_o5e_cr(m)` reads `cr` (v2) with fallback to `challenge_rating` (v1); `_o5e_ability(m, short, full)` reads ability scores from either the v2 nested `ability_scores` dict or the v1 top-level keys; `_o5e_save_prof` and `_o5e_skill_prof` do the same for saving-throw and skill proficiencies.
+- `/api/open5e/monsters` now accepts two optional query params: `type_filter=beast` (forwarded to v2 as `type__key=beast`) and `cr_max=1/4` (parsed to a decimal and forwarded as `cr__lte=`). If the upstream API rejects the filter (4xx), the proxy retries once without it so the picker stays usable.
+- Beast picker UI surfaces a live count in the modal footer — e.g. "7 of 50 on this page match the beast / CR filter" — so users can tell whether the API returned anything and how aggressively the filter is chopping.
+
+### Fixed
+- Transformed beasts now get correct ability scores, save proficiencies, and skill proficiencies from v2 responses. Previously every transform produced a creature with stat-line `10/10/10/10/10/10` and no proficiencies.
+- The proficiency-bonus calculation derived from CR was always reading 0 (because `m.get("challenge_rating")` returned `None` on v2), so every wild-shaped creature had Prof +2 regardless of CR. Now derived correctly from the real `cr` value.
+- Beast picker empty-state messaging is clearer: distinguishes between an empty API page ("API returned an empty page — try a different search term") and a filter mismatch ("No beasts within your CR cap on this page. Try a search term, or enable Free pick to bypass the filter").
+
+### Changed
+- Beast picker sends `type_filter=beast&cr_max={cap}` on every search when Free pick is off; toggling Free pick re-runs the search without those filters so the result set actually broadens (previously toggling only re-filtered the existing local list, which was already trimmed by the server).
+
+## [0.37.2] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Fix beast picker crash on Open5e v2 dict fields and auto-populate the list on open
+
+**Description:** The Wild Shape / Polymorph beast picker threw `(r.type || "").toLowerCase is not a function` and rendered no results on search. Root cause: the Open5e v2 creatures endpoint returns `type` and `size` as `{"key": "beast", "name": "Beast"}` dictionaries for some creatures rather than plain strings (the v1 API returned strings). Our `/api/open5e/monsters` proxy passed the values through verbatim, and the picker's client-side filter called `.toLowerCase()` on whatever it got — which crashed for dicts. Fix normalizes the values server-side with a new `_o5e_str()` helper and adds defensive coercion on the client too. While here: the picker now auto-runs an empty search on open (mirroring the Spell Browser UX) so the list is pre-loaded with beasts the character can transform into — no more "type something to start" empty state.
+
+### Fixed
+- `/api/open5e/monsters` (and the import-monster / `_open5e_to_dnd5e_sheet` / transform CR-check code paths) now coerce Open5e v2 `type` and `size` fields to plain strings via a new `_o5e_str()` helper. Dicts with `name` / `key` fields collapse to their display name; raw strings pass through unchanged.
+- Client-side `beast_picker.js` adds a `_str()` defense layer that does the same coercion, so even if a future API change slips an unexpected shape through, the filter and detail panel no longer crash.
+
+### Changed
+- Beast picker now auto-runs a search the moment it opens — list panel shows "Loading beasts…" until the first page of results lands, then renders them. Users can refine by typing instead of starting from a "Search to browse beasts" prompt.
+
+## [0.37.1] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Route the Wild Shape resource Use button into the beast picker
+
+**Description:** The "⚡ Use" button on the Wild Shape entry in the Class Resources panel now opens the beast picker overlay (the same one the legend's "🐺 Wild Shape" button uses) instead of silently decrementing the counter and posting a generic "used Wild Shape" announcement. The /transform endpoint already decrements the `wild-shape` resource as a side effect of a successful transform, so the count stays consistent. Every other resource (Channel Divinity, Rage, Action Surge, Superiority Dice, …) keeps its original click-to-spend-and-announce behaviour. If the picker module isn't loaded (e.g. on a standalone sheet outside a live campaign), the click falls through to the plain decrement path so the button still does *something* useful.
+
+### Changed
+- `app/templates/sheet_dnd5e.html` Class Resources `.res-use` click handler special-cases `key === 'wild-shape'`: collects druid level + Moon subclass + character level from the roster, then calls `window.BeastPicker.open({source: 'wild-shape', …})`. Falls back to the existing `postUse(...)` decrement when the picker isn't available.
+
+## [0.37.0] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Track per-class per-level HP rolls with an in-sheet picker, multi-class aware
+
+**Description:** D&D 5e characters can now record the HP gained at each class level. A new "HP per Level" table appears inside the character edit panel (the one that opens when you click ✏ Edit by the name/level area) and shows one row per class level — pre-filled with what's stored, blank otherwise. Each non-locked row has a 🎲 Roll button that rolls `1d{hit-die}+{CON}` (using the campaign roll endpoint when in a live session so the table sees the result, falling back to a local random for standalone characters). Level 1 of the *first* class on the roster is locked to `max die + CON` per RAW; every other level (including level 1 of any subsequent multiclass) is rolled or hand-entered. A yellow banner appears above the table when any non-locked slot is still empty, prompting existing characters to backfill on their first edit. The picker also offers "Use average for empty" (fills empty slots with ⌊dN/2⌋+1+CON, the PHB optional rule) and "Apply sum → Max HP" (sets the form's Max HP to the sum of every per-level entry, and bumps current HP if it was already at the old max). Multi-classing is fully supported: `sheet["hp_rolls"]` is keyed by class slug (e.g. `{"druid": [10, 6, 7, 5, 8], "wizard": [4, 3]}`) and `normalize_dnd5e_sheet` keeps each per-class list synchronized with that class's current level — adding a level appends an empty slot, removing a level trims, dropping a class removes its history. Every edit PATCHes `/sheet-fields` immediately so refreshes don't lose work, and the field is on the server-side preserve list so a full sheet Save can't wipe it. Schema is JSON-only — no migration required.
+
+### Added
+- `sheet["hp_rolls"]` field on the D&D 5e template — `{class_slug: [int, …]}`. Default `{}`. Normalizer in `app/sheet_templates.py` trims/pads each list to its class level, drops orphaned class entries, and coerces non-integer values to 0.
+- "HP per Level" subsection inside `#char-edit-panel` in `sheet_dnd5e.html` with a yellow incompleteness banner, per-class blocks (one row per level with input + 🎲 Roll button), subtotals per class, a running grand sum, and two helper buttons: "Apply sum → Max HP" and "Use average for empty".
+- Inline IIFE renders the picker from the live roster and `window._savedHpRolls`. Re-renders on `vtt:mc-changed` (level up/down, swap class) and on CON changes. Each input change or 🎲 click writes through the existing `/sheet-fields` PATCH endpoint (works on both campaign and standalone characters).
+- `hp_rolls` added to `_SHEET_PATCH_KEYS` in `tabletop_routes.py` so the patch endpoint accepts it, and to the server-managed-preserve list in `update_sheet` so a full Save without `hp_rolls` doesn't wipe the field (mirrors the pattern that fixed `active_form` / `prior_form` in v0.35.4).
+
+## [0.36.2] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Fix active-form banner rendering for every D&D 5e character regardless of transform state
+
+**Description:** The "✨ Revert to true form" banner at the top of the full D&D 5e sheet was appearing for every character — including freshly created ones who had never been Wild Shaped or Polymorphed. Brand-new characters from any preset (including the new Druid Moon Lv 5 preset) loaded with the banner already showing. Root cause: the banner's `<div>` carried an inline `style` attribute with **two** `display:` declarations — `display:none` (when `active_form` was unset) followed later in the same string by `display:flex` (for layout). CSS resolves duplicate declarations by taking the **last** one, so `display:flex` always won and the banner rendered no matter what. Fix wraps the entire banner in a Jinja `{% if _af %}` so it isn't emitted at all when the character isn't transformed. The single JS reference (`document.getElementById('revert-form-btn')`) already uses optional chaining, so removing the element when there's no active form has no other side effects.
+
+### Fixed
+- Active-form banner on `sheet_dnd5e.html` no longer renders when `sheet["active_form"]` is unset. Brand-new characters (from a preset or blank) load without a spurious "Reverted to true form" button.
+
+**Schema version:** 21
+
+**Commit summary:** Make Skills and Spells sections collapsible on the tabletop mini-sheet with per-character memory
+
+**Description:** The tabletop player drawer's mini-sheet now lets each player collapse the Skills and Spells sections to keep the drawer tidy when those panels aren't needed. Click the section label (or its chevron) to toggle. The collapse state persists in `localStorage` under a per-character + per-section key (`simplevtt_mini_collapse_<charId>_<skills|spells>`) so the next page load remembers exactly how each character was left. A separate storage namespace from the full-sheet fieldset collapsibles means the two contexts are independent — collapsing Skills on the mini-sheet doesn't affect the same section on the standalone full sheet.
+
+### Added
+- New `.mini-collapsible` / `.mini-collapsible-header` / `.mini-collapsible-body` / `.mini-collapsible-chevron` classes in `tabletop.html`. Headers show a rotating chevron and toggle the body's `display:none` via a `collapsed` CSS class on the wrapper.
+- One-line IIFE on the tabletop that wires up every `.mini-collapsible` on page load: reads its persisted state, applies the `collapsed` class if needed, and binds a click handler that toggles + persists. Clicks inside any nested `<button>` / `<a>` / `<input>` / `<select>` / `<textarea>` are ignored so existing controls (cast / strike / slot pips / rest) still work.
+- Wrapped both the Skills and Spells sections in the new collapsible markup. The Spells wrapper sits outside the existing `mini-spells` container so its slot pips and cast buttons stay intact.
+
+**Schema version:** 21
+
+**Commit summary:** Add character presets dropdown with six pre-built leveled D&D 5e characters for fast testing
+
+**Description:** The "+ New Character" panel on `/characters` now has a "Start from" dropdown that pre-populates the sheet with a fully-built, leveled-up character instead of an empty default. Six D&D 5e presets are included to exercise the framework's feature surface in one click each: 🐺 Moon Druid Lv 5 (Wild Shape), ⚔ Battle Master Fighter Lv 5 (Action Surge / Superiority Dice), ✨ Life Cleric Lv 5 (Channel Divinity / prepared spells), 🔥 Evocation Wizard Lv 5 (Fireball / Sculpt Spells), 💢 Berserker Barbarian Lv 4 (Rage), and 🗡 Thief Rogue Lv 3 (Sneak Attack). Each preset comes with class roster, ability scores, HP, AC, speed, saving throw & skill proficiencies, attacks, prepared spells, spell slots, race, background, and notes describing the class's signature abilities. The two existing "Blank — Generic" and "Blank — D&D 5e" options remain as defaults at the top of the list, preserving current behaviour for anyone who wants an empty sheet. The Class Resources panel auto-fills on first sheet load (no need to pre-populate Rage / Channel Divinity / Wild Shape counters — they appear when the player opens the sheet).
+
+### Added
+- New module `app/character_presets.py` with a `PRESETS` registry, helper builders (`_dnd5e_base`, `_add_class`, `_add_attack`, `_add_spell`, `_set_spell_slots`, etc.), and six leveled D&D 5e characters plus two blank options. Add presets by appending to `PRESETS`.
+- "Start from" dropdown on both creation forms in `app/templates/all_characters.html` (campaign tab and standalone tab) with the preset's description shown below the selector and the suggested name auto-filled (only until the user types something custom).
+- `preset` form field handled in `POST /characters/new` and `POST /characters/new-standalone`. When the key is unknown or blank, the existing behaviour (blank sheet for the campaign's game system / chosen template) is preserved.
+
+### Changed
+- The standalone creation form's "Sheet Type" select becomes a hidden field — the preset choice now drives the template implicitly, so users don't have to keep template and preset in sync manually.
+
+## [0.35.4] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Fix Wild Shape characters getting permanently stuck after a sheet save
+
+**Description:** A druid (or polymorphed character) who clicked Save on the full sheet while transformed would become permanently stuck in beast form. Root cause: `buildSheet()` in `sheet.js` only emits sheet fields that have form inputs, and `active_form` / `prior_form` are server-managed with no inputs — so the save payload never included them. The `update_sheet` endpoint then did `char.sheet = body["sheet"]` which **replaced the entire sheet**, wiping both transform fields. `active_form` being gone meant the banner disappeared from a fresh sheet load, but the BEAST stats were still in `sheet["hp"]` / `sheet["abilities"]` / etc. Even more visibly: when `active_form` was still present (e.g. via the mini-sheet banner) but `prior_form` had been wiped, clicking Revert 409'd with "Character is not currently transformed" — because the endpoint checked `prior_form` first. This release fixes the bug going forward AND provides a rescue path for already-stuck characters.
+
+### Fixed
+- `update_sheet` (`POST /api/campaign/{id}/character/{char_id}`) now preserves server-managed transform fields (`active_form`, `prior_form`) when the client submits a sheet save without them. Saving while transformed no longer wipes out the form snapshot or strands the player.
+- `/revert` is now tolerant of "stuck" characters: if `active_form` is set but `prior_form` was lost (legacy data from before this fix), the endpoint still clears `active_form` and returns `{ok: true, stats_restored: false}`. The UI surfaces a clear alert telling the player to edit HP / abilities / AC / speed / attacks back to their true-form values manually. Only returns 409 now if BOTH fields are unset (genuinely not transformed).
+- Roll-log "Reverted to true form" card includes a "prior stats not restored, please edit manually" suffix when the rescue path triggers, so the GM and table see what happened.
+
+### Changed
+- Revert handlers on the full sheet (`sheet_dnd5e.html`) and tabletop mini-sheet (`tabletop.html`) read `stats_restored` from the JSON response and pop an alert before reloading when it's `false`.
+
+**Schema version:** 21
+
+**Commit summary:** Open full character sheet in a new tab and retire the in-page popup modal
+
+**Description:** The mini-sheet's "Open full sheet →" button now opens the standalone D&D 5e sheet in a new browser tab instead of injecting it as a popup modal over the tabletop. Double-clicking a token on the map does the same. The retired modal path used a DOMParser+innerHTML injection that **stripped every inline `<script>` block from the sheet template** before mounting it, then re-fetched only `sheet.js` and ran it. That meant features wired up in inline scripts — Wild Shape / Polymorph buttons, the Class Resources panel, the Revert flow, short/long-rest handlers, the subclass picker, spell-slot pip renderer, transform field-lock — all silently no-op'd inside the modal context. Now the full sheet always loads via the canonical `/campaign/{id}/character/{cid}/sheet` route with every inline script intact, and `CAMPAIGN_ID` is set lexically (the safe pattern). No more silent feature gaps depending on which way you opened the sheet.
+
+### Changed
+- `app/templates/tabletop.html`: mini-sheet "Open full sheet →" is now an `<a target="_blank" rel="noopener">` pointing at the standalone sheet route. The `<div id="modal-root">` mount point and the now-orphaned `.modal-bg` / `.modal` CSS rules are removed.
+- `app/static/tabletop.js`: `window.openSheet(charId)` is now a thin `window.open(url, '_blank', 'noopener')` helper. The DOMParser injection, `_sheetJs` cache, and `window.closeSheet` definition are removed. Canvas token double-click still calls `openSheet` and so also opens a new tab.
+
+### Removed
+- In-page popup-modal rendering of the character sheet on the tabletop. Inline `onclick="closeSheet()"` buttons inside the sheet template still work because `character_page.html` (the standalone page) defines its own `window.closeSheet` that navigates back to the character list.
+
+## [0.35.2] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Fix Revert and Use buttons not working on the standalone D&D 5e sheet
+
+**Description:** On the standalone D&D 5e sheet (the `/campaign/{id}/character/{cid}/sheet` route), clicking "✨ Revert to true form" did nothing — and the same bug silently disabled every "Use" button in the Class Resources panel from calling the live `/resource` endpoint. Both features had been working only on the tabletop modal path because of a scoping mistake in the inline IIFEs introduced in v0.34.0 and v0.35.0. The two blocks read `window.CAMPAIGN_ID`, but `CAMPAIGN_ID` on the standalone sheet page is declared with `const` at script-top-level (in `character_page.html`) — a classic-script top-level `const` lives in the Script Record's lexical environment and is **not** copied onto `window` or `globalThis`. So `window.CAMPAIGN_ID` was always `undefined`, the early-return at the top of each IIFE fired, and no click handler was ever attached to the Revert button (or to the live-broadcast path of the resource Use buttons). The fix reads `CAMPAIGN_ID` via a bare-identifier `typeof` guard — the same pattern already used throughout `sheet.js` — and stores it as `_CAMPAIGN_ID` inside each IIFE to avoid shadowing the outer binding.
+
+### Fixed
+- Revert button on the standalone D&D 5e sheet now actually POSTs to `/api/campaign/{id}/character/{cid}/revert` and reloads. Previously the inline IIFE's early-return prevented its click handler from ever being attached.
+- Class Resources "⚡ Use" buttons on the standalone sheet now also broadcast the spend via `/resource` so other clients (mini-sheet, popped roll log) see the WS update. Previously the live-broadcast path was guarded by the same broken `window.CAMPAIGN_ID` check, so spends only updated the local form state — they neither persisted server-side nor announced in chat until the next full sheet Save.
+
+## [0.35.1] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Surface Wild Shape / Polymorph buttons on the tabletop mini-sheet
+
+**Description:** The Wild Shape / Polymorph framework introduced in v0.35.0 was previously only reachable from the standalone D&D 5e sheet. This release surfaces the same beast picker on the tabletop player drawer's mini-sheet — Druid level 2+ characters see a "🐺 Wild Shape" button next to their rest controls; characters with the Polymorph spell get a "🦌 Polymorph" button. When transformed, the mini-sheet shows the active form (e.g. "🐺 Wolf CR 1/4") with a "✨ Revert" button. The picker modal markup is now a shared Jinja partial (`_beast_picker_modal.html`) and the open/search/transform logic moves into a reusable `app/static/beast_picker.js` module so the sheet and tabletop both call the same code path. Server endpoints and CR-cap rules are unchanged from v0.35.0.
+
+### Added
+- New shared partial `app/templates/_beast_picker_modal.html` and module `app/static/beast_picker.js` (exposes `window.BeastPicker.open({campaignId, characterId, source, druidLevel, isMoonDruid, characterLevel, onSuccess})`).
+- Mini-sheet "Transform" bar in the tabletop player drawer with Wild Shape / Polymorph buttons (visibility driven by class roster and spell list, mirroring the standalone sheet) and an active-form badge + Revert button when a transform is in effect.
+- Tabletop `transform_update` WS handler — when any character on the player drawer transforms or reverts (including from another open tab or the GM doing it on their behalf), the tabletop reloads so the mini-sheet picks up the new HP / AC / badge.
+
+### Changed
+- `app/templates/sheet_dnd5e.html` now `{% include %}`s the shared modal partial instead of carrying its own copy. The inline picker JS (search, render, confirm) was removed in favour of calling `window.BeastPicker.open(...)`. Button visibility, Revert wiring, and field locking remain inline.
+- `beast_picker.js` is loaded ahead of `sheet.js` (in the standalone sheet) and ahead of `tabletop.js` (on the tabletop), so both consumers can call `BeastPicker.open(...)` synchronously.
+
+## [0.35.0] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Add Wild Shape and Polymorph framework with beast picker and stat-swap
+
+**Description:** D&D 5e characters can now transform into a beast and use its stat block as their own. Druids see a "🐺 Wild Shape" button in the Class Resources fieldset (level 2+) and any character with the Polymorph spell prepared sees a "🦌 Polymorph" button. Both open a beast picker overlay that searches Open5e, filters by type (Beast) and CR (Druid Wild Shape table for the source class, or target level / 4 for Polymorph), and supports a "Free pick (homebrew)" toggle that bypasses the cap. On Transform, the server snapshots the character's HP/AC/speed/abilities/skills/saves/attacks into `sheet["prior_form"]`, applies the beast's stats (Wild Shape keeps INT/WIS/CHA; Polymorph replaces all six per RAW), sets `sheet["active_form"]`, decrements the Wild Shape resource counter, and broadcasts a `transform_update` WS message. A yellow active-form banner pins to the top of the sheet with a "✨ Revert to true form" button; the revert restores the prior form (with optional Wild Shape HP overflow). Token image and size on the tabletop are unchanged in this release — token sync is a follow-up. Schema is JSON-only, no migration required.
+
+### Added
+- New `POST /api/campaign/{id}/character/{char_id}/transform` and `/revert` endpoints. The transform endpoint enforces 5e Wild Shape CR caps (CR ¼/½/1 at lv 2/4/8 for default druids; 1/2/3/4/5/6 at lv 2/4/6/8/10/12+ for Moon Druids) and Polymorph CR cap (target level ÷ 4), plus type=Beast — all bypassable with `free_pick: true`.
+- Beast picker overlay in `app/templates/sheet_dnd5e.html`: search, type filter, CR cap status bar, Free-pick toggle, transform button.
+- "🐺 Wild Shape" and "🦌 Polymorph" buttons in the Class Resources fieldset legend. Visibility driven by class roster (Druid lv2+) and spell list (`Polymorph` present).
+- Active-form banner at the top of the sheet, rendering the beast name, CR/type, and a "✨ Revert to true form" button.
+- Roll-log card announcing transformations and reverts (`feature_used` WS broadcast).
+- WS handler `transform_update` triggers a reload on any open sheet for the same character so mini-sheet + full sheet stay in sync.
+
+### Changed
+- D&D 5e sheet template gains `active_form: None` and `prior_form: None` default fields; `normalize_dnd5e_sheet()` drops malformed values.
+- Wild Shape resource (already in v0.34.0) is now decremented automatically when a Wild Shape transform succeeds.
+- Non-HP combat fields (ability scores, AC, base AC, speed, initiative bonus) become read-only on the sheet while a transform is active. HP stays editable because the form takes damage during combat.
+
+## [0.34.0] - 2026-05-11
+
+**Schema version:** 21
+
+**Commit summary:** Add Class Resources panel with auto-fill for trackable D&D 5e subclass features
+
+**Description:** D&D 5e character sheets gain a new "Class Resources" fieldset between Spells and Inventory that tracks limited-use class and subclass features — Rage, Channel Divinity, Ki, Action Surge, Bardic Inspiration, Superiority Dice, Portent, Lay on Hands, and many more. A curated recipe table (`app/static/dnd5e_class_resources.js`) auto-populates the panel based on the multiclass roster, level, and ability modifiers; players can also add custom counters by hand. Each row has a pip-style spend UI for small pools, a +/− stepper for big pools (Lay on Hands HP), and a "Use" button that decrements the counter and broadcasts a `feature_used` card to the campaign roll log so the rest of the table sees who fired what. Counters reset automatically on short/long rest (both the form-only sheet buttons and the mini-sheet `/rest` endpoint). The schema is JSON-only on `Character.sheet["resources"]`, so no SQL migration is required — existing characters will see the panel empty until they click ↻ Auto-fill.
+
+### Added
+- New `app/static/dnd5e_class_resources.js` curated recipe table with ~20 PHB class & subclass features (Barbarian Rage, Bard Bardic Inspiration / Song of Rest, Cleric Channel Divinity, Druid Wild Shape / Land Natural Recovery, Fighter Second Wind / Action Surge / Indomitable, Monk Ki, Paladin Lay on Hands / Divine Sense / Channel Divinity / Cleansing Touch, Sorcerer Sorcery Points / Wild Magic Tides of Chaos, Wizard Arcane Recovery / Divination Portent, Battle Master Superiority Dice, Tempest Wrath of the Storm, War Priest, Rogue Stroke of Luck). Each recipe is a function of class level + ability mods + proficiency bonus.
+- New "Class Resources" collapsible fieldset in `app/templates/sheet_dnd5e.html` with auto-fill, add-custom-counter, edit/delete, and a pip-spend or stepper UI per resource.
+- New backend endpoint `POST /api/campaign/{id}/character/{char_id}/resource` accepts `{key, delta}` / `{key, set, …}` / `{key, reset: true}` payloads. Returns 409 `{"error":"no_uses"}` when a spend would underflow. Broadcasts a `resource_update` WS message.
+- New WS message type `feature_used` rendered as a compact card in the main tabletop roll log (`tabletop.js`) and the popped-out roll log (`rolls_popout.html`).
+- Short-rest / long-rest sheet buttons now also refill matching resources locally; the backend `/rest` endpoint (called by the tabletop mini-sheet) also refills resources and broadcasts `resource_update` for every refilled counter so any open panel re-pips.
+
+### Changed
+- `normalize_dnd5e_sheet()` cleans and clamps the new `sheet["resources"]` list on every load. Items missing required fields (key, name) are dropped.
+- `app/static/sheet.js` deserialises the `resources_json` hidden textarea into `sheet.resources` on form submit, mirroring the `classes_json` pattern.
+- D&D 5e sheet template gains a `"resources": []` default field.
+
 ## [0.33.19] - 2026-05-10
 
 **Schema version:** 21

@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+{% block title %}Stubs — Admin — SimpleVTT{% endblock %}
+{% block content %}
+<p><a href="/admin">← Admin home</a></p>
+<h1>Local-features stubs</h1>
+<p class="muted">
+    Class and subclass detail lookups consult <code>app/data/local/</code> first;
+    anything not satisfied there falls through to the Open5e mirror or live API
+    and is recorded below. The registry is in-memory — it resets when the app
+    restarts. Sorted by hit count to surface the most-requested content to
+    author locally next.
+</p>
+
+<section>
+    <h2>Local overrides on disk</h2>
+    <p class="muted">Content the resolver returns directly; no Open5e call needed.</p>
+
+    <h3>Classes ({{ local_classes|length }})</h3>
+    {% if local_classes %}
+        <ul class="cards">
+            {% for slug in local_classes %}
+                <li><code>{{ slug }}</code></li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="muted"><em>None yet.</em></p>
+    {% endif %}
+
+    <h3>Subclasses ({{ local_subclasses|length }})</h3>
+    {% if local_subclasses %}
+        <table class="data">
+            <thead><tr><th>Class</th><th>Subclass</th><th>File</th></tr></thead>
+            <tbody>
+                {% for row in local_subclasses %}
+                <tr>
+                    <td><code>{{ row.class_slug or '—' }}</code></td>
+                    <td><code>{{ row.sub_slug }}</code></td>
+                    <td class="muted"><code>{{ row.file }}</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="muted"><em>None yet.</em></p>
+    {% endif %}
+</section>
+
+<section>
+    <h2>Campaign homebrew classes (DB-backed) — {{ custom_classes_db|length }}</h2>
+    <p class="muted">
+        Custom base classes authored from a campaign's settings page. Each
+        shadows any shipped SRD or Open5e class with the same slug under
+        <code>campaign:&lt;id&gt;</code> scope.
+    </p>
+    {% if custom_classes_db %}
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Campaign</th>
+                    <th>Class</th>
+                    <th>Slug</th>
+                    <th>Hit die</th>
+                    <th>Spellcasting</th>
+                    <th>Features</th>
+                    <th>Spells</th>
+                    <th>Resources</th>
+                    <th>Multiclass</th>
+                    <th>Author</th>
+                    <th>Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in custom_classes_db %}
+                <tr>
+                    <td><a href="/campaign/{{ r.campaign_id }}/settings#custom-classes">{{ r.campaign_name }}</a></td>
+                    <td>{{ r.name }}</td>
+                    <td><code>{{ r.class_slug }}</code></td>
+                    <td>d{{ r.hit_die }}</td>
+                    <td>{{ r.spellcasting_ability.upper() if r.spellcasting_ability else '—' }}</td>
+                    <td>{{ r.feature_count }}</td>
+                    <td>{{ r.spell_count }}</td>
+                    <td>{{ r.resource_count }}</td>
+                    <td class="muted">{{ r.multiclass_summary }}</td>
+                    <td class="muted">{{ r.created_by or '—' }}</td>
+                    <td class="muted">{{ r.updated_at_fmt }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="muted"><em>None yet. GMs can author these from a campaign's settings page.</em></p>
+    {% endif %}
+</section>
+
+<section>
+    <h2>Campaign homebrew subclasses (DB-backed) — {{ custom_subclasses_db|length }}</h2>
+    <p class="muted">
+        Custom subclasses authored from the campaign settings page. These
+        only surface to characters in their owning campaign, and shadow
+        any shipped SRD file with the same slug under <code>campaign:&lt;id&gt;</code> scope.
+    </p>
+    {% if custom_subclasses_db %}
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Campaign</th>
+                    <th>Class</th>
+                    <th>Subclass</th>
+                    <th>Slug</th>
+                    <th>Features</th>
+                    <th>Author</th>
+                    <th>Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in custom_subclasses_db %}
+                <tr>
+                    <td><a href="/campaign/{{ r.campaign_id }}/settings#custom-subclasses">{{ r.campaign_name }}</a></td>
+                    <td><code>{{ r.class_slug }}</code></td>
+                    <td>{{ r.name }}</td>
+                    <td><code>{{ r.sub_slug }}</code></td>
+                    <td>{{ r.feature_count }}</td>
+                    <td class="muted">{{ r.created_by or '—' }}</td>
+                    <td class="muted">{{ r.updated_at_fmt }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="muted"><em>None yet. GMs can author these from a campaign's settings page.</em></p>
+    {% endif %}
+</section>
+
+<section>
+    <h2>Campaign homebrew races (DB-backed) — {{ custom_races_db|length }}</h2>
+    <p class="muted">
+        Custom races authored from the campaign settings page. Each shadows
+        any SRD race with the same slug under <code>campaign:&lt;id&gt;</code> scope.
+    </p>
+    {% if custom_races_db %}
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Campaign</th>
+                    <th>Race</th>
+                    <th>Slug</th>
+                    <th>Size</th>
+                    <th>Speed</th>
+                    <th>Ability bonuses</th>
+                    <th>Traits</th>
+                    <th>Author</th>
+                    <th>Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in custom_races_db %}
+                <tr>
+                    <td><a href="/campaign/{{ r.campaign_id }}/settings#custom-races">{{ r.campaign_name }}</a></td>
+                    <td>{{ r.name }}</td>
+                    <td><code>{{ r.race_slug }}</code></td>
+                    <td>{{ r.size }}</td>
+                    <td>{{ r.speed }} ft</td>
+                    <td class="muted">{{ r.ability_summary }}</td>
+                    <td>{{ r.trait_count }}</td>
+                    <td class="muted">{{ r.created_by or '—' }}</td>
+                    <td class="muted">{{ r.updated_at_fmt }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="muted"><em>None yet. GMs can author these from a campaign's settings page.</em></p>
+    {% endif %}
+</section>
+
+<section>
+    <h2>Campaign homebrew monsters (DB-backed) — {{ custom_monsters_db|length }}</h2>
+    <p class="muted">
+        Custom monsters and NPCs authored from the campaign settings page.
+        Each shadows any Open5e creature with the same slug under
+        <code>campaign:&lt;id&gt;</code> scope. Beast-type entries appear in
+        the Wild Shape / Polymorph picker; other types surface there only
+        when Free pick is on.
+    </p>
+    {% if custom_monsters_db %}
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Campaign</th>
+                    <th>Monster</th>
+                    <th>Slug</th>
+                    <th>Size</th>
+                    <th>Type</th>
+                    <th>CR</th>
+                    <th>AC</th>
+                    <th>HP</th>
+                    <th>Actions (total)</th>
+                    <th>Author</th>
+                    <th>Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in custom_monsters_db %}
+                <tr>
+                    <td><a href="/campaign/{{ r.campaign_id }}/settings#custom-monsters">{{ r.campaign_name }}</a></td>
+                    <td>{{ r.name }}</td>
+                    <td><code>{{ r.monster_slug }}</code></td>
+                    <td>{{ r.size }}</td>
+                    <td>{{ r.type }}</td>
+                    <td>{{ r.cr }}</td>
+                    <td>{{ r.ac }}</td>
+                    <td>{{ r.hp }}</td>
+                    <td>{{ r.action_count }}</td>
+                    <td class="muted">{{ r.created_by or '—' }}</td>
+                    <td class="muted">{{ r.updated_at_fmt }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="muted"><em>None yet. GMs can author these from a campaign's settings page.</em></p>
+    {% endif %}
+</section>
+
+<section>
+    <h2>Campaign homebrew backgrounds (DB-backed) — {{ custom_backgrounds_db|length }}</h2>
+    <p class="muted">
+        Custom character backgrounds authored from the campaign settings
+        page. Each shadows any Open5e background with the same slug under
+        <code>campaign:&lt;id&gt;</code> scope.
+    </p>
+    {% if custom_backgrounds_db %}
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Campaign</th><th>Background</th><th>Slug</th>
+                    <th>Signature feature</th><th>Skill profs</th>
+                    <th>Author</th><th>Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in custom_backgrounds_db %}
+                <tr>
+                    <td><a href="/campaign/{{ r.campaign_id }}/settings#custom-backgrounds">{{ r.campaign_name }}</a></td>
+                    <td>{{ r.name }}</td>
+                    <td><code>{{ r.background_slug }}</code></td>
+                    <td class="muted">{{ r.feature_name }}</td>
+                    <td class="muted">{{ r.skill_proficiencies[:60] }}{% if r.skill_proficiencies|length > 60 %}…{% endif %}</td>
+                    <td class="muted">{{ r.created_by or '—' }}</td>
+                    <td class="muted">{{ r.updated_at_fmt }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="muted"><em>None yet. GMs can author these from a campaign's settings page.</em></p>
+    {% endif %}
+</section>
+
+<section>
+    <h2>Campaign homebrew feats (DB-backed) — {{ custom_feats_db|length }}</h2>
+    <p class="muted">
+        Custom feats authored from the campaign settings page. Each shadows
+        any Open5e feat with the same slug under <code>campaign:&lt;id&gt;</code> scope.
+    </p>
+    {% if custom_feats_db %}
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Campaign</th><th>Feat</th><th>Slug</th>
+                    <th>Prerequisite</th><th>Author</th><th>Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in custom_feats_db %}
+                <tr>
+                    <td><a href="/campaign/{{ r.campaign_id }}/settings#custom-feats">{{ r.campaign_name }}</a></td>
+                    <td>{{ r.name }}</td>
+                    <td><code>{{ r.feat_slug }}</code></td>
+                    <td class="muted">{{ r.prerequisite }}</td>
+                    <td class="muted">{{ r.created_by or '—' }}</td>
+                    <td class="muted">{{ r.updated_at_fmt }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="muted"><em>None yet. GMs can author these from a campaign's settings page.</em></p>
+    {% endif %}
+</section>
+
+<section>
+    <h2>Stubbed (still served from Open5e) — {{ misses|length }}</h2>
+    {% if misses %}
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Kind</th>
+                    <th>Class</th>
+                    <th>Slug</th>
+                    <th>Last source</th>
+                    <th>Count</th>
+                    <th>First seen</th>
+                    <th>Last seen</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in misses %}
+                <tr>
+                    <td>{{ m.kind }}</td>
+                    <td><code>{{ m.class_slug or '—' }}</code></td>
+                    <td><code>{{ m.slug }}</code></td>
+                    <td><code>{{ m.source }}</code></td>
+                    <td>{{ m.count }}</td>
+                    <td class="muted">{{ m.first_seen_fmt }}</td>
+                    <td class="muted">{{ m.last_seen_fmt }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <form method="post" action="/admin/stubs/clear" onsubmit="return confirm('Clear the miss registry? This only affects in-memory counts.')" style="margin-top:1em">
+            <button>Clear registry</button>
+        </form>
+    {% else %}
+        <p class="muted"><em>No misses recorded yet. Misses are populated as users open class / subclass detail panels.</em></p>
+    {% endif %}
+    <p class="muted" style="margin-top:1em">
+        JSON snapshot for scripted pipelines: <a href="/admin/stubs.json"><code>/admin/stubs.json</code></a>
+    </p>
+</section>
+{% endblock %}

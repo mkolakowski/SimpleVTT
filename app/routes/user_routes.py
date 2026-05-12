@@ -18,6 +18,8 @@ from ..models import (
     UserAudioCategoryPref,
     VALID_THEMES,
 )
+from ..character_presets import build_sheet as build_preset_sheet
+from ..character_presets import list_presets, preset_template
 from ..game_systems import get_system
 from ..sheet_templates import get_template
 from ..templates import templates
@@ -76,8 +78,19 @@ def all_characters(
             "grouped": grouped,
             "standalone": standalone,
             "member_campaigns": member_campaigns,
+            "presets": list_presets(),
         },
     )
+
+
+def _sheet_for_preset(preset_key: str, fallback_template: str) -> tuple[str, dict]:
+    """Resolve a preset key into (template, sheet). Falls back to a blank
+    sheet of ``fallback_template`` when the key is unknown or empty."""
+    if preset_key:
+        built = build_preset_sheet(preset_key)
+        if built is not None:
+            return preset_template(preset_key), built
+    return fallback_template, get_template(fallback_template)
 
 
 @router.post("/characters/new")
@@ -85,10 +98,13 @@ def create_my_character(
     request: Request,
     campaign_id: int = Form(...),
     name: str = Form(...),
+    preset: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Player creates their own character in a campaign they belong to."""
+    """Player creates their own character in a campaign they belong to.
+    Optional ``preset`` field can pre-populate the sheet from
+    ``app/character_presets.py``."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         from fastapi import HTTPException
@@ -104,11 +120,14 @@ def create_my_character(
     if not is_member:
         raise HTTPException(403, "Not a member of this campaign")
     sys = get_system(campaign.game_system)
+    # Resolve preset → sheet/template. Falls back to a blank sheet of the
+    # campaign's default game system when no preset (or an unknown one).
+    tmpl, sheet = _sheet_for_preset(preset, sys.sheet_template)
     char = Character(
         campaign_id=campaign_id,
         name=name.strip()[:120] or "New Character",
-        template=sys.sheet_template,
-        sheet=get_template(sys.sheet_template),
+        template=tmpl,
+        sheet=sheet,
         owner_user_id=user.id,
     )
     db.add(char)
@@ -120,17 +139,21 @@ def create_my_character(
 def create_standalone_character(
     name: str = Form(...),
     template: str = Form("generic"),
+    preset: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Create a character not tied to any campaign."""
+    """Create a character not tied to any campaign. ``preset`` overrides
+    ``template`` when both are supplied (the preset carries its own
+    template choice)."""
     from ..game_systems import SYSTEMS
     safe_template = template if template in {s.sheet_template for s in SYSTEMS.values()} else "generic"
+    tmpl, sheet = _sheet_for_preset(preset, safe_template)
     char = Character(
         campaign_id=None,
         name=name.strip()[:120] or "New Character",
-        template=safe_template,
-        sheet=get_template(safe_template),
+        template=tmpl,
+        sheet=sheet,
         owner_user_id=user.id,
     )
     db.add(char)
@@ -312,6 +335,22 @@ def update_scale(
         user.font_scale = _coerce_scale(body.font_scale)
     db.commit()
     return {"ok": True, "ui_scale": user.ui_scale, "font_scale": user.font_scale}
+
+
+class _AnimateGifsBody(BaseModel):
+    animate_gifs: bool
+
+
+@router.post("/api/settings/animate_gifs")
+def update_animate_gifs(
+    body: _AnimateGifsBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Persist the user's preference for animated GIF portraits and tokens."""
+    user.animate_gifs = body.animate_gifs
+    db.commit()
+    return {"ok": True, "animate_gifs": user.animate_gifs}
 
 
 @router.post("/api/settings/tab_color")

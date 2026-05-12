@@ -1,14 +1,65 @@
 <div class="sheet dnd5e">
     <form id="sheet-form" data-char-id="{{ char.id }}" data-template="dnd5e" data-save-url="{{ sheet_save_url|default('') }}" data-save-method="{{ sheet_save_method|default('POST') }}" {% if not can_edit %}data-readonly="1"{% endif %}>
 
+        {# ── Active-form banner (Wild Shape / Polymorph) ──────────────────
+             Shown only when sheet.active_form is set. Wrapping the whole
+             div in a Jinja {% if %} (rather than toggling via inline
+             display:none) avoids the CSS dual-declaration trap — the
+             container also needs ``display:flex`` for layout, and a later
+             declaration wins, so an inline ``display:none`` was being
+             silently overridden and the banner rendered for every
+             character regardless of state. #}
+        {% set _af = sheet.get('active_form') %}
+        {% if _af %}
+        <div id="active-form-banner"
+             style="background:linear-gradient(90deg, rgba(167,139,250,.15), rgba(99,102,241,.08));border:1px solid var(--s-accent);border-radius:8px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <span style="font-size:22px;line-height:1;">{% if _af.get('source') == 'polymorph' %}🦌{% else %}🐺{% endif %}</span>
+            <div style="display:flex;flex-direction:column;gap:1px;flex:1;min-width:140px;">
+                <span style="font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.08em;">
+                    {% if _af.get('source') == 'polymorph' %}Polymorphed{% else %}Wild Shaped{% endif %}
+                </span>
+                <span id="active-form-name" style="font-size:15px;font-weight:700;color:var(--s-fg);">
+                    {{ _af.get('name', '') }}
+                </span>
+                <span id="active-form-meta" style="font-size:11px;color:var(--s-mute);">
+                    CR {{ _af.get('cr','?') }} · {{ _af.get('creature_type','') }}
+                </span>
+            </div>
+            {% if can_edit %}
+            <button type="button" id="revert-form-btn"
+                    style="font-size:12px;padding:5px 12px;background:var(--s-accent);border:1px solid var(--s-accent);color:#fff;border-radius:5px;cursor:pointer;font-weight:700;">
+                ✨ Revert to true form
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
+
         {# ── Character header ─────────────────────────────────────────── #}
         <div style="display:flex;gap:14px;margin-bottom:12px;align-items:flex-start;">
 
             {# Portrait column — doubled from 96px to 192px for the full sheet #}
             <div style="flex-shrink:0;position:relative;width:192px;">
                 {% if char.portrait_url %}
+                {% set _is_gif = char.portrait_url.lower().endswith('.gif') or '.gif?' in char.portrait_url.lower() %}
+                {% if _is_gif and not animate_gifs %}
+                {# Static first-frame thumbnail for users who disabled GIF animation #}
+                <canvas id="char-portrait-img" width="192" height="192"
+                        style="border-radius:8px;display:block;"
+                        data-src="{{ char.portrait_url }}"></canvas>
+                <script>
+                (function(){
+                    const c = document.getElementById('char-portrait-img');
+                    if (!c) return;
+                    const ctx2d = c.getContext('2d');
+                    const img = new Image();
+                    img.onload = () => { ctx2d.drawImage(img, 0, 0, 192, 192); };
+                    img.src = c.dataset.src;
+                })();
+                </script>
+                {% else %}
                 <img id="char-portrait-img" src="{{ char.portrait_url }}" alt="{{ char.name }}"
                      style="width:192px;height:192px;object-fit:cover;border-radius:8px;display:block;">
+                {% endif %}
                 {% else %}
                 <div id="char-portrait-placeholder"
                      style="width:192px;height:192px;background:var(--s-card);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:72px;color:var(--s-mute);border:1px solid var(--s-border);font-weight:700;">
@@ -119,23 +170,27 @@
                         {% endif %}
                     </div>
 
-                    {# Combat stat chips (3-across: Speed / Init / Prof) #}
-                    {# AC is tracked in the Inventory / armor section below #}
+                    {# Combat stat chips (2×2: AC / Speed / Init / Prof) #}
                     <input type="number" name="ac" id="ac-hidden" value="{{ sheet.get('ac',10) }}" style="display:none;" tabindex="-1" aria-hidden="true">
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;flex-shrink:0;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;flex-shrink:0;">
+                        {# AC — updated live by the armor engine #}
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:6px 8px;min-width:52px;min-height:56px;">
+                            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-label);margin-bottom:2px;">AC</span>
+                            <span id="ac-disp" style="font-size:20px;font-weight:800;color:var(--s-fg);">{{ sheet.get('ac',10) }}</span>
+                        </div>
                         {# Speed — display; edit via panel #}
                         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:6px 8px;min-width:52px;min-height:56px;">
-                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-mute);margin-bottom:2px;">Speed</span>
+                            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-label);margin-bottom:2px;">Speed</span>
                             <span id="speed-disp" style="font-size:20px;font-weight:800;color:var(--s-fg);">{{ sheet.get('speed',30) }}</span>
                         </div>
                         {# Initiative — display; edit via panel #}
                         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:6px 8px;min-width:52px;min-height:56px;">
-                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-mute);margin-bottom:2px;">Init</span>
+                            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-label);margin-bottom:2px;">Init</span>
                             <span id="init-disp" style="font-size:20px;font-weight:800;color:var(--s-fg);">{{ '+' if sheet.get('initiative_bonus',0) >= 0 else '' }}{{ sheet.get('initiative_bonus',0) }}</span>
                         </div>
                         {# Proficiency — display; edit via panel #}
                         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:6px 8px;min-width:52px;min-height:56px;">
-                            <span style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-mute);margin-bottom:2px;">Prof</span>
+                            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--s-label);margin-bottom:2px;">Prof</span>
                             <span id="prof-disp" style="font-size:20px;font-weight:800;color:var(--s-fg);">{{ '+' if sheet.get('proficiency_bonus',2) >= 0 else '' }}{{ sheet.get('proficiency_bonus',2) }}</span>
                         </div>
                     </div>
@@ -181,6 +236,43 @@
                     <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Prof Bonus</span>
                     <input type="number" name="proficiency_bonus" id="prof-edit-input" value="{{ sheet.get('proficiency_bonus',2) }}">
                 </label>
+                <label style="display:flex;flex-direction:column;gap:3px;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Background</span>
+                    <select name="background" id="background-select" data-current="{{ sheet.get('background','') }}">
+                        <option value="">— loading… —</option>
+                    </select>
+                </label>
+            </div>
+            {# Cached background detail blob — populated by the picker on
+                 change and on initial load so the display block can render
+                 without re-fetching from Open5e every time the sheet opens. #}
+            <textarea name="background_data" id="background-data-input" style="display:none">{{ sheet.get('background_data') | tojson if sheet.get('background_data') else '{}' }}</textarea>
+            <div id="background-display" style="background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:10px 12px;margin-bottom:10px;display:none;">
+                <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Background</span>
+                    <strong id="bg-name" style="font-size:13px;color:var(--s-fg);"></strong>
+                    <span id="bg-source-badge" style="display:none;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#d4a84a;background:#3a2f15;border:1px solid #6e5828;border-radius:3px;padding:1px 6px;">Custom</span>
+                    <button type="button" id="bg-sync-btn" title="Re-fetch background detail" style="margin-left:auto;font-size:11px;padding:2px 8px;">↻ Sync</button>
+                </div>
+                <div id="bg-feature" style="margin-top:6px;display:none;">
+                    <div class="ft-title"><span id="bg-feature-name"></span></div>
+                    <div id="bg-feature-desc" class="ft-desc" style="margin-top:3px;white-space:pre-wrap;"></div>
+                </div>
+                <div id="bg-desc" style="font-size:11px;color:var(--s-mute);margin-top:6px;line-height:1.45;white-space:pre-wrap;"></div>
+            </div>
+            {# ── Feats section ─────────────────────────────────────────── #}
+            <div id="feats-section" style="background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:10px 12px;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Feats</span>
+                    <span id="feats-count" style="font-size:11px;color:var(--s-mute);"></span>
+                    <button type="button" id="feats-add-btn" style="margin-left:auto;font-size:11px;padding:3px 10px;">+ Add feat</button>
+                </div>
+                <div id="feats-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+                <div id="feats-add-panel" style="display:none;margin-top:8px;padding:8px;background:var(--s-input);border:1px solid var(--s-border);border-radius:4px;">
+                    <input type="text" id="feats-search" placeholder="Search feats to add (2+ chars)…" style="width:100%;font-size:12px;box-sizing:border-box;">
+                    <div id="feats-search-results" style="max-height:200px;overflow-y:auto;margin-top:6px;display:none;border:1px solid var(--s-border);border-radius:3px;background:var(--s-card);"></div>
+                </div>
+                <textarea name="feats" id="feats-data-input" style="display:none">{{ sheet.get('feats') | tojson if sheet.get('feats') is iterable else '[]' }}</textarea>
             </div>
             {# ── Multiclass editor ─────────────────────────────────────── #}
             <div id="multiclass-editor" style="background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:10px 12px;margin-bottom:10px;">
@@ -191,6 +283,41 @@
                 </div>
                 <div id="mc-class-list" style="display:flex;flex-direction:column;gap:6px;"></div>
                 <p id="mc-hint" class="muted" style="font-size:11px;margin:6px 0 0;">Pick a class, optional subclass, and how many levels you have in it. Total of all classes is capped at 20.</p>
+            </div>
+            {# ── HP per Level tracker ───────────────────────────────────
+                 Source of truth: sheet["hp_rolls"] = {class_slug: [int, …]}.
+                 Each entry is HP gained at that class level (already
+                 including the CON mod at the time). The picker renders
+                 from the current roster + persists each edit via the
+                 /sheet-fields PATCH endpoint. The first level of the
+                 FIRST class is locked (max die + CON). Banner appears
+                 only when at least one entry is missing (== 0).
+            #}
+            <div id="hp-rolls-editor" style="background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:10px 12px;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
+                    <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">HP per Level</span>
+                    <span id="hp-rolls-sum-display" style="font-size:11px;color:var(--s-mute);">
+                        Sum: <span id="hp-rolls-sum" style="color:var(--s-fg);font-weight:700;">0</span>
+                        <span class="muted" style="margin:0 4px;">·</span>
+                        Max HP: <span id="hp-rolls-cur-max" style="color:var(--s-fg);font-weight:700;">{{ sheet.get('hp',{}).get('max',0) }}</span>
+                    </span>
+                    <button type="button" id="hp-rolls-apply-max"
+                            title="Set Max HP to the sum of every per-level entry"
+                            style="font-size:11px;padding:3px 10px;">Apply sum → Max HP</button>
+                    <button type="button" id="hp-rolls-fill-avg"
+                            title="Fill every empty slot with the class average (⌊dN/2⌋+1 + CON)"
+                            style="font-size:11px;padding:3px 10px;">Use average for empty</button>
+                </div>
+                <div id="hp-rolls-banner"
+                     style="display:none;background:rgba(247,176,77,.10);border:1px solid #f7b04d;color:#f7b04d;border-radius:5px;padding:7px 10px;margin-bottom:8px;font-size:11px;line-height:1.45;">
+                    ⚠ <strong>Some per-level HP entries are missing.</strong> Roll for each
+                    empty slot below (🎲 button) or type the values you used at level-up.
+                    Level 1 of your first class is locked to max die + CON.
+                </div>
+                <div id="hp-rolls-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+                <p id="hp-rolls-empty" class="muted" style="font-size:11px;margin:6px 0 0;display:none;">
+                    Add a class above to start tracking per-level HP rolls.
+                </p>
             </div>
             <div style="display:flex;justify-content:flex-end;">
                 <button type="button" id="char-done-btn">✓ Done</button>
@@ -347,6 +474,45 @@
         }
         fieldset.collapsible.collapsed > legend .fs-chevron { transform: rotate(-90deg); }
         fieldset.collapsible.collapsed > *:not(legend) { display: none !important; }
+
+        /* ── Readability: label vs value contrast ─────────────────────────
+           A mid-tone between --s-fg and --s-mute so labels read clearly
+           as labels without blending into the values they describe.       */
+        .sheet.dnd5e { --s-label: color-mix(in srgb, var(--s-fg) 60%, var(--s-mute)); }
+
+        /* Section headings — legends stand out as clear section titles */
+        .sheet.dnd5e fieldset > legend {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--s-accent);
+            letter-spacing: .04em;
+        }
+
+        /* Ability-score abbreviation labels (STR / DEX / …) */
+        .sheet.dnd5e .ab-roll-card > span:first-child,
+        .sheet.dnd5e .st-roll-card > span:first-child {
+            font-size: 11px !important;
+            color: var(--s-label) !important;
+        }
+
+        /* Skill-card ability tag (the small "WIS" / "STR" beside skill name) */
+        .sheet.dnd5e .sk-roll-card > span:nth-child(3) {
+            font-size: 11px !important;
+            color: var(--s-label) !important;
+        }
+
+        /* Feature / trait title vs description contrast */
+        .sheet.dnd5e .ft-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--s-fg);
+            letter-spacing: .01em;
+        }
+        .sheet.dnd5e .ft-desc {
+            font-size: 12px;
+            color: var(--s-label);
+            line-height: 1.5;
+        }
         </style>
 
         <fieldset>
@@ -551,6 +717,99 @@
                  style="display:none;margin-top:10px;padding:10px 12px;background:var(--s-input);
                         border:1px solid var(--s-border);border-radius:6px;font-size:12px;
                         color:var(--s-mute);line-height:1.6;"></div>
+        </fieldset>
+
+        {# ── Defenses ─────────────────────────────────────────────────
+             Four chip-toggle rows (damage resistances / immunities /
+             vulnerabilities and condition immunities). Each row shows
+             the predefined PHB list as chips and a "+ Custom" input
+             for edge cases like "BPS from nonmagical attacks". Active
+             chips persist via PATCH /sheet-fields on every toggle so
+             changes survive a refresh without an explicit Save.
+        #}
+        <fieldset class="collapsible" data-collapse-key="defenses">
+            <legend><span class="fs-chevron">▼</span>Defenses</legend>
+
+            {% set _DMG_TYPES = [
+                ('acid','Acid'),('bludgeoning','Bludgeoning'),('cold','Cold'),
+                ('fire','Fire'),('force','Force'),('lightning','Lightning'),
+                ('necrotic','Necrotic'),('piercing','Piercing'),('poison','Poison'),
+                ('psychic','Psychic'),('radiant','Radiant'),('slashing','Slashing'),
+                ('thunder','Thunder')
+            ] %}
+            {% set _COND_TYPES = [
+                ('blinded','Blinded'),('charmed','Charmed'),('deafened','Deafened'),
+                ('exhaustion','Exhaustion'),('frightened','Frightened'),('grappled','Grappled'),
+                ('incapacitated','Incapacitated'),('invisible','Invisible'),
+                ('paralyzed','Paralyzed'),('petrified','Petrified'),('poisoned','Poisoned'),
+                ('prone','Prone'),('restrained','Restrained'),('stunned','Stunned'),
+                ('unconscious','Unconscious')
+            ] %}
+
+            {# Macro-like inline block: one row per defense category.
+               ``hidden_name`` is the form field name; sheet.js parses
+               its JSON value on save. ``chip_class`` styles active
+               chips with the category-appropriate accent (gold for
+               resistance, red for immunity, orange for vulnerability,
+               teal for condition immunity). #}
+            {% macro defense_row(hidden_name, label, types, active_list, chip_class, accent) -%}
+            <div class="defense-row" data-field="{{ hidden_name }}"
+                 data-accent="{{ accent }}"
+                 style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span style="font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--s-mute);text-transform:uppercase;flex:1;min-width:120px;">{{ label }}</span>
+                </div>
+                <input type="hidden" name="{{ hidden_name }}" class="defense-input"
+                       value="{{ (active_list or []) | tojson }}">
+                <div class="defense-chips" style="display:flex;flex-wrap:wrap;gap:5px;">
+                    {% set _active_lower = (active_list or []) | map('lower') | list %}
+                    {# Standard chips — toggle by clicking #}
+                    {% for slug, label_text in types %}
+                    {% set is_active = label_text|lower in _active_lower %}
+                    <button type="button" class="defense-chip {{ chip_class }}"
+                            data-label="{{ label_text }}"
+                            data-active="{{ '1' if is_active else '' }}"
+                            {% if not can_edit %}disabled{% endif %}
+                            style="padding:3px 10px;border-radius:11px;font-size:11px;cursor:{{ 'pointer' if can_edit else 'default' }};
+                                   transition:background .12s,border-color .12s,color .12s;
+                                   background:{% if is_active %}color-mix(in srgb,{{ accent }} 28%,var(--bg)){% else %}var(--s-card){% endif %};
+                                   border:1px solid {% if is_active %}{{ accent }}{% else %}var(--s-border){% endif %};
+                                   color:{% if is_active %}color-mix(in srgb,{{ accent }} 50%,#fff){% else %}var(--s-mute){% endif %};
+                                   font-weight:{% if is_active %}700{% else %}500{% endif %};">{{ label_text }}</button>
+                    {% endfor %}
+                    {# Custom chips — anything not in the predefined list #}
+                    {% set _type_labels_lower = types | map(attribute=1) | map('lower') | list %}
+                    {% for entry in (active_list or []) %}
+                    {% if (entry|lower) not in _type_labels_lower %}
+                    <span class="defense-chip-custom"
+                          data-label="{{ entry }}"
+                          style="display:inline-flex;align-items:center;gap:4px;padding:3px 4px 3px 10px;border-radius:11px;font-size:11px;
+                                 background:color-mix(in srgb,{{ accent }} 28%,var(--bg));border:1px solid {{ accent }};
+                                 color:color-mix(in srgb,{{ accent }} 50%,#fff);font-weight:700;">
+                        {{ entry }}
+                        {% if can_edit %}
+                        <button type="button" class="defense-chip-remove" title="Remove"
+                                style="background:none;border:none;color:inherit;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;">×</button>
+                        {% endif %}
+                    </span>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+                {% if can_edit %}
+                <div class="defense-custom-add" style="display:flex;gap:4px;align-items:center;">
+                    <input type="text" class="defense-custom-input" placeholder="+ Custom entry (e.g. BPS from nonmagical attacks)"
+                           style="flex:1;font-size:11px;padding:3px 8px;background:var(--s-input);border:1px solid var(--s-border);border-radius:4px;color:var(--s-fg);">
+                    <button type="button" class="defense-custom-add-btn"
+                            style="font-size:11px;padding:3px 9px;background:var(--s-card);border:1px solid var(--s-border);border-radius:4px;color:var(--s-mute);cursor:pointer;">Add</button>
+                </div>
+                {% endif %}
+            </div>
+            {%- endmacro %}
+
+            {{ defense_row('damage_resistances',     'Damage Resistances',     _DMG_TYPES,  sheet.get('damage_resistances'),     'defense-chip-res',  '#d4a84a') }}
+            {{ defense_row('damage_immunities',      'Damage Immunities',      _DMG_TYPES,  sheet.get('damage_immunities'),      'defense-chip-imm',  '#6ec1c1') }}
+            {{ defense_row('damage_vulnerabilities', 'Damage Vulnerabilities', _DMG_TYPES,  sheet.get('damage_vulnerabilities'), 'defense-chip-vuln', '#e07070') }}
+            {{ defense_row('condition_immunities',   'Condition Immunities',   _COND_TYPES, sheet.get('condition_immunities'),   'defense-chip-cond', '#9aa9e0') }}
         </fieldset>
 
         {# ── Attacks fieldset ─────────────────────────────────────────── #}
@@ -796,6 +1055,9 @@
             </div>
         </div>
 
+        {# ── Beast Picker Overlay (shared partial) ───────────────────── #}
+        {% include "_beast_picker_modal.html" %}
+
         {# Spell slot pip renderer (inline, runs immediately) #}
         <script>
         (function () {
@@ -848,6 +1110,53 @@
             //  (class, level) row instead of just (level).)
         })();
         </script>
+
+        {# ── Class Resources fieldset ──────────────────────────────────
+             Trackable class / subclass features (Rage, Channel Divinity,
+             Ki, Action Surge, …). Auto-populated from
+             ``window._CLASS_RESOURCES`` based on the multiclass roster +
+             level + ability mods. Player-added "manual" resources are
+             preserved across syncs.
+        #}
+        <fieldset id="resources-fieldset" class="collapsible" data-collapse-key="resources">
+            <legend><span class="fs-chevron">▼</span>Class Resources
+                {% if can_edit %}
+                <button type="button" id="resources-sync-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;" title="Re-seed counters from your class + level. Player-added entries are kept.">↻ Auto-fill</button>
+                <button type="button" id="resources-add-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;" title="Add a custom feature counter">+ Add</button>
+                <button type="button" id="wild-shape-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;display:none;" title="Transform into a beast (Druid level 2+)">🐺 Wild Shape</button>
+                <button type="button" id="polymorph-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;display:none;" title="Transform into a beast via the Polymorph spell">🦌 Polymorph</button>
+                <span id="resources-status" style="font-size:11px;margin-left:6px;color:var(--s-mute);"></span>
+                {% endif %}
+            </legend>
+            <textarea id="resources-data" name="resources_json" style="display:none;" {% if not can_edit %}readonly{% endif %}>{{ (sheet.get('resources') or []) | tojson }}</textarea>
+            <div id="resources-list" style="display:flex;flex-direction:column;gap:8px;margin-top:4px;"></div>
+            <p id="resources-empty" class="muted" style="font-size:12px;margin:6px 0 0;">
+                {% if can_edit %}Pick a class &amp; level to auto-fill Rage, Channel Divinity, Ki, Action Surge, etc. Or click <strong>+ Add</strong> to create a custom counter.{% else %}—{% endif %}
+            </p>
+
+            {% if can_edit %}
+            <div id="resource-edit-panel" style="display:none;margin-top:10px;border:1px solid var(--s-border);border-radius:6px;padding:10px;background:var(--s-input);">
+                <div class="row" style="margin-bottom:6px;flex-wrap:wrap;gap:8px;">
+                    <label style="flex:2;min-width:140px;">Name<input type="text" id="re-name" placeholder="e.g. Channel Divinity" style="width:100%;"></label>
+                    <label>Max<input type="number" id="re-max" value="1" min="0" max="999" style="width:60px;"></label>
+                    <label style="flex:1;min-width:120px;">Reset
+                        <select id="re-reset" style="width:100%;">
+                            <option value="short">Short rest</option>
+                            <option value="long" selected>Long rest</option>
+                            <option value="none">Manual only</option>
+                        </select>
+                    </label>
+                </div>
+                <label style="display:block;margin-bottom:6px;">Source<input type="text" id="re-source" placeholder="e.g. Cleric Lv 2" style="width:100%;"></label>
+                <label style="display:block;margin-bottom:6px;">Description<textarea id="re-desc" rows="2" placeholder="What does it do?" style="width:100%;font-size:12px;"></textarea></label>
+                <div style="display:flex;gap:8px;">
+                    <button type="button" id="re-save-btn">Save</button>
+                    <button type="button" id="re-cancel-btn">Cancel</button>
+                    <button type="button" id="re-delete-btn" style="margin-left:auto;background:var(--s-err-bg);border-color:var(--s-danger);color:var(--s-err-fg);">Delete</button>
+                </div>
+            </div>
+            {% endif %}
+        </fieldset>
 
         {# ── Inventory fieldset ───────────────────────────────────────── #}
         <fieldset id="inventory-fieldset" class="collapsible" data-collapse-key="inventory">
@@ -1105,6 +1414,21 @@
     </form>
 </div>
 <script>
+// ── Saved HP rolls (per-class, per-level HP gain) ─────────────────────────────
+// Server is the source of truth — exposed as ``window._savedHpRolls`` so the
+// HP-per-level picker in the edit panel can render its initial state on
+// open. Any change PATCHes back to /sheet-fields immediately and updates
+// this cache in-place.
+window._savedHpRolls = {{ (sheet.get('hp_rolls') or {}) | tojson }};
+
+// ── Saved beast favorites (Wild Shape / Polymorph picker) ──────────────────
+// Array of Open5e creature slugs the player has starred. Read by the
+// Wild Shape / Polymorph button handlers below and passed into
+// BeastPicker.open(...). The picker mutates this cache via the
+// onFavoritesChange callback so subsequent opens reflect new stars
+// without a page reload.
+window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }};
+
 // ── Subclass features cache ───────────────────────────────────────────────────
 // Prefer new per-feature format; fall back to legacy blob for unsynced chars.
 (function () {
@@ -1144,6 +1468,85 @@
      picker's _lookupSubclassData reads window._SUBCLASS_SPELLS at that
      moment. Loading the data file first guarantees it's populated. -->
 <script src="/static/dnd5e_subclass_spells.js"></script>
+<script src="/static/dnd5e_class_resources.js"></script>
+<script src="/static/dnd5e_innate_defenses.js"></script>
+<script src="/static/open5e_coverage.js"></script>
+<script>
+/* Homebrew class-resource merge.
+ *
+ * Fetches every CustomClass.resources record for this campaign and
+ * appends them to window._CLASS_RESOURCES with their declarative
+ * ``max_kind`` translated into a runtime ``max`` function — the same
+ * shape the existing curated table uses. Filtered by class slug on the
+ * panel side via the existing ``resourcesFor`` helper, so homebrew
+ * classes automatically surface their counters once a character is
+ * configured to that class.
+ *
+ * No-op outside a campaign (CAMPAIGN_ID undefined) and silently tolerant
+ * of fetch failures — homebrew counters just won't appear, the rest of
+ * the panel keeps working.
+ */
+(async function () {
+    if (typeof CAMPAIGN_ID === 'undefined' || !CAMPAIGN_ID) return;
+    if (!Array.isArray(window._CLASS_RESOURCES)) window._CLASS_RESOURCES = [];
+    try {
+        const r = await fetch('/api/campaign/' + CAMPAIGN_ID + '/custom-class-resources');
+        if (!r.ok) return;
+        const data = await r.json();
+        const recs = (data && data.results) || [];
+
+        function _maxFnFor(rec) {
+            if (rec.max_kind === 'ability_mod') {
+                const ab = (rec.max_ability || 'cha').toUpperCase();
+                return (lvl, mods) => Math.max(1, (mods && mods[ab]) || 0);
+            }
+            if (rec.max_kind === 'proficiency') {
+                return (lvl, mods, prof) => prof || 2;
+            }
+            if (rec.max_kind === 'level_table') {
+                const table = rec.max_table || {};
+                return (lvl) => {
+                    let val = 0;
+                    let bestThreshold = -1;
+                    for (const k of Object.keys(table)) {
+                        const t = parseInt(k, 10);
+                        if (!Number.isFinite(t)) continue;
+                        if (t <= lvl && t > bestThreshold) {
+                            bestThreshold = t;
+                            val = parseInt(table[k], 10) || 0;
+                        }
+                    }
+                    return val;
+                };
+            }
+            // "static" fallback
+            const n = parseInt(rec.max_static, 10);
+            return () => Number.isFinite(n) ? n : 0;
+        }
+
+        recs.forEach(rec => {
+            if (!rec || !rec.name || !rec.class) return;
+            window._CLASS_RESOURCES.push({
+                key:      rec.key || (rec.name + '').toLowerCase().replace(/\s+/g, '-'),
+                name:     rec.name,
+                class:    rec.class,
+                subclass: rec.subclass || null,
+                minLevel: rec.min_level || 1,
+                max:      _maxFnFor(rec),
+                reset:    rec.reset || 'long',
+                desc:     rec.desc || '',
+            });
+        });
+        // Let listeners react if they want — the resource panel doesn't
+        // subscribe yet, so homebrew counters surface on the next natural
+        // re-render (level change, roster change, ↻ Auto-fill, or reload).
+        document.dispatchEvent(new CustomEvent('simplevtt:homebrew-resources-merged', {
+            detail: { count: recs.length },
+        }));
+    } catch (e) { /* swallow — non-fatal */ }
+})();
+</script>
+<script src="/static/beast_picker.js"></script>
 <script src="/static/sheet.js"></script>
 <script>
 (function () {
@@ -1165,7 +1568,17 @@
             const img = document.getElementById('char-portrait-img');
             const ph = document.getElementById('char-portrait-placeholder');
             if (img) {
-                img.src = url;
+                // If the current element is a canvas (static GIF thumbnail), replace it
+                // with a live <img> so the newly uploaded file is immediately visible.
+                if (img.tagName === 'CANVAS') {
+                    const newImg = document.createElement('img');
+                    newImg.id = 'char-portrait-img';
+                    Object.assign(newImg.style, { width:'192px', height:'192px', objectFit:'cover', borderRadius:'8px', display:'block' });
+                    newImg.src = url;
+                    img.replaceWith(newImg);
+                } else {
+                    img.src = url;
+                }
             } else if (ph) {
                 const newImg = document.createElement('img');
                 newImg.id = 'char-portrait-img';
@@ -1781,7 +2194,7 @@
             headingRow.appendChild(chevron);
 
             const label = document.createElement('span');
-            label.style.cssText = 'font-size:10px;color:var(--s-mute);text-transform:uppercase;letter-spacing:.6px;flex-shrink:0;';
+            label.style.cssText = 'font-size:13px;color:var(--s-fg);text-transform:uppercase;letter-spacing:.6px;flex-shrink:0;';
             label.textContent = lvl === 0 ? 'Cantrips' : `Level ${lvl} Spells`;
             headingRow.appendChild(label);
 
@@ -1949,7 +2362,9 @@
         if (!key) return null;
         if (_spellDetailCache[key]) return _spellDetailCache[key];
         try {
-            const r = await fetch('/api/open5e/spells?search=' + encodeURIComponent(name) + '&limit=10');
+            const _cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+            const r = await fetch('/api/open5e/spells?search=' + encodeURIComponent(name) + '&limit=10'
+                + (_cid ? '&campaign_id=' + _cid : ''));
             if (!r.ok) return null;
             const data = await r.json();
             const list = data.results || [];
@@ -2163,20 +2578,38 @@
 
     // ── Cached cantrip lookup per class ─────────────────────────────────
     // The choose-a-cantrip dropdowns hit Open5e once per class slug and
-    // reuse the result for the remainder of the session.
+    // reuse the result for the remainder of the session. Empty / errored
+    // responses are NOT cached so a transient failure (Open5e down, slow
+    // network) doesn't poison every dropdown until the page is reloaded.
     const _cantripListCache = {};
     function _fetchCantripsForClass(classSlug) {
-        if (!classSlug) return Promise.resolve([]);
+        if (!classSlug) return Promise.resolve({ list: [], error: 'no-slug' });
         const slug = classSlug.toLowerCase();
-        if (_cantripListCache[slug]) return Promise.resolve(_cantripListCache[slug]);
-        const url = '/api/open5e/spells?spell_list=' + encodeURIComponent(slug) + '&level=0&limit=80';
-        return fetch(url).then(r => r.ok ? r.json() : { results: [] })
-            .then(d => {
+        if (_cantripListCache[slug]) return Promise.resolve({ list: _cantripListCache[slug], error: null });
+        const _cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+        const url = '/api/open5e/spells?spell_list=' + encodeURIComponent(slug) + '&level=0&limit=80'
+            + (_cid ? '&campaign_id=' + _cid : '');
+        return fetch(url)
+            .then(r => r.ok
+                ? r.json().then(d => ({ d, error: null }))
+                : Promise.resolve({ d: { results: [] }, error: 'http-' + r.status }))
+            .then(({ d, error }) => {
                 const list = (d.results || []).map(s => ({ name: s.name, slug: s.slug || '' }));
-                _cantripListCache[slug] = list;
-                return list;
+                if (list.length) {
+                    _cantripListCache[slug] = list;
+                    return { list, error: null };
+                }
+                // Empty result is treated as a soft failure — log so the
+                // developer can see why the dropdown is empty.
+                const soft = error || 'empty-result';
+                console.warn(`[bonus-cantrip] /api/open5e/spells returned no `
+                    + `${slug} cantrips (${soft}). URL: ${url}`);
+                return { list: [], error: soft };
             })
-            .catch(() => []);
+            .catch(err => {
+                console.warn(`[bonus-cantrip] cantrip fetch failed for ${slug}:`, err);
+                return { list: [], error: String(err && err.message || err) };
+            });
     }
 
     // ── Feature-grants panel renderer ───────────────────────────────────
@@ -2361,9 +2794,36 @@
                 row.appendChild(clearBtn);
 
                 if (!locked) {
-                    _fetchCantripsForClass(grant.fromClass).then(list => {
+                    // Render a small inline status / retry control next to the
+                    // dropdown so an empty Open5e response doesn't look like a
+                    // broken dropdown — the player sees what went wrong and
+                    // can re-try without reloading the page.
+                    const status = document.createElement('span');
+                    status.style.cssText = 'font-size:11px;color:var(--s-danger);display:none;align-items:center;gap:4px;';
+                    const retry = document.createElement('button');
+                    retry.type = 'button';
+                    retry.textContent = '↻ Retry';
+                    retry.style.cssText = 'background:transparent;border:1px solid var(--s-border);color:var(--s-mute);font-size:10px;padding:2px 6px;border-radius:3px;cursor:pointer;';
+                    status.appendChild(retry);
+                    row.appendChild(status);
+
+                    function _populateDropdown(list, error) {
                         sel.innerHTML = '';
                         sel.disabled = isReadonly;
+                        if (error || !list.length) {
+                            // Fetch failed or returned empty — surface it so
+                            // the dropdown doesn't look mysteriously broken.
+                            sel.disabled = true;
+                            sel.appendChild(Object.assign(document.createElement('option'), {
+                                value: '',
+                                textContent: error
+                                    ? `(error: ${error})`
+                                    : `(no ${grant.fromClass} cantrips found)`,
+                            }));
+                            status.style.display = 'inline-flex';
+                            return;
+                        }
+                        status.style.display = 'none';
                         sel.appendChild(Object.assign(document.createElement('option'), {
                             value: '', textContent: '— pick a cantrip —',
                         }));
@@ -2373,12 +2833,34 @@
                             if (current && current.name === c.name) o.selected = true;
                             sel.appendChild(o);
                         });
-                        sel.addEventListener('change', () => {
-                            if (current) _removeGrantedByFeature(feature, cslug);
-                            if (sel.value) _addGrantedSpell(sel.value, 0, cslug, feature);
-                            window._renderFeatureGrantsPanel(target, entry);
+                    }
+
+                    function _doFetch() {
+                        sel.disabled = true;
+                        sel.innerHTML = '';
+                        sel.appendChild(Object.assign(document.createElement('option'), {
+                            value: '', textContent: 'Loading cantrips…',
+                        }));
+                        status.style.display = 'none';
+                        _fetchCantripsForClass(grant.fromClass).then(({ list, error }) => {
+                            _populateDropdown(list, error);
                         });
+                    }
+
+                    retry.addEventListener('click', () => {
+                        // Drop the cached failure so we actually re-hit the
+                        // server. The fetcher only caches successful, non-
+                        // empty results — so this clears nothing on success
+                        // paths but lets us re-try when something went wrong.
+                        delete _cantripListCache[grant.fromClass.toLowerCase()];
+                        _doFetch();
                     });
+                    sel.addEventListener('change', () => {
+                        if (current) _removeGrantedByFeature(feature, cslug);
+                        if (sel.value) _addGrantedSpell(sel.value, 0, cslug, feature);
+                        window._renderFeatureGrantsPanel(target, entry);
+                    });
+                    _doFetch();
                 }
             }
 
@@ -2953,6 +3435,8 @@
         if (q)  qs.set('search', q);
         if (cv) qs.set('spell_list', cv);
         if (sbCurrentLvl !== 'all') qs.set('level', sbCurrentLvl);
+        const _cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+        if (_cid) qs.set('campaign_id', _cid);
 
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 12000);
@@ -4168,7 +4652,1209 @@
         });
 
         _toast('💤 Long rest complete — HP, hit dice, and spell slots refreshed. Save to persist.', 'info');
+
+        // Also refill all long-rest + short-rest resources in the Class
+        // Resources panel. Local-only — saved with the next form submit.
+        if (typeof window._mcRefillResources === 'function') {
+            window._mcRefillResources('long');
+        }
     });
+
+    /* Patch short-rest button: refill 'short' resources locally */
+    document.getElementById('short-rest-btn')?.addEventListener('click', () => {
+        if (typeof window._mcRefillResources === 'function') {
+            window._mcRefillResources('short');
+        }
+    });
+})();
+
+/* ── Class Resources panel ─────────────────────────────────────────────────
+   Renders sheet["resources"] as a per-class group with pip-style "Use"
+   buttons. Auto-seeds from window._CLASS_RESOURCES based on the current
+   multiclass roster + ability mods. Player-added entries (manual:true)
+   are preserved across re-seeds.
+
+   Persistence model:
+     - Each click optimistically updates the on-page state and the hidden
+       <textarea name="resources_json"> input. When the form is saved,
+       app/routes/tabletop_routes.py reads ``resources_json`` like every
+       other JSON-stringified collection on the sheet (see ``spells``).
+     - When this sheet is open inside a live campaign, "Use" also POSTs to
+       /api/campaign/{id}/character/{char_id}/resource so the spend is
+       persisted immediately AND broadcast to other connected clients
+       (mini-sheet on the tabletop, popped-out roll log). Outside a
+       campaign session the local update is the source of truth.
+   ──────────────────────────────────────────────────────────────────────── */
+(function () {
+    const fs = document.getElementById('resources-fieldset');
+    if (!fs) return;
+    const listEl    = document.getElementById('resources-list');
+    const emptyEl   = document.getElementById('resources-empty');
+    const dataEl    = document.getElementById('resources-data');
+    const editPanel = document.getElementById('resource-edit-panel');
+    const syncBtn   = document.getElementById('resources-sync-btn');
+    const addBtn    = document.getElementById('resources-add-btn');
+    const statusEl  = document.getElementById('resources-status');
+    if (!listEl || !dataEl) return;
+
+    // CAMPAIGN_ID is set with ``const`` at script-top-level in
+    // character_page.html (and tabletop.html when this sheet renders in
+    // a modal). Classic script-tag ``const`` lives in the Script Record's
+    // lexical environment — it is NOT a property of ``window`` or
+    // ``globalThis``. The only way to safely read it from a nested IIFE
+    // is a bare-identifier ``typeof`` check (which uses lexical scope
+    // lookup and won't throw a ReferenceError when undeclared). This
+    // mirrors the pattern already used throughout sheet.js (see e.g.
+    // ``typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID``).
+    const _CAMPAIGN_ID = (typeof CAMPAIGN_ID !== 'undefined') ? CAMPAIGN_ID : null;
+    const CHAR_ID     = {{ char.id }};
+    const CAN_EDIT    = {{ 'true' if can_edit else 'false' }};
+
+    function _esc(s) {
+        return String(s ?? '').replace(/[&<>"']/g, c => ({
+            '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+        }[c]));
+    }
+
+    function _readResources() {
+        try {
+            const v = JSON.parse(dataEl.value || '[]');
+            return Array.isArray(v) ? v : [];
+        } catch { return []; }
+    }
+    function _writeResources(arr) {
+        dataEl.value = JSON.stringify(arr || []);
+    }
+
+    function _abilityMods() {
+        const form = document.getElementById('sheet-form');
+        const m = {};
+        ['STR','DEX','CON','INT','WIS','CHA'].forEach(k => {
+            const v = parseInt(form?.querySelector(`[name="abilities.${k}"]`)?.value, 10);
+            m[k] = isNaN(v) ? 0 : Math.floor((v - 10) / 2);
+        });
+        return m;
+    }
+    function _profBonus() {
+        const form = document.getElementById('sheet-form');
+        const v = parseInt(form?.querySelector('[name="proficiency_bonus"]')?.value, 10);
+        return isNaN(v) ? 2 : v;
+    }
+
+    function _classRoster() {
+        if (typeof window._mcRoster === 'function') {
+            try { return window._mcRoster() || []; } catch { /* fall through */ }
+        }
+        // Fallback: read the hidden classes_json textarea directly
+        const ta = document.getElementById('classes-data');
+        if (!ta) return [];
+        try { return JSON.parse(ta.value || '[]') || []; } catch { return []; }
+    }
+
+    /* Auto-seed: walk the class roster and add any missing recipe-driven
+       resources. Existing entries (matched by key) keep their current
+       value but get max / reset / source refreshed in case the player
+       leveled up. Manual entries are left alone. */
+    function autoFill(opts) {
+        const opts2 = opts || {};
+        const roster = _classRoster();
+        const mods   = _abilityMods();
+        const prof   = _profBonus();
+        const existing = _readResources();
+        const byKey = {};
+        existing.forEach(r => { if (r && r.key) byKey[r.key] = r; });
+
+        const recipeKeys = new Set();
+        roster.forEach(entry => {
+            if (!entry || !entry.class) return;
+            const recipes = (window._findRecipesForEntry || (() => []))(entry);
+            recipes.forEach(rc => {
+                if (!window._buildResourceFromRecipe) return;
+                const built = window._buildResourceFromRecipe(rc, entry, mods, prof);
+                if (!built || !built.key) return;
+                recipeKeys.add(built.key);
+                const prev = byKey[built.key];
+                if (prev) {
+                    // Update max / reset / source / desc; preserve current
+                    // (clamped to the new max).
+                    prev.max = built.max;
+                    prev.reset = built.reset;
+                    prev.source = built.source;
+                    prev.class_slug = built.class_slug;
+                    prev.subclass_slug = built.subclass_slug;
+                    if (!prev.desc) prev.desc = built.desc;
+                    if (prev.max > 0 && (prev.current == null || prev.current > prev.max)) {
+                        prev.current = prev.max;
+                    }
+                    prev.manual = false;
+                } else {
+                    byKey[built.key] = built;
+                    existing.push(built);
+                }
+            });
+        });
+
+        // Sort: by class_slug then by name; manual entries last.
+        existing.sort((a, b) => {
+            const ma = a.manual ? 1 : 0, mb = b.manual ? 1 : 0;
+            if (ma !== mb) return ma - mb;
+            const ca = (a.class_slug || '').localeCompare(b.class_slug || '');
+            if (ca !== 0) return ca;
+            return (a.name || '').localeCompare(b.name || '');
+        });
+        _writeResources(existing);
+        render();
+        if (statusEl) {
+            const added = existing.filter(r => recipeKeys.has(r.key) && !r.manual).length;
+            statusEl.textContent = opts2.silent ? '' : `✓ ${added} feature${added === 1 ? '' : 's'} ready`;
+            statusEl.style.color = '#6cb';
+            setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 4000);
+        }
+    }
+
+    /* Render the list of resources, grouped by class. */
+    function render() {
+        const arr = _readResources();
+        if (!arr.length) {
+            listEl.innerHTML = '';
+            if (emptyEl) emptyEl.style.display = '';
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        const groups = {};
+        arr.forEach(r => {
+            const key = r.class_slug || (r.manual ? '_manual' : '_other');
+            (groups[key] = groups[key] || []).push(r);
+        });
+
+        const html = Object.keys(groups).sort((a, b) => {
+            if (a.startsWith('_') !== b.startsWith('_')) return a.startsWith('_') ? 1 : -1;
+            return a.localeCompare(b);
+        }).map(gKey => {
+            const groupItems = groups[gKey];
+            const headLabel = gKey === '_manual' ? 'Custom'
+                            : gKey === '_other'  ? 'Other'
+                            : (groupItems[0]?.source?.split(' Lv')[0] || gKey);
+            const rows = groupItems.map(r => _rowHtml(r)).join('');
+            return `
+                <div class="res-group" data-cslug="${_esc(gKey)}" style="display:flex;flex-direction:column;gap:5px;">
+                    <div style="font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;">${_esc(headLabel)}</div>
+                    ${rows}
+                </div>
+            `;
+        }).join('');
+        listEl.innerHTML = html;
+    }
+
+    function _rowHtml(r) {
+        const k    = _esc(r.key);
+        const name = _esc(r.name || '');
+        const mx   = parseInt(r.max, 10) || 0;
+        const cur  = Math.max(0, parseInt(r.current, 10) || 0);
+        const reset = (r.reset || 'long').toLowerCase();
+        const resetLabel = reset === 'short' ? '⚡ short'
+                        : reset === 'long'  ? '💤 long'
+                        : 'manual';
+        const desc = r.desc ? `<div class="res-desc" style="display:none;font-size:11px;color:var(--s-mute);margin-top:4px;line-height:1.4;white-space:pre-wrap;">${_esc(r.desc)}</div>` : '';
+
+        // Pip-style indicator: same vibe as spell slots, but compact.
+        // For max==0 (chat-only) we just show the use button + counter of
+        // times announced.
+        let counterHtml;
+        if (mx === 0) {
+            const used = Math.max(0, -cur); // not used for chat-only
+            counterHtml = `<span style="font-size:11px;color:var(--s-mute);margin-left:4px;">chat-only</span>`;
+        } else if (mx <= 12) {
+            const pips = [];
+            for (let i = 0; i < mx; i++) {
+                const isAvail = i < cur;
+                pips.push(`<button type="button" class="res-pip" data-key="${k}" data-idx="${i}"
+                    title="${isAvail ? 'Click to spend' : 'Click to restore'}"
+                    style="width:14px;height:14px;border-radius:50%;padding:0;cursor:${CAN_EDIT ? 'pointer' : 'default'};
+                           transition:background .15s,border-color .15s,opacity .15s;
+                           ${isAvail
+                                ? 'background:var(--s-accent);border:2px solid var(--s-accent);'
+                                : 'background:transparent;border:2px solid var(--s-border);opacity:.45;'}"></button>`);
+            }
+            counterHtml = `<div class="res-pips" style="display:flex;gap:4px;flex-wrap:wrap;">${pips.join('')}</div>
+                           <span class="res-count" style="font-size:11px;color:var(--s-mute);">${cur}/${mx}</span>`;
+        } else {
+            // Big pool (e.g. Lay on Hands HP). Use a +/- stepper.
+            counterHtml = `
+                <button type="button" class="res-step" data-key="${k}" data-step="-1"
+                    ${CAN_EDIT ? '' : 'disabled'}
+                    style="font-size:14px;padding:0 8px;height:22px;">−</button>
+                <span class="res-count" style="font-size:13px;font-weight:700;color:var(--s-fg);min-width:50px;text-align:center;">${cur} / ${mx}</span>
+                <button type="button" class="res-step" data-key="${k}" data-step="1"
+                    ${CAN_EDIT ? '' : 'disabled'}
+                    style="font-size:14px;padding:0 8px;height:22px;">+</button>`;
+        }
+
+        const useBtnLabel = mx === 0 ? '📣 Announce' : '⚡ Use';
+        const useBtnTitle = mx === 0
+            ? 'Announce use of this feature in the roll log'
+            : 'Spend one use and announce in the roll log';
+
+        const editBtn = CAN_EDIT
+            ? `<button type="button" class="res-edit" data-key="${k}"
+                title="Edit / delete"
+                style="font-size:11px;padding:2px 8px;background:transparent;border:1px solid var(--s-border);color:var(--s-mute);border-radius:4px;cursor:pointer;">✎</button>`
+            : '';
+
+        return `
+            <div class="res-row" data-key="${k}"
+                 style="background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:8px 10px;">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <span class="res-name" style="font-size:12px;font-weight:700;color:var(--s-fg);cursor:pointer;flex:0 0 auto;" title="${r.desc ? 'Click to show description' : ''}">
+                        ${name}
+                    </span>
+                    <span style="font-size:10px;color:var(--s-mute);">${resetLabel}</span>
+                    <span style="flex:1;"></span>
+                    ${counterHtml}
+                    <button type="button" class="res-use" data-key="${k}"
+                        title="${useBtnTitle}"
+                        ${CAN_EDIT ? '' : 'disabled'}
+                        style="font-size:11px;padding:3px 10px;background:var(--s-btn);border:1px solid var(--s-border);color:var(--s-fg);border-radius:4px;cursor:${CAN_EDIT ? 'pointer' : 'not-allowed'};font-weight:600;${(mx>0 && cur<=0) ? 'opacity:.5;' : ''}">${useBtnLabel}</button>
+                    ${editBtn}
+                </div>
+                ${desc}
+            </div>
+        `;
+    }
+
+    /* Toast helper — reuse the same shared toast as the rest buttons. */
+    function _toast(msg, kind) {
+        if (typeof window._toast === 'function') return window._toast(msg, kind);
+        if (typeof window.showToast === 'function') return window.showToast(msg, kind);
+        console.log('[resources]', msg);
+    }
+
+    async function postUse(key, delta, announce) {
+        // Update local state optimistically.
+        const arr = _readResources();
+        const r = arr.find(x => x.key === key);
+        if (!r) return;
+        const mx  = parseInt(r.max, 10) || 0;
+        let   cur = parseInt(r.current, 10) || 0;
+        if (mx > 0 && delta < 0 && cur <= 0) {
+            _toast(`${r.name}: no uses remaining`, 'error');
+            return;
+        }
+        cur = mx > 0 ? Math.max(0, Math.min(mx, cur + delta)) : Math.max(0, cur + delta);
+        r.current = cur;
+        _writeResources(arr);
+        render();
+
+        // If a live campaign session is open, push the change so other
+        // clients (mini-sheet, popped roll log) get the WS update.
+        if (_CAMPAIGN_ID && CAN_EDIT) {
+            try {
+                const resp = await fetch(`/api/campaign/${_CAMPAIGN_ID}/character/${CHAR_ID}/resource`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key, delta, announce: !!announce }),
+                });
+                if (!resp.ok) {
+                    // Roll back optimistic update if the server rejected
+                    if (resp.status === 409) {
+                        r.current = cur - delta;
+                        _writeResources(arr);
+                        render();
+                        _toast(`${r.name}: no uses remaining`, 'error');
+                        return;
+                    }
+                }
+            } catch (e) {
+                // Network failure — keep optimistic local update; will save with form
+            }
+        }
+
+        if (delta < 0 && announce) {
+            _toast(mx > 0 ? `${r.name} used (${cur}/${mx} left)` : `${r.name} announced`, 'info');
+        }
+    }
+
+    /* Refill all resources whose reset kind matches the rest type. Local
+       only — called by the short-rest / long-rest buttons. */
+    window._mcRefillResources = function (restType) {
+        const arr = _readResources();
+        let touched = 0;
+        arr.forEach(r => {
+            const k = (r.reset || 'long').toLowerCase();
+            const should = (k === 'short' && (restType === 'short' || restType === 'long'))
+                        || (k === 'long' && restType === 'long');
+            if (should && parseInt(r.max, 10) > 0) {
+                r.current = parseInt(r.max, 10) || 0;
+                touched++;
+            }
+        });
+        if (touched) {
+            _writeResources(arr);
+            render();
+        }
+    };
+
+    /* Editing modal */
+    let editingKey = null;
+    function openEditor(key) {
+        if (!editPanel) return;
+        editingKey = key;
+        const arr = _readResources();
+        const r = key ? arr.find(x => x.key === key) : null;
+        document.getElementById('re-name').value   = r?.name   || '';
+        document.getElementById('re-max').value    = r?.max ?? 1;
+        document.getElementById('re-reset').value  = r?.reset  || 'long';
+        document.getElementById('re-source').value = r?.source || '';
+        document.getElementById('re-desc').value   = r?.desc   || '';
+        document.getElementById('re-delete-btn').style.display = r ? '' : 'none';
+        editPanel.style.display = '';
+        editPanel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        document.getElementById('re-name').focus();
+    }
+    function closeEditor() {
+        editingKey = null;
+        if (editPanel) editPanel.style.display = 'none';
+    }
+
+    /* Wire delegated clicks on the list */
+    listEl.addEventListener('click', (ev) => {
+        const pip = ev.target.closest('.res-pip');
+        if (pip && CAN_EDIT) {
+            const k = pip.dataset.key;
+            const idx = parseInt(pip.dataset.idx, 10);
+            const arr = _readResources();
+            const r = arr.find(x => x.key === k);
+            if (!r) return;
+            const cur = parseInt(r.current, 10) || 0;
+            // Click an "available" pip to spend; click a "used" pip to restore.
+            if (idx < cur) {
+                // Spend (drop to idx)
+                postUse(k, idx - cur, false);
+            } else {
+                // Restore (set to idx+1)
+                postUse(k, (idx + 1) - cur, false);
+            }
+            return;
+        }
+        const step = ev.target.closest('.res-step');
+        if (step && CAN_EDIT) {
+            const k = step.dataset.key;
+            const d = parseInt(step.dataset.step, 10) || 0;
+            if (d) postUse(k, d, false);
+            return;
+        }
+        const useBtn = ev.target.closest('.res-use');
+        if (useBtn && CAN_EDIT) {
+            const k = useBtn.dataset.key;
+
+            // ── Wild Shape: route to the beast picker instead of just
+            // decrementing the counter. The /transform endpoint decrements
+            // the wild-shape resource as a side effect on a successful
+            // transform, so the count stays consistent. If the picker is
+            // unavailable (e.g. standalone character outside a campaign)
+            // we fall through to the plain "Use" decrement+announce path.
+            if (k === 'wild-shape' && _CAMPAIGN_ID && window.BeastPicker) {
+                const roster = (typeof window._mcRoster === 'function') ? window._mcRoster() : [];
+                let druidLv = 0, isMoon = false;
+                for (const cc of roster) {
+                    if ((cc.class || '').trim().toLowerCase() === 'druid') {
+                        druidLv = Math.max(druidLv, parseInt(cc.level, 10) || 0);
+                        if ((cc.subclass || '').toLowerCase().includes('moon')) isMoon = true;
+                    }
+                }
+                const lvInp = document.querySelector('[name="level"]');
+                const charLv = parseInt(lvInp?.value, 10) || 1;
+                window.BeastPicker.open({
+                    campaignId: _CAMPAIGN_ID,
+                    characterId: CHAR_ID,
+                    source: 'wild-shape',
+                    druidLevel: druidLv,
+                    isMoonDruid: isMoon,
+                    characterLevel: charLv,
+                    favorites: window._savedBeastFavorites || [],
+                    onFavoritesChange: (newList) => { window._savedBeastFavorites = newList; },
+                });
+                return;
+            }
+
+            const arr = _readResources();
+            const r = arr.find(x => x.key === k);
+            if (!r) return;
+            const mx = parseInt(r.max, 10) || 0;
+            postUse(k, mx > 0 ? -1 : 0, true);
+            return;
+        }
+        const editBtn = ev.target.closest('.res-edit');
+        if (editBtn && CAN_EDIT) {
+            openEditor(editBtn.dataset.key);
+            return;
+        }
+        const nameSpan = ev.target.closest('.res-name');
+        if (nameSpan) {
+            const row = ev.target.closest('.res-row');
+            const desc = row?.querySelector('.res-desc');
+            if (desc) desc.style.display = desc.style.display === 'none' ? '' : 'none';
+        }
+    });
+
+    syncBtn?.addEventListener('click', () => autoFill({ silent: false }));
+    addBtn?.addEventListener('click', () => openEditor(null));
+
+    /* Edit-panel buttons */
+    document.getElementById('re-cancel-btn')?.addEventListener('click', closeEditor);
+    document.getElementById('re-save-btn')?.addEventListener('click', () => {
+        const name = (document.getElementById('re-name').value || '').trim();
+        if (!name) { _toast('Name is required', 'error'); return; }
+        const mx = Math.max(0, parseInt(document.getElementById('re-max').value, 10) || 0);
+        const reset = document.getElementById('re-reset').value || 'long';
+        const source = (document.getElementById('re-source').value || '').trim();
+        const desc = (document.getElementById('re-desc').value || '').trim();
+
+        const arr = _readResources();
+        if (editingKey) {
+            const r = arr.find(x => x.key === editingKey);
+            if (r) {
+                r.name = name;
+                const oldMx = parseInt(r.max, 10) || 0;
+                r.max = mx;
+                if (mx > 0 && (parseInt(r.current, 10) > mx)) r.current = mx;
+                if (oldMx === 0 && mx > 0 && (r.current == null)) r.current = mx;
+                r.reset = reset;
+                r.source = source;
+                r.desc = desc;
+                r.manual = true;   // editing it makes it a player-owned override
+            }
+        } else {
+            // New entry — generate a unique key from the name.
+            let baseKey = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'custom';
+            let key = baseKey;
+            let n = 1;
+            while (arr.some(x => x.key === key)) { n++; key = `${baseKey}-${n}`; }
+            arr.push({
+                key, name, current: mx, max: mx, reset, source, desc,
+                class_slug: '', subclass_slug: '', manual: true,
+            });
+        }
+        _writeResources(arr);
+        render();
+        closeEditor();
+        _toast('✓ Saved — remember to Save the sheet to persist', 'info');
+    });
+    document.getElementById('re-delete-btn')?.addEventListener('click', () => {
+        if (!editingKey) { closeEditor(); return; }
+        if (!confirm('Delete this resource?')) return;
+        const arr = _readResources().filter(x => x.key !== editingKey);
+        _writeResources(arr);
+        render();
+        closeEditor();
+    });
+
+    /* WebSocket: keep this panel in sync with other clients spending the
+       same character's resources (mini-sheet, second open tab, GM). */
+    document.addEventListener('vtt:ws-message', (ev) => {
+        const msg = ev.detail;
+        if (!msg || msg.type !== 'resource_update') return;
+        const d = msg.data || {};
+        if (d.character_id !== CHAR_ID) return;
+        const arr = _readResources();
+        const r = arr.find(x => x.key === d.key);
+        if (!r) return;
+        r.current = parseInt(d.current, 10) || 0;
+        if (d.max != null) r.max = parseInt(d.max, 10) || 0;
+        _writeResources(arr);
+        render();
+    });
+
+    /* Re-render when the multiclass roster changes (level up, swap subclass).
+       We don't auto-re-seed — that would overwrite the player's current
+       counts. Instead we show a hint via the ↻ Auto-fill button. */
+
+    // Initial render from the existing data
+    render();
+
+    // If the sheet has no resources at all and we have at least one class,
+    // do a silent auto-fill so first-time D&D 5e characters get sensible
+    // defaults without an explicit click.
+    if (CAN_EDIT && _readResources().length === 0 && _classRoster().some(c => c && c.class)) {
+        autoFill({ silent: true });
+    }
+})();
+
+/* ── HP per Level tracker (edit panel) ────────────────────────────────────
+   Renders sheet["hp_rolls"] as a per-class table inside #hp-rolls-editor.
+   - First level of the FIRST class on the roster is locked to ``max_die + CON``.
+   - Every other slot accepts manual entry or a 🎲 Roll button that
+     performs 1d{die}+{con} client-side and (when in a live campaign)
+     posts the roll to /api/campaign/{id}/roll so the table sees it.
+   - Each edit immediately PATCHes /sheet-fields with the merged
+     hp_rolls dict; the form's full Save no longer wipes it (server-side
+     preserve was added in tandem). The banner appears when any
+     non-locked slot is 0.
+   - Re-renders on ``vtt:mc-changed`` so adding/removing a class or
+     bumping a level updates the picker shape immediately.
+   ──────────────────────────────────────────────────────────────────────── */
+(function () {
+    const editor = document.getElementById('hp-rolls-editor');
+    if (!editor) return;
+    const listEl    = document.getElementById('hp-rolls-list');
+    const sumEl     = document.getElementById('hp-rolls-sum');
+    const curMaxEl  = document.getElementById('hp-rolls-cur-max');
+    const banner    = document.getElementById('hp-rolls-banner');
+    const emptyEl   = document.getElementById('hp-rolls-empty');
+    const applyBtn  = document.getElementById('hp-rolls-apply-max');
+    const fillBtn   = document.getElementById('hp-rolls-fill-avg');
+    if (!listEl) return;
+
+    const _CAMPAIGN_ID = (typeof CAMPAIGN_ID !== 'undefined') ? CAMPAIGN_ID : null;
+    const CHAR_ID = {{ char.id }};
+    const CAN_EDIT = {{ 'true' if can_edit else 'false' }};
+    if (!CAN_EDIT) { editor.style.display = 'none'; return; }
+
+    const _slug = (s) => String(s || '').trim().toLowerCase().replace(/\s+/g, '-');
+    const _esc  = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+    function _toast(msg, kind) {
+        if (typeof window._toast === 'function') return window._toast(msg, kind);
+        if (typeof window.showToast === 'function') return window.showToast(msg, kind);
+        console.log('[hp-rolls]', msg);
+    }
+
+    function _conMod() {
+        const form = document.getElementById('sheet-form');
+        const v = parseInt(form?.querySelector('[name="abilities.CON"]')?.value, 10);
+        if (isNaN(v)) return 0;
+        return Math.floor((v - 10) / 2);
+    }
+    function _hitDieSize(c) {
+        const raw = (c && (c.class_hit_die || '')).toString().trim() || 'd8';
+        const m = /d(\d+)/i.exec(raw);
+        return m ? parseInt(m[1], 10) : 8;
+    }
+    function _avgGain(die) { return Math.floor(die / 2) + 1; }
+
+    function _readRolls() {
+        const cur = (window._savedHpRolls && typeof window._savedHpRolls === 'object')
+            ? window._savedHpRolls : {};
+        // Defensive copy so callers don't mutate the cache directly
+        const out = {};
+        for (const k of Object.keys(cur)) {
+            const v = cur[k];
+            out[k] = Array.isArray(v) ? v.map(n => parseInt(n, 10) || 0) : [];
+        }
+        return out;
+    }
+
+    async function _writeRolls(rolls) {
+        window._savedHpRolls = rolls;
+        // PATCH the server. Failure here doesn't roll back the optimistic
+        // local update — the next full sheet save will eventually reconcile,
+        // and the server-side preserve guards against an empty replace
+        // wiping the field.
+        try {
+            const url = _CAMPAIGN_ID
+                ? `/api/campaign/${_CAMPAIGN_ID}/character/${CHAR_ID}/sheet-fields`
+                : `/api/character/${CHAR_ID}/sheet-fields`;
+            await fetch(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hp_rolls: rolls }),
+            });
+        } catch (e) { /* swallow */ }
+    }
+
+    function _roster() {
+        if (typeof window._mcRoster === 'function') {
+            try { return window._mcRoster() || []; } catch { /* fall through */ }
+        }
+        const ta = document.getElementById('classes-data');
+        try { return JSON.parse(ta?.value || '[]') || []; } catch { return []; }
+    }
+
+    function render() {
+        const roster = _roster();
+        const rolls  = _readRolls();
+        const con    = _conMod();
+
+        if (!roster.length) {
+            listEl.innerHTML = '';
+            if (emptyEl) emptyEl.style.display = '';
+            if (banner) banner.style.display = 'none';
+            if (sumEl) sumEl.textContent = '0';
+            return;
+        }
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        let total = 0;
+        let anyMissing = false;
+        const html = roster.map((c, ci) => {
+            if (!c || !c.class) return '';
+            const cslug = _slug(c.class);
+            const die   = _hitDieSize(c);
+            const lvl   = Math.max(1, parseInt(c.level, 10) || 1);
+            const arr   = (rolls[cslug] && Array.isArray(rolls[cslug])) ? rolls[cslug] : [];
+            const rowsHtml = [];
+            for (let i = 0; i < lvl; i++) {
+                const isFirstClassLevel1 = ci === 0 && i === 0;
+                const stored = parseInt(arr[i], 10) || 0;
+                const lockedValue = die + con;  // for the level-1-of-first-class lock
+                const value = isFirstClassLevel1 ? lockedValue : stored;
+                if (value > 0) total += value;
+                else if (!isFirstClassLevel1) anyMissing = true;
+                const lockBadge = isFirstClassLevel1
+                    ? `<span class="muted" style="font-size:10px;margin-left:6px;">🔒 max die + CON</span>`
+                    : '';
+                rowsHtml.push(`
+                    <div class="hp-row" data-cslug="${_esc(cslug)}" data-idx="${i}"
+                         style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-size:11px;color:var(--s-mute);width:46px;flex-shrink:0;">Lv ${i + 1}</span>
+                        <input type="number" class="hp-roll-input" min="0" max="99"
+                               data-cslug="${_esc(cslug)}" data-idx="${i}"
+                               value="${value || ''}"
+                               ${isFirstClassLevel1 ? 'readonly' : ''}
+                               style="width:64px;font-size:13px;text-align:center;${isFirstClassLevel1 ? 'background:rgba(255,255,255,.04);' : ''}">
+                        ${isFirstClassLevel1 ? '' : `
+                            <button type="button" class="hp-roll-btn"
+                                    data-cslug="${_esc(cslug)}" data-idx="${i}"
+                                    data-die="${die}" data-class-label="${_esc(c.class)}"
+                                    title="Roll 1d${die}+${con >= 0 ? '+' : ''}${con}"
+                                    style="font-size:11px;padding:3px 9px;">🎲 Roll 1d${die}${con >= 0 ? '+' : ''}${con}</button>`}
+                        ${lockBadge}
+                    </div>
+                `);
+            }
+            const subtotal = (arr.slice(0, lvl).reduce((a, v) => a + (parseInt(v, 10) || 0), 0))
+                + (ci === 0 ? (die + con) - (parseInt(arr[0], 10) || 0) : 0);
+            return `
+                <div class="hp-class-block" data-cslug="${_esc(cslug)}"
+                     style="border:1px solid var(--s-border);border-radius:5px;padding:8px 10px;background:rgba(255,255,255,.02);">
+                    <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:5px;flex-wrap:wrap;">
+                        <strong style="font-size:12px;">${_esc(c.class)}</strong>
+                        <span class="muted" style="font-size:11px;">Lv ${lvl} · d${die} · CON ${con >= 0 ? '+' : ''}${con}</span>
+                        <span class="muted" style="margin-left:auto;font-size:11px;">subtotal: <strong>${subtotal}</strong></span>
+                    </div>
+                    <div style="display:flex;flex-direction:column;gap:4px;">${rowsHtml.join('')}</div>
+                </div>
+            `;
+        }).join('');
+        listEl.innerHTML = html;
+
+        if (sumEl) sumEl.textContent = String(total);
+        if (curMaxEl) {
+            const maxInp = document.getElementById('hp-max-input');
+            const cur = maxInp ? (parseInt(maxInp.value, 10) || 0) : 0;
+            curMaxEl.textContent = String(cur);
+        }
+        if (banner) banner.style.display = anyMissing ? '' : 'none';
+    }
+
+    // ── Persist a single edit ─────────────────────────────────────────
+    async function _setValue(cslug, idx, value) {
+        const rolls = _readRolls();
+        const arr = rolls[cslug] && Array.isArray(rolls[cslug]) ? rolls[cslug].slice() : [];
+        while (arr.length <= idx) arr.push(0);
+        arr[idx] = Math.max(0, parseInt(value, 10) || 0);
+        rolls[cslug] = arr;
+        await _writeRolls(rolls);
+        render();
+    }
+
+    // ── Roll handler ──────────────────────────────────────────────────
+    async function _rollFor(cslug, idx, die, classLabel) {
+        const con = _conMod();
+        let total = 0;
+        const expr = `1d${die}${con >= 0 ? '+' : ''}${con}`;
+        const note = `${classLabel} Lv ${idx + 1} HP`;
+
+        // Prefer the campaign roll endpoint so the table sees the roll;
+        // fall back to local random for standalone characters.
+        if (_CAMPAIGN_ID) {
+            try {
+                const resp = await fetch(`/api/campaign/${_CAMPAIGN_ID}/roll`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ expression: expr, visibility: 'public', note: '🩸 ' + note }),
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    total = Math.max(1, parseInt(data.total, 10) || 1);
+                }
+            } catch { /* fall back below */ }
+        }
+        if (!total) {
+            const r = 1 + Math.floor(Math.random() * die);
+            total = Math.max(1, r + con);
+        }
+        await _setValue(cslug, idx, total);
+        _toast(`🎲 ${note}: ${expr} = ${total} HP`, 'info');
+    }
+
+    // ── Wire-up ────────────────────────────────────────────────────────
+    listEl.addEventListener('input', (ev) => {
+        const inp = ev.target.closest('.hp-roll-input');
+        if (!inp || inp.readOnly) return;
+        // Debounce: persist on blur instead of every keystroke
+    });
+    listEl.addEventListener('change', (ev) => {
+        const inp = ev.target.closest('.hp-roll-input');
+        if (!inp || inp.readOnly) return;
+        _setValue(inp.dataset.cslug, parseInt(inp.dataset.idx, 10), inp.value);
+    });
+    listEl.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('.hp-roll-btn');
+        if (!btn) return;
+        const cslug = btn.dataset.cslug;
+        const idx = parseInt(btn.dataset.idx, 10);
+        const die = parseInt(btn.dataset.die, 10) || 8;
+        const label = btn.dataset.classLabel || cslug;
+        btn.disabled = true;
+        _rollFor(cslug, idx, die, label).finally(() => { btn.disabled = false; });
+    });
+
+    applyBtn?.addEventListener('click', () => {
+        const sum = parseInt(sumEl?.textContent, 10) || 0;
+        if (!sum) { _toast('Sum is 0 — fill in some entries first.', 'error'); return; }
+        const maxInp = document.getElementById('hp-max-input');
+        if (!maxInp) return;
+        maxInp.value = sum;
+        maxInp.dispatchEvent(new Event('input',  { bubbles: true }));
+        maxInp.dispatchEvent(new Event('change', { bubbles: true }));
+        // Also raise current HP to the new max if it was at-or-above the old max
+        const hpInp = document.getElementById('hp-current-input');
+        if (hpInp) {
+            const cur = parseInt(hpInp.value, 10) || 0;
+            const oldMax = parseInt(curMaxEl?.textContent, 10) || 0;
+            if (cur >= oldMax) {
+                hpInp.value = sum;
+                hpInp.dispatchEvent(new Event('input',  { bubbles: true }));
+                hpInp.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        }
+        _toast(`✓ Max HP set to ${sum}. Remember to Save the sheet.`, 'info');
+        render();
+    });
+
+    fillBtn?.addEventListener('click', async () => {
+        const roster = _roster();
+        const rolls  = _readRolls();
+        const con    = _conMod();
+        let changed = false;
+        roster.forEach((c, ci) => {
+            if (!c || !c.class) return;
+            const cslug = _slug(c.class);
+            const die   = _hitDieSize(c);
+            const lvl   = Math.max(1, parseInt(c.level, 10) || 1);
+            const arr = (rolls[cslug] && Array.isArray(rolls[cslug])) ? rolls[cslug].slice() : [];
+            while (arr.length < lvl) arr.push(0);
+            for (let i = 0; i < lvl; i++) {
+                if (ci === 0 && i === 0) continue;   // level 1 of first class is locked
+                if ((parseInt(arr[i], 10) || 0) === 0) {
+                    arr[i] = _avgGain(die) + con;
+                    changed = true;
+                }
+            }
+            rolls[cslug] = arr;
+        });
+        if (!changed) { _toast('Nothing to fill — every slot is already set.', 'info'); return; }
+        await _writeRolls(rolls);
+        render();
+        _toast('✓ Empty slots filled with class averages + CON.', 'info');
+    });
+
+    // Re-render when the roster changes (level up/down, swap class/subclass)
+    document.addEventListener('vtt:mc-changed', render);
+
+    // Re-render when CON changes (the lock value depends on it) or when
+    // the user opens the edit panel (which is when this picker matters).
+    document.querySelectorAll('[name="abilities.CON"]').forEach(el => {
+        el.addEventListener('change', render);
+    });
+    document.getElementById('ab-done-btn')?.addEventListener('click', () => setTimeout(render, 0));
+
+    // Initial paint — defer to next tick so the multiclass IIFE has wired
+    // _mcRoster() before we read the roster.
+    setTimeout(render, 0);
+})();
+
+/* ── Wild Shape / Polymorph (button visibility, picker invocation, revert) ──
+   Picker behavior lives in app/static/beast_picker.js as window.BeastPicker.
+   This block:
+     - Shows the Wild Shape button for Druid lv2+
+     - Shows the Polymorph button when Polymorph is in the spell list
+     - Wires both buttons to BeastPicker.open(...)
+     - Wires the Revert button (visible while transformed)
+     - Locks non-HP combat fields while a form is active
+     - Reloads the sheet on a remote transform_update WS message
+   ──────────────────────────────────────────────────────────────────────── */
+(function () {
+    // CAMPAIGN_ID is set with ``const`` at script-top-level in
+    // character_page.html (and tabletop.html when this sheet renders in
+    // a modal). Classic script-tag ``const`` lives in the Script Record's
+    // lexical environment — it is NOT a property of ``window`` or
+    // ``globalThis``. The only way to safely read it from a nested IIFE
+    // is a bare-identifier ``typeof`` check (which uses lexical scope
+    // lookup and won't throw a ReferenceError when undeclared). This
+    // mirrors the pattern already used throughout sheet.js (see e.g.
+    // ``typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID``).
+    const _CAMPAIGN_ID = (typeof CAMPAIGN_ID !== 'undefined') ? CAMPAIGN_ID : null;
+    const CHAR_ID = {{ char.id }};
+    const CAN_EDIT = {{ 'true' if can_edit else 'false' }};
+    if (!_CAMPAIGN_ID || !CAN_EDIT) return;   // No transforms outside a live session
+
+    const wsBtn    = document.getElementById('wild-shape-btn');
+    const polyBtn  = document.getElementById('polymorph-btn');
+    const revertBtn = document.getElementById('revert-form-btn');
+
+    function _toast(msg, kind) {
+        if (typeof window._toast === 'function') return window._toast(msg, kind);
+        if (typeof window.showToast === 'function') return window.showToast(msg, kind);
+        console.log('[transform]', msg);
+    }
+
+    function _druidInfo() {
+        const roster = (typeof window._mcRoster === 'function') ? window._mcRoster() : [];
+        let lv = 0, moon = false;
+        for (const c of roster) {
+            if ((c.class || '').trim().toLowerCase() === 'druid') {
+                lv = Math.max(lv, parseInt(c.level, 10) || 0);
+                if ((c.subclass || '').toLowerCase().includes('moon')) moon = true;
+            }
+        }
+        return { level: lv, moon };
+    }
+
+    /* ── Button visibility based on class & spells ── */
+    function _updateButtonVisibility() {
+        const di = _druidInfo();
+        if (wsBtn) wsBtn.style.display = di.level >= 2 ? '' : 'none';
+
+        const spellsTa = document.getElementById('spells-data');
+        let spells = [];
+        try { spells = JSON.parse(spellsTa?.value || '[]'); } catch { spells = []; }
+        const hasPoly = Array.isArray(spells)
+            && spells.some(s => s && (s.name || '').trim().toLowerCase() === 'polymorph');
+        if (polyBtn) polyBtn.style.display = hasPoly ? '' : 'none';
+    }
+    _updateButtonVisibility();
+    document.getElementById('resources-sync-btn')?.addEventListener('click', _updateButtonVisibility);
+    document.getElementById('spells-data')?.addEventListener('input', _updateButtonVisibility);
+
+    function _openPicker(source) {
+        const di = _druidInfo();
+        const lvInp = document.querySelector('[name="level"]');
+        const charLv = parseInt(lvInp?.value, 10) || 1;
+        if (!window.BeastPicker) { _toast('Beast picker not loaded', 'error'); return; }
+        window.BeastPicker.open({
+            campaignId: _CAMPAIGN_ID,
+            characterId: CHAR_ID,
+            source,
+            druidLevel: di.level,
+            isMoonDruid: di.moon,
+            characterLevel: charLv,
+            favorites: window._savedBeastFavorites || [],
+            onFavoritesChange: (newList) => { window._savedBeastFavorites = newList; },
+        });
+    }
+    wsBtn?.addEventListener('click', () => _openPicker('wild-shape'));
+    polyBtn?.addEventListener('click', () => _openPicker('polymorph'));
+
+    /* ── Revert ── */
+    revertBtn?.addEventListener('click', async () => {
+        if (!confirm('Revert to your true form?\n\nBeast HP is discarded; your true-form HP is restored from before the transform. Class features and spells return.')) return;
+        revertBtn.disabled = true;
+        try {
+            const resp = await fetch(`/api/campaign/${_CAMPAIGN_ID}/character/${CHAR_ID}/revert`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({}),
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ detail: 'Revert failed' }));
+                throw new Error(err.detail || `HTTP ${resp.status}`);
+            }
+            const data = await resp.json().catch(() => ({}));
+            // Rescue path: server cleared the active form but lost the prior
+            // stats snapshot. Warn before reloading so the player understands
+            // they'll need to fix HP / abilities / attacks manually.
+            if (data && data.stats_restored === false) {
+                alert('Beast form cleared, but your original stats could not be restored (prior_form was lost — usually from saving the sheet while transformed on a pre-v0.35.4 build).\n\nPlease edit your HP, abilities, AC, speed, and attacks back to their true-form values, then Save.');
+            }
+            window.location.reload();
+        } catch (e) {
+            revertBtn.disabled = false;
+            _toast('Revert failed: ' + e.message, 'error');
+        }
+    });
+
+    /* ── Lock non-HP fields while transformed ── */
+    (function _lockForTransform() {
+        const af = {{ (sheet.get('active_form') or none) | tojson }};
+        if (!af) return;
+        const form = document.getElementById('sheet-form');
+        if (!form) return;
+        const protectedFields = [
+            'abilities.STR','abilities.DEX','abilities.CON',
+            'abilities.INT','abilities.WIS','abilities.CHA',
+            'ac', 'base_ac', 'speed', 'initiative_bonus',
+        ];
+        protectedFields.forEach(n => {
+            form.querySelectorAll(`[name="${n}"]`).forEach(el => {
+                el.readOnly = true;
+                el.disabled = el.tagName === 'SELECT';
+                el.title = 'Locked — managed by your active form. Revert to edit.';
+                el.style.opacity = '.7';
+            });
+        });
+    })();
+
+    /* ── WS: react to remote transform_update for THIS character ── */
+    document.addEventListener('vtt:ws-message', (ev) => {
+        const msg = ev.detail;
+        if (!msg || msg.type !== 'transform_update') return;
+        const d = msg.data || {};
+        if (d.character_id !== CHAR_ID) return;
+        window.location.reload();
+    });
+})();
+
+/* ── Defenses (chip toggle + custom-add) ──────────────────────────────────
+   Each ``.defense-row`` is one of the four categories (damage
+   resistances / immunities / vulnerabilities / condition immunities).
+   Source of truth is the hidden ``input.defense-input`` carrying a
+   JSON-encoded array of labels — sheet.js parses it on save. Every
+   chip toggle and custom-add additionally PATCHes /sheet-fields so
+   changes survive a refresh without an explicit Save.
+   ──────────────────────────────────────────────────────────────────────── */
+(function () {
+    const CAN_EDIT = {{ 'true' if can_edit else 'false' }};
+    const CHAR_ID = {{ char.id }};
+    const _CAMPAIGN_ID = (typeof CAMPAIGN_ID !== 'undefined') ? CAMPAIGN_ID : null;
+    if (!CAN_EDIT) return;
+
+    function _readActive(row) {
+        const inp = row.querySelector('.defense-input');
+        try {
+            const arr = JSON.parse(inp.value || '[]');
+            return Array.isArray(arr) ? arr : [];
+        } catch { return []; }
+    }
+    function _writeActive(row, arr) {
+        const inp = row.querySelector('.defense-input');
+        inp.value = JSON.stringify(arr || []);
+    }
+
+    async function _persist(row) {
+        // Live PATCH so toggles survive a refresh without an explicit
+        // Save. Falls back to /api/character/{id}/sheet-fields for
+        // standalone characters (no campaign).
+        if (!CAN_EDIT) return;
+        const field = row.dataset.field;
+        const arr = _readActive(row);
+        const url = _CAMPAIGN_ID
+            ? `/api/campaign/${_CAMPAIGN_ID}/character/${CHAR_ID}/sheet-fields`
+            : `/api/character/${CHAR_ID}/sheet-fields`;
+        try {
+            await fetch(url, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ [field]: arr }),
+            });
+        } catch { /* local state already updated; full Save will reconcile */ }
+    }
+
+    function _renderChipState(btn, isActive, accent) {
+        btn.dataset.active = isActive ? '1' : '';
+        btn.style.background = isActive
+            ? `color-mix(in srgb, ${accent} 28%, var(--bg))`
+            : 'var(--s-card)';
+        btn.style.borderColor = isActive ? accent : 'var(--s-border)';
+        btn.style.color = isActive
+            ? `color-mix(in srgb, ${accent} 50%, #fff)`
+            : 'var(--s-mute)';
+        btn.style.fontWeight = isActive ? '700' : '500';
+    }
+
+    function _addCustomChipHtml(label, accent) {
+        // Re-uses the same shape as the Jinja-rendered custom chips.
+        const span = document.createElement('span');
+        span.className = 'defense-chip-custom';
+        span.dataset.label = label;
+        span.style.cssText = `display:inline-flex;align-items:center;gap:4px;padding:3px 4px 3px 10px;border-radius:11px;font-size:11px;background:color-mix(in srgb,${accent} 28%,var(--bg));border:1px solid ${accent};color:color-mix(in srgb,${accent} 50%,#fff);font-weight:700;`;
+        span.textContent = label;
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.className = 'defense-chip-remove';
+        x.title = 'Remove';
+        x.textContent = '×';   // ×
+        x.style.cssText = 'background:none;border:none;color:inherit;cursor:pointer;font-size:13px;line-height:1;padding:0 3px;margin-left:2px;';
+        span.appendChild(x);
+        return span;
+    }
+
+    // ── Innate-defense overlay ────────────────────────────────────
+    // Race / class / subclass can grant always-on defenses (Tiefling
+    // Fire Resistance, Monk Lv10 Purity of Body poison immunity, etc.)
+    // Those come from window._INNATE_DEFENSES via _computeInnateDefenses.
+    // Any standard chip whose label matches a granted defense gets a
+    // ✨ badge + locked styling; clicking it shows the source instead
+    // of toggling. Custom (player-added) entries stay editable.
+
+    function _readSheetSnapshotForInnate() {
+        const raceInp = document.querySelector('[name="race"]');
+        const race = raceInp ? raceInp.value : '';
+        const classes = (typeof window._mcRoster === 'function')
+            ? (window._mcRoster() || [])
+            : [];
+        return { race, classes };
+    }
+
+    function _applyAutoDefenses() {
+        if (typeof window._computeInnateDefenses !== 'function') return;
+        const snap = _readSheetSnapshotForInnate();
+        const auto = window._computeInnateDefenses(snap);
+        document.querySelectorAll('.defense-row').forEach(row => {
+            const field = row.dataset.field;
+            const accent = row.dataset.accent || '#6cb';
+            const grants = (auto && auto[field]) || [];
+            const grantMap = new Map(grants.map(g => [g.label.toLowerCase(), g]));
+            const active = _readActive(row);
+            const activeLower = new Set(active.map(s => s.toLowerCase()));
+
+            row.querySelectorAll('.defense-chip').forEach(chip => {
+                const label = chip.dataset.label || '';
+                const lower = label.toLowerCase();
+                const g = grantMap.get(lower);
+                if (g) {
+                    // Mark as auto-applied (locked).
+                    chip.dataset.auto = '1';
+                    chip.title = `Auto-applied from ${g.source}`;
+                    chip.style.background = `color-mix(in srgb, ${accent} 35%, var(--bg))`;
+                    chip.style.borderColor = accent;
+                    chip.style.color = `color-mix(in srgb, ${accent} 55%, #fff)`;
+                    chip.style.fontWeight = '700';
+                    chip.style.cursor = 'help';
+                    // Prefix the label with ✨ once, remembering the
+                    // original so we can revert cleanly if the grant
+                    // is later removed (race change, level down).
+                    if (chip.dataset.autoBadge !== '1') {
+                        chip.dataset.autoBadge = '1';
+                        chip.dataset.origLabel = chip.textContent;
+                        chip.textContent = `✨ ${label}`;
+                    }
+                } else if (chip.dataset.auto === '1') {
+                    // Was auto, now isn't — restore to plain toggle styling.
+                    chip.dataset.auto = '';
+                    chip.title = '';
+                    chip.style.cursor = 'pointer';
+                    if (chip.dataset.autoBadge === '1' && chip.dataset.origLabel) {
+                        chip.textContent = chip.dataset.origLabel;
+                        chip.dataset.autoBadge = '';
+                        chip.dataset.origLabel = '';
+                    }
+                    _renderChipState(chip, activeLower.has(lower), accent);
+                }
+            });
+        });
+    }
+
+    function _toastInnate(msg) {
+        if (typeof window._toast === 'function') return window._toast(msg, 'info');
+        if (typeof window.showToast === 'function') return window.showToast(msg, 'info');
+        console.log('[defenses]', msg);
+    }
+
+    document.querySelectorAll('.defense-row').forEach(row => {
+        const accent = row.dataset.accent || '#6cb';
+        const chipsContainer = row.querySelector('.defense-chips');
+
+        // Chip toggle (standard chips)
+        chipsContainer.addEventListener('click', (ev) => {
+            const stdChip = ev.target.closest('.defense-chip');
+            if (stdChip) {
+                if (stdChip.dataset.auto === '1') {
+                    // Locked — auto-applied from race/class. Surface the
+                    // source rather than silently no-op'ing.
+                    _toastInnate(stdChip.title || 'Auto-applied — cannot toggle.');
+                    return;
+                }
+                const label = stdChip.dataset.label;
+                const arr = _readActive(row);
+                const lower = label.toLowerCase();
+                const idx = arr.findIndex(s => s.toLowerCase() === lower);
+                if (idx === -1) {
+                    arr.push(label);
+                    _renderChipState(stdChip, true, accent);
+                } else {
+                    arr.splice(idx, 1);
+                    _renderChipState(stdChip, false, accent);
+                }
+                _writeActive(row, arr);
+                _persist(row);
+                return;
+            }
+            const removeBtn = ev.target.closest('.defense-chip-remove');
+            if (removeBtn) {
+                const customChip = removeBtn.closest('.defense-chip-custom');
+                if (!customChip) return;
+                const label = customChip.dataset.label;
+                const arr = _readActive(row).filter(s => s.toLowerCase() !== label.toLowerCase());
+                _writeActive(row, arr);
+                customChip.remove();
+                _persist(row);
+                return;
+            }
+        });
+
+        // Custom add — text input + button (or Enter on the input)
+        const addBtn = row.querySelector('.defense-custom-add-btn');
+        const addInp = row.querySelector('.defense-custom-input');
+        function _doAdd() {
+            if (!addInp) return;
+            const raw = (addInp.value || '').trim();
+            if (!raw) return;
+            const arr = _readActive(row);
+            const lower = raw.toLowerCase();
+            if (arr.some(s => s.toLowerCase() === lower)) {
+                // Already present — flash the existing chip instead of duplicating.
+                addInp.value = '';
+                return;
+            }
+            arr.push(raw);
+            _writeActive(row, arr);
+
+            // If the raw label matches a standard chip, just light it up;
+            // otherwise insert a new custom chip alongside the standards.
+            const matchStd = chipsContainer.querySelector(`.defense-chip[data-label="${raw.replace(/"/g, '\\"')}"]`);
+            if (matchStd) {
+                _renderChipState(matchStd, true, accent);
+            } else {
+                chipsContainer.appendChild(_addCustomChipHtml(raw, accent));
+            }
+            addInp.value = '';
+            _persist(row);
+        }
+        addBtn?.addEventListener('click', _doAdd);
+        addInp?.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter') { ev.preventDefault(); _doAdd(); }
+        });
+    });
+
+    // Initial paint: apply auto-defenses once after the multiclass IIFE
+    // has had a tick to wire _mcRoster, so the snapshot includes the
+    // current roster from the hidden classes_json textarea.
+    setTimeout(_applyAutoDefenses, 0);
+
+    // Re-apply when the roster changes (new class, level bump, subclass
+    // swap) — sheet.js dispatches ``vtt:mc-changed`` on every roster
+    // mutation, so this picks up Monk crossing Lv 10 etc.
+    document.addEventListener('vtt:mc-changed', _applyAutoDefenses);
+
+    // Re-apply when the race changes. The Open5e race-select dispatches
+    // a ``change`` event on user pick; this also fires when the cached
+    // race value is reapplied after page load, which is fine — it's
+    // idempotent.
+    document.querySelector('[name="race"]')?.addEventListener('change', _applyAutoDefenses);
 })();
 
 /* ── Collapsible fieldsets (state persists per character in localStorage) ─── */
@@ -4192,5 +5878,308 @@
             } catch {}
         });
     });
+})();
+
+/* ── Background + Feats pickers ────────────────────────────────────────────
+   Two related but independent flows on the sheet:
+
+   • Background: a single <select> populated from /api/open5e/backgrounds.
+     On change, fetches detail via /background/{slug} and caches the result
+     in sheet["background_data"] so the display block can re-render on
+     refresh without another HTTP call. Shows a "Custom" pill when the
+     resolver returns source=local-custom.
+
+   • Feats: a chip list backed by sheet["feats"]. "+ Add feat" reveals an
+     inline search that fetches /api/open5e/feats?search=… and adds the
+     chosen feat (with cached prereq + desc) to the chip list. Each chip
+     is a collapsible card showing the feat's prerequisite and description.
+
+   Persistence: both auto-save via /sheet-fields PATCH on every change so
+   the player's selection survives refreshes without an explicit form Save.
+   ──────────────────────────────────────────────────────────────────────── */
+(function () {
+    const bgSelect = document.getElementById('background-select');
+    const bgDataInp = document.getElementById('background-data-input');
+    const bgDisplay = document.getElementById('background-display');
+    const bgNameEl = document.getElementById('bg-name');
+    const bgBadge = document.getElementById('bg-source-badge');
+    const bgFeatureWrap = document.getElementById('bg-feature');
+    const bgFeatureNameEl = document.getElementById('bg-feature-name');
+    const bgFeatureDescEl = document.getElementById('bg-feature-desc');
+    const bgDescEl = document.getElementById('bg-desc');
+    const bgSyncBtn = document.getElementById('bg-sync-btn');
+    if (!bgSelect || !bgDataInp) return;
+
+    const _cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+    const _campParam = _cid ? '&campaign_id=' + _cid : '';
+    const _campParamFirst = _cid ? '?campaign_id=' + _cid : '';
+
+    function _readBgData() {
+        try { return JSON.parse(bgDataInp.value || '{}'); } catch { return {}; }
+    }
+    function _writeBgData(obj) {
+        bgDataInp.value = JSON.stringify(obj || {});
+    }
+
+    function _renderBgDisplay(data) {
+        if (!data || !data.name) {
+            bgDisplay.style.display = 'none';
+            return;
+        }
+        bgDisplay.style.display = '';
+        bgNameEl.textContent = data.name;
+        bgBadge.style.display = (data.source === 'local-custom') ? '' : 'none';
+        if (data.feature) {
+            bgFeatureWrap.style.display = '';
+            bgFeatureNameEl.textContent = data.feature;
+            bgFeatureDescEl.textContent = data.feature_desc || '';
+        } else {
+            bgFeatureWrap.style.display = 'none';
+        }
+        bgDescEl.textContent = data.desc || '';
+    }
+
+    function _persistSheetField(field, value) {
+        if (typeof CHAR_ID === 'undefined' || !CHAR_ID) return;
+        const url = _cid
+            ? '/api/campaign/' + _cid + '/character/' + CHAR_ID + '/sheet-fields'
+            : '/api/character/' + CHAR_ID + '/sheet-fields';
+        fetch(url, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ [field]: value }),
+        }).catch(() => {});
+    }
+
+    async function _fetchBgDetail(slug) {
+        if (!slug) return null;
+        try {
+            const r = await fetch('/api/open5e/background/' + encodeURIComponent(slug) + _campParamFirst);
+            if (!r.ok) return null;
+            return await r.json();
+        } catch { return null; }
+    }
+
+    async function _loadBackgroundList() {
+        const current = bgSelect.dataset.current || '';
+        try {
+            const r = await fetch('/api/open5e/backgrounds?limit=50' + _campParam);
+            if (!r.ok) { bgSelect.innerHTML = '<option value="">(Open5e unreachable)</option>'; return; }
+            const data = await r.json();
+            const items = data.results || [];
+            bgSelect.innerHTML = '<option value="">— none —</option>';
+            // Track matching slug so we can keep the current value selected
+            // even when the current display name doesn't exactly equal a row.
+            let matched = false;
+            for (const it of items) {
+                const opt = document.createElement('option');
+                opt.value = it.name || it.slug || '';
+                opt.dataset.slug = it.slug || '';
+                opt.dataset.isCustom = it.is_custom ? '1' : '';
+                opt.textContent = it.name + (it.is_custom ? '  (Custom)' : '');
+                bgSelect.appendChild(opt);
+                if (current && (current === it.name || current === it.slug)) {
+                    opt.selected = true;
+                    matched = true;
+                }
+            }
+            // Preserve the current selection even when the upstream API
+            // doesn't list it (e.g. legacy free-text "Sage from preset" or
+            // homebrew the GM deleted). Insert a synthetic option so the
+            // <select>'s value stays accurate.
+            if (current && !matched) {
+                const opt = document.createElement('option');
+                opt.value = current;
+                opt.textContent = current + '  (saved)';
+                opt.selected = true;
+                bgSelect.appendChild(opt);
+            }
+        } catch {
+            bgSelect.innerHTML = '<option value="' + (current || '') + '">' + (current || '— none —') + '</option>';
+        }
+    }
+
+    function _selectedBgSlug() {
+        const opt = bgSelect.options[bgSelect.selectedIndex];
+        if (!opt) return '';
+        return opt.dataset.slug || opt.value.toLowerCase().replace(/\s+/g, '-');
+    }
+
+    async function _syncSelected() {
+        const slug = _selectedBgSlug();
+        if (!slug) {
+            _writeBgData({});
+            _renderBgDisplay(null);
+            _persistSheetField('background_data', {});
+            return;
+        }
+        const d = await _fetchBgDetail(slug);
+        if (d) {
+            _writeBgData(d);
+            _renderBgDisplay(d);
+            _persistSheetField('background_data', d);
+        }
+    }
+
+    bgSelect.addEventListener('change', () => {
+        // Also persist the display-name string the legacy code path expects.
+        _persistSheetField('background', bgSelect.value);
+        _syncSelected();
+    });
+    bgSyncBtn?.addEventListener('click', _syncSelected);
+
+    // Initial render from cached data (if any), then load the list.
+    _renderBgDisplay(_readBgData());
+    _loadBackgroundList();
+
+    // ── Feats ───────────────────────────────────────────────────────────────
+    const featsListEl = document.getElementById('feats-list');
+    const featsCountEl = document.getElementById('feats-count');
+    const featsDataInp = document.getElementById('feats-data-input');
+    const featsAddBtn = document.getElementById('feats-add-btn');
+    const featsAddPanel = document.getElementById('feats-add-panel');
+    const featsSearchInp = document.getElementById('feats-search');
+    const featsResultsEl = document.getElementById('feats-search-results');
+    if (!featsListEl || !featsDataInp) return;
+
+    function _readFeats() {
+        try {
+            const v = JSON.parse(featsDataInp.value || '[]');
+            return Array.isArray(v) ? v : [];
+        } catch { return []; }
+    }
+    function _writeFeats(arr) {
+        featsDataInp.value = JSON.stringify(arr || []);
+    }
+
+    function _renderFeats() {
+        const arr = _readFeats();
+        featsListEl.innerHTML = '';
+        featsCountEl.textContent = arr.length ? '(' + arr.length + ')' : '';
+        if (!arr.length) {
+            const empty = document.createElement('p');
+            empty.style.cssText = 'margin:0;color:var(--s-mute);font-size:11px;font-style:italic;';
+            empty.textContent = 'No feats yet. Click "+ Add feat" to search.';
+            featsListEl.appendChild(empty);
+            return;
+        }
+        arr.forEach((f, idx) => featsListEl.appendChild(_renderFeatCard(f, idx)));
+    }
+
+    function _renderFeatCard(feat, idx) {
+        const card = document.createElement('details');
+        card.style.cssText = 'background:var(--s-input);border:1px solid var(--s-border);border-radius:5px;';
+        const summary = document.createElement('summary');
+        summary.style.cssText = 'cursor:pointer;padding:6px 10px;display:flex;align-items:center;gap:8px;list-style:none;';
+        const name = document.createElement('strong');
+        name.style.cssText = 'font-size:12px;color:var(--s-fg);';
+        name.textContent = feat.name || feat.slug;
+        summary.appendChild(name);
+        if (feat.source === 'local-custom') {
+            const badge = document.createElement('span');
+            badge.textContent = 'Custom';
+            badge.title = 'Campaign-authored homebrew';
+            badge.style.cssText = 'font-size:9px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#d4a84a;background:#3a2f15;border:1px solid #6e5828;border-radius:3px;padding:0 4px;';
+            summary.appendChild(badge);
+        }
+        if (feat.prerequisite) {
+            const pre = document.createElement('span');
+            pre.style.cssText = 'font-size:10px;color:var(--s-mute);font-style:italic;';
+            pre.textContent = '· Prereq: ' + feat.prerequisite;
+            summary.appendChild(pre);
+        }
+        const rm = document.createElement('button');
+        rm.type = 'button';
+        rm.textContent = '✕';
+        rm.title = 'Remove this feat';
+        rm.style.cssText = 'margin-left:auto;background:none;border:none;color:#c66;font-size:13px;cursor:pointer;padding:0 4px;';
+        rm.addEventListener('click', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            const arr = _readFeats();
+            arr.splice(idx, 1);
+            _writeFeats(arr);
+            _renderFeats();
+            _persistSheetField('feats', arr);
+        });
+        summary.appendChild(rm);
+        card.appendChild(summary);
+        if (feat.desc) {
+            const body = document.createElement('div');
+            body.style.cssText = 'padding:8px 10px;border-top:1px solid var(--s-border);font-size:12px;color:var(--s-fg);line-height:1.5;white-space:pre-wrap;';
+            body.textContent = feat.desc;
+            card.appendChild(body);
+        }
+        return card;
+    }
+
+    featsAddBtn?.addEventListener('click', () => {
+        const open = featsAddPanel.style.display !== 'none';
+        featsAddPanel.style.display = open ? 'none' : '';
+        if (!open) {
+            featsSearchInp.value = '';
+            featsResultsEl.innerHTML = '';
+            featsResultsEl.style.display = 'none';
+            featsSearchInp.focus();
+        }
+    });
+
+    let _featSearchTimer = 0;
+    featsSearchInp?.addEventListener('input', () => {
+        const q = featsSearchInp.value.trim();
+        clearTimeout(_featSearchTimer);
+        if (q.length < 2) {
+            featsResultsEl.innerHTML = '';
+            featsResultsEl.style.display = 'none';
+            return;
+        }
+        _featSearchTimer = setTimeout(async () => {
+            try {
+                const r = await fetch('/api/open5e/feats?search=' + encodeURIComponent(q) + '&limit=15' + _campParam);
+                if (!r.ok) return;
+                const data = await r.json();
+                featsResultsEl.innerHTML = '';
+                (data.results || []).forEach(f => {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'padding:5px 9px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--s-border);';
+                    const label = f.name + (f.is_custom ? '  (Custom)' : '');
+                    const pre = f.prerequisite ? '  · ' + f.prerequisite : '';
+                    row.textContent = label + pre;
+                    row.addEventListener('mouseenter', () => row.style.background = 'var(--s-input)');
+                    row.addEventListener('mouseleave', () => row.style.background = '');
+                    row.addEventListener('click', async () => {
+                        const slug = f.slug || (f.name || '').toLowerCase().replace(/\s+/g, '-');
+                        // Dedup
+                        const existing = _readFeats();
+                        if (existing.some(x => x.slug === slug)) {
+                            featsAddPanel.style.display = 'none';
+                            return;
+                        }
+                        // Fetch full detail (the list endpoint only gives name+prereq)
+                        let full = null;
+                        try {
+                            const dr = await fetch('/api/open5e/feat/' + encodeURIComponent(slug) + _campParamFirst);
+                            if (dr.ok) full = await dr.json();
+                        } catch {}
+                        const rec = {
+                            slug: slug,
+                            name: (full && full.name) || f.name,
+                            prerequisite: (full && full.prerequisite) || f.prerequisite || '',
+                            desc: (full && full.desc) || '',
+                            source: (full && full.source) || (f.is_custom ? 'local-custom' : ''),
+                        };
+                        existing.push(rec);
+                        _writeFeats(existing);
+                        _renderFeats();
+                        _persistSheetField('feats', existing);
+                        featsAddPanel.style.display = 'none';
+                    });
+                    featsResultsEl.appendChild(row);
+                });
+                featsResultsEl.style.display = (data.results && data.results.length) ? '' : 'none';
+            } catch {}
+        }, 200);
+    });
+
+    _renderFeats();
 })();
 </script>

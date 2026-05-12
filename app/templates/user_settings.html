@@ -438,6 +438,41 @@
 </section>
 
 <section>
+    <h2>🎞️ Animated GIFs</h2>
+    <p class="muted">When enabled, animated GIF portraits play in the character sheet and GIF tokens animate on the tabletop canvas. Disable to show a static first-frame thumbnail instead — useful if motion is distracting during play.</p>
+    <div style="display:flex;align-items:center;gap:14px;margin-top:12px;">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;">
+            <input type="checkbox" id="animate-gifs-toggle" {% if user.animate_gifs %}checked{% endif %} style="width:16px;height:16px;cursor:pointer;">
+            Animate GIFs
+        </label>
+        <span id="animate-gifs-status" style="font-size:11px;color:#6cb;min-width:4em;"></span>
+    </div>
+    <script>
+    (function () {
+        const toggle = document.getElementById('animate-gifs-toggle');
+        const status = document.getElementById('animate-gifs-status');
+        if (!toggle) return;
+        toggle.addEventListener('change', async () => {
+            status.textContent = 'saving…';
+            try {
+                const resp = await fetch('/api/settings/animate_gifs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ animate_gifs: toggle.checked }),
+                });
+                if (!resp.ok) throw new Error(await resp.text());
+                status.textContent = '✓ Saved';
+                setTimeout(() => { status.textContent = ''; }, 2000);
+            } catch (e) {
+                status.textContent = '✗ Failed';
+                console.error(e);
+            }
+        });
+    })();
+    </script>
+</section>
+
+<section>
     <h2>🎵 Category volumes</h2>
     <p class="muted">Set your personal volume for each audio category. These preferences are saved server-side and apply across all browsers and devices. The effective volume in the tabletop = master volume × category volume.</p>
 

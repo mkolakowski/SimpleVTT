@@ -1,6 +1,6 @@
 # SimpleVTT
 
-> Current version: **0.33.19** · Schema: **v21** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions.
+> Current version: **0.57.1** · Schema: **v31** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions.
 
 A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 

@@ -42,6 +42,20 @@
         </fieldset>
 
         <fieldset>
+            <legend>Defenses</legend>
+            <label style="display:block;margin-bottom:8px;">Resistances
+                <input name="resistances" value="{{ sheet.get('resistances','') }}"
+                       placeholder="e.g. fire, cold, BPS from nonmagical attacks"
+                       {% if not can_edit %}readonly{% endif %}>
+            </label>
+            <label style="display:block;">Immunities
+                <input name="immunities" value="{{ sheet.get('immunities','') }}"
+                       placeholder="e.g. poison, charmed, frightened"
+                       {% if not can_edit %}readonly{% endif %}>
+            </label>
+        </fieldset>
+
+        <fieldset>
             <legend>Inventory (one per line)</legend>
             <textarea name="inventory" rows="4" {% if not can_edit %}readonly{% endif %}>{{ '\n'.join(sheet.get('inventory') or []) }}</textarea>
         </fieldset>

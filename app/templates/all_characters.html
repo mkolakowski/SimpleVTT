@@ -82,7 +82,25 @@
         <button type="button" class="cc-tab" data-tab="standalone" style="font-size:12px;padding:4px 12px;border-radius:4px;opacity:0.6;">Standalone</button>
     </div>
 
+    {# JSON catalogue consumed by the form JS below — drives the description
+       text and the "auto-fill suggested name" behavior. Keep this in one
+       place so the two forms (campaign and standalone) share it. #}
+    <script id="cc-presets-json" type="application/json">{{ presets | tojson }}</script>
+
     <form id="cc-form-campaign" method="post" action="/characters/new" style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+        <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px;">
+            <span style="font-size:12px;color:var(--fg-mute);">Start from</span>
+            <select name="preset" class="cc-preset-select" style="font-size:13px;">
+                {% for p in presets %}
+                <option value="{{ p.key }}"
+                        data-template="{{ p.template }}"
+                        data-suggested-name="{{ p.suggested_name }}">
+                    {{ p.label }}
+                </option>
+                {% endfor %}
+            </select>
+            <small class="cc-preset-desc muted" style="font-size:11px;min-height:1.2em;"></small>
+        </label>
         <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px;">
             <span style="font-size:12px;color:var(--fg-mute);">Character Name</span>
             <input name="name" placeholder="e.g. Thalindra Moonwhisper" required style="font-size:13px;">
@@ -100,17 +118,27 @@
     </form>
 
     <form id="cc-form-standalone" method="post" action="/characters/new-standalone" style="display:none;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+        <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:180px;">
+            <span style="font-size:12px;color:var(--fg-mute);">Start from</span>
+            <select name="preset" class="cc-preset-select" style="font-size:13px;">
+                {% for p in presets %}
+                <option value="{{ p.key }}"
+                        data-template="{{ p.template }}"
+                        data-suggested-name="{{ p.suggested_name }}">
+                    {{ p.label }}
+                </option>
+                {% endfor %}
+            </select>
+            <small class="cc-preset-desc muted" style="font-size:11px;min-height:1.2em;"></small>
+        </label>
         <label style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px;">
             <span style="font-size:12px;color:var(--fg-mute);">Character Name</span>
             <input name="name" placeholder="e.g. Thalindra Moonwhisper" required style="font-size:13px;">
         </label>
-        <label style="display:flex;flex-direction:column;gap:4px;min-width:140px;">
-            <span style="font-size:12px;color:var(--fg-mute);">Sheet Type</span>
-            <select name="template" style="font-size:13px;">
-                <option value="generic">Generic</option>
-                <option value="dnd5e">D&amp;D 5e</option>
-            </select>
-        </label>
+        {# template is overridden by the preset server-side when a preset is
+           chosen; we keep this field for "blank — generic / blank — D&D 5e"
+           cases since both blank presets carry the right template anyway. #}
+        <input type="hidden" name="template" class="cc-template-hidden" value="generic">
         <button type="submit" style="padding:6px 18px;font-size:13px;font-weight:600;">Create</button>
         <button type="button" class="cc-cancel-btn" style="padding:6px 14px;font-size:13px;opacity:0.7;">Cancel</button>
     </form>
@@ -139,6 +167,44 @@
             document.getElementById('cc-form-standalone').style.display = which === 'standalone' ? 'flex' : 'none';
         });
     });
+
+    /* Preset → description + suggested-name autofill. */
+    (function () {
+        var presets = [];
+        try { presets = JSON.parse(document.getElementById('cc-presets-json').textContent) || []; } catch (e) { presets = []; }
+        function findPreset(key) {
+            for (var i = 0; i < presets.length; i++) if (presets[i].key === key) return presets[i];
+            return null;
+        }
+        function _refresh(selectEl) {
+            var form = selectEl.closest('form');
+            var nameInput = form.querySelector('input[name="name"]');
+            var descEl = form.querySelector('.cc-preset-desc');
+            var hiddenTmpl = form.querySelector('.cc-template-hidden');
+            var p = findPreset(selectEl.value);
+            if (!p) { if (descEl) descEl.textContent = ''; return; }
+            if (descEl) descEl.textContent = p.description || '';
+            if (hiddenTmpl) hiddenTmpl.value = p.template || 'generic';
+            // Autofill the name field with the suggested name, but only if
+            // the user hasn't already typed something custom.
+            if (nameInput && (!nameInput.value || nameInput.dataset.autofilled === '1')) {
+                nameInput.value = p.suggested_name || '';
+                nameInput.dataset.autofilled = '1';
+            }
+        }
+        document.querySelectorAll('.cc-preset-select').forEach(function (sel) {
+            sel.addEventListener('change', function () { _refresh(sel); });
+            // Initial pass to populate the description on page load
+            _refresh(sel);
+        });
+        // Mark the name input as user-edited the moment they type something
+        document.querySelectorAll('#cc-form-campaign input[name="name"], #cc-form-standalone input[name="name"]')
+            .forEach(function (inp) {
+                inp.addEventListener('input', function () {
+                    inp.dataset.autofilled = '';
+                });
+            });
+    })();
 </script>
 {% endif %}
 

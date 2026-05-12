@@ -35,9 +35,6 @@
     .character-list { list-style: none; margin: 0; padding: 0; }
     .character-list li { padding: 5px 2px; cursor: pointer; border-bottom: 1px dashed var(--border); font-size: 13px; }
     .character-list li:hover { color: var(--accent); }
-    .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index: 100; }
-    .modal { background: var(--bg-2); padding: 20px; border-radius: 8px; max-width: 720px; max-height: 88vh; overflow:auto; width: 90%;}
-
     /* ── Drawer system ── */
     .drawer-sidebar {
         display: flex; flex-direction: column; flex-shrink: 0;
@@ -372,6 +369,14 @@
     .mini-open-full { font-size: 11px; padding: 3px 10px; margin-top: 6px; }
     .no-chars-msg { font-size: 12px; color: var(--fg-mute); padding: 8px 0; }
     .mini-section-label { font-size: 9px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; margin: 8px 0 3px; }
+
+    /* Collapsible mini-sheet sections (Skills, Spells). The chevron rotates
+       and the body collapses on click; state persists in localStorage. */
+    .mini-collapsible-header { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 5px; }
+    .mini-collapsible-header:hover { color: var(--fg); }
+    .mini-collapsible-chevron { display: inline-block; font-size: 8px; color: var(--fg-mute); transition: transform .15s ease; }
+    .mini-collapsible.collapsed .mini-collapsible-chevron { transform: rotate(-90deg); }
+    .mini-collapsible.collapsed .mini-collapsible-body { display: none; }
     .mini-roll-row { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
     .mini-roll-btn { background: var(--accent-bg2); border: 1px solid var(--accent-border); color: var(--accent); border-radius: 3px; cursor: pointer; padding: 1px 6px; font-size: 11px; flex-shrink: 0; line-height: 1.5; transition: background 0.12s; }
     .mini-roll-btn:hover { background: var(--accent-bg-hover); }
@@ -414,7 +419,8 @@
     .mini-cast-btn:hover { background: rgba(167,139,250,.22); }
     .mini-cast-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .mini-slot-row { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--fg-mute); padding: 1px 2px; }
-    .mini-slot-row .mini-slot-label { width: 28px; flex-shrink: 0; }
+    .mini-slot-row .mini-slot-label { min-width: 36px; flex-shrink: 0; }
+    .mini-spell-tag.cls { color: var(--fg-mute); font-style: italic; }
     .mini-slot-pip { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--accent); background: var(--accent); margin-right: 2px; transition: background .12s, border-color .12s, opacity .12s; }
     .mini-slot-pip.used { background: transparent; border-color: var(--border); opacity: 0.4; }
     /* Mini HP +/- buttons (used inside mini-stat-row HP/Temp cells) */
@@ -663,6 +669,9 @@
                     data-grid-type="{{ active_map.grid_type.value }}"
                     data-grid-size="{{ active_map.grid_size_px }}"
                     {% if active_map.image_url %}data-bg="{{ active_map.image_url }}"{% endif %}></canvas>
+            {# GIF token overlay — sits over the canvas and receives the same pan/zoom transform.
+               Real <img> elements here animate natively; canvas only draws the colour ring. #}
+            <div id="gif-token-overlay" style="position:absolute;top:0;left:0;pointer-events:none;transform-origin:0 0;"></div>
         {% else %}
             <p class="muted" style="padding: 20px;">No active map. {% if is_gm %}Upload one in <a href="/admin/campaign/{{ campaign.id }}">campaign settings</a>.{% endif %}</p>
         {% endif %}
@@ -826,6 +835,64 @@
                     <button type="button" class="mini-rest-btn mini-long-rest-btn" data-char-id="{{ c.id }}" data-char-name="{{ c.name }}" title="Restore HP, recover half max hit dice, reset spell slots">💤 Long</button>
                     {% endif %}
                 </div>
+                {# ── Transform bar (Wild Shape / Polymorph / Revert) ──
+                     Visible when the character has Druid Lv 2+ or knows the
+                     Polymorph spell, OR is currently transformed. Server
+                     enforces eligibility on /transform regardless of UI. #}
+                {% if c.owner_user_id == user.id or is_gm %}
+                {% set _af = sh.get('active_form') %}
+                {% set _classes = sh.get('classes') or [] %}
+                {% set _druid_lv = 0 %}
+                {% set _moon = false %}
+                {% for _cc in _classes %}
+                    {% if (_cc.get('class') or '') | trim | lower == 'druid' %}
+                        {% if (_cc.get('level') or 0) | int > _druid_lv %}{% set _druid_lv = (_cc.get('level') or 0) | int %}{% endif %}
+                        {% if 'moon' in (_cc.get('subclass') or '') | lower %}{% set _moon = true %}{% endif %}
+                    {% endif %}
+                {% endfor %}
+                {% set _has_poly = false %}
+                {% for _sp in (sh.get('spells') or []) %}
+                    {% if (_sp.get('name') or '') | trim | lower == 'polymorph' %}{% set _has_poly = true %}{% endif %}
+                {% endfor %}
+                {% set _show_ws = _druid_lv >= 2 %}
+                {% set _char_lv = (sh.get('level') or 1) | int %}
+                {% if _af or _show_ws or _has_poly %}
+                <div class="mini-transform-bar"
+                     data-char-id="{{ c.id }}"
+                     data-druid-lv="{{ _druid_lv }}"
+                     data-moon="{{ 'true' if _moon else 'false' }}"
+                     data-char-lv="{{ _char_lv }}"
+                     data-favorites='{{ (sh.get("favorite_beasts") or []) | tojson }}'
+                     style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 8px;margin-top:4px;background:rgba(167,139,250,.06);border:1px solid var(--border);border-radius:5px;">
+                    {% if _af %}
+                    <span style="font-size:11px;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:5px;flex:1;min-width:0;">
+                        <span style="font-size:14px;line-height:1;">{% if _af.get('source') == 'polymorph' %}🦌{% else %}🐺{% endif %}</span>
+                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ _af.get('name','?') }}</span>
+                        <span class="muted" style="font-weight:normal;font-size:10px;">CR {{ _af.get('cr','?') }}</span>
+                    </span>
+                    <button type="button" class="mini-revert-btn"
+                            data-char-id="{{ c.id }}" data-char-name="{{ c.name }}"
+                            style="font-size:10px;padding:3px 9px;background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:4px;cursor:pointer;font-weight:700;">
+                        ✨ Revert
+                    </button>
+                    {% else %}
+                    <span class="muted" style="font-size:10px;">Transform:</span>
+                    {% if _show_ws %}
+                    <button type="button" class="mini-transform-btn"
+                            data-char-id="{{ c.id }}" data-source="wild-shape"
+                            title="Druid Lv {{ _druid_lv }} — Wild Shape into a beast"
+                            style="font-size:10px;padding:3px 9px;background:rgba(108,180,255,.12);border:1px solid var(--border);color:var(--fg);border-radius:4px;cursor:pointer;">🐺 Wild Shape</button>
+                    {% endif %}
+                    {% if _has_poly %}
+                    <button type="button" class="mini-transform-btn"
+                            data-char-id="{{ c.id }}" data-source="polymorph"
+                            title="Cast Polymorph on yourself — target beast CR ≤ {{ (_char_lv / 4) | int }}"
+                            style="font-size:10px;padding:3px 9px;background:rgba(167,139,250,.12);border:1px solid var(--border);color:var(--fg);border-radius:4px;cursor:pointer;">🦌 Polymorph</button>
+                    {% endif %}
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endif %}
                 {# ── Abilities & Saves ── #}
                 <div class="mini-section-label">Abilities &amp; Saves</div>
                 <div class="mini-ab-grid">
@@ -864,35 +931,41 @@
                     <button class="mini-roll-btn mac-btn" data-expr="1d20{{ sv_str }}" data-note="{{ c.name }}: {{ ab }} save{{ ' (prof)' if is_prof else '' }}" title="{{ ab }} save {{ sv_str }}{{ ' (prof)' if is_prof else '' }}"><span class="mac-btn-ab">{{ ab }}</span><span class="mac-btn-mod">{{ sv_str }}</span></button>
                     {% endfor %}
                 </div>
-                {# ── Skills ── #}
-                <div class="mini-section-label" style="margin-top:10px;">Skills</div>
-                {% set SKILLS_LIST = [
-                    ('Acrobatics','DEX'),('Animal Handling','WIS'),('Arcana','INT'),
-                    ('Athletics','STR'),('Deception','CHA'),('History','INT'),
-                    ('Insight','WIS'),('Intimidation','CHA'),('Investigation','INT'),
-                    ('Medicine','WIS'),('Nature','INT'),('Perception','WIS'),
-                    ('Performance','CHA'),('Persuasion','CHA'),('Religion','INT'),
-                    ('Sleight of Hand','DEX'),('Stealth','DEX'),('Survival','WIS')
-                ] %}
-                <div class="mini-skills-grid">
-                {% for sname, sab in SKILLS_LIST %}
-                {% set s_score = (ab_map.get(sab) or 10) | int %}
-                {% set s_mod = ((s_score - 10) // 2) %}
-                {% set sk = skill_map.get(sname) or {} %}
-                {% set is_sk_prof = sk.get('proficient', false) %}
-                {% set is_sk_exp = sk.get('expertise', false) %}
-                {% set sk_bonus = s_mod + (prof * 2 if is_sk_exp else prof if is_sk_prof else 0) %}
-                {% set sk_str = (('+' if sk_bonus >= 0 else '') ~ (sk_bonus | string)) %}
-                <button class="mini-sk-btn{{ ' is-exp' if is_sk_exp else ' is-prof' if is_sk_prof else '' }}"
-                        data-expr="1d20{{ sk_str }}"
-                        data-note="{{ c.name }}: {{ sname }}{{ ' (expertise)' if is_sk_exp else ' (prof)' if is_sk_prof else '' }}"
-                        title="{{ 'Expertise' if is_sk_exp else 'Proficient' if is_sk_prof else '' }}">
-                    <span class="mini-sk-dot"></span>
-                    <span class="mini-sk-name">{{ sname }}</span>
-                    <span class="mini-sk-ab">{{ sab }}</span>
-                    <span class="mini-sk-mod">{{ sk_str }}</span>
-                </button>
-                {% endfor %}
+                {# ── Skills (collapsible) ── #}
+                <div class="mini-collapsible" data-collapse-key="skills" data-char-id="{{ c.id }}">
+                    <div class="mini-section-label mini-collapsible-header" style="margin-top:10px;">
+                        <span class="mini-collapsible-chevron">▼</span> Skills
+                    </div>
+                    <div class="mini-collapsible-body">
+                        {% set SKILLS_LIST = [
+                            ('Acrobatics','DEX'),('Animal Handling','WIS'),('Arcana','INT'),
+                            ('Athletics','STR'),('Deception','CHA'),('History','INT'),
+                            ('Insight','WIS'),('Intimidation','CHA'),('Investigation','INT'),
+                            ('Medicine','WIS'),('Nature','INT'),('Perception','WIS'),
+                            ('Performance','CHA'),('Persuasion','CHA'),('Religion','INT'),
+                            ('Sleight of Hand','DEX'),('Stealth','DEX'),('Survival','WIS')
+                        ] %}
+                        <div class="mini-skills-grid">
+                        {% for sname, sab in SKILLS_LIST %}
+                        {% set s_score = (ab_map.get(sab) or 10) | int %}
+                        {% set s_mod = ((s_score - 10) // 2) %}
+                        {% set sk = skill_map.get(sname) or {} %}
+                        {% set is_sk_prof = sk.get('proficient', false) %}
+                        {% set is_sk_exp = sk.get('expertise', false) %}
+                        {% set sk_bonus = s_mod + (prof * 2 if is_sk_exp else prof if is_sk_prof else 0) %}
+                        {% set sk_str = (('+' if sk_bonus >= 0 else '') ~ (sk_bonus | string)) %}
+                        <button class="mini-sk-btn{{ ' is-exp' if is_sk_exp else ' is-prof' if is_sk_prof else '' }}"
+                                data-expr="1d20{{ sk_str }}"
+                                data-note="{{ c.name }}: {{ sname }}{{ ' (expertise)' if is_sk_exp else ' (prof)' if is_sk_prof else '' }}"
+                                title="{{ 'Expertise' if is_sk_exp else 'Proficient' if is_sk_prof else '' }}">
+                            <span class="mini-sk-dot"></span>
+                            <span class="mini-sk-name">{{ sname }}</span>
+                            <span class="mini-sk-ab">{{ sab }}</span>
+                            <span class="mini-sk-mod">{{ sk_str }}</span>
+                        </button>
+                        {% endfor %}
+                        </div>
+                    </div>
                 </div>
                 {# ── Mini Attacks ── #}
                 {% set attacks_list = sh.get('attacks') or [] %}
@@ -931,20 +1004,24 @@
                 {% endif %}
                 {% endfor %}
                 {% if _spell_vis.any %}
-                <div class="mini-section-label" style="margin-top:10px;">Spells</div>
+                <div class="mini-collapsible" data-collapse-key="spells" data-char-id="{{ c.id }}">
+                <div class="mini-section-label mini-collapsible-header" style="margin-top:10px;">
+                    <span class="mini-collapsible-chevron">▼</span> Spells
+                </div>
+                <div class="mini-collapsible-body">
                 <div class="mini-spells" data-char-id="{{ c.id }}">
                 {# Iterate classes in order of highest level first; fall back to a
                    single synthesized "primary class" if there's no roster yet. #}
                 {% set _iter_classes = (_mc_sorted if _mc_sorted else (
                     [{'class': sh.get('class',''), 'level': sh.get('level',1)}] if sh.get('class') else []
                 )) %}
-                {% for _cc in _iter_classes %}
-                {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
-                {% set _cc_label = _cc.get('class') %}
-                {% set _cc_is_prepared = _cc_slug in _PREPARED_CASTERS %}
-                {% set _cc_slots = spell_slots_map.get(_cc_slug) or {} %}
+                {% set _is_multiclass = (_iter_classes | length) > 1 %}
+                {# Group by level (0-9) across all classes, matching the full sheet layout #}
                 {% for lvl_i in range(10) %}
                     {% set _level_has = namespace(any=false) %}
+                    {% for _cc in _iter_classes %}
+                    {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+                    {% set _cc_is_prepared = _cc_slug in _PREPARED_CASTERS %}
                     {% for s in spells_list %}
                     {% set s_lvl = (s.level or 0) | int %}
                     {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
@@ -952,38 +1029,55 @@
                     {% set _level_has.any = true %}
                     {% endif %}
                     {% endfor %}
+                    {% endfor %}
                     {% if _level_has.any %}
-                    <div class="mini-spell-level">{{ ('Cantrips' if lvl_i == 0 else 'Level ' ~ lvl_i ~ ' Spells') ~ (' - ' ~ _cc_label if _cc_label else '') }}</div>
+                    <div class="mini-spell-level">{{ 'Cantrips' if lvl_i == 0 else 'Level ' ~ lvl_i ~ ' Spells' }}</div>
                     {% if lvl_i >= 1 %}
+                    {# One slot-pip row per class that has slots at this level; wrapped in a flex row so they sit side by side #}
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    {% for _cc in _iter_classes %}
+                    {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+                    {% set _cc_label = _cc.get('class') %}
+                    {% set _cc_slots = spell_slots_map.get(_cc_slug) or {} %}
                     {% set slot = _cc_slots.get(lvl_i | string) or {} %}
                     {% set slot_total = (slot.get('total') or 0) | int %}
                     {% set slot_used = (slot.get('used') or 0) | int %}
                     {% if slot_total > 0 %}
                     <div class="mini-slot-row" data-char-id="{{ c.id }}" data-class-slug="{{ _cc_slug }}" data-slot-level="{{ lvl_i }}" data-total="{{ slot_total }}" data-used="{{ slot_used }}">
-                        <span class="mini-slot-label">Slots</span>
+                        <span class="mini-slot-label">{{ _cc_label if _is_multiclass else 'Slots' }}</span>
                         <span class="mini-slot-pips">
                         {% for i in range(slot_total) %}<span class="mini-slot-pip{{ ' used' if i < slot_used else '' }}"></span>{% endfor %}
                         </span>
                         <span class="mini-slot-count">{{ slot_total - slot_used }}/{{ slot_total }}</span>
                     </div>
                     {% endif %}
+                    {% endfor %}
+                    </div>
                     {% endif %}
+                    {# Spell rows for all classes at this level #}
+                    {% for _cc in _iter_classes %}
+                    {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+                    {% set _cc_label = _cc.get('class') %}
+                    {% set _cc_is_prepared = _cc_slug in _PREPARED_CASTERS %}
                     {% for s in spells_list %}
                     {% set s_lvl = (s.level or 0) | int %}
                     {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
                     {% if s_lvl == lvl_i and s_cls == _cc_slug and not (_cc_is_prepared and s_lvl > 0 and not s.prepared) %}
                     <div class="mini-spell-row" title="{{ s.name }}{% if s.casting_time %} · {{ s.casting_time }}{% endif %}{% if s.range %} · {{ s.range }}{% endif %}">
                         <span class="mini-spell-name">{{ s.name }}{% if s.concentration %} <span class="mini-spell-tag" title="Concentration">⏱</span>{% endif %}{% if s.ritual %} <span class="mini-spell-tag" title="Ritual">®</span>{% endif %}</span>
+                        {% if _is_multiclass %}<span class="mini-spell-tag cls">{{ _cc_label }}</span>{% endif %}
                         {% if s.damage %}<span class="mini-spell-tag dmg">{{ s.damage }}</span>{% endif %}
                         {% if s.save_ability %}<span class="mini-spell-tag save">{{ s.save_ability }} save</span>{% endif %}
                         <button type="button" class="mini-cast-btn" data-char-id="{{ c.id }}" data-spell-idx="{{ loop.index0 }}" data-spell-name="{{ s.name }}" data-spell-level="{{ s_lvl }}" data-class-slug="{{ s_cls }}" title="Cast {{ s.name }}{% if s_lvl > 0 %} (uses Lv {{ s_lvl }} slot for {{ _cc_label or 'this class' }}){% endif %}">🪄 Cast</button>
                     </div>
                     {% endif %}
                     {% endfor %}
+                    {% endfor %}
                     {% endif %}
                 {% endfor %}
-                {% endfor %}
-                </div>
+                </div>{# /.mini-spells #}
+                </div>{# /.mini-collapsible-body #}
+                </div>{# /.mini-collapsible (spells) #}
                 {% endif %}
             {% else %}
                 {% if sh.get('summary') %}
@@ -1001,7 +1095,13 @@
                 {% endif %}
             {% endif %}
             </div>
-            <button class="mini-open-full btn-link" onclick="openSheet({{ c.id }})">Open full sheet →</button>
+            {# Open the standalone sheet in a new tab. The popup-modal path
+                 (window.openSheet) was retired in v0.35.3 — inline <script>s in
+                 the sheet template were stripped by the modal injector, leaving
+                 features like Wild Shape / Class Resources broken there. #}
+            <a class="mini-open-full btn-link"
+               href="/campaign/{{ campaign.id }}/character/{{ c.id }}/sheet"
+               target="_blank" rel="noopener">Open full sheet →</a>
             <div class="conc-section" id="conc-section-{{ c.id }}" data-char-id="{{ c.id }}"></div>
         </div>
         {% endif %}
@@ -1260,12 +1360,14 @@
     </div>
 </div>
 
-<div id="modal-root"></div>
 <div id="roll-toast-container"></div>
+
+{# Shared Wild Shape / Polymorph beast picker — mini-sheet uses it via window.BeastPicker #}
+{% include "_beast_picker_modal.html" %}
 
 <script>
 const CAMPAIGN_ID = {{ campaign.id }};
-const ME = { id: {{ user.id }}, name: {{ user.display_name|tojson }}, isGm: {{ 'true' if is_gm else 'false' }} };
+const ME = { id: {{ user.id }}, name: {{ user.display_name|tojson }}, isGm: {{ 'true' if is_gm else 'false' }}, animateGifs: {{ 'true' if user.animate_gifs else 'false' }} };
 const GAME_SYSTEM = {{ system.key|tojson }};
 const ROLLABLE_SHEET = {{ 'true' if system.rollable_sheet else 'false' }};
 const MEMBERS = [{% for m in members %}{"id":{{ m.id }},"name":{{ m.display_name|tojson }}}{% if not loop.last %},{% endif %}{% endfor %}];
@@ -1277,6 +1379,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 <script id="initial-data" type="application/json">
 {{ {"tokens": token_data, "characters": char_data, "templates": tmpl_data} | tojson }}
 </script>
+<script src="/static/beast_picker.js"></script>
 <script src="/static/tabletop.js"></script>
 <script src="/static/audio.js"></script>
 <script>
@@ -1572,6 +1675,35 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             }
         });
 
+        /* Mini-sheet collapsible sections (Skills, Spells) — state persists
+           per character in localStorage under
+           ``simplevtt_mini_collapse_<charId>_<key>``. Distinct namespace
+           from the full-sheet fieldset collapsibles (which use
+           ``simplevtt_collapse_…``) so the two contexts don't share state. */
+        (function () {
+            document.querySelectorAll('.mini-collapsible').forEach(wrap => {
+                const charId = wrap.dataset.charId;
+                const key    = wrap.dataset.collapseKey;
+                if (!charId || !key) return;
+                const storageKey = `simplevtt_mini_collapse_${charId}_${key}`;
+                try {
+                    if (localStorage.getItem(storageKey) === '1') wrap.classList.add('collapsed');
+                } catch (_) {}
+                const header = wrap.querySelector('.mini-collapsible-header');
+                if (!header || header._collapseBound) return;
+                header._collapseBound = true;
+                header.addEventListener('click', (ev) => {
+                    // Don't collapse on clicks inside buttons / inputs the
+                    // header may contain in the future.
+                    if (ev.target.closest('button, a, input, select, textarea')) return;
+                    wrap.classList.toggle('collapsed');
+                    try {
+                        localStorage.setItem(storageKey, wrap.classList.contains('collapsed') ? '1' : '');
+                    } catch (_) {}
+                });
+            });
+        })();
+
         /* Mini-sheet rest buttons — post to /rest */
         async function _miniRest(btn, restType) {
             const charId = parseInt(btn.dataset.charId, 10);
@@ -1689,6 +1821,86 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 _miniHpStep(charId, field, delta);
                 return;
             }
+            // Wild Shape / Polymorph — opens the shared beast picker
+            const tfBtn = ev.target.closest('.mini-transform-btn');
+            if (tfBtn) {
+                const charId = parseInt(tfBtn.dataset.charId, 10);
+                const source = tfBtn.dataset.source || 'wild-shape';
+                const bar = tfBtn.closest('.mini-transform-bar');
+                const druidLv = parseInt(bar?.dataset.druidLv, 10) || 0;
+                const isMoon  = bar?.dataset.moon === 'true';
+                const charLv  = parseInt(bar?.dataset.charLv, 10) || 1;
+                let favorites = [];
+                try { favorites = JSON.parse(bar?.dataset.favorites || '[]') || []; } catch { favorites = []; }
+                if (!window.BeastPicker) {
+                    (window.showToast || alert)('Beast picker not loaded', 'error');
+                    return;
+                }
+                window.BeastPicker.open({
+                    campaignId: CAMPAIGN_ID,
+                    characterId: charId,
+                    source,
+                    druidLevel: druidLv,
+                    isMoonDruid: isMoon,
+                    characterLevel: charLv,
+                    favorites,
+                    // Update the data-attribute in place so the next open
+                    // (without a reload) sees the new list. The full sheet
+                    // route reads from window._savedBeastFavorites; here
+                    // we have no equivalent global so the bar carries the
+                    // authoritative copy.
+                    onFavoritesChange: (newList) => {
+                        if (bar) bar.dataset.favorites = JSON.stringify(newList || []);
+                    },
+                    onSuccess: () => window.location.reload(),
+                });
+                return;
+            }
+            // Revert from active form
+            const rvBtn = ev.target.closest('.mini-revert-btn');
+            if (rvBtn) {
+                const charId = parseInt(rvBtn.dataset.charId, 10);
+                const name = rvBtn.dataset.charName || 'character';
+                if (!confirm(`Revert ${name} to true form?\n\nBeast HP is discarded; true-form HP is restored from before the transform.`)) return;
+                rvBtn.disabled = true;
+                fetch(`/api/campaign/${CAMPAIGN_ID}/character/${charId}/revert`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                }).then(async resp => {
+                    if (!resp.ok) {
+                        const err = await resp.json().catch(() => ({ detail: 'Revert failed' }));
+                        throw new Error(err.detail || `HTTP ${resp.status}`);
+                    }
+                    const data = await resp.json().catch(() => ({}));
+                    // Rescue path: server cleared active_form but prior_form
+                    // was lost (e.g. saved while transformed on a pre-v0.35.4
+                    // build). The transform_update WS broadcast still reloads
+                    // every client; alert the user here so they understand
+                    // why their stats look like the beast.
+                    if (data && data.stats_restored === false) {
+                        alert(`${name}: beast form cleared, but original stats could not be restored — the prior-form snapshot was lost.\n\nOpen the full sheet and manually edit HP / abilities / AC / speed / attacks back to true-form values.`);
+                    }
+                    // The transform_update WS broadcast triggers the reload
+                    // on every connected client (including this one).
+                }).catch(e => {
+                    rvBtn.disabled = false;
+                    (window.showToast || alert)('Revert failed: ' + e.message, 'error');
+                });
+                return;
+            }
+        });
+
+        // Reload the tabletop when any character on the page transforms or
+        // reverts. The mini-sheet is server-rendered Jinja; reloading is
+        // the simplest way to get the new HP / AC / form badge in sync.
+        document.addEventListener('vtt:ws-message', (ev) => {
+            const msg = ev.detail;
+            if (!msg || msg.type !== 'transform_update') return;
+            const d = msg.data || {};
+            // Only reload if this character is in our player-char-list
+            const row = document.querySelector(`.mini-stat-row[data-char-id="${d.character_id}"]`);
+            if (row) window.location.reload();
         });
 
         /* Mini-sheet strike (weapon attack) buttons — post to /attack */

@@ -96,6 +96,36 @@ ws.onmessage = (ev) => {
         return;
     }
 
+    if (msg.type === 'feature_used') {
+        const d = msg.data || {};
+        const now = new Date();
+        const h = now.getHours(), m = now.getMinutes();
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        const h12  = (h % 12) || 12;
+        const hhmm = h12.toString().padStart(2,'0') + ':' + m.toString().padStart(2,'0') + ' ' + ampm;
+        const color = d.user_color || '';
+        const name  = d.character_name || 'Player';
+        const feat  = d.feature_name || 'feature';
+        const remaining = (d.max && d.max > 0)
+            ? ` <span style="font-size:11px;color:var(--muted,#888);">(${d.remaining}/${d.max} left)</span>`
+            : '';
+        const li = document.createElement('li');
+        li.innerHTML = `
+            <div class="roll-card">
+                <div class="roll-card-header">
+                    <div class="roll-card-avatar">✨</div>
+                    <span class="roll-card-user" data-uid="${d.character_id || ''}"${color ? ` style="color:${escapeHTML(color)}"` : ''}>${escapeHTML(name)}</span>
+                    <span class="roll-card-time">${hhmm}</span>
+                </div>
+                <div class="roll-card-body">
+                    <strong>${escapeHTML(feat)}</strong>${remaining}
+                    ${d.feature_desc ? `<div class="roll-card-note" style="margin-top:3px;">${escapeHTML(d.feature_desc)}</div>` : ''}
+                </div>
+            </div>`;
+        document.getElementById('roll-list').prepend(li);
+        return;
+    }
+
     if (msg.type !== 'roll') return;
     const r = msg.data;
     if (!IS_GM) {

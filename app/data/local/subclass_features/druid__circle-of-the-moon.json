@@ -1,0 +1,37 @@
+{
+  "slug": "circle-of-the-moon",
+  "class_slug": "druid",
+  "name": "Circle of the Moon",
+  "flavor": "Druids of the Circle of the Moon are fierce guardians of the wilds. Their order gathers under the full moon to share news and trade warnings. They haunt the deepest reaches of the wilderness, where they can roam for weeks on end without seeing another humanoid creature.",
+  "features": [
+    {
+      "name": "Combat Wild Shape",
+      "level": 2,
+      "desc": "When you choose this circle at 2nd level, you gain the ability to use Wild Shape on your turn as a bonus action, rather than as an action. Additionally, while you are transformed by Wild Shape, you can use a bonus action to expend one spell slot to regain 1d8 hit points per level of the spell slot expended."
+    },
+    {
+      "name": "Circle Forms",
+      "level": 2,
+      "desc": "The rites of your circle grant you the ability to transform into more dangerous animal forms. Starting at 2nd level, you can use your Wild Shape to transform into a beast with a challenge rating as high as 1. Starting at 6th level, you can transform into a beast with a challenge rating as high as your druid level divided by 3, rounded down."
+    },
+    {
+      "name": "Primal Strike",
+      "level": 6,
+      "desc": "Starting at 6th level, your attacks in beast form count as magical for the purpose of overcoming resistance and immunity to nonmagical attacks and damage."
+    },
+    {
+      "name": "Elemental Wild Shape",
+      "level": 10,
+      "desc": "At 10th level, you can expend two uses of Wild Shape at the same time to transform into an air elemental, an earth elemental, a fire elemental, or a water elemental."
+    },
+    {
+      "name": "Thousand Forms",
+      "level": 14,
+      "desc": "By 14th level, you have learned to use magic to alter your physical form in more subtle ways. You can cast the alter self spell at will."
+    }
+  ],
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD (CC BY 4.0 / OGL 1.0a). Rephrased mechanical summaries — not a verbatim copy."
+}
