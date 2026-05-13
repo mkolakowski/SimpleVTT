@@ -1,0 +1,34 @@
+{
+  "slug": "tiefling",
+  "name": "Tiefling",
+  "ability_bonuses": [
+    {"attribute": "Intelligence", "bonus": 1},
+    {"attribute": "Charisma", "bonus": 2}
+  ],
+  "size": "Medium",
+  "speed": 30,
+  "age": "Tieflings mature at the same rate as humans but live a few years longer.",
+  "alignment": "Tieflings might not have an innate tendency toward evil, but many of them end up there. Evil or not, an independent nature inclines many tieflings toward a chaotic alignment.",
+  "languages": "You can speak, read, and write Common and Infernal.",
+  "traits": [
+    {
+      "name": "Darkvision",
+      "level": null,
+      "desc": "Thanks to your infernal heritage, you have superior vision in dark and dim conditions. You can see in dim light within 60 feet of you as if it were bright light, and in darkness as if it were dim light. You can't discern color in darkness, only shades of gray."
+    },
+    {
+      "name": "Hellish Resistance",
+      "level": null,
+      "desc": "You have resistance to fire damage."
+    },
+    {
+      "name": "Infernal Legacy",
+      "level": null,
+      "desc": "You know the thaumaturgy cantrip. When you reach 3rd level, you can cast the hellish rebuke spell once per day as a 2nd-level spell. When you reach 5th level, you can also cast the darkness spell once per day. Charisma is your spellcasting ability for these spells. (Add these spells to your spell list manually as you level up; track the 1/day uses as racial features on your sheet.)"
+    }
+  ],
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD (CC BY 4.0 / OGL 1.0a). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy."
+}

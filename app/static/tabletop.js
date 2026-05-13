@@ -23,16 +23,18 @@
     let tokens = initialData.tokens || [];
     const characters = initialData.characters || [];
     const templates = initialData.templates || [];
+    // Currently-editing encounter context for spawn-point UI. When an
+    // encounter row's edit form is open AND use_spawn_points is enabled
+    // AND the encounter's map_id matches the active MAP_ID, the panel
+    // sets these via window.vttSetSpawnContext so the canvas renders
+    // the marker pass + the click-to-set landing endpoint is wired to
+    // the right encounter. Cleared on edit-form close.
+    let spawnContext = null;   // { encounterId, spawns: {char_id_str: {x,y}}, mapId }
+    let spawnArmingCharId = null;
 
     const gridType = canvas.dataset.gridType || 'square';
     const gridSize = parseInt(canvas.dataset.gridSize || '70', 10);
-    const bgUrl = canvas.dataset.bg;
-    let bgImg = null;
-    if (bgUrl) {
-        bgImg = new Image();
-        bgImg.onload = render;
-        bgImg.src = bgUrl;
-    }
+    const bgLayer = document.getElementById('map-bg-layer');
 
     // ---------- Hex helpers (pointy-top) ----------
     // Hex height = gridSize. Width = sqrt(3)/2 * height.
@@ -199,17 +201,53 @@
         ctx.restore();
     }
 
+    function drawSpawnMarkers() {
+        // GM-only encounter-prep markers. Only drawn while an encounter
+        // edit form is open AND its bound map matches the active map.
+        // A dashed ring tinted with each character's color so they
+        // don't look like real tokens.
+        if (!ME.isGm) return;
+        if (!spawnContext || !spawnContext.spawns) return;
+        if (spawnContext.mapId != null && spawnContext.mapId !== MAP_ID) return;
+        const spawns = spawnContext.spawns;
+        if (!Object.keys(spawns).length) return;
+        const r = Math.max(14, gridSize / 3);
+        Object.keys(spawns).forEach(key => {
+            const spawn = spawns[key];
+            if (!spawn || typeof spawn.x !== 'number' || typeof spawn.y !== 'number') return;
+            const ch = characters.find(c => String(c.id) === key);
+            const cx = spawn.x + gridSize / 2;
+            const cy = spawn.y + gridSize / 2;
+            const tint = (ch && ch.color) || '#d4a84a';
+            ctx.save();
+            ctx.globalAlpha = 0.85;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(20,20,28,0.55)';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = tint;
+            ctx.setLineDash([5, 4]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            const initial = ch && ch.name ? ch.name.slice(0, 1).toUpperCase() : '📍';
+            ctx.fillStyle = tint;
+            ctx.font = 'bold ' + Math.round(r * 0.95) + 'px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(initial, cx, cy + 1);
+            ctx.restore();
+        });
+    }
+
     function render() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        if (bgImg && bgImg.complete) {
-            ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
-        } else {
-            ctx.fillStyle = '#222';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
         if (gridType === 'square') drawSquareGrid();
         else if (gridType === 'hex') drawHexGrid();
         tokens.forEach(drawToken);
+        drawSpawnMarkers();
         _updateGifOverlay();
     }
     render();
@@ -222,10 +260,122 @@
     const MAX_SCALE = 5;
     canvas.style.transformOrigin = '0 0';
 
+    // GM-only view persistence. Key per (campaign, map) so each map
+    // remembers its own pan/zoom; saves are debounced to avoid spamming
+    // localStorage during a pinch or drag. Players are excluded —
+    // they get the auto-center on first controlled token from v0.77.0,
+    // and persisting on top of that creates a confusing jump on
+    // session start.
+    const VIEW_KEY = (ME && ME.isGm && typeof MAP_ID !== 'undefined' && MAP_ID)
+        ? `simplevtt_gm_view_${CAMPAIGN_ID}_${MAP_ID}`
+        : null;
+    let _saveViewTimer = null;
+    function scheduleSaveView() {
+        if (!VIEW_KEY) return;
+        clearTimeout(_saveViewTimer);
+        _saveViewTimer = setTimeout(() => {
+            try {
+                localStorage.setItem(VIEW_KEY, JSON.stringify({
+                    panX: panX, panY: panY, scale: scale,
+                }));
+            } catch (e) { /* quota / disabled — silently skip */ }
+        }, 250);
+    }
+
+    function clampPan() {
+        const paneRect = mapPane.getBoundingClientRect();
+        if (!paneRect || paneRect.width <= 0 || paneRect.height <= 0) return;
+        const margin = gridSize * scale;
+        panX = Math.max(margin - canvas.width  * scale, Math.min(paneRect.width  - margin, panX));
+        panY = Math.max(margin - canvas.height * scale, Math.min(paneRect.height - margin, panY));
+    }
+
     function applyTransform() {
+        clampPan();
         const t = `translate(${panX}px, ${panY}px) scale(${scale})`;
         canvas.style.transform = t;
+        if (bgLayer) { bgLayer.style.transform = t; }
         if (_gifOverlay) { _gifOverlay.style.transform = t; _gifOverlay.style.transformOrigin = '0 0'; }
+        scheduleSaveView();
+    }
+
+    // Restore previously-saved view (GM only). Clamps scale into the
+    // existing zoom bounds in case MIN_SCALE / MAX_SCALE moved since
+    // the save. Pan is clamped by clampPan() inside applyTransform().
+    if (VIEW_KEY) {
+        try {
+            const raw = localStorage.getItem(VIEW_KEY);
+            if (raw) {
+                const saved = JSON.parse(raw);
+                if (saved
+                    && Number.isFinite(saved.panX)
+                    && Number.isFinite(saved.panY)
+                    && Number.isFinite(saved.scale)) {
+                    panX = saved.panX;
+                    panY = saved.panY;
+                    scale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, saved.scale));
+                    applyTransform();
+                }
+            }
+        } catch (e) { /* corrupt JSON — ignore + overwrite on next move */ }
+    }
+
+    // ---------- Auto-center on the player's first controlled token ----------
+    // Called after initial render (session start + page reloads on map
+    // switch) and after every token_add WS message (same-map encounter
+    // loads). Player-only — GMs control many tokens and would find the
+    // auto-pan disruptive.
+
+    function centerOnToken(token) {
+        // No-op if the pane hasn't been laid out yet — the caller can
+        // retry. Token world-coord center accounts for the gridSize
+        // offset render uses, so the token visually lands at the center
+        // of the viewport, not its top-left corner.
+        if (!token) return false;
+        const paneRect = mapPane.getBoundingClientRect();
+        if (paneRect.width <= 0 || paneRect.height <= 0) return false;
+        const tx = token.x + gridSize / 2;
+        const ty = token.y + gridSize / 2;
+        panX = paneRect.width / 2 - tx * scale;
+        panY = paneRect.height / 2 - ty * scale;
+        applyTransform();
+        return true;
+    }
+
+    function findMyFirstControlledToken() {
+        // First token in array order where the current user controls
+        // the character, either via controller_user_id or via being the
+        // owner of the linked character.
+        if (!ME || ME.id == null) return null;
+        for (const t of tokens) {
+            if (t.controller_user_id != null && t.controller_user_id === ME.id) return t;
+            if (t.character_id) {
+                const c = characters.find(c => c.id === t.character_id);
+                if (c && c.owner_user_id === ME.id) return t;
+            }
+        }
+        return null;
+    }
+
+    function centerOnFirstControlledToken() {
+        if (ME && ME.isGm) return;
+        const t = findMyFirstControlledToken();
+        if (t) centerOnToken(t);
+    }
+
+    // Initial autocenter — runs after the synchronous render() at
+    // module init, so the map is drawn before we move the viewport.
+    // setTimeout(0) lets the browser finish initial layout so
+    // mapPane has a real width/height to center against.
+    setTimeout(centerOnFirstControlledToken, 0);
+
+    // Per-user zoom-speed multiplier. 1.0 = default. Applied to both
+    // wheel (1.12 per notch base) and pinch (with extra baseline
+    // dampening so iPad gestures aren't twitchy). Clamped on the
+    // server but defended here against bad globals too.
+    function _zoomSpeed() {
+        const s = (ME && ME.zoomSpeed) || 1.0;
+        return Math.max(0.3, Math.min(1.5, Number.isFinite(s) ? s : 1.0));
     }
 
     mapPane.addEventListener('wheel', (ev) => {
@@ -233,7 +383,10 @@
         const rect = mapPane.getBoundingClientRect();
         const mouseX = ev.clientX - rect.left;
         const mouseY = ev.clientY - rect.top;
-        const factor = ev.deltaY < 0 ? 1.12 : 1 / 1.12;
+        // Per-notch factor scales with zoom_speed exponentially so 1.0
+        // preserves the pre-v0.81 feel; <1 is gentler, >1 snappier.
+        const baseFactor = Math.pow(1.12, _zoomSpeed());
+        const factor = ev.deltaY < 0 ? baseFactor : 1 / baseFactor;
         const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale * factor));
         panX = mouseX - (mouseX - panX) * (newScale / scale);
         panY = mouseY - (mouseY - panY) * (newScale / scale);
@@ -270,7 +423,55 @@
         ];
     }
 
+    // World-space coordinate at the center of what the GM is currently
+    // looking at (the map-pane viewport, accounting for pan + zoom).
+    // Used by token-add flows so new tokens land where the GM is looking
+    // instead of the (often offscreen) geometric center of the map.
+    function viewportCenterWorld() {
+        const paneRect = mapPane.getBoundingClientRect();
+        const canvasRect = canvas.getBoundingClientRect();
+        const screenCx = paneRect.left + paneRect.width / 2;
+        const screenCy = paneRect.top + paneRect.height / 2;
+        return {
+            x: (screenCx - canvasRect.left) / scale,
+            y: (screenCy - canvasRect.top) / scale,
+        };
+    }
+    window.vttViewportCenterWorld = viewportCenterWorld;
+
     canvas.addEventListener('mousedown', (ev) => {
+        // Click-to-set spawn: when armed (GM picked "Set" on a character
+        // row in an encounter's spawn-points editor), eat the next
+        // left-click on the canvas as the spawn coordinate for that
+        // character. Snap to grid. Right-click still pans.
+        if (spawnArmingCharId != null && spawnContext && spawnContext.encounterId && ev.button === 0) {
+            const [wx, wy] = clientToCanvas(ev);
+            const snappedX = Math.floor(wx / gridSize) * gridSize;
+            const snappedY = Math.floor(wy / gridSize) * gridSize;
+            const charId = spawnArmingCharId;
+            const encId = spawnContext.encounterId;
+            // Locally apply the new spawn so the marker shows up
+            // immediately; the inline panel will re-fetch on the
+            // server response to stay authoritative.
+            spawnContext.spawns[String(charId)] = { x: snappedX, y: snappedY };
+            render();
+            window.vttCancelSpawnArming();
+            ev.preventDefault();
+            fetch(`/api/campaign/${CAMPAIGN_ID}/encounters/${encId}/spawn`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ character_id: charId, x: snappedX, y: snappedY }),
+            }).then(r => {
+                if (!r.ok) {
+                    r.text().then(t => alert('Failed to set spawn: ' + t));
+                    return;
+                }
+                if (window.vttSpawnPlacedCallback) {
+                    window.vttSpawnPlacedCallback(encId, charId, snappedX, snappedY);
+                }
+            });
+            return;
+        }
         if (ev.button === 2) {
             panning = { startX: ev.clientX - panX, startY: ev.clientY - panY };
             canvas.style.cursor = 'move';
@@ -285,6 +486,60 @@
                 canvas.style.cursor = 'grabbing';
                 return;
             }
+        }
+    });
+
+    // Encounter spawn-points helpers used by the encounter panel
+    // controller (inline in tabletop.html). Set the context when the
+    // edit form opens; clear it when the form closes. Arming + the
+    // click-to-set landing flow are gated by the context being set.
+    window.vttGetCharacters = function () { return characters; };
+    // Lookup a token on the active map by character id (or null). Used
+    // by the spawn-points editor so clicking Set on a character who's
+    // already placed copies that token's position instead of requiring
+    // a second click on the map.
+    window.vttFindTokenForCharacter = function (charId) {
+        const cid = parseInt(charId, 10);
+        if (!cid) return null;
+        return tokens.find(t => t.character_id === cid) || null;
+    };
+    window.vttSetSpawnContext = function (ctx) {
+        // ctx: null | {encounterId, mapId, spawns: {char_id_str: {x,y}}}
+        spawnContext = ctx ? {
+            encounterId: ctx.encounterId,
+            mapId: ctx.mapId != null ? ctx.mapId : null,
+            spawns: ctx.spawns || {},
+        } : null;
+        if (!spawnContext && spawnArmingCharId != null) {
+            window.vttCancelSpawnArming();
+        }
+        render();
+    };
+    window.vttArmSpawn = function (charId) {
+        if (!spawnContext) {
+            // Caller forgot to set the context first — no-op to avoid
+            // arming with nowhere to send the click.
+            return;
+        }
+        spawnArmingCharId = parseInt(charId, 10) || null;
+        document.body.classList.toggle('spawn-arming', spawnArmingCharId != null);
+        const banner = document.getElementById('spawn-arm-banner');
+        const nameEl = document.getElementById('spawn-arm-name');
+        if (banner) banner.style.display = spawnArmingCharId ? '' : 'none';
+        if (nameEl && spawnArmingCharId) {
+            const ch = characters.find(c => c.id === spawnArmingCharId);
+            nameEl.textContent = ch ? ch.name : 'player';
+        }
+    };
+    window.vttCancelSpawnArming = function () {
+        spawnArmingCharId = null;
+        document.body.classList.remove('spawn-arming');
+        const banner = document.getElementById('spawn-arm-banner');
+        if (banner) banner.style.display = 'none';
+    };
+    document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape' && spawnArmingCharId != null) {
+            window.vttCancelSpawnArming();
         }
     });
 
@@ -342,6 +597,209 @@
         }
     });
 
+    // ---------- Touch controls (iPad / tablet) ----------
+    // One finger: drag token if started on a movable one, else pan.
+    // Two fingers: pinch zoom around the gesture's center, with pan
+    // adjusted so the world coord under the center stays put. A clean
+    // single-finger tap (small movement, short duration) is treated
+    // like a mouse click — fires spawn-arm if armed; pairs of taps
+    // close together open the character sheet (double-tap = dblclick).
+    // touch-action:none on #map-pane (CSS) suppresses the browser's
+    // default scroll/zoom so these gestures own the pane.
+    {
+        let touchPan = null;
+        let touchPinch = null;
+        let touchDrag = null;
+        let tapStart = null;
+        let lastTap = { time: 0, x: 0, y: 0 };
+
+        function touchDist(t1, t2) {
+            return Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        }
+        function clientToCanvasXY(cx, cy) {
+            const r = canvas.getBoundingClientRect();
+            return [(cx - r.left) / scale, (cy - r.top) / scale];
+        }
+
+        mapPane.addEventListener('touchstart', (ev) => {
+            if (ev.touches.length === 1) {
+                const t = ev.touches[0];
+                tapStart = { time: Date.now(), x: t.clientX, y: t.clientY };
+
+                // Spawn click-to-set: a tap while armed consumes the touch.
+                if (spawnArmingCharId != null && spawnContext && spawnContext.encounterId) {
+                    const [wx, wy] = clientToCanvasXY(t.clientX, t.clientY);
+                    const snappedX = Math.floor(wx / gridSize) * gridSize;
+                    const snappedY = Math.floor(wy / gridSize) * gridSize;
+                    const charId = spawnArmingCharId;
+                    const encId = spawnContext.encounterId;
+                    spawnContext.spawns[String(charId)] = { x: snappedX, y: snappedY };
+                    render();
+                    window.vttCancelSpawnArming();
+                    ev.preventDefault();
+                    fetch(`/api/campaign/${CAMPAIGN_ID}/encounters/${encId}/spawn`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ character_id: charId, x: snappedX, y: snappedY }),
+                    }).then(r => {
+                        if (!r.ok) { r.text().then(s => alert('Failed to set spawn: ' + s)); return; }
+                        if (window.vttSpawnPlacedCallback) {
+                            window.vttSpawnPlacedCallback(encId, charId, snappedX, snappedY);
+                        }
+                    });
+                    tapStart = null;
+                    return;
+                }
+
+                const [wx, wy] = clientToCanvasXY(t.clientX, t.clientY);
+                for (let i = tokens.length - 1; i >= 0; i--) {
+                    const tok = tokens[i];
+                    if (pointInToken(wx, wy, tok) && canMove(tok)) {
+                        touchDrag = { token: tok, offsetX: wx - tok.x, offsetY: wy - tok.y };
+                        ev.preventDefault();
+                        return;
+                    }
+                }
+                touchPan = {
+                    startPanX: panX, startPanY: panY,
+                    startTouchX: t.clientX, startTouchY: t.clientY,
+                };
+                ev.preventDefault();
+                return;
+            }
+            if (ev.touches.length === 2) {
+                // Drop any single-finger state — pinch wins.
+                touchDrag = null;
+                touchPan = null;
+                tapStart = null;
+                const [t1, t2] = ev.touches;
+                const paneRect = mapPane.getBoundingClientRect();
+                const midX = (t1.clientX + t2.clientX) / 2;
+                const midY = (t1.clientY + t2.clientY) / 2;
+                touchPinch = {
+                    startDist: touchDist(t1, t2),
+                    startScale: scale,
+                    startPanX: panX,
+                    startPanY: panY,
+                    centerX: midX - paneRect.left,
+                    centerY: midY - paneRect.top,
+                };
+                ev.preventDefault();
+            }
+        }, { passive: false });
+
+        mapPane.addEventListener('touchmove', (ev) => {
+            if (touchPinch && ev.touches.length >= 2) {
+                const [t1, t2] = ev.touches;
+                const newDist = touchDist(t1, t2);
+                if (touchPinch.startDist > 0) {
+                    // Pinch exponent: raw `newDist/startDist` is too
+                    // twitchy on iPad. Multiply by a 0.6 baseline
+                    // dampener × the user's zoom_speed multiplier so a
+                    // default 1.0 setting feels comfortable and the
+                    // slider tunes from there. Effective exponent
+                    // range at default: 0.6 × {0.3..1.5} = {0.18..0.9}.
+                    const exp = 0.6 * _zoomSpeed();
+                    const ratio = Math.pow(newDist / touchPinch.startDist, exp);
+                    const newScale = Math.max(
+                        MIN_SCALE,
+                        Math.min(MAX_SCALE, touchPinch.startScale * ratio)
+                    );
+                    // Anchor the gesture's center: same math the wheel
+                    // handler uses, with the touch midpoint as the
+                    // fixed screen point.
+                    const cx = touchPinch.centerX;
+                    const cy = touchPinch.centerY;
+                    const factor = newScale / touchPinch.startScale;
+                    panX = cx - (cx - touchPinch.startPanX) * factor;
+                    panY = cy - (cy - touchPinch.startPanY) * factor;
+                    scale = newScale;
+                    applyTransform();
+                }
+                ev.preventDefault();
+                return;
+            }
+            if (touchDrag && ev.touches.length === 1) {
+                const t = ev.touches[0];
+                const [wx, wy] = clientToCanvasXY(t.clientX, t.clientY);
+                touchDrag.token.x = wx - touchDrag.offsetX;
+                touchDrag.token.y = wy - touchDrag.offsetY;
+                render();
+                ev.preventDefault();
+                return;
+            }
+            if (touchPan && ev.touches.length === 1) {
+                const t = ev.touches[0];
+                panX = touchPan.startPanX + (t.clientX - touchPan.startTouchX);
+                panY = touchPan.startPanY + (t.clientY - touchPan.startTouchY);
+                applyTransform();
+                ev.preventDefault();
+            }
+        }, { passive: false });
+
+        function endTouches(ev) {
+            // Finalize token drag when the last finger lifts.
+            if (touchDrag && ev.touches.length === 0) {
+                const [sx, sy] = snapToGrid(touchDrag.token.x, touchDrag.token.y);
+                touchDrag.token.x = sx;
+                touchDrag.token.y = sy;
+                const id = touchDrag.token.id;
+                fetch(`/api/campaign/${CAMPAIGN_ID}/token/${id}/move`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ x: sx, y: sy }),
+                });
+                touchDrag = null;
+                render();
+                tapStart = null;
+            }
+            if (touchPan && ev.touches.length === 0) {
+                touchPan = null;
+            }
+            // Pinch ending — if one finger remains, transition into pan
+            // so the user can keep moving the map.
+            if (touchPinch && ev.touches.length < 2) {
+                touchPinch = null;
+                if (ev.touches.length === 1) {
+                    const t = ev.touches[0];
+                    touchPan = {
+                        startPanX: panX, startPanY: panY,
+                        startTouchX: t.clientX, startTouchY: t.clientY,
+                    };
+                }
+            }
+            // Tap / double-tap detection: only fires when the lift moved
+            // very little since touchstart (i.e., not a pan or drag).
+            if (tapStart && ev.changedTouches.length === 1 && ev.touches.length === 0) {
+                const ct = ev.changedTouches[0];
+                const moved = Math.hypot(ct.clientX - tapStart.x, ct.clientY - tapStart.y);
+                const dt = Date.now() - tapStart.time;
+                if (moved < 12 && dt < 350) {
+                    const now = Date.now();
+                    const dx = ct.clientX - lastTap.x;
+                    const dy = ct.clientY - lastTap.y;
+                    if (now - lastTap.time < 400 && Math.hypot(dx, dy) < 30) {
+                        // Double-tap → mirror dblclick behaviour.
+                        const [wx, wy] = clientToCanvasXY(ct.clientX, ct.clientY);
+                        for (let i = tokens.length - 1; i >= 0; i--) {
+                            const tok = tokens[i];
+                            if (pointInToken(wx, wy, tok) && tok.character_id) {
+                                openSheet(tok.character_id);
+                                break;
+                            }
+                        }
+                        lastTap = { time: 0, x: 0, y: 0 };
+                    } else {
+                        lastTap = { time: now, x: ct.clientX, y: ct.clientY };
+                    }
+                }
+                tapStart = null;
+            }
+        }
+        mapPane.addEventListener('touchend', endTouches);
+        mapPane.addEventListener('touchcancel', endTouches);
+    }
+
     // ---------- WebSocket ----------
     const wsProto = location.protocol === 'https:' ? 'wss://' : 'ws://';
     let ws;
@@ -360,6 +818,15 @@
                 location.href = '/';
                 return;
             }
+            // Encounter load swapped the active map under us. The canvas
+            // wasn't built to swap maps mid-session (grid math, bg image,
+            // dims all change), so the simplest correct path is a hard
+            // reload — SSR rebuilds the page against the new active map
+            // and the WS reconnects to seed battle state from the hub.
+            if (msg.type === 'map_change') {
+                location.reload();
+                return;
+            }
             if (msg.type === 'token_move') {
                 const t = tokens.find(t => t.id === msg.data.id);
                 if (t) { t.x = msg.data.x; t.y = msg.data.y; render(); }
@@ -368,6 +835,12 @@
                 renderTokenTracker();
                 refreshPlaceButtons();
                 render();
+                // Encounter load cascades token_add per token — center
+                // on the player's first controlled token as soon as
+                // it appears. Idempotent for non-controlled tokens;
+                // GM check inside the helper keeps this a player-only
+                // behavior.
+                centerOnFirstControlledToken();
             } else if (msg.type === 'token_delete') {
                 tokens = tokens.filter(t => t.id !== msg.data.id);
                 renderTokenTracker();
@@ -1027,8 +1500,9 @@
 
     document.querySelectorAll('.quick-die').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.getElementById('roll-expr').value = btn.dataset.expr;
-            document.getElementById('roll-form').dispatchEvent(new Event('submit', { cancelable: true }));
+            const exprEl = document.getElementById('roll-expr');
+            const current = exprEl.value.trim();
+            exprEl.value = current ? current + '+' + btn.dataset.expr : btn.dataset.expr;
         });
     });
 
@@ -1080,16 +1554,158 @@
                     card.appendChild(info);
                     card.addEventListener('click', async () => {
                         modal.style.display = 'none';
+                        const center = viewportCenterWorld();
                         const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/tokens`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ token_template_id: tmpl.id }),
+                            body: JSON.stringify({
+                                token_template_id: tmpl.id,
+                                x: center.x, y: center.y,
+                            }),
                         });
                         if (!resp.ok) alert('Failed to place token');
                     });
                     grid.appendChild(card);
                 });
             }
+
+            // ── Populate Players grid (campaign characters) ──
+            // Multi-select: click cards to toggle selection, then use
+            // "Place Selected" to place all at once. Placed tokens can
+            // be removed by clicking their card directly (bypasses multi-select).
+            const playerGrid = document.getElementById('atm-player-grid');
+            const noChars = document.getElementById('atm-no-characters');
+            const placeSelBtn = document.getElementById('atm-place-selected-btn');
+            const selCountEl = document.getElementById('atm-selected-count');
+            const selectedIds = new Set();
+
+            function syncPlaceBtn() {
+                const n = selectedIds.size;
+                if (placeSelBtn) {
+                    placeSelBtn.style.display = n > 0 ? '' : 'none';
+                    if (selCountEl) selCountEl.textContent = n;
+                }
+            }
+
+            if (playerGrid) {
+                playerGrid.innerHTML = '';
+                selectedIds.clear();
+                syncPlaceBtn();
+                if (!characters.length) {
+                    noChars.style.display = '';
+                    playerGrid.style.display = 'none';
+                } else {
+                    noChars.style.display = 'none';
+                    playerGrid.style.display = 'grid';
+                    characters.forEach(ch => {
+                        const placed = charTokenOnMap(ch.id);
+                        const card = document.createElement('div');
+                        card.dataset.charId = ch.id;
+                        card.style.cssText =
+                            'background:#20232a;border:2px solid #2e3140;border-radius:6px;' +
+                            'overflow:hidden;cursor:pointer;transition:border-color 0.15s,box-shadow 0.15s;' +
+                            'position:relative;' + (placed ? 'opacity:0.78;' : '');
+
+                        function applySelStyle() {
+                            const sel = selectedIds.has(ch.id);
+                            card.style.borderColor = sel ? '#6cb' : (placed ? '#3a6a50' : '#2e3140');
+                            card.style.boxShadow = sel ? '0 0 0 1px #6cb' : 'none';
+                        }
+
+                        const portrait = ch.portrait_url || (ch.owner_user_id ? USER_PORTRAITS[ch.owner_user_id] : null);
+                        if (portrait) {
+                            const img = document.createElement('img');
+                            img.src = portrait;
+                            img.style.cssText = 'width:100%;height:90px;object-fit:cover;display:block;';
+                            card.appendChild(img);
+                        } else {
+                            const ph = document.createElement('div');
+                            const tint = ch.color || (ch.owner_user_id ? USER_COLORS[ch.owner_user_id] : null) || '#3a3f55';
+                            ph.style.cssText =
+                                'width:100%;height:90px;display:flex;align-items:center;justify-content:center;' +
+                                'background:' + tint + ';font-size:28px;font-weight:700;color:#fff;' +
+                                'text-shadow:0 1px 2px rgba(0,0,0,0.5);';
+                            ph.textContent = ch.name.slice(0, 1).toUpperCase();
+                            card.appendChild(ph);
+                        }
+                        if (placed) {
+                            const badge = document.createElement('span');
+                            badge.textContent = 'On map';
+                            badge.style.cssText =
+                                'position:absolute;top:5px;right:5px;font-size:9px;font-weight:700;' +
+                                'background:rgba(34,68,55,0.92);color:#7c9;border:1px solid #3a6a50;' +
+                                'border-radius:3px;padding:1px 5px;letter-spacing:.04em;';
+                            card.appendChild(badge);
+                        }
+                        const info = document.createElement('div');
+                        info.style.cssText = 'padding:6px 8px;';
+                        const nameEl = document.createElement('div');
+                        nameEl.style.cssText = 'font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+                        nameEl.textContent = ch.name;
+                        info.appendChild(nameEl);
+                        const ownerName = ch.owner_user_id ? USER_CHAR_NAMES[ch.owner_user_id] : null;
+                        if (ownerName && ownerName !== ch.name) {
+                            const ownerEl = document.createElement('div');
+                            ownerEl.style.cssText = 'font-size:10px;color:var(--fg-mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px;';
+                            ownerEl.textContent = ownerName;
+                            info.appendChild(ownerEl);
+                        }
+                        card.appendChild(info);
+                        card.addEventListener('click', async () => {
+                            if (card.dataset.busy === '1') return;
+                            // Already on map → remove immediately (no multi-select for removals)
+                            if (charTokenOnMap(ch.id)) {
+                                card.dataset.busy = '1';
+                                try {
+                                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/character/${ch.id}/token`, {
+                                        method: 'DELETE',
+                                        headers: { 'Content-Type': 'application/json' },
+                                    });
+                                    if (!resp.ok) alert('Failed: ' + await resp.text());
+                                } finally {
+                                    delete card.dataset.busy;
+                                }
+                                return;
+                            }
+                            // Not on map → toggle selection
+                            if (selectedIds.has(ch.id)) {
+                                selectedIds.delete(ch.id);
+                            } else {
+                                selectedIds.add(ch.id);
+                            }
+                            applySelStyle();
+                            syncPlaceBtn();
+                        });
+                        applySelStyle();
+                        playerGrid.appendChild(card);
+                    });
+                }
+            }
+
+            if (placeSelBtn) {
+                placeSelBtn.onclick = async () => {
+                    if (!selectedIds.size || placeSelBtn.dataset.busy === '1') return;
+                    placeSelBtn.dataset.busy = '1';
+                    placeSelBtn.disabled = true;
+                    const center = viewportCenterWorld();
+                    const ids = Array.from(selectedIds);
+                    try {
+                        for (const id of ids) {
+                            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/character/${id}/place-token`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(center),
+                            });
+                            if (!resp.ok) { alert('Failed: ' + await resp.text()); break; }
+                        }
+                    } finally {
+                        delete placeSelBtn.dataset.busy;
+                        placeSelBtn.disabled = false;
+                    }
+                    modal.style.display = 'none';
+                };
+            }
+
             // Tab switching
             modal.querySelectorAll('.atm-tab-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
@@ -1121,14 +1737,104 @@
                 const label = document.getElementById('atm-blank-label').value.trim() || 'Token';
                 const color = document.getElementById('atm-blank-color').value || '#cc3333';
                 document.getElementById('add-token-modal').style.display = 'none';
+                const center = viewportCenterWorld();
                 const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/tokens`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ label, color, x: 100, y: 100 }),
+                    body: JSON.stringify({ label, color, x: center.x, y: center.y }),
                 });
                 if (!resp.ok) alert('Failed to add token');
             });
         }
+
+        // Open5e search tab
+        (function() {
+            const searchInput = document.getElementById('atm-o5e-search');
+            const statusEl   = document.getElementById('atm-o5e-status');
+            const resultsEl  = document.getElementById('atm-o5e-results');
+            if (!searchInput) return;
+
+            let o5eTimer = null;
+
+            function renderResults(creatures) {
+                resultsEl.innerHTML = '';
+                if (!creatures.length) {
+                    statusEl.textContent = 'No results.';
+                    return;
+                }
+                statusEl.textContent = `${creatures.length} result${creatures.length === 1 ? '' : 's'}`;
+                creatures.forEach(c => {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg-3,#1a1d24);border-radius:4px;gap:8px;';
+                    const info = document.createElement('div');
+                    const cr   = c.cr != null ? `CR ${c.cr}` : '';
+                    const type = [c.size, c.type, cr].filter(Boolean).join(' · ');
+                    info.innerHTML = `<div style="font-size:12px;font-weight:600;">${c.name}</div><div style="font-size:10px;color:var(--fg-mute);">${type}</div>`;
+                    const btn = document.createElement('button');
+                    btn.textContent = 'Import & Place';
+                    btn.style.cssText = 'font-size:11px;padding:4px 10px;white-space:nowrap;flex-shrink:0;';
+                    btn.addEventListener('click', async () => {
+                        btn.disabled = true;
+                        btn.textContent = 'Importing…';
+                        try {
+                            const imp = await fetch(`/api/campaign/${CAMPAIGN_ID}/templates/import-monster`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ slug: c.slug }),
+                            });
+                            if (!imp.ok) throw new Error(await imp.text());
+                            const tmpl = await imp.json();
+                            document.getElementById('add-token-modal').style.display = 'none';
+                            const center = viewportCenterWorld();
+                            const place = await fetch(`/api/campaign/${CAMPAIGN_ID}/tokens`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ template_id: tmpl.id, x: center.x, y: center.y }),
+                            });
+                            if (!place.ok) alert('Template imported but token placement failed.');
+                        } catch (err) {
+                            btn.disabled = false;
+                            btn.textContent = 'Import & Place';
+                            alert(`Import failed: ${err.message}`);
+                        }
+                    });
+                    row.appendChild(info);
+                    row.appendChild(btn);
+                    resultsEl.appendChild(row);
+                });
+            }
+
+            async function doSearch(q) {
+                if (!q) { statusEl.textContent = ''; resultsEl.innerHTML = ''; return; }
+                statusEl.textContent = 'Searching…';
+                resultsEl.innerHTML = '';
+                try {
+                    const r = await fetch(`/api/open5e/monsters?search=${encodeURIComponent(q)}&limit=25`);
+                    if (!r.ok) throw new Error(r.statusText);
+                    const data = await r.json();
+                    renderResults(data.results || data);
+                } catch (e) {
+                    statusEl.textContent = `Error: ${e.message}`;
+                }
+            }
+
+            searchInput.addEventListener('input', () => {
+                clearTimeout(o5eTimer);
+                o5eTimer = setTimeout(() => doSearch(searchInput.value.trim()), 350);
+            });
+
+            // Clear search when tab is opened
+            modal.querySelectorAll('.atm-tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (btn.dataset.tab === 'atm-tab-open5e') {
+                        searchInput.value = '';
+                        statusEl.textContent = '';
+                        resultsEl.innerHTML = '';
+                        setTimeout(() => searchInput.focus(), 50);
+                    }
+                });
+            });
+        })();
 
         // Close modal on backdrop click
         document.getElementById('add-token-modal').addEventListener('click', (ev) => {
@@ -1348,7 +2054,23 @@
             list.innerHTML = '<p class="muted" style="font-size:11px;margin:4px 0;">No tokens on this map.</p>';
             return;
         }
-        tokens.forEach(t => {
+        // Split into player- vs GM-controlled tokens. The signal is
+        // ``controller_user_id``: set by place_character_token when the
+        // GM places a player's character token; remains null for NPCs
+        // / monsters / blank tokens the GM creates from the Add Token
+        // modal. The two sections render with their own headers so the
+        // GM can scan players first during combat.
+        const playerTokens = tokens.filter(t => t.controller_user_id != null);
+        const npcTokens    = tokens.filter(t => t.controller_user_id == null);
+
+        function _appendSectionHeader(label, count) {
+            const h = document.createElement('div');
+            h.className = 'tt-section-header';
+            h.style.cssText = 'font-size:9px;font-weight:700;color:var(--fg-mute);text-transform:uppercase;letter-spacing:.06em;padding:8px 0 4px;margin-top:4px;border-bottom:1px solid var(--border);';
+            h.innerHTML = `${label} <span style="color:var(--fg);font-weight:400;font-size:10px;letter-spacing:0;">(${count})</span>`;
+            list.appendChild(h);
+        }
+        function _renderToken(t) {
             const row = document.createElement('div');
             row.className = 'tt-row';
             row.dataset.id = t.id;
@@ -1434,7 +2156,16 @@
                     }
                 });
             }
-        });
+        }   // end _renderToken
+
+        if (playerTokens.length) {
+            _appendSectionHeader('👤 Players', playerTokens.length);
+            playerTokens.forEach(_renderToken);
+        }
+        if (npcTokens.length) {
+            _appendSectionHeader('⚙ GM / NPCs', npcTokens.length);
+            npcTokens.forEach(_renderToken);
+        }
     }
 
     renderTokenTracker();
@@ -1445,9 +2176,12 @@
     }
 
     function canPlaceChar(charId) {
-        if (ME.isGm) return true;
-        const c = characters.find(c => c.id === charId);
-        return c && c.owner_user_id === ME.id;
+        // GM-only as of v0.63.0. Players no longer add or remove their
+        // own tokens — the GM does it for them from the Token Management
+        // panel in the Battle drawer. The local check matches the
+        // server-side gate in place_character_token / remove_character_token;
+        // even if the player tried to bypass the UI, the API returns 403.
+        return !!ME.isGm;
     }
 
     function refreshPlaceButtons() {
@@ -1468,10 +2202,15 @@
                         : `/api/campaign/${CAMPAIGN_ID}/character/${charId}/place-token`;
                     btn.disabled = true;
                     try {
-                        const resp = await fetch(url, {
+                        // For place (POST): send viewport-center world coords so
+                        // the new token lands where the GM is looking. For
+                        // remove (DELETE): no body needed.
+                        const init = {
                             method: existing ? 'DELETE' : 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                        });
+                        };
+                        if (!existing) init.body = JSON.stringify(viewportCenterWorld());
+                        const resp = await fetch(url, init);
                         if (!resp.ok) alert('Failed: ' + await resp.text());
                     } finally { btn.disabled = false; }
                 });

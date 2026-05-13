@@ -34,8 +34,16 @@ frontend can render an authoring affordance only on custom content.
 
 File layout
 -----------
-``app/data/local/class_features/<slug>.json``
-``app/data/local/subclass_features/<class_slug>__<sub_slug>.json``
+Content is namespaced by game system from disk on outward so a future
+second system (PF2e, CoC, …) can ship alongside D&D 5e without renames:
+
+``app/data/local/<system>/class_features/<slug>.json``
+``app/data/local/<system>/subclass_features/<class_slug>__<sub_slug>.json``
+``app/data/local/<system>/races/<slug>.json``
+
+Only ``dnd5e`` ships today; the constants below pin to that subtree.
+When a second system arrives the loader will accept a ``system`` arg
+and resolve paths against ``_DATA_DIR / system / …``.
 """
 from __future__ import annotations
 
@@ -46,8 +54,10 @@ import time
 from typing import Callable, Optional
 
 _DATA_DIR = pathlib.Path(__file__).parent / "data" / "local"
-_CLASS_DIR = _DATA_DIR / "class_features"
-_SUBCLASS_DIR = _DATA_DIR / "subclass_features"
+_SYSTEM_DIR = _DATA_DIR / "dnd5e"
+_CLASS_DIR = _SYSTEM_DIR / "class_features"
+_SUBCLASS_DIR = _SYSTEM_DIR / "subclass_features"
+_RACE_DIR = _SYSTEM_DIR / "races"
 
 _lock = threading.Lock()
 _misses: dict[str, dict] = {}
@@ -302,11 +312,34 @@ def _db_race_provider(slug: str, *, scopes: list[str], db=None) -> tuple[dict, s
 
 
 def _fs_race_provider(slug: str, *, scopes: list[str], db=None) -> tuple[dict, str] | None:
-    """Reserved: shipped FS races would go here.  No shipped race files
-    yet (only the Druid class + two subclass JSON files), but the slot
-    in the provider chain is wired so adding ``app/data/local/races/<slug>.json``
-    later is purely additive — no resolver changes needed."""
-    return None
+    """Shipped FS races under ``app/data/local/dnd5e/races/<slug>.json``.
+
+    Files mirror the shape ``_db_race_provider`` returns so the
+    ``/api/open5e/race-detail`` adapter handles both uniformly: ``name``,
+    ``ability_bonuses`` (Open5e list of ``{attribute, bonus}``), ``size``,
+    ``speed`` (either int or ``{"walk": int}``), ``age``, ``alignment``,
+    ``languages``, and ``traits_list`` (structured ``{name, level, desc}``).
+    """
+    s = _safe_slug(slug)
+    if not s:
+        return None
+    rec = _load_json(_RACE_DIR / f"{s}.json")
+    if not rec or _scope_of(rec) not in scopes:
+        return None
+    # Normalise speed to a dict so the response adapter doesn't have to
+    # branch — shipped files may use either ``speed: 30`` (matches the
+    # CustomRace authoring form) or ``speed: {"walk": 30}`` (matches the
+    # Open5e shape).
+    spd = rec.get("speed")
+    if isinstance(spd, int):
+        rec = {**rec, "speed": {"walk": spd}}
+    # Accept ``traits`` as the structured list field on disk (more
+    # natural for hand-authoring) and re-emit as ``traits_list`` for the
+    # adapter, which won't synthesise a markdown blob if the structured
+    # list is non-empty.
+    if "traits_list" not in rec and isinstance(rec.get("traits"), list):
+        rec = {**rec, "traits_list": rec.get("traits") or []}
+    return rec, _label_for_fs_record(rec)
 
 
 def _db_monster_provider(slug: str, *, scopes: list[str], db=None) -> tuple[dict, str] | None:
@@ -598,10 +631,22 @@ def clear_misses() -> None:
 
 # ── Discovery helpers (for admin panels) ──────────────────────────────────────
 
-def list_local_classes() -> list[str]:
+def list_local_classes() -> list[dict]:
+    """Discovery helper for shipped FS classes. Returns parsed name +
+    hit die alongside the slug so admin views and the search endpoint
+    can render a useful summary without reopening each file."""
     if not _CLASS_DIR.exists():
         return []
-    return sorted(p.stem for p in _CLASS_DIR.glob("*.json"))
+    rows = []
+    for p in sorted(_CLASS_DIR.glob("*.json")):
+        rec = _load_json(p) or {}
+        rows.append({
+            "slug": p.stem,
+            "name": rec.get("name") or p.stem,
+            "hit_die": rec.get("hit_die"),
+            "file": p.name,
+        })
+    return rows
 
 
 def list_local_subclasses() -> list[dict]:
@@ -615,4 +660,22 @@ def list_local_subclasses() -> list[dict]:
         else:
             cls, sub = "", stem
         rows.append({"class_slug": cls, "sub_slug": sub, "file": p.name})
+    return rows
+
+
+def list_local_races() -> list[dict]:
+    """Discovery helper for shipped FS races. Mirrors ``list_local_classes``
+    but returns the parsed name/size alongside the slug so admin views can
+    render a useful summary without reopening each file."""
+    if not _RACE_DIR.exists():
+        return []
+    rows = []
+    for p in sorted(_RACE_DIR.glob("*.json")):
+        rec = _load_json(p) or {}
+        rows.append({
+            "slug": p.stem,
+            "name": rec.get("name") or p.stem,
+            "size": rec.get("size") or "",
+            "file": p.name,
+        })
     return rows

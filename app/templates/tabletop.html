@@ -8,7 +8,7 @@
     body { overflow: hidden; }
     .container { padding: 8px 12px; overflow: hidden; display: flex; flex-direction: column; }
     .tabletop-layout { display: flex; flex-direction: row; flex: 1; min-height: 0; }
-    .map-pane { flex: 1; min-width: 0; position: relative; overflow: hidden; background: var(--bg); border-radius: 6px; }
+    .map-pane { flex: 1; min-width: 0; position: relative; overflow: hidden; background: var(--bg); border-radius: 6px; touch-action: none; }
 
     /* ── Tabletop top bar ── */
     .tt-topbar {
@@ -38,28 +38,13 @@
     /* ── Drawer system ── */
     .drawer-sidebar {
         display: flex; flex-direction: column; flex-shrink: 0;
-        width: 0; height: 100%; overflow: hidden;
-        background: var(--bg-2); border-left: 0 solid var(--border);
-        transition: width 0.22s ease, border-left-width 0.22s ease;
+        width: 480px; height: 100%;
+        background: var(--bg-2); border-left: 1px solid var(--border);
     }
-    .drawer-sidebar.is-open {
-        width: 430px; border-left-width: 1px;
-    }
-    .drawer-sidebar.no-transition { transition: none !important; }
-    #drawer-open-btn {
-        position: absolute; top: 8px; right: 8px; z-index: 50;
-        width: 30px; height: 30px; padding: 0;
-        background: color-mix(in srgb, var(--bg-2) 96%, transparent);
-        border: 1px solid var(--border); border-radius: 4px;
-        color: var(--fg-mute); font-size: 15px; cursor: pointer;
-        display: flex; align-items: center; justify-content: center;
-        transition: background 0.15s, color 0.15s;
-    }
-    #drawer-open-btn:hover { background: var(--border); color: var(--fg); }
     .drawer-tab-bar {
         display: flex; flex-direction: row; align-items: center; flex-wrap: wrap;
         gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0;
-        min-width: 430px;
+        min-width: 480px;
     }
     .drawer-tab-btn {
         padding: 5px 11px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px;
@@ -68,17 +53,7 @@
     }
     .drawer-tab-btn:hover { background: var(--surface-hover); color: var(--fg); }
     .drawer-tab-btn.active { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-border); }
-    .drawer-pin-btn {
-        margin-left: auto; width: 26px; height: 26px; flex-shrink: 0;
-        display: flex; align-items: center; justify-content: center;
-        background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px;
-        cursor: pointer; color: var(--fg-mute); font-size: 13px; padding: 0;
-        transition: background 0.15s, color 0.15s;
-    }
-    .drawer-pin-btn:hover { background: var(--surface-hover); color: var(--fg-mute); }
-    .drawer-pin-btn.pinned { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-border); }
-    .drawer-panels-wrapper { position: relative; flex: 1; overflow: hidden; display: none; min-width: 430px; }
-    .drawer-panels-wrapper.has-open { display: block; }
+    .drawer-panels-wrapper { position: relative; flex: 1; overflow: hidden; display: block; min-width: 480px; }
     .drawer-panel {
         position: absolute; top: 0; left: 0; width: 100%; height: 100%;
         background: var(--bg-2); display: flex; flex-direction: column; visibility: hidden;
@@ -89,8 +64,6 @@
         padding: 11px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
     }
     .drawer-header h3 { margin: 0; font-size: 14px; }
-    .drawer-close { background: none; border: none; color: var(--fg-mute); font-size: 20px; cursor: pointer; padding: 0 2px; line-height: 1; }
-    .drawer-close:hover { color: var(--fg); }
     .drawer-body { flex: 1; overflow-y: auto; padding: 10px 14px; }
 
     /* ── Roll log cards ── */
@@ -341,6 +314,7 @@
     /* ── GM roll-request panel quick buttons ── */
     .rr-quick { padding: 2px 7px; font-size: 11px; cursor: pointer; }
     .rr-quick.rr-selected { background: var(--accent-bg); border-color: var(--accent-border); color: var(--accent); }
+    .rr-dc-preset { padding: 2px 7px; font-size: 11px; cursor: pointer; }
 
     /* ── Player tab: character list ── */
     .char-row { display: flex; align-items: center; gap: 6px; padding: 7px 2px; border-bottom: 1px solid var(--border); }
@@ -506,6 +480,56 @@
     .battle-banner { font-size:13px; font-weight:600; color: var(--accent); background: var(--accent-bg); border-radius:4px; padding:7px 12px; margin-bottom:10px; border:1px solid var(--accent-border); }
     .battle-ctrl { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin-bottom:10px; }
 
+    /* Token Management <details> in the Battle drawer (GM-only) */
+    #token-management-panel summary::-webkit-details-marker { display: none; }
+    #token-management-panel summary::marker { content: ''; }
+    #token-management-panel[open] .tm-chevron { transform: rotate(0); }
+    #token-management-panel:not([open]) .tm-chevron { transform: rotate(-90deg); }
+
+    /* Encounters <details> in the GM Tools drawer */
+    #encounters-panel summary::-webkit-details-marker { display: none; }
+    #encounters-panel summary::marker { content: ''; }
+    #encounters-panel[open] .enc-chevron { transform: rotate(0); }
+    #encounters-panel:not([open]) .enc-chevron { transform: rotate(-90deg); }
+
+    /* Roll Request <details> in the GM Tools drawer */
+    #roll-request-panel summary::-webkit-details-marker { display: none; }
+    #roll-request-panel summary::marker { content: ''; }
+    #roll-request-panel[open] .rr-chevron { transform: rotate(0); }
+    #roll-request-panel:not([open]) .rr-chevron { transform: rotate(-90deg); }
+
+    /* Music <details> in the GM Tools drawer */
+    #music-panel summary::-webkit-details-marker { display: none; }
+    #music-panel summary::marker { content: ''; }
+    #music-panel[open] .music-chevron { transform: rotate(0); }
+    #music-panel:not([open]) .music-chevron { transform: rotate(-90deg); }
+
+    /* Player characters <details> in the Player drawer */
+    #player-chars-panel summary::-webkit-details-marker { display: none; }
+    #player-chars-panel summary::marker { content: ''; }
+    #player-chars-panel[open] .pchar-chevron { transform: rotate(0); }
+    #player-chars-panel:not([open]) .pchar-chevron { transform: rotate(-90deg); }
+
+    /* Initiative <details> in the Player drawer */
+    #initiative-panel summary::-webkit-details-marker { display: none; }
+    #initiative-panel summary::marker { content: ''; }
+    #initiative-panel[open] .init-panel-chevron { transform: rotate(0); }
+    #initiative-panel:not([open]) .init-panel-chevron { transform: rotate(-90deg); }
+
+    /* Sound <details> in the Player drawer */
+    #player-sound-panel summary::-webkit-details-marker { display: none; }
+    #player-sound-panel summary::marker { content: ''; }
+    #player-sound-panel[open] .sound-chevron { transform: rotate(0); }
+    #player-sound-panel:not([open]) .sound-chevron { transform: rotate(-90deg); }
+
+    /* HP threshold badge in initiative list (player view) */
+    .init-threshold { font-size:10px; font-weight:600; padding:1px 5px; border-radius:3px; flex-shrink:0; }
+
+    /* Crosshair cursor on the map while encounter-spawn click-to-set is armed */
+    body.spawn-arming .canvas-host,
+    body.spawn-arming #vtt-canvas,
+    body.spawn-arming #map-pane { cursor: crosshair !important; }
+
     /* GM music drawer */
     .gm-playlist { margin-bottom: 4px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
     .gm-playlist-header { display: flex; align-items: center; gap: 6px; padding: 7px 10px; background: color-mix(in srgb, var(--bg-2) 38%, transparent); cursor: pointer; }
@@ -599,20 +623,14 @@
         /* Hide the map/canvas pane entirely; the drawer becomes the whole UI */
         .tabletop-layout .map-pane { display: none; }
 
-        /* Sidebar fills the screen and stays open with no slide animation */
-        .tabletop-layout .drawer-sidebar,
-        .tabletop-layout .drawer-sidebar.is-open {
+        /* Sidebar fills the screen */
+        .tabletop-layout .drawer-sidebar {
             width: 100%; flex: 1; min-width: 0;
             border-left-width: 0; border-top: 1px solid var(--border);
-            transition: none;
         }
         .drawer-tab-bar { min-width: 0; padding: 5px 6px; }
         .drawer-tab-btn { padding: 6px 10px; }
-        .drawer-panels-wrapper { min-width: 0; display: block; }
-
-        /* No need for the open-arrow or the pin button in the always-open layout */
-        #drawer-open-btn,
-        #drawer-pin-btn { display: none; }
+        .drawer-panels-wrapper { min-width: 0; }
 
         /* Slightly tighter top bar on phones */
         .tt-topbar { gap: 8px; }
@@ -650,28 +668,47 @@
     {% endif %}
 </div>
 
-{% if is_gm %}
-<div id="open5e-stale-banner" style="display:none; background:color-mix(in srgb,var(--danger) 15%,var(--bg)); border-bottom:1px solid color-mix(in srgb,var(--danger) 35%,var(--border)); color:var(--fg); padding:8px 16px; font-size:13px; display:flex; align-items:center; gap:10px;">
-    <span style="flex:1;">⚠ Local Open5e data may be out of date. Run <code style="background:rgba(0,0,0,.2); padding:1px 5px; border-radius:3px;">python scripts/sync_open5e.py</code> to refresh.</span>
-    <span id="open5e-stale-detail" style="font-size:11px; color:var(--fg-mute);"></span>
-    <button onclick="document.getElementById('open5e-stale-banner').style.display='none'; localStorage.setItem('open5e_banner_dismissed', Date.now());"
-            style="background:none; border:1px solid color-mix(in srgb,var(--danger) 35%,var(--border)); color:var(--fg); padding:2px 10px; border-radius:4px; cursor:pointer; flex-shrink:0;">Dismiss</button>
+
+{# audio-panel init div — must exist in the DOM for audio.js to read
+   data-initial-play and initialise the seek offset. Has no visible content. #}
+<div id="audio-panel"
+     {% if now_playing and now_playing_started_at_ms %}data-initial-play='{"track_id": {{ now_playing.id }}, "name": {{ now_playing.name|tojson }}, "file_url": {{ now_playing.file_url|tojson }}, "started_at_ms": {{ now_playing_started_at_ms }} }'{% endif %}
+     style="display:none;"></div>
+
+{% if view_as_user %}
+<div style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#7c3a0a;color:#ffd9a0;padding:6px 16px;display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.4);">
+    <span>👁 GM Preview — viewing as <strong>{{ user.display_name }}</strong></span>
+    <a href="/campaign/{{ campaign.id }}" style="color:#ffd9a0;text-decoration:underline;font-weight:400;">Exit preview</a>
 </div>
+<div style="height:32px;"></div>
 {% endif %}
 
 <div class="tabletop-layout">
     <div class="map-pane" id="map-pane">
-        <button id="drawer-open-btn" title="Open panel" hidden>☰</button>
         {% if active_map %}
+            {# Animated map background — rendered as a native HTML element so GIFs animate
+               and videos loop. Sits behind the canvas (z-index:0) which draws only the
+               grid and tokens on top (transparent background). #}
+            {% if active_map.image_url %}
+                {% set _bg_ext = active_map.image_url.rsplit('.', 1)[-1].lower() %}
+                {% if _bg_ext in ('mp4', 'webm') %}
+                    <video id="map-bg-layer" src="{{ active_map.image_url }}" autoplay loop muted playsinline
+                           style="position:absolute;top:0;left:0;z-index:0;pointer-events:none;transform-origin:0 0;width:{{ active_map.width_px }}px;height:{{ active_map.height_px }}px;object-fit:fill;display:block;"></video>
+                {% else %}
+                    <img id="map-bg-layer" src="{{ active_map.image_url }}" alt=""
+                         style="position:absolute;top:0;left:0;z-index:0;pointer-events:none;transform-origin:0 0;width:{{ active_map.width_px }}px;height:{{ active_map.height_px }}px;display:block;">
+                {% endif %}
+            {% endif %}
             <canvas id="vtt-canvas"
                     width="{{ active_map.width_px }}"
                     height="{{ active_map.height_px }}"
                     data-grid-type="{{ active_map.grid_type.value }}"
                     data-grid-size="{{ active_map.grid_size_px }}"
+                    style="position:relative;z-index:1;"
                     {% if active_map.image_url %}data-bg="{{ active_map.image_url }}"{% endif %}></canvas>
             {# GIF token overlay — sits over the canvas and receives the same pan/zoom transform.
                Real <img> elements here animate natively; canvas only draws the colour ring. #}
-            <div id="gif-token-overlay" style="position:absolute;top:0;left:0;pointer-events:none;transform-origin:0 0;"></div>
+            <div id="gif-token-overlay" style="position:absolute;top:0;left:0;z-index:2;pointer-events:none;transform-origin:0 0;"></div>
         {% else %}
             <p class="muted" style="padding: 20px;">No active map. {% if is_gm %}Upload one in <a href="/admin/campaign/{{ campaign.id }}">campaign settings</a>.{% endif %}</p>
         {% endif %}
@@ -681,21 +718,14 @@
         <div class="drawer-tab-bar">
             <button class="drawer-tab-btn" data-target="roll-log-drawer">Roll Log</button>
             <button class="drawer-tab-btn player-tab" data-target="players-drawer">Player</button>
-            <button class="drawer-tab-btn battle-tab" data-target="battle-drawer">⚔ Battle</button>
-            <button class="drawer-tab-btn gm-tools-tab" data-target="settings-drawer">Settings</button>
             {% if is_gm %}
             <button class="drawer-tab-btn gm-tools-tab" data-target="gm-tools-drawer">⚙ GM Tools</button>
             {% endif %}
-            <button class="drawer-pin-btn" id="drawer-pin-btn" title="Pin sidebar open">📌</button>
         </div>
         <div class="drawer-panels-wrapper" id="drawer-panels-wrapper">
 
 <!-- ── Roll log drawer ── -->
 <div id="roll-log-drawer" class="drawer-panel">
-    <div class="drawer-header">
-        <h3>Roll Log</h3>
-        <button class="drawer-close" data-drawer="roll-log-drawer">&times;</button>
-    </div>
     <div class="drawer-body">
         <ul class="roll-list" id="roll-list">
             {% for r in rolls %}
@@ -723,8 +753,8 @@
             {% endfor %}
         </ul>
     </div>
-    <div style="padding:10px 14px; border-top:1px solid var(--border); flex-shrink:0;">
-        <form id="roll-form" class="row">
+    <div style="padding:10px 14px 10px;border-top:1px solid var(--border);flex-shrink:0;">
+        <form id="roll-form" class="row" style="margin-bottom:6px;">
             <input type="text" id="roll-expr" placeholder="1d20+5" required style="flex:1;">
             <select id="roll-vis">
                 <option value="public">All players</option>
@@ -733,21 +763,144 @@
             </select>
             <button type="submit">Roll</button>
         </form>
-        <div class="row quick" style="margin-top:6px;">
+        <div class="row quick" style="margin-bottom:{% if is_gm %}10px{% else %}0{% endif %};">
             {% for q in system.quick_dice %}
             <button type="button" class="quick-die" data-expr="{{ q.expression }}" title="{{ q.expression }}">{{ q.label }}</button>
             {% endfor %}
         </div>
+        {% if is_gm %}
+        <details id="roll-request-panel" open style="border-top:1px solid var(--border);padding-top:8px;">
+            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:8px;">
+                <span class="rr-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">📋 Roll Request</h4>
+                <span style="margin-left:auto;font-size:9px;color:var(--fg-mute);letter-spacing:0.3px;">GM only</span>
+            </summary>
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:3px;margin-bottom:6px;">
+                <button type="button" id="rr-mode-save"  title="Saving Throw — Characters resist an effect using their saving throw modifier. Common for spells, traps, and hazards." style="font-size:10px;padding:3px 6px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);border-radius:3px;cursor:pointer;">Save</button>
+                <button type="button" id="rr-mode-check" title="Ability Check — Characters attempt a task using their ability modifier, plus proficiency if applicable." style="font-size:10px;padding:3px 6px;background:var(--input-bg);color:var(--fg-mute);border:1px solid var(--border);border-radius:3px;cursor:pointer;">Check</button>
+                <span style="width:1px;height:14px;background:var(--border);margin:0 2px;flex-shrink:0;"></span>
+                <button type="button" class="rr-quick" data-attr="str" title="Strength — Athletics, feats of power, resisting being grappled or moved">STR</button>
+                <button type="button" class="rr-quick" data-attr="dex" title="Dexterity — Acrobatics, Stealth, Sleight of Hand, dodging area effects">DEX</button>
+                <button type="button" class="rr-quick" data-attr="con" title="Constitution — Enduring pain, holding breath, maintaining concentration">CON</button>
+                <button type="button" class="rr-quick" data-attr="int" title="Intelligence — Arcana, History, Investigation, Nature, Religion">INT</button>
+                <button type="button" class="rr-quick" data-attr="wis" title="Wisdom — Perception, Insight, Medicine, Survival, Animal Handling">WIS</button>
+                <button type="button" class="rr-quick" data-attr="cha" title="Charisma — Persuasion, Deception, Intimidation, Performance">CHA</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;flex-wrap:wrap;">
+                <span style="font-size:10px;color:var(--fg-mute);flex-shrink:0;">DC</span>
+                <input type="number" id="rr-dc" min="1" max="40" placeholder="—" title="Difficulty Class" style="font-size:14px;font-weight:600;padding:3px 5px;text-align:center;width:52px;">
+                <button type="button" class="rr-dc-preset" data-dc="5"  title="Very Easy — almost anyone can do it">5</button>
+                <button type="button" class="rr-dc-preset" data-dc="10" title="Easy — requires minimal effort for a trained character">10</button>
+                <button type="button" class="rr-dc-preset" data-dc="15" title="Medium — a meaningful challenge for an average adventurer">15</button>
+                <button type="button" class="rr-dc-preset" data-dc="20" title="Hard — demands skill, focus, and a bit of luck">20</button>
+                <button type="button" class="rr-dc-preset" data-dc="25" title="Very Hard — only the exceptionally talented succeed">25</button>
+                <button type="button" class="rr-dc-preset" data-dc="30" title="Nearly Impossible — at the very limit of mortal ability">30</button>
+            </div>
+            <input type="text" id="rr-label" placeholder="Label — e.g. Perception DC 14" style="font-size:11px;padding:3px 5px;width:100%;box-sizing:border-box;margin-bottom:5px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+                <button type="button" id="rr-send-btn" style="font-size:11px;padding:4px 10px;flex-shrink:0;">📋 Post to Log</button>
+                <button type="button" id="rr-clear-btn" style="font-size:10px;padding:2px 6px;color:var(--fg-mute);display:none;">✕ Clear</button>
+                <select id="rr-vis" style="font-size:11px;padding:3px 4px;margin-left:auto;">
+                    <option value="public">All</option>
+                    <option value="gm_and_roller">GM+roller</option>
+                    <option value="gm_only">GM only</option>
+                </select>
+            </div>
+            <div id="rr-status" style="font-size:10px;color:var(--fg-mute);margin-top:3px;min-height:1.2em;"></div>
+        </details>
+        {% endif %}
     </div>
 </div>
 
 <!-- ── Player drawer ── -->
 <div id="players-drawer" class="drawer-panel">
-    <div class="drawer-header">
-        <h3>Player</h3>
-        <button class="drawer-close" data-drawer="players-drawer">&times;</button>
-    </div>
     <div class="drawer-body">
+
+        <!-- ── Initiative Tracker ── -->
+        <details id="initiative-panel" open
+                 style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:8px;">
+                <span class="init-panel-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚔ Initiative</h4>
+                <span id="battle-round-label" style="margin-left:auto;font-size:10px;color:var(--fg-mute);flex-shrink:0;">Not started</span>
+            </summary>
+            {% if is_gm %}
+            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">
+                <button type="button" id="battle-from-map-btn" class="tt-btn" style="flex:1;font-size:11px;" title="Add all tokens from the active map">🗺 From Map</button>
+                <button type="button" id="battle-add-char-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Character</button>
+                <button type="button" id="battle-add-manual-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Manual</button>
+                <button type="button" id="battle-roll-init-btn" class="tt-btn" style="flex:1;font-size:11px;">🎲 Roll All</button>
+            </div>
+            <div id="battle-char-panel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px;max-height:200px;overflow-y:auto;margin-bottom:6px;">
+                <div id="battle-char-list"></div>
+            </div>
+            <div id="battle-manual-panel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px;margin-bottom:6px;">
+                <div style="display:grid;grid-template-columns:1fr 50px 50px 30px;gap:5px;margin-bottom:6px;align-items:center;">
+                    <input type="text" id="bm-name" placeholder="Name" style="font-size:12px;">
+                    <input type="number" id="bm-init" placeholder="Init" style="font-size:12px;text-align:center;">
+                    <input type="number" id="bm-hp" placeholder="HP" style="font-size:12px;text-align:center;">
+                    <input type="color" id="bm-color" value="#cc3333" style="width:100%;height:28px;padding:1px;cursor:pointer;border-radius:3px;">
+                </div>
+                <div style="display:flex;gap:6px;">
+                    <button type="button" id="bm-add-btn" style="font-size:12px;padding:3px 14px;">Add</button>
+                    <button type="button" id="bm-cancel-btn" style="font-size:12px;padding:3px 14px;">Cancel</button>
+                </div>
+            </div>
+            <div class="battle-ctrl" style="margin-bottom:8px;">
+                <button type="button" id="battle-prev-btn" class="tt-btn">◀</button>
+                <button type="button" id="battle-next-btn" class="tt-btn">Next ▶</button>
+                <button type="button" id="battle-start-btn" class="tt-btn" title="Jump to Round 1">↺ Start</button>
+                <button type="button" id="battle-clear-btn" class="tt-btn" style="margin-left:auto;color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--border));" title="Clear all combatants">🗑</button>
+            </div>
+            {% endif %}
+            <div id="battle-banner" class="battle-banner" style="display:none;"></div>
+            <div id="initiative-list"></div>
+        </details>
+
+        <!-- ── Sound (players only — GMs use the GM Tools music panel) ── -->
+        {% if not is_gm %}
+        <details id="player-sound-panel" open
+                 style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:6px;">
+                <span class="sound-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">🎵 Sound</h4>
+                <span id="audio-now-playing" class="muted" style="margin-left:auto;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;">{% if now_playing %}▶ {{ now_playing.name }}{% else %}Nothing playing{% endif %}</span>
+            </summary>
+            <div class="audio-progress" hidden
+                 style="display:flex;align-items:center;gap:6px;margin:0 0 6px;font-size:10px;color:var(--fg-mute);">
+                <span class="audio-progress-elapsed" style="width:34px;text-align:right;font-variant-numeric:tabular-nums;">0:00</span>
+                <div class="audio-progress-track" style="flex:1;height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;">
+                    <div class="audio-progress-fill" style="height:100%;width:0%;background:var(--accent);transition:width .25s linear;"></div>
+                </div>
+                <span class="audio-progress-total" style="width:34px;font-variant-numeric:tabular-nums;">0:00</span>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:4px;">
+                <span style="flex-shrink:0;">Vol</span>
+                <input type="range" id="audio-volume" min="0" max="1" step="0.01" value="0.6" style="flex:1;">
+            </label>
+            <div id="audio-cat-volume" style="display:{% if now_playing %}block{% else %}none{% endif %};margin-bottom:4px;">
+                <label style="display:flex;align-items:center;gap:6px;font-size:11px;">
+                    <span id="audio-cat-volume-label" style="color:var(--fg-mute);width:4em;">Music</span>
+                    <input type="range" id="audio-cat-volume-slider" min="0" max="1" step="0.01" value="1" style="flex:1;">
+                    <span id="audio-cat-volume-num" style="width:3em;text-align:right;font-size:10px;">100%</span>
+                </label>
+            </div>
+            <button type="button" id="audio-enable" style="display:none;font-size:11px;padding:2px 8px;margin-bottom:4px;">▶ Click to enable audio</button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--fg-mute);align-items:center;">
+                <button type="button" onclick="vttResyncAudio()" style="font-size:11px;padding:2px 6px;" title="Resync to GM">⟳ Resync</button>
+                <button type="button" id="audio-mute" style="font-size:11px;padding:2px 8px;">🔈</button>
+                <a href="/settings" style="font-size:11px;">Category volumes</a>
+            </div>
+        </details>
+        {% endif %}{# end {% if not is_gm %} sound panel #}
+
+        <!-- ── Characters ── -->
+        <details id="player-chars-panel" open
+                 style="margin-bottom:4px;">
+            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:8px;">
+                <span class="pchar-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">Characters</h4>
+            </summary>
         <div id="player-char-list">
         {% set shown = namespace(count=0) %}
         {% for c in characters %}
@@ -1109,167 +1262,1057 @@
         {% if shown.count == 0 %}
         <p class="no-chars-msg">No characters assigned to you yet.</p>
         {% endif %}
-        </div>
-    </div>
-</div>
-
-<!-- ── Battle / Initiative Tracker drawer ── -->
-<div id="battle-drawer" class="drawer-panel">
-    <div class="drawer-header">
-        <h3>⚔ Battle</h3>
-        <button class="drawer-close" data-drawer="battle-drawer">&times;</button>
-    </div>
-    <div class="drawer-body">
-        <div id="battle-banner" class="battle-banner" style="display:none;"></div>
-        <div class="battle-ctrl">
-            <span id="battle-round-label" style="font-size:12px;color:var(--fg-mute);flex-shrink:0;">Not started</span>
-            {% if is_gm %}
-            <button type="button" id="battle-prev-btn" class="tt-btn">◀</button>
-            <button type="button" id="battle-next-btn" class="tt-btn">Next ▶</button>
-            <button type="button" id="battle-start-btn" class="tt-btn" title="Jump to Round 1">↺ Start</button>
-            <button type="button" id="battle-clear-btn" class="tt-btn" style="margin-left:auto;color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--border));" title="Clear all combatants">🗑</button>
-            {% endif %}
-        </div>
-        <div id="initiative-list"></div>
-        {% if is_gm %}
-        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
-            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px;">
-                <button type="button" id="battle-add-char-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Character</button>
-                <button type="button" id="battle-add-manual-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Manual</button>
-                <button type="button" id="battle-roll-init-btn" class="tt-btn" style="flex:1;font-size:11px;">🎲 Roll All</button>
-            </div>
-            <div id="battle-char-panel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px;max-height:200px;overflow-y:auto;margin-bottom:6px;">
-                <div id="battle-char-list"></div>
-            </div>
-            <div id="battle-manual-panel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px;margin-bottom:6px;">
-                <div style="display:grid;grid-template-columns:1fr 50px 50px 30px;gap:5px;margin-bottom:6px;align-items:center;">
-                    <input type="text" id="bm-name" placeholder="Name" style="font-size:12px;">
-                    <input type="number" id="bm-init" placeholder="Init" style="font-size:12px;text-align:center;">
-                    <input type="number" id="bm-hp" placeholder="HP" style="font-size:12px;text-align:center;">
-                    <input type="color" id="bm-color" value="#cc3333" style="width:100%;height:28px;padding:1px;cursor:pointer;border-radius:3px;">
-                </div>
-                <div style="display:flex;gap:6px;">
-                    <button type="button" id="bm-add-btn" style="font-size:12px;padding:3px 14px;">Add</button>
-                    <button type="button" id="bm-cancel-btn" style="font-size:12px;padding:3px 14px;">Cancel</button>
-                </div>
-            </div>
-        </div>
-        {% endif %}
-    </div>
-</div>
-
-<!-- ── Settings drawer ── -->
-<div id="settings-drawer" class="drawer-panel">
-    <div id="audio-panel"
-         {% if now_playing and now_playing_started_at_ms %}data-initial-play='{"track_id": {{ now_playing.id }}, "name": {{ now_playing.name|tojson }}, "file_url": {{ now_playing.file_url|tojson }}, "started_at_ms": {{ now_playing_started_at_ms }} }'{% endif %}
-         style="display:contents;">
-    </div>
-    <div class="drawer-header">
-        <h3>Settings</h3>
-        <button class="drawer-close" data-drawer="settings-drawer">&times;</button>
-    </div>
-    <div class="drawer-body">
-        <h4 style="margin:0 0 10px; font-size:11px; color:var(--accent); text-transform:uppercase; letter-spacing:0.5px;">🎵 Sound</h4>
-        <p id="audio-now-playing" class="muted" style="margin:0 0 8px;">{% if now_playing %}▶ {{ now_playing.name }}{% else %}Nothing playing{% endif %}</p>
-        <div class="row">
-            <label style="flex:1;">Vol
-                <input type="range" id="audio-volume" min="0" max="1" step="0.01" value="0.6" style="width:100%;">
-            </label>
-            <button type="button" id="audio-mute">🔈 Mute</button>
-        </div>
-        <div id="audio-cat-volume" style="display:{% if now_playing %}block{% else %}none{% endif %}; margin-top:6px;">
-            <label style="display:flex; align-items:center; gap:6px;">
-                <span id="audio-cat-volume-label" style="font-size:11px; color:var(--fg-mute); width:5em;">Music</span>
-                <input type="range" id="audio-cat-volume-slider" min="0" max="1" step="0.01" value="1" style="flex:1;">
-                <span id="audio-cat-volume-num" style="width:3em; text-align:right; font-size:11px;">100%</span>
-            </label>
-        </div>
-        <button type="button" id="audio-enable" style="display:none; margin-top:6px;">▶ Click to enable audio</button>
-        <p class="muted" style="margin-top:8px; font-size:11px;">
-            <button type="button" onclick="vttResyncAudio()" title="Resync to GM">⟳ Resync</button>
-            · <a href="/settings">Category volumes</a>
-            {% if is_gm %} · <button type="button" onclick="vttStopAudio()">⏹ Stop</button>{% endif %}
-        </p>
+        </div><!-- /#player-char-list -->
+        </details><!-- /#player-chars-panel -->
     </div>
 </div>
 
 {% if is_gm %}
+        {# Click-to-set mode banner — shown over the canvas while the GM
+           is arming a spawn from an encounter's edit form. #}
+        <div id="spawn-arm-banner" style="display:none;font-size:11px;padding:6px 8px;margin-top:8px;background:#3a2f15;border:1px solid #6e5828;color:#d4a84a;border-radius:4px;">
+            Click on the map to set <span id="spawn-arm-name">player</span>'s spawn — or press Esc to cancel.
+        </div>
+        <script>
+        // Encounters panel controller — list + save + load + update +
+        // rename + delete + duplicate + sort + tag filter (Phases 2–5)
+        // + map/playlist selectors + thumbnails + tag autocomplete (v0.70.0).
+        document.addEventListener('DOMContentLoaded', function() {
+        (function() {
+            // Maps + playlists from the page render, used to populate
+            // the per-row edit form's dropdowns.
+            const ENC_MAPS = [
+                {% for m in all_maps %}
+                {id: {{ m.id }}, name: {{ m.name|tojson }}, image_url: {{ (m.image_url or '')|tojson }} }{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+            const ENC_PLAYLISTS = [
+                {% for p in playlists %}
+                {id: {{ p.id }}, name: {{ p.name|tojson }} }{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+            const list = document.getElementById('encounters-list');
+            if (!list) return;
+            const CAMPAIGN_URL = '/api/campaign/{{ campaign.id }}/encounters';
+            const sortSelect = document.getElementById('enc-sort');
+            const filterBar = document.getElementById('enc-tag-filters');
+            const searchInput = document.getElementById('enc-search');
+
+            // Last fetched rows (raw server response) kept so sort/filter
+            // toggles can re-render without a refetch.
+            let allRows = [];
+            let activeTag = null;
+            let searchQuery = '';
+            // Per-folder open/closed state (folder name → bool). New
+            // folders default to open; closed state is sticky across
+            // re-renders within the same page session.
+            const folderOpen = {};
+
+            function plural(n, one, many) { return n === 1 ? one : many; }
+
+            function buildPreviewTitle(e) {
+                // Browser-native title attribute for the hover preview.
+                // Lists token names + map so the GM can recall what's in
+                // a saved encounter without expanding the row.
+                const parts = [];
+                if (e.map_name) parts.push('Map: ' + e.map_name);
+                if (e.token_names && e.token_names.length) {
+                    let line = 'Tokens: ' + e.token_names.join(', ');
+                    if (e.token_names_extra) line += ' + ' + e.token_names_extra + ' more';
+                    parts.push(line);
+                } else if ((e.token_count|0) === 0) {
+                    parts.push('No tokens saved');
+                }
+                if (e.tags && e.tags.length) parts.push('Tags: ' + e.tags.join(', '));
+                return parts.join('\n');
+            }
+
+            function buildTagChip(tag, opts) {
+                opts = opts || {};
+                const chip = document.createElement('span');
+                chip.textContent = tag;
+                const active = !!opts.active;
+                chip.style.cssText =
+                    'font-size:9px;padding:1px 6px;border-radius:8px;' +
+                    'background:' + (active ? '#3a2f15' : 'var(--bg)') + ';' +
+                    'color:' + (active ? '#d4a84a' : 'var(--fg-mute)') + ';' +
+                    'border:1px solid ' + (active ? '#6e5828' : 'var(--border)') + ';' +
+                    (opts.clickable ? 'cursor:pointer;' : '');
+                return chip;
+            }
+
+            function buildRow(e) {
+                // Each row gets two modes:
+                //   • view: thumbnail + name + meta + action buttons + tag chips
+                //   • edit: name/notes/tags inputs + map/playlist/mode + Save/Cancel
+                const row = document.createElement('div');
+                const isCurrent = !!e.is_current;
+                // Currently-running encounter: cyan-tinted border + bg so
+                // it's easy to spot inside the list when expanded.
+                row.style.cssText = 'padding:6px 8px;margin-bottom:4px;background:' +
+                    (isCurrent ? '#142a30' : 'var(--bg-2)') + ';border:1px solid ' +
+                    (isCurrent ? '#2a4f5a' : 'var(--border)') + ';border-radius:4px;color:var(--fg);';
+                row.title = buildPreviewTitle(e);
+
+                // ── view mode ──
+                const view = document.createElement('div');
+
+                // Two-column layout: thumbnail (left) stretches to match right column height
+                const mainRow = document.createElement('div');
+                mainRow.style.cssText = 'display:flex;gap:6px;align-items:stretch;';
+
+                // ── LEFT: thumbnail with overlaid play button ──
+                const thumbWrap = document.createElement('div');
+                thumbWrap.style.cssText = 'position:relative;flex-shrink:0;width:52px;min-height:56px;border-radius:3px;overflow:hidden;background:var(--bg);border:1px solid var(--border);';
+                const thumbImg = document.createElement('div');
+                thumbImg.style.cssText = 'position:absolute;inset:0;background-size:cover;background-position:center;';
+                if (e.map_image_url) {
+                    thumbImg.style.backgroundImage = 'url("' + e.map_image_url + '")';
+                } else if (e.map_name) {
+                    thumbImg.textContent = e.map_name.slice(0,1).toUpperCase();
+                    thumbImg.style.cssText += 'display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--fg-mute);';
+                } else {
+                    thumbImg.textContent = '—';
+                    thumbImg.style.cssText += 'display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--fg-mute);';
+                }
+                thumbWrap.appendChild(thumbImg);
+                const loadOverlay = document.createElement('button');
+                loadOverlay.type = 'button';
+                loadOverlay.title = 'Load — replace GM tokens + initiative with this encounter. Player tokens in the saved encounter move to their saved positions.';
+                loadOverlay.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;background:rgba(0,0,0,.5);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;color:#fff;opacity:0;transition:opacity .15s;padding:0;';
+                loadOverlay.textContent = '▶';
+                loadOverlay.addEventListener('mouseenter', () => loadOverlay.style.opacity = '1');
+                loadOverlay.addEventListener('mouseleave', () => loadOverlay.style.opacity = '0');
+                loadOverlay.addEventListener('click', () => loadEncounter(e, loadOverlay));
+                thumbWrap.appendChild(loadOverlay);
+                mainRow.appendChild(thumbWrap);
+
+                // ── RIGHT: name + buttons, then meta / desc / tags below ──
+                const rightCol = document.createElement('div');
+                rightCol.style.cssText = 'flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;';
+
+                const titleRow = document.createElement('div');
+                titleRow.style.cssText = 'display:flex;align-items:center;gap:4px;';
+                const name = document.createElement('div');
+                name.style.cssText = 'font-weight:600;font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+                name.textContent = e.name;
+                titleRow.appendChild(name);
+
+                const updateBtn = document.createElement('button');
+                updateBtn.type = 'button';
+                updateBtn.textContent = '💾';
+                updateBtn.title = 'Update — re-snapshot the current state into this encounter (overwrites in place).';
+                updateBtn.style.cssText = 'font-size:10px;padding:2px 6px;flex-shrink:0;';
+                updateBtn.addEventListener('click', () => updateEncounter(e, updateBtn));
+
+                const dupBtn = document.createElement('button');
+                dupBtn.type = 'button';
+                dupBtn.textContent = '📋';
+                dupBtn.title = 'Duplicate — make a copy with "(copy)" appended to the name.';
+                dupBtn.style.cssText = 'font-size:10px;padding:2px 6px;flex-shrink:0;';
+                dupBtn.addEventListener('click', () => duplicateEncounter(e, dupBtn));
+
+                const editBtn = document.createElement('button');
+                editBtn.type = 'button';
+                editBtn.textContent = '✎';
+                editBtn.title = 'Rename / edit notes / edit tags';
+                editBtn.style.cssText = 'font-size:10px;padding:2px 6px;flex-shrink:0;';
+                editBtn.addEventListener('click', () => {
+                    view.style.display = 'none';
+                    edit.style.display = '';
+                    editName.focus();
+                    editName.select();
+                    // Mark this row as the active spawn-points editor so
+                    // the canvas can render the markers + click-to-set
+                    // routes to the right encounter. Map-mismatch case
+                    // is handled inside the sub-panel that builds below.
+                    if (window.vttSetSpawnContext) {
+                        window.vttSetSpawnContext({
+                            encounterId: e.id,
+                            mapId: e.map_id,
+                            spawns: Object.assign({}, e.spawn_points || {}),
+                        });
+                    }
+                });
+
+                const delBtn = document.createElement('button');
+                delBtn.type = 'button';
+                delBtn.textContent = '🗑';
+                delBtn.title = 'Delete this saved encounter';
+                delBtn.style.cssText = 'font-size:10px;padding:2px 6px;flex-shrink:0;color:var(--danger);';
+                delBtn.addEventListener('click', () => deleteEncounter(e));
+
+                titleRow.appendChild(updateBtn);
+                titleRow.appendChild(dupBtn);
+                titleRow.appendChild(editBtn);
+                titleRow.appendChild(delBtn);
+                rightCol.appendChild(titleRow);
+
+                const tokN = e.token_count|0, initN = e.initiative_count|0;
+                const meta = document.createElement('div');
+                meta.className = 'muted';
+                meta.style.cssText = 'font-size:10px;';
+                meta.textContent =
+                    tokN + ' ' + plural(tokN, 'token', 'tokens') +
+                    ' · ' + initN + ' ' + plural(initN, 'init slot', 'init slots');
+                rightCol.appendChild(meta);
+                if (e.description) {
+                    const desc = document.createElement('div');
+                    desc.className = 'muted';
+                    desc.style.cssText = 'font-size:10px;';
+                    desc.textContent = e.description;
+                    rightCol.appendChild(desc);
+                }
+                if (e.tags && e.tags.length) {
+                    const tagsRow = document.createElement('div');
+                    tagsRow.style.cssText = 'display:flex;gap:3px;flex-wrap:wrap;';
+                    e.tags.forEach(t => tagsRow.appendChild(buildTagChip(t)));
+                    rightCol.appendChild(tagsRow);
+                }
+                mainRow.appendChild(rightCol);
+                view.appendChild(mainRow);
+
+                // ── edit mode ──
+                const edit = document.createElement('div');
+                edit.style.display = 'none';
+
+                // Helper: wrap an input with a small muted label above
+                // it so each field reads as "<label>: <input>" instead
+                // of just a row of placeholders.
+                function labeledField(labelText, inputEl) {
+                    const wrap = document.createElement('div');
+                    wrap.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:3px;';
+                    const label = document.createElement('div');
+                    label.style.cssText = 'font-size:9px;color:var(--fg-mute);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;flex-shrink:0;min-width:52px;text-align:right;';
+                    label.textContent = labelText;
+                    const inputWrap = document.createElement('div');
+                    inputWrap.style.cssText = 'flex:1;min-width:0;';
+                    inputWrap.appendChild(inputEl);
+                    wrap.appendChild(label);
+                    wrap.appendChild(inputWrap);
+                    return wrap;
+                }
+
+                const editName = document.createElement('input');
+                editName.type = 'text';
+                editName.value = e.name || '';
+                editName.placeholder = 'Encounter name';
+                editName.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;';
+                const editDesc = document.createElement('input');
+                editDesc.type = 'text';
+                editDesc.value = e.description || '';
+                editDesc.placeholder = 'Notes';
+                editDesc.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;';
+                const editTags = document.createElement('input');
+                editTags.type = 'text';
+                editTags.setAttribute('list', 'enc-tag-list');
+                editTags.value = (e.tags || []).join(', ');
+                editTags.placeholder = 'Comma-separated';
+                editTags.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;';
+                const editFolder = document.createElement('input');
+                editFolder.type = 'text';
+                editFolder.setAttribute('list', 'enc-folder-list');
+                editFolder.value = e.folder || '';
+                editFolder.placeholder = 'Folder';
+                editFolder.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;';
+                // Map / playlist / mode dropdowns built from the page-render
+                // data. Defaults preselected to the encounter's current binding.
+                const editMap = document.createElement('select');
+                editMap.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;padding:3px 4px;';
+                const noneMapOpt = document.createElement('option');
+                noneMapOpt.value = '';
+                noneMapOpt.textContent = '— no map bound —';
+                editMap.appendChild(noneMapOpt);
+                ENC_MAPS.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = String(m.id);
+                    opt.textContent = m.name;
+                    if (e.map_id === m.id) opt.selected = true;
+                    editMap.appendChild(opt);
+                });
+                const editPlaylist = document.createElement('select');
+                editPlaylist.style.cssText = 'font-size:11px;padding:3px 4px;';
+                const nonePlOpt = document.createElement('option');
+                nonePlOpt.value = '';
+                nonePlOpt.textContent = '— no playlist —';
+                editPlaylist.appendChild(nonePlOpt);
+                ENC_PLAYLISTS.forEach(p => {
+                    const opt = document.createElement('option');
+                    opt.value = String(p.id);
+                    opt.textContent = p.name;
+                    if (e.auto_play_playlist_id === p.id) opt.selected = true;
+                    editPlaylist.appendChild(opt);
+                });
+                const editMode = document.createElement('select');
+                editMode.style.cssText = 'font-size:11px;padding:3px 4px;';
+                editMode.title = 'Playlist playback mode';
+                ['order','shuffle'].forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m;
+                    opt.textContent = m.charAt(0).toUpperCase() + m.slice(1);
+                    if ((e.auto_play_mode || 'order') === m) opt.selected = true;
+                    editMode.appendChild(opt);
+                });
+                // Playlist + Mode share a row; Map gets its own row above.
+                const playlistRow = document.createElement('div');
+                playlistRow.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:4px;align-items:center;';
+                playlistRow.appendChild(editPlaylist);
+                playlistRow.appendChild(editMode);
+                const stopAudioLabel = document.createElement('label');
+                stopAudioLabel.style.cssText = 'display:flex;flex-direction:row;align-items:center;gap:6px;font-size:10px;color:var(--fg-mute);cursor:pointer;margin-bottom:3px;';
+                stopAudioLabel.title = 'When no playlist is selected, stop the currently-playing audio on load instead of leaving it running.';
+                const editStopAudio = document.createElement('input');
+                editStopAudio.type = 'checkbox';
+                editStopAudio.checked = !!e.stop_audio_on_load;
+                stopAudioLabel.appendChild(editStopAudio);
+                stopAudioLabel.appendChild(document.createTextNode('Stop audio on load'));
+
+                // ── Spawn points sub-panel ──
+                // Toggle + per-character Set/Clear list. When the
+                // toggle is on, click-to-set on the canvas writes to
+                // this encounter's spawn_points; loading uses them in
+                // place of the snapshot's player positions.
+                const spawnWrap = document.createElement('div');
+                spawnWrap.style.cssText = 'margin:6px 0 6px;padding:6px 8px;background:var(--bg);border:1px solid var(--border);border-radius:3px;';
+                const spawnToggleLabel = document.createElement('label');
+                spawnToggleLabel.style.cssText = 'display:flex;flex-direction:row;align-items:center;gap:6px;font-size:11px;cursor:pointer;';
+                const useSpawnPointsCheckbox = document.createElement('input');
+                useSpawnPointsCheckbox.type = 'checkbox';
+                useSpawnPointsCheckbox.checked = !!e.use_spawn_points;
+                spawnToggleLabel.appendChild(useSpawnPointsCheckbox);
+                const spawnToggleText = document.createElement('span');
+                spawnToggleText.textContent = 'Use spawn points for players';
+                spawnToggleLabel.appendChild(spawnToggleText);
+                spawnWrap.appendChild(spawnToggleLabel);
+                const spawnHint = document.createElement('div');
+                spawnHint.className = 'muted';
+                spawnHint.style.cssText = 'font-size:9px;line-height:1.4;margin:4px 0 0;';
+                if (e.map_id != null && e.map_id !== MAP_ID) {
+                    spawnHint.textContent = 'Switch to this encounter\'s bound map to place spawns; the markers + click-to-set only work on the matching map.';
+                } else if (!e.map_id) {
+                    spawnHint.textContent = 'Bind this encounter to a map (above) to set spawn points.';
+                } else {
+                    spawnHint.textContent = 'Click Set on a character, then click on the map to record their spawn. Esc cancels.';
+                }
+                spawnWrap.appendChild(spawnHint);
+                const spawnList = document.createElement('div');
+                spawnList.style.cssText = 'margin-top:6px;display:flex;flex-direction:column;gap:3px;';
+                spawnWrap.appendChild(spawnList);
+
+                function renderSpawnList() {
+                    spawnList.innerHTML = '';
+                    if (!useSpawnPointsCheckbox.checked) {
+                        spawnList.style.display = 'none';
+                        return;
+                    }
+                    spawnList.style.display = '';
+                    const chars = (window.vttGetCharacters && window.vttGetCharacters()) || [];
+                    if (!chars.length) {
+                        const empty = document.createElement('em');
+                        empty.className = 'muted';
+                        empty.style.fontSize = '10px';
+                        empty.textContent = 'No player characters in this campaign yet.';
+                        spawnList.appendChild(empty);
+                        return;
+                    }
+                    chars.forEach(ch => {
+                        const row = document.createElement('div');
+                        row.style.cssText = 'display:flex;align-items:center;gap:4px;font-size:10px;';
+                        const swatch = document.createElement('span');
+                        swatch.style.cssText = 'width:8px;height:8px;border-radius:50%;background:' + (ch.color || '#888') + ';flex-shrink:0;';
+                        const nm = document.createElement('span');
+                        nm.style.cssText = 'flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+                        nm.textContent = ch.name;
+                        const sp = (e.spawn_points || {})[String(ch.id)];
+                        const coord = document.createElement('span');
+                        coord.className = 'muted';
+                        coord.style.cssText = 'font-variant-numeric:tabular-nums;font-size:9px;flex-shrink:0;';
+                        coord.textContent = sp ? ('(' + Math.round(sp.x) + ',' + Math.round(sp.y) + ')') : '(unset)';
+                        const setBtn = document.createElement('button');
+                        setBtn.type = 'button';
+                        setBtn.textContent = 'Set';
+                        setBtn.style.cssText = 'font-size:9px;padding:1px 5px;flex-shrink:0;';
+                        const mapMismatch = (e.map_id == null) || (e.map_id !== MAP_ID);
+                        setBtn.disabled = mapMismatch;
+                        // Title hints at which mode the click will use —
+                        // copies the token's current position when one
+                        // exists on the active map, otherwise arms
+                        // click-to-set.
+                        const existingTok = !mapMismatch && window.vttFindTokenForCharacter
+                            ? window.vttFindTokenForCharacter(ch.id) : null;
+                        if (mapMismatch) {
+                            setBtn.title = 'Switch to this encounter\'s bound map to set spawns';
+                        } else if (existingTok) {
+                            setBtn.title = 'Use ' + ch.name + '\'s current token position as the spawn';
+                        } else {
+                            setBtn.title = 'Click to arm, then click on the map to record the spawn';
+                        }
+                        setBtn.addEventListener('click', async () => {
+                            const tok = window.vttFindTokenForCharacter
+                                ? window.vttFindTokenForCharacter(ch.id) : null;
+                            if (tok && typeof tok.x === 'number' && typeof tok.y === 'number') {
+                                // Copy the existing token's position straight
+                                // into the spawn dict (no click-to-set step).
+                                setBtn.disabled = true;
+                                try {
+                                    const resp = await fetch(CAMPAIGN_URL + '/' + e.id + '/spawn', {
+                                        method: 'POST',
+                                        headers: {'Content-Type': 'application/json'},
+                                        body: JSON.stringify({character_id: ch.id, x: tok.x, y: tok.y}),
+                                    });
+                                    if (!resp.ok) { alert('Failed to set spawn: ' + await resp.text()); return; }
+                                    const updated = await resp.json();
+                                    e.spawn_points = updated.spawn_points || {};
+                                    if (window.vttSetSpawnContext) {
+                                        window.vttSetSpawnContext({
+                                            encounterId: e.id,
+                                            mapId: e.map_id,
+                                            spawns: Object.assign({}, e.spawn_points),
+                                        });
+                                    }
+                                    renderSpawnList();
+                                } finally { setBtn.disabled = false; }
+                            } else {
+                                // No token yet — arm click-to-set as before.
+                                window.vttArmSpawn(ch.id);
+                            }
+                        });
+                        const clrBtn = document.createElement('button');
+                        clrBtn.type = 'button';
+                        clrBtn.textContent = 'Clear';
+                        clrBtn.style.cssText = 'font-size:9px;padding:1px 5px;flex-shrink:0;';
+                        clrBtn.disabled = !sp;
+                        clrBtn.addEventListener('click', async () => {
+                            clrBtn.disabled = true;
+                            try {
+                                const resp = await fetch(CAMPAIGN_URL + '/' + e.id + '/spawn', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({character_id: ch.id}),
+                                });
+                                if (!resp.ok) { alert('Failed: ' + await resp.text()); return; }
+                                const updated = await resp.json();
+                                e.spawn_points = updated.spawn_points || {};
+                                if (window.vttSetSpawnContext) {
+                                    window.vttSetSpawnContext({
+                                        encounterId: e.id,
+                                        mapId: e.map_id,
+                                        spawns: Object.assign({}, e.spawn_points),
+                                    });
+                                }
+                                renderSpawnList();
+                            } finally { clrBtn.disabled = false; }
+                        });
+                        row.appendChild(swatch);
+                        row.appendChild(nm);
+                        row.appendChild(coord);
+                        row.appendChild(setBtn);
+                        row.appendChild(clrBtn);
+                        spawnList.appendChild(row);
+                    });
+                }
+                useSpawnPointsCheckbox.addEventListener('change', renderSpawnList);
+                renderSpawnList();
+
+                // When the canvas commits a new spawn via click-to-set,
+                // re-render the per-character coord readout in this row.
+                window.vttSpawnPlacedCallback = function (encId, charId, x, y) {
+                    if (encId !== e.id) return;
+                    if (!e.spawn_points) e.spawn_points = {};
+                    e.spawn_points[String(charId)] = { x: x, y: y };
+                    renderSpawnList();
+                };
+
+                const editBtns = document.createElement('div');
+                editBtns.style.cssText = 'display:flex;gap:6px;';
+                const saveEdit = document.createElement('button');
+                saveEdit.type = 'button';
+                saveEdit.textContent = 'Save';
+                saveEdit.style.cssText = 'font-size:11px;padding:3px 10px;';
+                saveEdit.addEventListener('click', async () => {
+                    const newName = (editName.value || '').trim();
+                    if (!newName) { editName.focus(); return; }
+                    saveEdit.disabled = true;
+                    try {
+                        const resp = await fetch(CAMPAIGN_URL + '/' + e.id, {
+                            method: 'PATCH',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({
+                                name: newName,
+                                description: (editDesc.value || '').trim(),
+                                tags: editTags.value,
+                                folder: (editFolder.value || '').trim(),
+                                map_id: editMap.value || null,
+                                auto_play_playlist_id: editPlaylist.value || null,
+                                auto_play_mode: editMode.value,
+                                stop_audio_on_load: !!editStopAudio.checked,
+                                use_spawn_points: !!useSpawnPointsCheckbox.checked,
+                            }),
+                        });
+                        if (!resp.ok) {
+                            alert('Save failed: ' + await resp.text());
+                            return;
+                        }
+                        if (window.vttSetSpawnContext) window.vttSetSpawnContext(null);
+                        refresh();
+                    } finally {
+                        saveEdit.disabled = false;
+                    }
+                });
+                const cancelEdit = document.createElement('button');
+                cancelEdit.type = 'button';
+                cancelEdit.textContent = 'Cancel';
+                cancelEdit.style.cssText = 'font-size:11px;padding:3px 10px;';
+                cancelEdit.addEventListener('click', () => {
+                    editName.value = e.name || '';
+                    editDesc.value = e.description || '';
+                    editTags.value = (e.tags || []).join(', ');
+                    edit.style.display = 'none';
+                    view.style.display = '';
+                    if (window.vttSetSpawnContext) window.vttSetSpawnContext(null);
+                });
+                editBtns.appendChild(saveEdit);
+                editBtns.appendChild(cancelEdit);
+                edit.appendChild(labeledField('Name', editName));
+                edit.appendChild(labeledField('Notes', editDesc));
+                edit.appendChild(labeledField('Tags', editTags));
+                edit.appendChild(labeledField('Folder', editFolder));
+                edit.appendChild(labeledField('Map', editMap));
+                edit.appendChild(labeledField('Playlist / Mode', playlistRow));
+                edit.appendChild(stopAudioLabel);
+                edit.appendChild(spawnWrap);
+                edit.appendChild(editBtns);
+
+                row.appendChild(view);
+                row.appendChild(edit);
+                return row;
+            }
+
+            function rerender() {
+                // Apply search + tag filter + sort, group by folder, then
+                // rebuild the DOM. Called by the search input, sort
+                // dropdown, and tag chip handlers; refresh() also calls
+                // it after a fetch.
+                let rows = allRows.slice();
+                if (activeTag) {
+                    rows = rows.filter(e => (e.tags || []).includes(activeTag));
+                    // Auto-expand every folder that has a matching encounter
+                    rows.forEach(e => { folderOpen[(e.folder || '').trim()] = true; });
+                }
+                if (searchQuery) {
+                    const q = searchQuery.toLowerCase();
+                    rows = rows.filter(e => {
+                        if ((e.name || '').toLowerCase().includes(q)) return true;
+                        if ((e.tags || []).some(t => (t || '').toLowerCase().includes(q))) return true;
+                        if ((e.folder || '').toLowerCase().includes(q)) return true;
+                        return false;
+                    });
+                }
+                const sortMode = sortSelect ? sortSelect.value : 'recent';
+                if (sortMode === 'name') {
+                    rows.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, {sensitivity: 'base'}));
+                } else {
+                    rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+                }
+                renderFilterBar();
+                if (!rows.length) {
+                    let msg = 'None saved yet — save the current state below.';
+                    if (searchQuery) msg = 'No encounters match "' + searchQuery + '".';
+                    else if (activeTag) msg = 'No encounters with tag "' + activeTag + '".';
+                    list.innerHTML = '<em>' + msg + '</em>';
+                    return;
+                }
+                // Group by folder; "" → "Unfiled" group rendered last.
+                const groups = new Map();
+                rows.forEach(e => {
+                    const key = (e.folder || '').trim();
+                    if (!groups.has(key)) groups.set(key, []);
+                    groups.get(key).push(e);
+                });
+                const folderNames = Array.from(groups.keys())
+                    .filter(n => n)
+                    .sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'}));
+                if (groups.has('')) folderNames.push('');
+                list.innerHTML = '';
+                folderNames.forEach(folder => {
+                    const items = groups.get(folder);
+                    // Default closed; the per-folder open state is sticky
+                    // across re-renders once the GM has toggled it.
+                    const isOpen = !!folderOpen[folder];
+                    const wrap = document.createElement('details');
+                    if (isOpen) wrap.open = true;
+                    wrap.style.cssText = 'margin-bottom:4px;';
+                    const summary = document.createElement('summary');
+                    summary.style.cssText = 'cursor:pointer;font-size:13px;color:var(--fg-mute);padding:3px 0;list-style:none;display:flex;align-items:center;gap:5px;';
+                    // Chevron — points right when collapsed, rotates 90°
+                    // down on open. Same affordance as the panel-level
+                    // .enc-chevron above so the expand-ability of folder
+                    // rows is visually obvious.
+                    const chev = document.createElement('span');
+                    chev.textContent = '▶';
+                    chev.style.cssText = 'font-size:8px;color:var(--fg-mute);transition:transform .15s;display:inline-block;flex-shrink:0;' + (isOpen ? 'transform:rotate(90deg);' : '');
+                    summary.appendChild(chev);
+                    const label = document.createElement('span');
+                    label.textContent = (folder || 'Unfiled') + ' (' + items.length + ')';
+                    label.style.fontWeight = isOpen ? '700' : '400';
+                    summary.appendChild(label);
+                    summary.addEventListener('click', (ev) => {
+                        // Toggle happens natively; capture the next
+                        // open state so the sticky map stays in sync,
+                        // and spin the chevron to match.
+                        setTimeout(() => {
+                            folderOpen[folder] = wrap.open;
+                            chev.style.transform = wrap.open ? 'rotate(90deg)' : '';
+                            label.style.fontWeight = wrap.open ? '700' : '400';
+                        }, 0);
+                    });
+                    wrap.appendChild(summary);
+                    const body = document.createElement('div');
+                    body.style.cssText = 'padding-top:3px;';
+                    items.forEach(e => body.appendChild(buildRow(e)));
+                    wrap.appendChild(body);
+                    list.appendChild(wrap);
+                });
+            }
+
+            function renderFilterBar() {
+                if (!filterBar) return;
+                const tagSet = new Set();
+                allRows.forEach(e => (e.tags || []).forEach(t => tagSet.add(t)));
+                // Tag autocomplete: refresh the shared <datalist> from the
+                // current library so freshly-added tags show as suggestions
+                // in both the Save form and the per-row Edit forms.
+                const dlist = document.getElementById('enc-tag-list');
+                if (dlist) {
+                    dlist.innerHTML = '';
+                    Array.from(tagSet).sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'})).forEach(t => {
+                        const opt = document.createElement('option');
+                        opt.value = t;
+                        dlist.appendChild(opt);
+                    });
+                }
+                // Folder autocomplete: refresh the shared folders
+                // datalist from the current set of folders.
+                const folderSet = new Set();
+                allRows.forEach(e => { if (e.folder) folderSet.add(e.folder); });
+                const fdSel = document.getElementById('enc-save-folder');
+                if (fdSel) {
+                    const cur = fdSel.value;
+                    fdSel.innerHTML = '<option value="">— no folder —</option>';
+                    Array.from(folderSet).sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'})).forEach(f => {
+                        const opt = document.createElement('option');
+                        opt.value = f; opt.textContent = f;
+                        fdSel.appendChild(opt);
+                    });
+                    const newOpt = document.createElement('option');
+                    newOpt.value = '__new__'; newOpt.textContent = '+ New folder…';
+                    fdSel.appendChild(newOpt);
+                    if (cur) fdSel.value = cur;
+                    const fdNew = document.getElementById('enc-save-folder-new');
+                    fdSel.addEventListener('change', () => {
+                        if (fdNew) fdNew.style.display = fdSel.value === '__new__' ? '' : 'none';
+                    });
+                }
+                filterBar.innerHTML = '';
+                if (!tagSet.size) return;
+                Array.from(tagSet).sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'})).forEach(t => {
+                    const chip = buildTagChip(t, {clickable: true, active: activeTag === t});
+                    chip.addEventListener('click', () => {
+                        activeTag = (activeTag === t) ? null : t;
+                        rerender();
+                    });
+                    filterBar.appendChild(chip);
+                });
+            }
+
+            function updateCurrentChip(rows) {
+                // Sync the always-visible "currently running" chip in
+                // the panel summary. Hidden when no encounter is marked
+                // current (fresh campaign / never loaded one).
+                const chip = document.getElementById('enc-current-chip');
+                if (!chip) return;
+                const cur = (rows || []).find(e => e.is_current);
+                if (cur) {
+                    chip.textContent = '▶ ' + cur.name;
+                    chip.title = 'Currently loaded encounter: ' + cur.name;
+                    chip.style.display = '';
+                } else {
+                    chip.textContent = '';
+                    chip.style.display = 'none';
+                }
+            }
+
+            function refresh() {
+                list.innerHTML = '<em>Loading…</em>';
+                fetch(CAMPAIGN_URL, {credentials: 'same-origin'})
+                    .then(r => r.ok ? r.json() : Promise.reject('HTTP ' + r.status))
+                    .then(rows => {
+                        allRows = rows || [];
+                        // Drop the active tag if it no longer exists on
+                        // any row (e.g. user just edited away the last
+                        // encounter carrying it).
+                        if (activeTag && !allRows.some(e => (e.tags || []).includes(activeTag))) {
+                            activeTag = null;
+                        }
+                        updateCurrentChip(allRows);
+                        rerender();
+                    })
+                    .catch(err => {
+                        allRows = [];
+                        updateCurrentChip([]);
+                        list.innerHTML = '<em style="color:var(--danger);">Failed to load (' + err + ')</em>';
+                    });
+            }
+
+            if (sortSelect) sortSelect.addEventListener('change', rerender);
+            if (searchInput) searchInput.addEventListener('input', () => {
+                searchQuery = (searchInput.value || '').trim();
+                rerender();
+            });
+
+            async function duplicateEncounter(e, btn) {
+                btn.disabled = true;
+                try {
+                    const resp = await fetch(CAMPAIGN_URL + '/' + e.id + '/duplicate', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                    });
+                    if (!resp.ok) {
+                        alert('Duplicate failed: ' + await resp.text());
+                        return;
+                    }
+                    refresh();
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+
+            async function loadEncounter(e, btn) {
+                const tokN = e.token_count|0;
+                if (!confirm(
+                    'Load "' + e.name + '"?\n\n' +
+                    'This deletes the current GM-owned tokens on the target map and recreates the saved ' +
+                    tokN + ' ' + plural(tokN, 'token', 'tokens') + '. ' +
+                    'Player tokens for characters in the saved encounter will move to their saved positions; ' +
+                    'other player tokens are untouched.'
+                )) return;
+                btn.disabled = true;
+                try {
+                    const resp = await fetch(CAMPAIGN_URL + '/' + e.id + '/load', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({start_audio: true}),
+                    });
+                    if (!resp.ok) {
+                        alert('Load failed: ' + await resp.text());
+                        return;
+                    }
+                    const result = await resp.json().catch(() => null);
+                    if (result && result.warnings && result.warnings.length) {
+                        alert('Loaded with warnings:\n\n' + result.warnings.join('\n'));
+                    }
+                    // If map didn't switch, broadcasts already updated the
+                    // canvas. If it did, the server sent a map_change WS
+                    // that triggered a reload — nothing more to do here.
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+
+            async function updateEncounter(e, btn) {
+                if (!confirm(
+                    'Overwrite "' + e.name + '" with the current state?\n\n' +
+                    'This re-snapshots GM tokens, initiative, and the active playlist ' +
+                    'into this encounter, replacing the previous bundle. ' +
+                    'Name and notes are kept.'
+                )) return;
+                btn.disabled = true;
+                try {
+                    const resp = await fetch(CAMPAIGN_URL + '/' + e.id + '/update', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                    });
+                    if (!resp.ok) {
+                        alert('Update failed: ' + await resp.text());
+                        return;
+                    }
+                    refresh();
+                } finally {
+                    btn.disabled = false;
+                }
+            }
+
+            async function deleteEncounter(e) {
+                if (!confirm('Delete saved encounter "' + e.name + '"? This cannot be undone.')) return;
+                const resp = await fetch(CAMPAIGN_URL + '/' + e.id + '/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                });
+                if (!resp.ok) {
+                    alert('Delete failed: ' + await resp.text());
+                    return;
+                }
+                refresh();
+            }
+
+            const saveBtn = document.getElementById('enc-save-btn');
+            const saveName = document.getElementById('enc-save-name');
+            const saveDesc = document.getElementById('enc-save-desc');
+            const saveTags = document.getElementById('enc-save-tags');
+            const saveFolder = document.getElementById('enc-save-folder');
+            const saveMap = document.getElementById('enc-save-map');
+            const savePlaylist = document.getElementById('enc-save-playlist');
+            const saveMode = document.getElementById('enc-save-mode');
+            const saveStopAudio = document.getElementById('enc-save-stop-audio');
+            const saveStatus = document.getElementById('enc-save-status');
+            /* Map → tags: emit map-tag lookup table from template */
+            const ENC_MAP_TAGS = {
+                {% for m in all_maps %}
+                "{{ m.id }}": {{ (m.tags or []) | tojson }},
+                {% endfor %}
+            };
+            if (saveMap) {
+                saveMap.addEventListener('change', () => {
+                    const tags = ENC_MAP_TAGS[saveMap.value];
+                    if (tags && tags.length && saveTags) saveTags.value = tags.join(', ');
+                });
+            }
+            const PLAYLIST_TRACKS = {
+                {% for p in playlists %}
+                "{{ p.id }}": [{% for t in (p.tracks or []) %}{"id":{{ t.id }},"name":{{ t.name | tojson }}},{% endfor %}],
+                {% endfor %}
+            };
+            const saveSong = document.getElementById('enc-save-song');
+            const saveSongRow = document.getElementById('enc-save-song-row');
+            function updateSongPicker() {
+                if (!saveSong || !saveSongRow) return;
+                const mode = saveMode ? saveMode.value : '';
+                const pid  = savePlaylist ? savePlaylist.value : '';
+                if (mode === 'song' && pid) {
+                    const tracks = PLAYLIST_TRACKS[pid] || [];
+                    saveSong.innerHTML = '<option value="">— choose song —</option>' +
+                        tracks.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+                    saveSongRow.style.display = '';
+                } else {
+                    saveSongRow.style.display = 'none';
+                }
+            }
+            if (saveMode)    saveMode.addEventListener('change', updateSongPicker);
+            if (savePlaylist) savePlaylist.addEventListener('change', updateSongPicker);
+            saveBtn.addEventListener('click', async () => {
+                const name = (saveName.value || '').trim();
+                if (!name) {
+                    saveName.focus();
+                    return;
+                }
+                saveBtn.disabled = true;
+                saveStatus.textContent = 'Saving…';
+                try {
+                    // Only send selector overrides when the GM picked a
+                    // non-default value — the server's defaults (active
+                    // map, currently-playing playlist) kick in when the
+                    // key is omitted.
+                    const body = {
+                        name: name,
+                        description: (saveDesc.value || '').trim(),
+                        tags: saveTags ? saveTags.value : '',
+                        folder: (function() {
+                            if (!saveFolder) return '';
+                            if (saveFolder.value === '__new__') {
+                                const n = document.getElementById('enc-save-folder-new');
+                                return n ? n.value.trim() : '';
+                            }
+                            return saveFolder.value.trim();
+                        })(),
+                        stop_audio_on_load: !!(saveStopAudio && saveStopAudio.checked),
+                    };
+                    if (saveMap && saveMap.value) body.map_id = saveMap.value;
+                    // Always send playlist (null when empty) so the
+                    // server doesn't fall back to inferring from the
+                    // currently-playing track. Picking "— no playlist
+                    // —" is an explicit choice, not "I forgot."
+                    if (savePlaylist) body.auto_play_playlist_id = savePlaylist.value || null;
+                    if (saveMode && saveMode.value) body.auto_play_mode = saveMode.value;
+                    if (saveMode && saveMode.value === 'song' && saveSong && saveSong.value)
+                        body.auto_play_track_id = parseInt(saveSong.value) || null;
+                    const resp = await fetch(CAMPAIGN_URL, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(body),
+                    });
+                    if (!resp.ok) {
+                        saveStatus.textContent = 'Failed: ' + await resp.text();
+                        return;
+                    }
+                    saveName.value = '';
+                    saveDesc.value = '';
+                    if (saveTags) saveTags.value = '';
+                    // Leave map / playlist / folder selectors at their
+                    // current values so consecutive saves to the same
+                    // scene/folder are one-click after the first.
+                    saveStatus.textContent = 'Saved.';
+                    refresh();
+                    setTimeout(() => { saveStatus.textContent = ''; }, 3000);
+                } finally {
+                    saveBtn.disabled = false;
+                }
+            });
+
+            refresh();
+        })();
+        });
+        </script>
+{% endif %}
+
+{% if is_gm %}
 <!-- ── GM Tools drawer ── -->
 <div id="gm-tools-drawer" class="drawer-panel">
-    <div class="drawer-header">
-        <h3>GM Tools</h3>
-        <button class="drawer-close" data-drawer="gm-tools-drawer">&times;</button>
-    </div>
     <div class="drawer-body">
-        <!-- ── Roll Request creator ── -->
-        <div style="margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--border);">
-            <h4 style="margin:0 0 8px; font-size:11px; color:var(--accent); text-transform:uppercase; letter-spacing:0.5px;">📋 Roll Request</h4>
-
-            <div style="margin-bottom:5px;">
-                <div style="font-size:10px; color:var(--fg-mute); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:3px;">Saving Throws</div>
-                <div style="display:flex; flex-wrap:wrap; gap:3px;">
-                    <button type="button" class="rr-quick" data-label="STR Saving Throw" data-stat="str_save">STR</button>
-                    <button type="button" class="rr-quick" data-label="DEX Saving Throw" data-stat="dex_save">DEX</button>
-                    <button type="button" class="rr-quick" data-label="CON Saving Throw" data-stat="con_save">CON</button>
-                    <button type="button" class="rr-quick" data-label="INT Saving Throw" data-stat="int_save">INT</button>
-                    <button type="button" class="rr-quick" data-label="WIS Saving Throw" data-stat="wis_save">WIS</button>
-                    <button type="button" class="rr-quick" data-label="CHA Saving Throw" data-stat="cha_save">CHA</button>
+        <!-- ── Encounters ── -->
+        <details id="encounters-panel"
+                 style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:8px;">
+                <span class="enc-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚔ Encounters</h4>
+                <span id="enc-current-chip"
+                      title="Currently loaded encounter"
+                      style="display:none;margin-left:auto;font-size:10px;color:#6cb;background:#142a30;border:1px solid #2a4f5a;border-radius:3px;padding:1px 6px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+            </summary>
+            <input type="search" id="enc-search" placeholder="Search by name or tag…"
+                   style="width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;margin-bottom:4px;">
+            <div style="display:flex;align-items:center;gap:8px;font-size:10px;color:var(--fg-mute);margin-bottom:6px;flex-wrap:wrap;">
+                <label style="display:inline-flex;flex-direction:row;align-items:center;gap:4px;white-space:nowrap;">Sort<select id="enc-sort" style="font-size:10px;padding:1px 4px;">
+                        <option value="recent">Recent</option>
+                        <option value="name">A–Z</option>
+                    </select></label>
+                <div id="enc-tag-filters" style="display:flex;gap:3px;flex-wrap:wrap;flex:1;"></div>
+            </div>
+            <div id="encounters-list" style="font-size:11px;color:var(--fg-mute);margin-bottom:8px;">
+                <em>Loading…</em>
+            </div>
+            <details id="encounters-save-form"
+                     style="padding:8px;background:var(--bg-2);border:1px solid var(--border);border-radius:4px;">
+                <summary style="cursor:pointer;font-size:10px;color:var(--fg-mute);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;list-style:revert;">💾 Save current state</summary>
+                <input type="text" id="enc-save-name" placeholder="Encounter name"
+                       style="width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;margin-bottom:4px;">
+                <input type="text" id="enc-save-desc" placeholder="Notes (optional)"
+                       style="width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;margin-bottom:4px;">
+                <input type="text" id="enc-save-tags" list="enc-tag-list" placeholder="Tags (comma-separated, optional)"
+                       style="width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;margin-bottom:4px;">
+                <div style="display:flex;gap:4px;margin-bottom:4px;">
+                    <select id="enc-save-folder" style="flex:1;font-size:11px;padding:3px 4px;">
+                        <option value="">— no folder —</option>
+                    </select>
+                    <input type="text" id="enc-save-folder-new" placeholder="New folder name"
+                           style="display:none;flex:1;font-size:11px;padding:3px 5px;">
                 </div>
-            </div>
-            <div style="margin-bottom:8px;">
-                <div style="font-size:10px; color:var(--fg-mute); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:3px;">Ability Checks</div>
-                <div style="display:flex; flex-wrap:wrap; gap:3px;">
-                    <button type="button" class="rr-quick" data-label="Strength Check" data-stat="str_check">STR</button>
-                    <button type="button" class="rr-quick" data-label="Dexterity Check" data-stat="dex_check">DEX</button>
-                    <button type="button" class="rr-quick" data-label="Constitution Check" data-stat="con_check">CON</button>
-                    <button type="button" class="rr-quick" data-label="Intelligence Check" data-stat="int_check">INT</button>
-                    <button type="button" class="rr-quick" data-label="Wisdom Check" data-stat="wis_check">WIS</button>
-                    <button type="button" class="rr-quick" data-label="Charisma Check" data-stat="cha_check">CHA</button>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:4px;align-items:center;">
+                    <select id="enc-save-map" title="Bind this encounter to a map"
+                            style="font-size:11px;padding:3px 4px;">
+                        <option value="">— bind map (default: active) —</option>
+                        {% for m in all_maps %}
+                        <option value="{{ m.id }}" {% if active_map and active_map.id == m.id %}selected{% endif %}>{{ m.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="enc-save-playlist" title="Auto-play playlist on load"
+                            style="font-size:11px;padding:3px 4px;">
+                        <option value="">— no playlist —</option>
+                        {% for p in playlists %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
-            </div>
+                <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px;flex-wrap:wrap;">
+                    <select id="enc-save-mode" title="Playlist playback mode"
+                            style="font-size:11px;padding:3px 4px;">
+                        <option value="order">Order</option>
+                        <option value="shuffle">Shuffle</option>
+                        <option value="song">Song</option>
+                    </select>
+                    <label style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--fg-mute);cursor:pointer;margin-left:4px;">
+                        <input type="checkbox" id="enc-save-stop-audio">
+                        <span>Stop audio on load</span>
+                    </label>
+                </div>
+                <div id="enc-save-song-row" style="display:none;margin-bottom:6px;">
+                    <select id="enc-save-song" style="font-size:11px;padding:3px 4px;width:100%;">
+                        <option value="">— choose song —</option>
+                    </select>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <button type="button" id="enc-save-btn" style="font-size:11px;padding:3px 12px;">Save</button>
+                    <span id="enc-save-status" class="muted" style="font-size:10px;"></span>
+                </div>
+            </details>
+            <datalist id="enc-tag-list"></datalist>
+        </details>
 
-            <div style="display:grid; grid-template-columns:1fr 52px; gap:4px; margin-bottom:4px;">
-                <input type="text" id="rr-label" placeholder="Label — e.g. Perception DC 14" style="font-size:11px; padding:3px 5px;">
-                <input type="number" id="rr-dc" min="1" max="40" placeholder="DC" title="Difficulty Class" style="font-size:11px; padding:3px 5px; text-align:center;">
-            </div>
-            <div style="display:grid; grid-template-columns:1fr auto; gap:4px; margin-bottom:5px;">
-                <input type="text" id="rr-expr" placeholder="Dice expression (default: 1d20)" style="font-size:11px; padding:3px 5px;">
-                <select id="rr-vis" style="font-size:11px; padding:3px 4px;">
-                    <option value="public">All</option>
-                    <option value="gm_and_roller">GM+roller</option>
-                    <option value="gm_only">GM only</option>
-                </select>
-            </div>
-            <div style="display:flex; align-items:center; gap:6px;">
-                <button type="button" id="rr-send-btn" style="font-size:11px; padding:4px 10px; flex-shrink:0;">📋 Post to Log</button>
-                <button type="button" id="rr-clear-btn" style="font-size:10px; padding:2px 6px; color:var(--fg-mute); display:none;">✕ Clear</button>
-            </div>
-            <div id="rr-status" style="font-size:10px; color:var(--fg-mute); margin-top:3px; min-height:1.2em;"></div>
-        </div>
-
-        <!-- ── Tokens ── -->
-        <div style="margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--border);">
-            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;">
-                <h4 style="margin:0; font-size:11px; color:var(--accent); text-transform:uppercase; letter-spacing:0.5px;">Tokens</h4>
-                <button type="button" id="add-token-btn" style="font-size:11px; padding:3px 10px;">+ Add Token</button>
+        <!-- ── Token Management ── -->
+        <details id="token-management-panel" open
+                 style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:8px;">
+                <span class="tm-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">🎯 Token Management</h4>
+            </summary>
+            <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+                <button type="button" id="add-token-btn"
+                        style="font-size:11px;padding:3px 10px;">+ Add Token</button>
             </div>
             <div id="token-tracker-list"></div>
-        </div>
-        <h4 style="margin:0 0 8px; font-size:11px; color:var(--accent); text-transform:uppercase; letter-spacing:0.5px;">Music</h4>
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:8px;">
+        </details>
+
+        <details id="music-panel" open
+                 style="margin-bottom:14px;">
+            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:8px;">
+                <span class="music-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">🎵 Music</h4>
+            </summary>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; gap:8px;">
             <span id="gm-now-playing-label" class="muted" style="font-size:12px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                 {% if now_playing %}▶ {{ now_playing.name }}{% else %}Nothing playing{% endif %}
             </span>
             <button type="button" onclick="vttStopAudio()" style="font-size:11px; flex-shrink:0;">⏹ Stop all</button>
         </div>
+        {# Transport controls — GM-only. The glyph on the play/pause toggle
+           re-renders via the WS-message listener below so it tracks the
+           server-authoritative pause state. #}
+        <div style="display:flex; align-items:center; gap:6px; margin-bottom:4px;">
+            <button type="button" onclick="vttPreviousTrack()"
+                    title="Previous track"
+                    style="font-size:13px; padding:3px 10px; flex:1;">⏮ Prev</button>
+            <button type="button" id="gm-play-pause-btn" onclick="vttTogglePause()"
+                    title="Play / Pause"
+                    style="font-size:13px; padding:3px 10px; flex:1;">⏸ Pause</button>
+            <button type="button" onclick="vttSkipTrack()"
+                    title="Next track"
+                    style="font-size:13px; padding:3px 10px; flex:1;">Skip ⏭</button>
+        </div>
+        <button type="button" id="audio-enable" style="display:none;font-size:11px;padding:2px 8px;margin-bottom:4px;width:100%;">▶ Click to enable audio</button>
+        {# Progress bar + volume slider on one line. Progress takes 2/3, slider takes 1/3. #}
+        <div class="audio-progress" hidden
+             style="display:flex;align-items:center;gap:6px;margin-bottom:8px;font-size:10px;color:var(--fg-mute);">
+            <div style="flex:2;display:flex;align-items:center;gap:6px;min-width:0;">
+                <span class="audio-progress-elapsed" style="width:34px;text-align:right;font-variant-numeric:tabular-nums;flex-shrink:0;">0:00</span>
+                <div class="audio-progress-track" style="flex:1;height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;">
+                    <div class="audio-progress-fill" style="height:100%;width:0%;background:var(--accent);transition:width .25s linear;"></div>
+                </div>
+                <span class="audio-progress-total" style="width:34px;font-variant-numeric:tabular-nums;flex-shrink:0;">0:00</span>
+            </div>
+            <div style="flex:1;display:flex;align-items:center;gap:4px;min-width:0;">
+                <button type="button" id="audio-mute" title="Mute / Unmute" style="flex-shrink:0;background:none;border:none;padding:0 2px;font-size:14px;cursor:pointer;line-height:1;">🔊</button>
+                <input type="range" id="audio-volume" min="0" max="1" step="0.01" value="0.6" style="flex:1;min-width:0;">
+            </div>
+        </div>
 
         {% if playlists %}
             {% for playlist in playlists %}
-            <div class="gm-playlist{% if now_playing and playlist.tracks and now_playing.id in playlist.tracks | map(attribute='id') | list %} open{% endif %}"
+            <div class="gm-playlist"
                  data-playlist-id="{{ playlist.id }}">
                 <div class="gm-playlist-header">
                     <span class="gm-playlist-chevron">▶</span>
-                    <span class="gm-playlist-label" title="{{ playlist.name }}">{{ playlist.name }}</span>
+                    <span class="gm-playlist-label" title="{{ playlist.name }}{% if playlist.description %} — {{ playlist.description }}{% endif %}">
+                        {{ playlist.name }}{% if playlist.description %}<span class="muted" style="font-weight:400;margin-left:6px;font-size:11px;">— {{ playlist.description }}</span>{% endif %}
+                    </span>
                     <div class="gm-playlist-btns">
                         {% if playlist.tracks %}
                         <button type="button"
@@ -1304,6 +2347,7 @@
         {% else %}
         <p class="muted">No playlists yet. Create one in <a href="/campaign/{{ campaign.id }}/settings#audio">campaign settings</a>.</p>
         {% endif %}
+        </details><!-- /#music-panel -->
     </div>
 </div>
 {% endif %}
@@ -1319,11 +2363,19 @@
         <h3 style="margin:0 0 14px; font-size:15px;">Add Token</h3>
         <div style="display:flex; gap:6px; margin-bottom:14px;">
             <button class="atm-tab-btn atm-tab-active" data-tab="atm-tab-library" style="padding:5px 14px; font-size:12px; background:var(--accent-bg); color:var(--accent); border:1px solid var(--accent-border); border-radius:4px; cursor:pointer;">Library</button>
+            <button class="atm-tab-btn" data-tab="atm-tab-players" style="padding:5px 14px; font-size:12px; background:var(--input-bg); color:var(--fg-mute); border:1px solid var(--border); border-radius:4px; cursor:pointer;">Players</button>
             <button class="atm-tab-btn" data-tab="atm-tab-blank" style="padding:5px 14px; font-size:12px; background:var(--input-bg); color:var(--fg-mute); border:1px solid var(--border); border-radius:4px; cursor:pointer;">Blank Token</button>
+            <button class="atm-tab-btn" data-tab="atm-tab-open5e" style="padding:5px 14px; font-size:12px; background:var(--input-bg); color:var(--fg-mute); border:1px solid var(--border); border-radius:4px; cursor:pointer;">Open5e</button>
         </div>
         <div id="atm-tab-library">
             <p id="atm-no-templates" class="muted" style="font-size:12px; display:none;">No token templates yet. Create some in <a href="" id="atm-settings-link">campaign settings</a>.</p>
             <div id="atm-template-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px;"></div>
+        </div>
+        <div id="atm-tab-players" style="display:none;">
+            <p id="atm-no-characters" class="muted" style="font-size:12px; display:none;">No player characters in this campaign yet.</p>
+            <p class="muted" style="font-size:11px; margin:0 0 8px;">Click to select, then place. Click a placed token again to remove it.</p>
+            <div id="atm-player-grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; margin-bottom:10px;"></div>
+            <button type="button" id="atm-place-selected-btn" style="display:none;width:100%;padding:7px;font-size:12px;font-weight:600;">Place Selected (<span id="atm-selected-count">0</span>)</button>
         </div>
         <div id="atm-tab-blank" style="display:none;">
             <div class="stacked" style="max-width:300px;">
@@ -1331,6 +2383,11 @@
                 <label>Color <input type="color" id="atm-blank-color" value="#cc3333"></label>
                 <div><button type="button" id="atm-blank-place">Place on Map</button></div>
             </div>
+        </div>
+        <div id="atm-tab-open5e" style="display:none;">
+            <input type="text" id="atm-o5e-search" placeholder="Search creatures…" style="width:100%;box-sizing:border-box;padding:7px 10px;font-size:12px;background:var(--input-bg);color:var(--fg);border:1px solid var(--border);border-radius:4px;margin-bottom:8px;">
+            <p id="atm-o5e-status" style="font-size:11px;color:var(--fg-mute);margin:0 0 6px;"></p>
+            <div id="atm-o5e-results" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;"></div>
         </div>
     </div>
 </div>
@@ -1367,7 +2424,8 @@
 
 <script>
 const CAMPAIGN_ID = {{ campaign.id }};
-const ME = { id: {{ user.id }}, name: {{ user.display_name|tojson }}, isGm: {{ 'true' if is_gm else 'false' }}, animateGifs: {{ 'true' if user.animate_gifs else 'false' }} };
+const MAP_ID = {{ active_map.id if active_map else 'null' }};
+const ME = { id: {{ user.id }}, name: {{ user.display_name|tojson }}, isGm: {{ 'true' if is_gm else 'false' }}, animateGifs: {{ 'true' if user.animate_gifs else 'false' }}, zoomSpeed: {{ user.zoom_speed or 1.0 }} };
 const GAME_SYSTEM = {{ system.key|tojson }};
 const ROLLABLE_SHEET = {{ 'true' if system.rollable_sheet else 'false' }};
 const MEMBERS = [{% for m in members %}{"id":{{ m.id }},"name":{{ m.display_name|tojson }}}{% if not loop.last %},{% endif %}{% endfor %}];
@@ -1385,117 +2443,86 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 <script>
 /* ── Drawer system ── */
 (function () {
-    const tabs = document.querySelectorAll('.drawer-tab-btn');
-    const panels = document.querySelectorAll('.drawer-panel');
+    const tabs    = document.querySelectorAll('.drawer-tab-btn');
+    const panels  = document.querySelectorAll('.drawer-panel');
     const wrapper = document.getElementById('drawer-panels-wrapper');
-    const pinBtn = document.getElementById('drawer-pin-btn');
-    const sidebar = document.querySelector('.drawer-sidebar');
-    const openBtn = document.getElementById('drawer-open-btn');
     const STORAGE_KEY = 'simplevtt_drawer_' + CAMPAIGN_ID;
-    const PIN_KEY = 'simplevtt_drawer_pinned_' + CAMPAIGN_ID;
-
-    let pinned = (() => { try { return localStorage.getItem(PIN_KEY) === '1'; } catch (e) { return false; } })();
-
-    function applyPin() {
-        pinBtn.classList.toggle('pinned', pinned);
-        pinBtn.title = pinned ? 'Unpin sidebar' : 'Pin sidebar open';
-        try { localStorage.setItem(PIN_KEY, pinned ? '1' : ''); } catch (e) {}
-    }
-
-    function saveState(targetId) {
-        try { localStorage.setItem(STORAGE_KEY, targetId || ''); } catch (e) {}
-    }
-
-    function collapseSidebar() {
-        sidebar.classList.remove('is-open');
-        openBtn.hidden = false;
-        tabs.forEach(t => t.classList.remove('active'));
-        panels.forEach(p => p.classList.remove('open'));
-        wrapper.classList.remove('has-open');
-        saveState('');
-    }
-
-    function closeAll() {
-        if (pinned) return;
-        collapseSidebar();
-    }
 
     function openPanel(targetId) {
         tabs.forEach(t => t.classList.remove('active'));
         panels.forEach(p => p.classList.remove('open'));
-        const tab = [...tabs].find(t => t.dataset.target === targetId);
+        const tab   = [...tabs].find(t => t.dataset.target === targetId);
         const panel = document.getElementById(targetId);
         if (tab && panel) {
             tab.classList.add('active');
             panel.classList.add('open');
-            wrapper.classList.add('has-open');
-            sidebar.classList.add('is-open');
-            openBtn.hidden = true;
-            saveState(targetId);
+            try { localStorage.setItem(STORAGE_KEY, targetId); } catch (e) {}
         }
     }
 
-    tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            const wasActive = tab.classList.contains('active');
-            if (wasActive && !pinned) { closeAll(); } else { openPanel(tab.dataset.target); }
-        });
-    });
+    tabs.forEach(tab => tab.addEventListener('click', () => openPanel(tab.dataset.target)));
 
-    document.querySelectorAll('.drawer-close').forEach(btn => {
-        btn.addEventListener('click', () => {
-            pinned = false;
-            applyPin();
-            collapseSidebar();
-        });
-    });
-
-    pinBtn.addEventListener('click', () => {
-        pinned = !pinned;
-        applyPin();
-        if (pinned && !wrapper.classList.contains('has-open')) {
-            const lastSaved = (() => { try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; } })();
-            const target = lastSaved || tabs[0]?.dataset.target;
-            if (target) openPanel(target);
-        }
-    });
-
-    openBtn.addEventListener('click', () => {
-        const lastSaved = (() => { try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; } })();
-        const target = lastSaved || tabs[0]?.dataset.target;
-        if (target) openPanel(target);
-    });
-
-    applyPin();
-
-    /* Restore last open drawer on load — suppress animation for initial paint */
-    sidebar.classList.add('no-transition');
+    /* Restore last-used tab on load, defaulting to the first tab */
     const saved = (() => { try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; } })();
-    const isMobile = window.matchMedia('(max-width: 640px)').matches;
-    if (saved || pinned || isMobile) {
-        openPanel(saved || tabs[0]?.dataset.target);
-    } else {
-        openBtn.hidden = false;
-    }
-    requestAnimationFrame(() => requestAnimationFrame(() => sidebar.classList.remove('no-transition')));
+    openPanel(saved || tabs[0]?.dataset.target);
 
-    /* ── GM Tools: keep now-playing label + track highlight in sync ── */
+    /* ── GM Tools: keep now-playing label + track highlight + transport
+       button glyph in sync with the server-authoritative state ── */
     const gmLabel = document.getElementById('gm-now-playing-label');
-    function setGmNowPlaying(trackId, name) {
+    const gmPlayPauseBtn = document.getElementById('gm-play-pause-btn');
+    // Cached so audio_pause (which carries no track_id / name) can
+    // keep showing the same track without re-querying the DOM.
+    let _gmCurTrackId = null;
+    let _gmCurTrackName = '';
+    let _gmCurPaused = false;
+
+    function _renderGmAudio() {
+        // Track-row highlight in the playlist below.
         document.querySelectorAll('.gm-track').forEach(el => el.classList.remove('now-playing'));
-        if (trackId) {
-            const row = document.getElementById('gm-track-' + trackId);
+        if (_gmCurTrackId) {
+            const row = document.getElementById('gm-track-' + _gmCurTrackId);
             if (row) row.classList.add('now-playing');
-            if (gmLabel) gmLabel.textContent = '▶ ' + (name || '');
-        } else {
-            if (gmLabel) gmLabel.textContent = 'Nothing playing';
+        }
+        // Top-of-panel label.
+        if (gmLabel) {
+            gmLabel.textContent = _gmCurTrackId
+                ? (_gmCurPaused ? '⏸ ' : '▶ ') + _gmCurTrackName
+                : 'Nothing playing';
+        }
+        // Play/Pause button glyph — shows what the button WILL do on click.
+        // Playing → click pauses (⏸); paused or stopped → click plays (▶).
+        if (gmPlayPauseBtn) {
+            const willPause = !!_gmCurTrackId && !_gmCurPaused;
+            gmPlayPauseBtn.textContent = willPause ? '⏸ Pause' : '▶ Play';
+            gmPlayPauseBtn.disabled = !_gmCurTrackId;
+            gmPlayPauseBtn.style.opacity = _gmCurTrackId ? '1' : '0.5';
         }
     }
+
+    // Initial paint from the server-rendered "now playing".
+    {% if now_playing %}
+    _gmCurTrackId   = {{ now_playing.id }};
+    _gmCurTrackName = {{ now_playing.name|tojson }};
+    _gmCurPaused    = {{ 'true' if campaign.now_playing_paused_offset_s is not none else 'false' }};
+    {% endif %}
+    _renderGmAudio();
 
     document.addEventListener('vtt:ws-message', (ev) => {
         const msg = ev.detail;
-        if (msg.type === 'audio_play') setGmNowPlaying(msg.data.track_id, msg.data.name);
-        else if (msg.type === 'audio_stop') setGmNowPlaying(null, null);
+        if (msg.type === 'audio_play') {
+            _gmCurTrackId   = msg.data.track_id;
+            _gmCurTrackName = msg.data.name || _gmCurTrackName;
+            _gmCurPaused    = !!msg.data.paused;
+            _renderGmAudio();
+        } else if (msg.type === 'audio_pause') {
+            _gmCurPaused = true;
+            _renderGmAudio();
+        } else if (msg.type === 'audio_stop') {
+            _gmCurTrackId   = null;
+            _gmCurTrackName = '';
+            _gmCurPaused    = false;
+            _renderGmAudio();
+        }
     });
 
     /* ── GM playlist expand/collapse ── */
@@ -1954,7 +2981,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     const IS_GM = ME.isGm;
     const BATTLE_KEY = 'simplevtt_battle_' + CAMPAIGN_ID;
     const initData = JSON.parse(document.getElementById('initial-data')?.textContent || '{}');
-    const allChars = initData.characters || [];
+    const allChars      = initData.characters || [];
+    const allTokens     = initData.tokens     || [];
+    const allTemplates  = initData.templates  || [];
 
     let battle = { combatants: [], turn_index: 0, round: 1, active: false };
     try { const s = localStorage.getItem(BATTLE_KEY); if (s) battle = JSON.parse(s); } catch {}
@@ -1979,11 +3008,60 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 
     function _abi(score) { return Math.floor((Number(score || 10) - 10) / 2); }
 
+    function _hpFromSheet(sh) {
+        const hp = sh.hp;
+        if (!hp) return [10, 10];
+        if (typeof hp === 'number') return [hp, hp];
+        const max = parseInt(hp.max || hp.maximum || 10) || 10;
+        const cur = parseInt(hp.current || hp.value || max) || max;
+        return [cur, max];
+    }
+
+    function combatantFromToken(tok) {
+        let dexMod = 0;
+        let hpCur = 10, hpMax = 10;
+        const color = tok.color || '#888';
+
+        if (tok.character_id) {
+            const ch = allChars.find(c => c.id === tok.character_id);
+            if (ch) {
+                const sh = ch.sheet || {};
+                dexMod = _abi((sh.abilities || {}).DEX) + parseInt(sh.initiative_bonus || 0);
+                [hpCur, hpMax] = _hpFromSheet(sh);
+            }
+        } else if (tok.token_template_id) {
+            const tmpl = allTemplates.find(t => t.id === tok.token_template_id);
+            if (tmpl) {
+                const sh = tmpl.sheet || {};
+                dexMod = _abi((sh.abilities || {}).DEX);
+                [hpCur, hpMax] = _hpFromSheet(sh);
+            }
+        }
+
+        return {
+            id: 'tok_' + tok.id + '_' + Date.now(),
+            char_id: tok.character_id || null,
+            name: tok.label,
+            initiative: 0, hp_current: hpCur, hp_max: hpMax,
+            color, dex_mod: dexMod,
+        };
+    }
+
     function hpColor(cur, max) {
         const pct = max > 0 ? cur / max : 1;
         return pct > 0.5
             ? getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6cb4ff'
             : pct > 0.25 ? '#e8a040' : 'var(--danger)';
+    }
+
+    const HP_THRESHOLDS = {{ hp_thresholds | tojson }};
+    function hpThreshold(cur, max) {
+        if (!max || cur <= 0) return HP_THRESHOLDS[HP_THRESHOLDS.length - 1].label;
+        const pct = (cur / max) * 100;
+        for (const t of HP_THRESHOLDS) {
+            if (pct >= t.min_pct) return t.label;
+        }
+        return HP_THRESHOLDS[HP_THRESHOLDS.length - 1].label;
     }
 
     function renderBattle() {
@@ -2022,11 +3100,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     <button class="init-rm" data-idx="${i}" title="Remove">×</button>
                 </div>`;
             } else {
+                const label = hpThreshold(c.hp_current, c.hp_max);
                 return `<div class="init-row${isActive ? ' active-turn' : ''}" data-idx="${i}">
                     <div class="init-swatch" style="background:${c.color || 'var(--fg-mute)'};"></div>
                     <span class="init-name" title="${c.name}">${c.name}</span>
-                    <span style="font-size:12px;font-weight:700;color:var(--fg);width:28px;text-align:right;flex-shrink:0;">${c.initiative}</span>
-                    <span style="font-size:11px;color:${col};flex-shrink:0;min-width:44px;text-align:right;">${c.hp_current}/${c.hp_max}</span>
+                    <span class="init-threshold" style="color:${col};">${label}</span>
                 </div>`;
             }
         }).join('');
@@ -2122,6 +3200,21 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         battle.combatants.sort((a, b) => b.initiative - a.initiative);
         battle.turn_index = 0; battle.round = 1; battle.active = true;
         pushBattle(); renderBattle();
+    });
+
+    /* ── From Map ── */
+    document.getElementById('battle-from-map-btn')?.addEventListener('click', () => {
+        if (!allTokens.length) return;
+        let added = 0;
+        allTokens.forEach(tok => {
+            const dup = tok.character_id
+                ? battle.combatants.some(c => c.char_id === tok.character_id)
+                : battle.combatants.some(c => c.name === tok.label && !c.char_id);
+            if (dup) return;
+            battle.combatants.push(combatantFromToken(tok));
+            added++;
+        });
+        if (added) { pushBattle(); renderBattle(); }
     });
 
     /* ── Character picker ── */
@@ -2262,61 +3355,60 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 
 {% if is_gm %}
 <script>
-(function () {
-    const banner = document.getElementById('open5e-stale-banner');
-    if (!banner) return;
-
-    const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;  // 24 h
-    const DISMISS_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-    const lastCheck    = parseInt(localStorage.getItem('open5e_check_ts')    || '0', 10);
-    const lastDismiss  = parseInt(localStorage.getItem('open5e_banner_dismissed') || '0', 10);
-    const now          = Date.now();
-
-    if (now - lastCheck < CHECK_INTERVAL_MS) return;   // checked recently
-    if (now - lastDismiss < DISMISS_INTERVAL_MS) return; // user dismissed recently
-
-    fetch('/api/open5e/update-check')
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-            localStorage.setItem('open5e_check_ts', String(Date.now()));
-            if (!data || !data.enabled || !data.stale) return;
-
-            // Build a short detail string e.g. "spells: 402→415"
-            const changed = Object.entries(data.details || {})
-                .filter(([, v]) => v.stale)
-                .map(([k, v]) => `${k}: ${v.local}→${v.remote}`)
-                .join(', ');
-            const detail = document.getElementById('open5e-stale-detail');
-            if (detail && changed) detail.textContent = `(${changed})`;
-
-            banner.style.display = 'flex';
-        })
-        .catch(() => {});   // network error — silently skip
-})();
-</script>
-{% endif %}
-
-{% if is_gm %}
-<script>
 /* ── Roll Request creator (GM only) ── */
 (function () {
     let rrStatKey = null;
+    let rrMode = 'save';
 
-    const labelEl  = document.getElementById('rr-label');
-    const dcEl     = document.getElementById('rr-dc');
-    const exprEl   = document.getElementById('rr-expr');
-    const visEl    = document.getElementById('rr-vis');
-    const sendBtn  = document.getElementById('rr-send-btn');
-    const clearBtn = document.getElementById('rr-clear-btn');
-    const statusEl = document.getElementById('rr-status');
+    const ATTRS = {
+        str: { save: { label: 'STR Saving Throw',   stat: 'str_save'   }, check: { label: 'Strength Check',     stat: 'str_check'  } },
+        dex: { save: { label: 'DEX Saving Throw',   stat: 'dex_save'   }, check: { label: 'Dexterity Check',    stat: 'dex_check'  } },
+        con: { save: { label: 'CON Saving Throw',   stat: 'con_save'   }, check: { label: 'Constitution Check', stat: 'con_check'  } },
+        int: { save: { label: 'INT Saving Throw',   stat: 'int_save'   }, check: { label: 'Intelligence Check', stat: 'int_check'  } },
+        wis: { save: { label: 'WIS Saving Throw',   stat: 'wis_save'   }, check: { label: 'Wisdom Check',       stat: 'wis_check'  } },
+        cha: { save: { label: 'CHA Saving Throw',   stat: 'cha_save'   }, check: { label: 'Charisma Check',     stat: 'cha_check'  } },
+    };
+
+    const labelEl      = document.getElementById('rr-label');
+    const dcEl         = document.getElementById('rr-dc');
+    const exprEl       = document.getElementById('roll-expr');
+    const visEl        = document.getElementById('rr-vis');
+    const sendBtn      = document.getElementById('rr-send-btn');
+    const clearBtn     = document.getElementById('rr-clear-btn');
+    const statusEl     = document.getElementById('rr-status');
+    const modeSaveBtn  = document.getElementById('rr-mode-save');
+    const modeCheckBtn = document.getElementById('rr-mode-check');
     if (!sendBtn) return;
 
-    /* Quick-preset buttons (save / ability check) */
+    const _on  = 'font-size:10px;padding:3px 6px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);border-radius:3px;cursor:pointer;';
+    const _off = 'font-size:10px;padding:3px 6px;background:var(--input-bg);color:var(--fg-mute);border:1px solid var(--border);border-radius:3px;cursor:pointer;';
+
+    function setMode(mode) {
+        rrMode = mode;
+        modeSaveBtn.style.cssText  = mode === 'save'  ? _on : _off;
+        modeCheckBtn.style.cssText = mode === 'check' ? _on : _off;
+        const sel = document.querySelector('.rr-quick.rr-selected');
+        if (sel) {
+            const map = ATTRS[sel.dataset.attr]?.[mode];
+            if (map) { rrStatKey = map.stat; labelEl.value = map.label; }
+        }
+    }
+
+    modeSaveBtn.addEventListener('click',  () => setMode('save'));
+    modeCheckBtn.addEventListener('click', () => setMode('check'));
+
+    document.querySelectorAll('.rr-dc-preset').forEach(btn => {
+        btn.addEventListener('click', () => { dcEl.value = btn.dataset.dc; });
+    });
+
+
+    /* Quick-preset buttons */
     document.querySelectorAll('.rr-quick').forEach(btn => {
         btn.addEventListener('click', () => {
-            rrStatKey = btn.dataset.stat;
-            labelEl.value = btn.dataset.label;
+            const map = ATTRS[btn.dataset.attr]?.[rrMode];
+            if (!map) return;
+            rrStatKey = map.stat;
+            labelEl.value = map.label;
             clearBtn.style.display = '';
             document.querySelectorAll('.rr-quick').forEach(b => b.classList.remove('rr-selected'));
             btn.classList.add('rr-selected');
@@ -2536,6 +3628,21 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     // Initial render for all characters
     document.querySelectorAll('.conc-section').forEach(el => {
         window.renderConcSection(+el.dataset.charId);
+    });
+})();
+</script>
+<script>
+/* ── Collapsible <details> state persistence ── */
+(function () {
+    const PREFIX = `vtt_details_${CAMPAIGN_ID}_`;
+    document.querySelectorAll('details[id]').forEach(el => {
+        const key = PREFIX + el.id;
+        const saved = localStorage.getItem(key);
+        if (saved === 'open') el.open = true;
+        else if (saved === 'closed') el.open = false;
+        el.addEventListener('toggle', () => {
+            localStorage.setItem(key, el.open ? 'open' : 'closed');
+        });
     });
 })();
 </script>

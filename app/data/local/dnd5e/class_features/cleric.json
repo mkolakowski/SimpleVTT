@@ -1,0 +1,20 @@
+{
+  "slug": "cleric",
+  "name": "Cleric",
+  "hit_die": 8,
+  "prof_armor": "Light armor, medium armor, shields",
+  "prof_weapons": "Simple weapons",
+  "prof_tools": "None",
+  "prof_saving_throws": "Wisdom, Charisma",
+  "prof_skills": "Choose two from History, Insight, Medicine, Persuasion, and Religion",
+  "spellcasting_ability": "wis",
+  "equipment": "(a) a mace or (b) a warhammer (if proficient)\n(a) scale mail, (b) leather armor, or (c) chain mail (if proficient)\n(a) a light crossbow and 20 bolts or (b) any simple weapon\n(a) a priest's pack or (b) an explorer's pack\nA shield and a holy symbol",
+  "features": "## Cleric Features\n\n### Spellcasting\n*1st-level cleric feature*\n\nAs a conduit for divine power, you can cast cleric spells. Wisdom is your spellcasting ability for your cleric spells. You use a holy symbol as a spellcasting focus. You prepare a list of cleric spells available for you to cast: choose a number of cleric spells equal to your Wisdom modifier + your cleric level (minimum one spell). The spells must be of a level for which you have spell slots. Preparing a new list of cleric spells requires time spent in prayer and meditation: at least 1 minute per spell level for each spell on your list.\n\nYou know three cleric cantrips of your choice at 1st level (4 at 4th, 5 at 10th).\n\nYou can cast a cleric spell as a ritual if that spell has the ritual tag and you have the spell prepared.\n\n### Divine Domain\n*1st-level cleric feature*\n\nChoose one domain related to your deity. Your choice grants you domain spells and other features when you choose it at 1st level. It also grants you additional ways to use Channel Divinity when you gain that feature at 2nd level, and additional benefits at 6th, 8th, and 17th levels.\n\n### Channel Divinity\n*2nd-level cleric feature*\n\nAt 2nd level, you gain the ability to channel divine energy directly from your deity, using that energy to fuel magical effects. You start with two such effects: Turn Undead and an effect determined by your domain. You use your Channel Divinity once per short or long rest, increasing to twice between rests at 6th level and three times at 18th level. The saving throw DC equals 8 + your proficiency bonus + your Wisdom modifier.\n\n**Channel Divinity: Turn Undead.** As an action, you present your holy symbol and speak a prayer censuring the undead. Each undead that can see or hear you within 30 feet of you must make a Wisdom saving throw. If the creature fails its saving throw, it is turned for 1 minute or until it takes any damage. A turned creature must spend its turns trying to move as far away from you as it can.\n\n### Destroy Undead\n*5th-level cleric feature*\n\nStarting at 5th level, when an undead fails its saving throw against your Turn Undead feature, the creature is instantly destroyed if its challenge rating is at or below a certain threshold: CR 1/2 at 5th level, CR 1 at 8th, CR 2 at 11th, CR 3 at 14th, and CR 4 at 17th.\n\n### Ability Score Improvement\n*4th-, 8th-, 12th-, 16th-, and 19th-level cleric feature*\n\nWhen you reach the listed levels, you can increase one ability score by 2, or two ability scores by 1. You can't increase a score above 20 using this feature.\n\n### Divine Intervention\n*10th-level cleric feature*\n\nBeginning at 10th level, you can call on your deity to intervene on your behalf when your need is great. Imploring your deity's aid requires you to use your action. Describe the assistance you seek, and roll percentile dice. If you roll a number equal to or lower than your cleric level, your deity intervenes. If your deity intervenes, you can't use this feature again for 7 days. Otherwise, you can use it again after you finish a long rest. At 20th level, your call for intervention succeeds automatically, no roll required.",
+  "multiclass_prereq_abilities": {"wis": 13},
+  "multiclass_prereq_mode": "all",
+  "multiclass_proficiencies": "Light armor, medium armor, shields",
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD (CC BY 4.0 / OGL 1.0a). Rephrased mechanical summaries — not a verbatim copy."
+}

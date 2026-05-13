@@ -392,6 +392,48 @@
 </section>
 
 <section>
+    <h2>🔭 Tabletop zoom speed</h2>
+    <p class="muted">Adjust how fast the tabletop canvas zooms when you use the mouse wheel or pinch on a touch device. Default 1.0 keeps the existing wheel feel; lower values are gentler (good for iPad pinch), higher values are snappier. Applies on every device.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:18px;align-items:center;margin-top:10px;">
+        <label style="display:flex;flex-direction:column;gap:4px;">
+            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--fg-mute);">Zoom speed</span>
+            <input type="range" id="zoom-speed" min="0.3" max="1.5" step="0.1" value="{{ '%.1f'|format(user.zoom_speed or 1.0) }}" style="width:260px;">
+            <span style="font-size:11px;color:var(--fg-mute);"><span id="zoom-speed-val">{{ '%.1f'|format(user.zoom_speed or 1.0) }}</span>× (gentler ← → snappier)</span>
+        </label>
+        <span id="zoom-speed-status" style="font-size:12px;color:var(--fg-mute);min-height:1.4em;"></span>
+    </div>
+    <script>
+    (function () {
+        const slider = document.getElementById('zoom-speed');
+        const valEl  = document.getElementById('zoom-speed-val');
+        const status = document.getElementById('zoom-speed-status');
+        // Live label update while the user drags; save only fires on
+        // ``change`` so we don't hammer the endpoint on every step.
+        slider.addEventListener('input', () => {
+            valEl.textContent = parseFloat(slider.value).toFixed(1);
+        });
+        slider.addEventListener('change', async () => {
+            const value = parseFloat(slider.value);
+            status.textContent = 'Saving…';
+            try {
+                const resp = await fetch('/api/settings/zoom_speed', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ zoom_speed: value }),
+                });
+                if (!resp.ok) throw new Error(await resp.text());
+                status.textContent = '✓ Saved — open or refresh the tabletop to feel the change.';
+                setTimeout(() => { status.textContent = ''; }, 4000);
+            } catch (e) {
+                status.textContent = '✗ Failed — ' + e.message;
+                console.error(e);
+            }
+        });
+    })();
+    </script>
+</section>
+
+<section>
     <h2>🗂️ Tabletop tab colors</h2>
     <p class="muted">Tint specific sidebar tabs with a personal color. Only visible to you. Leave at the default grey to keep the standard look.</p>
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">

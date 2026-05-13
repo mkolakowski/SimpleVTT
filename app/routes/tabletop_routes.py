@@ -6,6 +6,7 @@ The WebSocket pushes those changes to other connected clients.
 from __future__ import annotations
 
 import logging
+import os
 import time as _time
 import uuid
 from datetime import timezone
@@ -18,6 +19,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     Request,
     UploadFile,
     WebSocket,
@@ -32,6 +34,7 @@ from ..config import get_settings
 from ..database import SessionLocal, get_db
 from ..game_systems import SYSTEMS, get_system, system_choices
 from ..models import (
+    AudioPlayEvent,
     Campaign,
     CampaignMembership,
     Character,
@@ -43,6 +46,7 @@ from ..models import (
     CustomRace,
     CustomSubclass,
     DiceRoll,
+    Encounter,
     GridType,
     Map,
     Playlist,
@@ -65,6 +69,8 @@ from ..templates import templates
 
 router = APIRouter()
 log = logging.getLogger(__name__)
+
+_OPEN5E_BASE = os.getenv("OPEN5E_BASE_URL", "https://api.open5e.com").rstrip("/")
 
 # In-memory heal-claim store (cast_id → claim dict). Entries expire after 8 h.
 _heal_claims: dict[str, dict] = {}
@@ -292,6 +298,7 @@ def campaign_view(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
+    view_as: Optional[int] = Query(None),
 ):
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
@@ -299,10 +306,20 @@ def campaign_view(
     if not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(403, "Not a member of this campaign")
     is_gm = _user_is_gm(user, campaign, db)
+
+    # GM preview mode: render the tabletop as if the requester were a specific player.
+    view_as_user = None
+    if view_as and is_gm:
+        target = db.query(User).filter(User.id == view_as).first()
+        if target and _user_can_view_campaign(db, target, campaign):
+            view_as_user = user          # keep real GM reference for the banner
+            user = target                # override user context for template rendering
+            is_gm = False
+
     # Session gate: players (non-GM members) only see the tabletop while the
     # GM has the session active. They get a "waiting" page that auto-redirects
     # via WebSocket the moment the GM hits Start.
-    if not is_gm and not campaign.session_active:
+    if not is_gm and not view_as_user and not campaign.session_active:
         return templates.TemplateResponse(
             "session_waiting.html",
             {
@@ -360,8 +377,34 @@ def campaign_view(
         if is_gm
         else []
     )
+    # All maps in the campaign — surfaced for the Encounters panel's map
+    # dropdown in the Save / Edit forms. GM-only (the panel itself is
+    # gated), so we skip the query for non-GMs.
+    all_maps = (
+        db.query(Map)
+        .filter(Map.campaign_id == campaign.id)
+        .order_by(Map.id)
+        .all()
+        if is_gm
+        else []
+    )
     tmpl_objs = db.query(TokenTemplate).filter(TokenTemplate.campaign_id == campaign.id).order_by(TokenTemplate.name).all()
-    char_data = [{"id": c.id, "name": c.name, "owner_user_id": c.owner_user_id, "template": c.template, "sheet": c.sheet or {}} for c in characters]
+    char_data = [
+        {
+            "id": c.id,
+            "name": c.name,
+            "owner_user_id": c.owner_user_id,
+            "template": c.template,
+            "sheet": c.sheet or {},
+            # Surfaced for the GM's "Players" tab in the Add Token modal —
+            # mini-sheet rendering already pulls portrait/color from the
+            # user_*_map helpers, so these fields cover the per-character
+            # avatar in the picker without duplicating the merge logic.
+            "portrait_url": c.portrait_url,
+            "color": c.color,
+        }
+        for c in characters
+    ]
     token_data = [_token_dict(t) for t in tokens]
     tmpl_data = [{"id": t.id, "name": t.name, "image_url": t.image_url, "tags": t.tags or [], "template": t.template, "sheet": t.sheet or {}} for t in tmpl_objs]
     user_color_map, user_portrait_map, user_char_name_map = _build_user_maps(db, campaign)
@@ -392,6 +435,7 @@ def campaign_view(
             "now_playing": now_playing,
             "now_playing_started_at_ms": now_playing_started_at_ms,
             "playlists": playlists,
+            "all_maps": all_maps,
             "char_data": char_data,
             "token_data": token_data,
             "tmpl_data": tmpl_data,
@@ -399,6 +443,8 @@ def campaign_view(
             "user_portrait_map": user_portrait_map,
             "user_char_name_map": user_char_name_map,
             "conc_by_char": conc_by_char,
+            "hp_thresholds": campaign.hp_thresholds or _DEFAULT_HP_THRESHOLDS,
+            "view_as_user": view_as_user,
         },
     )
 
@@ -482,6 +528,59 @@ def campaign_settings(
         .order_by(CustomFeat.name)
         .all()
     )
+    # ── Encounters (Phase 1, v0.64.0) ────────────────────────────────────
+    # Read-only listing of saved encounters; save / load / edit / delete
+    # land in later phases. See docs/encounters-plan.md.
+    encounters = (
+        db.query(Encounter)
+        .filter(Encounter.campaign_id == campaign_id)
+        .order_by(Encounter.created_at.desc())
+        .all()
+    )
+
+    # ── Audio history (PR 4) ─────────────────────────────────────────────
+    # Recent plays (last 50, newest first), top tracks (by play count,
+    # top 10), and a summary line. The table grows by ~1 row per track
+    # play so capping the page render is important.
+    from sqlalchemy import func
+    audio_recent = (
+        db.query(AudioPlayEvent)
+        .filter(AudioPlayEvent.campaign_id == campaign_id)
+        .order_by(AudioPlayEvent.started_at.desc())
+        .limit(50)
+        .all()
+    )
+    # Aggregate by the snapshot ``track_name`` so renamed/deleted tracks
+    # still group correctly (the FK can be NULL after a delete).
+    audio_top_rows = (
+        db.query(
+            AudioPlayEvent.track_name,
+            func.count(AudioPlayEvent.id).label("play_count"),
+            func.coalesce(func.sum(AudioPlayEvent.duration_s), 0).label("total_s"),
+        )
+        .filter(AudioPlayEvent.campaign_id == campaign_id)
+        .filter(AudioPlayEvent.track_name != "")
+        .group_by(AudioPlayEvent.track_name)
+        .order_by(func.count(AudioPlayEvent.id).desc())
+        .limit(10)
+        .all()
+    )
+    audio_top = [
+        {"track_name": r.track_name, "play_count": r.play_count, "total_s": int(r.total_s or 0)}
+        for r in audio_top_rows
+    ]
+    audio_summary = (
+        db.query(
+            func.count(AudioPlayEvent.id).label("total"),
+            func.coalesce(func.sum(AudioPlayEvent.duration_s), 0).label("total_s"),
+        )
+        .filter(AudioPlayEvent.campaign_id == campaign_id)
+        .first()
+    )
+    audio_stats = {
+        "total_plays": int(audio_summary.total or 0) if audio_summary else 0,
+        "total_seconds": int(audio_summary.total_s or 0) if audio_summary else 0,
+    }
 
     # Characters owned by campaign members (from any campaign) that aren't already here
     all_member_ids = list(member_user_ids | {campaign.gm_user_id})
@@ -524,11 +623,24 @@ def campaign_settings(
             "custom_monsters": custom_monsters,
             "custom_backgrounds": custom_backgrounds,
             "custom_feats": custom_feats,
+            "audio_recent": audio_recent,
+            "audio_top": audio_top,
+            "audio_stats": audio_stats,
+            "encounters": encounters,
+            "hp_thresholds": campaign.hp_thresholds or _DEFAULT_HP_THRESHOLDS,
         },
     )
 
 
 _VALID_CAMPAIGN_FONTS = {"", "lora", "cormorant", "im-fell"}
+
+_DEFAULT_HP_THRESHOLDS = [
+    {"label": "Healthy",  "min_pct": 76},
+    {"label": "Wounded",  "min_pct": 51},
+    {"label": "Bloodied", "min_pct": 26},
+    {"label": "Critical", "min_pct": 1},
+    {"label": "Dead",     "min_pct": 0},
+]
 
 
 @router.post("/campaign/{campaign_id}/settings")
@@ -540,8 +652,16 @@ async def campaign_settings_save(
     game_system: str = Form("generic"),
     gm_tab_color: str = Form(""),
     font_override: str = Form(""),
+    auto_play_playlist_id: str = Form(""),
+    auto_play_mode: str = Form("order"),
+    default_encounter_id: str = Form(""),
     thumbnail: UploadFile = File(None),
     clear_thumbnail: bool = Form(False),
+    hp_threshold_0: str = Form(""),
+    hp_threshold_1: str = Form(""),
+    hp_threshold_2: str = Form(""),
+    hp_threshold_3: str = Form(""),
+    hp_threshold_4: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -556,11 +676,60 @@ async def campaign_settings_save(
     campaign.gm_tab_color = gm_tab_color.strip()[:20] or None
     fo = font_override.strip()
     campaign.font_override = fo if fo in _VALID_CAMPAIGN_FONTS and fo else None
+    # Default-encounter-on-session-start setting. Validate the encounter
+    # belongs to this campaign before assigning; empty / invalid clears.
+    de_raw = (default_encounter_id or "").strip()
+    if de_raw:
+        try:
+            de_id = int(de_raw)
+        except ValueError:
+            de_id = None
+        if de_id:
+            owned = (
+                db.query(Encounter.id)
+                .filter(Encounter.id == de_id, Encounter.campaign_id == campaign_id)
+                .first()
+            )
+            campaign.default_encounter_id = owned[0] if owned else None
+        else:
+            campaign.default_encounter_id = None
+    else:
+        campaign.default_encounter_id = None
+    # Audio auto-start config. Empty value = no auto-play. Validate the
+    # playlist belongs to this campaign before assigning.
+    ap_raw = (auto_play_playlist_id or "").strip()
+    if ap_raw:
+        try:
+            ap_id = int(ap_raw)
+        except ValueError:
+            ap_id = None
+        if ap_id:
+            owned = (
+                db.query(Playlist.id)
+                .filter(Playlist.id == ap_id, Playlist.campaign_id == campaign_id)
+                .first()
+            )
+            campaign.auto_play_playlist_id = owned[0] if owned else None
+        else:
+            campaign.auto_play_playlist_id = None
+    else:
+        campaign.auto_play_playlist_id = None
+    mode = (auto_play_mode or "order").strip().lower()
+    campaign.auto_play_mode = "shuffle" if mode == "shuffle" else "order"
     if clear_thumbnail:
         campaign.thumbnail_url = None
     if thumbnail and thumbnail.filename:
         from ..routes.admin_routes import _save_thumbnail
         campaign.thumbnail_url = await _save_thumbnail(thumbnail)
+    raw_labels = [hp_threshold_0, hp_threshold_1, hp_threshold_2, hp_threshold_3, hp_threshold_4]
+    if any(l.strip() for l in raw_labels):
+        new_thresholds = []
+        for i, (default, label) in enumerate(zip(_DEFAULT_HP_THRESHOLDS, raw_labels)):
+            new_thresholds.append({
+                "label": label.strip()[:40] or default["label"],
+                "min_pct": default["min_pct"],
+            })
+        campaign.hp_thresholds = new_thresholds
     db.commit()
     return RedirectResponse(f"/campaign/{campaign_id}/settings", status_code=303)
 
@@ -2502,8 +2671,17 @@ async def start_session(
     user: User = Depends(require_user),
 ):
     """GM (or admin) opens the tabletop to players. Idempotent: re-Starting
-    an already-active session is a no-op except it refreshes started_at."""
+    an already-active session is a no-op except it refreshes started_at.
+
+    Audio auto-start: when ``campaign.auto_play_playlist_id`` is set, the
+    configured playlist begins playing the moment the session starts.
+    ``auto_play_mode == 'order'`` plays the first track; ``'shuffle'``
+    picks a random track. Any audio already playing is replaced. The
+    auto-play side-effect tolerates errors (missing playlist, no tracks)
+    silently — a broken auto-play config shouldn't block session start.
+    """
     from datetime import datetime as _dt
+    import random as _random
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(404, "Campaign not found")
@@ -2513,6 +2691,67 @@ async def start_session(
     campaign.session_started_at = _dt.utcnow()
     db.commit()
     await hub.broadcast(campaign_id, {"type": "session_started", "data": {}})
+
+    # Auto-start audio if configured.
+    if campaign.auto_play_playlist_id:
+        from .audio_routes import _start_track_for_campaign
+        playlist = (
+            db.query(Playlist)
+            .filter(
+                Playlist.id == campaign.auto_play_playlist_id,
+                Playlist.campaign_id == campaign_id,
+            )
+            .first()
+        )
+        if playlist and playlist.tracks:
+            tracks = list(playlist.tracks)   # ordered by position
+            if (campaign.auto_play_mode or "order").lower() == "shuffle":
+                track = _random.choice(tracks)
+            else:
+                track = tracks[0]
+            try:
+                await _start_track_for_campaign(
+                    db, campaign, track,
+                    source="auto_start",
+                    prev_reason="session_end",
+                    user_id=user.id,
+                )
+            except Exception as exc:
+                log.warning("Auto-play failed for campaign %s: %s", campaign_id, exc)
+
+    # Auto-load the configured default encounter, if any. Same
+    # tolerate-failures pattern as audio above — a broken default
+    # encounter config shouldn't block session start. ``start_audio``
+    # is False here because we just kicked off audio above (if
+    # configured) via the campaign's auto-play setting; letting the
+    # encounter clobber that would be surprising.
+    if campaign.default_encounter_id:
+        default_enc = (
+            db.query(Encounter)
+            .filter(
+                Encounter.id == campaign.default_encounter_id,
+                Encounter.campaign_id == campaign_id,
+            )
+            .first()
+        )
+        if default_enc:
+            try:
+                await _perform_encounter_load(
+                    db, campaign, default_enc,
+                    start_audio=False,
+                    user_id=user.id,
+                )
+            except HTTPException as exc:
+                log.warning(
+                    "Default encounter %s skipped on session start for campaign %s: %s",
+                    default_enc.id, campaign_id, exc.detail,
+                )
+            except Exception as exc:
+                log.warning(
+                    "Default encounter %s failed on session start for campaign %s: %s",
+                    default_enc.id, campaign_id, exc,
+                )
+
     return RedirectResponse(f"/campaign/{campaign_id}", status_code=303)
 
 
@@ -2524,7 +2763,11 @@ async def end_session(
 ):
     """GM (or admin) closes the tabletop. Players in the tabletop will be
     bounced back to the lobby; new players hitting the URL get the
-    waiting page until the GM Starts again."""
+    waiting page until the GM Starts again.
+
+    Audio auto-stop: any audio still playing is stopped for everyone via
+    the same path as the manual ``/audio/stop`` button.
+    """
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(404, "Campaign not found")
@@ -2533,6 +2776,17 @@ async def end_session(
     campaign.session_active = False
     db.commit()
     await hub.broadcast(campaign_id, {"type": "session_ended", "data": {}})
+
+    # Stop any audio that's still playing. Idempotent — safe when nothing
+    # is currently playing. ``reason='session_end'`` labels the in-flight
+    # AudioPlayEvent (if any) so the history shows why the play ended.
+    if campaign.now_playing_track_id is not None:
+        from .audio_routes import _stop_audio_for_campaign
+        try:
+            await _stop_audio_for_campaign(db, campaign, reason="session_end")
+        except Exception as exc:
+            log.warning("Auto-stop audio failed for campaign %s: %s", campaign_id, exc)
+
     return RedirectResponse("/", status_code=303)
 
 
@@ -2650,15 +2904,31 @@ async def create_token(
 async def place_character_token(
     campaign_id: int,
     char_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Place a character's token on the active map (character owner or GM).
+    """Place a character's token on the active map. GM-only as of v0.63.0
+    (previously the character's owner could also call this; players no
+    longer add/remove tokens themselves).
+
+    Optional body: ``{x: float, y: float}`` to override the default
+    placement coordinates. The browser client passes the world-space
+    center of the GM's current viewport so tokens land where the GM is
+    looking instead of at the (often offscreen) geometric center of the
+    map. Non-browser callers can omit the body and get the legacy
+    map-center default.
+
     If the character already has a token on this map it is replaced.
     Token image is pre-filled from the character's portrait if one is set."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
-    if not campaign or not _user_can_view_campaign(db, user, campaign):
-        raise HTTPException(403, "Not a member")
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
     if not campaign.active_map_id:
         raise HTTPException(400, "No active map")
     char = db.query(Character).filter(
@@ -2666,8 +2936,6 @@ async def place_character_token(
     ).first()
     if not char:
         raise HTTPException(404, "Character not found")
-    if not _user_is_gm(user, campaign, db) and char.owner_user_id != user.id:
-        raise HTTPException(403, "Cannot place this character's token")
 
     # Remove any existing token for this character on the active map first.
     existing = (
@@ -2683,8 +2951,19 @@ async def place_character_token(
 
     active_map = db.query(Map).filter(Map.id == campaign.active_map_id).first()
     gsize = active_map.grid_size_px if active_map else 70
-    cx = round((active_map.width_px / 2) / gsize) * gsize if active_map else 0
-    cy = round((active_map.height_px / 2) / gsize) * gsize if active_map else 0
+    # Legacy fallback: geometric center of the map, snapped to the grid.
+    fallback_x = round((active_map.width_px / 2) / gsize) * gsize if active_map else 0
+    fallback_y = round((active_map.height_px / 2) / gsize) * gsize if active_map else 0
+    # If the client sent viewport-center coords, snap them to the grid
+    # so the new token sits cleanly on a cell instead of mid-tile.
+    if isinstance(body, dict) and "x" in body and "y" in body:
+        try:
+            cx = round(float(body["x"]) / gsize) * gsize
+            cy = round(float(body["y"]) / gsize) * gsize
+        except (TypeError, ValueError):
+            cx, cy = fallback_x, fallback_y
+    else:
+        cx, cy = fallback_x, fallback_y
 
     t = Token(
         map_id=campaign.active_map_id,
@@ -2711,17 +2990,16 @@ async def remove_character_token(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Remove a character's token from the active map (character owner or GM)."""
+    """Remove a character's token from the active map. GM-only as of
+    v0.63.0 (previously the character's owner could also call this)."""
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
-    if not campaign or not _user_can_view_campaign(db, user, campaign):
-        raise HTTPException(403, "Not a member")
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
     char = db.query(Character).filter(
         Character.id == char_id, Character.campaign_id == campaign_id
     ).first()
     if not char:
         raise HTTPException(404, "Character not found")
-    if not _user_is_gm(user, campaign, db) and char.owner_user_id != user.id:
-        raise HTTPException(403, "Cannot remove this character's token")
     if not campaign.active_map_id:
         return {"ok": True, "removed": False}
     token = (
@@ -2755,6 +3033,866 @@ async def delete_token(
     db.commit()
     await hub.broadcast(campaign_id, {"type": "token_delete", "data": {"id": token_id}})
     return {"ok": True}
+
+
+def _encounter_to_dict(e: Encounter) -> dict:
+    """Encounter projection used by the GM listing UIs.
+
+    Includes the lightweight summary fields the Battle drawer + campaign
+    settings need to render rows, plus the preview fields Phase 5 added
+    (``token_names``, ``map_name``) for the on-hover tooltip and the
+    ``tags`` array for client-side filtering / chip rendering."""
+    payload = e.payload or {}
+    tokens = payload.get("tokens") or []
+    initiative = payload.get("initiative") or []
+    # Cap names returned to keep payload bounded; the tooltip elides
+    # the rest as " + N more". Order matches the saved token order so
+    # the GM sees combatants in roughly the same sequence they're
+    # rendered on the canvas.
+    token_names = [
+        (t.get("label_override") or "Token") for t in tokens[:25]
+    ]
+    extra = max(0, len(tokens) - len(token_names))
+    return {
+        "id": e.id,
+        "name": e.name,
+        "description": e.description or "",
+        "map_id": e.map_id,
+        "map_name": e.map.name if e.map else None,
+        "map_image_url": e.map.image_url if e.map else None,
+        "auto_play_playlist_id": e.auto_play_playlist_id,
+        "auto_play_mode": e.auto_play_mode or "order",
+        "auto_play_playlist_name": (
+            e.auto_play_playlist.name if e.auto_play_playlist else None
+        ),
+        "tags": list(e.tags or []),
+        "folder": e.folder or "",
+        "stop_audio_on_load": bool(e.stop_audio_on_load),
+        "use_spawn_points": bool(e.use_spawn_points),
+        "spawn_points": dict(e.spawn_points or {}),
+        "token_count": len(tokens),
+        "token_names": token_names,
+        "token_names_extra": extra,
+        "initiative_count": len(initiative),
+        "created_at": e.created_at.isoformat() if e.created_at else None,
+        "updated_at": e.updated_at.isoformat() if e.updated_at else None,
+    }
+
+
+def _parse_tags(value) -> list[str]:
+    """Coerce a tags input (list or comma-separated string) into a
+    deduplicated list of short trimmed strings. Used by both the create
+    and PATCH endpoints so the wire format is flexible."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        items = [t.strip() for t in value.split(",")]
+    elif isinstance(value, (list, tuple)):
+        items = [str(t).strip() for t in value]
+    else:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for t in items:
+        if not t:
+            continue
+        t = t[:40]
+        key = t.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+        if len(out) >= 20:
+            break
+    return out
+
+
+@router.get("/api/campaign/{campaign_id}/encounters")
+def list_encounters(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """List the GM's saved encounters for a campaign. GM-only.
+
+    Each row carries an ``is_current`` flag so the Battle drawer can pin
+    the currently-running encounter (the one most recently loaded via
+    ``_perform_encounter_load``) to the top of its panel summary.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    rows = (
+        db.query(Encounter)
+        .filter(Encounter.campaign_id == campaign_id)
+        .order_by(Encounter.created_at.desc())
+        .all()
+    )
+    current_id = campaign.current_encounter_id
+    out = []
+    for e in rows:
+        d = _encounter_to_dict(e)
+        d["is_current"] = (current_id is not None and e.id == current_id)
+        out.append(d)
+    return out
+
+
+def _snapshot_encounter_payload(db: Session, campaign: Campaign) -> dict:
+    """Capture the current token state + battle hub state into the JSON
+    payload shape used by the encounters table.
+
+    Both GM-owned and player-controlled tokens are captured (the latter
+    flagged by a non-null ``controller_user_id`` + ``character_id``).
+    The load flow applies Option B for player tokens — restore only if
+    the character has no token on the target map yet — so capturing
+    them is non-destructive to ongoing player positions.
+    """
+    tokens_out = []
+    if campaign.active_map_id:
+        rows = (
+            db.query(Token)
+            .filter(Token.map_id == campaign.active_map_id)
+            .all()
+        )
+        for t in rows:
+            tokens_out.append({
+                "template_id": t.token_template_id,
+                "character_id": t.character_id,
+                "controller_user_id": t.controller_user_id,
+                "label_override": t.label or "",
+                "color_override": t.color or "",
+                "image_url": t.image_url,
+                "size": int(t.size or 1),
+                "x": float(t.x or 0),
+                "y": float(t.y or 0),
+                "is_hidden": bool(t.is_hidden),
+            })
+    # Battle hub state is opaque to the server — JS PUTs the canonical
+    # shape via /api/campaign/.../battle. We snapshot it whole so a load
+    # restores combatant order, current turn, round number, HP, …
+    # exactly as the GM had it.
+    battle_state = hub.get_battle(campaign.id) or {}
+    return {
+        "tokens": tokens_out,
+        "battle_state": battle_state,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/encounters")
+async def create_encounter(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Save an encounter. GM-only.
+
+    Two creation modes:
+
+    1. **Snapshot the current state** (the original Phase 2 path).
+       Body: ``{name, description?, tags?, map_id?, auto_play_playlist_id?,
+       auto_play_mode?}``. When ``payload`` is absent we capture the
+       active map's tokens + the in-memory battle hub state. ``map_id``
+       and ``auto_play_playlist_id`` override the active-map / now-playing
+       defaults so the GM can bind the snapshot to a different map or
+       playlist than the live ones (useful when staging tokens on map A
+       but the encounter belongs to map B).
+
+    2. **Build from blank** — Phase-6 prep workflow.
+       Body: ``{name, payload: {tokens: [], battle_state: {}}, map_id,
+       auto_play_playlist_id?, auto_play_mode?, description?, tags?}``.
+       When ``payload`` is present we trust it as-is, don't touch the
+       live tabletop state, and create a draft the GM can fill in later
+       with 💾 Update once they're staged on the bound map.
+    """
+    body = await request.json()
+    name = str(body.get("name") or "").strip()[:160]
+    if not name:
+        raise HTTPException(400, "Encounter name required")
+    description = str(body.get("description") or "").strip()
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+
+    if "payload" in body:
+        # Build-from-blank path. Accept the caller's payload verbatim so
+        # they can start with an empty bundle and fill in later.
+        raw_payload = body.get("payload") or {}
+        if not isinstance(raw_payload, dict):
+            raise HTTPException(400, "payload must be an object")
+        payload = {
+            "tokens": list(raw_payload.get("tokens") or []),
+            "battle_state": raw_payload.get("battle_state") or {},
+        }
+    else:
+        payload = _snapshot_encounter_payload(db, campaign)
+
+    # Map binding: explicit > campaign.active_map_id. Validate that any
+    # explicit map_id belongs to this campaign so the GM can't bind to
+    # another campaign's map.
+    if "map_id" in body and body["map_id"] is not None:
+        try:
+            map_id_val = int(body["map_id"])
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Invalid map_id")
+        m = db.query(Map).filter(Map.id == map_id_val, Map.campaign_id == campaign_id).first()
+        if not m:
+            raise HTTPException(404, "Map not found in this campaign")
+        bound_map_id = m.id
+    else:
+        bound_map_id = campaign.active_map_id
+
+    # Playlist binding: explicit > inferred from currently-playing track.
+    auto_play_mode = str(body.get("auto_play_mode") or campaign.auto_play_mode or "order")
+    if auto_play_mode not in ("order", "shuffle", "song"):
+        auto_play_mode = "order"
+    auto_play_playlist_id: Optional[int] = None
+    if "auto_play_playlist_id" in body:
+        v = body["auto_play_playlist_id"]
+        if v is not None and v != "":
+            try:
+                pl_id = int(v)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Invalid auto_play_playlist_id")
+            pl = (
+                db.query(Playlist)
+                .filter(Playlist.id == pl_id, Playlist.campaign_id == campaign_id)
+                .first()
+            )
+            if not pl:
+                raise HTTPException(404, "Playlist not found in this campaign")
+            auto_play_playlist_id = pl.id
+    elif campaign.now_playing_track_id:
+        track = (
+            db.query(PlaylistTrack)
+            .filter(PlaylistTrack.id == campaign.now_playing_track_id)
+            .first()
+        )
+        if track:
+            auto_play_playlist_id = track.playlist_id
+
+    use_spawn_points = bool(body.get("use_spawn_points", False))
+    raw_spawns = body.get("spawn_points")
+    spawn_points: dict = {}
+    if isinstance(raw_spawns, dict):
+        for key, coord in raw_spawns.items():
+            if not isinstance(coord, dict):
+                continue
+            try:
+                spawn_points[str(int(key))] = {
+                    "x": float(coord.get("x", 0)),
+                    "y": float(coord.get("y", 0)),
+                }
+            except (TypeError, ValueError):
+                continue
+
+    enc = Encounter(
+        campaign_id=campaign_id,
+        name=name,
+        description=description,
+        map_id=bound_map_id,
+        auto_play_playlist_id=auto_play_playlist_id,
+        auto_play_mode=auto_play_mode,
+        auto_play_track_id=int(body["auto_play_track_id"]) if body.get("auto_play_track_id") else None,
+        payload=payload,
+        tags=_parse_tags(body.get("tags")),
+        use_spawn_points=use_spawn_points,
+        spawn_points=spawn_points,
+        folder=str(body.get("folder") or "").strip()[:120],
+        stop_audio_on_load=bool(body.get("stop_audio_on_load", False)),
+    )
+    db.add(enc)
+    db.commit()
+    db.refresh(enc)
+    return _encounter_to_dict(enc)
+
+
+@router.patch("/api/campaign/{campaign_id}/encounters/{encounter_id}")
+async def update_encounter_meta(
+    campaign_id: int,
+    encounter_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Rename / re-describe a saved encounter. GM-only.
+
+    Body: ``{name?, description?}``. Either or both may be provided;
+    omitted fields are left untouched. Empty/whitespace ``name`` is
+    rejected — the library row would render as a blank line otherwise.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    enc = (
+        db.query(Encounter)
+        .filter(Encounter.id == encounter_id, Encounter.campaign_id == campaign_id)
+        .first()
+    )
+    if not enc:
+        raise HTTPException(404, "Encounter not found")
+
+    if "name" in body:
+        new_name = str(body.get("name") or "").strip()[:160]
+        if not new_name:
+            raise HTTPException(400, "Encounter name cannot be empty")
+        enc.name = new_name
+    if "description" in body:
+        enc.description = str(body.get("description") or "").strip()
+    if "tags" in body:
+        enc.tags = _parse_tags(body.get("tags"))
+    if "map_id" in body:
+        v = body.get("map_id")
+        if v is None or v == "":
+            enc.map_id = None
+        else:
+            try:
+                map_id_val = int(v)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Invalid map_id")
+            m = (
+                db.query(Map)
+                .filter(Map.id == map_id_val, Map.campaign_id == campaign_id)
+                .first()
+            )
+            if not m:
+                raise HTTPException(404, "Map not found in this campaign")
+            enc.map_id = m.id
+    if "auto_play_playlist_id" in body:
+        v = body.get("auto_play_playlist_id")
+        if v is None or v == "":
+            enc.auto_play_playlist_id = None
+        else:
+            try:
+                pl_id = int(v)
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Invalid auto_play_playlist_id")
+            pl = (
+                db.query(Playlist)
+                .filter(Playlist.id == pl_id, Playlist.campaign_id == campaign_id)
+                .first()
+            )
+            if not pl:
+                raise HTTPException(404, "Playlist not found in this campaign")
+            enc.auto_play_playlist_id = pl.id
+    if "auto_play_mode" in body:
+        mode = str(body.get("auto_play_mode") or "order")
+        if mode not in ("order", "shuffle"):
+            raise HTTPException(400, "auto_play_mode must be 'order' or 'shuffle'")
+        enc.auto_play_mode = mode
+    if "folder" in body:
+        enc.folder = str(body.get("folder") or "").strip()[:120]
+    if "stop_audio_on_load" in body:
+        enc.stop_audio_on_load = bool(body.get("stop_audio_on_load"))
+    if "use_spawn_points" in body:
+        enc.use_spawn_points = bool(body.get("use_spawn_points"))
+    if "spawn_points" in body:
+        # Wholesale replace — the per-character endpoint below is the
+        # incremental path; this branch is for PATCH callers that want
+        # to set the whole dict at once (e.g. duplicating from another
+        # encounter, or clearing all spawns with ``{}``).
+        raw_spawns = body.get("spawn_points") or {}
+        if not isinstance(raw_spawns, dict):
+            raise HTTPException(400, "spawn_points must be an object")
+        normalised: dict = {}
+        for key, coord in raw_spawns.items():
+            if not isinstance(coord, dict):
+                continue
+            try:
+                normalised[str(int(key))] = {
+                    "x": float(coord.get("x", 0)),
+                    "y": float(coord.get("y", 0)),
+                }
+            except (TypeError, ValueError):
+                continue
+        enc.spawn_points = normalised
+
+    db.commit()
+    db.refresh(enc)
+    return _encounter_to_dict(enc)
+
+
+@router.post("/api/campaign/{campaign_id}/encounters/{encounter_id}/spawn")
+async def set_encounter_spawn(
+    campaign_id: int,
+    encounter_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Set or clear a single character's spawn point on an encounter.
+    GM-only. Body: ``{character_id: int, x?: float, y?: float}``. When
+    ``x`` and ``y`` are both numeric the spawn is recorded; otherwise
+    the entry for ``character_id`` is cleared. Used by the click-to-set
+    flow in the encounter row's edit form."""
+    body = await request.json()
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    enc = (
+        db.query(Encounter)
+        .filter(Encounter.id == encounter_id, Encounter.campaign_id == campaign_id)
+        .first()
+    )
+    if not enc:
+        raise HTTPException(404, "Encounter not found")
+    try:
+        char_id = int(body.get("character_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "character_id required")
+    char = (
+        db.query(Character)
+        .filter(Character.id == char_id, Character.campaign_id == campaign_id)
+        .first()
+    )
+    if not char:
+        raise HTTPException(404, "Character not found in this campaign")
+
+    spawns = dict(enc.spawn_points or {})
+    key = str(char_id)
+    x_raw = body.get("x")
+    y_raw = body.get("y")
+    if x_raw is None or y_raw is None:
+        spawns.pop(key, None)
+        out = None
+    else:
+        try:
+            spawns[key] = {"x": float(x_raw), "y": float(y_raw)}
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Invalid x or y")
+        out = spawns[key]
+    enc.spawn_points = spawns
+    db.commit()
+    db.refresh(enc)
+    return _encounter_to_dict(enc)
+
+
+@router.post("/api/campaign/{campaign_id}/encounters/{encounter_id}/duplicate")
+def duplicate_encounter(
+    campaign_id: int,
+    encounter_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Copy a saved encounter into a new row with a " (copy)" suffix on
+    the name. GM-only. Useful for spinning up variants of the same setup
+    ("Goblin Ambush — Dawn", "Goblin Ambush — Night") without recapturing
+    the whole bundle each time.
+
+    The copy is a fresh row with new ``created_at`` / ``updated_at``;
+    everything else (payload, map, playlist, tags, notes) is duplicated."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    src = (
+        db.query(Encounter)
+        .filter(Encounter.id == encounter_id, Encounter.campaign_id == campaign_id)
+        .first()
+    )
+    if not src:
+        raise HTTPException(404, "Encounter not found")
+
+    new_name = (src.name + " (copy)")[:160]
+    copy = Encounter(
+        campaign_id=campaign_id,
+        name=new_name,
+        description=src.description or "",
+        map_id=src.map_id,
+        auto_play_playlist_id=src.auto_play_playlist_id,
+        auto_play_mode=src.auto_play_mode or "order",
+        payload=src.payload or {},
+        tags=list(src.tags or []),
+    )
+    db.add(copy)
+    db.commit()
+    db.refresh(copy)
+    return _encounter_to_dict(copy)
+
+
+@router.post("/api/campaign/{campaign_id}/encounters/{encounter_id}/update")
+async def overwrite_encounter(
+    campaign_id: int,
+    encounter_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Re-snapshot the current campaign state into an existing encounter.
+    GM-only.
+
+    Use this when a saved encounter ("Goblin Ambush") evolves between
+    sessions and the GM wants to overwrite the bundle in place instead
+    of creating a new sibling row. Name + description + ``created_at``
+    are kept; ``payload`` + ``map_id`` + ``auto_play_playlist_id`` +
+    ``auto_play_mode`` are replaced from the current state. ``updated_at``
+    auto-bumps via the ``onupdate=func.now()`` clause on the column.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    enc = (
+        db.query(Encounter)
+        .filter(Encounter.id == encounter_id, Encounter.campaign_id == campaign_id)
+        .first()
+    )
+    if not enc:
+        raise HTTPException(404, "Encounter not found")
+
+    enc.payload = _snapshot_encounter_payload(db, campaign)
+    enc.map_id = campaign.active_map_id
+    enc.auto_play_mode = campaign.auto_play_mode or "order"
+    enc.auto_play_playlist_id = None
+    if campaign.now_playing_track_id:
+        track = (
+            db.query(PlaylistTrack)
+            .filter(PlaylistTrack.id == campaign.now_playing_track_id)
+            .first()
+        )
+        if track:
+            enc.auto_play_playlist_id = track.playlist_id
+
+    db.commit()
+    db.refresh(enc)
+    return _encounter_to_dict(enc)
+
+
+@router.post("/api/campaign/{campaign_id}/encounters/{encounter_id}/delete")
+def delete_encounter(
+    campaign_id: int,
+    encounter_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Delete a saved encounter. GM-only. No broadcast — the library is
+    a GM-only view, so other clients don't care."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    enc = (
+        db.query(Encounter)
+        .filter(Encounter.id == encounter_id, Encounter.campaign_id == campaign_id)
+        .first()
+    )
+    if not enc:
+        raise HTTPException(404, "Encounter not found")
+    db.delete(enc)
+    db.commit()
+    return {"ok": True}
+
+
+async def _perform_encounter_load(
+    db: Session,
+    campaign: Campaign,
+    enc: Encounter,
+    *,
+    start_audio: bool,
+    user_id: Optional[int],
+) -> dict:
+    """Two-pass strict load shared by the explicit Load endpoint and the
+    session-start auto-load hook. See ``load_encounter`` for the
+    semantics — this helper is the implementation; the route is a thin
+    wrapper that parses the body + permission-checks. Raises
+    ``HTTPException`` for caller-fixable errors so the route can let
+    them propagate verbatim.
+    """
+    payload = enc.payload or {}
+    target_map_id = enc.map_id or campaign.active_map_id
+    if not target_map_id:
+        raise HTTPException(400, "Encounter has no map and campaign has no active map")
+    map_switched = bool(enc.map_id and enc.map_id != campaign.active_map_id)
+    campaign_id = campaign.id
+
+    # ── Pass 1: clear every token on the target map ──
+    # Strict semantics (v0.73.0): only the tokens described by the
+    # encounter exist after the load. Players whose characters aren't
+    # in the saved bundle (no snapshot entry AND no spawn point) have
+    # their tokens removed too.
+    all_tokens = (
+        db.query(Token)
+        .filter(Token.map_id == target_map_id)
+        .all()
+    )
+    deleted_ids = [t.id for t in all_tokens]
+    for t in all_tokens:
+        db.delete(t)
+    db.flush()
+
+    # ── Pass 2a: switch the active map if the encounter binds a new one ──
+    if map_switched:
+        campaign.active_map_id = enc.map_id
+        db.flush()
+
+    # Mark this encounter as the campaign's currently-running one so the
+    # Battle drawer can keep it pinned in the UI even while collapsed.
+    campaign.current_encounter_id = enc.id
+    db.flush()
+
+    # ── Pass 2b: create the new tokens from the payload ──
+    # When ``use_spawn_points`` is true the encounter's spawn_points
+    # dict drives player placement and the snapshot's player entries
+    # are ignored. Otherwise we fall back to the snapshot's player
+    # tokens. GM tokens (no ``character_id``) always come from payload.
+    warnings: list[str] = []
+    created_tokens: list[Token] = []
+    use_spawns = bool(enc.use_spawn_points)
+    spawn_map: dict = dict(enc.spawn_points or {}) if use_spawns else {}
+
+    for tok_def in (payload.get("tokens") or []):
+        char_id = tok_def.get("character_id")
+        if char_id:
+            # Player token. Skip the snapshot entry when spawn-points
+            # mode is on — the spawn pass below covers player placement.
+            if use_spawns:
+                continue
+            char = db.query(Character).filter(Character.id == char_id).first()
+            if not char:
+                warnings.append(
+                    f"Player character #{char_id} no longer exists; skipping their saved token."
+                )
+                continue
+            new_token = Token(
+                map_id=target_map_id,
+                character_id=char.id,
+                controller_user_id=char.owner_user_id,
+                label=char.name[:120],
+                color=(tok_def.get("color_override") or char.color or "#cc3333")[:20],
+                image_url=tok_def.get("image_url") or char.portrait_url,
+                x=float(tok_def.get("x", 100)),
+                y=float(tok_def.get("y", 100)),
+                size=int(tok_def.get("size", 1) or 1),
+                is_hidden=bool(tok_def.get("is_hidden", False)),
+            )
+            db.add(new_token)
+            created_tokens.append(new_token)
+            continue
+        tmpl_id = tok_def.get("template_id")
+        tmpl = None
+        if tmpl_id:
+            tmpl = (
+                db.query(TokenTemplate)
+                .filter(
+                    TokenTemplate.id == tmpl_id,
+                    TokenTemplate.campaign_id == campaign_id,
+                )
+                .first()
+            )
+            if not tmpl:
+                warnings.append(
+                    f"Token template #{tmpl_id} missing; falling back to manual token."
+                )
+        label = (tok_def.get("label_override") or (tmpl.name if tmpl else "Token"))[:120]
+        color = (tok_def.get("color_override") or "#cc3333")[:20]
+        image_url = tok_def.get("image_url") or (tmpl.image_url if tmpl else None)
+        new_token = Token(
+            map_id=target_map_id,
+            token_template_id=tmpl.id if tmpl else None,
+            label=label,
+            color=color,
+            image_url=image_url,
+            x=float(tok_def.get("x", 100)),
+            y=float(tok_def.get("y", 100)),
+            size=int(tok_def.get("size", 1) or 1),
+            is_hidden=bool(tok_def.get("is_hidden", False)),
+        )
+        db.add(new_token)
+        created_tokens.append(new_token)
+
+    # ── Pass 2c: place player tokens from spawn_points (when enabled) ──
+    if use_spawns:
+        gsize = 1
+        target_map_obj = db.query(Map).filter(Map.id == target_map_id).first()
+        if target_map_obj and target_map_obj.grid_size_px:
+            gsize = max(1, int(target_map_obj.grid_size_px))
+        for key, coord in spawn_map.items():
+            if not isinstance(coord, dict):
+                continue
+            try:
+                char_id = int(key)
+                x = round(float(coord["x"]) / gsize) * gsize
+                y = round(float(coord["y"]) / gsize) * gsize
+            except (TypeError, ValueError, KeyError):
+                continue
+            char = (
+                db.query(Character)
+                .filter(Character.id == char_id, Character.campaign_id == campaign_id)
+                .first()
+            )
+            if not char:
+                warnings.append(
+                    f"Spawn-point character #{char_id} no longer exists; skipping."
+                )
+                continue
+            new_token = Token(
+                map_id=target_map_id,
+                character_id=char.id,
+                controller_user_id=char.owner_user_id,
+                label=char.name[:120],
+                color=char.color or "#cc3333",
+                image_url=char.portrait_url,
+                x=float(x),
+                y=float(y),
+                size=1,
+            )
+            db.add(new_token)
+            created_tokens.append(new_token)
+
+    db.commit()
+    for t in created_tokens:
+        db.refresh(t)
+
+    # ── Pass 3: restore battle hub state ──
+    battle_state = payload.get("battle_state") or {}
+    if battle_state:
+        hub.set_battle(campaign_id, battle_state)
+
+    # ── Broadcasts ──
+    if map_switched:
+        # Map change is a big enough scene shift that we ask clients to
+        # reload; their existing canvas wasn't built to swap maps in
+        # place. The reload picks up the new active_map + tokens via the
+        # standard SSR path and reconnects the WS, which seeds the new
+        # battle state from the hub.
+        await hub.broadcast(
+            campaign_id,
+            {"type": "map_change", "data": {"map_id": target_map_id}},
+        )
+    else:
+        # Same map — surgical token_delete + token_add broadcasts keep
+        # every player's canvas in sync without a reload.
+        for tid in deleted_ids:
+            await hub.broadcast(
+                campaign_id, {"type": "token_delete", "data": {"id": tid}}
+            )
+        for t in created_tokens:
+            await hub.broadcast(
+                campaign_id, {"type": "token_add", "data": _token_dict(t)}
+            )
+        if battle_state:
+            await hub.broadcast(
+                campaign_id, {"type": "battle_update", "data": battle_state}
+            )
+
+    # ── Audio behaviour on load ──
+    # Three-way decision when ``start_audio`` is true:
+    #   1. ``auto_play_playlist_id`` set → start that playlist (takes
+    #      precedence over the stop-on-load flag).
+    #   2. No playlist + ``stop_audio_on_load`` true → stop current
+    #      audio so the GM gets a clean silent transition.
+    #   3. No playlist + ``stop_audio_on_load`` false (default) →
+    #      leave the currently-playing audio alone (continue).
+    # Each branch tolerates missing/broken state with a non-fatal
+    # warning rather than failing the whole load.
+    if start_audio and enc.auto_play_playlist_id:
+        playlist = (
+            db.query(Playlist)
+            .filter(
+                Playlist.id == enc.auto_play_playlist_id,
+                Playlist.campaign_id == campaign_id,
+            )
+            .first()
+        )
+        if not playlist:
+            warnings.append("Saved playlist missing; audio skipped.")
+        else:
+            tracks = list(playlist.tracks)
+            track: Optional[PlaylistTrack] = None
+            mode = enc.auto_play_mode or "order"
+            if tracks:
+                if mode == "shuffle":
+                    import random
+                    track = random.choice(tracks)
+                elif mode == "song" and enc.auto_play_track_id:
+                    track = next((t for t in tracks if t.id == enc.auto_play_track_id), tracks[0])
+                else:
+                    track = tracks[0]
+            if track:
+                # Deferred import: audio_routes imports from realtime + models,
+                # so importing it lazily keeps this module's load-time graph
+                # free of audio-side dependencies.
+                from .audio_routes import _start_track_for_campaign
+                await _start_track_for_campaign(
+                    db, campaign, track,
+                    source="auto_start",
+                    prev_reason="skipped",
+                    user_id=user_id,
+                )
+    elif start_audio and enc.stop_audio_on_load and campaign.now_playing_track_id:
+        # No playlist for this encounter AND the GM asked for silence;
+        # stop whatever's currently playing. ``_stop_audio_for_campaign``
+        # is idempotent so the now_playing_track_id guard is just to
+        # skip the no-op call when nothing is playing.
+        from .audio_routes import _stop_audio_for_campaign
+        await _stop_audio_for_campaign(db, campaign, reason="skipped")
+
+    return {
+        "ok": True,
+        "map_switched": map_switched,
+        "tokens_created": len(created_tokens),
+        "tokens_deleted": len(deleted_ids),
+        "warnings": warnings,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/encounters/{encounter_id}/load")
+async def load_encounter(
+    campaign_id: int,
+    encounter_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Two-pass strict load. GM-only.
+
+    Pass 1 — Delete **every** token on the **target map** (the
+    encounter's bound map, or the campaign's active map if the encounter
+    has no map). Strict semantics: after a load, only tokens described
+    by the encounter remain. Player tokens for characters not in the
+    encounter are removed.
+
+    Pass 2 — If the encounter binds a different map, switch
+    ``campaign.active_map_id`` and broadcast ``map_change`` so connected
+    clients reload onto the new map. Then recreate tokens from the
+    encounter:
+
+    * **GM tokens** from the saved payload.
+    * **Player tokens**:
+      - When ``use_spawn_points`` is true, one token per entry in
+        ``encounter.spawn_points`` (placed at the spawn coord). The
+        saved snapshot's player tokens are ignored.
+      - Otherwise, the saved snapshot's player tokens are used
+        verbatim (positions captured at save time).
+
+    Body (optional): ``{start_audio: bool = true}``. When true and the
+    encounter has an ``auto_play_playlist_id``, audio auto-starts via the
+    existing ``_start_track_for_campaign`` helper.
+
+    Implementation lives in ``_perform_encounter_load`` so the
+    session-start auto-load hook can call the same code path.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    start_audio = bool(body.get("start_audio", True))
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    enc = (
+        db.query(Encounter)
+        .filter(Encounter.id == encounter_id, Encounter.campaign_id == campaign_id)
+        .first()
+    )
+    if not enc:
+        raise HTTPException(404, "Encounter not found")
+    return await _perform_encounter_load(
+        db, campaign, enc, start_audio=start_audio, user_id=user.id,
+    )
 
 
 @router.patch("/api/campaign/{campaign_id}/token/{token_id}")
@@ -3872,7 +5010,7 @@ def _fetch_open5e_creature(slug: str) -> dict:
     import urllib.request as _urlreq
     try:
         req = _urlreq.Request(
-            f"https://api.open5e.com/v2/creatures/{slug}/",
+            f"{_OPEN5E_BASE}/v2/creatures/{slug}/",
             headers={"User-Agent": "SimpleVTT/1.0"},
         )
         with _urlreq.urlopen(req, timeout=10) as r:
@@ -4782,7 +5920,7 @@ async def import_open5e_monster(
     import urllib.request as _urlreq
     try:
         req = _urlreq.Request(
-            f"https://api.open5e.com/v2/creatures/{slug}/",
+            f"{_OPEN5E_BASE}/v2/creatures/{slug}/",
             headers={"User-Agent": "SimpleVTT/1.0"},
         )
         with _urlreq.urlopen(req, timeout=10) as r:
@@ -4930,7 +6068,7 @@ def open5e_monsters_proxy(
                 params["cr__lte"] = str(cr_val)
             except (TypeError, ValueError):
                 pass
-        return f"https://api.open5e.com/v2/creatures/?{_urlparse.urlencode(params)}"
+        return f"{_OPEN5E_BASE}/v2/creatures/?{_urlparse.urlencode(params)}"
 
     def _fetch(url: str) -> dict:
         req = _urlreq.Request(url, headers={"User-Agent": "SimpleVTT/1.0"})
@@ -5047,7 +6185,7 @@ def open5e_creature_detail(
     import urllib.error as _urlerr
     try:
         req = _urlreq.Request(
-            f"https://api.open5e.com/v2/creatures/{slug}/",
+            f"{_OPEN5E_BASE}/v2/creatures/{slug}/",
             headers={"User-Agent": "SimpleVTT/1.0"},
         )
         with _urlreq.urlopen(req, timeout=8) as r:
@@ -5423,6 +6561,7 @@ def open5e_classes_proxy(
     db: Session = Depends(get_db),
 ):
     from ..open5e_local import is_ready, search_classes, _source
+    from .. import local_features
     cap = min(abs(limit), 30)
 
     # Campaign-scoped homebrew classes prepend the list and shadow any
@@ -5443,8 +6582,32 @@ def open5e_classes_proxy(
             })
             custom_slugs.add(row.class_slug)
 
+    # Shipped FS classes sit between campaign homebrew and Open5e — same
+    # arrangement as races. If Open5e is unreachable the picker still
+    # lists the SRD baseline; if Open5e is reachable the FS entries
+    # dedupe out of its results below (detail endpoint resolves to FS
+    # regardless).
+    fs_results: list[dict] = []
+    fs_slugs: set[str] = set()
+    needle = (search or "").strip().lower()
+    for entry in local_features.list_local_classes():
+        slug = entry.get("slug", "")
+        if slug in custom_slugs:
+            continue
+        name = entry.get("name") or slug
+        if needle and needle not in name.lower() and needle not in slug.lower():
+            continue
+        fs_results.append({
+            "name": name,
+            "slug": slug,
+            "hit_die": entry.get("hit_die") or "",
+            "source": "SRD",
+        })
+        fs_slugs.add(slug)
+
     def _dedupe(results: list[dict]) -> list[dict]:
-        return [r for r in results if r.get("slug") not in custom_slugs]
+        skip = custom_slugs | fs_slugs
+        return [r for r in results if r.get("slug") not in skip]
 
     if is_ready():
         items, total = search_classes(q=search, limit=cap)
@@ -5455,8 +6618,8 @@ def open5e_classes_proxy(
         ]
         rows = _dedupe(rows)
         return {
-            "count": len(custom_results) + total - (len(items) - len(rows)),
-            "results": custom_results + rows,
+            "count": len(custom_results) + len(fs_results) + total - (len(items) - len(rows)),
+            "results": custom_results + fs_results + rows,
         }
     import json as _json, urllib.parse as _urlparse, urllib.request as _urlreq
     url = f"https://api.open5e.com/v1/classes/?{_urlparse.urlencode({'search': search, 'limit': cap})}"
@@ -5465,9 +6628,12 @@ def open5e_classes_proxy(
         with _urlreq.urlopen(req, timeout=8) as r:
             data = _json.loads(r.read())
     except Exception as exc:
-        # If Open5e is down but we have homebrew, still return that.
-        if custom_results:
-            return {"count": len(custom_results), "results": custom_results}
+        # Open5e unreachable — fall back to homebrew + shipped FS classes.
+        if custom_results or fs_results:
+            return {
+                "count": len(custom_results) + len(fs_results),
+                "results": custom_results + fs_results,
+            }
         raise HTTPException(502, f"Open5e unavailable: {exc}")
     results = []
     for c in data.get("results", []):
@@ -5478,8 +6644,8 @@ def open5e_classes_proxy(
                          "hit_die": c.get("hit_die", ""), "source": src})
     results = _dedupe(results)
     return {
-        "count": len(custom_results) + data.get("count", 0),
-        "results": custom_results + results,
+        "count": len(custom_results) + len(fs_results) + data.get("count", 0),
+        "results": custom_results + fs_results + results,
     }
 
 
@@ -5491,6 +6657,7 @@ def open5e_races_proxy(
     db: Session = Depends(get_db),
 ):
     from ..open5e_local import is_ready, search_races, _source
+    from .. import local_features
     cap = min(abs(limit), 30)
 
     # Campaign-scoped homebrew races prepend the list and shadow any
@@ -5512,8 +6679,31 @@ def open5e_races_proxy(
             })
             custom_slugs.add(row.race_slug)
 
+    # Shipped FS races sit between campaign homebrew and Open5e — so if
+    # Open5e is unreachable the picker still lists the SRD baseline, and
+    # if Open5e is reachable the FS entries dedupe out of its results
+    # below (the detail endpoint already resolves to FS regardless).
+    fs_results: list[dict] = []
+    fs_slugs: set[str] = set()
+    needle = (search or "").strip().lower()
+    for entry in local_features.list_local_races():
+        slug = entry.get("slug", "")
+        if slug in custom_slugs:
+            continue
+        name = entry.get("name") or slug
+        if needle and needle not in name.lower() and needle not in slug.lower():
+            continue
+        fs_results.append({
+            "name": name,
+            "slug": slug,
+            "size": entry.get("size", ""),
+            "source": "SRD",
+        })
+        fs_slugs.add(slug)
+
     def _dedupe(results: list[dict]) -> list[dict]:
-        return [r for r in results if r.get("slug") not in custom_slugs]
+        skip = custom_slugs | fs_slugs
+        return [r for r in results if r.get("slug") not in skip]
 
     if is_ready():
         items, total = search_races(q=search, limit=cap)
@@ -5524,8 +6714,8 @@ def open5e_races_proxy(
         ]
         rows = _dedupe(rows)
         return {
-            "count": len(custom_results) + total - (len(items) - len(rows)),
-            "results": custom_results + rows,
+            "count": len(custom_results) + len(fs_results) + total - (len(items) - len(rows)),
+            "results": custom_results + fs_results + rows,
         }
     import json as _json, urllib.parse as _urlparse, urllib.request as _urlreq
     url = f"https://api.open5e.com/v1/races/?{_urlparse.urlencode({'search': search, 'limit': cap})}"
@@ -5534,8 +6724,12 @@ def open5e_races_proxy(
         with _urlreq.urlopen(req, timeout=8) as r:
             data = _json.loads(r.read())
     except Exception as exc:
-        if custom_results:
-            return {"count": len(custom_results), "results": custom_results}
+        # Open5e unreachable — fall back to homebrew + shipped FS races.
+        if custom_results or fs_results:
+            return {
+                "count": len(custom_results) + len(fs_results),
+                "results": custom_results + fs_results,
+            }
         raise HTTPException(502, f"Open5e unavailable: {exc}")
     results = []
     for r in data.get("results", []):
@@ -5546,8 +6740,8 @@ def open5e_races_proxy(
                          "size": r.get("size", ""), "source": src})
     results = _dedupe(results)
     return {
-        "count": len(custom_results) + data.get("count", 0),
-        "results": custom_results + results,
+        "count": len(custom_results) + len(fs_results) + data.get("count", 0),
+        "results": custom_results + fs_results + results,
     }
 
 
@@ -6484,16 +7678,43 @@ async def campaign_ws(websocket: WebSocket, campaign_id: int):
         await websocket.close(code=4401)
         return
     db = SessionLocal()
+    # Audio sync: if a track is currently playing for this campaign, the
+    # new client gets the audio_play payload sent privately on connect so
+    # they sync to the same seek offset everyone else hears. Built here
+    # while the DB session is open; sent below after hub.connect accepts
+    # the socket. Targeted send (not broadcast) — broadcasting would
+    # restart audio for every other client too.
+    initial_audio_payload: dict | None = None
     try:
         user = db.query(User).filter(User.id == user_id).first()
         campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
         if not user or not campaign or not _user_can_view_campaign(db, user, campaign):
             await websocket.close(code=4403)
             return
+        if campaign.now_playing_track_id:
+            track = (
+                db.query(PlaylistTrack)
+                .filter(PlaylistTrack.id == campaign.now_playing_track_id)
+                .first()
+            )
+            if track:
+                from .audio_routes import _now_playing_payload
+                initial_audio_payload = {
+                    "type": "audio_play",
+                    "data": _now_playing_payload(campaign, track),
+                }
     finally:
         db.close()
 
     await hub.connect(campaign_id, websocket)
+
+    if initial_audio_payload is not None:
+        import json as _json
+        try:
+            await websocket.send_text(_json.dumps(initial_audio_payload, default=str))
+        except Exception as exc:
+            log.warning("audio sync send failed for campaign %s: %s", campaign_id, exc)
+
     try:
         while True:
             await websocket.receive_text()
@@ -6600,7 +7821,7 @@ def character_sheet_page(
 
 _SETTINGS_UPLOAD_ROOT = Path(__file__).resolve().parent.parent / "static" / "uploads"
 _MAP_DIR = _SETTINGS_UPLOAD_ROOT / "maps"
-_ALLOWED_IMG = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+_ALLOWED_IMG = {"image/png", "image/jpeg", "image/webp", "image/gif", "video/webm", "video/mp4"}
 
 
 @router.post("/campaign/{campaign_id}/settings/characters")
@@ -6659,7 +7880,7 @@ def settings_delete_character(
     char = db.query(Character).filter(Character.id == char_id, Character.campaign_id == campaign_id).first()
     if not char:
         raise HTTPException(404)
-    db.delete(char)
+    char.campaign_id = None
     db.commit()
     return RedirectResponse(f"/campaign/{campaign_id}/settings#characters", status_code=303)
 
@@ -6702,6 +7923,8 @@ async def settings_upload_map(
     grid_size_px: int = Form(70),
     width_px: int = Form(2000),
     height_px: int = Form(1500),
+    tags: str = Form(""),
+    folder: str = Form(""),
     image: UploadFile = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
@@ -6714,13 +7937,21 @@ async def settings_upload_map(
         if image.content_type not in _ALLOWED_IMG:
             raise HTTPException(400, "Unsupported image type")
         data = await image.read()
-        if len(data) > 25 * 1024 * 1024:
-            raise HTTPException(400, "Map image too large (>25 MB)")
+        if len(data) > 80 * 1024 * 1024:
+            raise HTTPException(400, "Map image too large (>80 MB)")
         _MAP_DIR.mkdir(parents=True, exist_ok=True)
         ext = Path(image.filename).suffix.lower() or ".png"
         fname = f"{uuid.uuid4().hex}{ext}"
         (_MAP_DIR / fname).write_bytes(data)
         image_url = f"/static/uploads/maps/{fname}"
+        if image.content_type and image.content_type.startswith("image/"):
+            try:
+                import io as _io
+                from PIL import Image as _PILImage
+                with _PILImage.open(_io.BytesIO(data)) as _img:
+                    width_px, height_px = _img.size
+            except Exception:
+                pass
     try:
         gt = GridType(grid_type)
     except ValueError:
@@ -6733,6 +7964,8 @@ async def settings_upload_map(
         grid_size_px=max(20, min(grid_size_px, 300)),
         width_px=max(200, min(width_px, 8000)),
         height_px=max(200, min(height_px, 8000)),
+        tags=_parse_tags(tags),
+        folder=folder.strip()[:120],
     )
     db.add(m)
     db.commit()
@@ -6741,6 +7974,98 @@ async def settings_upload_map(
         campaign.active_map_id = m.id
         db.commit()
     return RedirectResponse(f"/campaign/{campaign_id}/settings#maps", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/rename")
+async def settings_rename_map(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Rename a map in place. GM-only. Body: ``{name: str}``. Empty /
+    whitespace-only names are rejected so the table row doesn't render
+    as a blank line."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    body = await request.json()
+    new_name = str(body.get("name") or "").strip()[:120]
+    if not new_name:
+        raise HTTPException(400, "Map name cannot be empty")
+    m.name = new_name
+    db.commit()
+    return {"ok": True, "name": m.name}
+
+
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/grid_size")
+async def settings_map_grid_size(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    body = await request.json()
+    val = max(20, min(300, int(body.get("grid_size_px", 70))))
+    m.grid_size_px = val
+    db.commit()
+    return {"ok": True, "grid_size_px": m.grid_size_px}
+
+
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/tags")
+async def settings_set_map_tags(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Replace the map's tag list. GM-only. Body accepts either a JSON
+    array or a comma-separated string; same normalisation as encounter
+    and playlist tags (trim, dedupe case-insensitive, 40-char cap each,
+    ≤20 entries)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    body = await request.json()
+    m.tags = _parse_tags(body.get("tags"))
+    db.commit()
+    return {"ok": True, "tags": m.tags}
+
+
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/folder")
+async def settings_set_map_folder(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Set the map's folder. GM-only. Body: ``{folder: str}``."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    body = await request.json()
+    m.folder = (body.get("folder") or "").strip()[:120]
+    db.commit()
+    return {"ok": True, "folder": m.folder}
 
 
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/activate")

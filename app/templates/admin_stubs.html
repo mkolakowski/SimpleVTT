@@ -17,11 +17,19 @@
 
     <h3>Classes ({{ local_classes|length }})</h3>
     {% if local_classes %}
-        <ul class="cards">
-            {% for slug in local_classes %}
-                <li><code>{{ slug }}</code></li>
-            {% endfor %}
-        </ul>
+        <table class="data">
+            <thead><tr><th>Name</th><th>Slug</th><th>Hit die</th><th>File</th></tr></thead>
+            <tbody>
+                {% for row in local_classes %}
+                <tr>
+                    <td>{{ row.name }}</td>
+                    <td><code>{{ row.slug }}</code></td>
+                    <td>{{ ('d' ~ row.hit_die) if row.hit_die else '—' }}</td>
+                    <td class="muted"><code>{{ row.file }}</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     {% else %}
         <p class="muted"><em>None yet.</em></p>
     {% endif %}
@@ -35,6 +43,25 @@
                 <tr>
                     <td><code>{{ row.class_slug or '—' }}</code></td>
                     <td><code>{{ row.sub_slug }}</code></td>
+                    <td class="muted"><code>{{ row.file }}</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="muted"><em>None yet.</em></p>
+    {% endif %}
+
+    <h3>Races ({{ local_races|length }})</h3>
+    {% if local_races %}
+        <table class="data">
+            <thead><tr><th>Name</th><th>Slug</th><th>Size</th><th>File</th></tr></thead>
+            <tbody>
+                {% for row in local_races %}
+                <tr>
+                    <td>{{ row.name }}</td>
+                    <td><code>{{ row.slug }}</code></td>
+                    <td>{{ row.size or '—' }}</td>
                     <td class="muted"><code>{{ row.file }}</code></td>
                 </tr>
                 {% endfor %}

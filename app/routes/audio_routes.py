@@ -137,10 +137,17 @@ def _require_campaign_gm(db: Session, user: User, campaign_id: int) -> Campaign:
 
 def _now_playing_payload(campaign: Campaign, track: PlaylistTrack) -> dict:
     """Build the audio_play broadcast payload, including the start timestamp
-    in epoch milliseconds so clients can compute the seek offset."""
+    in epoch milliseconds so clients can compute the seek offset.
+
+    When audio is paused, ``paused`` is True and ``paused_offset_s`` carries
+    the seek offset clients should park at. The WS reconnect sync in
+    tabletop_routes.py uses this same payload so a player joining mid-pause
+    lands at the correct position.
+    """
     started_at = campaign.now_playing_started_at or datetime.utcnow()
     started_at_ms = int(started_at.replace(tzinfo=timezone.utc).timestamp() * 1000)
     category = track.playlist.category if track.playlist else "music"
+    paused = campaign.now_playing_paused_offset_s is not None
     return {
         "track_id": track.id,
         "playlist_id": track.playlist_id,
@@ -149,6 +156,8 @@ def _now_playing_payload(campaign: Campaign, track: PlaylistTrack) -> dict:
         "loop": campaign.now_playing_loop,
         "started_at_ms": started_at_ms,
         "category": category,
+        "paused": paused,
+        "paused_offset_s": float(campaign.now_playing_paused_offset_s) if paused else None,
     }
 
 
@@ -184,20 +193,105 @@ def backfill_metadata(
 
 # ---------- playlist CRUD ----------
 
+def _normalize_playlist_tags(value) -> list[str]:
+    """Coerce a tag input (list or comma-separated string) into a
+    deduplicated list of trimmed short strings. Mirrors the helper in
+    tabletop_routes._parse_tags so playlist tags stay consistent with
+    encounter tags."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        items = [t.strip() for t in value.split(",")]
+    elif isinstance(value, (list, tuple)):
+        items = [str(t).strip() for t in value]
+    else:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for t in items:
+        if not t:
+            continue
+        t = t[:40]
+        key = t.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+        if len(out) >= 20:
+            break
+    return out
+
+
 @router.post("/campaign/{campaign_id}/playlists")
 def create_playlist(
     campaign_id: int,
     name: str = Form(...),
     category: str = Form("music"),
+    description: str = Form(""),
+    tags: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
     _require_campaign_gm(db, user, campaign_id)
     cat = category if category in AUDIO_CATEGORIES else "music"
-    pl = Playlist(campaign_id=campaign_id, name=name.strip()[:120] or "Untitled", category=cat)
+    pl = Playlist(
+        campaign_id=campaign_id,
+        name=name.strip()[:120] or "Untitled",
+        category=cat,
+        description=(description or "").strip()[:200],
+        tags=_normalize_playlist_tags(tags),
+    )
     db.add(pl)
     db.commit()
     return RedirectResponse(f"/campaign/{campaign_id}/settings#audio", status_code=303)
+
+
+@router.post("/campaign/{campaign_id}/playlists/{playlist_id}/description")
+async def set_playlist_description(
+    campaign_id: int,
+    playlist_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Set the playlist's short description (shown on the tabletop next
+    to the name). Empty body clears it. GM-only."""
+    _require_campaign_gm(db, user, campaign_id)
+    pl = (
+        db.query(Playlist)
+        .filter(Playlist.id == playlist_id, Playlist.campaign_id == campaign_id)
+        .first()
+    )
+    if not pl:
+        raise HTTPException(404, "Playlist not found")
+    body = await request.json()
+    pl.description = str(body.get("description") or "").strip()[:200]
+    db.commit()
+    return {"ok": True, "description": pl.description}
+
+
+@router.post("/campaign/{campaign_id}/playlists/{playlist_id}/tags")
+async def set_playlist_tags(
+    campaign_id: int,
+    playlist_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Replace the playlist's tag list. Body accepts either a JSON
+    array or a comma-separated string. GM-only."""
+    _require_campaign_gm(db, user, campaign_id)
+    pl = (
+        db.query(Playlist)
+        .filter(Playlist.id == playlist_id, Playlist.campaign_id == campaign_id)
+        .first()
+    )
+    if not pl:
+        raise HTTPException(404, "Playlist not found")
+    body = await request.json()
+    pl.tags = _normalize_playlist_tags(body.get("tags"))
+    db.commit()
+    return {"ok": True, "tags": pl.tags}
 
 
 @router.post("/campaign/{campaign_id}/playlists/{playlist_id}/rename")
@@ -410,6 +504,205 @@ async def delete_track(
 
 # ---------- playback control ----------
 
+def _finalize_play_event(db: Session, campaign_id: int, reason: str) -> None:
+    """Close any in-flight ``AudioPlayEvent`` for the campaign with the
+    given ``reason``. Idempotent — a no-op when nothing is ongoing. Does
+    not commit; the caller commits alongside its own state changes.
+
+    Computes ``duration_s`` as ``ended_at - started_at`` (clamped to 0).
+    Multiple in-flight rows would be unusual (only happens if a previous
+    play wasn't finalized — e.g. a crash mid-play); this iterates all
+    of them to keep the table consistent.
+    """
+    from ..models import AudioPlayEvent
+    now = datetime.utcnow()
+    ongoing = (
+        db.query(AudioPlayEvent)
+        .filter(
+            AudioPlayEvent.campaign_id == campaign_id,
+            AudioPlayEvent.ended_at.is_(None),
+        )
+        .all()
+    )
+    for ev in ongoing:
+        ev.ended_at = now
+        ev.ended_reason = reason
+        delta = (now - ev.started_at).total_seconds() if ev.started_at else 0
+        ev.duration_s = max(0, int(delta))
+
+
+def _open_play_event(
+    db: Session,
+    campaign_id: int,
+    track: PlaylistTrack,
+    source: str,
+    user_id: "int | None",
+) -> None:
+    """Insert a new ``AudioPlayEvent`` for ``track`` with ``ended_at``
+    NULL. Snapshots ``track.name`` and ``playlist.name`` so the row
+    survives a later rename / delete of the source rows. Does not commit.
+    """
+    from ..models import AudioPlayEvent
+    pl = track.playlist
+    ev = AudioPlayEvent(
+        campaign_id=campaign_id,
+        track_id=track.id,
+        playlist_id=track.playlist_id,
+        track_name=(track.name or "")[:300],
+        playlist_name=(pl.name if pl else "")[:200],
+        started_at=datetime.utcnow(),
+        ended_at=None,
+        ended_reason="ongoing",
+        source=source,
+        triggered_by_user_id=user_id,
+    )
+    db.add(ev)
+
+
+async def _start_track_for_campaign(
+    db: Session,
+    campaign: Campaign,
+    track: PlaylistTrack,
+    *,
+    source: str = "manual",
+    prev_reason: str = "skipped",
+    user_id: "int | None" = None,
+) -> None:
+    """Set ``campaign.now_playing_*`` to ``track`` and broadcast audio_play.
+
+    Caller is responsible for permission checks AND for ensuring the track
+    belongs to the same campaign. Used by both the manual ``/audio/play``
+    endpoint and the session-start auto-play hook in tabletop_routes.
+
+    Audit fields (PR 4):
+        ``source``      — how this play was triggered (manual / auto_start /
+                          auto_next / loop). Stored on the new AudioPlayEvent.
+        ``prev_reason`` — how to label the in-flight event being replaced
+                          ("skipped" for GM jumps, "completed" for natural
+                          end of file, "session_end" for cross-session
+                          residue, etc.). See models.AudioPlayEvent docstring.
+        ``user_id``     — who triggered the play, for the audit row's
+                          ``triggered_by_user_id``.
+    """
+    _finalize_play_event(db, campaign.id, prev_reason)
+    _open_play_event(db, campaign.id, track, source, user_id)
+    campaign.now_playing_track_id = track.id
+    # Record server-side start time so all clients can compute the same offset.
+    campaign.now_playing_started_at = datetime.utcnow()
+    # Starting a new track always clears any pause state from the previous one.
+    campaign.now_playing_paused_offset_s = None
+    db.commit()
+    db.refresh(campaign)
+    await hub.broadcast(
+        campaign.id,
+        {"type": "audio_play", "data": _now_playing_payload(campaign, track)},
+    )
+
+
+async def _stop_audio_for_campaign(
+    db: Session, campaign: Campaign, *, reason: str = "stopped"
+) -> None:
+    """Clear ``campaign.now_playing_*`` and broadcast audio_stop.
+
+    Used by both the manual ``/audio/stop`` endpoint and the session-end
+    auto-stop hook. Idempotent — safe to call when nothing is playing.
+
+    ``reason`` is the label stored on the in-flight AudioPlayEvent being
+    finalized: ``"stopped"`` (GM hit stop), ``"session_end"`` (session
+    ended), ``"completed"`` (playlist reached its natural end). Defaults
+    to ``"stopped"`` since that's what the manual endpoint wants.
+    """
+    _finalize_play_event(db, campaign.id, reason)
+    campaign.now_playing_track_id = None
+    campaign.now_playing_started_at = None
+    campaign.now_playing_paused_offset_s = None
+    db.commit()
+    await hub.broadcast(campaign.id, {"type": "audio_stop", "data": {}})
+
+
+async def _pause_audio_for_campaign(db: Session, campaign: Campaign) -> None:
+    """Pause whatever's currently playing for the campaign.
+
+    Records the seek offset (server-side compute: ``now - started_at``)
+    so resume can put everyone back in the same spot. Does NOT finalize
+    the AudioPlayEvent — pause is "still listening, just not right now",
+    not a play termination. Idempotent — already paused → no-op.
+    """
+    if campaign.now_playing_track_id is None:
+        return  # Nothing to pause
+    if campaign.now_playing_paused_offset_s is not None:
+        return  # Already paused
+    if campaign.now_playing_started_at is None:
+        return
+    offset = (datetime.utcnow() - campaign.now_playing_started_at).total_seconds()
+    campaign.now_playing_paused_offset_s = max(0.0, offset)
+    db.commit()
+    await hub.broadcast(campaign.id, {
+        "type": "audio_pause",
+        "data": {"paused_offset_s": campaign.now_playing_paused_offset_s},
+    })
+
+
+async def _resume_audio_for_campaign(db: Session, campaign: Campaign) -> None:
+    """Resume a paused campaign's audio.
+
+    Sets ``now_playing_started_at = now - paused_offset_s`` so every
+    client's existing time-sync math computes the same seek position,
+    then clears the pause field and re-broadcasts ``audio_play`` with
+    the fresh start timestamp. Idempotent — not paused → no-op.
+    """
+    if campaign.now_playing_track_id is None:
+        return
+    if campaign.now_playing_paused_offset_s is None:
+        return
+    track = (
+        db.query(PlaylistTrack)
+        .filter(PlaylistTrack.id == campaign.now_playing_track_id)
+        .first()
+    )
+    if not track:
+        # Track was deleted while paused — clean up cleanly.
+        await _stop_audio_for_campaign(db, campaign, reason="completed")
+        return
+    from datetime import timedelta
+    offset = float(campaign.now_playing_paused_offset_s or 0.0)
+    campaign.now_playing_started_at = datetime.utcnow() - timedelta(seconds=offset)
+    campaign.now_playing_paused_offset_s = None
+    db.commit()
+    db.refresh(campaign)
+    await hub.broadcast(
+        campaign.id,
+        {"type": "audio_play", "data": _now_playing_payload(campaign, track)},
+    )
+
+
+def _find_sibling_track(
+    db: Session, current: PlaylistTrack, direction: int, *, loop: bool = False,
+) -> Optional[PlaylistTrack]:
+    """Return the previous (direction=-1) or next (direction=+1) track in
+    the current track's playlist. With ``loop=True`` the search wraps
+    around at the playlist boundary; otherwise returns None at the edge.
+    """
+    siblings = (
+        db.query(PlaylistTrack)
+        .filter(PlaylistTrack.playlist_id == current.playlist_id)
+        .order_by(PlaylistTrack.position, PlaylistTrack.id)
+        .all()
+    )
+    if not siblings:
+        return None
+    try:
+        idx = [t.id for t in siblings].index(current.id)
+    except ValueError:
+        return None
+    target = idx + direction
+    if 0 <= target < len(siblings):
+        return siblings[target]
+    if loop:
+        return siblings[target % len(siblings)]
+    return None
+
+
 @router.post("/campaign/{campaign_id}/audio/play")
 async def play_track(
     campaign_id: int,
@@ -428,14 +721,10 @@ async def play_track(
     )
     if not track:
         raise HTTPException(404, "Track not found")
-    campaign.now_playing_track_id = track.id
-    # Record server-side start time so all clients can compute the same offset.
-    campaign.now_playing_started_at = datetime.utcnow()
-    db.commit()
-    db.refresh(campaign)
-    await hub.broadcast(
-        campaign_id,
-        {"type": "audio_play", "data": _now_playing_payload(campaign, track)},
+    # Manual GM jump → previous track (if any) is "skipped".
+    await _start_track_for_campaign(
+        db, campaign, track,
+        source="manual", prev_reason="skipped", user_id=user.id,
     )
     return {"ok": True}
 
@@ -447,10 +736,7 @@ async def stop_audio(
     user: User = Depends(require_user),
 ):
     campaign = _require_campaign_gm(db, user, campaign_id)
-    campaign.now_playing_track_id = None
-    campaign.now_playing_started_at = None
-    db.commit()
-    await hub.broadcast(campaign_id, {"type": "audio_stop", "data": {}})
+    await _stop_audio_for_campaign(db, campaign)
     return {"ok": True}
 
 
@@ -463,7 +749,12 @@ async def next_in_playlist(
 ):
     """Called by client when a track ends naturally. Advances to the next
     track. The first client to send wins; subsequent calls for the same
-    finished_id are no-ops."""
+    finished_id are no-ops.
+
+    Records the finished track as ``ended_reason='completed'`` (natural
+    end of file) before opening the next event with source=``auto_next``
+    or ``loop`` when the playlist loops back to the same/first track.
+    """
     body = await request.json()
     finished_id = int(body.get("track_id"))
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
@@ -475,41 +766,121 @@ async def next_in_playlist(
         return {"ok": True, "noop": True}
     track = db.query(PlaylistTrack).filter(PlaylistTrack.id == finished_id).first()
     if not track:
-        campaign.now_playing_track_id = None
-        campaign.now_playing_started_at = None
-        db.commit()
-        await hub.broadcast(campaign_id, {"type": "audio_stop", "data": {}})
+        # Track was deleted while playing — finalize as completed and stop.
+        await _stop_audio_for_campaign(db, campaign, reason="completed")
         return {"ok": True}
-    siblings = (
-        db.query(PlaylistTrack)
-        .filter(PlaylistTrack.playlist_id == track.playlist_id)
-        .order_by(PlaylistTrack.position, PlaylistTrack.id)
-        .all()
+    next_track = _find_sibling_track(
+        db, track, direction=+1, loop=campaign.now_playing_loop,
     )
-    ids = [t.id for t in siblings]
-    try:
-        idx = ids.index(track.id)
-    except ValueError:
-        idx = -1
-    next_track: Optional[PlaylistTrack] = None
-    if idx >= 0 and idx + 1 < len(siblings):
-        next_track = siblings[idx + 1]
-    elif campaign.now_playing_loop and siblings:
-        next_track = siblings[0]
     if next_track is None:
-        campaign.now_playing_track_id = None
-        campaign.now_playing_started_at = None
-        db.commit()
-        await hub.broadcast(campaign_id, {"type": "audio_stop", "data": {}})
+        # End of playlist + loop off — finalize as completed and stop.
+        await _stop_audio_for_campaign(db, campaign, reason="completed")
         return {"ok": True}
-    campaign.now_playing_track_id = next_track.id
-    campaign.now_playing_started_at = datetime.utcnow()
-    db.commit()
-    db.refresh(campaign)
-    await hub.broadcast(
-        campaign_id,
-        {"type": "audio_play", "data": _now_playing_payload(campaign, next_track)},
+    # Advance via the shared helper so the event audit is recorded the
+    # same way as a manual play. ``prev_reason='completed'`` because the
+    # finished track played to its natural end. ``source='loop'`` when
+    # the playlist wraps back to the same single track playing again.
+    src = "loop" if next_track.id == finished_id else "auto_next"
+    await _start_track_for_campaign(
+        db, campaign, next_track,
+        source=src, prev_reason="completed", user_id=user.id,
     )
+    return {"ok": True}
+
+
+@router.post("/campaign/{campaign_id}/audio/skip")
+async def skip_track(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """GM-only manual skip to the next track. Unlike ``/audio/next``
+    (which is client-initiated when a track ends naturally), this is
+    fired by the GM clicking ⏭. The current track is finalized as
+    ``ended_reason='skipped'``.
+    """
+    campaign = _require_campaign_gm(db, user, campaign_id)
+    if campaign.now_playing_track_id is None:
+        return {"ok": True, "noop": True}
+    track = (
+        db.query(PlaylistTrack)
+        .filter(PlaylistTrack.id == campaign.now_playing_track_id)
+        .first()
+    )
+    if not track:
+        await _stop_audio_for_campaign(db, campaign, reason="completed")
+        return {"ok": True}
+    next_track = _find_sibling_track(
+        db, track, direction=+1, loop=campaign.now_playing_loop,
+    )
+    if next_track is None:
+        # End of playlist + loop off — skipping past the last track stops.
+        await _stop_audio_for_campaign(db, campaign, reason="skipped")
+        return {"ok": True}
+    await _start_track_for_campaign(
+        db, campaign, next_track,
+        source="manual", prev_reason="skipped", user_id=user.id,
+    )
+    return {"ok": True}
+
+
+@router.post("/campaign/{campaign_id}/audio/previous")
+async def previous_track(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """GM-only jump back to the previous track in the current playlist.
+    Wraps to the last track when loop is on and we're at track 1. The
+    current track is finalized as ``ended_reason='skipped'``.
+    """
+    campaign = _require_campaign_gm(db, user, campaign_id)
+    if campaign.now_playing_track_id is None:
+        return {"ok": True, "noop": True}
+    track = (
+        db.query(PlaylistTrack)
+        .filter(PlaylistTrack.id == campaign.now_playing_track_id)
+        .first()
+    )
+    if not track:
+        await _stop_audio_for_campaign(db, campaign, reason="completed")
+        return {"ok": True}
+    prev_track = _find_sibling_track(
+        db, track, direction=-1, loop=campaign.now_playing_loop,
+    )
+    if prev_track is None:
+        # At track 1 + loop off → no-op (no broadcast).
+        return {"ok": True, "noop": True}
+    await _start_track_for_campaign(
+        db, campaign, prev_track,
+        source="manual", prev_reason="skipped", user_id=user.id,
+    )
+    return {"ok": True}
+
+
+@router.post("/campaign/{campaign_id}/audio/pause")
+async def pause_audio(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """GM-only pause. Does not finalize the in-flight AudioPlayEvent —
+    pause is mid-listen, not a play termination."""
+    campaign = _require_campaign_gm(db, user, campaign_id)
+    await _pause_audio_for_campaign(db, campaign)
+    return {"ok": True, "paused_offset_s": campaign.now_playing_paused_offset_s}
+
+
+@router.post("/campaign/{campaign_id}/audio/resume")
+async def resume_audio(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """GM-only resume from pause. Re-broadcasts audio_play with an
+    adjusted started_at so every client seeks to the same position."""
+    campaign = _require_campaign_gm(db, user, campaign_id)
+    await _resume_audio_for_campaign(db, campaign)
     return {"ok": True}
 
 

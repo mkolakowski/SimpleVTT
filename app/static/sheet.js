@@ -505,6 +505,49 @@
         return '';
     }
 
+    // Returns null (no badge) or {label, title, css} describing how a
+    // content-source string should render. ``kind`` is the noun used in the
+    // tooltip ("subclasses" / "races") so the user knows where to go to
+    // manage that flavor of content. Three buckets:
+    //   - "local-custom"  → orange "Custom" — campaign homebrew (DB).
+    //   - "local-srd"     → green  "SRD"    — shipped FS files.
+    //   - "open5e_mirror" / "open5e_live" → blue "Open5e" — external API.
+    // Anything else returns null so unrecognised sources stay quiet.
+    function _sourceBadgeSpec(source, kind) {
+        if (source === 'local-custom') {
+            return {
+                label: 'Custom',
+                title: 'Campaign-authored homebrew. Manage via campaign settings → Custom ' + (kind || 'content') + '.',
+                css: 'color:#d4a84a;background:#3a2f15;border:1px solid #6e5828;',
+            };
+        }
+        if (source === 'local-srd') {
+            return {
+                label: 'SRD',
+                title: 'Shipped locally as part of the D&D 5e SRD baseline — no Open5e call needed.',
+                css: 'color:#7fb069;background:#1f2d1a;border:1px solid #3d5e30;',
+            };
+        }
+        if (source === 'open5e_mirror' || source === 'open5e_live') {
+            return {
+                label: 'Open5e',
+                title: 'Loaded from the Open5e ' + (source === 'open5e_mirror' ? 'mirror' : 'live API') + '.',
+                css: 'color:#7aa7d4;background:#1a2433;border:1px solid #2f4a6e;',
+            };
+        }
+        return null;
+    }
+
+    function _appendSourceBadge(headerEl, source, kind) {
+        const spec = _sourceBadgeSpec(source, kind);
+        if (!spec) return;
+        const badge = document.createElement('span');
+        badge.textContent = spec.label;
+        badge.title = spec.title;
+        badge.style.cssText = 'font-size:10px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;border-radius:3px;padding:1px 6px;' + spec.css;
+        headerEl.appendChild(badge);
+    }
+
     function populateSelect(sel, items, currentName) {
         sel.innerHTML = '';
         const blank = document.createElement('option');
@@ -515,7 +558,14 @@
         items.forEach(function (item) {
             const opt = document.createElement('option');
             opt.value = item.name;
-            opt.textContent = item.name;
+            // Append the source as a suffix so the user can see at a glance
+            // which entry is local SRD / Custom / Open5e — and pick the one
+            // they want when multiple sources expose the same name. Search
+            // endpoints set: "Custom" for DB homebrew, "SRD" for shipped
+            // FS files, and an Open5e document title (e.g. "5e Core Rules")
+            // otherwise. Empty/missing source renders as the bare name.
+            const src = (item.source || '').trim();
+            opt.textContent = src ? (item.name + ' · ' + src) : item.name;
             opt.dataset.slug = item.slug || '';
             sel.appendChild(opt);
             if (item.name === currentName) { opt.selected = true; matched = true; }
@@ -674,22 +724,18 @@
         container.style.display = '';
         if (emptyEl) emptyEl.style.display = 'none';
 
-        // Subclass name + source badge ("Custom" for homebrew, otherwise hidden).
-        // ``data.source`` is set by the resolver — "local-custom" indicates a
-        // campaign-scoped homebrew record from the custom_subclasses table.
+        // Subclass name + source badge. ``data.source`` is set by the
+        // resolver/route: "local-custom" (campaign homebrew DB),
+        // "local-srd" (shipped FS file), or "open5e_mirror"/"open5e_live"
+        // for content fetched from Open5e. _appendSourceBadge no-ops for
+        // unrecognised values.
         if (data.name) {
             const h = document.createElement('div');
             h.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:4px;color:var(--fg,#e0e0e0);display:flex;align-items:center;gap:8px;';
             const nameSpan = document.createElement('span');
             nameSpan.textContent = data.name;
             h.appendChild(nameSpan);
-            if (data.source === 'local-custom') {
-                const badge = document.createElement('span');
-                badge.textContent = 'Custom';
-                badge.title = 'Campaign-authored homebrew (Custom subclasses → campaign settings).';
-                badge.style.cssText = 'font-size:10px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#d4a84a;background:#3a2f15;border:1px solid #6e5828;border-radius:3px;padding:1px 6px;';
-                h.appendChild(badge);
-            }
+            _appendSourceBadge(h, data.source, 'subclasses');
             container.appendChild(h);
         }
         const cleanedFlavor = _cleanMd(flavor);
@@ -824,22 +870,16 @@
         container.style.display = '';
         if (emptyEl) emptyEl.style.display = 'none';
 
-        // Race name heading + source badge (matches the subclass renderer
-        // pattern). data.source comes from the resolver — "local-custom"
-        // for campaign-authored homebrew, otherwise we render no badge.
+        // Race name heading + source badge — same conventions as the
+        // subclass renderer above. ``data.source`` is "local-custom",
+        // "local-srd", or one of the open5e_* labels.
         if (data.name) {
             const h = document.createElement('div');
             h.style.cssText = 'font-weight:700;font-size:14px;margin-bottom:4px;color:var(--fg);display:flex;align-items:center;gap:8px;';
             const nameSpan = document.createElement('span');
             nameSpan.textContent = data.name;
             h.appendChild(nameSpan);
-            if (data.source === 'local-custom') {
-                const badge = document.createElement('span');
-                badge.textContent = 'Custom';
-                badge.title = 'Campaign-authored homebrew (Custom races → campaign settings).';
-                badge.style.cssText = 'font-size:10px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:#d4a84a;background:#3a2f15;border:1px solid #6e5828;border-radius:3px;padding:1px 6px;';
-                h.appendChild(badge);
-            }
+            _appendSourceBadge(h, data.source, 'races');
             container.appendChild(h);
         }
 
@@ -1736,13 +1776,16 @@
                 || bonusFeaturesByName.has(lc);
         }
 
-        // Heading: "<Class> - <Subclass>"
+        // Heading: "<Class> - <Subclass>" + source badge if the cached
+        // detail blob carries one.
         const heading = document.createElement('div');
         heading.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:4px;';
         const lbl = document.createElement('span');
         lbl.style.cssText = 'font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted,#888);text-transform:uppercase;';
         lbl.textContent = className + (subName ? ' - ' + subName : ' - (no subclass)');
         heading.appendChild(lbl);
+        const subSource = entry.subclass_features_data && entry.subclass_features_data.source;
+        if (subSource) _appendSourceBadge(heading, subSource, 'subclasses');
         if (!isReadonly) {
             const sync = document.createElement('button');
             sync.type = 'button';

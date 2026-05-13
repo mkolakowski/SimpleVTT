@@ -1,0 +1,54 @@
+{
+  "slug": "hill-dwarf",
+  "name": "Hill Dwarf",
+  "ability_bonuses": [
+    {"attribute": "Constitution", "bonus": 2},
+    {"attribute": "Wisdom", "bonus": 1}
+  ],
+  "size": "Medium",
+  "speed": 25,
+  "age": "Dwarves mature at the same rate as humans, but they're considered young until they reach the age of 50. On average, they live about 350 years.",
+  "alignment": "Most dwarves are lawful, believing firmly in the benefits of a well-ordered society. They tend toward good as well, with a strong sense of fair play and a belief that everyone deserves to share in the benefits of a just order.",
+  "languages": "You can speak, read, and write Common and Dwarvish.",
+  "traits": [
+    {
+      "name": "Darkvision",
+      "level": null,
+      "desc": "Accustomed to life underground, you have superior vision in dark and dim conditions. You can see in dim light within 60 feet of you as if it were bright light, and in darkness as if it were dim light. You can't discern color in darkness, only shades of gray."
+    },
+    {
+      "name": "Dwarven Resilience",
+      "level": null,
+      "desc": "You have advantage on saving throws against poison, and you have resistance against poison damage."
+    },
+    {
+      "name": "Dwarven Combat Training",
+      "level": null,
+      "desc": "You have proficiency with the battleaxe, handaxe, light hammer, and warhammer."
+    },
+    {
+      "name": "Tool Proficiency",
+      "level": null,
+      "desc": "You gain proficiency with the artisan's tools of your choice: smith's tools, brewer's supplies, or mason's tools. (Pick one when you create the character and write it into your tools list.)"
+    },
+    {
+      "name": "Stonecunning",
+      "level": null,
+      "desc": "Whenever you make an Intelligence (History) check related to the origin of stonework, you are considered proficient in the History skill and add double your proficiency bonus to the check, instead of your normal proficiency bonus."
+    },
+    {
+      "name": "Speed Not Reduced by Heavy Armor",
+      "level": null,
+      "desc": "Your speed is not reduced by wearing heavy armor."
+    },
+    {
+      "name": "Dwarven Toughness",
+      "level": null,
+      "desc": "Your hit point maximum increases by 1, and it increases by 1 every time you gain a level. (Track this on your character sheet alongside your class hit points.)"
+    }
+  ],
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD (CC BY 4.0 / OGL 1.0a). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy."
+}

@@ -337,6 +337,39 @@ def update_scale(
     return {"ok": True, "ui_scale": user.ui_scale, "font_scale": user.font_scale}
 
 
+class _ZoomSpeedBody(BaseModel):
+    zoom_speed: float
+
+
+def _coerce_zoom_speed(v: float) -> float:
+    """Clamp a zoom-speed slider value into [0.3, 1.5]. The slider on
+    the user-settings page uses 0.1 steps so any value the GM sends is
+    one of {0.3, 0.4, ..., 1.5} — but a hostile client could send
+    anything, hence the explicit clamp."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return 1.0
+    if f != f:  # NaN
+        return 1.0
+    return max(0.3, min(1.5, f))
+
+
+@router.post("/api/settings/zoom_speed")
+def update_zoom_speed(
+    body: _ZoomSpeedBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Persist the user's zoom-speed multiplier. Applied to both wheel
+    and pinch on the tabletop canvas; pinch additionally has a
+    baked-in 0.6 baseline dampening so the default 1.0 feels right on
+    iPad rather than twitchy."""
+    user.zoom_speed = _coerce_zoom_speed(body.zoom_speed)
+    db.commit()
+    return {"ok": True, "zoom_speed": user.zoom_speed}
+
+
 class _AnimateGifsBody(BaseModel):
     animate_gifs: bool
 

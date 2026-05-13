@@ -1,0 +1,34 @@
+{
+  "slug": "dragonborn",
+  "name": "Dragonborn",
+  "ability_bonuses": [
+    {"attribute": "Strength", "bonus": 2},
+    {"attribute": "Charisma", "bonus": 1}
+  ],
+  "size": "Medium",
+  "speed": 30,
+  "age": "Young dragonborn grow quickly. They walk hours after hatching, attain the size and development of a 10-year-old human child by the age of 3, and reach adulthood by 15. They live to be around 80.",
+  "alignment": "Dragonborn tend to extremes, making a conscious choice for one side or the other in the cosmic war between good and evil. Most dragonborn are good, but those who side with evil can be terrible villains.",
+  "languages": "You can speak, read, and write Common and Draconic.",
+  "traits": [
+    {
+      "name": "Draconic Ancestry",
+      "level": null,
+      "desc": "You have draconic ancestry. Choose one type of dragon — the table below determines your breath weapon's damage type and shape:\n\n- **Black** — acid · 5 by 30 ft. line (Dex save)\n- **Blue** — lightning · 5 by 30 ft. line (Dex save)\n- **Brass** — fire · 5 by 30 ft. line (Dex save)\n- **Bronze** — lightning · 5 by 30 ft. line (Dex save)\n- **Copper** — acid · 5 by 30 ft. line (Dex save)\n- **Gold** — fire · 15 ft. cone (Dex save)\n- **Green** — poison · 15 ft. cone (Con save)\n- **Red** — fire · 15 ft. cone (Dex save)\n- **Silver** — cold · 15 ft. cone (Con save)\n- **White** — cold · 15 ft. cone (Con save)\n\nNote your ancestry on your character sheet."
+    },
+    {
+      "name": "Breath Weapon",
+      "level": null,
+      "desc": "You can use your action to exhale destructive energy. Your draconic ancestry determines the size, shape, and damage type of the exhalation. When you use your breath weapon, each creature in the area of the exhalation must make a saving throw — the DC equals 8 + your Constitution modifier + your proficiency bonus. A creature takes 2d6 damage on a failed save, and half as much damage on a successful one. The damage increases to 3d6 at 6th level, 4d6 at 11th level, and 5d6 at 16th level. After you use your breath weapon, you can't use it again until you complete a short or long rest."
+    },
+    {
+      "name": "Damage Resistance",
+      "level": null,
+      "desc": "You have resistance to the damage type associated with your draconic ancestry."
+    }
+  ],
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD (CC BY 4.0 / OGL 1.0a). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy."
+}

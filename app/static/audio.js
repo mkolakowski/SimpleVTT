@@ -48,7 +48,7 @@
     let masterVol = loadMasterVol();
     audioEl.muted = loadMute();
     if (volSlider) volSlider.value = String(masterVol);
-    if (muteBtn) muteBtn.textContent = audioEl.muted ? '🔇 Unmute' : '🔈 Mute';
+    if (muteBtn) { muteBtn.textContent = audioEl.muted ? '🔇' : '🔊'; muteBtn.title = audioEl.muted ? 'Unmute' : 'Mute'; }
 
     // ---- per-category volume preferences (server-side) ----
     // Map of category -> volume (0..1). Loaded once on init.
@@ -78,11 +78,11 @@
             if (masterVol === 0 && !audioEl.muted) {
                 audioEl.muted = true;
                 localStorage.setItem(MUTE_KEY, '1');
-                if (muteBtn) muteBtn.textContent = '🔇 Unmute';
+                if (muteBtn) { muteBtn.textContent = '🔇'; muteBtn.title = 'Unmute'; }
             } else if (masterVol > 0 && audioEl.muted) {
                 audioEl.muted = false;
                 localStorage.setItem(MUTE_KEY, '0');
-                if (muteBtn) muteBtn.textContent = '🔈 Mute';
+                if (muteBtn) { muteBtn.textContent = '🔊'; muteBtn.title = 'Mute'; }
             }
             applyEffectiveVolume();
         });
@@ -91,7 +91,8 @@
         muteBtn.addEventListener('click', () => {
             audioEl.muted = !audioEl.muted;
             localStorage.setItem(MUTE_KEY, audioEl.muted ? '1' : '0');
-            muteBtn.textContent = audioEl.muted ? '🔇 Unmute' : '🔈 Mute';
+            muteBtn.textContent = audioEl.muted ? '🔇' : '🔊';
+            muteBtn.title = audioEl.muted ? 'Unmute' : 'Mute';
         });
     }
 
@@ -141,6 +142,44 @@
         nowPlayingEl.textContent = name || 'Nothing playing';
     }
 
+    // ---- progress bars ----
+    // Re-queried lazily on each call: the player drawer + GM tools each
+    // render their own ``.audio-progress`` element, and the GM panel can
+    // be lazily-rendered on first open in some flows.
+    function _progressEls() {
+        return document.querySelectorAll('.audio-progress');
+    }
+    function _fmtTime(seconds) {
+        if (!isFinite(seconds) || seconds < 0) return '0:00';
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+    function _showProgress(visible) {
+        _progressEls().forEach(el => {
+            if (visible) el.removeAttribute('hidden');
+            else el.setAttribute('hidden', '');
+        });
+    }
+    function _setProgress(elapsed, total) {
+        const safeTotal = isFinite(total) && total > 0 ? total : 0;
+        const pct = safeTotal > 0 ? Math.min(100, Math.max(0, (elapsed / safeTotal) * 100)) : 0;
+        _progressEls().forEach(el => {
+            const eEl = el.querySelector('.audio-progress-elapsed');
+            const tEl = el.querySelector('.audio-progress-total');
+            const fEl = el.querySelector('.audio-progress-fill');
+            if (eEl) eEl.textContent = _fmtTime(elapsed);
+            if (tEl) tEl.textContent = _fmtTime(safeTotal);
+            if (fEl) fEl.style.width = pct + '%';
+        });
+    }
+    // <audio>.timeupdate fires every ~250 ms during playback — perfect
+    // cadence for a smooth bar without any extra timer.
+    audioEl.addEventListener('timeupdate', () => {
+        if (!currentTrackId) return;
+        _setProgress(audioEl.currentTime || 0, audioEl.duration || 0);
+    });
+
     // ---- autoplay-blocked helper ----
     function tryPlay() {
         const p = audioEl.play();
@@ -162,6 +201,9 @@
     // ---- time sync ----
     const DRIFT_THRESHOLD_S = 0.75;
     let serverStartedAtMs = null;
+    let currentPaused = false;
+    let currentPausedOffset = 0;
+    let currentTrackName = '';
 
     function expectedPositionSeconds() {
         if (serverStartedAtMs == null) return 0;
@@ -177,11 +219,23 @@
     }
     audioEl.addEventListener('loadedmetadata', () => {
         currentDuration = audioEl.duration || 0;
-        seekToExpected();
-        tryPlay();
+        if (currentPaused) {
+            // Sync the freshly-loaded element to the pause offset so the
+            // user sees the correct elapsed time on the progress bar; do
+            // NOT auto-play.
+            audioEl.currentTime = Math.min(currentPausedOffset, currentDuration || currentPausedOffset);
+        } else {
+            seekToExpected();
+            tryPlay();
+        }
+        // First moment we know the total duration → paint the bar with
+        // real values and reveal it.
+        _setProgress(audioEl.currentTime || 0, currentDuration);
+        _showProgress(true);
     });
     setInterval(() => {
         if (!currentTrackId || serverStartedAtMs == null) return;
+        if (currentPaused) return;   // Don't fight the GM's pause.
         if (audioEl.paused || !audioEl.duration) return;
         const expected = expectedPositionSeconds() % audioEl.duration;
         const drift = Math.abs(expected - audioEl.currentTime);
@@ -190,26 +244,87 @@
     }, 5000);
 
     // ---- WS event handling ----
+    function _labelFor(name, paused) {
+        return `${paused ? '⏸' : '▶'} ${name || ''}`;
+    }
+
     function handleMessage(msg) {
         if (msg.type === 'audio_play') {
             const d = msg.data || {};
-            currentTrackId    = d.track_id;
-            currentCategory   = d.category || 'music';
-            serverStartedAtMs = d.started_at_ms || Date.now();
-            currentDuration   = 0;
+            const newPaused = !!d.paused;
+            // Idempotency: server sends audio_play on every WS connect
+            // (so reconnecting clients re-sync to the live position).
+            // That means a fresh page load fires this handler twice — once
+            // from the HTML data-initial-play, then again from the WS sync
+            // with identical data. Skip the second call to avoid an
+            // unnecessary <audio> reload glitch.
+            if (currentTrackId === d.track_id
+                && serverStartedAtMs === (d.started_at_ms || null)
+                && currentPaused === newPaused
+                && audioEl.src
+                && audioEl.src.endsWith(d.file_url || '')) {
+                return;
+            }
+            // Same-track update — pause toggle or resume with adjusted
+            // started_at. Update timing/pause state without reloading
+            // ``<audio>.src`` (which would force a refetch + reseek glitch).
+            if (currentTrackId === d.track_id
+                && audioEl.src
+                && audioEl.src.endsWith(d.file_url || '')) {
+                serverStartedAtMs   = d.started_at_ms || Date.now();
+                currentPausedOffset = (typeof d.paused_offset_s === 'number') ? d.paused_offset_s : 0;
+                currentPaused       = newPaused;
+                currentTrackName    = d.name || currentTrackName;
+                if (newPaused) {
+                    audioEl.currentTime = currentPausedOffset;
+                    audioEl.pause();
+                } else {
+                    seekToExpected();
+                    tryPlay();
+                }
+                setNowPlaying(_labelFor(currentTrackName, newPaused));
+                _setProgress(audioEl.currentTime || 0, audioEl.duration || 0);
+                return;
+            }
+            // Different track (or first play) — full reset.
+            currentTrackId      = d.track_id;
+            currentCategory     = d.category || 'music';
+            serverStartedAtMs   = d.started_at_ms || Date.now();
+            currentPaused       = newPaused;
+            currentPausedOffset = (typeof d.paused_offset_s === 'number') ? d.paused_offset_s : 0;
+            currentTrackName    = d.name || '';
+            currentDuration     = 0;
             audioEl.src = d.file_url;
-            setNowPlaying(`▶ ${d.name || ''}`);
+            setNowPlaying(_labelFor(currentTrackName, currentPaused));
             refreshCategoryVolUI();
             applyEffectiveVolume();
+            // Reset the bar to "—" while metadata loads; loadedmetadata
+            // will populate real values + reveal it.
+            _setProgress(0, 0);
+        } else if (msg.type === 'audio_pause') {
+            const d = msg.data || {};
+            currentPaused = true;
+            if (typeof d.paused_offset_s === 'number') {
+                currentPausedOffset = d.paused_offset_s;
+            } else if (audioEl.duration) {
+                currentPausedOffset = audioEl.currentTime || 0;
+            }
+            audioEl.pause();
+            setNowPlaying(_labelFor(currentTrackName, true));
         } else if (msg.type === 'audio_stop') {
-            currentTrackId    = null;
-            currentCategory   = 'music';
-            serverStartedAtMs = null;
+            currentTrackId      = null;
+            currentCategory     = 'music';
+            serverStartedAtMs   = null;
+            currentPaused       = false;
+            currentPausedOffset = 0;
+            currentTrackName    = '';
             audioEl.pause();
             audioEl.removeAttribute('src');
             audioEl.load();
             setNowPlaying('Nothing playing');
             refreshCategoryVolUI();
+            _setProgress(0, 0);
+            _showProgress(false);
         }
     }
     document.addEventListener('vtt:ws-message', (ev) => handleMessage(ev.detail));
@@ -253,4 +368,27 @@
         if (typeof CAMPAIGN_ID === 'undefined') return;
         await fetch(`/campaign/${CAMPAIGN_ID}/audio/resync`, { method: 'POST', credentials: 'same-origin' });
     };
+
+    // ---- Transport controls (GM-only) ----
+    // Idempotent fetches; the buttons disable themselves while pending.
+    async function _audioPost(path) {
+        if (typeof CAMPAIGN_ID === 'undefined') return;
+        try {
+            const resp = await fetch(`/campaign/${CAMPAIGN_ID}/audio/${path}`, {
+                method: 'POST', credentials: 'same-origin',
+            });
+            if (!resp.ok) console.warn(`audio/${path} failed: HTTP ${resp.status}`);
+        } catch (e) { console.warn(`audio/${path} failed:`, e); }
+    }
+    window.vttSkipTrack     = () => _audioPost('skip');
+    window.vttPreviousTrack = () => _audioPost('previous');
+    window.vttPauseAudio    = () => _audioPost('pause');
+    window.vttResumeAudio   = () => _audioPost('resume');
+    // Convenience: one toggle button can call this and the server figures
+    // out whether to pause or resume based on current state.
+    window.vttTogglePause   = () => currentPaused ? _audioPost('resume') : _audioPost('pause');
+
+    // Expose state read so the UI button can render the right glyph.
+    window.vttAudioIsPaused = () => currentPaused;
+    window.vttAudioHasTrack = () => currentTrackId != null;
 })();

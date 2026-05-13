@@ -8,6 +8,459 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [1.1.0] - 2026-05-13
+
+**Schema version:** 49
+**Commit summary:** Map folders, encounter editor inline labels, checkbox layout fixes
+**Description:** Maps in Campaign Settings can now be organised into named folders — each folder renders as a collapsible `<details>` group. A Folder column (auto-saves on blur, datalist autocomplete) and a Folder field in the upload form are added. The encounter editor fields (Name, Notes, Tags, Folder, Map, Playlist/Mode) now render their labels inline to the left of each input rather than stacked above, saving vertical space. The "Stop audio on load" and "Use spawn points" checkboxes have `flex-direction:row` enforced so the tick box is always to the left of the label text.
+
+### Added
+- Maps: `folder` column on the `maps` table (schema v49); maps in Campaign Settings are grouped into collapsible folder sections
+- Maps: Folder column in the map table (auto-saves on blur); Folder field in the Upload Map form; datalist autocomplete from existing map folders
+
+### Changed
+- Encounter editor: field labels (Name, Notes, Tags, Folder, Map, Playlist/Mode) now appear inline to the left of each input instead of stacked above — saves ~40 % of vertical height in the edit panel
+- Encounter editor: "Stop audio on load" and "Use spawn points" checkboxes explicitly use `flex-direction:row` so the checkbox is always visually to the left of the text
+
+### Schema
+- v49: `ALTER TABLE maps ADD COLUMN folder VARCHAR(120) DEFAULT ''`
+
+---
+
+## [1.0.0] - 2026-05-13
+
+**Schema version:** 48
+**Commit summary:** Encounter card redesign, tag auto-expand, character remove-from-campaign
+**Description:** Encounter cards are restructured — the thumbnail now fills the left side at full card height with a hover-reveal ▶ play button overlaid on it; the separate play button is removed. Meta info (token count, description, tags) moves to the right column beneath the action buttons. Selecting a tag in the encounter filter automatically expands any collapsed folders that contain matching encounters. Campaign Settings character management now detaches a character from the campaign instead of deleting it — the sheet and user assignment are preserved.
+
+### Changed
+- Encounter cards: thumbnail is now a tall left-column panel (52 px wide, full card height) with an overlay ▶ play button that appears on hover; separate ▶ load button removed from the action row
+- Encounter cards: meta info (token/init counts), description, and tag chips moved from below the thumbnail to below the action buttons in the right column
+- Encounter tag filter: selecting a tag auto-expands all folders that contain matching encounters
+- Campaign Settings → Characters: "Delete" button renamed to "Remove"; action now sets `campaign_id = NULL` on the character record rather than deleting it — the sheet and owner assignment are untouched
+
+---
+
+## [0.99.0] - 2026-05-12
+
+**Schema version:** 48
+**Commit summary:** GM "View as Player" preview mode
+**Description:** GMs can now open the tabletop rendered exactly as any player would see it. A "Preview Tabletop as Player" picker in Campaign Settings → People opens a new tab at `/campaign/{id}?view_as={user_id}`. The page renders with `is_gm=False` for the chosen player — their roll log (only rolls they can see), their Player tab, no GM Tools drawer, no token management, etc. A fixed amber banner at the top identifies the preview and provides an "Exit preview" link back to the GM view. The session gate is bypassed so the GM can preview even when the session is inactive.
+
+### Added
+- Campaign Settings → People: "Preview Tabletop as Player" section with a player dropdown and "👁 View as Player" button; opens `/campaign/{id}?view_as={user_id}` in a new tab
+- Tabletop route: `?view_as=<user_id>` query parameter; GM-only — verified the target is a campaign member before switching context
+- Tabletop: amber fixed banner shown in preview mode displaying the player name and an "Exit preview" link
+
+---
+
+## [0.98.1] - 2026-05-12
+
+**Schema version:** 48
+**Commit summary:** GM music panel speaker emoji replaced with mute toggle button
+**Description:** The 🔊 span in the GM Tools music progress bar is now a clickable button that toggles mute on/off. It shows 🔊 when unmuted and 🔇 when muted, with a matching tooltip. The slider auto-mutes/unmutes as before, and the button stays in sync.
+
+### Changed
+- GM Tools music panel: speaker emoji (`🔊`) replaced with `<button id="audio-mute">` that toggles mute; label updates to 🔇 when muted and back to 🔊 when unmuted
+- `audio.js`: mute button label/title kept in sync from the volume slider and on page load
+
+---
+
+## [0.98.0] - 2026-05-12
+
+**Schema version:** 48
+**Commit summary:** Open5e tab in Add Token modal, collapsible panel state persistence, TODO backlog additions
+**Description:** The Add Token modal on the tabletop now includes an Open5e tab — GMs can search any creature by name, preview its type/CR, and click "Import & Place" to import the template and drop a token at the viewport centre in one step. All `<details>` panels on the tabletop page (initiative, roll requests, encounters, music, token management, etc.) now remember their open/closed state per campaign in `localStorage` and restore automatically on page load. Three new backlog items were added to TODO.md: Playlist Builder with Existing Songs, Initiative Tracker Roll Prompt, and Philips Hue Integration.
+
+### Added
+- Add Token modal: new **Open5e** tab with live creature search (debounced, 350 ms), name/type/CR preview rows, and an "Import & Place" button that imports the creature template and places a token at the viewport centre
+- Tabletop: all `<details id="…">` panels persist their open/closed state to `localStorage` keyed by `vtt_details_{campaignId}_{panelId}`; state is restored on next load
+- TODO.md: Playlist Builder with Existing Songs, Initiative Tracker Roll Prompt, Philips Hue Integration backlog entries
+
+---
+
+## [0.97.0] - 2026-05-12
+
+**Schema version:** 48
+**Commit summary:** GM sound panel removed from Player tab; volume slider added to music progress bar
+**Description:** GMs no longer see the Sound section in the Player drawer — all audio controls are in GM Tools. The progress bar row in the GM Tools music panel now has a 🔊 volume slider occupying the right third of the line. The browser-autoplay unlock button (`audio-enable`) is also wired into the GM Tools panel so GMs can unblock audio without the player sound panel.
+
+### Changed
+- Player drawer: Sound section (`#player-sound-panel`) is now hidden for GMs; it remains visible for players
+- GM Tools music panel: progress bar row restructured — left 2/3 is the elapsed / track bar / total, right 1/3 is a 🔊 master volume slider (`id="audio-volume"`)
+- GM Tools music panel: `id="audio-enable"` (browser autoplay unlock) button added above the progress bar, hidden by default, shown by `audio.js` when needed
+
+---
+
+## [0.96.0] - 2026-05-12
+
+**Schema version:** 48
+**Commit summary:** Open5e creature search, spawn snapping fix, map dimension auto-detect
+**Description:** Adds an inline Open5e creature search panel to the token templates section so GMs can search and import any monster without leaving campaign settings. Fixes spawn point placement so any click within a grid cell reliably registers for that cell. Map uploads now auto-detect pixel dimensions from the image file (Pillow on the backend; Image/Video API on the frontend for instant pre-fill); the width/height fields remain editable as a fallback for video maps or manual override.
+
+### Added
+- Token Templates: "🔍 Open5e" button opens an inline search panel; type to search creatures, click Import to create a D&D 5e token template in one step (uses existing `/api/open5e/monsters` proxy and `/api/campaign/{id}/templates/import-monster` endpoint)
+- Map upload: client-side dimension detection via `Image`/`Video` API — width and height fields auto-populate when a file is selected, with a "✓ Dimensions detected from image" confirmation note
+- `Pillow` added to `requirements.txt` for server-side image dimension detection
+
+### Changed
+- Open5e base URL is now read from `OPEN5E_BASE_URL` env var (defaults to `https://api.open5e.com`) across all creature-fetching endpoints in tabletop_routes.py
+- Spawn point snapping changed from `Math.round` to `Math.floor` so clicking anywhere within a grid cell places the spawn in that cell, not the nearest grid-line intersection (affects both mouse and touch handlers)
+- Map upload (both `/campaign/{id}/settings/maps` and admin route): if the uploaded file is an image, Pillow reads its actual pixel dimensions and overrides the form values
+
+---
+
+## [0.95.0] - 2026-05-12
+
+**Schema version:** 48
+**Commit summary:** Initiative tracker battle controls + UI declutter + multi-select token picker
+**Description:** Moves all battle management into the Initiative tracker (GM-only), removes the dedicated Battle tab and drawer, cleans up header labels, increases encounter folder font size with bold-on-open, adds multi-select to the player token modal, and updates token cards to use portrait thumbnails prominently.
+
+### Changed
+- Initiative tracker: From Map / +Character / +Manual / Roll All combatant buttons moved to top of initiative panel (GM-only)
+- Initiative tracker: ◀ / Next ▶ / ↺ Start / 🗑 navigation buttons now appear above the initiative list instead of below
+- Removed Battle tab button and Battle drawer panel entirely
+- Removed "Player" heading text from the Player drawer (tab label unchanged)
+- Removed "GM Tools" heading text from the GM Tools drawer (tab label unchanged)
+- Encounter folders: font size increased from 10px to 13px; folder name bolds when expanded
+- Token selector (Players tab): cards now toggle a selection state; a "Place Selected (N)" button places all chosen characters at once; removing an on-map token still works with a single click
+
+---
+
+## [0.94.0] - 2026-05-12
+
+**Schema version:** 48
+
+**Commit summary:** Encounter save form — map-tag auto-fill, song mode, folder dropdown, stop-audio inline
+
+**Description:** Four improvements to the encounter save form. Selecting a map now auto-populates the Tags field with that map's tags. Playback mode gains a "Song" option that shows a track picker populated from the selected playlist; the chosen track is stored in a new `auto_play_track_id` column on `encounters` (schema v48) and played directly on load. The folder field is replaced with a smart dropdown showing existing folders plus a "+ New folder…" sentinel that reveals a text input. The "Stop audio on load" checkbox moves inline with the playback mode selector.
+
+### Added
+- `auto_play_track_id` nullable FK column on `encounters` (schema v48)
+- "Song" playback mode: stores a specific track and seeks it on encounter load
+- Song picker `<select>` that populates from the chosen playlist's tracks
+- Folder dropdown built from existing encounter folders; "+ New folder…" reveals a text input
+- `ENC_MAP_TAGS` and `PLAYLIST_TRACKS` JS constants emitted from Jinja2 for client-side lookups
+
+### Changed
+- Selecting a map in the encounter save form auto-fills the Tags field
+- Stop audio on load checkbox moved inline with the playback mode selector
+- Map/playlist selectors moved to a 2-column row; mode row is separate
+
+### Schema
+- `encounters.auto_play_track_id INTEGER` — nullable FK → `playlist_tracks.id ON DELETE SET NULL`
+
+---
+
+## [0.93.0] - 2026-05-12
+
+**Schema version:** 47
+
+**Commit summary:** Wider sidebar, map upload progress bar, inline grid size editing
+
+**Description:** Three UX improvements. The tabletop sidebar is widened from 430 px to 480 px. Map uploads in campaign settings now show an XHR-based progress bar with a percentage counter instead of a blank wait; the page reloads automatically on completion. The map table now has an editable grid size field per row that saves on blur via a new `POST /campaign/{id}/settings/maps/{id}/grid_size` endpoint, matching the existing inline name and tags editing pattern.
+
+### Added
+- Map upload progress bar (XHR + `upload.onprogress`); page auto-reloads on success
+- Inline grid size input in the campaign settings map table, saved on blur
+- `POST /campaign/{campaign_id}/settings/maps/{map_id}/grid_size` backend route
+
+### Changed
+- Sidebar width increased from 430 px to 480 px (tab bar and panels wrapper updated to match)
+- Map upload size label updated from 25 MB to 80 MB to match the raised backend limit
+
+---
+
+## [0.92.8] - 2026-05-12
+
+**Schema version:** 47
+
+**Commit summary:** Raise map upload limit from 25 MB to 80 MB
+
+**Description:** The per-file size check on map uploads is raised to 80 MB in both the admin portal route (`admin_routes.py`) and the campaign-settings route (`tabletop_routes.py`). No other limits (audio, portraits, thumbnails) are changed.
+
+### Changed
+- Map upload size cap raised from 25 MB to 80 MB in `admin_routes.py` and `tabletop_routes.py`
+
+---
+
+## [0.92.7] - 2026-05-12
+
+**Schema version:** 47
+
+**Commit summary:** Quick-die buttons stack expressions instead of auto-rolling
+
+**Description:** Clicking a quick-die button (d4, d6, d8 …) now appends the die to the current expression field (`1d6` → `1d6+1d8`) rather than replacing it and auto-submitting. The roll only fires when the Roll button is pressed, giving players time to build multi-die expressions by clicking several buttons in sequence.
+
+### Changed
+- Quick-die buttons append `+{expr}` to `roll-expr` instead of replacing it and auto-submitting the form
+
+---
+
+## [0.92.6] - 2026-05-12
+
+**Schema version:** 47
+
+**Commit summary:** Merge dice roller and Roll Request into a single combined footer
+
+**Description:** The dice roller form and Roll Request panel are now one unified section at the bottom of the Roll Log drawer. All users share the expression input and quick-dice buttons; clicking a die populates `roll-expr` which the Roll Request also reads when posting. The GM-only Roll Request block sits below, separated by a border and labelled "GM only", and remains collapsible. The separate `rr-expr` input and `rr-expr-die` button row are removed. The visibility selector for the roll request moves to the send row (right-aligned).
+
+### Changed
+- Dice roller and Roll Request merged into one footer section
+- Roll Request reads `roll-expr` (shared with the roller) instead of its own expression field
+- `rr-expr` input and `rr-expr-die` quick-die row removed
+- Roll Request visibility selector moved inline with the Post to Log / Clear buttons
+- GM-only Roll Request block separated by a border with a "GM only" label in the summary
+
+### Removed
+- Separate Roll Request footer `<div>` (merged into the roller footer)
+- `rr-expr` input field
+- `rr-expr-die` button row
+
+---
+
+## [0.92.5] - 2026-05-12
+
+**Schema version:** 47
+
+**Commit summary:** Roll Request — dice buttons populate expression field
+
+**Description:** The system's quick-dice buttons (d4, d6, d8, etc.) now appear inside the Roll Request panel as a second row. Clicking one fills the dice expression field instead of auto-rolling, giving the GM a fast way to set a custom expression without typing. These buttons use a dedicated `rr-expr-die` class so they don't trigger the main roller's auto-submit behaviour.
+
+### Added
+- Quick-dice row inside Roll Request panel; clicking a die button populates `#rr-expr`
+
+---
+
+## [0.92.4] - 2026-05-12
+
+**Schema version:** 47
+
+**Commit summary:** Roll Request — hover tooltips, larger DC input, DC preset buttons
+
+**Description:** Three UX improvements to the Roll Request panel. All interactive elements now carry `title` tooltip text: the Save/Check mode buttons describe what saving throws and ability checks are; each attribute button (STR–CHA) lists the skills and situations it covers. The DC input is rendered larger (14 px bold) so the value is easier to read at a glance. Three DC preset buttons — 10 (Normal), 18 (Challenging), 21 (Extremely Difficult) — sit inline with the DC field and populate it on click.
+
+### Added
+- `title` tooltip on the Save mode button explaining saving throws
+- `title` tooltip on the Check mode button explaining ability checks
+- `title` tooltips on STR/DEX/CON/INT/WIS/CHA attribute buttons listing relevant skills
+- DC preset buttons: **10** Normal, **18** Challenging, **21** Extremely Difficult
+- `.rr-dc-preset` CSS class for preset button styling
+
+### Changed
+- DC input font size increased to 14 px bold for legibility
+
+---
+
+## [0.92.3] - 2026-05-12
+
+**Schema version:** 47
+
+**Commit summary:** Roll Request — toggle between Saving Throw / Ability Check with combined attribute buttons
+
+**Description:** The Roll Request panel previously showed two separate rows of six buttons each (one for saves, one for checks), totalling twelve buttons. Now there is a single row of six attribute buttons (STR / DEX / CON / INT / WIS / CHA) and a two-state toggle above them. The toggle controls whether clicking an attribute fires a saving throw or an ability check request; the label and stat key are derived from the combination at click time. Switching the toggle while an attribute is already selected updates the label and stat key immediately.
+
+### Changed
+- Replaced 12 fixed `rr-quick` buttons (6 saves + 6 checks) with a Saving Throw / Ability Check mode toggle and 6 combined attribute buttons
+- JS derives `label` and `stat_key` from the selected attribute + current mode at click time
+- Switching the mode toggle updates the label/stat of any already-selected attribute button
+
+---
+
+## [0.92.2] - 2026-05-12
+
+**Schema version:** 47
+
+**Commit summary:** Move Roll Request to bottom of Roll Log drawer
+
+**Description:** The GM-only Roll Request panel moves from the GM Tools drawer to the bottom of the Roll Log drawer, where it sits directly beneath the dice roller form. The collapsible `<details>` behaviour is preserved. The panel is gated on `is_gm` so players never see it.
+
+### Changed
+- Roll Request `<details>` panel relocated from GM Tools drawer to the fixed footer of the Roll Log drawer
+- Removed Roll Request from GM Tools drawer
+
+---
+
+## [0.92.1] - 2026-05-12
+
+**Schema version:** 47
+
+**Commit summary:** Player sidebar layout tweaks — initiative buttons, volume slider, mute placement
+
+**Description:** Three small layout improvements to the Player drawer. GM initiative controls (◀ / Next ▶ / ↺ Start / 🗑) now appear below the combatant list rather than above it, so the list reads top-to-bottom before showing controls. The Vol label and range slider are now on a single line. The 🔈 mute button moves from the Vol row to sit beside the ⟳ Resync button.
+
+### Changed
+- GM initiative control buttons rendered after `#initiative-list` instead of before it
+- Vol label and volume slider placed on one flex row
+- Mute button moved from the Vol row to the Resync/controls row
+
+---
+
+## [0.92.0] - 2026-05-12
+
+**Schema version:** 47
+
+**Commit summary:** Sidebar always visible — remove collapse, pin, and close controls
+
+**Description:** The sidebar is now permanently visible; there is no way to hide or collapse it. The animated slide-in/slide-out drawer system is replaced with a static 430 px column with a tab bar for switching between panels. The open-arrow button, pin button, and all per-panel close buttons are removed. Tab state is persisted to `localStorage` so the last-visited panel is restored on reload. The mobile media query is simplified: on narrow screens the map pane is hidden and the sidebar expands to full width as before, but all dead references to the removed elements are stripped.
+
+### Changed
+- Sidebar is now always 430 px wide — no collapse, no slide animation
+- Replaced animated drawer controller JS with a minimal tab-switcher (open/pin/close logic removed)
+- Tab selection persisted to `localStorage` per campaign; last tab is restored on page load
+- Removed `#drawer-open-btn` (open-arrow), `#drawer-pin-btn` (pin button), and all `<button class="drawer-close">` buttons from the HTML
+- Simplified `@media (max-width: 640px)` block: removed dead `.is-open`, `#drawer-open-btn`, and `#drawer-pin-btn` references
+
+---
+
+## [0.91.0] - 2026-05-12
+
+**Schema version:** 47
+
+**Commit summary:** Sidebar reorganisation — initiative and sound to Player, token management to GM Tools, HP thresholds
+
+**Description:** Major sidebar restructure. The initiative tracker (with GM controls) and a compact sound panel move to the top of the Player drawer so all users see turn order in one place. Token Management moves from the Battle drawer to GM Tools. The Settings drawer is removed — its only content (sound) is now in Player. The Battle drawer becomes a GM-only tab for adding combatants. Players no longer see raw HP or initiative numbers in the tracker; instead they see a named threshold label (Healthy / Wounded / Bloodied / Critical / Dead by default) coloured by health level. GMs can rename the five threshold labels in Campaign Settings → Basic info. A new `hp_thresholds` JSON column on the `campaigns` table stores per-campaign threshold labels.
+
+### Added
+- HP threshold system: players see a named label (e.g. "Bloodied") instead of raw HP in the initiative tracker
+- `hp_thresholds` JSON column on `campaigns` table (schema v47); defaults to five built-in labels
+- GM threshold editor in Campaign Settings → Basic info: rename any of the five labels, boundaries fixed at ≥76 / ≥51 / ≥26 / ≥1 / 0 %
+- `hpThreshold()` JS helper driven by the server-supplied `HP_THRESHOLDS` constant
+
+### Changed
+- Initiative tracker moved from Battle drawer to top of Player drawer (visible to all users)
+- Sound controls moved from Settings drawer to Player drawer as a compact collapsible card
+- Token Management moved from Battle drawer to GM Tools drawer
+- Settings drawer removed (was sound-only; sound now lives in Player)
+- Battle drawer is now GM-only (tab button gated on `is_gm`); contains only add-combatant controls
+- Player view of initiative list no longer shows initiative number or raw HP — shows turn order + threshold label only
+- GM view unchanged: editable initiative, HP cur/max, remove button
+
+### Schema
+- `campaigns.hp_thresholds JSON` — nullable; null means use application defaults
+
+---
+
+## [0.90.7] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Expose WebM/MP4 animated maps in file pickers
+
+**Description:** The backend already accepted `video/webm` and `video/mp4` for map uploads and rendered them as looping `<video>` elements on the tabletop. The file picker `accept` attribute on both the admin and campaign-settings map upload forms was still restricted to `image/*`, which hid video files in the OS file dialog. Updated both inputs to `accept="image/*,video/mp4,video/webm"` and updated the label copy to reflect the supported formats.
+
+### Fixed
+- Map upload file picker in admin (`admin_campaign.html`) now accepts `.mp4` and `.webm` in addition to images
+- Map upload file picker in campaign settings (`campaign_settings.html`) now accepts `.mp4` and `.webm` in addition to images
+
+---
+
+## [0.90.6] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Make Roll Request, Music, and Characters collapsible cards in the sidebar
+
+**Description:** Four sidebar sections are now wrapped in collapsible `<details>` cards matching the existing pattern used by Encounters and Token Management. Roll Request and Music (both in the GM Tools drawer) and Characters (Player drawer) gain a chevron summary header and can be collapsed to save vertical space. Collapsed state is controlled natively by the browser `<details>` element; all sections default to open.
+
+### Changed
+- Wrapped Roll Request section in `<details id="roll-request-panel">` with chevron summary (GM Tools drawer)
+- Wrapped Music section in `<details id="music-panel">` with chevron summary (GM Tools drawer)
+- Wrapped character list in `<details id="player-chars-panel">` with "Characters" chevron summary (Player drawer)
+- Added CSS chevron-flip rules for `#roll-request-panel`, `#music-panel`, and `#player-chars-panel`
+
+---
+
+## [0.90.5] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Fix map not rendering and encounters folders not loading after panel reorganisation
+
+**Description:** Two regressions introduced when the encounters panel was moved and the animated map background layer was added. The canvas `background:#222` CSS was blocking the bg-layer from showing through transparent canvas pixels; removing it restores map rendering. The encounters controller `<script>` block is located above the encounters HTML in the DOM; wrapping the IIFE in `DOMContentLoaded` ensures `document.getElementById('encounters-list')` resolves successfully before the controller initialises.
+
+### Fixed
+- Removed `background:#222` from the tabletop canvas inline style so the animated/static bg-layer element behind it is visible through transparent canvas pixels
+- Wrapped the encounters controller IIFE in `document.addEventListener('DOMContentLoaded', …)` so the script no longer exits early when the encounters panel HTML hasn't been parsed yet
+
+---
+
+## [0.90.4] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Move Encounters panel from Battle drawer to GM Tools drawer
+
+**Description:** The Encounters panel (save, load, search, tag filter) now lives at the top of the ⚙ GM Tools drawer instead of inside the ⚔ Battle drawer. The Battle drawer remains visible to all players and now only contains initiative tracking and token management. The encounters controller script and all element IDs are unchanged so no backend or data changes are required.
+
+### Changed
+- Moved `#encounters-panel` HTML from the Battle drawer to the top of the GM Tools drawer
+- Removed the "GM only" badge from the encounters summary since the entire GM Tools drawer is already GM-gated
+- Replaced the top `border-top` separator with a `border-bottom` to suit the new position at the top of the drawer
+
+---
+
+## [0.90.3] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Clamp tabletop pan so at least one grid square stays visible
+
+**Description:** Panning the map can no longer push it entirely off-screen. A `clampPan()` guard runs inside `applyTransform()` — the single call-site for all pan/zoom changes — and enforces that at least one grid square's worth of map remains inside the viewport at all times. The constraint applies to mouse drag, scroll-wheel zoom, pinch-to-zoom, touch pan, and restored GM view positions.
+
+### Changed
+- Added `clampPan()` to `applyTransform()` in `tabletop.js`; enforces a minimum one-grid-square overlap between the map canvas and the visible pane on every transform update
+
+---
+
+## [0.90.2] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Add From Map button to populate initiative tracker from active map tokens
+
+**Description:** A new "🗺 From Map" button in the Battle drawer adds every token currently on the active map to the initiative list in one click. Character tokens resolve DEX modifier, initiative bonus, and current HP from their linked character sheet; NPC tokens pull the same stats from their token template sheet. Tokens already in the tracker are skipped so clicking the button a second time is safe. "Roll All" continues to work as before.
+
+### Added
+- "🗺 From Map" button in the GM battle controls that bulk-adds all tokens on the active map as combatants, deduplicating against entries already in the list
+- `combatantFromToken()` helper that resolves DEX mod and HP from a linked character sheet or token template sheet
+- `_hpFromSheet()` helper that handles both numeric and object HP fields across character and NPC sheets
+
+---
+
+## [0.90.1] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Upload audio tracks one at a time with per-file progress bar
+
+**Description:** The audio upload form now sends each selected file as a separate XHR request and displays a progress bar while each one transfers. The label updates to show "Uploading X of Y: filename" as the queue advances, and the page reloads automatically once all files finish. Any file that fails shows an inline error without aborting the remaining queue.
+
+### Changed
+- Replaced native form submission for audio uploads with a sequential XHR loop that uploads one file per request
+- Progress bar and status label appear below the upload zone during transfer; page reloads ~700 ms after the last file completes
+- Submit button now reads "Upload N files" when multiple files are selected
+
+---
+
+## [0.90.0] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Add animated map support for GIF and WebM/MP4 video backgrounds
+
+**Description:** Map backgrounds are now rendered as native HTML elements instead of being drawn onto the canvas, allowing animated GIFs to play and WebM/MP4 video files to loop continuously. The canvas remains on top and draws only the grid and tokens, which are composited transparently over the background layer. Both new formats can be uploaded through the GM campaign settings and the admin portal. No operator action required.
+
+### Added
+- Accept `video/webm` and `video/mp4` MIME types for map image uploads in both the admin and GM settings upload routes
+- Render animated map backgrounds via a `<img>` (for images and GIFs) or `<video autoplay loop muted>` (for WebM/MP4) element placed behind the canvas; the element receives the same pan/zoom transform as the canvas
+
+### Changed
+- Map background is no longer drawn via `ctx.drawImage()` on the canvas; the canvas is now transparent so the HTML background layer shows through beneath the grid and tokens
+- `gif-token-overlay` given explicit `z-index:2` to maintain correct stacking order above the new background layer
+
+---
+
 ## Instructions for AI agents updating this file
 
 Read this section in full before modifying any version-related file. Follow it exactly.
@@ -85,6 +538,830 @@ Each release section must include all five of these, in this order:
 (Replace `X.Y.Z`, `YYYY-MM-DD`, and `N` with actual values when you copy this.)
 
 ---
+
+## [0.89.0] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Show content source on race and subclass headers and in the picker dropdowns
+
+**Description:** The character sheet now visibly distinguishes content sources for races, subclasses, and the multi-class subclass blocks. A small coloured pill appears next to the rendered name — green "SRD" for shipped FS files, orange "Custom" for campaign-authored homebrew, and blue "Open5e" for content fetched from the mirror or live API. Class, subclass, and race picker dropdowns also suffix each option with its source (e.g. "Hill Dwarf · SRD", "My Race · Custom", "Some Race · 5e Core Rules") so users can pick the version they want when multiple sources expose the same name. No backend or schema changes.
+
+### Added
+- ``_sourceBadgeSpec`` / ``_appendSourceBadge`` helpers in ``app/static/sheet.js`` covering ``local-custom``, ``local-srd``, ``open5e_mirror``, and ``open5e_live``. Each badge carries a tooltip explaining what the source means and where to go to manage it.
+- Source suffixes in ``populateSelect`` so class / subclass / race dropdowns show the origin of each entry inline. Empty/missing source renders as the bare name.
+
+### Changed
+- ``renderSubclassFeatures``, ``renderRaceTraits``, and the per-class-block ``_renderSubclassBlock`` headers now call the shared badge helper. Previously only ``local-custom`` content was visually marked; SRD and Open5e content now also display their source.
+
+---
+
+## [0.88.0] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Ship Paladin, Ranger, Bard, and Monk SRD classes — finishing the local SRD class baseline
+
+**Description:** Phase 3 of the class-content rollout — the four remaining SRD classes (half-casters and hybrids) are now served from on-disk JSON. Combined with the existing Druid and the Phase 1/2 classes, every SRD 5.1 class now ships locally alongside its SRD-listed subclass. Subclass slugs match Open5e (``oath-of-devotion``, ``hunter``, ``college-of-lore``, ``way-of-the-open-hand``) so detail lookups by Open5e listing slug resolve locally. The full SRD baseline (12 classes × the SRD-listed subclass for each, plus Druid's two) is now in.
+### Added
+- ``app/data/local/dnd5e/class_features/paladin.json`` — d10, Cha half-caster, Divine Sense / Lay on Hands pools, 4 Fighting Styles, Divine Smite slot scaling, Aura of Protection / Courage with 10ft→30ft range bump, Improved Divine Smite, Cleansing Touch.
+- ``app/data/local/dnd5e/class_features/ranger.json`` — d10, Wis half-caster (known list), Favored Enemy and Natural Explorer with full SRD lists, 4 Fighting Styles, Primeval Awareness, Land's Stride, Hide in Plain Sight, Vanish, Feral Senses, Foe Slayer.
+- ``app/data/local/dnd5e/class_features/bard.json`` — d8, Cha full caster with ritual casting, Bardic Inspiration with die scaling and Font of Inspiration short-rest recharge at L5, Jack of All Trades, Song of Rest, Expertise (L3 + L10), Countercharm, Magical Secrets at L10/14/18, Superior Inspiration.
+- ``app/data/local/dnd5e/class_features/monk.json`` — d8, no spellcasting, Unarmored Defense (Dex + Wis), Martial Arts with die scaling, Ki with full point pool / DC formula, Flurry of Blows / Patient Defense / Step of the Wind, Unarmored Movement speed bumps, Deflect Missiles, Slow Fall, Stunning Strike, Ki-Empowered Strikes, Evasion, Stillness of Mind, Purity of Body, Tongue of the Sun and Moon, Diamond Soul, Timeless Body, Empty Body, Perfect Self.
+- ``app/data/local/dnd5e/subclass_features/paladin__oath-of-devotion.json`` — Oath Spells table, Channel Divinity: Sacred Weapon, Channel Divinity: Turn the Unholy, Aura of Devotion, Purity of Spirit, Holy Nimbus.
+- ``app/data/local/dnd5e/subclass_features/ranger__hunter.json`` — Hunter's Prey / Defensive Tactics / Multiattack / Superior Hunter's Defense, each with the SRD's three-option pick.
+- ``app/data/local/dnd5e/subclass_features/bard__college-of-lore.json`` — Bonus Proficiencies, Cutting Words, Additional Magical Secrets, Peerless Skill.
+- ``app/data/local/dnd5e/subclass_features/monk__way-of-the-open-hand.json`` — Open Hand Technique, Wholeness of Body, Tranquility, Quivering Palm.
+
+---
+
+## [0.87.0] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Ship Wizard, Cleric, Sorcerer, and Warlock SRD classes with their SRD subclasses
+
+**Description:** Phase 2 of the class-content rollout — the four SRD core spellcaster classes are now served from on-disk JSON, alongside Druid plus the Phase 1 martials. Each class file sets the correct ``spellcasting_ability`` field (int / wis / cha / cha), embeds the relevant spellcasting mechanics in the features blob (cantrips known, prepared vs known casters, ritual rules, pact-magic slot scaling for Warlock), and ships its SRD subclass as a structured features list. Slugs match Open5e so subclass detail lookups by Open5e listing slug resolve locally (``school-of-evocation``, ``life-domain``, ``draconic-bloodline``, ``the-fiend``).
+
+### Added
+- ``app/data/local/dnd5e/class_features/wizard.json`` — d6, Int caster, prepared list, Spellcasting, Arcane Recovery, Arcane Tradition, Spell Mastery, Signature Spells.
+- ``app/data/local/dnd5e/class_features/cleric.json`` — d8, Wis caster, prepared list, Spellcasting, Divine Domain (chosen at L1), Channel Divinity / Turn Undead with scaling uses, Destroy Undead CR thresholds, Divine Intervention.
+- ``app/data/local/dnd5e/class_features/sorcerer.json`` — d6, Cha caster, known list, Spellcasting, Sorcerous Origin, Font of Magic with sorcery-point / slot exchange table, eight Metamagic options described in-line, Sorcerous Restoration.
+- ``app/data/local/dnd5e/class_features/warlock.json`` — d8, Cha caster, Pact Magic with full slot-count / slot-level scaling, Eldritch Invocations, three Pact Boon choices (Chain / Blade / Tome), Mystic Arcanum, Eldritch Master.
+- ``app/data/local/dnd5e/subclass_features/wizard__school-of-evocation.json`` — Evocation Savant, Sculpt Spells, Potent Cantrip, Empowered Evocation, Overchannel.
+- ``app/data/local/dnd5e/subclass_features/cleric__life-domain.json`` — Domain Spells table, Bonus Proficiency (heavy armor), Disciple of Life, Channel Divinity: Preserve Life, Blessed Healer, Divine Strike, Supreme Healing.
+- ``app/data/local/dnd5e/subclass_features/sorcerer__draconic-bloodline.json`` — Dragon Ancestor color table, Draconic Resilience, Elemental Affinity, Dragon Wings, Draconic Presence.
+- ``app/data/local/dnd5e/subclass_features/warlock__the-fiend.json`` — Expanded Spell List, Dark One's Blessing, Dark One's Own Luck, Fiendish Resilience, Hurl Through Hell.
+
+---
+
+## [0.86.0] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Ship Fighter, Barbarian, and Rogue SRD classes locally with Champion, Berserker, and Thief subclasses
+
+**Description:** Phase 1 of the class-content rollout — the three SRD martial classes (no spellcasting) and their SRD-listed subclasses are now served from on-disk JSON, alongside the existing Druid. Each class file carries full proficiencies, equipment choices, multiclass prerequisites, and a markdown blob of leveled features from 1st through 20th level. Each subclass file ships its features as the structured ``[{name, level, desc}]`` list the renderer prefers. Slugs match Open5e (``champion``, ``path-of-the-berserker``, ``thief``) so detail lookups by Open5e listing slug resolve locally.
+
+### Added
+- ``app/data/local/dnd5e/class_features/fighter.json`` — d10 hit die, all armor + shields, Str/Con saves, 6 fighting styles described in-line, Second Wind, Action Surge, Extra Attack scaling, Indomitable.
+- ``app/data/local/dnd5e/class_features/barbarian.json`` — d12 hit die, light/medium/shields, Str/Con saves, Rage with full damage / uses scaling table, Unarmored Defense, Reckless Attack, Danger Sense, Brutal Critical scaling, Relentless / Persistent Rage, Indomitable Might, Primal Champion.
+- ``app/data/local/dnd5e/class_features/rogue.json`` — d8 hit die, light armor + thieves' tools, Dex/Int saves, Expertise, Sneak Attack with full 1d6→10d6 scaling, Thieves' Cant, Cunning Action, Uncanny Dodge, Evasion, Reliable Talent, Blindsense, Slippery Mind, Elusive, Stroke of Luck.
+- ``app/data/local/dnd5e/subclass_features/fighter__champion.json`` — Improved Critical, Remarkable Athlete, Additional Fighting Style, Superior Critical, Survivor.
+- ``app/data/local/dnd5e/subclass_features/barbarian__path-of-the-berserker.json`` — Frenzy, Mindless Rage, Intimidating Presence, Retaliation.
+- ``app/data/local/dnd5e/subclass_features/rogue__thief.json`` — Fast Hands, Second-Story Work, Supreme Sneak, Use Magic Device, Thief's Reflexes.
+
+---
+
+## [0.85.0] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Merge shipped FS classes into the classes search endpoint and admin stubs
+
+**Description:** Mirrors the 0.83.0 races change for classes. ``/api/open5e/classes`` now lists shipped FS classes between campaign homebrew and Open5e results, with dedupe-by-slug, so the picker surfaces the SRD baseline even when Open5e is unreachable. ``list_local_classes()`` now returns dicts (slug + name + hit die + file) to match the equivalent races helper, and the admin "Local-features stubs" Classes section renders as a table for parity with the Races and Subclasses sections. No schema change. The ``/admin/stubs.json`` shape changes for the ``local_classes`` field — admin-only and used for scripting; any consumer iterating string slugs needs to read ``entry["slug"]`` instead.
+
+### Added
+- Shipped FS classes are merged into ``/api/open5e/classes`` search results (between campaign homebrew and Open5e), with dedupe-by-slug. When Open5e is unreachable the picker now still lists the SRD baseline.
+
+### Changed
+- ``local_features.list_local_classes()`` now returns ``[{slug, name, hit_die, file}]`` instead of a bare ``list[str]``. The admin stubs Classes section renders as a table consistent with the Races and Subclasses sections.
+
+---
+
+## [0.84.0] - 2026-05-12
+
+**Schema version:** 46
+
+**Commit summary:** Extend the system column to every Custom* table for symmetric multi-system support
+
+**Description:** Follow-on to 0.83.0 — the ``system`` column introduced on ``CustomRace`` is now also present on ``CustomClass``, ``CustomSubclass``, ``CustomBackground``, ``CustomFeat``, and ``CustomMonster``. All six tables default to ``dnd5e`` for existing rows, so this remains purely additive and requires no operator action. With every campaign-authored content type now system-aware, the day a second system arrives there's no asymmetric backfill to chase.
+
+### Schema
+- Added ``system VARCHAR(40) NOT NULL DEFAULT 'dnd5e'`` to ``custom_classes``, ``custom_subclasses``, ``custom_backgrounds``, ``custom_feats``, and ``custom_monsters``. Resolver and search endpoints don't filter on it yet; the column ships ahead of need.
+- ``SCHEMA_VERSION`` bumped from 45 to 46.
+
+---
+
+## [0.83.0] - 2026-05-12
+
+**Schema version:** 45
+
+**Commit summary:** Ship nine SRD races locally and namespace shipped content by game system
+
+**Description:** The nine D&D 5e SRD races (Hill Dwarf, High Elf, Lightfoot Halfling, Human, Dragonborn, Rock Gnome, Half-Elf, Half-Orc, Tiefling) are now served from on-disk JSON, so race pickers and race-detail lookups work offline against the SRD baseline. Shipped filesystem content has been moved under a game-system root — `app/data/local/dnd5e/` — so a future second system can ship alongside without renames. ``CustomRace`` gains a ``system`` column (default ``dnd5e``) to mirror the same partitioning for campaign-authored homebrew. No operator action required; the column is added automatically on next boot.
+
+### Added
+- Nine race JSON files under ``app/data/local/dnd5e/races/`` covering the SRD 5.1 baseline. Each flattens base race + SRD subrace traits into one playable record (e.g. ``hill-dwarf.json`` contains both shared Dwarf traits and the Hill Dwarf subrace bonuses), mirroring how Open5e returns subrace-slug lookups.
+- ``local_features._fs_race_provider`` now actually reads files (was a no-op stub). Speed is normalised from int to ``{"walk": int}`` so the race-detail adapter handles FS and DB records uniformly.
+- ``local_features.list_local_races()`` discovery helper used by ``/admin/stubs``.
+- Shipped FS races are merged into ``/api/open5e/races`` search results (positioned between campaign homebrew and Open5e), with dedupe-by-slug. When Open5e is unreachable the picker now still lists the SRD baseline.
+- Admin "Local-features stubs" page gains a Races table alongside the existing Classes and Subclasses tables; ``/admin/stubs.json`` exposes the same list.
+
+### Changed
+- ``app/data/local/{class_features,subclass_features}/`` moved to ``app/data/local/dnd5e/{class_features,subclass_features}/``. The existing Druid class + Circle of the Land / Circle of the Moon subclass files relocate accordingly. ``_CLASS_DIR``, ``_SUBCLASS_DIR``, and the new ``_RACE_DIR`` constants in ``app/local_features.py`` now resolve under the ``dnd5e`` subtree.
+
+### Schema
+- ``custom_races.system VARCHAR(40) NOT NULL DEFAULT 'dnd5e'`` — reserved for future multi-system support. The resolver and search endpoints do not filter on it yet; the column ships ahead of need so the day a second system arrives there's no backfill required.
+- ``SCHEMA_VERSION`` bumped from 44 to 45.
+
+---
+
+## [0.82.0] - 2026-05-12
+
+**Schema version:** 44
+
+**Commit summary:** Pin the currently-running encounter in the Battle drawer and tidy the encounters panel layout
+
+**Description:** The Battle drawer's Encounters panel now keeps the currently-loaded encounter visible at all times. Loading an encounter records it on the campaign; the panel summary surfaces its name as a chip even when the panel is collapsed, and the matching row in the list gets a cyan-tinted highlight when expanded. Two layout fixes ride along: the Sort label/select now renders inline (the global ``label`` rule had been forcing the select onto a new line) on both the tabletop Battle drawer and the campaign-settings library, and folder summaries gain a rotating ▶ chevron so it's obvious they expand on click.
+
+### Added
+- ``Campaign.current_encounter_id`` (nullable FK → encounters, ON DELETE SET NULL). Set by ``_perform_encounter_load`` whenever an encounter is loaded (via the explicit Load endpoint or the session-start auto-load hook). Cleared automatically if the encounter is deleted.
+- ``is_current`` flag on every row returned by ``GET /api/campaign/{id}/encounters`` (true for the one matching ``campaign.current_encounter_id``).
+- New ``#enc-current-chip`` element in the tabletop Encounters panel summary — shows ``▶ <encounter name>`` while a current encounter exists. Hidden when none is set.
+
+### Changed
+- Tabletop Encounters panel: rows for the current encounter render with a cyan border + background tint to distinguish them from the rest of the library.
+- Tabletop + campaign-settings Encounter "Sort" label: inline-flex now forces ``flex-direction: row`` so the global ``label { flex-direction: column }`` rule from ``style.css`` can't push the select onto its own line.
+- Tabletop + campaign-settings encounter folder summaries: native marker suppressed (``list-style: none``) and replaced with a ``▶`` chevron span that rotates 90° on open, matching the existing panel chevron affordance.
+- ``app/version.py``, ``README.md``, ``CHANGELOG.md`` — MINOR bump to 0.82.0. ``SCHEMA_VERSION`` bumped from 43 to 44.
+
+### Schema
+- New ``campaigns.current_encounter_id`` column (INTEGER NULL, FK → encounters(id) ON DELETE SET NULL). Inline migration in ``_apply_inline_migrations()``; existing campaigns get NULL until their next encounter load.
+- ``SCHEMA_VERSION`` bumped from 43 to 44.
+
+## [0.81.0] - 2026-05-12
+
+**Schema version:** 43
+
+**Commit summary:** Add per-user tabletop zoom-speed slider and damp the default iPad pinch sensitivity
+
+**Description:** Pinch zoom on iPad was twitchy because the raw `newDist/startDist` ratio is way too sensitive on a small touchscreen. v0.81 introduces a `User.zoom_speed` multiplier (default 1.0, range 0.3–1.5) applied to both wheel and pinch, plus a baked-in 0.6 baseline dampener on pinch. At default settings: wheel feels the same as before, pinch is roughly 60% as sensitive as v0.79.0. A slider on the user-settings page lets each user tune the multiplier for their devices; the value is saved on the account so it carries across browsers.
+
+### Added
+- `User.zoom_speed` (FLOAT NOT NULL DEFAULT 1.0). Schema v43 inline migration adds the column with the safe default so every existing user keeps their pre-v0.81 wheel feel.
+- `POST /api/settings/zoom_speed` (auth-required). Body: `{zoom_speed: float}`. Server clamps to `[0.3, 1.5]` with `_coerce_zoom_speed`. NaN / non-numeric → 1.0.
+- **User settings → 🔭 Tabletop zoom speed** section with a 0.3–1.5 slider (step 0.1). Live label updates while dragging; the save fires on `change` so the endpoint isn't hammered on every tick.
+- `ME.zoomSpeed` global in `tabletop.html` (baked from `user.zoom_speed`).
+- `_zoomSpeed()` defensive helper in `tabletop.js` — reads `ME.zoomSpeed`, defaults to 1.0, clamps to `[0.3, 1.5]`.
+
+### Changed
+- Wheel zoom in `tabletop.js`: per-notch factor is now `Math.pow(1.12, _zoomSpeed())` instead of a fixed 1.12. At 1.0 this is identical to the pre-v0.81 behavior.
+- Pinch zoom in `tabletop.js`: the raw distance ratio is raised to the power of `0.6 * _zoomSpeed()` before being applied to the scale. The 0.6 baseline brings the default pinch from "way too fast" to "natural"; the user multiplier on top tunes from 0.18× to 0.9× of the raw ratio's sensitivity. Anchor-the-center math stays the same.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.81.0. `SCHEMA_VERSION` bumped from 42 to 43.
+
+### Schema
+- New `users.zoom_speed` column (FLOAT NOT NULL DEFAULT 1.0).
+- `SCHEMA_VERSION` bumped from 42 to 43.
+
+## [0.80.0] - 2026-05-12
+
+**Schema version:** 42
+
+**Commit summary:** Persist the GM canvas pan and zoom across page refreshes per campaign and map
+
+**Description:** The tabletop canvas now remembers the GM's pan + zoom across page refreshes. Keyed per `(campaign, map)`, so each map keeps its own view — flipping between maps doesn't smear the same offset across them. State lives in `localStorage`; saves are debounced 250 ms so panning or pinching doesn't hammer the storage on every frame. Players are deliberately excluded: the v0.77.0 auto-center on first controlled token still fires on session start, and layering a persisted view on top would create a confusing jump.
+
+### Added
+- `app/static/tabletop.js` — view-persistence block under the pan / zoom variable declarations:
+  - `VIEW_KEY` — `simplevtt_gm_view_${CAMPAIGN_ID}_${MAP_ID}` when the user is the GM and a map is active, else `null` (everything is a no-op when null).
+  - `scheduleSaveView()` — debounced (250 ms) writer that stores `{panX, panY, scale}`. Failures (quota, disabled storage) are swallowed silently.
+  - `applyTransform()` now calls `scheduleSaveView()` so every interaction path (wheel zoom, mouse pan / drag, touch pan / pinch / drag) writes the new state without each callsite needing to know.
+  - Restore block runs synchronously at init: reads `VIEW_KEY`, validates the three numbers, clamps `scale` to `[MIN_SCALE, MAX_SCALE]`, applies. Corrupt JSON is ignored and overwritten on the next interaction.
+
+### Changed
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.80.0. No schema change.
+
+## [0.79.0] - 2026-05-12
+
+**Schema version:** 42
+
+**Commit summary:** Add touch controls to the tabletop canvas for pan zoom drag tap and double-tap on iPad
+
+**Description:** Tabletop canvas gains a touch-event layer alongside the existing mouse handlers so iPad / tablet users get full interaction. One-finger drag pans the map (or drags a movable token when started on one); two-finger pinch zooms around the gesture's center, with pan auto-adjusted so the world coord under the midpoint stays put; a quick tap fires the spawn-arm click-to-set when armed; two taps in quick succession behave like a dblclick and open the character sheet on the tapped token. CSS sets `touch-action: none` on the map pane so the browser's default scroll / zoom doesn't pre-empt these gestures.
+
+### Added
+- `app/static/tabletop.js` — new touch-event block under the existing mouse handlers. Tracks four states: `touchPan`, `touchPinch`, `touchDrag`, and a `tapStart` snapshot used for tap / double-tap detection. State machine:
+  - **One-finger touchstart**: arm spawn-set if armed (records the spawn immediately); otherwise hit-test for movable token (drag) → fall back to pan.
+  - **Two-finger touchstart**: cancel any single-finger state, snapshot scale / pan / midpoint, enter pinch.
+  - **touchmove**: pinch (clamped to `[MIN_SCALE, MAX_SCALE]`, midpoint anchored), drag (writes to the local token), or pan (updates `panX` / `panY` deltas).
+  - **touchend / touchcancel**: finalize drag (snap-to-grid + `POST /token/{id}/move`), or transition from pinch back to pan when one finger lifts. Final tap with <12 px movement + <350 ms duration registers as a tap; two taps within 400 ms + 30 px → dblclick.
+- `app/templates/tabletop.html` — `.map-pane { touch-action: none; }` on the existing CSS rule so the browser stops intercepting the gestures.
+
+### Changed
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.79.0. No schema change.
+
+## [0.78.5] - 2026-05-12
+
+**Schema version:** 42
+
+**Commit summary:** Add field labels to the Battle drawer encounter edit form and split Map from the Playlist row
+
+**Description:** Light layout pass on the Battle drawer's per-row encounter Edit form. Each input now sits under a small uppercase label (Name / Notes / Tags / Folder / Map / Playlist / Mode) instead of relying on placeholder text alone — the form reads as a labeled stack instead of a rowful of identical-looking inputs. Map dropdown gets its own row; Playlist + Mode share a row below it. Stop-audio-on-load and the spawn-points sub-panel stay where they were.
+
+### Changed
+- `app/templates/tabletop.html` — added a `labeledField(labelText, inputEl)` helper in the encounter row's `buildRow` and wrapped Name / Notes / Tags / Folder / Map / Playlist+Mode in it. The previous `mapPlaylistRow` (3-col map | playlist | mode) was split: Map sits on its own labeled row, Playlist + Mode share a `playlistRow` 2-col grid under their shared label. Placeholders shortened since the label carries the field name now.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — PATCH bump to 0.78.5. No schema change.
+
+## [0.78.4] - 2026-05-12
+
+**Schema version:** 42
+
+**Commit summary:** Stop inferring a playlist from the now-playing track on save and make spawn Set use the existing token position
+
+**Description:** Two bug fixes for the encounter editor. (1) Saving an encounter without an explicit playlist no longer silently inherits whatever's currently playing — picking "— no playlist —" is now respected and the encounter saves with `auto_play_playlist_id=null`. The JS save handlers always send the field (null when empty) so the server doesn't fall back to the "infer from `campaign.now_playing_track_id`" branch. (2) Clicking **Set** on a character row in the spawn-points editor now copies that character's current token position when one exists on the active map, instead of always arming click-to-set. The click-to-set arming still kicks in when the character has no token yet.
+
+### Changed
+- `app/templates/tabletop.html`:
+  - Battle drawer encounter Save form now sends `auto_play_playlist_id` even when the dropdown is empty (`null`). The server's "no field" branch only fires for legacy callers that omit the key, not for the GM explicitly picking "no playlist".
+  - Spawn editor **Set** button: if the character has a token on the active map AND the encounter's bound map matches the active map, the button POSTs the token's current `(x, y)` directly to `/encounters/{eid}/spawn`. If no token exists, it falls back to the arming + click-to-set flow. The button's title attribute reflects the mode it will use.
+- `app/templates/campaign_settings.html` — same playlist-field fix in the New encounter form: always sends `auto_play_playlist_id` (null for empty).
+- `app/static/tabletop.js` — new `window.vttFindTokenForCharacter(charId)` helper returns the active-map token tied to a character (or null).
+- `app/version.py`, `README.md`, `CHANGELOG.md` — PATCH bump to 0.78.4. No schema change.
+
+## [0.78.3] - 2026-05-12
+
+**Schema version:** 42
+
+**Commit summary:** Tighten encounter library layout: inline shuffle mode with playlist picker, collapse folders by default, glue Sort label to its dropdown
+
+**Description:** Three small layout tweaks to the encounter library on both surfaces. The shuffle-mode dropdown now sits inline with the map + playlist pickers (3-column grid) instead of taking its own row below them. Encounter folders default to collapsed on first paint instead of open, matching how the playlist `<details>` blocks already render. The Sort label hugs its dropdown via `inline-flex + white-space:nowrap` so the word and the control can't separate when the surrounding row wraps.
+
+### Changed
+- `app/templates/tabletop.html`:
+  - Battle drawer encounter **Save form**: map / playlist / mode pickers now share one 3-column grid (`grid-template-columns:1fr 1fr auto`) instead of a 2-col grid plus a separate Mode row.
+  - Battle drawer encounter **per-row Edit form**: same 3-column row built dynamically in JS (`mapPlaylistRow`); the old `modeRow` + `Mode` label disappear. Stop-audio-on-load checkbox moves to its own line right below.
+  - Sort label uses `display:inline-flex;align-items:center;gap:4px;white-space:nowrap` so the word "Sort" and the dropdown never separate.
+  - Folder `<details>` blocks default closed: `isOpen` derived from `!!folderOpen[folder]` (sticky once the GM toggles).
+- `app/templates/campaign_settings.html`:
+  - Sort label gets the same `inline-flex + nowrap` treatment.
+  - Settings library folder `<details>` blocks default closed too.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — PATCH bump to 0.78.3. No schema change.
+
+## [0.78.2] - 2026-05-12
+
+**Schema version:** 42
+
+**Commit summary:** Collapse the Save current state form in the Battle drawer Encounters panel by default
+
+**Description:** The "💾 Save current state" form inside the Battle drawer's Encounters panel used to always render expanded, pushing the encounter list down. It's now a collapsible `<details>` — closed on first paint, click the summary line to expand and save. Saves the dominant vertical space for the actual library list.
+
+### Changed
+- `app/templates/tabletop.html` — converted `#encounters-save-form` from a `<div>` to a `<details>` element with the "💾 Save current state" header as the `<summary>`. All existing inputs + handlers continue to work unchanged.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — PATCH bump to 0.78.2. No schema change.
+
+## [0.78.1] - 2026-05-12
+
+**Schema version:** 42
+
+**Commit summary:** Keep tabletop GM Music playlists collapsed by default instead of auto-opening the one with the playing track
+
+**Description:** The tabletop's GM Music panel used to auto-expand whichever playlist contained the currently-playing track. With growing libraries that pushed the rest of the panel down on every page load and re-collapsed when the GM switched playlists. All GM Music playlists now render collapsed by default; the GM clicks the chevron on the one they want, matching the v0.74.1 behavior for the campaign settings playlist cards.
+
+### Changed
+- `app/templates/tabletop.html` — removed the `{% if now_playing and now_playing.id in playlist.tracks ... %} open{% endif %}` class modifier on the `.gm-playlist` wrapper. Every playlist row renders collapsed on first paint.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — PATCH bump to 0.78.1. No schema change.
+
+## [0.78.0] - 2026-05-12
+
+**Schema version:** 42
+
+**Commit summary:** Add a stop-audio-on-load toggle to encounters so the GM picks continue vs stop when no playlist is bound
+
+**Description:** Fixes the audio handling on encounter load. Previously, loading an encounter with no playlist bound just left the currently-playing music alone — there was no way to ask for a clean silent transition. Each encounter now carries a `stop_audio_on_load` boolean. On load, the audio decision is three-way: when a playlist IS bound it plays (unchanged); when no playlist is bound and the toggle is on, audio stops; when no playlist is bound and the toggle is off (default), audio continues — same behavior as before for every existing encounter.
+
+### Added
+- `Encounter.stop_audio_on_load` (BOOLEAN NOT NULL DEFAULT FALSE). Schema v42 inline migration adds the column with a safe default so existing encounters keep their pre-v0.78 behavior.
+- `_encounter_to_dict` returns the new field.
+- `create_encounter` + `PATCH /encounters/{eid}` accept `stop_audio_on_load`.
+- **"Stop audio on load (when no playlist is selected)" checkbox** in all four encounter forms: Battle drawer Save form, Battle drawer per-row Edit form, campaign-settings + New form, and campaign-settings per-card Edit form. Each input has a tooltip explaining that the playlist takes precedence when one IS bound.
+
+### Changed
+- `_perform_encounter_load` audio branch now does three-way dispatch instead of "playlist or nothing":
+  1. **Playlist set** → start that playlist (existing behavior, unchanged).
+  2. **No playlist + `stop_audio_on_load=True`** → call `_stop_audio_for_campaign(reason="skipped")` to clear `now_playing_*` and broadcast `audio_stop`. Skipped when nothing is playing.
+  3. **No playlist + `stop_audio_on_load=False`** (default) → no-op; current audio continues.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.78.0. `SCHEMA_VERSION` bumped from 41 to 42.
+
+### Schema
+- New `encounters.stop_audio_on_load` column (BOOLEAN NOT NULL DEFAULT FALSE).
+- `SCHEMA_VERSION` bumped from 41 to 42.
+
+## [0.77.0] - 2026-05-12
+
+**Schema version:** 41
+
+**Commit summary:** Auto-center the player canvas on their first controlled token at session start and on encounter load
+
+**Description:** Players' canvas viewport now pans to their first controlled token automatically — on initial session load (after the GM hits Start session and the waiting page redirects them to the tabletop) and after every encounter load (a `token_add` arriving for their character recenters the view). GMs are unaffected: they control many tokens and the auto-pan would yank their view around mid-prep, so the helper short-circuits on `ME.isGm`. No schema change.
+
+### Added
+- `centerOnToken(token)` helper in `app/static/tabletop.js`. Pans `panX` / `panY` so the token's world-coord center lands at the map-pane viewport center, accounting for the current `scale`. Returns false when the pane hasn't been laid out yet so the caller can decide whether to retry.
+- `findMyFirstControlledToken()` — first token in the local `tokens` array that the current user controls (via `controller_user_id` OR via being the linked character's owner).
+- `centerOnFirstControlledToken()` — the player-only convenience wrapper. No-op when `ME.isGm` is true.
+
+### Changed
+- Initial-load: `setTimeout(centerOnFirstControlledToken, 0)` runs after the synchronous initial `render()` so the browser has a chance to lay out the map pane before we read its rect. Covers both the GM-clicks-Start path (waiting page redirects → fresh tabletop page load) and the encounter-map-switched path (the `map_change` WS broadcast triggers `location.reload()`).
+- `token_add` WS handler now calls `centerOnFirstControlledToken()` after pushing the new token + re-rendering. Encounter loads cascade `token_add` per token — the moment the player's controlled token arrives the view recenters; subsequent token_adds are idempotent.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.77.0. No schema change.
+
+## [0.76.0] - 2026-05-12
+
+**Schema version:** 41
+
+**Commit summary:** Add map rename and free-form tags with inline editing on the campaign settings maps table
+
+**Description:** The campaign settings → Maps section gets the same kind of light inline editing the playlists section has. The Name column is now an editable input that auto-saves on blur; a new Tags column does the same for free-form GM-side tags. The upload form gains a matching optional tags input. Tags use the same normalisation as encounter and playlist tags (trim, dedupe case-insensitive, ≤40 chars each, ≤20 entries). A shared `<datalist>` autocompletes tag names across all map rows and the upload form.
+
+### Added
+- `Map.tags` (JSON list, default `[]`). Schema v41 inline migration adds the column with the JSON / TEXT dialect split used by every other JSON column.
+- `POST /campaign/{cid}/settings/maps/{mid}/rename` (GM-only). JSON body `{name}`. Empty / whitespace-only names are rejected so a blank row never lands in the table.
+- `POST /campaign/{cid}/settings/maps/{mid}/tags` (GM-only). JSON body `{tags}` (array or comma-separated string). Reuses the existing `_parse_tags` helper for normalisation.
+- `tags` form field on the existing upload route (`POST /campaign/{cid}/settings/maps`).
+- **Campaign settings → World → Maps**: new Tags column between Name and Grid. Name + tags inputs auto-save on blur; the tags input echoes back the server's normalised list (dedupe + trim visible without a page reload). Shared `#map-tag-list` `<datalist>` aggregates every map's current tags for autocomplete in both the inline edit inputs and the upload form.
+
+### Changed
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.76.0. `SCHEMA_VERSION` bumped from 40 to 41.
+
+### Schema
+- New `maps.tags` column (JSON on Postgres / TEXT on SQLite, NOT NULL DEFAULT `[]`).
+- `SCHEMA_VERSION` bumped from 40 to 41.
+
+## [0.75.0] - 2026-05-12
+
+**Schema version:** 40
+
+**Commit summary:** Add description and tags fields to playlists and show the description on the tabletop
+
+**Description:** Each playlist now carries an optional short description and a list of free-form tags. The campaign settings → Audio section exposes both as auto-saving inputs at the top of each playlist's body (above the track list), plus matching fields on the New playlist form. The tabletop GM Music panel renders the description next to the playlist name (muted, em-dash separator) so the GM can see what each playlist is for without having to recall the name. Tags are metadata-only for now — searched and surfaced in settings, not displayed on the tabletop.
+
+### Added
+- `Playlist.description` (VARCHAR(200) NOT NULL DEFAULT '') and `Playlist.tags` (JSON list, default `[]`) columns. Schema v40 inline migration adds both with safe defaults.
+- `POST /campaign/{cid}/playlists/{pid}/description` (GM-only). Body: `{description: str}`. Empty / missing clears.
+- `POST /campaign/{cid}/playlists/{pid}/tags` (GM-only). Body: `{tags: list | str}`. Accepts either a JSON array or a comma-separated string. Server-side normalisation: trimmed, deduped (case-insensitive), each tag capped at 40 chars, list capped at 20 entries (same rules as the encounter tag helper).
+- `_normalize_playlist_tags` helper in `audio_routes.py` — single normalisation point reused by create + the tags endpoint.
+- `create_playlist` (POST form handler) gained optional `description` and `tags` form fields.
+- **Campaign settings → Audio**: each playlist body now starts with a description input and a tags input that auto-save on blur. The tag input reflects the server's normalised value after save so dedupe + trim are visible without a page reload.
+- **Campaign settings → New playlist form**: optional `description` and `tags` inputs alongside the existing name + category.
+- **Tabletop GM Music panel**: playlist label shows `Name — Description` when a description is set (muted suffix); the surrounding `title` tooltip includes it too.
+
+### Changed
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.75.0. `SCHEMA_VERSION` bumped from 39 to 40.
+
+### Schema
+- New `playlists.description` column (VARCHAR(200) NOT NULL DEFAULT '').
+- New `playlists.tags` column (JSON on Postgres / TEXT on SQLite, NOT NULL DEFAULT `[]`).
+- `SCHEMA_VERSION` bumped from 39 to 40.
+
+## [0.74.1] - 2026-05-12
+
+**Schema version:** 39
+
+**Commit summary:** Stop auto-expanding the first playlist on the campaign settings page
+
+**Description:** The campaign settings → Audio section used to open the first playlist's `<details>` block by default. With a growing library that pushes the rest of the section (and now the encounters library below it) down on every page load. All playlists now render collapsed; the GM clicks the chevron on the one they want.
+
+### Changed
+- `app/templates/campaign_settings.html` — removed the `{% if loop.first %}open{% endif %}` attribute on the playlist `<details>` element. Every playlist now renders collapsed on first paint.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — PATCH bump to 0.74.1. No schema change.
+
+## [0.74.0] - 2026-05-12
+
+**Schema version:** 39
+
+**Commit summary:** Add default encounter on session start plus encounter folders and name/tag/folder search
+
+**Description:** Three additions to the encounters library. (1) Campaign settings → Basic info gets a new "Default encounter on session start" dropdown; clicking ▶ Start session runs the same load flow as the manual ▶ Load button (strict reset on the bound map + GM tokens + player positions or spawn points). Failures are tolerated and logged — a broken default encounter never blocks session start. (2) Each encounter now has an optional **folder** (single-level, free-form string) for library organisation. Both library surfaces render rows grouped by folder in collapsible `<details>` blocks (open by default; unfiled rows group at the bottom), and the Save / New / per-row Edit forms get a folder input with `<datalist>` autocomplete from existing folders in the campaign. (3) Both libraries get a **search** input — case-insensitive substring match against name, any tag, or folder — that composes with the existing tag filter chip (AND).
+
+### Added
+- `Encounter.folder` (VARCHAR(120) NOT NULL DEFAULT '') — single-level grouping string. Empty = "Unfiled" group in the UI.
+- `Campaign.default_encounter_id` (nullable FK → encounters, ON DELETE SET NULL) — the encounter that auto-loads on Start session. Same pattern + `use_alter=True` as `auto_play_playlist_id`.
+- `_perform_encounter_load(db, campaign, enc, *, start_audio, user_id)` async helper extracted from `load_encounter`. The route is now a thin wrapper that parses the body + permission-checks and delegates. `start_session` calls the same helper.
+- `start_session` honors `campaign.default_encounter_id`: after flipping `session_active=True` and triggering audio auto-play, it loads the default encounter with `start_audio=False` so the audio setting doesn't fight with the encounter's auto-play. Failures are caught + logged at WARN, never raised.
+- `campaign_settings_save` accepts `default_encounter_id` (Form, optional). Validates the encounter belongs to the campaign before assigning; empty / invalid clears.
+- **Campaign settings → Basic info** gains a "⚔ Encounter on session start" fieldset with a "Default encounter" dropdown (mirrors the existing 🎵 Audio fieldset structure).
+- `_encounter_to_dict` returns `folder`. `create_encounter` + PATCH accept `folder`.
+- **Battle drawer Encounters panel**: search input above the sort + tag-filter row; folder input (with datalist autocomplete) in the Save form and in each per-row Edit form; collapsible per-folder grouping.
+- **Campaign settings → World → Encounters**: search input alongside the sort + tag-filter row; folder input in the New form and in each card's Edit form; collapsible per-folder grouping (each folder rendered as a bordered `<details>` block).
+- Shared `<datalist>` elements `#enc-folder-list` (Battle drawer) and `#enc-lib-folder-list` (settings) populated from current library on every refresh.
+
+### Changed
+- `load_encounter` route function is now a thin wrapper around `_perform_encounter_load`. The behavior is identical from the caller's perspective.
+- The Battle drawer + settings library rerender functions now apply the search filter (substring match across name, tags, folder) on top of the existing tag-chip filter, then group the surviving rows by folder before rendering.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.74.0. `SCHEMA_VERSION` bumped from 38 to 39.
+
+### Schema
+- New `encounters.folder` column (VARCHAR(120) NOT NULL DEFAULT '').
+- New `campaigns.default_encounter_id` column (INTEGER NULL, FK → encounters(id) ON DELETE SET NULL).
+- `SCHEMA_VERSION` bumped from 38 to 39.
+
+## [0.73.0] - 2026-05-12
+
+**Schema version:** 38
+
+**Commit summary:** Move spawn points onto encounters as a per-encounter toggle and make load strict about token presence
+
+**Description:** Spawn points are now an encounter feature instead of a standalone per-map one. Each encounter has a **Use spawn points for players** toggle in its edit form; when on, the GM gets a per-character Set / Clear list, and clicking Set arms click-to-set on the canvas so the next click on the encounter's bound map records that character's spawn coordinate. Loading an encounter is now **strict**: Pass 1 deletes every token on the target map (GM-owned and player-owned alike), then Pass 2 recreates only what the encounter describes — GM tokens from the saved payload + player tokens either from the encounter's spawn points (when the toggle is on) or from the snapshot's saved player positions (when off). A player whose character isn't in the encounter has their token removed on Load. The v0.71.0 standalone Battle-drawer Spawn Points panel and its `/maps/{mid}/spawn*` endpoints are gone; `Map.player_spawns` stays in the schema for backward compat but isn't read.
+
+### Added
+- `Encounter.use_spawn_points` (boolean, default false) and `Encounter.spawn_points` (JSON, default `{}`) columns. Schema v38 inline migration adds both with safe defaults so existing encounters keep loading exactly as they did before.
+- `POST /api/campaign/{cid}/encounters/{eid}/spawn` (GM-only). Body: `{character_id: int, x?: float, y?: float}`. Set the coord when both are present and numeric; clear the entry when either is missing or null. Returns the updated encounter dict.
+- `_encounter_to_dict` returns `use_spawn_points` + `spawn_points`.
+- `create_encounter` and `PATCH /encounters/{eid}` accept `use_spawn_points` + `spawn_points` (the PATCH wholesale-replaces the dict; the new `/spawn` route is the per-character incremental path).
+- **Battle drawer encounter row edit form** gains a "Use spawn points for players" checkbox and, when enabled, a per-character list with Set / Clear / coord readout. Set arms click-to-set; Clear POSTs to the new `/spawn` route. A hint above the list tells the GM whether they're on the right map (Set is disabled until the active map matches the encounter's bound map).
+- `vttSetSpawnContext({encounterId, mapId, spawns})` / `vttSpawnPlacedCallback(encId, charId, x, y)` helpers bridging the inline encounter panel and the canvas in `tabletop.js`. Edit-open sets the context; Cancel / Save / Esc clears it.
+
+### Changed
+- `load_encounter` now uses **strict** semantics. Pass 1 deletes every token on the target map (was: only GM tokens). Pass 2 creates GM tokens from the payload as before; for player tokens it consults `use_spawn_points`: when true, one token per `spawn_points` entry (placed at the spawn coord, grid-snapped to the bound map); when false, fall back to the snapshot's saved player tokens. Players absent from the encounter no longer have their tokens preserved on Load — they're removed.
+- Canvas marker pass in `tabletop.js` now reads from the currently-editing encounter context (set by the panel when the GM opens an edit form) instead of `Map.player_spawns`. Markers only render when the encounter's bound map matches the active map.
+- Click-to-set in `tabletop.js` now routes to `POST /encounters/{eid}/spawn` (was: `PATCH /maps/{mid}/spawn`). The arming flow refuses to engage without a spawn context to land in.
+- `load_encounter` docstring rewritten to describe the strict + spawn-points behavior. Battle drawer Load confirm dialog text reflects the same.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.73.0. `SCHEMA_VERSION` bumped from 37 to 38.
+
+### Removed
+- `PATCH /api/campaign/{cid}/maps/{mid}/spawn` and `POST /api/campaign/{cid}/maps/{mid}/place-players-at-spawn` (the v0.71.0 standalone map-level spawn-points endpoints).
+- Battle drawer **📍 Spawn Points** collapsible panel + its inline panel controller `<script>` block.
+- WS message type `spawn_update` (no callers after the panel removal).
+- `tabletop.js` exports `vttGetSpawns` and `vttRefreshSpawnPanel`. Helpers replaced by `vttSetSpawnContext` / `vttSpawnPlacedCallback`.
+
+### Schema
+- New `encounters.use_spawn_points` column (BOOLEAN NOT NULL DEFAULT FALSE).
+- New `encounters.spawn_points` column (JSON NOT NULL DEFAULT `{}` on Postgres, TEXT on SQLite).
+- `maps.player_spawns` (from v0.71.0) stays in place but is no longer read. No destructive migration.
+- `SCHEMA_VERSION` bumped from 37 to 38.
+
+## [0.72.0] - 2026-05-12
+
+**Schema version:** 37
+
+**Commit summary:** Restore saved player positions on encounter load instead of preserving the live placement
+
+**Description:** Tightens the encounter Load semantics so player tokens behave symmetrically with GM tokens — every player token in the saved bundle snaps to its saved position when Load is pressed, instead of being preserved in place. This is the behavior the GM expected for "press Play and players appear where I prepped them." Players whose characters were on the map at save time get moved; players whose characters were not in the saved bundle are untouched (their tokens stay exactly where they are). Reverses the v0.66.0 "preserve player tokens as-is" decision after the user clarified the intent during the v0.70.0–v0.71.0 prep-features arc. No schema change.
+
+### Changed
+- `load_encounter` Pass 2 player-token branch: previously skipped (Option B from v0.66.0) when a token already existed for that character on the target map. Now replaces it — deletes the existing token, broadcasts `token_delete`, then creates a fresh token at the saved coords and broadcasts `token_add`. Characters absent from the saved payload still aren't touched, so the GM can have additional players who weren't in the prep and they stay put.
+- `load_encounter` docstring rewritten to spell out the new GM-vs-player handling. The "Pass 1 deletes only GM tokens" rule still holds; the change is in Pass 2.
+- Battle drawer Load confirm dialog wording updated to reflect the new behavior: "Player tokens for characters in the saved encounter will move to their saved positions; other player tokens are untouched." Also updated the ▶ Load button's `title` and the panel-block comment so the surface area reads consistently.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.72.0. No schema change (the `encounters.payload` shape already captures player tokens as of v0.70.0).
+
+## [0.71.0] - 2026-05-12
+
+**Schema version:** 37
+
+**Commit summary:** Add per-character spawn points on each map for session prep and split-party setups
+
+**Description:** New session-prep feature for GMs: drop a designated starting marker for each player character on every battle map, then drop everyone at their spots in one click at the table. Designed for split-party setups — different characters can start in different rooms / corners / levels of the same map. Each map gets its own per-character spawn dict (Schema v37 — additive `maps.player_spawns` JSON column). A new "📍 Spawn Points" collapsible panel in the Battle drawer (GM-only) lists every campaign character; the GM clicks **Set**, then clicks anywhere on the canvas to record that character's spawn coordinates (snapped to the grid). **Clear** removes a marker. **📍 Place all** at the bottom drops each player's token at their saved spawn — characters already on the active map are skipped so deliberate pre-placements aren't overwritten. The canvas renders a dashed ring in each character's color with their initial inside as a GM-only marker; players don't see prep state.
+
+### Added
+- `Map.player_spawns` JSON column. Default `{}`. Keyed by character id (string) → `{x, y}`. Inline migration in `_apply_inline_migrations` (Schema v37) adds the column with `JSON` on Postgres, `TEXT` on SQLite — same dialect-split pattern used by every other JSON column in the schema.
+- `PATCH /api/campaign/{cid}/maps/{mid}/spawn` (GM-only). Body: `{character_id: int, x?: float, y?: float}`. Provide coords to set; omit (or null) to clear. Broadcasts a `spawn_update` WS message so other connected GMs stay in sync.
+- `POST /api/campaign/{cid}/maps/{mid}/place-players-at-spawn` (GM-only). For each character with a saved spawn AND no token on the map, creates a token at the saved coords (snapped to the grid). Returns `{placed, already_placed}`. Skipped characters are tokenless-by-choice and never overwritten.
+- New WS message type `spawn_update` (`{map_id, character_id, spawn?: {x, y}}`).
+- **Battle drawer → 📍 Spawn Points** (GM-only, collapsible). Per-character rows with color swatch, name, current coords (or "(unset)"), and **Set** / **Clear** buttons. Bulk **📍 Place all** button + status line at the bottom. A persistent banner appears above the canvas while click-to-set is armed; Esc cancels.
+- Canvas markers: dashed character-colored ring with the character's initial in the center, drawn at 0.85 opacity so live tokens stay dominant. GM-only render (player clients render nothing). Marker pass added to `render()` after the token pass.
+- `window.vttArmSpawn(charId)` / `window.vttCancelSpawnArming()` / `window.vttGetSpawns()` / `window.vttGetCharacters()` / `window.vttRefreshSpawnPanel` helpers bridging the canvas (in `tabletop.js`) and the panel controller (inline in `tabletop.html`).
+- `MAP_ID` global in `tabletop.html` — needed because click-to-set + bulk-place endpoints address the map directly.
+
+### Changed
+- `tabletop.js` canvas `mousedown` handler intercepts the left-click when click-to-set is armed: snaps to the grid, PATCHes the new coord, then exits arming mode. Right-click pans as before. `crosshair` cursor while armed (driven by a `body.spawn-arming` class).
+- `tabletop.js` WS handler chain gained a `spawn_update` branch that mutates the local `playerSpawns` dict and re-renders the canvas + panel.
+- `initial-data` JSON injected into `tabletop.html` now includes the active map's `player_spawns`.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.71.0. `SCHEMA_VERSION` bumped from 36 to 37.
+
+### Schema
+- New `maps.player_spawns` column (JSON / TEXT per dialect). Defaults to `{}`.
+- `SCHEMA_VERSION` bumped from 36 to 37.
+
+## [0.70.0] - 2026-05-12
+
+**Schema version:** 36
+
+**Commit summary:** Add encounter prep features for player tokens map selector playlist selector blank drafts thumbnails and tag autocomplete
+
+**Description:** Five combat-prep additions to the encounters feature. (1) **Player tokens are now part of the encounter snapshot.** Save captures GM and player tokens alike. On load, each saved player token is placed at its saved position **only if** that character has no token on the target map yet (Option B) — so a player who's already placed themselves is never yanked around, but absent players auto-appear where the GM staged them. (2) **Map selector** in both Save and Edit forms; the GM can bind an encounter to a map other than the currently-active one. (3) **Playlist + playback-mode selector** in both forms; the GM picks the auto-play playlist directly instead of inferring from whatever's currently streaming. (4) **+ New Encounter** flow on the campaign-settings library — creates a blank draft (name + map + playlist + tags + notes) without touching the live tabletop; token positions are filled in later via 💾 Update from the Battle drawer. (5) **Map thumbnails** on every encounter row in both surfaces, plus **tag autocomplete** via a shared `<datalist>` populated from the existing library. No schema change.
+
+### Added
+- `+ New Encounter` button + collapsible form on campaign settings → World → Encounters. Posts `payload: {tokens: [], battle_state: {}}` so the server's create endpoint treats it as a draft rather than a state snapshot.
+- `POST /api/campaign/{id}/encounters` now accepts optional `map_id`, `auto_play_playlist_id`, `auto_play_mode`, and an explicit `payload` in the body. When `payload` is present, the server skips the live-state snapshot entirely. `map_id` + `auto_play_playlist_id` are validated against the campaign's own maps + playlists so the GM can't bind to another campaign's resources.
+- `PATCH /api/campaign/{id}/encounters/{eid}` now accepts the same `map_id` / `auto_play_playlist_id` / `auto_play_mode` keys for in-place rebinding.
+- `_encounter_to_dict` returns `map_image_url` (for thumbnails) and `auto_play_playlist_name` (for richer hover/preview text).
+- Map / Playlist / Mode dropdowns in the **Save** form (Battle drawer), and matching dropdowns in the **per-row Edit** forms on both the Battle drawer and the campaign settings library.
+- Map thumbnail (36×24 on the Battle drawer, 60×40 on settings) at the start of every encounter row. Falls back to a monogram tile or em-dash when no map is bound.
+- Tag autocomplete via shared `<datalist>` elements (`#enc-tag-list` on the tabletop, `#enc-lib-tag-list` on settings). Refilled on every list refresh so freshly-added tags appear immediately as suggestions.
+
+### Changed
+- `_snapshot_encounter_payload` no longer filters out `controller_user_id IS NOT NULL` — player-controlled tokens are now part of the saved bundle. Each token entry includes the `controller_user_id` to disambiguate on load.
+- `load_encounter` Option B: saved player-token entries (`character_id` set) are placed at the saved position **only when the character has no token on the target map**. Existing player tokens are never moved or replaced; the v0.66.0 "preserve as-is" guarantee still holds. A missing character surfaces as a non-fatal warning instead of failing the whole load.
+- `campaign_view` (tabletop route) now passes `all_maps` to the template alongside `playlists` so the Battle drawer's selectors and per-row edit dropdowns can populate without a separate fetch.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.70.0. No schema change.
+
+## [0.69.0] - 2026-05-12
+
+**Schema version:** 36
+
+**Commit summary:** Add a Players tab to the Add Token modal for placing or removing player character tokens
+
+**Description:** The "+ Add Token" modal in the Battle drawer's Token Management panel gains a third tab — **Players** — alongside the existing **Library** (NPCs/monsters) and **Blank Token** tabs. The GM can now drop a player character's token onto the map without leaving the Token Management workflow. Each card in the grid shows the character's portrait (falling back to the player's portrait, then a colored initial avatar tinted with the character's roll-log color), the character name, and the player's display name underneath. Tokens already on the active map are dimmed with an "On map" badge; clicking dismisses them via the existing `DELETE /character/{cid}/token` endpoint. Tokens not yet placed are dropped at the GM's viewport center via the v0.65.0 `place-token` endpoint with viewport coords. No new endpoints — the tab reuses the same surfaces the mini-sheet ⊕/⊖ buttons already call.
+
+### Added
+- **Players tab** in `#add-token-modal` between Library and Blank Token. Renders a responsive grid of player characters from the existing `char_data` payload. Card UX:
+  - Portrait: character `portrait_url`, else owner user portrait from `USER_PORTRAITS`, else a 90px-tall avatar tile tinted with the character's color (or owner color) showing the first letter of the name.
+  - Name + owner display name under the avatar.
+  - "On map" badge in the top-right corner when a token for this character already exists on the active map. The card is dimmed (`opacity:0.78`) and the click handler routes to the `DELETE` (remove) path.
+  - Click handler is busy-locked while the request is in flight to prevent double-fires; modal closes on success.
+  - Helpful empty state ("No player characters in this campaign yet.") for fresh campaigns.
+
+### Changed
+- `campaign_view` in `app/routes/tabletop_routes.py` — `char_data` now includes `portrait_url` and `color` per character so the new Players tab can render proper avatars without duplicating the user_*_map merge logic the mini-sheet already does.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.69.0. No schema change.
+
+## [0.68.0] - 2026-05-12
+
+**Schema version:** 36
+
+**Commit summary:** Add encounter duplicate hover-preview sort and free-form tag filtering across the library UIs
+
+**Description:** Phase 5 of the combat encounters feature (see `docs/encounters-plan.md`). The library gets quality-of-life polish: a 📋 Duplicate button per row that POSTs a copy of the bundle with "(copy)" appended to the name; a browser-native hover tooltip on each row that lists the saved token names + map name; a Sort dropdown (Recent / A–Z); and free-form GM-chosen tags ("boss", "random", "set-piece", …) for grouping. Tags are an additive `encounters.tags` JSON column (Schema v36); clicking a tag chip in the new filter bar narrows the visible rows. Both surfaces — the tabletop Battle drawer Encounters panel and the campaign-settings Encounters section — got the same set of features, and the settings surface is now fully client-side rendered from `/api/encounters` so sort, tag filter, duplicate, edit, and delete all update without a page reload.
+
+### Added
+- `encounters.tags` JSON column. Default `[]`. Server-side normalisation: trimmed, deduped (case-insensitive), each tag capped at 40 chars, list capped at 20 entries. Accepted as either a JSON array or a comma-separated string in `POST /encounters` + `PATCH /encounters/{eid}` bodies.
+- `POST /api/campaign/{id}/encounters/{eid}/duplicate` (GM-only). Copies an existing encounter into a fresh row with " (copy)" suffix on the name; payload + map + playlist + tags + notes carried over; new `created_at` / `updated_at`.
+- `_parse_tags(value)` helper in `tabletop_routes.py` — central normalisation point reused by create + PATCH.
+- `_encounter_to_dict` now returns `tags`, `map_name`, `token_names` (capped at 25), and `token_names_extra` (overflow count). The new fields power the hover-preview tooltip and the per-row map summary.
+- **Battle drawer Encounters panel**:
+  - Sort dropdown (Recent / A–Z) above the list.
+  - Tag filter chip bar above the list. Active chip toggles on/off; filter is purely client-side over the most recent fetch.
+  - 📋 Duplicate icon button on each row.
+  - Browser-native `title` attribute with the multi-line token + map + tags preview.
+  - Tags input in the Save form (comma-separated) and in the per-row Edit form.
+  - Tag chips render under each row's description when present.
+- **Campaign settings → World → Encounters**:
+  - Full client-side rendering from `/api/encounters` (replaces the previous server-rendered cards).
+  - Sort dropdown + tag filter chip bar.
+  - 📋 Duplicate button on each card alongside ✎ Edit / 🗑 Delete.
+  - Hover preview tooltip, tag chips on each card, tags input in the inline edit form.
+
+### Changed
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.68.0. `SCHEMA_VERSION` bumped from 35 to 36.
+
+### Schema
+- New `encounters.tags` column (`JSON NOT NULL DEFAULT '[]'` on Postgres, `TEXT NOT NULL DEFAULT '[]'` on SQLite — same dialect-split pattern used by `custom_classes.spell_list`).
+- `SCHEMA_VERSION` bumped from 35 to 36. Inline migration in `_apply_inline_migrations()` runs the `ALTER TABLE encounters ADD COLUMN tags …` on existing deployments at boot.
+
+### Coming next
+- Encounters feature is now feature-complete per the original plan. Future polish ideas (tag autocomplete, multi-tag AND/OR filters, encounter sharing across campaigns, etc.) are out of scope for the planned phases.
+
+## [0.67.0] - 2026-05-12
+
+**Schema version:** 35
+
+**Commit summary:** Add encounter rename overwrite and delete with inline UI on tabletop and campaign settings
+
+**Description:** Phase 4 of the combat encounters feature (see `docs/encounters-plan.md`). Saved encounters are now fully editable: the GM can rename them, replace notes, re-snapshot the current state into an existing entry (so "Goblin Ambush" evolves without spawning a sibling row each session), and delete entries from the library. Three new endpoints back this — `PATCH /encounters/{eid}` for name + notes, `POST /encounters/{eid}/update` for in-place re-snapshot (payload + map_id + auto_play_playlist_id + auto_play_mode all replaced; name + notes + created_at preserved), and `POST /encounters/{eid}/delete` for removal. Both the tabletop Battle drawer and the campaign settings "Encounters" section get the inline UI. The Battle drawer row gains three new icon buttons next to `▶`: 💾 Update (re-snapshot), ✎ Edit (inline rename + notes form), 🗑 Delete (confirm + remove). The campaign settings library gets ✎ Edit + 🗑 Delete on each card and a card-removed-on-empty fallback so the section gracefully degrades back to the empty state without a page reload.
+
+### Added
+- `PATCH /api/campaign/{id}/encounters/{eid}` (GM-only). Body: `{name?, description?}`. Either or both. Empty/whitespace `name` is rejected. Returns the updated dict.
+- `POST /api/campaign/{id}/encounters/{eid}/update` (GM-only). Re-snapshots the current campaign state into the existing row: replaces `payload`, `map_id`, `auto_play_playlist_id`, `auto_play_mode`; preserves `name`, `description`, `created_at`. `updated_at` auto-bumps via the column's `onupdate=func.now()`. Reuses `_snapshot_encounter_payload`.
+- `POST /api/campaign/{id}/encounters/{eid}/delete` (GM-only).
+- **Battle drawer Encounters panel** — each row now carries `▶` Load / 💾 Update / ✎ Edit / 🗑 Delete icon buttons. ✎ swaps the row's title row for an inline name + notes form with Save / Cancel; Save PATCHes and refreshes the list. 💾 Update prompts for confirmation, POSTs `/update`, and refreshes. 🗑 prompts for confirmation, POSTs `/delete`, refreshes.
+- **Campaign settings → World → Encounters** — each card now carries `✎ Edit` and `🗑 Delete` actions on its title row. Edit swaps the card to an inline name + notes form (`<input>` + `<textarea>`) with Save / Cancel; Save PATCHes and re-renders the visible name + description from the server's response without a page reload. Delete confirms, POSTs `/delete`, and removes the card from the DOM; if the last card is removed, the container is replaced with the same SSR empty-state copy.
+
+### Changed
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.67.0. No schema change (the `encounters` table + columns from v0.64.0 cover the new endpoints; `updated_at` was already in place with `onupdate=func.now()`).
+
+### Coming next
+- Phase 5 — duplicate / preview-on-hover / sort / tags.
+
+## [0.66.0] - 2026-05-12
+
+**Schema version:** 35
+
+**Commit summary:** Add encounter load flow with two-pass clear and apply and preserve player tokens
+
+**Description:** Phase 3 of the combat encounters feature (see `docs/encounters-plan.md`). The GM can now reload a saved encounter at the table by clicking **▶ Load** on its row in the Battle drawer Encounters panel. The load flow is two-pass: it deletes GM-owned tokens on the **target map** (the encounter's bound map, or the current active map if the encounter has none), switches `Campaign.active_map_id` if the encounter binds a different map, recreates the saved tokens, and restores the in-memory battle / initiative state. **Player tokens are never touched** — their positions and map assignments are preserved exactly as they were (Open Question 1 in the plan, resolved in favor of "preserve as-is"). If the map switches, the existing player token stays on the old map until the GM or player moves it — the GM is expected to make the call mid-session. Audio auto-starts when the saved encounter had a playlist playing at save time and the GM keeps the default `start_audio=true`. Missing token templates fall back to a manual token with the saved label override; a missing playlist skips audio. Both surface as non-fatal `warnings[]` in the response and pop a single `alert` after the load lands. Delete UI is Phase 4 and still pending.
+
+### Added
+- `POST /api/campaign/{id}/encounters/{eid}/load` (GM-only) — two-pass clear + apply. Body: `{start_audio?: bool = true}`. Returns `{ok, map_switched, tokens_created, tokens_deleted, warnings}`. Player tokens (`controller_user_id IS NOT NULL`) are explicitly excluded from the Pass 1 delete sweep; saved entries with `character_id` set are skipped during Pass 2 recreation (we don't recreate player tokens — they live across loads).
+- New WS message `map_change` (`{map_id}`) — broadcast by the load flow when the active map switches. Clients reload to render the new map; the canvas wasn't built to swap maps in place. Same-map loads use the existing surgical `token_delete` + `token_add` + `battle_update` broadcasts so connected clients update without a reload.
+- **▶ Load** button on each encounter row in the Battle drawer Encounters panel. Click prompts a confirm dialog summarising token counts; warnings from the server pop in a second alert.
+
+### Changed
+- `app/static/tabletop.js` — WS message handler chain gained a `map_change` branch that triggers `location.reload()` so all connected clients land on the new map.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.66.0. No schema change (the `encounters` table from v0.64.0 + the save endpoint from v0.65.0 are both reused as-is).
+
+### Coming next
+- Phase 4 — rename + overwrite + delete (`PATCH /encounters/{eid}`, `POST /encounters/{eid}/update`, `POST /encounters/{eid}/delete`).
+- Phase 5 — duplicate / preview-on-hover / sort / tags.
+
+## [0.65.0] - 2026-05-12
+
+**Schema version:** 35
+
+**Commit summary:** Add encounter save flow and place new tokens at the GM viewport center
+
+**Description:** Phase 2 of the combat encounters feature (see `docs/encounters-plan.md`). The GM can now save the current state — active map + GM-owned tokens + battle hub state + currently-playing playlist — as a named encounter from a new save form in the Battle drawer's Encounters panel. Player-controlled tokens (`controller_user_id IS NOT NULL`) are intentionally skipped from the snapshot. The library is append-only for this release; load / delete UI is planned for a later phase. Same release also fixes token placement: the GM's `⊕` button on player mini-sheets and the `+ Add Token` modal now drop new tokens at the **center of the visible viewport** (the map-pane rect, accounting for pan + zoom), so tokens land where the GM is looking rather than at the often-offscreen geometric center of the map.
+
+### Added
+- `POST /api/campaign/{id}/encounters` (GM-only) — saves the current state. Body: `{name, description?}`. Snapshots GM-owned tokens on the active map + the in-memory battle hub state + the active map id + the currently-streaming playlist id. Player-controlled tokens (`controller_user_id IS NOT NULL`) are intentionally skipped from the token snapshot.
+- `_snapshot_encounter_payload(db, campaign)` helper in `tabletop_routes.py` — central place for the save shape, reusable by the future load flow.
+- `vttViewportCenterWorld()` + internal `viewportCenterWorld()` helper in `app/static/tabletop.js` — returns the world-space (canvas-coord) center of the GM's current viewport (map-pane rect, accounting for pan + zoom).
+- **Battle drawer Encounters panel** now ships its Save UI: a name + notes input with a "💾 Save" button below the list. Save shows a transient "Saved." status and refreshes the list. A footer line notes that load + delete buttons are coming in a future release.
+
+### Changed
+- `place_character_token` (POST `/api/campaign/{id}/character/{char_id}/place-token`) now accepts an optional JSON body `{x, y}`. When the body is missing or the coords don't parse, the legacy map-center default is used so non-browser callers stay unaffected. When coords are provided, they're snapped to the active map's grid so the new token sits cleanly on a cell.
+- `app/static/tabletop.js`:
+  - The `⊕` (place character token) handler now sends the viewport-center world coords as the body of the POST. The `⊖` (DELETE) path is unchanged.
+  - The `+ Add Token` modal's template-card and blank-token paths both send `{x, y}` from `viewportCenterWorld()` instead of the previous `(100, 100)` literal.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.65.0. No schema change (the `encounters` table from v0.64.0 is reused as-is).
+
+### Coming next
+- Phase 3 — load flow (`POST /encounters/{eid}/load`), two-pass clear + apply, player-token preservation, audio auto-start, ▶ Load button.
+- Phase 4 — rename + overwrite + delete UI.
+- Phase 5 — duplicate / preview-on-hover / sort / tags.
+
+## [0.64.0] - 2026-05-12
+
+**Schema version:** 35
+
+**Commit summary:** Add encounters table and a read-only library UI on the tabletop and campaign settings
+
+**Description:** First slice of the combat encounters feature (Phase 1 of the plan in `docs/encounters-plan.md`). A new `encounters` table stores a GM-saved bundle of `{map, tokens, initiative seed, optional playlist}` as a JSON payload, keyed to a campaign with a cascading FK. Two read-only listing surfaces consume it — a GM-only "⚔ Encounters" collapsible section under Token Management in the Battle drawer, populated by a new `GET /api/campaign/{id}/encounters` fetch on first open, and a full-width Encounters section under the **World** tab of campaign settings that server-renders from the same model. No save or load buttons yet; both surfaces currently show "None yet" plus a note that the save / load flow is coming. Existing deployments auto-upgrade — the new table is created via `Encounter.__table__.create(checkfirst=True)` on next boot.
+
+### Added
+- `Encounter` model (`app/models.py`): `id`, `campaign_id` (FK → campaigns, ON DELETE CASCADE, indexed), `name`, `description`, `map_id` (FK → maps, SET NULL), `auto_play_playlist_id` (FK → playlists, SET NULL), `auto_play_mode`, `payload` (JSON), `created_at`, `updated_at`. Includes ORM relationships back to campaign / map / playlist for future render-time joins.
+- `GET /api/campaign/{campaign_id}/encounters` (GM-only) — returns a list of `{id, name, description, map_id, auto_play_playlist_id, auto_play_mode, token_count, initiative_count, created_at, updated_at}` projections, sorted by `created_at` desc. Powers the Battle-drawer list.
+- `_encounter_to_dict` helper in `tabletop_routes.py` so the listing projection lives in one place (Phase 2+ will reuse it).
+- **Battle drawer** — new `<details id="encounters-panel">` block inside `{% if is_gm %}`, immediately under Token Management. Wears the same gold "GM only" pill + chevron-rotate-on-collapse animation as the Token Management panel. JS lazy-fetches the list via the new endpoint on first paint and renders a stack of card rows (name, token/init count, optional description). Empty state shows "None saved yet."; error state shows the HTTP status. A small note clarifies the save/load buttons are coming in a future release.
+- **Campaign settings → World tab** — new `<section id="encounters" data-tab="world">` between Token Templates and the Homebrew tab sections. Server-rendered cards from `encounters` template var, with map id / playlist id / mode summary, created-at date, and optional description. Empty state lives inline.
+
+### Changed
+- `campaign_view` and `campaign_settings` in `app/routes/tabletop_routes.py` now load encounters server-side. `campaign_settings` passes them as `encounters` to the template; `campaign_view` does the fetch via the JS path so the SSR payload stays unchanged for everyone else.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.64.0. `SCHEMA_VERSION` bumped from 34 to 35.
+
+### Schema
+- New `encounters` table (see Added). `_apply_inline_migrations()` now calls `Encounter.__table__.create(bind=engine, checkfirst=True)` as the Schema v35 step.
+- `SCHEMA_VERSION` bumped from 34 to 35.
+
+### Coming next
+- Phase 2 (Save current state): `POST /encounters` capture flow + a "💾 Save current state as encounter" form in the Battle drawer.
+- Phase 3 (Load): two-pass server flow with player-token preservation. Open question 1 in `docs/encounters-plan.md` (player-token position on map switch) needs a decision before Phase 3 begins.
+
+## [0.63.0] - 2026-05-12
+
+**Schema version:** 34
+
+**Commit summary:** Restrict token add and remove to the GM and split Token Management into Players and NPCs sections
+
+**Description:** Players can no longer add or remove their own character tokens from the map — the GM owns all placement now. The server-side `place_character_token` and `remove_character_token` endpoints both gate on `_user_is_gm`, so even a player who tries to call the API directly gets a 403. The client-side `canPlaceChar` helper that controls the ⊕/⊖ buttons in the player mini-sheet now returns `!!ME.isGm`, so players don't see those controls at all. To make the GM's life easier under this new model, the Token Management panel in the Battle drawer now groups its rows into two labeled sections — **👤 Players** (tokens whose `controller_user_id` is set, i.e., character tokens belonging to a player) and **⚙ GM / NPCs** (tokens with no controller) — with a small count next to each header. No schema change; the split is a pure presentation rearrangement of the existing token tracker.
+
+### Changed
+- `app/routes/tabletop_routes.py`:
+  - `place_character_token` — removed the "GM OR character owner" branch; the route now returns 403 unless the requester is the campaign GM.
+  - `remove_character_token` — same tightening; player-driven removal is gone.
+- `app/static/tabletop.js`:
+  - `canPlaceChar(charId)` simplified to `return !!ME.isGm;`. Player drawers no longer render the add/remove token buttons.
+  - `renderTokenTracker` now splits its `tokens` array on `controller_user_id` and renders two `<div class="tt-section-header">` blocks (👤 Players, ⚙ GM / NPCs) with per-section counts. Per-row build logic was extracted into an inner `_renderToken(t)` helper to avoid duplication.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.63.0. No schema change.
+
+### Removed
+- Player ability to add or remove their own character's token from the map. Players who want a token on the board ask the GM, who places it from the Token Management panel.
+
+## [0.62.0] - 2026-05-12
+
+**Schema version:** 34
+
+**Commit summary:** Move Token Management to the Battle drawer with a GM-only tag and a collapsible body
+
+**Description:** The token panel that used to live in the GM Tools drawer (titled "Tokens") moves into the Battle drawer where the GM actually uses it during combat — next to the initiative list and battle controls. It's renamed **Token Management**, is gated by `{% if is_gm %}` (the Battle drawer itself is visible to every player so the new block needs its own gate), wears a small gold "GM only" pill on the summary line so the GM can tell at a glance what the players DON'T see, and is wrapped in a `<details>` element that collapses with a chevron animation. The `+ Add Token` button moved out of the summary row into the body so clicking it doesn't also toggle the collapsed state. The old GM Tools "Tokens" section is left as a `{# moved … #}` comment for context. No backend changes — `add-token-btn` and `token-tracker-list` are still queried by id, so the existing `tabletop.js` token-add and tracker-render code paths work unchanged.
+
+### Changed
+- `app/templates/tabletop.html`:
+  - Removed the **Tokens** sub-section from the GM Tools drawer (lines that previously rendered the `<h4>Tokens</h4>` block + `+ Add Token` button + `#token-tracker-list`).
+  - Added a new `<details id="token-management-panel" open>` block inside the Battle drawer's body, gated `{% if is_gm %}`. Summary line carries the chevron + "Token Management" heading + a "GM only" pill. Body has the `+ Add Token` button and the existing `#token-tracker-list`.
+  - Added CSS rules for `#token-management-panel summary::-webkit-details-marker { display: none; }` (Webkit), `summary::marker { content: ''; }` (Firefox), and chevron rotation on `[open]`.
+- `app/version.py`, `README.md`, `CHANGELOG.md` — MINOR bump to 0.62.0. No schema change.
+
+### Coming next
+- The combat encounter system the GM asked for (load tokens + map + initiative as a single preset) — design + phasing landed as a planning doc at `docs/encounters-plan.md`.
+
+## [0.61.0] - 2026-05-12
+
+**Schema version:** 34
+
+**Commit summary:** Add Previous / Play-Pause / Skip transport buttons to the GM Tools music panel with synced server state
+
+**Description:** GMs can now jump back, jump forward, and pause/resume audio directly from the GM Tools music panel — three new buttons sit between the "Now playing" label and the progress bar. Skip and Previous land like a manual track change (current track finalized as `skipped` in the play log; new track starts with `source=manual`). Pause is fully synchronized: clicking ⏸ Pause records the seek offset server-side so every connected client pauses at the same position; clicking ▶ Play resumes by adjusting `now_playing_started_at` so the existing client-side time-sync math puts everyone back on the same frame. WS-reconnects mid-pause re-sync the new client to the paused state (the existing reconnect sync payload now carries `paused` and `paused_offset_s` fields). The Pause / Play button glyph flips automatically based on server-authoritative state — no client-only optimism.
+
+### Added
+- New `Campaign.now_playing_paused_offset_s` column (FLOAT, nullable). When non-null, audio is paused at this many seconds into the current track.
+- Inline migration `Schema v34` in `app/database.py` adds the column.
+- Two new helpers in `app/routes/audio_routes.py`:
+  - `_pause_audio_for_campaign(db, campaign)` — records the seek offset (`now - started_at`) and broadcasts `audio_pause`. Does NOT finalize the in-flight `AudioPlayEvent` (pause is mid-listen, not a play termination).
+  - `_resume_audio_for_campaign(db, campaign)` — sets `started_at = now - offset`, clears the pause field, re-broadcasts `audio_play` with the adjusted timestamp.
+  - `_find_sibling_track(db, current, direction, *, loop)` — generalized prev/next lookup used by `next_in_playlist`, `/audio/skip`, and `/audio/previous`. `next_in_playlist` was refactored to use it (the inline sibling search is gone).
+- Four new endpoints under `/campaign/{id}/audio/`:
+  - `POST /skip` (GM-only) — advances to the next track; `prev_reason="skipped"`, `source="manual"`. Stops if at end of playlist with loop off.
+  - `POST /previous` (GM-only) — jumps to the previous track; same labels. No-op at track 1 with loop off.
+  - `POST /pause` (GM-only) — broadcasts `audio_pause`.
+  - `POST /resume` (GM-only) — broadcasts a fresh `audio_play` with adjusted `started_at`.
+- New WS message type `audio_pause` (data: `{paused_offset_s: float}`). Clients pause their `<audio>` element and freeze the progress bar; the drift-correction loop now skips iterations while paused.
+- Three new fields on the `audio_play` payload: `paused: bool`, `paused_offset_s: float | null`. The WS-reconnect sync uses the same payload, so a player who joins during a pause lands at the right position in the right state.
+- Six new client-side globals in `app/static/audio.js`: `vttSkipTrack`, `vttPreviousTrack`, `vttPauseAudio`, `vttResumeAudio`, `vttTogglePause` (calls pause or resume based on current state), plus `vttAudioIsPaused()` / `vttAudioHasTrack()` getters for UI to query the source of truth.
+- Three new buttons in the GM Tools music panel (`tabletop.html`): `⏮ Prev`, a state-aware `⏸ Pause` / `▶ Play` toggle, and `Skip ⏭`. The toggle's glyph + label re-render on every relevant WS message via a tracked-state block in the GM-sync IIFE.
+
+### Changed
+- `_now_playing_payload` now includes `paused` and `paused_offset_s` so reconnecting clients sync to the correct play/pause state, not just the right track.
+- `_start_track_for_campaign` clears `now_playing_paused_offset_s` (starting a new track always exits pause mode).
+- `_stop_audio_for_campaign` clears `now_playing_paused_offset_s` (stop exits pause mode).
+- `audio.js` `audio_play` handler: a "same track, different timing" check distinguishes resume (no `<audio>.src` reload) from fresh play (full reset). Idempotency check now also compares `paused` state.
+- `audio.js` time-sync drift-correction loop bails out while paused so we don't override the GM's pause.
+- GM Tools now-playing sync block in `tabletop.html` tracks `{_gmCurTrackId, _gmCurTrackName, _gmCurPaused}` as module-level state and routes all updates through `_renderGmAudio()`, so label + row highlight + transport-button glyph stay in lockstep across `audio_play`, `audio_pause`, and `audio_stop`.
+
+### Schema
+- New `campaigns.now_playing_paused_offset_s` (FLOAT, nullable).
+- `SCHEMA_VERSION` bumped from 33 to 34.
+
+## [0.60.0] - 2026-05-12
+
+**Schema version:** 33
+
+**Commit summary:** Record an AudioPlayEvent log per track and surface a history panel in campaign settings
+
+**Description:** Every audio play now lands a row in a new `audio_play_events` table — recorded by the shared audio helpers in `audio_routes.py`, so manual GM clicks, session-start auto-plays, playlist auto-advances, and loops all feed the log uniformly. Each row tracks `track_id` / `playlist_id` (FKs, `ON DELETE SET NULL` so the history survives deletions) plus snapshot `track_name` / `playlist_name` strings (so the row remains readable after renames or removals), `started_at` / `ended_at` / `duration_s`, an `ended_reason` (`completed` / `skipped` / `stopped` / `session_end` / `ongoing`), a `source` (`manual` / `auto_start` / `auto_next` / `loop`), and the `triggered_by_user_id`. The campaign settings page gets a new collapsed "📊 Audio history" details panel with three sub-sections — a one-line summary (total play count + total listening time), a Top Tracks table (top 10 by play count with totals), and a Recent Plays table (last 50, newest first, with timestamp / duration / ended-reason / source). Closed when nothing has been played; auto-populates as soon as the first track lands. No client-side changes required for the recording — the existing `audio_play` WS broadcasts continue to work identically, just with audit rows landing alongside.
+
+### Added
+- New `AudioPlayEvent` model in `app/models.py` with full field docs (FKs, snapshot names, lifecycle columns, controlled-vocabulary `ended_reason` and `source`).
+- Inline migration `Schema v33` in `app/database.py` creates the table via `AudioPlayEvent.__table__.create(bind=engine, checkfirst=True)` so existing deployments pick it up on next boot.
+- Two new helpers in `app/routes/audio_routes.py`:
+  - `_finalize_play_event(db, campaign_id, reason)` — closes any in-flight row with the given reason, computing `duration_s`. Idempotent.
+  - `_open_play_event(db, campaign_id, track, source, user_id)` — inserts a new ongoing row with snapshot names.
+- Both `_start_track_for_campaign` and `_stop_audio_for_campaign` now accept `source` / `prev_reason` / `reason` / `user_id` kwargs and call the new helpers automatically. `play_track`, `next_in_playlist`, `session/start` auto-play, and `session/end` were updated to pass the right labels for each call site.
+- `next_in_playlist` was refactored to call the shared `_start_track_for_campaign` / `_stop_audio_for_campaign` helpers instead of mutating campaign state inline. Distinguishes `auto_next` (advancing) from `loop` (same single track replaying).
+- New "📊 Audio history" `<details>` panel at the bottom of the Audio section in `campaign_settings.html` — Top Tracks table (grouped by snapshot `track_name`, top 10 by play count) + Recent Plays table (last 50 by `started_at desc`) + a summary line. Capped row counts keep the page render fast even on long-running campaigns.
+
+### Schema
+- New table `audio_play_events`: id, campaign_id (FK → campaigns, indexed), track_id (FK → playlist_tracks, nullable+SET NULL, indexed), playlist_id (FK → playlists, nullable+SET NULL), track_name (str, snapshot), playlist_name (str, snapshot), started_at (datetime, indexed), ended_at (datetime, nullable), duration_s (int, nullable), ended_reason (str, default 'ongoing'), source (str, default 'manual'), triggered_by_user_id (FK → users, nullable+SET NULL).
+- `SCHEMA_VERSION` bumped from 32 to 33.
+
+## [0.59.0] - 2026-05-12
+
+**Schema version:** 32
+
+**Commit summary:** Add audio playback progress bar to the player Settings drawer and GM Tools music panel
+
+**Description:** The audio UI now shows a live progress bar with elapsed time, total duration, and a filling track that advances in real time as the current track plays. Two bars render in parallel — one under the "🎵 Sound" section of the player Settings drawer (visible to everyone) and one under the "Music" section of the GM Tools drawer (visible to GMs while picking the next track). Both update on the same `<audio>.timeupdate` event (~250 ms cadence), so playback drift correction and metadata loading naturally feed the UI. The bar appears once track metadata loads (when `<audio>.duration` becomes known) and hides on `audio_stop`. Click-to-seek is intentionally not included in this PR — the bar is read-only.
+
+### Added
+- `.audio-progress` markup in `app/templates/tabletop.html` — one instance below `#audio-now-playing` in the Settings drawer, one below `#gm-now-playing-label` in the GM Tools music panel. Each shows `0:00` elapsed / `0:00` total + a 4px filling bar. Hidden by default; revealed on `loadedmetadata`.
+- `_setProgress(elapsed, total)`, `_showProgress(visible)`, `_fmtTime(seconds)`, and `_progressEls()` helpers in `app/static/audio.js`. `_progressEls` is re-queried on each call so lazy-rendered panels still pick up the bar without an explicit re-bind.
+- `<audio>.timeupdate` event listener drives the bar; same listener handles both bars in a single update pass. The existing `loadedmetadata` listener now also paints the initial values + reveals the bar.
+
+### Changed
+- `audio_play` WS handler resets the bar to `0:00 / 0:00` while metadata loads (before `loadedmetadata` populates real values).
+- `audio_stop` WS handler hides the bar and resets the display.
+
+## [0.58.1] - 2026-05-12
+
+**Schema version:** 32
+
+**Commit summary:** Auto-sync audio to newly-connected WebSocket clients so players hear the live position on reconnect
+
+**Description:** When a player's WebSocket connects to a campaign that has audio playing — whether on first page load or after a network blip / tab sleep / browser refresh — the server now privately sends them the current `audio_play` payload so their `<audio>` element seeks to the same offset everyone else is hearing. Previously, the only audio sync on connect came from the HTML page render, which meant WS reconnects (which keep the page alive but drop the socket) would leave the player silent until the GM manually replayed or hit the existing Resync button. The new sync is targeted to the just-connected socket only — broadcasting would interrupt every other client for no reason. A client-side idempotency guard in `audio.js` ensures that on a *fresh* page load (where the page render already initialized audio and the new WS sync arrives moments later with identical data) the second handler call short-circuits and doesn't re-load the `<audio>` element.
+
+### Added
+- `app/routes/tabletop_routes.py` — the `/ws/campaign/{campaign_id}` WebSocket endpoint now reads `campaign.now_playing_track_id` during the auth phase, builds the `audio_play` payload via the existing `_now_playing_payload` helper, and sends it privately to the new socket after `hub.connect()` accepts it. Errors during the send are caught + logged.
+- `app/static/audio.js` — `handleMessage` short-circuits when the incoming `audio_play` has the same `track_id`, `started_at_ms`, and `file_url` as the current state. Prevents an unnecessary `<audio>.src` reload glitch on first connect (because the page already initialized audio from the HTML data attribute moments earlier).
+
+### Behaviour change
+- After a network blip or browser refresh while audio is playing, the client now silently re-syncs to the live position without the player needing to click anything.
+
+## [0.58.0] - 2026-05-12
+
+**Schema version:** 32
+
+**Commit summary:** Auto-play a configured playlist on session start and auto-stop audio on session end
+
+**Description:** GMs can configure a campaign so that clicking **Start session** automatically begins playing a chosen playlist for everyone, and clicking **End session** stops audio for everyone. The Campaign Settings → "🎵 Audio on session start" fieldset has two new fields: an "Auto-play playlist" dropdown (lists every playlist on the campaign, plus a "— None (don't auto-play) —" option) and a "Play mode" selector with **In order** (start at track 1) and **Shuffle** (pick a random track each session) modes. Auto-start re-fires every session — shuffle re-shuffles each time. Auto-stop runs the same path as the manual "⏹ Stop playback" button, so any audio that was playing — whether started via auto-play or manually mid-session — is cleanly stopped when the session ends. Both behaviours tolerate errors (missing playlist, deleted track, no tracks) silently so a misconfigured auto-play never blocks a session from starting.
+
+### Added
+- Two new columns on `campaigns`:
+  - `auto_play_playlist_id` (nullable FK to `playlists.id`, `ON DELETE SET NULL`).
+  - `auto_play_mode` (string, default `"order"`, accepts `"order"` / `"shuffle"`).
+- Inline migration block `Schema v32` in `app/database.py` adds both columns to existing deployments on next boot.
+- Two reusable helpers in `app/routes/audio_routes.py`:
+  - `_start_track_for_campaign(db, campaign, track)` — sets `now_playing_*` and broadcasts `audio_play`. The manual `/audio/play` endpoint now calls through this.
+  - `_stop_audio_for_campaign(db, campaign)` — clears `now_playing_*` and broadcasts `audio_stop`. Idempotent.
+- New "🎵 Audio on session start" fieldset on `campaign_settings.html` with playlist + mode pickers.
+- Two new optional fields on `POST /campaign/{id}/settings`: `auto_play_playlist_id`, `auto_play_mode`. Playlist ID is validated to belong to this campaign before assignment.
+
+### Changed
+- `POST /campaign/{id}/session/start` now reads `campaign.auto_play_playlist_id` and, if set, picks a track based on `auto_play_mode` ("order" → first track; "shuffle" → `random.choice` over the playlist's tracks) and calls `_start_track_for_campaign`. Errors during auto-play are caught and logged so a broken config doesn't block session start.
+- `POST /campaign/{id}/session/end` now calls `_stop_audio_for_campaign` after the session ends if anything is currently playing.
+
+### Schema
+- New `campaigns.auto_play_playlist_id` (INTEGER, nullable, FK → playlists.id ON DELETE SET NULL).
+- New `campaigns.auto_play_mode` (VARCHAR(10), NOT NULL, DEFAULT `'order'`).
+- `SCHEMA_VERSION` bumped from 31 to 32.
 
 ## [0.57.1] - 2026-05-12
 

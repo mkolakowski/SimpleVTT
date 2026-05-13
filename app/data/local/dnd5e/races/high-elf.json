@@ -1,0 +1,54 @@
+{
+  "slug": "high-elf",
+  "name": "High Elf",
+  "ability_bonuses": [
+    {"attribute": "Dexterity", "bonus": 2},
+    {"attribute": "Intelligence", "bonus": 1}
+  ],
+  "size": "Medium",
+  "speed": 30,
+  "age": "Although elves reach physical maturity at about the same age as humans, the elven understanding of adulthood goes beyond physical growth to encompass worldly experience. An elf typically claims adulthood and an adult name around the age of 100 and can live to be 750 years old.",
+  "alignment": "Elves love freedom, variety, and self-expression, so they lean strongly toward the gentler aspects of chaos. They value and protect others' freedom as well as their own, and they are more often good than not.",
+  "languages": "You can speak, read, and write Common and Elvish.",
+  "traits": [
+    {
+      "name": "Darkvision",
+      "level": null,
+      "desc": "Accustomed to twilit forests and the night sky, you have superior vision in dark and dim conditions. You can see in dim light within 60 feet of you as if it were bright light, and in darkness as if it were dim light. You can't discern color in darkness, only shades of gray."
+    },
+    {
+      "name": "Keen Senses",
+      "level": null,
+      "desc": "You have proficiency in the Perception skill."
+    },
+    {
+      "name": "Fey Ancestry",
+      "level": null,
+      "desc": "You have advantage on saving throws against being charmed, and magic can't put you to sleep."
+    },
+    {
+      "name": "Trance",
+      "level": null,
+      "desc": "Elves don't need to sleep. Instead, they meditate deeply, remaining semiconscious, for 4 hours a day. After resting in this way, you gain the same benefit that a human does from 8 hours of sleep."
+    },
+    {
+      "name": "Elf Weapon Training",
+      "level": null,
+      "desc": "You have proficiency with the longsword, shortsword, shortbow, and longbow."
+    },
+    {
+      "name": "Cantrip",
+      "level": null,
+      "desc": "You know one cantrip of your choice from the wizard spell list. Intelligence is your spellcasting ability for it. (Pick one cantrip at character creation and add it to your cantrip list.)"
+    },
+    {
+      "name": "Extra Language",
+      "level": null,
+      "desc": "You can speak, read, and write one extra language of your choice. (Write it into your languages list.)"
+    }
+  ],
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD (CC BY 4.0 / OGL 1.0a). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy."
+}

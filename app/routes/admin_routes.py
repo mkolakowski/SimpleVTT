@@ -54,7 +54,7 @@ TOKEN_DIR.mkdir(parents=True, exist_ok=True)
 THUMB_DIR.mkdir(parents=True, exist_ok=True)
 
 
-ALLOWED_IMG_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+ALLOWED_IMG_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif", "video/webm", "video/mp4"}
 MAX_THUMB_BYTES = 5 * 1024 * 1024
 
 
@@ -332,10 +332,18 @@ async def admin_upload_map(
         fname = f"{uuid.uuid4().hex}{ext}"
         out = MAP_DIR / fname
         data = await image.read()
-        if len(data) > 25 * 1024 * 1024:
-            raise HTTPException(400, "Map image too large (>25MB)")
+        if len(data) > 80 * 1024 * 1024:
+            raise HTTPException(400, "Map image too large (>80 MB)")
         out.write_bytes(data)
         image_url = f"/static/uploads/maps/{fname}"
+        if image.content_type and image.content_type.startswith("image/"):
+            try:
+                import io as _io
+                from PIL import Image as _PILImage
+                with _PILImage.open(_io.BytesIO(data)) as _img:
+                    width_px, height_px = _img.size
+            except Exception:
+                pass
     try:
         gt = GridType(grid_type)
     except ValueError:
@@ -580,6 +588,7 @@ def admin_stubs(
             "user": user,
             "local_classes": local_features.list_local_classes(),
             "local_subclasses": local_features.list_local_subclasses(),
+            "local_races": local_features.list_local_races(),
             "custom_classes_db": custom_classes_db,
             "custom_subclasses_db": custom_subclasses_db,
             "custom_races_db": custom_races_db,
@@ -608,6 +617,7 @@ def admin_stubs_json(
     return {
         "local_classes": local_features.list_local_classes(),
         "local_subclasses": local_features.list_local_subclasses(),
+        "local_races": local_features.list_local_races(),
         "custom_classes_db": [
             {
                 "id": cc.id,

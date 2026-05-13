@@ -1,0 +1,39 @@
+{
+  "slug": "half-orc",
+  "name": "Half-Orc",
+  "ability_bonuses": [
+    {"attribute": "Strength", "bonus": 2},
+    {"attribute": "Constitution", "bonus": 1}
+  ],
+  "size": "Medium",
+  "speed": 30,
+  "age": "Half-orcs mature a little faster than humans, reaching adulthood around age 14. They age noticeably faster and rarely live longer than 75 years.",
+  "alignment": "Half-orcs inherit a tendency toward chaos from their orc parents and are not strongly inclined toward good. Half-orcs raised among orcs and willing to live out their lives among them are usually evil.",
+  "languages": "You can speak, read, and write Common and Orc.",
+  "traits": [
+    {
+      "name": "Darkvision",
+      "level": null,
+      "desc": "Thanks to your orc blood, you have superior vision in dark and dim conditions. You can see in dim light within 60 feet of you as if it were bright light, and in darkness as if it were dim light. You can't discern color in darkness, only shades of gray."
+    },
+    {
+      "name": "Menacing",
+      "level": null,
+      "desc": "You gain proficiency in the Intimidation skill."
+    },
+    {
+      "name": "Relentless Endurance",
+      "level": null,
+      "desc": "When you are reduced to 0 hit points but not killed outright, you can drop to 1 hit point instead. You can't use this feature again until you finish a long rest. (Track this as a once-per-long-rest feature on your sheet.)"
+    },
+    {
+      "name": "Savage Attacks",
+      "level": null,
+      "desc": "When you score a critical hit with a melee weapon attack, you can roll one of the weapon's damage dice one additional time and add it to the extra damage of the critical hit."
+    }
+  ],
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD (CC BY 4.0 / OGL 1.0a). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy."
+}

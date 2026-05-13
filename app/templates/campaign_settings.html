@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ campaign.name }} — Settings{% endblock %}
 {% block content %}
+<div style="max-width:960px;margin:0 auto;padding:0 28px;">
 <style>
 /* ── Tabbed settings layout ────────────────────────────────────────────
    The page used to be one long scroll with an anchor-link strip at the
@@ -87,6 +88,12 @@
 }
 .upload-zone .file-label { font-size: 12px; color: #666; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+.upload-progress { margin-top: 8px; padding: 8px 12px; background: #181b22; border: 1px solid #2e3140; border-radius: 6px; }
+.upload-progress-label { font-size: 12px; color: #aaa; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.upload-progress-bar-wrap { height: 6px; background: #2e3140; border-radius: 3px; overflow: hidden; }
+.upload-progress-bar { height: 100%; width: 0%; background: var(--accent, #5b7cf6); border-radius: 3px; transition: width 0.1s linear; }
+.upload-progress-status { font-size: 11px; color: #666; margin-top: 4px; }
+
 .pl-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 10px; padding-top: 10px; border-top: 1px solid #2e3140; }
 .new-playlist-bar { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
 #new-playlist-form { display: none; align-items: center; gap: 8px; margin-top: 8px; }
@@ -163,6 +170,52 @@
             </select>
             <span class="muted" style="font-size:12px;">Forces all players to use this font on the tabletop page.</span>
         </label>
+        <fieldset>
+            <legend>🎵 Audio on session start</legend>
+            <p class="muted" style="margin:0 0 8px;">When you click <strong>Start session</strong>, this playlist begins playing for everyone automatically. Audio is stopped when the session ends.</p>
+            <label>Auto-play playlist
+                <select name="auto_play_playlist_id">
+                    <option value="" {% if not campaign.auto_play_playlist_id %}selected{% endif %}>— None (don't auto-play) —</option>
+                    {% for pl in playlists %}
+                    <option value="{{ pl.id }}" {% if campaign.auto_play_playlist_id == pl.id %}selected{% endif %}>
+                        {{ pl.name }} ({{ pl.tracks|length }} track{{ '' if pl.tracks|length == 1 else 's' }}, {{ pl.category }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>Play mode
+                <select name="auto_play_mode">
+                    <option value="order"   {% if (campaign.auto_play_mode or 'order') == 'order' %}selected{% endif %}>In order — start at track 1</option>
+                    <option value="shuffle" {% if campaign.auto_play_mode == 'shuffle' %}selected{% endif %}>Shuffle — pick a random track each session</option>
+                </select>
+            </label>
+        </fieldset>
+        <fieldset>
+            <legend>⚔ Encounter on session start</legend>
+            <p class="muted" style="margin:0 0 8px;">When you click <strong>Start session</strong>, this encounter loads automatically (same flow as the manual ▶ Load button — strict reset of tokens on the bound map). Audio comes from the playlist above, not the encounter's own auto-play setting.</p>
+            <label>Default encounter
+                <select name="default_encounter_id">
+                    <option value="" {% if not campaign.default_encounter_id %}selected{% endif %}>— None (don't auto-load) —</option>
+                    {% for enc in encounters %}
+                    <option value="{{ enc.id }}" {% if campaign.default_encounter_id == enc.id %}selected{% endif %}>
+                        {{ enc.name }}{% if enc.folder %} — {{ enc.folder }}{% endif %}{% if enc.map_id %} (map #{{ enc.map_id }}){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+        </fieldset>
+        <fieldset>
+            <legend>⚔ HP Thresholds (player view)</legend>
+            <p class="muted" style="margin:0 0 8px;">Labels shown to players instead of raw HP numbers in the initiative tracker. Rename any label; boundaries are fixed at 76 / 51 / 26 / 1 / 0 %.</p>
+            <div style="display:grid;grid-template-columns:max-content 1fr;gap:6px 12px;align-items:center;font-size:13px;">
+                {% for t in hp_thresholds %}
+                <span class="muted" style="font-size:12px;white-space:nowrap;">≥ {{ t.min_pct }}%</span>
+                <input type="text" name="hp_threshold_{{ loop.index0 }}"
+                       value="{{ t.label }}" maxlength="40"
+                       style="font-size:12px;padding:3px 6px;">
+                {% endfor %}
+            </div>
+        </fieldset>
         <div><button type="submit">Save basic info</button></div>
     </form>
 </section>
@@ -231,6 +284,28 @@
     </details>
     {% endif %}
 
+    {% set player_members = members_with_role | selectattr('is_gm', 'false') | list %}
+    {% if player_members %}
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+        <h3 style="font-size:13px;margin:0 0 6px;">Preview Tabletop as Player</h3>
+        <p class="muted" style="font-size:11px;margin:0 0 8px;">Open the tabletop exactly as a player would see it — their roll log, player tab, and map view.</p>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select id="view-as-select" style="font-size:12px;padding:5px 8px;">
+                {% for m in player_members %}
+                <option value="{{ m.user.id }}">{{ m.user.display_name }}</option>
+                {% endfor %}
+            </select>
+            <button type="button" id="view-as-btn" style="font-size:12px;padding:5px 12px;">👁 View as Player</button>
+        </div>
+    </div>
+    <script>
+    document.getElementById('view-as-btn').addEventListener('click', function () {
+        const uid = document.getElementById('view-as-select').value;
+        window.open('/campaign/{{ campaign.id }}?view_as=' + uid, '_blank');
+    });
+    </script>
+    {% endif %}
+
     <script>
     (function () {
         const CAMPAIGN_ID = {{ campaign.id }};
@@ -292,8 +367,8 @@
                 <span class="char-color-status" style="font-size:11px;color:#6cb;margin-left:4px;"></span>
             </td>
             <td>
-                <form method="post" action="/campaign/{{ campaign.id }}/settings/characters/{{ c.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete {{ c.name }}?')">
-                    <button type="submit" class="danger">Delete</button>
+                <form method="post" action="/campaign/{{ campaign.id }}/settings/characters/{{ c.id }}/delete" style="display:inline;" onsubmit="return confirm('Remove {{ c.name }} from this campaign? The character sheet will be preserved.')">
+                    <button type="submit" class="danger">Remove</button>
                 </form>
             </td>
         </tr>
@@ -377,36 +452,85 @@
 <section class="settings-section" id="maps" data-tab="world">
     <h2>Maps</h2>
     {% if maps %}
-    <table class="data">
-        <thead><tr><th>Name</th><th>Grid</th><th>Size</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody>
-        {% for m in maps %}
-        <tr>
-            <td>{{ m.name }}</td>
-            <td>{{ m.grid_type.value }}</td>
-            <td>{{ m.width_px }}×{{ m.height_px }}px / {{ m.grid_size_px }}px grid</td>
-            <td>{% if m.id == campaign.active_map_id %}<strong style="color:#6cb;">Active</strong>{% else %}<span class="muted">Inactive</span>{% endif %}</td>
-            <td style="display:flex;gap:4px;flex-wrap:wrap;">
-                {% if m.id != campaign.active_map_id %}
-                <form method="post" action="/campaign/{{ campaign.id }}/settings/maps/{{ m.id }}/activate" style="display:inline;">
-                    <button type="submit">Activate</button>
-                </form>
-                {% endif %}
-                <form method="post" action="/campaign/{{ campaign.id }}/settings/maps/{{ m.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete map {{ m.name }}?')">
-                    <button type="submit" class="danger">Delete</button>
-                </form>
-            </td>
-        </tr>
-        {% endfor %}
-        </tbody>
-    </table>
+    {# Group maps by folder; empty folder = "Unfiled" rendered last #}
+    {% set _folders = maps | map(attribute='folder') | map('default', '') | unique | sort | list %}
+    {% set _named_folders = _folders | reject('equalto', '') | list %}
+    {% set _all_folder_order = _named_folders + ([''] if '' in _folders else []) %}
+    {% for folder_name in _all_folder_order %}
+        {% set folder_maps = maps | selectattr('folder', 'equalto', folder_name) | list %}
+        {% if not folder_maps %}{% set folder_maps = maps | selectattr('folder', 'none') | list if folder_name == '' else [] %}{% endif %}
+    <details open style="margin-bottom:8px;">
+        <summary style="cursor:pointer;font-size:13px;color:var(--fg-mute);padding:3px 0;list-style:none;display:flex;align-items:center;gap:5px;">
+            <span style="font-size:8px;display:inline-block;transition:transform .15s;">▶</span>
+            <span style="font-weight:600;">{{ folder_name or 'Unfiled' }}</span>
+            <span class="muted" style="font-size:11px;font-weight:400;">({{ folder_maps | length }})</span>
+        </summary>
+        <table class="data" style="margin-top:4px;">
+            <thead><tr><th>Name</th><th>Folder</th><th>Tags</th><th>Grid</th><th>Size</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody>
+            {% for m in folder_maps %}
+            <tr data-map-id="{{ m.id }}">
+                <td>
+                    <input class="map-name-input" type="text" value="{{ m.name|e }}" maxlength="120"
+                           data-map-id="{{ m.id }}"
+                           style="font-size:13px;padding:3px 6px;min-width:140px;">
+                </td>
+                <td>
+                    <input class="map-folder-input" type="text" list="map-folder-list"
+                           value="{{ m.folder or '' }}"
+                           data-map-id="{{ m.id }}"
+                           placeholder="Folder (optional)"
+                           style="font-size:12px;padding:3px 6px;min-width:120px;">
+                </td>
+                <td>
+                    <input class="map-tags-input" type="text" list="map-tag-list"
+                           value="{{ m.tags|join(', ') }}"
+                           data-map-id="{{ m.id }}"
+                           placeholder="Tags (comma-separated)"
+                           style="font-size:12px;padding:3px 6px;min-width:140px;">
+                </td>
+                <td>{{ m.grid_type.value }}</td>
+                <td style="white-space:nowrap;">
+                    {{ m.width_px }}×{{ m.height_px }}px /
+                    <input class="map-grid-input" type="number" min="20" max="300"
+                           value="{{ m.grid_size_px }}" data-map-id="{{ m.id }}"
+                           style="width:52px;font-size:12px;padding:2px 4px;text-align:center;">px
+                </td>
+                <td>{% if m.id == campaign.active_map_id %}<strong style="color:#6cb;">Active</strong>{% else %}<span class="muted">Inactive</span>{% endif %}</td>
+                <td style="display:flex;gap:4px;flex-wrap:wrap;">
+                    {% if m.id != campaign.active_map_id %}
+                    <form method="post" action="/campaign/{{ campaign.id }}/settings/maps/{{ m.id }}/activate" style="display:inline;">
+                        <button type="submit">Activate</button>
+                    </form>
+                    {% endif %}
+                    <form method="post" action="/campaign/{{ campaign.id }}/settings/maps/{{ m.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete map {{ m.name }}?')">
+                        <button type="submit" class="danger">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </details>
+    {% endfor %}
     {% else %}
     <p class="muted">No maps yet.</p>
     {% endif %}
+    {# Shared autocomplete datasets #}
+    <datalist id="map-tag-list">
+        {% set _seen = [] %}
+        {% for m in maps %}{% for t in (m.tags or []) %}{% if t and t not in _seen %}<option value="{{ t }}">{% if _seen.append(t) %}{% endif %}{% endif %}{% endfor %}{% endfor %}
+    </datalist>
+    <datalist id="map-folder-list">
+        {% set _fseen = [] %}
+        {% for m in maps %}{% if m.folder and m.folder not in _fseen %}<option value="{{ m.folder }}">{% if _fseen.append(m.folder) %}{% endif %}{% endif %}{% endfor %}
+    </datalist>
     <details style="margin-top:10px;">
         <summary style="cursor:pointer;font-size:13px;">+ Upload map</summary>
-        <form method="post" action="/campaign/{{ campaign.id }}/settings/maps" enctype="multipart/form-data" class="stacked" style="margin-top:8px;max-width:480px;">
+        <form id="map-upload-form" method="post" action="/campaign/{{ campaign.id }}/settings/maps" enctype="multipart/form-data" class="stacked" style="margin-top:8px;max-width:480px;">
             <label>Name <input name="name" required></label>
+            <label>Folder <input name="folder" list="map-folder-list" placeholder="Optional — groups maps together"></label>
+            <label>Tags <input name="tags" list="map-tag-list" placeholder="Comma-separated, optional"></label>
             <label>Grid type
                 <select name="grid_type">
                     <option value="square">Square</option>
@@ -416,11 +540,57 @@
             </label>
             <div class="row">
                 <label>Grid size (px) <input type="number" name="grid_size_px" value="70" min="20" max="300" style="width:80px;"></label>
-                <label>Width (px) <input type="number" name="width_px" value="2000" min="200" max="8000" style="width:90px;"></label>
-                <label>Height (px) <input type="number" name="height_px" value="1500" min="200" max="8000" style="width:90px;"></label>
+                <label>Width (px) <input type="number" name="width_px" id="map-width-px" value="2000" min="200" max="8000" style="width:90px;"></label>
+                <label>Height (px) <input type="number" name="height_px" id="map-height-px" value="1500" min="200" max="8000" style="width:90px;"></label>
             </div>
-            <label>Image (png/jpg/webp, optional — max 25 MB) <input type="file" name="image" accept="image/*"></label>
-            <div><button type="submit">Upload map</button></div>
+            <span id="map-dim-note" style="font-size:11px;color:var(--fg-mute);display:none;">✓ Dimensions detected from image</span>
+            <label>Image (png/jpg/webp/gif/mp4/webm, optional — max 80 MB)
+                <input type="file" id="map-image-input" name="image" accept="image/*,video/mp4,video/webm">
+            </label>
+            <script>
+            (function() {
+                const fileInput = document.getElementById('map-image-input');
+                const wInput = document.getElementById('map-width-px');
+                const hInput = document.getElementById('map-height-px');
+                const note = document.getElementById('map-dim-note');
+                if (!fileInput) return;
+                fileInput.addEventListener('change', () => {
+                    const file = fileInput.files[0];
+                    if (!file) return;
+                    note.style.display = 'none';
+                    if (file.type.startsWith('image/')) {
+                        const url = URL.createObjectURL(file);
+                        const img = new Image();
+                        img.onload = () => {
+                            wInput.value = img.naturalWidth;
+                            hInput.value = img.naturalHeight;
+                            note.style.display = '';
+                            URL.revokeObjectURL(url);
+                        };
+                        img.onerror = () => URL.revokeObjectURL(url);
+                        img.src = url;
+                    } else if (file.type.startsWith('video/')) {
+                        const url = URL.createObjectURL(file);
+                        const vid = document.createElement('video');
+                        vid.onloadedmetadata = () => {
+                            wInput.value = vid.videoWidth;
+                            hInput.value = vid.videoHeight;
+                            note.style.display = '';
+                            URL.revokeObjectURL(url);
+                        };
+                        vid.onerror = () => URL.revokeObjectURL(url);
+                        vid.src = url;
+                    }
+                });
+            })();
+            </script>
+            <div><button type="submit" id="map-upload-btn">Upload map</button></div>
+            <div id="map-upload-progress" style="display:none;margin-top:8px;">
+                <div id="map-upload-status" style="font-size:11px;color:var(--fg-mute);margin-bottom:4px;">Uploading…</div>
+                <div style="height:6px;background:var(--input-bg);border-radius:3px;overflow:hidden;">
+                    <div id="map-upload-bar" style="height:100%;width:0%;background:var(--accent);transition:width .1s linear;border-radius:3px;"></div>
+                </div>
+            </div>
         </form>
     </details>
 </section>
@@ -445,7 +615,7 @@
     </label>
 
     {% for pl in playlists %}
-    <details class="playlist-card" {% if loop.first %}open{% endif %} data-playlist-details-id="{{ pl.id }}">
+    <details class="playlist-card" data-playlist-details-id="{{ pl.id }}">
         <summary>
             <span class="pl-chevron">▶</span>
             <strong class="pl-name">{{ pl.name }}</strong>
@@ -463,6 +633,21 @@
             </div>
         </summary>
         <div class="playlist-body">
+            {# Description + tags metadata. Auto-saves on blur — no
+               explicit Save button to avoid cluttering the row. #}
+            <div class="pl-meta-row" style="display:flex;flex-direction:column;gap:6px;margin:0 0 10px;">
+                <input class="pl-description-input" type="text"
+                       data-playlist-id="{{ pl.id }}"
+                       value="{{ pl.description|e }}"
+                       maxlength="200"
+                       placeholder="Description (shown on the tabletop next to the name)"
+                       style="font-size:12px;padding:4px 8px;">
+                <input class="pl-tags-input" type="text"
+                       data-playlist-id="{{ pl.id }}"
+                       value="{{ pl.tags|join(', ') }}"
+                       placeholder="Tags (comma-separated, optional)"
+                       style="font-size:12px;padding:4px 8px;">
+            </div>
             <div class="track-list" data-playlist-id="{{ pl.id }}">
                 {% for t in pl.tracks %}
                 <div class="track-row" data-track-id="{{ t.id }}" draggable="true">
@@ -494,6 +679,11 @@
                     <span class="file-label">No files chosen</span>
                     <button type="submit" class="upload-submit-btn" style="display:none;">Upload</button>
                 </div>
+                <div class="upload-progress" style="display:none;">
+                    <div class="upload-progress-label"></div>
+                    <div class="upload-progress-bar-wrap"><div class="upload-progress-bar"></div></div>
+                    <div class="upload-progress-status"></div>
+                </div>
             </form>
 
             <div class="pl-footer">
@@ -516,9 +706,104 @@
             <option value="sfx">SFX</option>
             <option value="environment">Environment</option>
         </select>
+        <input name="description" placeholder="Description (optional)" maxlength="200">
+        <input name="tags" placeholder="Tags (comma-separated, optional)">
         <button type="submit">Create</button>
         <button type="button" id="cancel-new-playlist">Cancel</button>
     </form>
+
+    {# ── Audio history ──────────────────────────────────────────────
+         Recorded by audio_routes.py on every play/skip/stop/next/end.
+         Collapsed by default to avoid pushing the playlist controls
+         down on every page load — open the <details> to inspect. #}
+    {% set _stats = audio_stats or {} %}
+    {% set _total_plays = _stats.get('total_plays', 0) %}
+    <details style="margin-top:18px;background:var(--bg-2);border:1px solid var(--border);border-radius:6px;">
+        <summary style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;gap:10px;font-weight:600;list-style:none;">
+            <span>📊 Audio history</span>
+            <span class="muted" style="font-weight:normal;font-size:12px;">
+                {% if _total_plays %}
+                    {{ _total_plays }} play{{ '' if _total_plays == 1 else 's' }}
+                    {% set _hrs = (_stats.get('total_seconds', 0) // 3600) %}
+                    {% set _mins = ((_stats.get('total_seconds', 0) % 3600) // 60) %}
+                    · {{ _hrs }}h {{ '%02d'|format(_mins) }}m total listening
+                {% else %}
+                    No plays recorded yet.
+                {% endif %}
+            </span>
+        </summary>
+        <div style="padding:0 14px 14px;">
+            {% if audio_top %}
+            <h4 style="margin:14px 0 6px;font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;">Top tracks</h4>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead><tr style="text-align:left;color:var(--fg-mute);font-size:11px;">
+                    <th style="padding:4px 6px;width:60%;">Track</th>
+                    <th style="padding:4px 6px;text-align:right;">Plays</th>
+                    <th style="padding:4px 6px;text-align:right;">Total</th>
+                </tr></thead>
+                <tbody>
+                {% for row in audio_top %}
+                {% set _h = row.total_s // 3600 %}
+                {% set _m = (row.total_s % 3600) // 60 %}
+                {% set _s = row.total_s % 60 %}
+                <tr style="border-top:1px solid var(--border);">
+                    <td style="padding:4px 6px;">{{ row.track_name }}</td>
+                    <td style="padding:4px 6px;text-align:right;font-variant-numeric:tabular-nums;">{{ row.play_count }}</td>
+                    <td style="padding:4px 6px;text-align:right;font-variant-numeric:tabular-nums;" class="muted">
+                        {% if _h %}{{ _h }}h {% endif %}{{ '%02d'|format(_m) }}m {{ '%02d'|format(_s) }}s
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if audio_recent %}
+            <h4 style="margin:14px 0 6px;font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;">Recent plays (last 50)</h4>
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead><tr style="text-align:left;color:var(--fg-mute);font-size:11px;">
+                    <th style="padding:4px 6px;">When</th>
+                    <th style="padding:4px 6px;">Track</th>
+                    <th style="padding:4px 6px;">Playlist</th>
+                    <th style="padding:4px 6px;text-align:right;">Duration</th>
+                    <th style="padding:4px 6px;">Ended</th>
+                    <th style="padding:4px 6px;">Source</th>
+                </tr></thead>
+                <tbody>
+                {% for ev in audio_recent %}
+                {% set _dur = ev.duration_s or 0 %}
+                {% set _m = _dur // 60 %}
+                {% set _s = _dur % 60 %}
+                {% set _reason_color = {
+                    'completed':   '#6cb',
+                    'skipped':     '#d4a84a',
+                    'stopped':     'var(--fg-mute)',
+                    'session_end': 'var(--fg-mute)',
+                    'ongoing':     '#9aa9e0',
+                }.get(ev.ended_reason, 'var(--fg-mute)') %}
+                <tr style="border-top:1px solid var(--border);">
+                    <td style="padding:4px 6px;color:var(--fg-mute);font-variant-numeric:tabular-nums;white-space:nowrap;">
+                        {{ ev.started_at.strftime('%Y-%m-%d %H:%M') if ev.started_at else '—' }}
+                    </td>
+                    <td style="padding:4px 6px;">{{ ev.track_name or '—' }}</td>
+                    <td style="padding:4px 6px;" class="muted">{{ ev.playlist_name or '—' }}</td>
+                    <td style="padding:4px 6px;text-align:right;font-variant-numeric:tabular-nums;">
+                        {% if ev.ended_at %}{{ '%d:%02d'|format(_m, _s) }}{% else %}<span class="muted">…</span>{% endif %}
+                    </td>
+                    <td style="padding:4px 6px;font-size:11px;" data-reason="{{ ev.ended_reason }}"
+                        style="color:{{ _reason_color }};">{{ ev.ended_reason }}</td>
+                    <td style="padding:4px 6px;font-size:11px;color:var(--fg-mute);">{{ ev.source }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% endif %}
+
+            {% if not audio_recent and not audio_top %}
+            <p class="muted" style="margin:14px 0 0;">No tracks have been played in this campaign yet. Start one and refresh this page.</p>
+            {% endif %}
+        </div>
+    </details>
 </section>
 
 <!-- ── Token Templates ── -->
@@ -590,6 +875,7 @@
         <button type="button" id="new-tmpl-btn">+ New template</button>
         <button type="button" id="export-tmpls-btn">⬇ Export</button>
         <button type="button" id="import-tmpls-btn">⬆ Import</button>
+        <button type="button" id="o5e-search-btn">🔍 Open5e</button>
     </div>
     <form id="new-tmpl-form" style="display:none; flex-wrap:wrap; align-items:center; gap:8px; margin-top:8px;" onsubmit="return false;">
         <input name="name" id="new-tmpl-name" placeholder="Template name" required>
@@ -598,6 +884,99 @@
         <button type="submit">Create</button>
         <button type="button" id="cancel-new-tmpl">Cancel</button>
     </form>
+
+    <!-- ── Open5e creature search panel ── -->
+    <div id="o5e-panel" style="display:none;margin-top:10px;background:var(--input-bg,#1a1d26);border:1px solid var(--border,#2e3140);border-radius:6px;padding:12px;">
+        <div style="display:flex;gap:6px;margin-bottom:8px;">
+            <input type="text" id="o5e-query" placeholder="Search creatures by name…" style="flex:1;font-size:13px;">
+            <button type="button" id="o5e-close-btn" style="background:none;border:none;font-size:18px;color:#888;cursor:pointer;padding:0 4px;">&times;</button>
+        </div>
+        <div id="o5e-status" style="font-size:11px;color:#888;margin-bottom:4px;min-height:1.2em;"></div>
+        <div id="o5e-results" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;"></div>
+    </div>
+    <script>
+    (function() {
+        const CAMPAIGN_ID = {{ campaign.id }};
+        const btn = document.getElementById('o5e-search-btn');
+        const panel = document.getElementById('o5e-panel');
+        const queryInput = document.getElementById('o5e-query');
+        const statusEl = document.getElementById('o5e-status');
+        const resultsEl = document.getElementById('o5e-results');
+        const closeBtn = document.getElementById('o5e-close-btn');
+
+        let debounce;
+
+        btn.addEventListener('click', () => {
+            panel.style.display = panel.style.display === 'none' ? '' : 'none';
+            if (panel.style.display !== 'none') queryInput.focus();
+        });
+        closeBtn.addEventListener('click', () => { panel.style.display = 'none'; });
+
+        queryInput.addEventListener('input', () => {
+            clearTimeout(debounce);
+            const q = queryInput.value.trim();
+            if (!q) { resultsEl.innerHTML = ''; statusEl.textContent = ''; return; }
+            statusEl.textContent = 'Searching…';
+            debounce = setTimeout(() => search(q), 350);
+        });
+
+        async function search(q) {
+            try {
+                const res = await fetch(`/api/open5e/monsters?search=${encodeURIComponent(q)}&limit=25&campaign_id=${CAMPAIGN_ID}`);
+                if (!res.ok) { statusEl.textContent = 'Search failed.'; return; }
+                const data = await res.json();
+                const rows = data.results || [];
+                statusEl.textContent = rows.length ? `${data.count ?? rows.length} result(s)` : 'No results.';
+                resultsEl.innerHTML = '';
+                rows.forEach(m => {
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;background:#20232a;';
+                    const info = document.createElement('span');
+                    info.style.cssText = 'flex:1;font-size:12px;';
+                    const typeStr = m.type ? ` · ${m.type}` : '';
+                    const crStr = m.challenge_rating != null ? ` · CR ${m.challenge_rating}` : '';
+                    info.textContent = `${m.name}${typeStr}${crStr}`;
+                    const impBtn = document.createElement('button');
+                    impBtn.type = 'button';
+                    impBtn.textContent = 'Import';
+                    impBtn.style.cssText = 'font-size:11px;padding:2px 10px;flex-shrink:0;';
+                    impBtn.addEventListener('click', () => importMonster(m.slug, impBtn));
+                    row.appendChild(info);
+                    row.appendChild(impBtn);
+                    resultsEl.appendChild(row);
+                });
+            } catch (e) {
+                statusEl.textContent = 'Search error.';
+            }
+        }
+
+        async function importMonster(slug, btn) {
+            btn.disabled = true;
+            btn.textContent = '…';
+            try {
+                const res = await fetch(`/api/campaign/${CAMPAIGN_ID}/templates/import-monster`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ slug }),
+                });
+                if (!res.ok) {
+                    const msg = await res.text();
+                    alert('Import failed: ' + msg);
+                    btn.disabled = false;
+                    btn.textContent = 'Import';
+                    return;
+                }
+                btn.textContent = '✓ Imported';
+                btn.style.color = '#6cb';
+                setTimeout(() => location.reload(), 800);
+            } catch (e) {
+                btn.disabled = false;
+                btn.textContent = 'Import';
+                alert('Import error: ' + e);
+            }
+        }
+    })();
+    </script>
 </section>
 
 <!-- Template sheet edit modal -->
@@ -672,6 +1051,635 @@
         </div>
     </div>
 </div>
+
+<!-- ── Encounters library (Phase 5 + v0.70.0 prep features).
+     Save / Load / Update happen on the tabletop Battle drawer; this
+     page is the "manage" + "prep" surface. The list is rendered fully
+     client-side from /api/encounters so sort, tag filter, build-from-
+     blank, and post-mutation refreshes don't need a page reload. -->
+<section class="settings-section" id="encounters" data-tab="world">
+    <h2>⚔ Encounters</h2>
+    <p class="muted">A saved encounter bundles a map, GM-owned tokens, the initiative seed, and an optional ambient playlist so the GM can load a prepped combat with a single click. Use <strong>+ New Encounter</strong> to draft one ahead of the session; once you're at the table and the scene is set, hit 💾 Update in the tabletop Battle drawer to fill in the token positions and initiative.</p>
+
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 8px;">
+        <button type="button" id="enc-lib-new-btn" style="font-size:12px;padding:5px 12px;">+ New Encounter</button>
+        <input type="search" id="enc-lib-search" placeholder="Search by name, tag, or folder…"
+               style="flex:1;min-width:200px;font-size:12px;padding:4px 8px;">
+        {# flex-direction:row override: the global ``label`` rule in
+           style.css sets ``flex-direction: column`` which would
+           otherwise stack "Sort" above the select. #}
+        <label style="display:inline-flex;flex-direction:row;align-items:center;gap:6px;white-space:nowrap;font-size:12px;color:var(--fg-mute);">Sort<select id="enc-lib-sort" style="font-size:12px;padding:2px 6px;">
+                <option value="recent">Recent</option>
+                <option value="name">A–Z</option>
+            </select></label>
+        <div id="enc-lib-tag-filters" style="display:flex;gap:4px;flex-wrap:wrap;flex-basis:100%;"></div>
+    </div>
+
+    {# Build-from-blank form, hidden until + New Encounter is clicked.
+       Creates a draft with an empty token payload — the GM fills it in
+       later from the tabletop. #}
+    <div id="enc-lib-new-form" style="display:none;padding:14px;background:var(--bg-2);border:1px solid var(--border);border-radius:6px;margin-bottom:14px;">
+        <h3 style="margin:0 0 10px;font-size:13px;">📝 New encounter</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <label style="font-size:12px;">Name
+                <input type="text" id="enc-lib-new-name" placeholder="e.g. Goblin Ambush — Dawn"
+                       style="width:100%;box-sizing:border-box;font-size:13px;padding:5px 8px;margin-top:3px;">
+            </label>
+            <label style="font-size:12px;">Tags
+                <input type="text" id="enc-lib-new-tags" list="enc-lib-tag-list"
+                       placeholder="boss, set-piece"
+                       style="width:100%;box-sizing:border-box;font-size:13px;padding:5px 8px;margin-top:3px;">
+            </label>
+            <label style="font-size:12px;grid-column:1 / -1;">Folder
+                <input type="text" id="enc-lib-new-folder" list="enc-lib-folder-list"
+                       placeholder="e.g. Act 1, Bosses, Side quests (leave blank for Unfiled)"
+                       style="width:100%;box-sizing:border-box;font-size:13px;padding:5px 8px;margin-top:3px;">
+            </label>
+            <label style="font-size:12px;">Map
+                <select id="enc-lib-new-map" style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 6px;margin-top:3px;">
+                    <option value="">— no map bound —</option>
+                    {% for m in maps %}
+                    <option value="{{ m.id }}">{{ m.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label style="font-size:12px;">Playlist
+                <select id="enc-lib-new-playlist" style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 6px;margin-top:3px;">
+                    <option value="">— no playlist —</option>
+                    {% for p in playlists %}
+                    <option value="{{ p.id }}">{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label style="font-size:12px;">Playback mode
+                <select id="enc-lib-new-mode" style="width:auto;font-size:12px;padding:5px 6px;margin-top:3px;">
+                    <option value="order">Order</option>
+                    <option value="shuffle">Shuffle</option>
+                </select>
+            </label>
+            <label style="font-size:12px;grid-column:1 / -1;display:flex;align-items:center;gap:6px;cursor:pointer;"
+                   title="When no playlist is selected, stop the currently-playing audio on load instead of leaving it running.">
+                <input type="checkbox" id="enc-lib-new-stop-audio">
+                <span>Stop audio on load (when no playlist is selected)</span>
+            </label>
+            <label style="font-size:12px;grid-column:1 / -1;">Notes
+                <textarea id="enc-lib-new-desc" rows="2" placeholder="Optional read-aloud or GM-only notes"
+                          style="width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;margin-top:3px;resize:vertical;"></textarea>
+            </label>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center;">
+            <button type="button" id="enc-lib-new-save" style="font-size:12px;padding:5px 14px;">Create draft</button>
+            <button type="button" id="enc-lib-new-cancel" style="font-size:12px;padding:5px 14px;">Cancel</button>
+            <span class="muted" style="font-size:11px;">Token positions and initiative are added later via 💾 Update from the tabletop.</span>
+        </div>
+    </div>
+
+    <div id="enc-library" style="display:flex;flex-direction:column;gap:8px;">
+        <p class="muted" style="margin:0;"><em>Loading…</em></p>
+    </div>
+    <datalist id="enc-lib-folder-list"></datalist>
+    {# Shared tag autocomplete datalist for both the New form and the
+       per-card edit forms. Refilled on every refresh(). #}
+    <datalist id="enc-lib-tag-list"></datalist>
+</section>
+
+<script>
+// Encounters library — Phase 5 client-side rendering with sort, tag
+// filter, hover-preview tooltip, duplicate, inline rename + delete +
+// tag edit. Save / Load / Update live on the tabletop Battle drawer.
+(function () {
+    const CAMPAIGN_ID = {{ campaign.id }};
+    const URL_BASE = '/api/campaign/' + CAMPAIGN_ID + '/encounters';
+    const container = document.getElementById('enc-library');
+    if (!container) return;
+    const sortSelect = document.getElementById('enc-lib-sort');
+    const filterBar = document.getElementById('enc-lib-tag-filters');
+    const searchInput = document.getElementById('enc-lib-search');
+    // Maps + playlists data, page-rendered, used by both the build-from-
+    // blank form's dropdowns and the per-card edit form's dropdowns.
+    const ENC_MAPS = [
+        {% for m in maps %}
+        {id: {{ m.id }}, name: {{ m.name|tojson }}, image_url: {{ (m.image_url or '')|tojson }} }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+    const ENC_PLAYLISTS = [
+        {% for p in playlists %}
+        {id: {{ p.id }}, name: {{ p.name|tojson }} }{% if not loop.last %},{% endif %}
+        {% endfor %}
+    ];
+
+    let allRows = [];
+    let activeTag = null;
+    let searchQuery = '';
+    const folderOpen = {};
+
+    function plural(n, one, many) { return n === 1 ? one : many; }
+
+    function buildPreviewTitle(e) {
+        const parts = [];
+        if (e.map_name) parts.push('Map: ' + e.map_name);
+        if (e.token_names && e.token_names.length) {
+            let line = 'Tokens: ' + e.token_names.join(', ');
+            if (e.token_names_extra) line += ' + ' + e.token_names_extra + ' more';
+            parts.push(line);
+        } else if ((e.token_count|0) === 0) {
+            parts.push('No tokens saved');
+        }
+        if (e.tags && e.tags.length) parts.push('Tags: ' + e.tags.join(', '));
+        return parts.join('\n');
+    }
+
+    function buildTagChip(tag, opts) {
+        opts = opts || {};
+        const chip = document.createElement('span');
+        chip.textContent = tag;
+        const active = !!opts.active;
+        chip.style.cssText =
+            'font-size:11px;padding:2px 8px;border-radius:10px;' +
+            'background:' + (active ? '#3a2f15' : 'var(--bg)') + ';' +
+            'color:' + (active ? '#d4a84a' : 'var(--fg-mute)') + ';' +
+            'border:1px solid ' + (active ? '#6e5828' : 'var(--border)') + ';' +
+            (opts.clickable ? 'cursor:pointer;' : '');
+        return chip;
+    }
+
+    function buildCard(e) {
+        const card = document.createElement('div');
+        card.className = 'enc-card';
+        card.dataset.encId = e.id;
+        card.style.cssText = 'padding:10px 14px;background:var(--bg-2);border:1px solid var(--border);border-radius:6px;';
+        card.title = buildPreviewTitle(e);
+
+        // ── View mode ──
+        const view = document.createElement('div');
+        const titleRow = document.createElement('div');
+        titleRow.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+        // Map thumbnail — 60×40 tile at the start of the row.
+        const thumb = document.createElement('div');
+        thumb.style.cssText = 'width:60px;height:40px;border-radius:4px;flex-shrink:0;background:var(--bg);border:1px solid var(--border);background-size:cover;background-position:center;';
+        if (e.map_image_url) {
+            thumb.style.backgroundImage = 'url("' + e.map_image_url + '")';
+        } else if (e.map_name) {
+            thumb.textContent = e.map_name.slice(0, 1).toUpperCase();
+            thumb.style.cssText += 'display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--fg-mute);';
+        } else {
+            thumb.textContent = '—';
+            thumb.style.cssText += 'display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--fg-mute);';
+        }
+        titleRow.appendChild(thumb);
+        const name = document.createElement('strong');
+        name.style.cssText = 'font-size:14px;';
+        name.textContent = e.name;
+        const tokN = e.token_count|0, initN = e.initiative_count|0;
+        const meta = document.createElement('span');
+        meta.className = 'muted';
+        meta.style.cssText = 'font-size:11px;';
+        let metaText =
+            tokN + ' ' + plural(tokN, 'token', 'tokens') +
+            ' · ' + initN + ' ' + plural(initN, 'init slot', 'init slots');
+        if (e.map_name) metaText += ' · map: ' + e.map_name;
+        if (e.auto_play_playlist_id) metaText += ' · 🎵 playlist #' + e.auto_play_playlist_id + ' (' + e.auto_play_mode + ')';
+        meta.textContent = metaText;
+        const date = document.createElement('span');
+        date.className = 'muted';
+        date.style.cssText = 'font-size:11px;margin-left:auto;';
+        date.textContent = (e.created_at || '').slice(0, 10);
+        const dupBtn = document.createElement('button');
+        dupBtn.type = 'button';
+        dupBtn.textContent = '📋 Duplicate';
+        dupBtn.title = 'Make a copy of this encounter with "(copy)" appended to the name.';
+        dupBtn.style.cssText = 'font-size:11px;padding:3px 8px;';
+        const editBtn = document.createElement('button');
+        editBtn.type = 'button';
+        editBtn.textContent = '✎ Edit';
+        editBtn.title = 'Rename / edit notes / edit tags';
+        editBtn.style.cssText = 'font-size:11px;padding:3px 8px;';
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.textContent = '🗑 Delete';
+        delBtn.title = 'Delete this encounter';
+        delBtn.style.cssText = 'font-size:11px;padding:3px 8px;color:var(--danger);';
+        titleRow.appendChild(name);
+        titleRow.appendChild(meta);
+        titleRow.appendChild(date);
+        titleRow.appendChild(dupBtn);
+        titleRow.appendChild(editBtn);
+        titleRow.appendChild(delBtn);
+        view.appendChild(titleRow);
+        if (e.description) {
+            const desc = document.createElement('p');
+            desc.className = 'enc-desc muted';
+            desc.style.cssText = 'margin:6px 0 0;font-size:12px;line-height:1.4;';
+            desc.textContent = e.description;
+            view.appendChild(desc);
+        }
+        if (e.tags && e.tags.length) {
+            const tagsRow = document.createElement('div');
+            tagsRow.style.cssText = 'display:flex;gap:4px;flex-wrap:wrap;margin-top:6px;';
+            e.tags.forEach(t => tagsRow.appendChild(buildTagChip(t)));
+            view.appendChild(tagsRow);
+        }
+
+        // ── Edit mode ──
+        const edit = document.createElement('div');
+        edit.style.display = 'none';
+        const editName = document.createElement('input');
+        editName.type = 'text';
+        editName.value = e.name || '';
+        editName.placeholder = 'Encounter name';
+        editName.style.cssText = 'width:100%;box-sizing:border-box;font-size:13px;padding:5px 8px;margin-bottom:6px;';
+        const editDesc = document.createElement('textarea');
+        editDesc.placeholder = 'Notes (optional)';
+        editDesc.rows = 2;
+        editDesc.value = e.description || '';
+        editDesc.style.cssText = 'width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;margin-bottom:6px;resize:vertical;';
+        const editTags = document.createElement('input');
+        editTags.type = 'text';
+        editTags.setAttribute('list', 'enc-lib-tag-list');
+        editTags.value = (e.tags || []).join(', ');
+        editTags.placeholder = 'Tags (comma-separated)';
+        editTags.style.cssText = 'width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;margin-bottom:6px;';
+        const editFolder = document.createElement('input');
+        editFolder.type = 'text';
+        editFolder.setAttribute('list', 'enc-lib-folder-list');
+        editFolder.value = e.folder || '';
+        editFolder.placeholder = 'Folder (leave blank for Unfiled)';
+        editFolder.style.cssText = 'width:100%;box-sizing:border-box;font-size:12px;padding:5px 8px;margin-bottom:6px;';
+        // Map / playlist / mode dropdowns. Preselected to the encounter's
+        // current binding.
+        const editGrid = document.createElement('div');
+        editGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:8px;';
+        const editMap = document.createElement('select');
+        editMap.style.cssText = 'font-size:12px;padding:4px 6px;';
+        const noneMapOpt = document.createElement('option');
+        noneMapOpt.value = '';
+        noneMapOpt.textContent = '— no map bound —';
+        editMap.appendChild(noneMapOpt);
+        ENC_MAPS.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = String(m.id);
+            opt.textContent = m.name;
+            if (e.map_id === m.id) opt.selected = true;
+            editMap.appendChild(opt);
+        });
+        const editPlaylist = document.createElement('select');
+        editPlaylist.style.cssText = 'font-size:12px;padding:4px 6px;';
+        const nonePlOpt = document.createElement('option');
+        nonePlOpt.value = '';
+        nonePlOpt.textContent = '— no playlist —';
+        editPlaylist.appendChild(nonePlOpt);
+        ENC_PLAYLISTS.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = String(p.id);
+            opt.textContent = p.name;
+            if (e.auto_play_playlist_id === p.id) opt.selected = true;
+            editPlaylist.appendChild(opt);
+        });
+        const editMode = document.createElement('select');
+        editMode.style.cssText = 'font-size:12px;padding:4px 6px;';
+        ['order','shuffle'].forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m;
+            opt.textContent = m.charAt(0).toUpperCase() + m.slice(1);
+            if ((e.auto_play_mode || 'order') === m) opt.selected = true;
+            editMode.appendChild(opt);
+        });
+        editGrid.appendChild(editMap);
+        editGrid.appendChild(editPlaylist);
+        editGrid.appendChild(editMode);
+        // Stop-audio-on-load fallback (only meaningful when no playlist
+        // is bound; the playlist takes precedence regardless). Lives in
+        // the grid's third column under the mode select so the audio
+        // controls stay clustered.
+        const stopAudioLabel = document.createElement('label');
+        stopAudioLabel.style.cssText = 'grid-column:1 / -1;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-mute);cursor:pointer;';
+        stopAudioLabel.title = 'When no playlist is selected, stop the currently-playing audio on load instead of leaving it running.';
+        const editStopAudio = document.createElement('input');
+        editStopAudio.type = 'checkbox';
+        editStopAudio.checked = !!e.stop_audio_on_load;
+        stopAudioLabel.appendChild(editStopAudio);
+        stopAudioLabel.appendChild(document.createTextNode('Stop audio on load (when no playlist is selected)'));
+        editGrid.appendChild(stopAudioLabel);
+        const editBtns = document.createElement('div');
+        editBtns.style.cssText = 'display:flex;gap:8px;';
+        const saveEditBtn = document.createElement('button');
+        saveEditBtn.type = 'button';
+        saveEditBtn.textContent = 'Save';
+        saveEditBtn.style.cssText = 'font-size:11px;padding:4px 12px;';
+        const cancelEditBtn = document.createElement('button');
+        cancelEditBtn.type = 'button';
+        cancelEditBtn.textContent = 'Cancel';
+        cancelEditBtn.style.cssText = 'font-size:11px;padding:4px 12px;';
+        editBtns.appendChild(saveEditBtn);
+        editBtns.appendChild(cancelEditBtn);
+        edit.appendChild(editName);
+        edit.appendChild(editDesc);
+        edit.appendChild(editTags);
+        edit.appendChild(editFolder);
+        edit.appendChild(editGrid);
+        edit.appendChild(editBtns);
+
+        card.appendChild(view);
+        card.appendChild(edit);
+
+        editBtn.addEventListener('click', () => {
+            view.style.display = 'none';
+            edit.style.display = '';
+            editName.focus();
+            editName.select();
+        });
+        cancelEditBtn.addEventListener('click', () => {
+            editName.value = e.name || '';
+            editDesc.value = e.description || '';
+            editTags.value = (e.tags || []).join(', ');
+            edit.style.display = 'none';
+            view.style.display = '';
+        });
+        saveEditBtn.addEventListener('click', async () => {
+            const newName = (editName.value || '').trim();
+            if (!newName) { editName.focus(); return; }
+            saveEditBtn.disabled = true;
+            try {
+                const resp = await fetch(URL_BASE + '/' + e.id, {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        name: newName,
+                        description: (editDesc.value || '').trim(),
+                        tags: editTags.value,
+                        folder: (editFolder.value || '').trim(),
+                        map_id: editMap.value || null,
+                        auto_play_playlist_id: editPlaylist.value || null,
+                        auto_play_mode: editMode.value,
+                        stop_audio_on_load: !!editStopAudio.checked,
+                    }),
+                });
+                if (!resp.ok) {
+                    alert('Save failed: ' + await resp.text());
+                    return;
+                }
+                refresh();
+            } finally {
+                saveEditBtn.disabled = false;
+            }
+        });
+        dupBtn.addEventListener('click', async () => {
+            dupBtn.disabled = true;
+            try {
+                const resp = await fetch(URL_BASE + '/' + e.id + '/duplicate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                });
+                if (!resp.ok) {
+                    alert('Duplicate failed: ' + await resp.text());
+                    return;
+                }
+                refresh();
+            } finally {
+                dupBtn.disabled = false;
+            }
+        });
+        delBtn.addEventListener('click', async () => {
+            if (!confirm('Delete saved encounter "' + e.name + '"? This cannot be undone.')) return;
+            delBtn.disabled = true;
+            try {
+                const resp = await fetch(URL_BASE + '/' + e.id + '/delete', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                });
+                if (!resp.ok) {
+                    alert('Delete failed: ' + await resp.text());
+                    return;
+                }
+                refresh();
+            } finally {
+                delBtn.disabled = false;
+            }
+        });
+
+        return card;
+    }
+
+    function renderFilterBar() {
+        if (!filterBar) return;
+        const tagSet = new Set();
+        const folderSet = new Set();
+        allRows.forEach(e => {
+            (e.tags || []).forEach(t => tagSet.add(t));
+            if (e.folder) folderSet.add(e.folder);
+        });
+        const dlist = document.getElementById('enc-lib-tag-list');
+        if (dlist) {
+            dlist.innerHTML = '';
+            Array.from(tagSet).sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'})).forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t;
+                dlist.appendChild(opt);
+            });
+        }
+        const fdlist = document.getElementById('enc-lib-folder-list');
+        if (fdlist) {
+            fdlist.innerHTML = '';
+            Array.from(folderSet).sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'})).forEach(f => {
+                const opt = document.createElement('option');
+                opt.value = f;
+                fdlist.appendChild(opt);
+            });
+        }
+        filterBar.innerHTML = '';
+        if (!tagSet.size) return;
+        Array.from(tagSet).sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'})).forEach(t => {
+            const chip = buildTagChip(t, {clickable: true, active: activeTag === t});
+            chip.addEventListener('click', () => {
+                activeTag = (activeTag === t) ? null : t;
+                rerender();
+            });
+            filterBar.appendChild(chip);
+        });
+    }
+
+    // ── Build-from-blank: create a draft encounter without touching
+    // the live tabletop. The GM fills in the token payload later from
+    // the Battle drawer via 💾 Update. ──
+    const newBtn = document.getElementById('enc-lib-new-btn');
+    const newForm = document.getElementById('enc-lib-new-form');
+    const newName = document.getElementById('enc-lib-new-name');
+    const newTags = document.getElementById('enc-lib-new-tags');
+    const newFolder = document.getElementById('enc-lib-new-folder');
+    const newMap = document.getElementById('enc-lib-new-map');
+    const newPlaylist = document.getElementById('enc-lib-new-playlist');
+    const newMode = document.getElementById('enc-lib-new-mode');
+    const newStopAudio = document.getElementById('enc-lib-new-stop-audio');
+    const newDesc = document.getElementById('enc-lib-new-desc');
+    const newSave = document.getElementById('enc-lib-new-save');
+    const newCancel = document.getElementById('enc-lib-new-cancel');
+    function resetNewForm() {
+        newName.value = '';
+        newTags.value = '';
+        if (newFolder) newFolder.value = '';
+        newDesc.value = '';
+        newMap.value = '';
+        newPlaylist.value = '';
+        newMode.value = 'order';
+        if (newStopAudio) newStopAudio.checked = false;
+    }
+    if (newBtn) {
+        newBtn.addEventListener('click', () => {
+            newForm.style.display = '';
+            newBtn.style.display = 'none';
+            newName.focus();
+        });
+    }
+    if (newCancel) {
+        newCancel.addEventListener('click', () => {
+            resetNewForm();
+            newForm.style.display = 'none';
+            if (newBtn) newBtn.style.display = '';
+        });
+    }
+    if (newSave) {
+        newSave.addEventListener('click', async () => {
+            const name = (newName.value || '').trim();
+            if (!name) { newName.focus(); return; }
+            newSave.disabled = true;
+            try {
+                const body = {
+                    name: name,
+                    description: (newDesc.value || '').trim(),
+                    tags: newTags.value,
+                    folder: newFolder ? (newFolder.value || '').trim() : '',
+                    // Empty payload — this is a draft. The token list +
+                    // initiative are populated later from the tabletop
+                    // via 💾 Update.
+                    payload: {tokens: [], battle_state: {}},
+                    auto_play_mode: newMode.value,
+                    stop_audio_on_load: !!(newStopAudio && newStopAudio.checked),
+                };
+                if (newMap.value) body.map_id = newMap.value;
+                // Always send playlist (null for empty) so the server
+                // doesn't infer from the currently-playing track when
+                // the GM explicitly picked "— no playlist —".
+                body.auto_play_playlist_id = newPlaylist.value || null;
+                const resp = await fetch(URL_BASE, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body),
+                });
+                if (!resp.ok) {
+                    alert('Create failed: ' + await resp.text());
+                    return;
+                }
+                resetNewForm();
+                newForm.style.display = 'none';
+                if (newBtn) newBtn.style.display = '';
+                refresh();
+            } finally {
+                newSave.disabled = false;
+            }
+        });
+    }
+
+    function rerender() {
+        let rows = allRows.slice();
+        if (activeTag) {
+            rows = rows.filter(e => (e.tags || []).includes(activeTag));
+        }
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            rows = rows.filter(e => {
+                if ((e.name || '').toLowerCase().includes(q)) return true;
+                if ((e.tags || []).some(t => (t || '').toLowerCase().includes(q))) return true;
+                if ((e.folder || '').toLowerCase().includes(q)) return true;
+                return false;
+            });
+        }
+        const sortMode = sortSelect ? sortSelect.value : 'recent';
+        if (sortMode === 'name') {
+            rows.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, {sensitivity: 'base'}));
+        } else {
+            rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+        }
+        renderFilterBar();
+        container.innerHTML = '';
+        if (!rows.length) {
+            const p = document.createElement('p');
+            p.className = 'muted';
+            p.style.margin = '0';
+            if (searchQuery) p.textContent = 'No encounters match "' + searchQuery + '".';
+            else if (activeTag) p.textContent = 'No encounters with tag "' + activeTag + '".';
+            else p.textContent = 'None yet — save your first one from the tabletop Battle drawer.';
+            container.appendChild(p);
+            return;
+        }
+        // Group by folder; unfiled rendered last.
+        const groups = new Map();
+        rows.forEach(e => {
+            const key = (e.folder || '').trim();
+            if (!groups.has(key)) groups.set(key, []);
+            groups.get(key).push(e);
+        });
+        const folderNames = Array.from(groups.keys())
+            .filter(n => n)
+            .sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'}));
+        if (groups.has('')) folderNames.push('');
+        folderNames.forEach(folder => {
+            const items = groups.get(folder);
+            // Default closed; sticky per-folder once the GM toggles.
+            const isOpen = !!folderOpen[folder];
+            const wrap = document.createElement('details');
+            if (isOpen) wrap.open = true;
+            wrap.style.cssText = 'border:1px solid var(--border);border-radius:6px;background:var(--bg);padding:6px 10px;';
+            const summary = document.createElement('summary');
+            summary.style.cssText = 'cursor:pointer;font-size:12px;color:var(--fg-mute);text-transform:uppercase;letter-spacing:.06em;padding:4px 0;list-style:none;display:flex;align-items:center;gap:6px;';
+            // Chevron rotates to indicate the folder is expandable.
+            // Native ▶ marker is suppressed via ``list-style:none`` above
+            // so the chevron lines up with the rest of the typography.
+            const chev = document.createElement('span');
+            chev.textContent = '▶';
+            chev.style.cssText = 'font-size:9px;color:var(--fg-mute);transition:transform .15s;display:inline-block;flex-shrink:0;' + (isOpen ? 'transform:rotate(90deg);' : '');
+            summary.appendChild(chev);
+            const label = document.createElement('span');
+            label.textContent = (folder || 'Unfiled') + ' (' + items.length + ')';
+            summary.appendChild(label);
+            summary.addEventListener('click', () => {
+                setTimeout(() => {
+                    folderOpen[folder] = wrap.open;
+                    chev.style.transform = wrap.open ? 'rotate(90deg)' : '';
+                }, 0);
+            });
+            wrap.appendChild(summary);
+            const inner = document.createElement('div');
+            inner.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-top:6px;';
+            items.forEach(e => inner.appendChild(buildCard(e)));
+            wrap.appendChild(inner);
+            container.appendChild(wrap);
+        });
+    }
+
+    function refresh() {
+        fetch(URL_BASE, {credentials: 'same-origin'})
+            .then(r => r.ok ? r.json() : Promise.reject('HTTP ' + r.status))
+            .then(rows => {
+                allRows = rows || [];
+                if (activeTag && !allRows.some(e => (e.tags || []).includes(activeTag))) {
+                    activeTag = null;
+                }
+                rerender();
+            })
+            .catch(err => {
+                allRows = [];
+                container.innerHTML = '<p class="muted" style="margin:0;color:var(--danger);">Failed to load (' + err + ')</p>';
+            });
+    }
+
+    if (sortSelect) sortSelect.addEventListener('change', rerender);
+    if (searchInput) searchInput.addEventListener('input', () => {
+        searchQuery = (searchInput.value || '').trim();
+        rerender();
+    });
+    refresh();
+})();
+</script>
 
 <!-- ── Custom classes (homebrew base classes) ── -->
 <section class="settings-section" id="custom-classes" data-tab="homebrew" data-sub="classes">
@@ -1549,16 +2557,81 @@ newPlBtn.addEventListener('click', () => {
 });
 cancelNewPl.addEventListener('click', () => { newPlForm.style.display = 'none'; newPlBtn.style.display = ''; });
 
+function uploadOneFile(url, file, onProgress) {
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.addEventListener('progress', e => {
+            if (e.lengthComputable) onProgress(Math.round(e.loaded / e.total * 100));
+        });
+        xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 400) resolve();
+            else reject(new Error(`HTTP ${xhr.status}`));
+        });
+        xhr.addEventListener('error', () => reject(new Error('Network error')));
+        const fd = new FormData();
+        fd.append('audio', file);
+        xhr.open('POST', url);
+        xhr.send(fd);
+    });
+}
+
 document.querySelectorAll('.upload-form').forEach(form => {
-    const input = form.querySelector('.file-input');
-    const label = form.querySelector('.file-label');
-    const chooseBtn = form.querySelector('.choose-files-btn');
-    const submitBtn = form.querySelector('.upload-submit-btn');
+    const input       = form.querySelector('.file-input');
+    const label       = form.querySelector('.file-label');
+    const chooseBtn   = form.querySelector('.choose-files-btn');
+    const submitBtn   = form.querySelector('.upload-submit-btn');
+    const progressEl  = form.querySelector('.upload-progress');
+    const progLabel   = form.querySelector('.upload-progress-label');
+    const progBar     = form.querySelector('.upload-progress-bar');
+    const progStatus  = form.querySelector('.upload-progress-status');
+
     chooseBtn.addEventListener('click', () => input.click());
+
     input.addEventListener('change', () => {
         const n = input.files.length;
         label.textContent = n === 0 ? 'No files chosen' : n === 1 ? input.files[0].name : `${n} files selected`;
-        submitBtn.style.display = n > 0 ? '' : 'none';
+        if (n > 0) {
+            submitBtn.textContent = n === 1 ? 'Upload' : `Upload ${n} files`;
+            submitBtn.style.display = '';
+        } else {
+            submitBtn.style.display = 'none';
+        }
+    });
+
+    form.addEventListener('submit', async e => {
+        e.preventDefault();
+        const files = Array.from(input.files);
+        if (!files.length) return;
+
+        chooseBtn.disabled = true;
+        submitBtn.style.display = 'none';
+        progressEl.style.display = '';
+        progStatus.textContent = '';
+
+        let failed = 0;
+        const url = form.action;
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            progLabel.textContent = `Uploading ${i + 1} of ${files.length}: ${file.name}`;
+            progBar.style.width = '0%';
+            try {
+                await uploadOneFile(url, file, pct => { progBar.style.width = pct + '%'; });
+                progBar.style.width = '100%';
+            } catch (_) {
+                failed++;
+                progStatus.textContent = `✕ Failed: ${file.name}`;
+            }
+        }
+
+        if (failed === 0) {
+            progLabel.textContent = `Done — ${files.length} file${files.length > 1 ? 's' : ''} uploaded`;
+            progBar.style.width = '100%';
+        } else {
+            progLabel.textContent = `Finished with ${failed} error${failed > 1 ? 's' : ''}`;
+        }
+        progStatus.textContent = 'Reloading…';
+        setTimeout(() => location.reload(), 700);
     });
 });
 
@@ -1616,6 +2689,114 @@ document.querySelectorAll('.pl-category-select').forEach(sel => {
         else sel.dataset.saved = sel.value;
     });
     sel.dataset.saved = sel.value;
+});
+
+// Description + tags auto-save on blur. Only fires when the value
+// actually changed since the field gained focus, so tabbing through
+// inputs without typing doesn't spam the server.
+document.querySelectorAll('.pl-description-input').forEach(input => {
+    input.dataset.saved = input.value;
+    input.addEventListener('blur', async () => {
+        if (input.value === input.dataset.saved) return;
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/playlists/${input.dataset.playlistId}/description`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ description: input.value }),
+        });
+        if (!resp.ok) { alert('Failed to save description'); input.value = input.dataset.saved; }
+        else input.dataset.saved = input.value;
+    });
+});
+document.querySelectorAll('.pl-tags-input').forEach(input => {
+    input.dataset.saved = input.value;
+    input.addEventListener('blur', async () => {
+        if (input.value === input.dataset.saved) return;
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/playlists/${input.dataset.playlistId}/tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags: input.value }),
+        });
+        if (!resp.ok) { alert('Failed to save tags'); input.value = input.dataset.saved; }
+        else {
+            const data = await resp.json().catch(() => null);
+            // Reflect the server's normalised value so dedupe + trim
+            // are visible to the GM without a page reload.
+            if (data && Array.isArray(data.tags)) input.value = data.tags.join(', ');
+            input.dataset.saved = input.value;
+        }
+    });
+});
+
+// Map name + tags auto-save on blur. Same pattern as the playlist
+// inputs above: only fires when the value changed, reverts on rejection,
+// reflects server-normalised value back into the field on success.
+document.querySelectorAll('.map-name-input').forEach(input => {
+    input.dataset.saved = input.value;
+    input.addEventListener('blur', async () => {
+        const next = input.value.trim();
+        if (!next) { input.value = input.dataset.saved; return; }
+        if (next === input.dataset.saved) return;
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/settings/maps/${input.dataset.mapId}/rename`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: next }),
+        });
+        if (!resp.ok) { alert('Failed to rename map'); input.value = input.dataset.saved; }
+        else {
+            const data = await resp.json().catch(() => null);
+            if (data && data.name) input.value = data.name;
+            input.dataset.saved = input.value;
+        }
+    });
+});
+document.querySelectorAll('.map-tags-input').forEach(input => {
+    input.dataset.saved = input.value;
+    input.addEventListener('blur', async () => {
+        if (input.value === input.dataset.saved) return;
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/settings/maps/${input.dataset.mapId}/tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags: input.value }),
+        });
+        if (!resp.ok) { alert('Failed to save map tags'); input.value = input.dataset.saved; }
+        else {
+            const data = await resp.json().catch(() => null);
+            if (data && Array.isArray(data.tags)) input.value = data.tags.join(', ');
+            input.dataset.saved = input.value;
+        }
+    });
+});
+document.querySelectorAll('.map-folder-input').forEach(input => {
+    input.dataset.saved = input.value;
+    input.addEventListener('blur', async () => {
+        const next = input.value.trim();
+        if (next === input.dataset.saved) return;
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/settings/maps/${input.dataset.mapId}/folder`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ folder: next }),
+        });
+        if (!resp.ok) { alert('Failed to save map folder'); input.value = input.dataset.saved; }
+        else { input.dataset.saved = next; }
+    });
+});
+document.querySelectorAll('.map-grid-input').forEach(input => {
+    input.dataset.saved = input.value;
+    input.addEventListener('change', () => {
+        const v = Math.max(20, Math.min(300, parseInt(input.value) || 20));
+        input.value = v;
+    });
+    input.addEventListener('blur', async () => {
+        const val = parseInt(input.value);
+        if (isNaN(val) || String(val) === input.dataset.saved) return;
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/settings/maps/${input.dataset.mapId}/grid_size`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ grid_size_px: val }),
+        });
+        if (!resp.ok) { alert('Failed to save grid size'); input.value = input.dataset.saved; }
+        else { input.dataset.saved = String(val); }
+    });
 });
 
 document.querySelectorAll('.pl-delete-btn').forEach(btn => {
@@ -2263,4 +3444,48 @@ document.querySelectorAll('.tmpl-card[data-tmpl-id]').forEach(card => {
 <script src="/static/features_editor.js"></script>
 <script src="/static/spell_picker.js"></script>
 <script src="/static/resources_editor.js"></script>
+<script>
+(function () {
+    const form = document.getElementById('map-upload-form');
+    if (!form) return;
+    form.addEventListener('submit', function (e) {
+        const fileInput = form.querySelector('input[type="file"]');
+        if (!fileInput || !fileInput.files.length) return;
+        e.preventDefault();
+        const wrap   = document.getElementById('map-upload-progress');
+        const bar    = document.getElementById('map-upload-bar');
+        const status = document.getElementById('map-upload-status');
+        const btn    = document.getElementById('map-upload-btn');
+        wrap.style.display = 'block';
+        btn.disabled = true;
+        bar.style.background = 'var(--accent)';
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', form.action);
+        xhr.upload.addEventListener('progress', ev => {
+            if (!ev.lengthComputable) return;
+            const pct = Math.round((ev.loaded / ev.total) * 100);
+            bar.style.width = pct + '%';
+            status.textContent = 'Uploading… ' + pct + '%';
+        });
+        xhr.addEventListener('load', () => {
+            if (xhr.status >= 200 && xhr.status < 400) {
+                bar.style.width = '100%';
+                status.textContent = '✓ Done — reloading…';
+                setTimeout(() => window.location.reload(), 700);
+            } else {
+                bar.style.background = 'var(--danger)';
+                status.textContent = '✗ Upload failed (' + xhr.status + ')';
+                btn.disabled = false;
+            }
+        });
+        xhr.addEventListener('error', () => {
+            bar.style.background = 'var(--danger)';
+            status.textContent = '✗ Network error';
+            btn.disabled = false;
+        });
+        xhr.send(new FormData(form));
+    });
+})();
+</script>
+</div><!-- /.settings-wrapper -->
 {% endblock %}

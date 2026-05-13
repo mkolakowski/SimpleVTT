@@ -1,0 +1,33 @@
+{
+  "slug": "human",
+  "name": "Human",
+  "ability_bonuses": [
+    {"attribute": "Strength", "bonus": 1},
+    {"attribute": "Dexterity", "bonus": 1},
+    {"attribute": "Constitution", "bonus": 1},
+    {"attribute": "Intelligence", "bonus": 1},
+    {"attribute": "Wisdom", "bonus": 1},
+    {"attribute": "Charisma", "bonus": 1}
+  ],
+  "size": "Medium",
+  "speed": 30,
+  "age": "Humans reach adulthood in their late teens and live less than a century.",
+  "alignment": "Humans tend toward no particular alignment. The best and the worst are found among them.",
+  "languages": "You can speak, read, and write Common and one extra language of your choice. Humans typically learn the languages of other peoples they deal with, including obscure dialects.",
+  "traits": [
+    {
+      "name": "Ability Score Increases",
+      "level": null,
+      "desc": "Your ability scores each increase by 1. (Already included in the bonus summary above — apply +1 to each of your six ability scores.)"
+    },
+    {
+      "name": "Extra Language",
+      "level": null,
+      "desc": "You can speak, read, and write one extra language of your choice. (Write it into your languages list.)"
+    }
+  ],
+  "scope": "global",
+  "source": "srd",
+  "owner": null,
+  "_attribution": "Adapted from the D&D 5e SRD (CC BY 4.0 / OGL 1.0a). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy."
+}
