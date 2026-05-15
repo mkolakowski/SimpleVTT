@@ -2,8 +2,14 @@
   "slug": "hill-dwarf",
   "name": "Hill Dwarf",
   "ability_bonuses": [
-    {"attribute": "Constitution", "bonus": 2},
-    {"attribute": "Wisdom", "bonus": 1}
+    {
+      "attribute": "Constitution",
+      "bonus": 2
+    },
+    {
+      "attribute": "Wisdom",
+      "bonus": 1
+    }
   ],
   "size": "Medium",
   "speed": 25,
@@ -50,5 +56,5 @@
   "scope": "global",
   "source": "srd",
   "owner": null,
-  "_attribution": "Adapted from the D&D 5e SRD (CC BY 4.0 / OGL 1.0a). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy."
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a), via the Open5e API (open5e.com, CC BY 4.0). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy of the SRD prose. See CREDITS.md."
 }

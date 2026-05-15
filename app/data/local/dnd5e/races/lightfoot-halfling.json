@@ -2,8 +2,14 @@
   "slug": "lightfoot-halfling",
   "name": "Lightfoot Halfling",
   "ability_bonuses": [
-    {"attribute": "Dexterity", "bonus": 2},
-    {"attribute": "Charisma", "bonus": 1}
+    {
+      "attribute": "Dexterity",
+      "bonus": 2
+    },
+    {
+      "attribute": "Charisma",
+      "bonus": 1
+    }
   ],
   "size": "Small",
   "speed": 25,
@@ -44,5 +50,5 @@
   "scope": "global",
   "source": "srd",
   "owner": null,
-  "_attribution": "Adapted from the D&D 5e SRD (CC BY 4.0 / OGL 1.0a). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy."
+  "_attribution": "Adapted from the D&D 5e SRD 5.1 by Wizards of the Coast (CC BY 4.0 / OGL 1.0a), via the Open5e API (open5e.com, CC BY 4.0). Mechanical summaries shipped as descriptive trait cards; not a verbatim copy of the SRD prose. See CREDITS.md."
 }
