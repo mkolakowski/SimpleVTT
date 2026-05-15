@@ -10,7 +10,14 @@ Application version and database schema version are also published at runtime by
 
 ---
 
-## [2.1.6] - 2026-05-15
+## [2.1.7] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Add a "Homebrew Clone" entry to the TODO backlog under GM Tools — a Clone button on every homebrew record (feats / backgrounds / races / subclasses / monsters / classes) that duplicates the source JSON as "Copy of \<name\>" and opens the new entry in the editor.
+**Description:** Captures a small but high-value GM-quality-of-life feature for future implementation: spin off homebrew variants without retyping every field. Lives in TODO.md under the GM Tools section.
+
+### Changed
+- `TODO.md`: new "Homebrew Clone" entry under GM Tools.
 
 **Schema version:** 52
 **Commit summary:** Remove the redundant standalone `#player-dice-panel` from the tabletop sidebar; the Dice Roller card attached to the roll log is now the single dice UI.

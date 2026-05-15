@@ -107,11 +107,22 @@ GMs should be able to open and read any player's character sheet in the campaign
 ### Reporting Page
 Admin/GM dashboard showing campaign activity: session count, token move history, roll statistics, active players over time. Useful for GMs who want a post-session summary.
 
+### Initiative Tracker — Open Sheet for Active Combatant
+When it is a combatant's turn in the initiative order, the GM should be able to open that combatant's character sheet (or stat block for monsters/NPCs) directly from the initiative tracker entry without having to find and click their token on the map. A small sheet icon or "Open Sheet" button next to the active-turn entry is sufficient. Should work for all three combatant types:
+- **Player characters** — opens the full D&D 5e or generic character sheet in the existing sheet modal
+- **NPCs with an assigned character** — opens their character sheet the same way
+- **Monsters / encounter creatures without a sheet** — opens the monster stat block pulled from the encounter data (the same stat block the GM sees when spawning the creature)
+
+The button should be most prominent on the currently-active turn entry but could optionally be available on all entries for quick reference during other players' turns.
+
 ### Initiative Tracker Roll Prompt
 When a combatant is added to the initiative order without a roll (e.g. added mid-combat from the token sheet or manually), show the GM a "Prompt Roll" button next to that entry. Clicking it sends a WebSocket message to the relevant player's client asking them to roll initiative. The button disappears automatically once the player's initiative is recorded (either via self-roll or GM entry).
 
 ### Roll Request — Per-Player Targeting
 The roll-request panel currently broadcasts the prompt to everyone in the campaign; only the targeted player(s) should see the click-to-roll button. Add a player picker next to the existing roll-type / DC / ability inputs that lets the GM target one specific player, multiple selected players, or "all players" (current behaviour, kept as the default). UI: a multi-select dropdown listing every player member of the campaign by display name — keep it compact so it fits inline with the rest of the roll-request form. Backend: extend the WebSocket payload with a `target_user_ids: list[int]` field; the client only renders the prompt button when `ME.id` is in that list (or the list is empty, meaning broadcast). The GM's roll log should reflect which players were prompted so it's clear who the request went to.
+
+### Homebrew Clone
+Add a "Clone" button on every homebrew entry in the campaign settings homebrew menu — feats, backgrounds, races, subclasses, monsters, and classes (the six file-based homebrew types as of v2.0.0). Clicking it duplicates the source record as a new homebrew JSON file with a name pre-populated to "Copy of \<original\>" and a fresh auto-generated slug, then opens the new entry in the editor for the GM to tweak. Makes it trivial to spin off variants (e.g. clone "Bandit" → tweak HP / abilities → save as "Veteran Bandit") without retyping every field. Behaviour: server-side endpoint reads the source JSON, mutates the `slug`/`name` fields, writes a new file in the same campaign scope, redirects to the edit form. Existing-slug guard already applies (the existing `_existing_*` check in `homebrew/import` rejects duplicates). No clone for shipped SRD content — that lives in `app/data/local/dnd5e/` and is read-only; cloning shipped → homebrew would be a separate feature.
 
 ---
 
@@ -181,6 +192,16 @@ Allow GMs to create playlists from tracks already uploaded to the campaign rathe
 ---
 
 ## Player Features
+
+### User Presence on the Tabletop
+Show who is currently connected to the session in real time. All connected users (GM and players) should be able to see at a glance which other players are online, idle, or have disconnected. Planned scope:
+
+- **Presence indicators** — a small online/offline dot (or avatar badge) next to each player's name in the player list and/or initiative tracker. Green = connected, grey = disconnected. Optional: amber = connected but idle (no interaction for N minutes).
+- **WebSocket lifecycle hooks** — on connect, broadcast a `presence_join` message to all clients; on disconnect (or WebSocket close), broadcast `presence_leave`. Clients maintain a local presence map and update the UI reactively.
+- **Cursor / active-token highlight** (stretch) — show a faint coloured ring or name label on the token currently being hovered or dragged by another user, similar to Google Docs cursor presence.
+- **GM view** — the GM's player list should show presence state for every campaign member, including those who haven't joined the current session yet (shown as offline).
+
+Backend: presence state is ephemeral (in-memory in `realtime.py`, not persisted to the database) — it resets when the server restarts, which is acceptable.
 
 ### Player Notes
 Per-player scratchpad (rich text or markdown) scoped to a campaign. Notes should be private to the player by default, with an optional "share with GM" toggle. Persisted server-side so they survive page refreshes.
