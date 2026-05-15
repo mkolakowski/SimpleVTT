@@ -5008,7 +5008,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             el.dataset.status = status;
             el.dataset.successes = String(successes);
             el.dataset.failures = String(failures);
-            el.style.display = (status === 'alive') ? 'none' : '';
+            // v2.1.1: tracker is permanently visible (no more display:none).
             // Status badge
             const badge = el.querySelector('.death-saves-status');
             if (badge) {

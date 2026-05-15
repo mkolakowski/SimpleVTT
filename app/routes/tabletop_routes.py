@@ -4988,10 +4988,15 @@ def _apply_hp_change(
     new_current = max(0, int(new_current))
 
     if new_current > 0:
-        # HP positive — healing or set. Wake from dying/stable.
-        # "Dead" does NOT auto-revive on healing per the v2.1.0 plan
-        # (revivify/resurrection requires the GM override endpoint).
-        if old_status in ("dying", "stable"):
+        # HP positive — healing or set. Wake from any non-alive state.
+        # v2.1.1: this includes "dead" — healing auto-revives. The earlier
+        # design ("dead stays dead, GM override required") proved confusing
+        # in practice: the user healing a character is usually the GM, and
+        # forcing them through a second action to clear the dead flag was
+        # unhelpful. If a table wants strict revivify-spell semantics they
+        # can keep the character at 0 HP and use the override to mark them
+        # alive at 1 HP rather than healing them through it.
+        if old_status in ("dying", "stable", "dead"):
             new_status = "alive"
             successes = 0
             failures = 0

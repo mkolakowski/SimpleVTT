@@ -23,8 +23,7 @@
      data-character-id="{{ char.id }}"
      data-status="{{ status }}"
      data-successes="{{ successes }}"
-     data-failures="{{ failures }}"
-     style="{% if status == 'alive' %}display:none;{% endif %}">
+     data-failures="{{ failures }}">
     <div class="death-saves-row">
         <span class="death-saves-label">Death Saves</span>
         <span class="death-saves-status death-saves-status-{{ status }}">{{ status|upper }}</span>

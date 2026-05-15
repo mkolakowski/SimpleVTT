@@ -1336,7 +1336,7 @@
             el.dataset.status = status;
             el.dataset.successes = String(successes);
             el.dataset.failures = String(failures);
-            el.style.display = (status === 'alive') ? 'none' : '';
+            // v2.1.1: tracker is permanently visible (no display toggle).
             const badge = el.querySelector('.death-saves-status');
             if (badge) {
                 badge.textContent = status.toUpperCase();
@@ -2138,7 +2138,8 @@
             });
             wrap.appendChild(statsGrid);
 
-            // Death saves tracker (v2.1.0). Visible only when status != alive.
+            // Death saves tracker (v2.1.1: permanently visible regardless
+            // of status so players always see their pips + current state).
             const ds = sh.death_saves || {};
             const dsStatus = ds.status || 'alive';
             const dsTracker = document.createElement('div');
@@ -2147,7 +2148,6 @@
             dsTracker.dataset.status = dsStatus;
             dsTracker.dataset.successes = ds.successes || 0;
             dsTracker.dataset.failures = ds.failures || 0;
-            if (dsStatus === 'alive') dsTracker.style.display = 'none';
             const dsSuccesses = ds.successes || 0;
             const dsFailures = ds.failures || 0;
             const canRoll = (char.owner_user_id === ME.id) || ME.isGm;

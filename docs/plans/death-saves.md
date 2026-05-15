@@ -43,9 +43,9 @@ Every endpoint that mutates `hp_current` (`/apply_healing`, `/apply_damage`, wea
 
 **Why:** server-side state machine means stale clients can't desync the dying state, and the behavior is identical across all damage sources (weapon attacks, action-button damage, GM HP edits). Single source of truth.
 
-### 3. Healing always clears the dying/stable state
+### 3. Any HP > 0 clears non-alive states (incl. dead)
 
-Any positive HP change to a dying or stable character sets `status = alive` and zeros out the save counters. Decided up-front: no house-rule support for "stays at 0 HP until they choose to wake up." Healing wakes them, period.
+Any positive HP change sets `status = alive` and zeros out the save counters, regardless of prior status. **v2.1.1 update:** this now includes `dead` — the original "dead stays dead, GM override required" rule proved confusing in practice (the user healing a character is usually the GM, so requiring a second action to clear the dead flag was unhelpful). If a table wants strict revivify-spell semantics, they keep the character at 0 HP and use the override to set them `alive` at 1 HP rather than healing them through it.
 
 ### 4. Death save rolls go through the existing `/roll` endpoint
 
@@ -71,9 +71,11 @@ The full character sheet exposes a "Stabilize" button that sets status to `stabl
 
 **Three touchpoints** (Phase 1):
 
-1. **Mini-sheet tracker** — three green dots (successes) and three red dots (failures), filled as they accumulate. Prominent "Roll Death Save" button when status is `dying`. Status badge ("DYING" / "STABLE" / "DEAD") in the appropriate color.
+1. **Mini-sheet tracker** — three green dots (successes) and three red dots (failures), filled as they accumulate. Prominent "Roll Death Save" button when status is `dying`. Status badge in the appropriate color ("ALIVE" / "DYING" / "STABLE" / "DEAD").
 2. **Full character sheet header** — same tracker, expanded with the GM-only "Stabilize" button.
 3. **GM token context menu** — "Set status: alive / dying / stable / dead" override, in case the GM needs to fix a misclick or apply a story beat.
+
+**v2.1.1 update:** the tracker is now **permanently visible** on both the full and mini sheet, regardless of status. The earlier "hide when alive" behavior made it unclear whether the feature was even present until a character actually started dying. Always-on visibility lets players see "I am ALIVE with 0 successes / 0 failures" as a baseline.
 
 **Color coding** matches the rest of the app's danger/success palette: red status fields when dying or dead, amber when stable, normal otherwise. Dying tracker gets a subtle pulse animation to draw the player's eye.
 
