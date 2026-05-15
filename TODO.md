@@ -118,13 +118,7 @@ The roll-request panel currently broadcasts the prompt to everyone in the campai
 ## Combat
 
 ### Advantage & Disadvantage Tracking
-Track per-character advantage/disadvantage state and automatically apply it to relevant rolls rather than requiring players to manually pick the `adv`/`dis` dice buttons.
-
-- **Phase 1 — Manual toggle:** A per-character toggle in the mini-sheet (or token context menu) that marks a character as having advantage or disadvantage. When set, any roll that would normally use a d20 (ability checks, attack rolls, saving throws) automatically uses `1d20a` or `1d20d` instead. The toggle state is visible to both the player and the GM.
-- **Phase 2 — Condition automation:** Common conditions that impose advantage/disadvantage (Blinded, Prone, Restrained, Invisible, etc.) set the toggle automatically when applied via the conditions system. Conflicting sources (one granting advantage, one granting disadvantage) cancel out to a straight roll per 5e rules.
-- **Phase 3 — Context-aware rolls:** Attack rolls against a prone target within 5 ft grant advantage automatically; ranged attacks against a prone target impose disadvantage — requiring the combat/movement system to be aware of token positions and conditions.
-
-Phase 1 can ship independently; Phases 2 and 3 depend on the conditions system and Combat 2.0 movement tracking respectively.
+Per-character roll-state toggle (adv / normal / dis) that the server applies to d20 rolls automatically, with the existing manual `adv` / `dis` dice buttons preserved as one-shot overrides. Three phases: manual toggle, condition automation, context-aware rolls. See [`docs/plans/advantage-disadvantage.md`](docs/plans/advantage-disadvantage.md) for the full design.
 
 ### Combat 2.0 — Action Economy Tracking
 Full per-turn action economy tracker surfaced in the initiative tracker and each player's mini-sheet. Tracks the four action types defined by D&D 5e:
