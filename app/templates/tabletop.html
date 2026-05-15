@@ -937,33 +937,8 @@
             </div>
         </details>
 
-        <!-- ── Dice Tray ── -->
-        <details id="player-dice-panel" open
-                 style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
-            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:6px;">
-                <span class="pdice-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
-                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">🎲 Dice</h4>
-            </summary>
-            <div style="padding:0 0 2px;">
-                <form id="roll-form-p" class="row" style="margin-bottom:6px;">
-                    <div style="position:relative;flex:1;display:flex;">
-                        <input type="text" id="roll-expr-p" placeholder="1d20+5" required style="flex:1;padding-right:44px;">
-                        <button type="button" id="roll-expr-clear-btn-p" title="Clear formula" style="position:absolute;right:0;top:0;bottom:0;width:44px;background:none;border:none;cursor:pointer;font-size:16px;color:var(--fg-mute);display:flex;align-items:center;justify-content:center;">✕</button>
-                    </div>
-                    <select id="roll-vis-p">
-                        <option value="public">All players</option>
-                        <option value="gm_and_roller">GM + me</option>
-                        <option value="gm_only">GM only</option>
-                    </select>
-                    <button type="submit">Roll</button>
-                </form>
-                <div class="row quick">
-                    {% for q in system.quick_dice %}
-                    <button type="button" class="quick-die-p" data-expr="{{ q.expression }}" title="{{ q.expression }}">{{ q.label }}</button>
-                    {% endfor %}
-                </div>
-            </div>
-        </details>
+        {# Standalone #player-dice-panel removed in 2.1.6 — the Dice Roller #}
+        {# card attached to the roll log (#roll-form) is the single dice UI. #}
 
         <!-- ── Sound (players only — GMs use the GM Tools music panel) ── -->
         {% if not is_gm %}

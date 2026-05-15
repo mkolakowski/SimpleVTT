@@ -1711,50 +1711,9 @@
         });
     });
 
-    // ---------- Player tab dice form ----------
-    document.getElementById('roll-expr-clear-btn-p')?.addEventListener('click', () => {
-        const el = document.getElementById('roll-expr-p');
-        el.value = '';
-        el.focus();
-    });
-
-    document.getElementById('roll-form-p')?.addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        const expr = document.getElementById('roll-expr-p').value.trim();
-        const vis  = document.getElementById('roll-vis-p').value;
-        if (!expr) return;
-        const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ expression: expr, visibility: vis }),
-        });
-        if (!resp.ok) alert('Roll failed: ' + await resp.text());
-    });
-
-    document.querySelectorAll('.quick-die-p').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const exprEl   = document.getElementById('roll-expr-p');
-            const current  = exprEl.value.trim();
-            const newExpr  = btn.dataset.expr;
-            if (!current) { exprEl.value = newExpr; return; }
-            const diceRe   = /^(\d+)(d\d+\w*)$/i;
-            const newMatch = newExpr.match(diceRe);
-            if (newMatch) {
-                const newType  = newMatch[2];
-                const newCount = parseInt(newMatch[1]);
-                const terms    = current.split('+').map(t => t.trim());
-                let merged     = false;
-                const newTerms = terms.map(term => {
-                    const m = term.match(diceRe);
-                    if (!merged && m && m[2] === newType) { merged = true; return (parseInt(m[1]) + newCount) + newType; }
-                    return term;
-                });
-                exprEl.value = merged ? newTerms.join('+') : current + '+' + newExpr;
-            } else {
-                exprEl.value = current + '+' + newExpr;
-            }
-        });
-    });
+    // Player-tab dice form handlers removed in 2.1.6 alongside the
+    // #player-dice-panel HTML block. The roll-log Dice Roller card
+    // (#roll-form) is the single dice UI on the tabletop.
 
     // ---------- GM: add token button ----------
     const addBtn = document.getElementById('add-token-btn');
