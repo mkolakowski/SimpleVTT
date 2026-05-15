@@ -2094,7 +2094,11 @@
 
     // ---------- GM: token tracker ----------
 
-    function buildMiniSheetEl(name, tmpl, sheet) {
+    function buildMiniSheetEl(name, tmpl, sheet, character) {
+        // ``character`` (optional) is the Character object — passed only
+        // when the mini-sheet belongs to a PC, not a token-template NPC.
+        // Phase 1 death saves are character-scoped, so NPC mini-sheets
+        // skip the tracker entirely.
         const sh = sheet || {};
         const wrap = document.createElement('div');
         wrap.className = 'mini-sheet';
@@ -2140,36 +2144,39 @@
 
             // Death saves tracker (v2.1.1: permanently visible regardless
             // of status so players always see their pips + current state).
-            const ds = sh.death_saves || {};
-            const dsStatus = ds.status || 'alive';
-            const dsTracker = document.createElement('div');
-            dsTracker.className = 'death-saves-tracker mini-death-saves';
-            dsTracker.dataset.characterId = char.id;
-            dsTracker.dataset.status = dsStatus;
-            dsTracker.dataset.successes = ds.successes || 0;
-            dsTracker.dataset.failures = ds.failures || 0;
-            const dsSuccesses = ds.successes || 0;
-            const dsFailures = ds.failures || 0;
-            const canRoll = (char.owner_user_id === ME.id) || ME.isGm;
-            dsTracker.innerHTML = `
-                <div class="death-saves-row">
-                    <span class="death-saves-label">Death Saves</span>
-                    <span class="death-saves-status death-saves-status-${dsStatus}">${dsStatus.toUpperCase()}</span>
-                </div>
-                <div class="death-saves-pips-row">
-                    <span class="death-saves-pips-label" title="Successes">✓</span>
-                    ${[0,1,2].map(i => `<span class="death-saves-pip death-saves-pip-success${i < dsSuccesses ? ' death-saves-pip-on' : ''}"></span>`).join('')}
-                    <span class="death-saves-pips-spacer"></span>
-                    <span class="death-saves-pips-label" title="Failures">✗</span>
-                    ${[0,1,2].map(i => `<span class="death-saves-pip death-saves-pip-failure${i < dsFailures ? ' death-saves-pip-on' : ''}"></span>`).join('')}
-                </div>
-                ${dsStatus === 'dying' ? `
-                <div class="death-saves-actions">
-                    ${canRoll ? `<button type="button" class="death-saves-roll-btn" data-action="roll-death-save" data-campaign-id="${CAMPAIGN_ID}" data-character-id="${char.id}">🎲 Roll Death Save</button>` : ''}
-                    ${ME.isGm ? `<button type="button" class="death-saves-stabilize-btn" data-action="stabilize" data-campaign-id="${CAMPAIGN_ID}" data-character-id="${char.id}">🩹 Stabilize</button>` : ''}
-                </div>` : ''}
-            `;
-            wrap.appendChild(dsTracker);
+            // PC-only — NPC mini-sheets (no ``character`` arg) skip this.
+            if (character && character.id) {
+                const ds = sh.death_saves || {};
+                const dsStatus = ds.status || 'alive';
+                const dsTracker = document.createElement('div');
+                dsTracker.className = 'death-saves-tracker mini-death-saves';
+                dsTracker.dataset.characterId = character.id;
+                dsTracker.dataset.status = dsStatus;
+                dsTracker.dataset.successes = ds.successes || 0;
+                dsTracker.dataset.failures = ds.failures || 0;
+                const dsSuccesses = ds.successes || 0;
+                const dsFailures = ds.failures || 0;
+                const canRoll = (character.owner_user_id === ME.id) || ME.isGm;
+                dsTracker.innerHTML = `
+                    <div class="death-saves-row">
+                        <span class="death-saves-label">Death Saves</span>
+                        <span class="death-saves-status death-saves-status-${dsStatus}">${dsStatus.toUpperCase()}</span>
+                    </div>
+                    <div class="death-saves-pips-row">
+                        <span class="death-saves-pips-label" title="Successes">✓</span>
+                        ${[0,1,2].map(i => `<span class="death-saves-pip death-saves-pip-success${i < dsSuccesses ? ' death-saves-pip-on' : ''}"></span>`).join('')}
+                        <span class="death-saves-pips-spacer"></span>
+                        <span class="death-saves-pips-label" title="Failures">✗</span>
+                        ${[0,1,2].map(i => `<span class="death-saves-pip death-saves-pip-failure${i < dsFailures ? ' death-saves-pip-on' : ''}"></span>`).join('')}
+                    </div>
+                    ${dsStatus === 'dying' ? `
+                    <div class="death-saves-actions">
+                        ${canRoll ? `<button type="button" class="death-saves-roll-btn" data-action="roll-death-save" data-campaign-id="${CAMPAIGN_ID}" data-character-id="${character.id}">🎲 Roll Death Save</button>` : ''}
+                        ${ME.isGm ? `<button type="button" class="death-saves-stabilize-btn" data-action="stabilize" data-campaign-id="${CAMPAIGN_ID}" data-character-id="${character.id}">🩹 Stabilize</button>` : ''}
+                    </div>` : ''}
+                `;
+                wrap.appendChild(dsTracker);
+            }
 
             // Abilities
             const abLbl = document.createElement('div');
@@ -2427,15 +2434,16 @@
                         if (!sheetRow.children.length) {
                             // Build the mini-sheet
                             let sheetData = null;
+                            let sheetChar = null;
                             if (t.character_id) {
                                 const c = characters.find(c => c.id === t.character_id);
-                                if (c) sheetData = { name: c.name, template: c.template, sheet: c.sheet };
+                                if (c) { sheetData = { name: c.name, template: c.template, sheet: c.sheet }; sheetChar = c; }
                             } else if (t.token_template_id) {
                                 const tmpl = templates.find(tmpl => tmpl.id === t.token_template_id);
                                 if (tmpl) sheetData = { name: tmpl.name, template: tmpl.template, sheet: tmpl.sheet };
                             }
                             if (sheetData) {
-                                sheetRow.appendChild(buildMiniSheetEl(sheetData.name, sheetData.template, sheetData.sheet));
+                                sheetRow.appendChild(buildMiniSheetEl(sheetData.name, sheetData.template, sheetData.sheet, sheetChar));
                             } else {
                                 const p = document.createElement('p');
                                 p.className = 'no-chars-msg';
