@@ -1045,6 +1045,22 @@
         const h12 = (h % 12) || 12;
         const timeStr = h12.toString().padStart(2, '0') + ':' + m.toString().padStart(2, '0') + ' ' + ampm;
 
+        // Per-player targeting (added in 1.7.1). When the GM ticks specific
+        // player checkboxes on the roll-request panel, the WS payload carries
+        // `target_user_ids` so we render the Roll button only for those
+        // players. An empty list (the default) keeps the legacy broadcast
+        // behaviour — everyone sees the Roll button. The GM always sees the
+        // Roll button regardless of targeting because they may be rolling for
+        // an NPC token they control.
+        const targetIds = Array.isArray(req.target_user_ids) ? req.target_user_ids : [];
+        const targetNames = Array.isArray(req.target_user_names) ? req.target_user_names : [];
+        const isTargeted = targetIds.length === 0 || targetIds.includes(ME.id) || ME.isGm;
+        const targetLine = targetIds.length
+            ? `<div class="roll-req-target" style="font-size:11px;color:var(--fg-mute);margin-top:2px;">
+                   To: ${targetNames.map(n => escapeHTML(n)).join(', ')}
+               </div>`
+            : '';
+
         // Characters this user can roll as (GM sees all; players see only theirs)
         const myChars = ME.isGm
             ? characters.filter(c => c.owner_user_id != null)
@@ -1071,6 +1087,10 @@
             ? `<div class="roll-req-expr">${escapeHTML(req.base_expression)} + ${statLabel}</div>`
             : `<div class="roll-req-expr">${escapeHTML(req.base_expression)}</div>`;
 
+        const rollBtnHtml = isTargeted
+            ? `<button class="roll-req-btn" type="button">🎲 Roll</button>`
+            : `<span class="roll-req-not-targeted" style="font-size:11px;color:var(--fg-mute);font-style:italic;">Not your roll</span>`;
+
         const li = document.createElement('li');
         li.dataset.reqId = req.id;
         li.innerHTML = `
@@ -1084,16 +1104,17 @@
                     <div class="roll-req-label">${escapeHTML(req.label)}</div>
                     ${dcBadge}
                     ${exprHint}
+                    ${targetLine}
                     <div class="roll-req-actions">
-                        ${charSelectHtml}
-                        <button class="roll-req-btn" type="button">🎲 Roll</button>
+                        ${isTargeted ? charSelectHtml : ''}
+                        ${rollBtnHtml}
                         <span class="roll-req-status"></span>
                     </div>
                 </div>
             </div>`;
 
         const rollBtn = li.querySelector('.roll-req-btn');
-        rollBtn.addEventListener('click', async () => {
+        if (rollBtn) rollBtn.addEventListener('click', async () => {
             const sel = li.querySelector('.roll-req-select');
             const charId = sel ? (parseInt(sel.value) || null) : null;
             rollBtn.disabled = true;

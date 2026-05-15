@@ -895,6 +895,29 @@
                     <button type="button" class="rr-dc-preset" data-dc="30" title="Nearly Impossible — at the very limit of mortal ability">30</button>
                 </div>
                 <input type="text" id="rr-label" placeholder="Label — e.g. Perception DC 14" style="font-size:11px;padding:3px 5px;width:100%;box-sizing:border-box;margin-bottom:5px;">
+                {# Player-target picker. Empty selection (default) = broadcast to
+                   everyone. One or more boxes checked = only those players see
+                   the Roll button on the card. Listed members exclude the GM
+                   since the GM always sees their own request. #}
+                <details id="rr-target-details" style="margin-bottom:5px;">
+                    <summary style="font-size:10px;color:var(--fg-mute);cursor:pointer;list-style:none;display:flex;align-items:center;gap:4px;">
+                        <span style="font-size:9px;">▸</span>
+                        Target: <span id="rr-target-label" style="color:var(--fg);">All players</span>
+                    </summary>
+                    <div id="rr-target-list" style="padding:4px 0 0 14px;display:flex;flex-wrap:wrap;gap:8px;">
+                        {% for m in members %}
+                        {% if m.id != campaign.gm_user_id %}
+                        <label class="rr-target-opt" style="font-size:11px;display:inline-flex;align-items:center;gap:3px;cursor:pointer;">
+                            <input type="checkbox" class="rr-target-cb" value="{{ m.id }}" data-name="{{ m.display_name }}">
+                            {{ m.display_name }}
+                        </label>
+                        {% endif %}
+                        {% endfor %}
+                        {% if members|length <= 1 %}
+                        <span style="font-size:11px;color:var(--fg-mute);font-style:italic;">No other players in this campaign yet.</span>
+                        {% endif %}
+                    </div>
+                </details>
                 <div style="display:flex;align-items:center;gap:6px;">
                     <button type="button" id="rr-send-btn" style="font-size:11px;flex-shrink:0;">📋 Post to Log</button>
                     <button type="button" id="rr-clear-btn" style="font-size:10px;color:var(--fg-mute);display:none;">✕ Clear</button>
@@ -4114,6 +4137,28 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         statusEl.textContent = '';
     });
 
+    /* Target-picker summary label keeps the closed `<details>` summary in sync
+       with the checkbox state, so the GM sees "All players" when none is
+       checked and "Alice + Bob" / "3 selected" when one or more is. */
+    const targetLabelEl = document.getElementById('rr-target-label');
+    const targetCbs = () => Array.from(document.querySelectorAll('.rr-target-cb'));
+    function _refreshTargetLabel() {
+        const checked = targetCbs().filter(cb => cb.checked);
+        if (!checked.length) {
+            targetLabelEl.textContent = 'All players';
+            return;
+        }
+        if (checked.length <= 2) {
+            targetLabelEl.textContent = checked.map(cb => cb.dataset.name || cb.value).join(' + ');
+            return;
+        }
+        targetLabelEl.textContent = checked.length + ' selected';
+    }
+    document.getElementById('rr-target-list')?.addEventListener('change', evt => {
+        if (evt.target && evt.target.classList.contains('rr-target-cb')) _refreshTargetLabel();
+    });
+    _refreshTargetLabel();
+
     /* Send roll request */
     sendBtn.addEventListener('click', async () => {
         const label = labelEl.value.trim();
@@ -4121,13 +4166,20 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         const dc   = parseInt(dcEl.value) || null;
         const expr = exprEl.value.trim() || '1d20';
         const vis  = visEl.value;
+        const target_user_ids = targetCbs()
+            .filter(cb => cb.checked)
+            .map(cb => parseInt(cb.value, 10))
+            .filter(Number.isFinite);
 
         statusEl.textContent = 'Posting…';
         try {
             const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll_request`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ label, stat_key: rrStatKey, base_expression: expr, dc, visibility: vis }),
+                body: JSON.stringify({
+                    label, stat_key: rrStatKey, base_expression: expr, dc, visibility: vis,
+                    target_user_ids,
+                }),
             });
             if (!resp.ok) throw new Error(await resp.text());
             statusEl.textContent = '✓ Posted to log';

@@ -8,6 +8,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [1.8.0] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Roll Request — per-player targeting picker on the GM panel; prompt button gated on the targeted players' clients.
+**Description:** The GM's Roll Request panel now includes a collapsible player-target picker that lets the GM send a roll prompt to one specific player, several selected players, or (default) every player in the campaign. The WebSocket broadcast carries the validated `target_user_ids` list; non-targeted players still see the prompt card in their roll log with a "Not your roll" note, but the 🎲 Roll button only renders for the targeted players (and the GM, who may be rolling for an NPC). When the GM targets specific players the card shows a "To: Alice, Bob" line so it's clear who was prompted. Empty selection keeps the legacy broadcast-to-everyone behaviour.
+
+### Added
+- Player-target picker in the GM `📋 Roll Request` panel — collapsible `<details>` with one checkbox per non-GM campaign member. Summary label updates to "All players" / "Alice + Bob" / "N selected" as the GM ticks boxes.
+- `target_user_ids: list[int]` + `target_user_names: list[str]` on the `roll_request` WebSocket broadcast payload, validated server-side against the campaign's `CampaignMembership` rows so the GM can't prompt non-members.
+- "To: …" line on roll-request cards in the log when the request is targeted (omitted on broadcasts).
+- "Not your roll" placeholder for non-targeted players in place of the Roll button.
+
+### Changed
+- `POST /api/campaign/{campaign_id}/roll_request` accepts an optional `target_user_ids` array (caps at 32 entries, ignores non-integers and non-members). Empty / missing keeps the legacy broadcast behaviour.
+
+---
+
 ## [1.7.0] - 2026-05-14
 
 **Schema version:** 51

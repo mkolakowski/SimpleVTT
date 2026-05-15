@@ -4254,6 +4254,38 @@ async def create_roll_request(
     except ValueError:
         visibility = Visibility.PUBLIC
 
+    # Target-player filter. Empty list (default) keeps the legacy
+    # broadcast-to-everyone behaviour. Non-empty list narrows the prompt to
+    # specific campaign members; the validated names are echoed back in the
+    # WS payload so the GM's roll-log card can show who was targeted.
+    raw_targets = body.get("target_user_ids") or []
+    if not isinstance(raw_targets, list):
+        raw_targets = []
+    target_ids: list[int] = []
+    for t in raw_targets[:32]:
+        try:
+            target_ids.append(int(t))
+        except (TypeError, ValueError):
+            continue
+    target_user_ids: list[int] = []
+    target_user_names: list[str] = []
+    if target_ids:
+        member_rows = (
+            db.query(User)
+            .join(CampaignMembership, CampaignMembership.user_id == User.id)
+            .filter(
+                CampaignMembership.campaign_id == campaign_id,
+                User.id.in_(target_ids),
+            )
+            .all()
+        )
+        by_id = {u.id: u for u in member_rows}
+        for tid in target_ids:
+            u = by_id.get(tid)
+            if u and u.id not in target_user_ids:
+                target_user_ids.append(u.id)
+                target_user_names.append(u.display_name)
+
     req = RollRequest(
         campaign_id=campaign_id,
         created_by_user_id=user.id,
@@ -4280,6 +4312,8 @@ async def create_roll_request(
                 "visibility": req.visibility.value,
                 "created_by_name": user.display_name,
                 "created_by_user_id": user.id,
+                "target_user_ids": target_user_ids,
+                "target_user_names": target_user_names,
             },
         },
     )
