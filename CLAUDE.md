@@ -16,6 +16,19 @@ Every time you make a user-visible, behavior-changing, or schema-changing edit y
 - Also update the version badge in the first paragraph of `README.md` to match.
 - Do **not** edit version numbers anywhere else — `app/version.py` is the single source of truth.
 
+## Touch targets must meet Apple's 44×44pt minimum
+
+All interactive elements (buttons, links, inputs, selects) must have a minimum tap target of **44×44 px**.
+
+**Rules:**
+
+- Never create a button or interactive element with a combined height (padding + line-height) below 44 px unless it is inside a deliberately compact panel (e.g. dense row-based UIs like the initiative tracker or mini-sheet). In those cases use a minimum of **32 px** and add a code comment explaining the exception.
+- The global `button` rule in `app/static/style.css` already sets `min-height: 44px; display: inline-flex; align-items: center; justify-content: center;` — do not remove these.
+- The global `input` / `select` rule in `app/static/style.css` already sets `min-height: 44px` — do not remove it.
+- When writing new compact button classes (e.g. for a dense panel), explicitly set `min-height: 32px` (not lower) and do **not** rely on the fallback from the base rule.
+- For absolutely-positioned overlay buttons (like the roll-expression clear button), set `width` and `height` to at least 44 px, or expand the target area with `padding` so the total touch area is 44×44 px.
+- Avoid `padding: 0`, `padding: 1px`, or `padding: 2px` on any clickable element.
+
 ## Third-party APIs must be Docker Compose services
 
 When integrating any external API or data service, add it as a named service in

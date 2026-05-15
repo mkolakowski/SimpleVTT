@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block title %}Homebrew — {{ type }} — Admin{% endblock %}
+{% block content %}
+<h1>Homebrew authoring</h1>
+<p class="muted">
+    Files are written to the homebrew Docker volume at
+    <code>/app/app/data/homebrew/&lt;system&gt;/&lt;scope&gt;/&lt;type&gt;/&lt;slug&gt;.json</code>.
+    No database rows are used. Scope <code>global</code> is visible to every
+    campaign; <code>campaign-&lt;id&gt;</code> only to that one.
+</p>
+
+<nav class="homebrew-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin:12px 0">
+    {% for t in type_choices %}
+    <a href="/admin/homebrew?type={{ t }}&scope={{ scope }}"
+       class="tab{% if t == type %} tab-active{% endif %}"
+       style="padding:6px 12px;border:1px solid #444;border-radius:4px;
+              {% if t == type %}background:#2a3142;color:#fff{% else %}color:#aaa{% endif %}">
+        {{ t.replace('_', ' ') }}
+    </a>
+    {% endfor %}
+</nav>
+
+<form method="get" action="/admin/homebrew" style="margin:12px 0">
+    <input type="hidden" name="type" value="{{ type }}">
+    <label>Scope:
+        <select name="scope" onchange="this.form.submit()">
+            <option value="global"{% if scope == 'global' %} selected{% endif %}>global</option>
+            {# Campaign-scoped scopes are entered manually by id since we don't
+               want to round-trip the full campaign list on every page load. #}
+        </select>
+    </label>
+    <input name="campaign_id" type="number" min="1" placeholder="…or campaign id"
+           value="{% if scope.startswith('campaign-') %}{{ scope.split('-',1)[1] }}{% endif %}">
+    <button type="submit">Apply</button>
+</form>
+
+<section>
+    <h2>{{ type }} — {{ scope }} ({{ total }} records)</h2>
+    {% if records %}
+    <table class="data">
+        <thead><tr>
+            <th>Slug</th><th>Name</th><th>Source</th><th>Actions</th><th></th>
+        </tr></thead>
+        <tbody>
+            {% for r in records %}
+            <tr>
+                <td><code>{{ r.slug }}</code></td>
+                <td>{{ r.name }}</td>
+                <td>
+                    <span class="badge" style="font-size:11px;padding:2px 6px;background:#2a3142">
+                        {{ r._source or 'local-srd' }}
+                    </span>
+                </td>
+                <td>{{ (r.actions or []) | length }} action(s)</td>
+                <td>
+                    {% if r._source == 'local-homebrew' %}
+                    <details style="display:inline-block">
+                        <summary>Edit</summary>
+                        <form method="post" action="/admin/homebrew/{{ type }}/{{ r.slug }}/edit">
+                            <input type="hidden" name="scope" value="{{ scope }}">
+                            <textarea name="payload" rows="20" cols="80" spellcheck="false">{{ r | tojson(indent=2) }}</textarea>
+                            <br>
+                            <button>Save</button>
+                        </form>
+                    </details>
+                    <form method="post" action="/admin/homebrew/{{ type }}/{{ r.slug }}/delete"
+                          style="display:inline" onsubmit="return confirm('Delete homebrew {{ r.slug }}?')">
+                        <input type="hidden" name="scope" value="{{ scope }}">
+                        <button>Delete</button>
+                    </form>
+                    {% else %}
+                    <span class="muted">read-only (shipped SRD)</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No records for this type/scope yet.</p>
+    {% endif %}
+</section>
+
+<section>
+    <h2>Create new homebrew</h2>
+    <details>
+        <summary>+ New {{ type }} entry</summary>
+        <form method="post" action="/admin/homebrew/{{ type }}/new">
+            <input type="hidden" name="scope" value="{{ scope }}">
+            <p class="muted">
+                Paste a JSON object matching the
+                <code>{{ type }}</code> schema. Required fields include
+                <code>slug</code> and <code>name</code>. The
+                <code>actions: list[Action]</code> array carries the buttons
+                rendered on the sheet (damage, save, attack, healing,
+                active_toggle, reroll_trigger, etc.).
+            </p>
+            <textarea name="payload" rows="20" cols="80" spellcheck="false"
+                      placeholder='{ "slug": "...", "name": "...", "actions": [] }'></textarea>
+            <br>
+            <button>Create</button>
+        </form>
+    </details>
+</section>
+
+<section>
+    <h2>Import existing content</h2>
+    <details>
+        <summary>Import one record from Open5e by slug</summary>
+        <form method="post" action="/admin/homebrew/{{ type }}/import/open5e/__SLUG__"
+              onsubmit="this.action = this.action.replace('__SLUG__', encodeURIComponent(this.elements['slug'].value))">
+            <input type="hidden" name="scope" value="{{ scope }}">
+            <input name="slug" placeholder="open5e slug (e.g. fireball)" required>
+            {% if type == 'items' %}
+            <select name="open5e_endpoint" required>
+                <option value="magicitems">magicitems</option>
+                <option value="weapons">weapons</option>
+                <option value="armor">armor</option>
+            </select>
+            {% endif %}
+            <button>Import</button>
+        </form>
+    </details>
+    <details>
+        <summary>Upload JSON (paste or file)</summary>
+        <form method="post" action="/admin/homebrew/{{ type }}/import/upload" enctype="multipart/form-data">
+            <input type="hidden" name="scope" value="{{ scope }}">
+            <textarea name="payload" rows="6" cols="80" spellcheck="false"
+                      placeholder='paste JSON object…'></textarea>
+            <br>or upload a file: <input type="file" name="file" accept="application/json,.json">
+            <br><button>Upload</button>
+        </form>
+    </details>
+</section>
+{% endblock %}

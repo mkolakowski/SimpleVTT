@@ -38,7 +38,7 @@ class GridType(str, enum.Enum):
 VALID_THEMES = {
     "dark", "midnight", "dim", "light", "forest", "bubblegum", "fire", "oled",
     # Fantasy themes
-    "hobbiton", "hearthstone", "mosswood", "inkwell", "forge",
+    "hobbiton", "hearthstone", "mosswood", "inkwell", "forge", "sepia",
 }
 
 
@@ -206,6 +206,7 @@ class Map(Base):
     # Encounter.tags and Playlist.tags.
     tags: Mapped[list] = mapped_column(JSON, default=list)
     folder: Mapped[Optional[str]] = mapped_column(String(120), nullable=True, default="", server_default="")
+    thumbnail_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     campaign: Mapped[Campaign] = relationship(back_populates="maps", foreign_keys=[campaign_id])
@@ -229,6 +230,7 @@ class Character(Base):
     sheet: Mapped[dict] = mapped_column(JSON, default=dict)
     portrait_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    ring_style: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     campaign: Mapped[Optional[Campaign]] = relationship(back_populates="characters")

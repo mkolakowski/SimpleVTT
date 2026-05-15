@@ -11,7 +11,14 @@ from starlette.middleware.sessions import SessionMiddleware
 from .auth import register_oauth
 from .config import get_settings
 from .database import init_db, record_schema_version
-from .routes import admin_routes, audio_routes, auth_routes, tabletop_routes, user_routes
+from .routes import (
+    admin_routes,
+    audio_routes,
+    auth_routes,
+    homebrew_routes,
+    tabletop_routes,
+    user_routes,
+)
 from .version import APP_VERSION, SCHEMA_VERSION
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -35,6 +42,7 @@ register_oauth(settings)
 app.include_router(auth_routes.router)
 app.include_router(tabletop_routes.router)
 app.include_router(admin_routes.router)
+app.include_router(homebrew_routes.router)
 app.include_router(audio_routes.router)
 app.include_router(user_routes.router)
 

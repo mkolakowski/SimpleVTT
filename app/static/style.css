@@ -208,13 +208,15 @@ input, textarea, select {
     background: var(--input-bg); color: var(--fg); border: 1px solid var(--border);
     padding: 6px 8px; border-radius: 4px; font-family: inherit;
 }
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select { min-height: 44px; }
 input[readonly], textarea[readonly] { opacity: 0.7; }
 button {
     background: var(--btn-bg); color: var(--fg); border: 1px solid var(--border);
     padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: inherit;
+    min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
 }
 button:hover { background: var(--btn-hover); }
-.quick-die { padding: 4px 8px; font-size: 12px; }
+.quick-die { padding: 4px 8px; font-size: 12px; min-height: 44px; }
 
 label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
 fieldset { border: 1px solid var(--border); border-radius: 4px; padding: 8px; margin: 8px 0; }

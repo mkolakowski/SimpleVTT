@@ -31,6 +31,13 @@ class GameSystem:
     # skill/save/ability fires a roll with the right modifier). The frontend
     # checks this flag via campaign.game_system.
     rollable_sheet: bool = False
+    # Capability flags for the content framework. When True, the sheet and
+    # the homebrew admin UI surface the corresponding content type. New
+    # systems opt in; generic stays False for everything.
+    has_spells: bool = False
+    has_feats: bool = False
+    has_items: bool = False
+    has_backgrounds: bool = False
 
 
 _GENERIC_QUICK = [
@@ -52,7 +59,7 @@ _DND5E_QUICK = [
     QuickDie("d8", "1d8"),
     QuickDie("d10", "1d10"),
     QuickDie("d12", "1d12"),
-    QuickDie("4d6kh3", "4d6kh3"),  # ability score generation
+    QuickDie("d100", "1d100"),
 ]
 
 
@@ -70,6 +77,10 @@ SYSTEMS: Dict[str, GameSystem] = {
         sheet_template="dnd5e",
         quick_dice=_DND5E_QUICK,
         rollable_sheet=True,
+        has_spells=True,
+        has_feats=True,
+        has_items=True,
+        has_backgrounds=True,
     ),
 }
 

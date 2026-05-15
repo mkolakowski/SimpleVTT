@@ -461,6 +461,18 @@ def _apply_inline_migrations() -> None:
         with engine.begin() as conn:
             conn.execute(text("ALTER TABLE maps ADD COLUMN folder VARCHAR(120) DEFAULT ''"))
 
+    # ---- Schema v50 (1.2.0): thumbnail_url column on maps ----
+    cols_v50 = _column_names("maps")
+    if cols_v50 and "thumbnail_url" not in cols_v50:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE maps ADD COLUMN thumbnail_url VARCHAR(500)"))
+
+    # ---- Schema v51 (1.3.0): ring_style column on characters ----
+    char_cols_v51 = _column_names("characters")
+    if char_cols_v51 and "ring_style" not in char_cols_v51:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE characters ADD COLUMN ring_style VARCHAR(20)"))
+
     # ---- Schema v48 (0.94.0): auto_play_track_id on encounters ----
     cols_v48 = _column_names("encounters")
     if cols_v48 and "auto_play_track_id" not in cols_v48:
@@ -495,6 +507,13 @@ def _apply_inline_migrations() -> None:
                     f"ALTER TABLE {_table} ADD COLUMN system VARCHAR(40) "
                     "NOT NULL DEFAULT 'dnd5e'"
                 ))
+
+    # NOTE: a v52 migration that would export Custom* rows to file-based
+    # homebrew and drop the Custom* tables is staged in app/_migrate_v52.py
+    # but NOT wired in here yet. Enabling it is a follow-up PR that also
+    # needs to replace the ~150 Custom*-based references in tabletop_routes.py
+    # with redirects to /admin/homebrew. See the v2.0.0 plan in
+    # ~/.claude/plans/optimized-waddling-pizza.md for the full sequencing.
 
 
 def _make_character_campaign_nullable(inspector) -> None:

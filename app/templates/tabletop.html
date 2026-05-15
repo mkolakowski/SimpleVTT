@@ -71,24 +71,39 @@
     .roll-list li { padding: 0; border: none; }
 
     .roll-card {
-        border-radius: 7px;
-        border: 1px solid var(--border);
-        border-left: 3px solid var(--accent);
+        border-radius: 8px;
+        border: 1px solid rgba(167,139,250,.35);
         background: var(--bg);
         overflow: hidden;
         font-size: 12px;
+        box-shadow: 0 3px 14px rgba(0,0,0,.22);
+        display: flex;
     }
-    .roll-card.vis-gm-only   { border-left-color: var(--danger); }
-    .roll-card.vis-gm-roller { border-left-color: #c8962a; }
+    /* feature-used-card has no total column — stack vertically */
+    .feature-used-card { flex-direction: column; }
+
+    /* Left total column */
+    .roll-card-total-col {
+        width: 58px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+        border-right: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+        padding: 10px 6px;
+    }
+    .roll-card.vis-gm-only   .roll-card-total-col { background: color-mix(in srgb, var(--danger) 14%, var(--bg)); border-right-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+    .roll-card.vis-gm-roller .roll-card-total-col { background: rgba(200,150,42,.12); border-right-color: rgba(200,150,42,.28); }
+
+    /* Right content wrapper */
+    .roll-card-right { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .roll-card-right > .roll-card-header { background: rgba(167,139,250,.06); border-bottom: 1px solid var(--border); }
 
     .roll-card-header {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        padding: 5px 10px;
-        background: rgba(0,0,0,.20);
-        border-bottom: 1px solid var(--border);
+        display: flex; align-items: center; gap: 7px; padding: 5px 10px;
+        background: linear-gradient(135deg, rgba(167,139,250,.15), rgba(108,180,255,.10));
+        border-bottom: 2px solid var(--accent);
     }
+    .roll-card.vis-gm-only   .roll-card-header { border-bottom-color: var(--danger); }
+    .roll-card.vis-gm-roller .roll-card-header { border-bottom-color: #c8962a; }
     .roll-card-avatar {
         width: 28px; height: 28px; border-radius: 50%;
         overflow: hidden; flex-shrink: 0;
@@ -107,9 +122,10 @@
     .roll-card.vis-gm-roller .roll-card-badge { background: rgba(200,150,42,.12); border-color: rgba(200,150,42,.3); color: #d4a84a; }
     .roll-card-time  { font-size: 10px; color: var(--fg-mute); flex-shrink: 0; margin-left: auto; }
 
-    .roll-card-body { padding: 8px 10px 10px; }
-    .roll-card-note  { font-size: 11px; color: var(--fg-mute); font-style: italic; margin-bottom: 4px; }
-    .roll-card-total { font-size: 38px; font-weight: 800; color: var(--accent); line-height: 1; letter-spacing: -.5px; display: block; margin-bottom: 6px; }
+    .roll-card-body { padding: 6px 10px 8px; }
+    .roll-card-note  { font-size: 11px; color: var(--fg-mute); font-style: italic; margin-bottom: 3px; }
+    .roll-card-expr  { font-size: 12px; color: var(--fg-mute); font-family: monospace; margin-bottom: 2px; }
+    .roll-card-total { font-size: 28px; font-weight: 800; color: var(--accent); line-height: 1; letter-spacing: -.5px; text-align: center; word-break: break-all; }
     .roll-card.vis-gm-only   .roll-card-total { color: var(--danger); }
     .roll-card.vis-gm-roller .roll-card-total { color: #d4a84a; }
     .roll-card-breakdown { font-size: 11px; color: var(--fg-mute); font-family: monospace; word-break: break-all; line-height: 1.6; }
@@ -117,18 +133,19 @@
 
     /* ── Roll request cards ── */
     .roll-req-card {
-        border-radius: 7px;
-        border: 1px solid var(--border);
+        border-radius: 8px;
+        border: 1px solid rgba(167,139,250,.35);
         border-left: 3px solid #c8962a;
         background: var(--bg);
         overflow: hidden;
         font-size: 12px;
+        box-shadow: 0 3px 14px rgba(0,0,0,.22);
     }
     .roll-req-header {
         display: flex; align-items: center; gap: 7px;
         padding: 5px 10px;
-        background: rgba(200, 150, 42, .08);
-        border-bottom: 1px solid var(--border);
+        background: linear-gradient(135deg, rgba(200,150,42,.14), rgba(167,139,250,.08));
+        border-bottom: 2px solid #c8962a;
     }
     .roll-req-icon { font-size: 14px; flex-shrink: 0; }
     .roll-req-creator { font-weight: 700; font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -147,12 +164,13 @@
 
     /* ── Spell-cast cards ── */
     .spell-cast-card {
-        border-radius: 7px;
-        border: 1px solid var(--border);
+        border-radius: 8px;
+        border: 1px solid rgba(167,139,250,.35);
         border-left: 3px solid #a78bfa;
         background: var(--bg);
         overflow: hidden;
         font-size: 12px;
+        box-shadow: 0 3px 14px rgba(0,0,0,.22);
     }
     .spell-cast-card .roll-card-header { background: rgba(167,139,250,.08); }
     .spell-cast-slot {
@@ -302,7 +320,7 @@
     .conc-rounds { font-size: 11px; font-weight: 400; color: var(--fg-mute); }
     .conc-notes { font-size: 10px; color: var(--fg-mute); font-style: italic; width: 100%; margin-top: 2px; }
     .conc-controls { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 4px; }
-    .conc-controls button { font-size: 10px; padding: 2px 7px; }
+    .conc-controls button { font-size: 10px; padding: 2px 7px; min-height: 36px; }
     .conc-end-btn { color: var(--danger) !important; border-color: color-mix(in srgb, var(--danger) 50%, var(--border)) !important; }
     .conc-end-btn:hover { background: color-mix(in srgb, var(--danger) 15%, var(--bg)) !important; }
     .conc-save-roll-btn { color: #f97316 !important; border-color: #7a3800 !important; }
@@ -312,19 +330,22 @@
     .conc-dot { font-size: 12px; flex-shrink: 0; line-height: 1; }
 
     /* ── GM roll-request panel quick buttons ── */
-    .rr-quick { padding: 2px 7px; font-size: 11px; cursor: pointer; }
+    .rr-quick { padding: 2px 7px; font-size: 11px; cursor: pointer; min-height: 44px; }
     .rr-quick.rr-selected { background: var(--accent-bg); border-color: var(--accent-border); color: var(--accent); }
-    .rr-dc-preset { padding: 2px 7px; font-size: 11px; cursor: pointer; }
+    .rr-dc-preset { padding: 2px 7px; font-size: 11px; cursor: pointer; min-height: 44px; }
 
     /* ── Player tab: character list ── */
     .char-row { display: flex; align-items: center; gap: 6px; padding: 7px 2px; border-bottom: 1px solid var(--border); }
     .char-fav { background: none; border: none; cursor: pointer; font-size: 15px; padding: 0; flex-shrink: 0; line-height: 1; color: var(--fg-mute); transition: color 0.15s; }
     .char-fav.active { color: #f5c542; }
-    .char-name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-    .char-expand-btn { background: var(--input-bg); border: 1px solid var(--border); color: var(--fg-mute); border-radius: 3px; cursor: pointer; padding: 2px 7px; font-size: 11px; flex-shrink: 0; transition: background 0.15s; }
+    .char-name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; cursor: pointer; }
+    .char-expand-btn { background: var(--input-bg); border: 1px solid var(--border); color: var(--fg-mute); border-radius: 3px; cursor: pointer; padding: 2px 7px; font-size: 11px; flex-shrink: 0; transition: background 0.15s; min-height: 44px; }
     .char-expand-btn:hover { background: var(--surface-hover); color: var(--fg); }
-    .char-detail { display: none; padding: 8px 4px 12px; border-bottom: 1px solid var(--border); }
-    .char-detail.open { display: block; }
+    .char-detail { display: block; margin: 0 2px 8px; border: 1px solid rgba(167,139,250,.35); border-radius: 8px; overflow: hidden; box-shadow: 0 3px 14px rgba(0,0,0,.22); }
+    .mini-body { display: none; padding: 8px 6px 12px; }
+    .char-detail.open .mini-body { display: block; }
+    .mini-footer { display: none; padding: 0 6px 12px; }
+    .char-detail.open .mini-footer { display: block; }
     .mini-sheet { font-size: 12px; }
     .mini-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 7px; }
     .mini-tag { background: var(--accent-bg); color: var(--accent); border-radius: 3px; padding: 1px 6px; font-size: 11px; }
@@ -340,7 +361,7 @@
     .mini-kv-pair { background: var(--bg); border-radius: 3px; padding: 2px 6px; font-size: 11px; }
     .mini-kv-pair .mk { color: var(--fg-mute); margin-right: 4px; }
     .mini-summary { font-size: 11px; color: var(--fg-mute); margin: 0 0 6px; white-space: pre-wrap; }
-    .mini-open-full { font-size: 11px; padding: 3px 10px; margin-top: 6px; }
+    .mini-open-full { font-size: 11px; padding: 3px 10px; margin-top: 6px; min-height: 44px; }
     .no-chars-msg { font-size: 12px; color: var(--fg-mute); padding: 8px 0; }
     .mini-section-label { font-size: 9px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.6px; font-weight: 600; margin: 8px 0 3px; }
 
@@ -352,7 +373,7 @@
     .mini-collapsible.collapsed .mini-collapsible-chevron { transform: rotate(-90deg); }
     .mini-collapsible.collapsed .mini-collapsible-body { display: none; }
     .mini-roll-row { display: flex; align-items: center; gap: 4px; padding: 2px 0; }
-    .mini-roll-btn { background: var(--accent-bg2); border: 1px solid var(--accent-border); color: var(--accent); border-radius: 3px; cursor: pointer; padding: 1px 6px; font-size: 11px; flex-shrink: 0; line-height: 1.5; transition: background 0.12s; }
+    .mini-roll-btn { background: var(--accent-bg2); border: 1px solid var(--accent-border); color: var(--accent); border-radius: 3px; cursor: pointer; padding: 1px 6px; font-size: 11px; flex-shrink: 0; line-height: 1.5; transition: background 0.12s; min-height: 32px; }
     .mini-roll-btn:hover { background: var(--accent-bg-hover); }
     .mini-ab-name { font-size: 11px; color: var(--fg-mute); font-weight: 600; width: 30px; flex-shrink: 0; }
     .mini-ab-score { font-size: 11px; color: var(--fg-mute); width: 22px; text-align: center; flex-shrink: 0; }
@@ -360,7 +381,7 @@
     .mini-prof-dot.is-prof { color: var(--accent); }
     .mini-prof-dot.is-exp { color: #f5c542; }
     .mini-skills-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 6px; }
-    .mini-sk-btn { display: flex; align-items: center; gap: 5px; width: 100%; padding: 3px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; text-align: left; }
+    .mini-sk-btn { display: flex; align-items: center; gap: 5px; width: 100%; padding: 3px 6px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; text-align: left; min-height: 36px; }
     .mini-sk-btn.is-prof { border: 2px solid var(--accent); }
     .mini-sk-btn.is-exp { border: 2px solid color-mix(in srgb, #daa520 70%, var(--accent)); }
     .mini-sk-btn:hover { background: var(--surface-hover); }
@@ -378,9 +399,54 @@
     .mac-score { font-size: 12px; font-weight: 600; line-height: 1.2; }
     .mac-mod { font-size: 10px; color: var(--fg-mute); padding-bottom: 2px; }
     .mac-row-label { grid-column: 1 / -1; font-size: 8px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.5px; padding: 3px 0 2px; border-top: 1px solid var(--border); text-align: left; margin-top: 2px; }
-    .mac-btn { width: 100%; padding: 2px 1px; font-size: 10px; display: flex; flex-direction: column; align-items: center; line-height: 1.15; gap: 0; }
+    .mac-btn { width: 100%; padding: 2px 1px; font-size: 10px; display: flex; flex-direction: column; align-items: center; line-height: 1.15; gap: 0; min-height: 36px; }
     .mac-btn .mac-btn-ab { font-size: 9px; opacity: 0.85; letter-spacing: 0.3px; }
     .mac-btn .mac-btn-mod { font-size: 11px; font-weight: 600; }
+    .mini-ab-header { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+    .mini-ab-toggle { display: inline-flex; background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; flex-shrink: 0; }
+    .mini-ab-toggle-btn { font-size: 10px; padding: 2px 8px; min-height: 26px; border: none; background: transparent; cursor: pointer; color: var(--fg-mute); line-height: 1; transition: background .12s, color .12s; }
+    .mini-ab-toggle-btn.active { background: var(--accent); color: #fff; }
+    /* ── Stat-block header (card header — also the open/close toggle) ── */
+    .mini-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 8px 10px 7px; margin: 0; background: linear-gradient(135deg, rgba(167,139,250,.15), rgba(108,180,255,.10)); border-bottom: 2px solid var(--accent); border-radius: 8px 8px 0 0; cursor: pointer; user-select: none; transition: background .15s; }
+    .mini-header:hover { background: linear-gradient(135deg, rgba(167,139,250,.26), rgba(108,180,255,.18)); }
+    .mini-header-info { flex: 1; min-width: 0; }
+    .mini-header-name { font-size: 13px; font-weight: 700; color: var(--fg); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mini-header-sub { font-size: 10px; color: var(--accent); margin-top: 2px; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mini-header-arrow { font-size: 10px; color: var(--accent); flex-shrink: 0; margin-top: 3px; transition: transform .2s; line-height: 1; }
+    .mini-header-arrow.open { transform: rotate(90deg); }
+    /* ── Compact stat block ── */
+    .mini-statblock { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; background: var(--bg-2); }
+    /* Primary row: HP stepper (left) + AC/Speed chips (right) */
+    .msb-primary { display: flex; align-items: stretch; }
+    .msb-hp-zone { flex: 1; padding: 8px 10px 6px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .msb-hp-stepper { display: flex; align-items: center; gap: 8px; }
+    .msb-hp-cur { font-size: 28px; font-weight: 800; line-height: 1; }
+    .msb-hp-max { font-size: 12px; color: var(--fg-mute); font-weight: 500; }
+    .msb-stat-chips { display: flex; flex-direction: column; flex-shrink: 0; border-left: 1px solid var(--border); }
+    .msb-chip { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px 12px; min-width: 44px; }
+    .msb-chip + .msb-chip { border-top: 1px solid var(--border); }
+    .msb-label { font-size: 9px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.4px; display: block; text-align: center; }
+    .msb-val { font-size: 14px; font-weight: 700; display: block; line-height: 1.2; }
+    /* Rest/footer row: Temp HP + HD + rest buttons */
+    .msb-rest { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+    .msb-temp-zone { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+    .msb-hd { font-size: 11px; color: var(--fg-mute); flex: 1; min-width: 0; }
+    .msb-hd em { font-style: normal; color: var(--fg); font-weight: 600; }
+    .msb-rest .mini-rest-btn { font-size: 11px; padding: 2px 8px; min-height: 32px; }
+    /* HP step buttons: compact circles */
+    .mini-hp-step { width: 26px; height: 26px; min-height: 26px; border-radius: 50%; font-size: 15px; font-weight: 700;
+                    line-height: 1; border: 1px solid var(--border); background: var(--input-bg); color: var(--fg-mute);
+                    cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
+    .mini-hp-step:hover { border-color: var(--accent); color: var(--accent); background: var(--btn-hover); }
+    /* ── modifier row variant: larger text, no mute colour ── */
+    .mac-mod-lg { font-size: 12px; font-weight: 700; color: var(--fg); padding-bottom: 2px; }
+    /* ── Section tabs ── */
+    .mini-tabs { display: flex; gap: 0; margin: 8px -4px 0; border-bottom: 1px solid var(--border); }
+    .mini-tab-btn { flex: 1; font-size: 10px; padding: 4px 4px; min-height: 30px; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; color: var(--fg-mute); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: -1px; transition: color .12s, border-color .12s; }
+    .mini-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .mini-tab-btn:hover:not(.active) { color: var(--fg); }
+    .mini-tab-panel { display: none; padding-top: 6px; }
+    .mini-tab-panel.active { display: block; }
     /* Mini spells */
     .mini-spells { display: flex; flex-direction: column; gap: 2px; }
     .mini-spell-level { font-size: 9px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.5px; padding: 4px 0 1px; margin-top: 2px; }
@@ -389,7 +455,7 @@
     .mini-spell-tag { font-size: 9px; color: var(--fg-mute); flex-shrink: 0; }
     .mini-spell-tag.dmg { color: #e8a; font-weight: 500; }
     .mini-spell-tag.save { color: #8cf; font-weight: 500; }
-    .mini-cast-btn { background: rgba(167,139,250,.12); border: 1px solid rgba(167,139,250,.4); color: #b9a3fb; border-radius: 3px; padding: 1px 7px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; line-height: 1.4; }
+    .mini-cast-btn { background: rgba(167,139,250,.12); border: 1px solid rgba(167,139,250,.4); color: #b9a3fb; border-radius: 3px; padding: 1px 7px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; line-height: 1.4; min-height: 32px; }
     .mini-cast-btn:hover { background: rgba(167,139,250,.22); }
     .mini-cast-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .mini-slot-row { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--fg-mute); padding: 1px 2px; }
@@ -397,13 +463,8 @@
     .mini-spell-tag.cls { color: var(--fg-mute); font-style: italic; }
     .mini-slot-pip { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--accent); background: var(--accent); margin-right: 2px; transition: background .12s, border-color .12s, opacity .12s; }
     .mini-slot-pip.used { background: transparent; border-color: var(--border); opacity: 0.4; }
-    /* Mini HP +/- buttons (used inside mini-stat-row HP/Temp cells) */
-    .mini-hp-max { font-size: 10px; color: var(--fg-mute); }
-    .mini-hp-step-stack { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
-    .mini-hp-step { background: none; border: 1px solid var(--border); border-radius: 3px;
-                    color: var(--fg-mute); font-size: 11px; line-height: 1; padding: 1px 5px;
-                    cursor: pointer; font-weight: 700; }
-    .mini-hp-step:hover { background: var(--btn-hover); color: var(--fg); border-color: var(--accent); }
+    /* .mini-hp-step-stack kept as no-op for any stray references */
+    .mini-hp-step-stack { display: contents; }
 
     /* Mini rest bar (HD tracker + Short / Long Rest buttons) */
     .mini-rest-bar {
@@ -422,7 +483,7 @@
     .mini-rest-btn {
         font-size: 12px; font-weight: 600; cursor: pointer;
         padding: 4px 12px; border-radius: 4px; flex-shrink: 0;
-        line-height: 1.5;
+        line-height: 1.5; min-height: 44px;
     }
     .mini-rest-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .mini-short-rest-btn {
@@ -443,34 +504,64 @@
     .mini-attack-tag.atk { color: #8cf; }
     .mini-attack-tag.dmg { color: #e8a; }
     .mini-attack-tag.save { color: #fb6; }
-    .mini-strike-btn { background: rgba(251,184,138,.10); border: 1px solid rgba(251,184,138,.4); color: #fbb88a; border-radius: 3px; padding: 1px 7px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; line-height: 1.4; }
+    .mini-strike-btn { background: rgba(251,184,138,.10); border: 1px solid rgba(251,184,138,.4); color: #fbb88a; border-radius: 3px; padding: 1px 7px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; line-height: 1.4; min-height: 32px; }
     .mini-strike-btn:hover { background: rgba(251,184,138,.22); }
     .mini-strike-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     /* Roll toast */
     #roll-toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 150; display: flex; flex-direction: column-reverse; align-items: center; gap: 8px; pointer-events: none; }
-    .roll-toast { background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 10px; padding: 12px 20px; min-width: 160px; max-width: 280px; text-align: center; box-shadow: 0 6px 24px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer; animation: rt-in 0.18s ease; }
+    .roll-toast { background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 10px; padding: 12px 20px; min-width: 160px; max-width: 320px; text-align: center; box-shadow: 0 6px 24px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer; animation: rt-in 0.18s ease; }
     .rt-label { font-size: 11px; color: var(--accent); margin-bottom: 5px; letter-spacing: 0.2px; }
     .rt-total { font-size: 38px; font-weight: 700; line-height: 1; color: var(--fg); }
+    .rt-total.rt-rolling { color: var(--fg-mute); }
+    .rt-total.rt-landed { animation: rt-land 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
     .rt-breakdown { font-size: 11px; color: var(--fg-mute); margin-top: 5px; }
     .rt-dismiss { font-size: 9px; color: var(--fg-mute); margin-top: 6px; opacity: 0.6; }
     .roll-toast.rt-out { animation: rt-out 0.35s ease forwards; }
     @keyframes rt-in { from { opacity:0; transform:translateY(10px) scale(0.94); } to { opacity:1; transform:none; } }
     @keyframes rt-out { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(10px) scale(0.94); } }
+    @keyframes rt-land { from { transform: scale(1.35); opacity: 0.7; } to { transform: scale(1); opacity: 1; } }
+    /* Dice icons */
+    .rt-dice { display: flex; justify-content: center; align-items: center; gap: 5px; margin: 6px 0 2px; flex-wrap: wrap; }
+    .rt-die { flex-shrink: 0; color: var(--accent); opacity: 0.65; }
+    .roll-toast.rt-animating .rt-die { animation: die-wobble 0.22s ease-in-out infinite alternate; }
+    .roll-toast.rt-animating .rt-die:nth-child(2n) { animation-direction: alternate-reverse; animation-delay: 0.11s; }
+    .roll-toast.rt-animating .rt-die:nth-child(3n) { animation-delay: 0.07s; }
+    @keyframes die-wobble { from { transform: rotate(-8deg) scale(0.93); } to { transform: rotate(8deg) scale(1.07); } }
+    .rt-sum { font-size: 20px; font-weight: 800; color: var(--fg); margin-top: 4px; }
+    .rt-sum.rt-landed { animation: rt-land 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    .rt-die.rt-die-landed { animation: rt-die-land 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+    @keyframes rt-die-land { from { transform: scale(1.22); opacity: 0.7; } to { transform: none; opacity: 1; } }
+    @media (max-width: 640px) {
+        #roll-toast-container { bottom: unset; top: 50%; transform: translate(-50%, -50%); z-index: 500; }
+        .roll-toast { min-width: 200px; padding: 18px 28px; }
+        .rt-total { font-size: 52px; }
+    }
 
     /* Token tracker */
     .tt-row { display: flex; align-items: center; gap: 4px; padding: 4px 2px; border-bottom: 1px solid var(--border); min-width: 0; }
-    .tt-swatch { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; border: 1px solid var(--border); }
+    .tt-swatch { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; border: 1px solid var(--border); }
+    .tt-portrait { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid rgba(167,139,250,.4); }
     .tt-name { flex: 1; min-width: 0; font-size: 12px; outline: none; padding: 1px 3px; border-radius: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
     .tt-name:focus { background: var(--input-bg); white-space: normal; }
-    .tt-btn { background: var(--input-bg); border: 1px solid var(--border); color: var(--fg-mute); border-radius: 3px; cursor: pointer; padding: 2px 5px; font-size: 11px; flex-shrink: 0; line-height: 1.2; }
+    .tt-btn { background: var(--input-bg); border: 1px solid var(--border); color: var(--fg-mute); border-radius: 3px; cursor: pointer; padding: 2px 5px; font-size: 11px; flex-shrink: 0; line-height: 1.2; min-height: 36px; }
     .tt-btn:hover { background: var(--surface-hover); color: var(--fg); }
     .tt-art-label { cursor: pointer; display: flex; align-items: center; }
-    .tt-ctrl { font-size: 10px; background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-mute); border-radius: 3px; max-width: 90px; padding: 2px 3px; flex-shrink: 0; }
+    .tt-ctrl { font-size: 10px; background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-mute); border-radius: 3px; max-width: 90px; padding: 2px 3px; flex-shrink: 0; min-height: 36px; }
 
     /* ── Initiative Tracker ── */
-    .init-row { display:flex; align-items:center; gap:5px; padding:5px 4px; border-bottom:1px solid var(--border); border-radius:3px; }
-    .init-row.active-turn { background: var(--accent-bg); border-left:3px solid var(--accent); padding-left:5px; }
-    .init-swatch { width:10px; height:10px; border-radius:50%; flex-shrink:0; border:1px solid var(--border); }
+    .init-row { display:flex; align-items:center; gap:5px; padding:6px 8px; border:1px solid rgba(167,139,250,.25); border-radius:8px; margin-bottom:4px; box-shadow:0 2px 6px rgba(0,0,0,.15); background:var(--bg-2); }
+    .init-row.active-turn { background:var(--accent-bg); border-color:var(--accent); box-shadow:0 2px 10px rgba(167,139,250,.28); }
+    /* GM combatant card wrapper — overrides the standalone init-row style when nested */
+    .init-entry { margin-bottom:4px; border:1px solid rgba(167,139,250,.25); border-radius:8px; overflow:hidden; box-shadow:0 2px 6px rgba(0,0,0,.15); background:var(--bg-2); }
+    .init-entry.active-turn { border-color:var(--accent); box-shadow:0 2px 10px rgba(167,139,250,.28); }
+    .init-entry.active-turn .mini-header { background:linear-gradient(135deg,rgba(167,139,250,.28),rgba(108,180,255,.18)); }
+    .init-card-sheet { border-top:1px solid var(--border); font-size:11px; display:none; }
+    .init-card-sheet.open { display:block; }
+    /* mini-body/footer moved from char-detail into an open init-card-sheet stay visible */
+    .init-card-sheet .mini-body,
+    .init-card-sheet .mini-footer { display: block; }
+    .init-card-edit { display:flex; align-items:center; gap:5px; padding:6px 8px; border-bottom:1px solid var(--border); }
+    .init-swatch { width:24px; height:24px; border-radius:50%; flex-shrink:0; border:1px solid var(--border); }
     .init-name { flex:1; font-size:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
     .init-init { width:38px; font-size:12px; font-weight:700; text-align:center; background: var(--bg); border:1px solid var(--border); border-radius:3px; color: var(--fg); padding:2px; flex-shrink:0; }
     .init-hp-cur { width:36px; font-size:12px; text-align:center; background: var(--bg); border:1px solid var(--border); border-radius:3px; padding:2px; flex-shrink:0; }
@@ -480,29 +571,27 @@
     .battle-banner { font-size:13px; font-weight:600; color: var(--accent); background: var(--accent-bg); border-radius:4px; padding:7px 12px; margin-bottom:10px; border:1px solid var(--accent-border); }
     .battle-ctrl { display:flex; align-items:center; gap:5px; flex-wrap:wrap; margin-bottom:10px; }
 
-    /* Token Management <details> in the Battle drawer (GM-only) */
-    #token-management-panel summary::-webkit-details-marker { display: none; }
-    #token-management-panel summary::marker { content: ''; }
-    #token-management-panel[open] .tm-chevron { transform: rotate(0); }
-    #token-management-panel:not([open]) .tm-chevron { transform: rotate(-90deg); }
+    /* Chevron rotation for GM Tools panel cards */
+    .gm-panel[open] .enc-chevron,
+    .gm-panel[open] .tm-chevron,
+    .gm-panel[open] .rr-chevron,
+    .gm-panel[open] .music-chevron,
+    .gm-panel[open] .init-panel-chevron { transform: rotate(0); }
+    .gm-panel:not([open]) .enc-chevron,
+    .gm-panel:not([open]) .tm-chevron,
+    .gm-panel:not([open]) .rr-chevron,
+    .gm-panel:not([open]) .music-chevron,
+    .gm-panel:not([open]) .init-panel-chevron { transform: rotate(-90deg); }
+    /* GM init entry header is fully clickable; .mini-header already sets cursor:pointer */
 
-    /* Encounters <details> in the GM Tools drawer */
-    #encounters-panel summary::-webkit-details-marker { display: none; }
-    #encounters-panel summary::marker { content: ''; }
-    #encounters-panel[open] .enc-chevron { transform: rotate(0); }
-    #encounters-panel:not([open]) .enc-chevron { transform: rotate(-90deg); }
-
-    /* Roll Request <details> in the GM Tools drawer */
-    #roll-request-panel summary::-webkit-details-marker { display: none; }
-    #roll-request-panel summary::marker { content: ''; }
-    #roll-request-panel[open] .rr-chevron { transform: rotate(0); }
-    #roll-request-panel:not([open]) .rr-chevron { transform: rotate(-90deg); }
-
-    /* Music <details> in the GM Tools drawer */
-    #music-panel summary::-webkit-details-marker { display: none; }
-    #music-panel summary::marker { content: ''; }
-    #music-panel[open] .music-chevron { transform: rotate(0); }
-    #music-panel:not([open]) .music-chevron { transform: rotate(-90deg); }
+    /* ── GM Tools / sidebar panel cards ── */
+    .gm-panel { margin: 0 0 8px; border: 1px solid rgba(167,139,250,.35); border-radius: 8px; overflow: hidden; box-shadow: 0 3px 14px rgba(0,0,0,.22); }
+    .gm-panel > summary { display: flex; align-items: center; gap: 8px; list-style: none; cursor: pointer; padding: 8px 10px 7px; margin: 0; background: linear-gradient(135deg, rgba(167,139,250,.15), rgba(108,180,255,.10)); border-bottom: 2px solid transparent; user-select: none; transition: background .15s; }
+    .gm-panel[open] > summary { border-bottom-color: var(--accent); }
+    .gm-panel > summary:hover { background: linear-gradient(135deg, rgba(167,139,250,.26), rgba(108,180,255,.18)); }
+    .gm-panel > summary::-webkit-details-marker { display: none; }
+    .gm-panel > summary::marker { content: ''; }
+    .gm-panel-body { padding: 8px 8px 12px; }
 
     /* Player characters <details> in the Player drawer */
     #player-chars-panel summary::-webkit-details-marker { display: none; }
@@ -549,6 +638,11 @@
     .gm-track-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
     .gm-track-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .gm-track-meta { font-size: 10px; color: var(--fg-mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    /* ── Encounter library touch targets ── */
+    .enc-action-btn { font-size: 10px; min-height: 32px; padding: 0 6px; flex-shrink: 0; }
+    .enc-modal-btn  { font-size: 11px; min-height: 44px; padding: 0 10px; }
+    .enc-spawn-btn  { font-size: 9px;  min-height: 32px; padding: 0 5px;  flex-shrink: 0; }
 </style>
 {% set gm_tint = campaign.gm_tab_color or '#d4a84a' %}
 {% set battle_tint = user.battle_tab_color %}
@@ -632,10 +726,10 @@
         .drawer-tab-btn { padding: 6px 10px; }
         .drawer-panels-wrapper { min-width: 0; }
 
-        /* Slightly tighter top bar on phones */
-        .tt-topbar { gap: 8px; }
-        .tt-topbar-title { font-size: 18px; }
-        .tt-topbar-thumb { width: 36px; height: 36px; }
+        /* On mobile condense the top bar to just the campaign title */
+        .tt-topbar { gap: 6px; margin-bottom: 4px; }
+        .tt-topbar-title { font-size: 16px; }
+        .tt-topbar-thumb { display: none; }
     }
 </style>
 {% if campaign.font_override %}
@@ -652,20 +746,6 @@
         <span class="badge system tt-topbar-badge">{{ system.label }}</span>
         {% if is_gm %}<span class="muted tt-topbar-gm">(GM)</span>{% endif %}
     </h1>
-    {% if is_gm %}
-    <span class="tt-topbar-actions">
-        {% if campaign.session_active %}
-        <form method="post" action="/campaign/{{ campaign.id }}/session/end" class="tt-topbar-form">
-            <button type="submit" title="End session and kick players back to lobby">⏹ End session</button>
-        </form>
-        {% else %}
-        <form method="post" action="/campaign/{{ campaign.id }}/session/start" class="tt-topbar-form">
-            <button type="submit" title="Open the tabletop to players">▶ Start session</button>
-        </form>
-        {% endif %}
-        <a href="/campaign/{{ campaign.id }}/settings" class="btn-link">⚙ Settings</a>
-    </span>
-    {% endif %}
 </div>
 
 
@@ -735,80 +815,100 @@
             {% set uportrait = user_portrait_map.get(r.user_id, '') %}
             <li>
                 <div class="roll-card {{ vis_class }}">
-                    <div class="roll-card-header">
-                        <div class="roll-card-avatar">
-                            {% if uportrait %}<img src="{{ uportrait }}" alt="">{% else %}🎲{% endif %}
-                        </div>
-                        <span class="roll-card-user" data-uid="{{ r.user_id }}"{% if ucolor %} style="color:{{ ucolor }}"{% endif %}>{{ user_char_name_map.get(r.user_id, r.user.display_name) }}</span>
-                        {% if badge_text %}<span class="roll-card-badge">{{ badge_text }}</span>{% endif %}
-                        <span class="roll-card-time">{{ r.created_at.strftime('%I:%M %p') }}</span>
-                    </div>
-                    <div class="roll-card-body">
-                        {% if r.note %}<div class="roll-card-note">{{ r.note }}</div>{% endif %}
+                    <div class="roll-card-total-col">
                         <span class="roll-card-total">{{ r.total }}</span>
-                        <div class="roll-card-breakdown">{{ r.breakdown | bold_dice }}</div>
+                    </div>
+                    <div class="roll-card-right">
+                        <div class="roll-card-header">
+                            <div class="roll-card-avatar">
+                                {% if uportrait %}<img src="{{ uportrait }}" alt="">{% else %}🎲{% endif %}
+                            </div>
+                            <span class="roll-card-user" data-uid="{{ r.user_id }}"{% if ucolor %} style="color:{{ ucolor }}"{% endif %}>{{ user_char_name_map.get(r.user_id, r.user.display_name) }}</span>
+                            {% if badge_text %}<span class="roll-card-badge">{{ badge_text }}</span>{% endif %}
+                            <span class="roll-card-time">{{ r.created_at.strftime('%I:%M %p') }}</span>
+                        </div>
+                        <div class="roll-card-body">
+                            {% if r.note %}<div class="roll-card-note">{{ r.note }}</div>{% endif %}
+                            <div class="roll-card-expr">{{ r.expression }}</div>
+                            <div class="roll-card-breakdown">{{ r.breakdown | bold_dice }}</div>
+                        </div>
                     </div>
                 </div>
             </li>
             {% endfor %}
         </ul>
     </div>
-    <div style="padding:10px 14px 10px;border-top:1px solid var(--border);flex-shrink:0;">
-        <form id="roll-form" class="row" style="margin-bottom:6px;">
-            <input type="text" id="roll-expr" placeholder="1d20+5" required style="flex:1;">
-            <select id="roll-vis">
-                <option value="public">All players</option>
-                <option value="gm_and_roller">GM + me</option>
-                <option value="gm_only">GM only</option>
-            </select>
-            <button type="submit">Roll</button>
-        </form>
-        <div class="row quick" style="margin-bottom:{% if is_gm %}10px{% else %}0{% endif %};">
-            {% for q in system.quick_dice %}
-            <button type="button" class="quick-die" data-expr="{{ q.expression }}" title="{{ q.expression }}">{{ q.label }}</button>
-            {% endfor %}
+    <div style="padding:8px 10px 10px;border-top:1px solid var(--border);flex-shrink:0;">
+        <div style="border:1px solid rgba(167,139,250,.35);border-radius:8px;overflow:hidden;box-shadow:0 3px 14px rgba(0,0,0,.22);">
+            <!-- Card header -->
+            <div style="display:flex;align-items:center;padding:6px 10px 5px;background:linear-gradient(135deg,rgba(167,139,250,.15),rgba(108,180,255,.10));border-bottom:2px solid var(--accent);">
+                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">🎲 Dice Roller</h4>
+            </div>
+            <!-- Roller form + quick dice -->
+            <div style="padding:8px 10px 6px;">
+                <form id="roll-form" class="row" style="margin-bottom:6px;">
+                    <div style="position:relative;flex:1;display:flex;">
+                        <input type="text" id="roll-expr" placeholder="1d20+5" required style="flex:1;padding-right:44px;">
+                        <button type="button" id="roll-expr-clear-btn" title="Clear formula" style="position:absolute;right:0;top:0;bottom:0;width:44px;background:none;border:none;cursor:pointer;font-size:16px;color:var(--fg-mute);display:flex;align-items:center;justify-content:center;">✕</button>
+                    </div>
+                    <select id="roll-vis">
+                        <option value="public">All players</option>
+                        <option value="gm_and_roller">GM + me</option>
+                        <option value="gm_only">GM only</option>
+                    </select>
+                    <button type="submit">Roll</button>
+                </form>
+                <div class="row quick">
+                    {% for q in system.quick_dice %}
+                    <button type="button" class="quick-die" data-expr="{{ q.expression }}" title="{{ q.expression }}">{{ q.label }}</button>
+                    {% endfor %}
+                </div>
+            </div>
+            <!-- GM Roll Request — blends into the card as a collapsible sub-section -->
+            {% if is_gm %}
+            <details id="roll-request-panel" class="gm-panel" style="margin:0;border:none;border-top:1px solid var(--border);border-radius:0;box-shadow:none;" open>
+                <summary>
+                    <span class="rr-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+                    <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">📋 Roll Request</h4>
+                    <span style="margin-left:auto;font-size:9px;color:var(--fg-mute);letter-spacing:0.3px;">GM only</span>
+                </summary>
+                <div class="gm-panel-body">
+                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:3px;margin-bottom:6px;">
+                    <button type="button" id="rr-mode-save"  title="Saving Throw — Characters resist an effect using their saving throw modifier. Common for spells, traps, and hazards." style="font-size:10px;padding:3px 6px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);border-radius:3px;cursor:pointer;">Save</button>
+                    <button type="button" id="rr-mode-check" title="Ability Check — Characters attempt a task using their ability modifier, plus proficiency if applicable." style="font-size:10px;padding:3px 6px;background:var(--input-bg);color:var(--fg-mute);border:1px solid var(--border);border-radius:3px;cursor:pointer;">Check</button>
+                    <span style="width:1px;height:14px;background:var(--border);margin:0 2px;flex-shrink:0;"></span>
+                    <button type="button" class="rr-quick" data-attr="str" title="Strength — Athletics, feats of power, resisting being grappled or moved">STR</button>
+                    <button type="button" class="rr-quick" data-attr="dex" title="Dexterity — Acrobatics, Stealth, Sleight of Hand, dodging area effects">DEX</button>
+                    <button type="button" class="rr-quick" data-attr="con" title="Constitution — Enduring pain, holding breath, maintaining concentration">CON</button>
+                    <button type="button" class="rr-quick" data-attr="int" title="Intelligence — Arcana, History, Investigation, Nature, Religion">INT</button>
+                    <button type="button" class="rr-quick" data-attr="wis" title="Wisdom — Perception, Insight, Medicine, Survival, Animal Handling">WIS</button>
+                    <button type="button" class="rr-quick" data-attr="cha" title="Charisma — Persuasion, Deception, Intimidation, Performance">CHA</button>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;flex-wrap:wrap;">
+                    <span style="font-size:10px;color:var(--fg-mute);flex-shrink:0;">DC</span>
+                    <input type="number" id="rr-dc" min="1" max="40" placeholder="—" title="Difficulty Class" style="font-size:14px;font-weight:600;padding:3px 5px;text-align:center;width:52px;">
+                    <button type="button" class="rr-dc-preset" data-dc="5"  title="Very Easy — almost anyone can do it">5</button>
+                    <button type="button" class="rr-dc-preset" data-dc="10" title="Easy — requires minimal effort for a trained character">10</button>
+                    <button type="button" class="rr-dc-preset" data-dc="15" title="Medium — a meaningful challenge for an average adventurer">15</button>
+                    <button type="button" class="rr-dc-preset" data-dc="20" title="Hard — demands skill, focus, and a bit of luck">20</button>
+                    <button type="button" class="rr-dc-preset" data-dc="25" title="Very Hard — only the exceptionally talented succeed">25</button>
+                    <button type="button" class="rr-dc-preset" data-dc="30" title="Nearly Impossible — at the very limit of mortal ability">30</button>
+                </div>
+                <input type="text" id="rr-label" placeholder="Label — e.g. Perception DC 14" style="font-size:11px;padding:3px 5px;width:100%;box-sizing:border-box;margin-bottom:5px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <button type="button" id="rr-send-btn" style="font-size:11px;flex-shrink:0;">📋 Post to Log</button>
+                    <button type="button" id="rr-clear-btn" style="font-size:10px;color:var(--fg-mute);display:none;">✕ Clear</button>
+                    <select id="rr-vis" style="font-size:11px;margin-left:auto;">
+                        <option value="public">All</option>
+                        <option value="gm_and_roller">GM+roller</option>
+                        <option value="gm_only">GM only</option>
+                    </select>
+                </div>
+                <div id="rr-status" style="font-size:10px;color:var(--fg-mute);margin-top:3px;min-height:1.2em;"></div>
+                </div><!-- /gm-panel-body (roll request) -->
+            </details>
+            {% endif %}
         </div>
-        {% if is_gm %}
-        <details id="roll-request-panel" open style="border-top:1px solid var(--border);padding-top:8px;">
-            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:8px;">
-                <span class="rr-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
-                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">📋 Roll Request</h4>
-                <span style="margin-left:auto;font-size:9px;color:var(--fg-mute);letter-spacing:0.3px;">GM only</span>
-            </summary>
-            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:3px;margin-bottom:6px;">
-                <button type="button" id="rr-mode-save"  title="Saving Throw — Characters resist an effect using their saving throw modifier. Common for spells, traps, and hazards." style="font-size:10px;padding:3px 6px;background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent-border);border-radius:3px;cursor:pointer;">Save</button>
-                <button type="button" id="rr-mode-check" title="Ability Check — Characters attempt a task using their ability modifier, plus proficiency if applicable." style="font-size:10px;padding:3px 6px;background:var(--input-bg);color:var(--fg-mute);border:1px solid var(--border);border-radius:3px;cursor:pointer;">Check</button>
-                <span style="width:1px;height:14px;background:var(--border);margin:0 2px;flex-shrink:0;"></span>
-                <button type="button" class="rr-quick" data-attr="str" title="Strength — Athletics, feats of power, resisting being grappled or moved">STR</button>
-                <button type="button" class="rr-quick" data-attr="dex" title="Dexterity — Acrobatics, Stealth, Sleight of Hand, dodging area effects">DEX</button>
-                <button type="button" class="rr-quick" data-attr="con" title="Constitution — Enduring pain, holding breath, maintaining concentration">CON</button>
-                <button type="button" class="rr-quick" data-attr="int" title="Intelligence — Arcana, History, Investigation, Nature, Religion">INT</button>
-                <button type="button" class="rr-quick" data-attr="wis" title="Wisdom — Perception, Insight, Medicine, Survival, Animal Handling">WIS</button>
-                <button type="button" class="rr-quick" data-attr="cha" title="Charisma — Persuasion, Deception, Intimidation, Performance">CHA</button>
-            </div>
-            <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;flex-wrap:wrap;">
-                <span style="font-size:10px;color:var(--fg-mute);flex-shrink:0;">DC</span>
-                <input type="number" id="rr-dc" min="1" max="40" placeholder="—" title="Difficulty Class" style="font-size:14px;font-weight:600;padding:3px 5px;text-align:center;width:52px;">
-                <button type="button" class="rr-dc-preset" data-dc="5"  title="Very Easy — almost anyone can do it">5</button>
-                <button type="button" class="rr-dc-preset" data-dc="10" title="Easy — requires minimal effort for a trained character">10</button>
-                <button type="button" class="rr-dc-preset" data-dc="15" title="Medium — a meaningful challenge for an average adventurer">15</button>
-                <button type="button" class="rr-dc-preset" data-dc="20" title="Hard — demands skill, focus, and a bit of luck">20</button>
-                <button type="button" class="rr-dc-preset" data-dc="25" title="Very Hard — only the exceptionally talented succeed">25</button>
-                <button type="button" class="rr-dc-preset" data-dc="30" title="Nearly Impossible — at the very limit of mortal ability">30</button>
-            </div>
-            <input type="text" id="rr-label" placeholder="Label — e.g. Perception DC 14" style="font-size:11px;padding:3px 5px;width:100%;box-sizing:border-box;margin-bottom:5px;">
-            <div style="display:flex;align-items:center;gap:6px;">
-                <button type="button" id="rr-send-btn" style="font-size:11px;padding:4px 10px;flex-shrink:0;">📋 Post to Log</button>
-                <button type="button" id="rr-clear-btn" style="font-size:10px;padding:2px 6px;color:var(--fg-mute);display:none;">✕ Clear</button>
-                <select id="rr-vis" style="font-size:11px;padding:3px 4px;margin-left:auto;">
-                    <option value="public">All</option>
-                    <option value="gm_and_roller">GM+roller</option>
-                    <option value="gm_only">GM only</option>
-                </select>
-            </div>
-            <div id="rr-status" style="font-size:10px;color:var(--fg-mute);margin-top:3px;min-height:1.2em;"></div>
-        </details>
-        {% endif %}
     </div>
 </div>
 
@@ -817,44 +917,78 @@
     <div class="drawer-body">
 
         <!-- ── Initiative Tracker ── -->
-        <details id="initiative-panel" open
-                 style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
-            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:8px;">
+        <details id="initiative-panel" class="gm-panel" open>
+            <summary>
                 <span class="init-panel-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
                 <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚔ Initiative</h4>
                 <span id="battle-round-label" style="margin-left:auto;font-size:10px;color:var(--fg-mute);flex-shrink:0;">Not started</span>
             </summary>
             {% if is_gm %}
-            <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">
-                <button type="button" id="battle-from-map-btn" class="tt-btn" style="flex:1;font-size:11px;" title="Add all tokens from the active map">🗺 From Map</button>
-                <button type="button" id="battle-add-char-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Character</button>
-                <button type="button" id="battle-add-manual-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Manual</button>
-                <button type="button" id="battle-roll-init-btn" class="tt-btn" style="flex:1;font-size:11px;">🎲 Roll All</button>
-            </div>
-            <div id="battle-char-panel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px;max-height:200px;overflow-y:auto;margin-bottom:6px;">
-                <div id="battle-char-list"></div>
-            </div>
-            <div id="battle-manual-panel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px;margin-bottom:6px;">
-                <div style="display:grid;grid-template-columns:1fr 50px 50px 30px;gap:5px;margin-bottom:6px;align-items:center;">
-                    <input type="text" id="bm-name" placeholder="Name" style="font-size:12px;">
-                    <input type="number" id="bm-init" placeholder="Init" style="font-size:12px;text-align:center;">
-                    <input type="number" id="bm-hp" placeholder="HP" style="font-size:12px;text-align:center;">
-                    <input type="color" id="bm-color" value="#cc3333" style="width:100%;height:28px;padding:1px;cursor:pointer;border-radius:3px;">
+            <div style="margin:8px 8px 0;border:1px solid rgba(167,139,250,.25);border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.14);">
+                <div style="background:linear-gradient(135deg,rgba(167,139,250,.13),rgba(108,180,255,.08));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚙ GM Controls</div>
+                <div style="padding:8px;">
+                    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">
+                        <button type="button" id="battle-from-map-btn" class="tt-btn" style="flex:1;font-size:11px;" title="Add all tokens from the active map">🗺 From Map</button>
+                        <button type="button" id="battle-add-char-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Character</button>
+                        <button type="button" id="battle-add-manual-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Manual</button>
+                        <button type="button" id="battle-roll-init-btn" class="tt-btn" style="flex:1;font-size:11px;">🎲 Roll All</button>
+                    </div>
+                    <div id="battle-char-panel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px;max-height:200px;overflow-y:auto;margin-bottom:6px;">
+                        <div id="battle-char-list"></div>
+                    </div>
+                    <div id="battle-manual-panel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px;margin-bottom:6px;">
+                        <div style="display:grid;grid-template-columns:1fr 50px 50px 30px;gap:5px;margin-bottom:6px;align-items:center;">
+                            <input type="text" id="bm-name" placeholder="Name" style="font-size:12px;">
+                            <input type="number" id="bm-init" placeholder="Init" style="font-size:12px;text-align:center;">
+                            <input type="number" id="bm-hp" placeholder="HP" style="font-size:12px;text-align:center;">
+                            <input type="color" id="bm-color" value="#cc3333" style="width:100%;height:28px;padding:1px;cursor:pointer;border-radius:3px;">
+                        </div>
+                        <div style="display:flex;gap:6px;">
+                            <button type="button" id="bm-add-btn" style="font-size:12px;padding:3px 14px;">Add</button>
+                            <button type="button" id="bm-cancel-btn" style="font-size:12px;padding:3px 14px;">Cancel</button>
+                        </div>
+                    </div>
+                    <div class="battle-ctrl">
+                        <button type="button" id="battle-prev-btn" class="tt-btn">◀</button>
+                        <button type="button" id="battle-next-btn" class="tt-btn">Next ▶</button>
+                        <button type="button" id="battle-start-btn" class="tt-btn" title="Jump to Round 1">↺ Start</button>
+                        <button type="button" id="battle-clear-btn" class="tt-btn" style="margin-left:auto;color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--border));" title="Clear all combatants">🗑</button>
+                    </div>
                 </div>
-                <div style="display:flex;gap:6px;">
-                    <button type="button" id="bm-add-btn" style="font-size:12px;padding:3px 14px;">Add</button>
-                    <button type="button" id="bm-cancel-btn" style="font-size:12px;padding:3px 14px;">Cancel</button>
-                </div>
-            </div>
-            <div class="battle-ctrl" style="margin-bottom:8px;">
-                <button type="button" id="battle-prev-btn" class="tt-btn">◀</button>
-                <button type="button" id="battle-next-btn" class="tt-btn">Next ▶</button>
-                <button type="button" id="battle-start-btn" class="tt-btn" title="Jump to Round 1">↺ Start</button>
-                <button type="button" id="battle-clear-btn" class="tt-btn" style="margin-left:auto;color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--border));" title="Clear all combatants">🗑</button>
             </div>
             {% endif %}
-            <div id="battle-banner" class="battle-banner" style="display:none;"></div>
-            <div id="initiative-list"></div>
+            <div class="gm-panel-body">
+                <div id="battle-banner" class="battle-banner" style="display:none;"></div>
+                <div id="initiative-list"></div>
+            </div>
+        </details>
+
+        <!-- ── Dice Tray ── -->
+        <details id="player-dice-panel" open
+                 style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:6px;">
+                <span class="pdice-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">🎲 Dice</h4>
+            </summary>
+            <div style="padding:0 0 2px;">
+                <form id="roll-form-p" class="row" style="margin-bottom:6px;">
+                    <div style="position:relative;flex:1;display:flex;">
+                        <input type="text" id="roll-expr-p" placeholder="1d20+5" required style="flex:1;padding-right:44px;">
+                        <button type="button" id="roll-expr-clear-btn-p" title="Clear formula" style="position:absolute;right:0;top:0;bottom:0;width:44px;background:none;border:none;cursor:pointer;font-size:16px;color:var(--fg-mute);display:flex;align-items:center;justify-content:center;">✕</button>
+                    </div>
+                    <select id="roll-vis-p">
+                        <option value="public">All players</option>
+                        <option value="gm_and_roller">GM + me</option>
+                        <option value="gm_only">GM only</option>
+                    </select>
+                    <button type="submit">Roll</button>
+                </form>
+                <div class="row quick">
+                    {% for q in system.quick_dice %}
+                    <button type="button" class="quick-die-p" data-expr="{{ q.expression }}" title="{{ q.expression }}">{{ q.label }}</button>
+                    {% endfor %}
+                </div>
+            </div>
         </details>
 
         <!-- ── Sound (players only — GMs use the GM Tools music panel) ── -->
@@ -874,22 +1008,11 @@
                 </div>
                 <span class="audio-progress-total" style="width:34px;font-variant-numeric:tabular-nums;">0:00</span>
             </div>
-            <label style="display:flex;align-items:center;gap:6px;font-size:11px;margin-bottom:4px;">
-                <span style="flex-shrink:0;">Vol</span>
+            <button type="button" id="audio-enable" style="display:none;font-size:11px;margin-bottom:4px;">▶ Click to enable audio</button>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+                <button type="button" id="audio-mute" title="Mute / Unmute"
+                        style="flex-shrink:0;background:none;border:none;padding:0 2px;font-size:14px;cursor:pointer;line-height:1;">🔊</button>
                 <input type="range" id="audio-volume" min="0" max="1" step="0.01" value="0.6" style="flex:1;">
-            </label>
-            <div id="audio-cat-volume" style="display:{% if now_playing %}block{% else %}none{% endif %};margin-bottom:4px;">
-                <label style="display:flex;align-items:center;gap:6px;font-size:11px;">
-                    <span id="audio-cat-volume-label" style="color:var(--fg-mute);width:4em;">Music</span>
-                    <input type="range" id="audio-cat-volume-slider" min="0" max="1" step="0.01" value="1" style="flex:1;">
-                    <span id="audio-cat-volume-num" style="width:3em;text-align:right;font-size:10px;">100%</span>
-                </label>
-            </div>
-            <button type="button" id="audio-enable" style="display:none;font-size:11px;padding:2px 8px;margin-bottom:4px;">▶ Click to enable audio</button>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--fg-mute);align-items:center;">
-                <button type="button" onclick="vttResyncAudio()" style="font-size:11px;padding:2px 6px;" title="Resync to GM">⟳ Resync</button>
-                <button type="button" id="audio-mute" style="font-size:11px;padding:2px 8px;">🔈</button>
-                <a href="/settings" style="font-size:11px;">Category volumes</a>
             </div>
         </details>
         {% endif %}{# end {% if not is_gm %} sound panel #}
@@ -906,13 +1029,7 @@
         {% for c in characters %}
         {% if c.owner_user_id == user.id %}
         {% set shown.count = shown.count + 1 %}
-        <div class="char-row" data-char-id="{{ c.id }}">
-            <button class="char-fav" data-char-id="{{ c.id }}" title="Favourite">☆</button>
-            <span class="char-name">{{ c.name }}</span>
-            <span class="conc-dot" id="conc-dot-{{ c.id }}" style="display:none;" title="Concentrating">🧿</span>
-            <button class="char-expand-btn" data-char-id="{{ c.id }}">▶</button>
-        </div>
-        <div class="char-detail" id="char-detail-{{ c.id }}">
+        <div class="char-detail" id="char-detail-{{ c.id }}" data-char-id="{{ c.id }}">
             <div class="mini-sheet">
             {% set sh = c.sheet or {} %}
             {% if c.template == 'dnd5e' %}
@@ -920,176 +1037,139 @@
                 {% set ab_map = sh.get('abilities') or {} %}
                 {% set save_map = sh.get('saving_throws') or {} %}
                 {% set skill_map = sh.get('skills') or {} %}
-                {# ── Combat stats ── #}
-                {# ── Combined classes tag (highest level first), e.g. "Druid 5 / Wizard 3" ── #}
+                {# ── Combined classes (needed by spells panel later) ── #}
                 {% set _mc = sh.get('classes') or [] %}
                 {% set _mc_sorted = _mc | sort(attribute='level', reverse=True) %}
-                <div class="mini-tags">
-                    {% if _mc_sorted %}
-                        {% for _cc in _mc_sorted %}
-                        <span class="mini-tag">{{ _cc.get('class') }} {{ _cc.get('level',1) }}</span>
-                        {% endfor %}
-                    {% elif sh.get('class') %}
-                        <span class="mini-tag">{{ sh.get('class') }} {{ sh.get('level',1) }}</span>
-                    {% endif %}
-                    {% if sh.get('race') %}<span class="mini-tag">{{ sh.get('race') }}</span>{% endif %}
+                {# ── Card header — always visible, click to open/close ── #}
+                <div class="mini-header" data-char-id="{{ c.id }}">
+                    <button class="char-fav" data-char-id="{{ c.id }}" title="Favourite" style="padding:4px;min-height:32px;min-width:24px;">☆</button>
+                    <div class="mini-header-info">
+                        <div class="mini-header-name">{{ c.name }} <span class="conc-dot" id="conc-dot-{{ c.id }}" style="display:none;" title="Concentrating">🧿</span></div>
+                        <div class="mini-header-sub">{% if _mc_sorted %}{% for _cc in _mc_sorted %}{{ _cc.get('class','') }} {{ _cc.get('level',1) }}{% if not loop.last %} · {% endif %}{% endfor %}{% elif sh.get('class') %}{{ sh.get('class','') }} {{ sh.get('level',1) }}{% endif %}{% if sh.get('race') %} · {{ sh.get('race') }}{% endif %}</div>
+                    </div>
+                    <span class="mini-header-arrow">▶</span>
                 </div>
-                {# ── HP / Temp / AC / Speed unified stat row ── #}
+                <div class="mini-body">
+                {# ── Compact stat block (HP / Temp / AC / Speed / HD / Rests) ── #}
                 {% set _hp = sh.get('hp') or {} %}
-                <div class="mini-stat-row" data-char-id="{{ c.id }}"
-                     data-hp-cur="{{ (_hp.get('current') or 0) | int }}"
-                     data-hp-max="{{ (_hp.get('max') or 0) | int }}"
-                     data-hp-temp="{{ (_hp.get('temp') or 0) | int }}">
-                    <div class="mini-cell mini-cell-hp">
-                        <span class="mc-label">HP</span>
-                        <div class="mini-cell-hp-body">
-                            {% if c.owner_user_id == user.id or is_gm %}
-                            <div class="mini-hp-step-stack">
-                                <button type="button" class="mini-hp-step mini-hp-plus" data-char-id="{{ c.id }}" data-field="hp">+</button>
-                                <button type="button" class="mini-hp-step mini-hp-minus" data-char-id="{{ c.id }}" data-field="hp">−</button>
-                            </div>
-                            {% endif %}
-                            <span class="mc-value mini-hp-cur">{{ (_hp.get('current') or 0) | int }}</span>
-                            <span class="mini-hp-max">/ {{ (_hp.get('max') or 0) | int }}</span>
-                        </div>
-                    </div>
-                    <div class="mini-cell mini-cell-hp">
-                        <span class="mc-label">Temp</span>
-                        <div class="mini-cell-hp-body">
-                            {% if c.owner_user_id == user.id or is_gm %}
-                            <div class="mini-hp-step-stack">
-                                <button type="button" class="mini-hp-step mini-hp-plus" data-char-id="{{ c.id }}" data-field="temp">+</button>
-                                <button type="button" class="mini-hp-step mini-hp-minus" data-char-id="{{ c.id }}" data-field="temp">−</button>
-                            </div>
-                            {% endif %}
-                            <span class="mc-value mini-hp-temp">{{ (_hp.get('temp') or 0) | int }}</span>
-                        </div>
-                    </div>
-                    <div class="mini-cell">
-                        <span class="mc-label">AC</span>
-                        <span class="mc-value">{{ sh.get('ac','—') }}</span>
-                    </div>
-                    <div class="mini-cell">
-                        <span class="mc-label">Speed</span>
-                        <span class="mc-value">{{ sh.get('speed','—') }}</span>
-                    </div>
-                </div>
-                {# ── Hit dice + rest buttons ── #}
                 {% set _hd_obj = sh.get('hit_dice') or {} %}
                 {% set _hd_max_v = (_hd_obj.get('max') if _hd_obj.get('max') is not none else sh.get('level', 1)) | int %}
                 {% set _hd_cur_v = (_hd_obj.get('current') if _hd_obj.get('current') is not none else _hd_max_v) | int %}
                 {% set _hd_die = sh.get('class_hit_die','') or 'd8' %}
-                <div class="mini-rest-bar" data-char-id="{{ c.id }}">
-                    <span class="mini-rest-hd" title="Hit dice — spend on a short rest, regain half-max on a long rest">
-                        🎲 Hit Dice <span class="mini-rest-hd-cur">{{ _hd_cur_v }}</span>/<span class="mini-rest-hd-max">{{ _hd_max_v }}</span> <span class="mini-rest-hd-die">{{ _hd_die }}</span>
-                    </span>
-                    {% if c.owner_user_id == user.id or is_gm %}
-                    <button type="button" class="mini-rest-btn mini-short-rest-btn" data-char-id="{{ c.id }}" data-char-name="{{ c.name }}" title="Spend one hit die: roll d{{ _hd_die }}+CON to recover HP">⚡ Short</button>
-                    <button type="button" class="mini-rest-btn mini-long-rest-btn" data-char-id="{{ c.id }}" data-char-name="{{ c.name }}" title="Restore HP, recover half max hit dice, reset spell slots">💤 Long</button>
-                    {% endif %}
-                </div>
-                {# ── Transform bar (Wild Shape / Polymorph / Revert) ──
-                     Visible when the character has Druid Lv 2+ or knows the
-                     Polymorph spell, OR is currently transformed. Server
-                     enforces eligibility on /transform regardless of UI. #}
-                {% if c.owner_user_id == user.id or is_gm %}
-                {% set _af = sh.get('active_form') %}
-                {% set _classes = sh.get('classes') or [] %}
-                {% set _druid_lv = 0 %}
-                {% set _moon = false %}
-                {% for _cc in _classes %}
-                    {% if (_cc.get('class') or '') | trim | lower == 'druid' %}
-                        {% if (_cc.get('level') or 0) | int > _druid_lv %}{% set _druid_lv = (_cc.get('level') or 0) | int %}{% endif %}
-                        {% if 'moon' in (_cc.get('subclass') or '') | lower %}{% set _moon = true %}{% endif %}
-                    {% endif %}
-                {% endfor %}
-                {% set _has_poly = false %}
-                {% for _sp in (sh.get('spells') or []) %}
-                    {% if (_sp.get('name') or '') | trim | lower == 'polymorph' %}{% set _has_poly = true %}{% endif %}
-                {% endfor %}
-                {% set _show_ws = _druid_lv >= 2 %}
-                {% set _char_lv = (sh.get('level') or 1) | int %}
-                {% if _af or _show_ws or _has_poly %}
-                <div class="mini-transform-bar"
+                {% set _is_owner = c.owner_user_id == user.id or is_gm %}
+                <div class="mini-statblock mini-stat-row"
                      data-char-id="{{ c.id }}"
-                     data-druid-lv="{{ _druid_lv }}"
-                     data-moon="{{ 'true' if _moon else 'false' }}"
-                     data-char-lv="{{ _char_lv }}"
-                     data-favorites='{{ (sh.get("favorite_beasts") or []) | tojson }}'
-                     style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 8px;margin-top:4px;background:rgba(167,139,250,.06);border:1px solid var(--border);border-radius:5px;">
-                    {% if _af %}
-                    <span style="font-size:11px;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:5px;flex:1;min-width:0;">
-                        <span style="font-size:14px;line-height:1;">{% if _af.get('source') == 'polymorph' %}🦌{% else %}🐺{% endif %}</span>
-                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ _af.get('name','?') }}</span>
-                        <span class="muted" style="font-weight:normal;font-size:10px;">CR {{ _af.get('cr','?') }}</span>
-                    </span>
-                    <button type="button" class="mini-revert-btn"
-                            data-char-id="{{ c.id }}" data-char-name="{{ c.name }}"
-                            style="font-size:10px;padding:3px 9px;background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:4px;cursor:pointer;font-weight:700;">
-                        ✨ Revert
-                    </button>
-                    {% else %}
-                    <span class="muted" style="font-size:10px;">Transform:</span>
-                    {% if _show_ws %}
-                    <button type="button" class="mini-transform-btn"
-                            data-char-id="{{ c.id }}" data-source="wild-shape"
-                            title="Druid Lv {{ _druid_lv }} — Wild Shape into a beast"
-                            style="font-size:10px;padding:3px 9px;background:rgba(108,180,255,.12);border:1px solid var(--border);color:var(--fg);border-radius:4px;cursor:pointer;">🐺 Wild Shape</button>
-                    {% endif %}
-                    {% if _has_poly %}
-                    <button type="button" class="mini-transform-btn"
-                            data-char-id="{{ c.id }}" data-source="polymorph"
-                            title="Cast Polymorph on yourself — target beast CR ≤ {{ (_char_lv / 4) | int }}"
-                            style="font-size:10px;padding:3px 9px;background:rgba(167,139,250,.12);border:1px solid var(--border);color:var(--fg);border-radius:4px;cursor:pointer;">🦌 Polymorph</button>
-                    {% endif %}
-                    {% endif %}
+                     data-hp-cur="{{ (_hp.get('current') or 0) | int }}"
+                     data-hp-max="{{ (_hp.get('max') or 0) | int }}"
+                     data-hp-temp="{{ (_hp.get('temp') or 0) | int }}">
+                    {# ── Primary row: HP stepper + AC / Speed chips ── #}
+                    <div class="msb-primary">
+                        <div class="msb-hp-zone">
+                            <span class="msb-label">HP</span>
+                            <div class="msb-hp-stepper">
+                                {% if _is_owner %}
+                                <button type="button" class="mini-hp-step mini-hp-minus" data-char-id="{{ c.id }}" data-field="hp" title="Lose HP">−</button>
+                                {% endif %}
+                                <span class="msb-hp-cur mini-hp-cur">{{ (_hp.get('current') or 0) | int }}</span>
+                                <span class="msb-hp-max mini-hp-max">/ {{ (_hp.get('max') or 0) | int }}</span>
+                                {% if _is_owner %}
+                                <button type="button" class="mini-hp-step mini-hp-plus" data-char-id="{{ c.id }}" data-field="hp" title="Gain HP">+</button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="msb-stat-chips">
+                            <div class="msb-chip">
+                                <span class="msb-label">AC</span>
+                                <span class="msb-val">{{ sh.get('ac','—') }}</span>
+                            </div>
+                            <div class="msb-chip">
+                                <span class="msb-label">Spd</span>
+                                <span class="msb-val">{{ sh.get('speed','—') }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {# ── Footer row: Temp HP + Hit Dice + Rest buttons ── #}
+                    <div class="msb-rest" data-char-id="{{ c.id }}">
+                        <div class="msb-temp-zone" title="Temporary HP">
+                            <span class="msb-label">Tmp</span>
+                            {% if _is_owner %}
+                            <button type="button" class="mini-hp-step mini-hp-minus" data-char-id="{{ c.id }}" data-field="temp">−</button>
+                            {% endif %}
+                            <span class="msb-val mini-hp-temp">{{ (_hp.get('temp') or 0) | int }}</span>
+                            {% if _is_owner %}
+                            <button type="button" class="mini-hp-step mini-hp-plus" data-char-id="{{ c.id }}" data-field="temp">+</button>
+                            {% endif %}
+                        </div>
+                        <span class="msb-hd" title="Hit dice — spend on a short rest">🎲 <span class="mini-rest-hd-cur">{{ _hd_cur_v }}</span>/<span class="mini-rest-hd-max">{{ _hd_max_v }}</span> <em>{{ _hd_die }}</em></span>
+                        {% if _is_owner %}
+                        <button type="button" class="mini-rest-btn mini-short-rest-btn" data-char-id="{{ c.id }}" data-char-name="{{ c.name }}" title="Short rest: roll d{{ _hd_die }}+CON to recover HP">⚡ Short</button>
+                        <button type="button" class="mini-rest-btn mini-long-rest-btn" data-char-id="{{ c.id }}" data-char-name="{{ c.name }}" title="Long rest: restore HP, HD, spell slots">💤 Long</button>
+                        {% endif %}
+                    </div>
                 </div>
-                {% endif %}
-                {% endif %}
-                {# ── Abilities & Saves ── #}
-                <div class="mini-section-label">Abilities &amp; Saves</div>
-                <div class="mini-ab-grid">
-                    {# Row 1: names — teal + dot for proficient saves #}
+                {# ── Abilities: name · modifier · roll button (raw score row removed) ── #}
+                <div class="mini-ab-header">
+                    <span class="mini-section-label" style="margin:0;flex:1;">Abilities</span>
+                    <div class="mini-ab-toggle" data-char-id="{{ c.id }}">
+                        <button type="button" class="mini-ab-toggle-btn active" data-char-id="{{ c.id }}" data-mode="check">Check</button>
+                        <button type="button" class="mini-ab-toggle-btn" data-char-id="{{ c.id }}" data-mode="save">Save</button>
+                    </div>
+                </div>
+                <div class="mini-ab-grid" data-char-id="{{ c.id }}">
                     {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
                     {% set is_save_prof = save_map.get(ab, false) %}
                     <span class="mac-name{{ ' mac-name-prof' if is_save_prof else '' }}" title="{{ 'Save proficiency' if is_save_prof else '' }}">{{ ab }}</span>
                     {% endfor %}
-                    {# Row 2: scores #}
-                    {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
-                    {% set score = (ab_map.get(ab) or 10) | int %}
-                    <span class="mac-score">{{ score }}</span>
-                    {% endfor %}
-                    {# Row 3: modifiers #}
                     {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
                     {% set score = (ab_map.get(ab) or 10) | int %}
                     {% set mod = ((score - 10) // 2) %}
-                    <span class="mac-mod">{{ ('+' if mod >= 0 else '') ~ (mod | string) }}</span>
+                    <span class="mac-mod mac-mod-lg">{{ ('+' if mod >= 0 else '') ~ (mod | string) }}</span>
                     {% endfor %}
-                    {# Row 4: check buttons #}
-                    <span class="mac-row-label">Check</span>
                     {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
                     {% set score = (ab_map.get(ab) or 10) | int %}
                     {% set mod = ((score - 10) // 2) %}
-                    {% set mod_str = (('+' if mod >= 0 else '') ~ (mod | string)) %}
-                    <button class="mini-roll-btn mac-btn" data-expr="1d20{{ mod_str }}" data-note="{{ c.name }}: {{ ab }} check" title="{{ ab }} check {{ mod_str }}"><span class="mac-btn-ab">{{ ab }}</span><span class="mac-btn-mod">{{ mod_str }}</span></button>
-                    {% endfor %}
-                    {# Row 5: save buttons #}
-                    <span class="mac-row-label">Save</span>
-                    {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
-                    {% set score = (ab_map.get(ab) or 10) | int %}
-                    {% set mod = ((score - 10) // 2) %}
+                    {% set mod_str = ('+' if mod >= 0 else '') ~ (mod | string) %}
                     {% set is_prof = save_map.get(ab, false) %}
                     {% set sv = mod + (prof if is_prof else 0) %}
-                    {% set sv_str = (('+' if sv >= 0 else '') ~ (sv | string)) %}
-                    <button class="mini-roll-btn mac-btn" data-expr="1d20{{ sv_str }}" data-note="{{ c.name }}: {{ ab }} save{{ ' (prof)' if is_prof else '' }}" title="{{ ab }} save {{ sv_str }}{{ ' (prof)' if is_prof else '' }}"><span class="mac-btn-ab">{{ ab }}</span><span class="mac-btn-mod">{{ sv_str }}</span></button>
+                    {% set sv_str = ('+' if sv >= 0 else '') ~ (sv | string) %}
+                    <button class="mini-roll-btn mac-btn mini-ab-btn"
+                            data-check-expr="1d20{{ mod_str }}"
+                            data-check-note="{{ c.name }}: {{ ab }} check"
+                            data-check-mod="{{ mod_str }}"
+                            data-save-expr="1d20{{ sv_str }}"
+                            data-save-note="{{ c.name }}: {{ ab }} save{{ ' (prof)' if is_prof else '' }}"
+                            data-save-mod="{{ sv_str }}"
+                            data-expr="1d20{{ mod_str }}"
+                            data-note="{{ c.name }}: {{ ab }} check"
+                            title="{{ ab }} · Check {{ mod_str }} / Save {{ sv_str }}{{ ' ★' if is_prof else '' }}">
+                        <span class="mac-btn-ab">{{ ab }}</span>
+                        <span class="mac-btn-mod">{{ mod_str }}</span>
+                    </button>
                     {% endfor %}
                 </div>
-                {# ── Skills (collapsible) ── #}
-                <div class="mini-collapsible" data-collapse-key="skills" data-char-id="{{ c.id }}">
-                    <div class="mini-section-label mini-collapsible-header" style="margin-top:10px;">
-                        <span class="mini-collapsible-chevron">▼</span> Skills
-                    </div>
-                    <div class="mini-collapsible-body">
+                {# ── Section tabs: Skills · Attacks · Spells ── #}
+                {% set attacks_list = sh.get('attacks') or [] %}
+                {% set spells_list = sh.get('spells') or [] %}
+                {% set spell_slots_map = sh.get('spell_slots') or {} %}
+                {% set _PREPARED_CASTERS = ['cleric','druid','paladin','wizard','artificer'] %}
+                {% set _primary_slug = (sh.get('class') or '') | string | lower | trim | replace(' ', '-') %}
+                {% set _spell_vis = namespace(any=false) %}
+                {% for s in spells_list %}
+                {% set s_lvl = (s.level or 0) | int %}
+                {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
+                {% set _is_prepared = s_cls in _PREPARED_CASTERS %}
+                {% if not (_is_prepared and s_lvl > 0 and not s.prepared) %}
+                {% set _spell_vis.any = true %}
+                {% endif %}
+                {% endfor %}
+                <div class="mini-tabs" data-char-id="{{ c.id }}">
+                    <button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="skills">Skills</button>
+                    {% if attacks_list %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="attacks">Attacks</button>{% endif %}
+                    {% if _spell_vis.any %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="spells">Spells</button>{% endif %}
+                </div>
+                <div class="mini-tab-content" data-char-id="{{ c.id }}">
+                    {# ── Skills panel ── #}
+                    <div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="skills">
                         {% set SKILLS_LIST = [
                             ('Acrobatics','DEX'),('Animal Handling','WIS'),('Arcana','INT'),
                             ('Athletics','STR'),('Deception','CHA'),('History','INT'),
@@ -1119,120 +1199,186 @@
                         {% endfor %}
                         </div>
                     </div>
-                </div>
-                {# ── Mini Attacks ── #}
-                {% set attacks_list = sh.get('attacks') or [] %}
-                {% if attacks_list %}
-                <div class="mini-section-label" style="margin-top:10px;">Attacks</div>
-                <div class="mini-attacks" data-char-id="{{ c.id }}">
-                {% for a in attacks_list %}
-                {% set a_save_dc = (a.save_dc or 0) | int %}
-                {% set a_is_save = a_save_dc > 0 and a.save_ability %}
-                {% set a_atk_bonus = a.attack_bonus or a.bonus or '' %}
-                <div class="mini-attack-row" title="{{ a.name }}{% if a.range %} · {{ a.range }}{% endif %}">
-                    <span class="mini-attack-name">{{ a.name }}</span>
-                    {% if a_atk_bonus and not a_is_save %}<span class="mini-attack-tag atk">{{ a_atk_bonus }}</span>{% endif %}
-                    {% if a.damage %}<span class="mini-attack-tag dmg">{{ a.damage }}</span>{% endif %}
-                    {% if a_is_save %}<span class="mini-attack-tag save">DC {{ a_save_dc }} {{ a.save_ability }}</span>{% endif %}
-                    <button type="button" class="mini-strike-btn" data-char-id="{{ c.id }}" data-attack-idx="{{ loop.index0 }}" data-attack-name="{{ a.name }}" title="Strike with {{ a.name }}">🗡 Strike</button>
-                </div>
-                {% endfor %}
-                </div>
-                {% endif %}
-                {# ── Mini Spells (multiclass-aware) ──
-                   Group spells by (class, level). Each class shows its own
-                   slot pip rows. Untagged spells fall back to the primary
-                   (highest-level) class. #}
-                {% set spells_list = sh.get('spells') or [] %}
-                {% set spell_slots_map = sh.get('spell_slots') or {} %}
-                {% set _PREPARED_CASTERS = ['cleric','druid','paladin','wizard','artificer'] %}
-                {% set _primary_slug = (sh.get('class') or '') | string | lower | trim | replace(' ', '-') %}
-                {% set _spell_vis = namespace(any=false) %}
-                {% for s in spells_list %}
-                {% set s_lvl = (s.level or 0) | int %}
-                {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
-                {% set _is_prepared = s_cls in _PREPARED_CASTERS %}
-                {% if not (_is_prepared and s_lvl > 0 and not s.prepared) %}
-                {% set _spell_vis.any = true %}
-                {% endif %}
-                {% endfor %}
-                {% if _spell_vis.any %}
-                <div class="mini-collapsible" data-collapse-key="spells" data-char-id="{{ c.id }}">
-                <div class="mini-section-label mini-collapsible-header" style="margin-top:10px;">
-                    <span class="mini-collapsible-chevron">▼</span> Spells
-                </div>
-                <div class="mini-collapsible-body">
-                <div class="mini-spells" data-char-id="{{ c.id }}">
-                {# Iterate classes in order of highest level first; fall back to a
-                   single synthesized "primary class" if there's no roster yet. #}
-                {% set _iter_classes = (_mc_sorted if _mc_sorted else (
-                    [{'class': sh.get('class',''), 'level': sh.get('level',1)}] if sh.get('class') else []
-                )) %}
-                {% set _is_multiclass = (_iter_classes | length) > 1 %}
-                {# Group by level (0-9) across all classes, matching the full sheet layout #}
-                {% for lvl_i in range(10) %}
-                    {% set _level_has = namespace(any=false) %}
-                    {% for _cc in _iter_classes %}
-                    {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
-                    {% set _cc_is_prepared = _cc_slug in _PREPARED_CASTERS %}
-                    {% for s in spells_list %}
-                    {% set s_lvl = (s.level or 0) | int %}
-                    {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
-                    {% if s_lvl == lvl_i and s_cls == _cc_slug and not (_cc_is_prepared and s_lvl > 0 and not s.prepared) %}
-                    {% set _level_has.any = true %}
-                    {% endif %}
-                    {% endfor %}
-                    {% endfor %}
-                    {% if _level_has.any %}
-                    <div class="mini-spell-level">{{ 'Cantrips' if lvl_i == 0 else 'Level ' ~ lvl_i ~ ' Spells' }}</div>
-                    {% if lvl_i >= 1 %}
-                    {# One slot-pip row per class that has slots at this level; wrapped in a flex row so they sit side by side #}
-                    <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                    {% for _cc in _iter_classes %}
-                    {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
-                    {% set _cc_label = _cc.get('class') %}
-                    {% set _cc_slots = spell_slots_map.get(_cc_slug) or {} %}
-                    {% set slot = _cc_slots.get(lvl_i | string) or {} %}
-                    {% set slot_total = (slot.get('total') or 0) | int %}
-                    {% set slot_used = (slot.get('used') or 0) | int %}
-                    {% if slot_total > 0 %}
-                    <div class="mini-slot-row" data-char-id="{{ c.id }}" data-class-slug="{{ _cc_slug }}" data-slot-level="{{ lvl_i }}" data-total="{{ slot_total }}" data-used="{{ slot_used }}">
-                        <span class="mini-slot-label">{{ _cc_label if _is_multiclass else 'Slots' }}</span>
-                        <span class="mini-slot-pips">
-                        {% for i in range(slot_total) %}<span class="mini-slot-pip{{ ' used' if i < slot_used else '' }}"></span>{% endfor %}
-                        </span>
-                        <span class="mini-slot-count">{{ slot_total - slot_used }}/{{ slot_total }}</span>
+                    {# ── Attacks panel ── #}
+                    {% if attacks_list %}
+                    <div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="attacks">
+                        <div class="mini-attacks">
+                        {% for a in attacks_list %}
+                        {% set a_save_dc = (a.save_dc or 0) | int %}
+                        {% set a_is_save = a_save_dc > 0 and a.save_ability %}
+                        {% set a_atk_bonus = a.attack_bonus or a.bonus or '' %}
+                        <div class="mini-attack-row" title="{{ a.name }}{% if a.range %} · {{ a.range }}{% endif %}">
+                            <span class="mini-attack-name">{{ a.name }}</span>
+                            {% if a_atk_bonus and not a_is_save %}<span class="mini-attack-tag atk">{{ a_atk_bonus }}</span>{% endif %}
+                            {% if a.damage %}<span class="mini-attack-tag dmg">{{ a.damage }}</span>{% endif %}
+                            {% if a_is_save %}<span class="mini-attack-tag save">DC {{ a_save_dc }} {{ a.save_ability }}</span>{% endif %}
+                            <button type="button" class="mini-strike-btn" data-char-id="{{ c.id }}" data-attack-idx="{{ loop.index0 }}" data-attack-name="{{ a.name }}" title="Strike with {{ a.name }}">🗡 Strike</button>
+                        </div>
+                        {% endfor %}
+                        </div>
                     </div>
                     {% endif %}
-                    {% endfor %}
+                    {# ── Spells panel ── #}
+                    {% if _spell_vis.any %}
+                    <div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="spells">
+                        <div class="mini-spells" data-char-id="{{ c.id }}">
+                        {% set _iter_classes = (_mc_sorted if _mc_sorted else (
+                            [{'class': sh.get('class',''), 'level': sh.get('level',1)}] if sh.get('class') else []
+                        )) %}
+                        {% set _is_multiclass = (_iter_classes | length) > 1 %}
+                        {% for lvl_i in range(10) %}
+                            {% set _level_has = namespace(any=false) %}
+                            {% for _cc in _iter_classes %}
+                            {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+                            {% set _cc_is_prepared = _cc_slug in _PREPARED_CASTERS %}
+                            {% for s in spells_list %}
+                            {% set s_lvl = (s.level or 0) | int %}
+                            {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
+                            {% if s_lvl == lvl_i and s_cls == _cc_slug and not (_cc_is_prepared and s_lvl > 0 and not s.prepared) %}
+                            {% set _level_has.any = true %}
+                            {% endif %}
+                            {% endfor %}
+                            {% endfor %}
+                            {% if _level_has.any %}
+                            <div class="mini-spell-level">{{ 'Cantrips' if lvl_i == 0 else 'Level ' ~ lvl_i ~ ' Spells' }}</div>
+                            {% if lvl_i >= 1 %}
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                            {% for _cc in _iter_classes %}
+                            {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+                            {% set _cc_label = _cc.get('class') %}
+                            {% set _cc_slots = spell_slots_map.get(_cc_slug) or {} %}
+                            {% set slot = _cc_slots.get(lvl_i | string) or {} %}
+                            {% set slot_total = (slot.get('total') or 0) | int %}
+                            {% set slot_used = (slot.get('used') or 0) | int %}
+                            {% if slot_total > 0 %}
+                            <div class="mini-slot-row" data-char-id="{{ c.id }}" data-class-slug="{{ _cc_slug }}" data-slot-level="{{ lvl_i }}" data-total="{{ slot_total }}" data-used="{{ slot_used }}">
+                                <span class="mini-slot-label">{{ _cc_label if _is_multiclass else 'Slots' }}</span>
+                                <span class="mini-slot-pips">
+                                {% for i in range(slot_total) %}<span class="mini-slot-pip{{ ' used' if i < slot_used else '' }}"></span>{% endfor %}
+                                </span>
+                                <span class="mini-slot-count">{{ slot_total - slot_used }}/{{ slot_total }}</span>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                            </div>
+                            {% endif %}
+                            {% for _cc in _iter_classes %}
+                            {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+                            {% set _cc_label = _cc.get('class') %}
+                            {% set _cc_is_prepared = _cc_slug in _PREPARED_CASTERS %}
+                            {% for s in spells_list %}
+                            {% set s_lvl = (s.level or 0) | int %}
+                            {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
+                            {% if s_lvl == lvl_i and s_cls == _cc_slug and not (_cc_is_prepared and s_lvl > 0 and not s.prepared) %}
+                            <div class="mini-spell-row" title="{{ s.name }}{% if s.casting_time %} · {{ s.casting_time }}{% endif %}{% if s.range %} · {{ s.range }}{% endif %}">
+                                <span class="mini-spell-name">{{ s.name }}{% if s.concentration %} <span class="mini-spell-tag" title="Concentration">⏱</span>{% endif %}{% if s.ritual %} <span class="mini-spell-tag" title="Ritual">®</span>{% endif %}</span>
+                                {% if _is_multiclass %}<span class="mini-spell-tag cls">{{ _cc_label }}</span>{% endif %}
+                                {% if s.damage %}<span class="mini-spell-tag dmg">{{ s.damage }}</span>{% endif %}
+                                {% if s.save_ability %}<span class="mini-spell-tag save">{{ s.save_ability }} save</span>{% endif %}
+                                <button type="button" class="mini-cast-btn" data-char-id="{{ c.id }}" data-spell-idx="{{ loop.index0 }}" data-spell-name="{{ s.name }}" data-spell-level="{{ s_lvl }}" data-class-slug="{{ s_cls }}" title="Cast {{ s.name }}{% if s_lvl > 0 %} (uses Lv {{ s_lvl }} slot for {{ _cc_label or 'this class' }}){% endif %}">🪄 Cast</button>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                            {% endfor %}
+                            {% endif %}
+                        {% endfor %}
+                        </div>{# /.mini-spells #}
                     </div>
                     {% endif %}
-                    {# Spell rows for all classes at this level #}
-                    {% for _cc in _iter_classes %}
-                    {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
-                    {% set _cc_label = _cc.get('class') %}
-                    {% set _cc_is_prepared = _cc_slug in _PREPARED_CASTERS %}
-                    {% for s in spells_list %}
-                    {% set s_lvl = (s.level or 0) | int %}
-                    {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
-                    {% if s_lvl == lvl_i and s_cls == _cc_slug and not (_cc_is_prepared and s_lvl > 0 and not s.prepared) %}
-                    <div class="mini-spell-row" title="{{ s.name }}{% if s.casting_time %} · {{ s.casting_time }}{% endif %}{% if s.range %} · {{ s.range }}{% endif %}">
-                        <span class="mini-spell-name">{{ s.name }}{% if s.concentration %} <span class="mini-spell-tag" title="Concentration">⏱</span>{% endif %}{% if s.ritual %} <span class="mini-spell-tag" title="Ritual">®</span>{% endif %}</span>
-                        {% if _is_multiclass %}<span class="mini-spell-tag cls">{{ _cc_label }}</span>{% endif %}
-                        {% if s.damage %}<span class="mini-spell-tag dmg">{{ s.damage }}</span>{% endif %}
-                        {% if s.save_ability %}<span class="mini-spell-tag save">{{ s.save_ability }} save</span>{% endif %}
-                        <button type="button" class="mini-cast-btn" data-char-id="{{ c.id }}" data-spell-idx="{{ loop.index0 }}" data-spell-name="{{ s.name }}" data-spell-level="{{ s_lvl }}" data-class-slug="{{ s_cls }}" title="Cast {{ s.name }}{% if s_lvl > 0 %} (uses Lv {{ s_lvl }} slot for {{ _cc_label or 'this class' }}){% endif %}">🪄 Cast</button>
-                    </div>
-                    {% endif %}
-                    {% endfor %}
-                    {% endfor %}
+                </div>{# /.mini-tab-content #}
+                {# ── Wild Shape / Polymorph / Revert ──
+                     Uses namespace() so loop assignments are visible outside the loop.
+                     Also checks legacy top-level class/level fields as fallback. #}
+                {% if c.owner_user_id == user.id or is_gm %}
+                {% set _tf = namespace(druid_lv=0, moon=false, has_poly=false) %}
+                {% for _cc in (sh.get('classes') or []) %}
+                    {% if (_cc.get('class') or '') | trim | lower == 'druid' %}
+                        {% if (_cc.get('level') or 0) | int > _tf.druid_lv %}{% set _tf.druid_lv = (_cc.get('level') or 0) | int %}{% endif %}
+                        {% if 'moon' in (_cc.get('subclass') or '') | lower %}{% set _tf.moon = true %}{% endif %}
                     {% endif %}
                 {% endfor %}
-                </div>{# /.mini-spells #}
-                </div>{# /.mini-collapsible-body #}
-                </div>{# /.mini-collapsible (spells) #}
+                {% if (sh.get('class') or '') | trim | lower == 'druid' %}
+                    {% if (sh.get('level') or 0) | int > _tf.druid_lv %}{% set _tf.druid_lv = (sh.get('level') or 0) | int %}{% endif %}
                 {% endif %}
+                {% for _sp in (sh.get('spells') or []) %}
+                    {% if (_sp.get('name') or '') | trim | lower == 'polymorph' %}{% set _tf.has_poly = true %}{% endif %}
+                {% endfor %}
+                {% set _af       = sh.get('active_form') %}
+                {% set _show_ws  = _tf.druid_lv >= 2 %}
+                {% set _char_lv  = (sh.get('level') or 1) | int %}
+                {% if _af or _show_ws or _tf.has_poly %}
+                <div class="mini-transform-bar"
+                     data-char-id="{{ c.id }}"
+                     data-druid-lv="{{ _tf.druid_lv }}"
+                     data-moon="{{ 'true' if _tf.moon else 'false' }}"
+                     data-char-lv="{{ _char_lv }}"
+                     data-favorites='{{ (sh.get("favorite_beasts") or []) | tojson }}'
+                     style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 8px;margin-top:8px;background:rgba(167,139,250,.06);border:1px solid var(--border);border-radius:5px;">
+                    {% if _af %}
+                    <span style="font-size:11px;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:5px;flex:1;min-width:0;">
+                        <span style="font-size:14px;line-height:1;">{% if _af.get('source') == 'polymorph' %}🦌{% else %}🐺{% endif %}</span>
+                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ _af.get('name','?') }}</span>
+                        <span class="muted" style="font-weight:normal;font-size:10px;">CR {{ _af.get('cr','?') }}</span>
+                    </span>
+                    <button type="button" class="mini-revert-btn"
+                            data-char-id="{{ c.id }}" data-char-name="{{ c.name }}"
+                            style="font-size:10px;padding:3px 9px;background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:4px;cursor:pointer;font-weight:700;">
+                        ✨ Revert
+                    </button>
+                    {% else %}
+                    <span class="muted" style="font-size:10px;">Transform:</span>
+                    {% if _show_ws %}
+                    <div class="mini-ws-wrap" style="flex-basis:100%;">
+                      <button type="button" class="mini-ws-trigger"
+                              data-char-id="{{ c.id }}"
+                              title="Druid Lv {{ _tf.druid_lv }} — Wild Shape into a beast"
+                              style="display:flex;align-items:center;justify-content:space-between;width:100%;font-size:11px;padding:4px 10px;min-height:32px;background:rgba(108,180,255,.12);border:1px solid var(--border);color:var(--fg);border-radius:4px;cursor:pointer;font-weight:600;gap:6px;box-sizing:border-box;"><!-- compact panel: 32px -->
+                        <span>🐺 Wild Shape</span>
+                        <span class="mini-ws-arrow" style="font-size:10px;opacity:.55;transition:transform .15s;" aria-hidden="true">▾</span>
+                      </button>
+                      <div class="mini-ws-dropdown" style="display:none;margin-top:3px;border:1px solid var(--border);border-radius:5px;overflow:hidden;">
+                        {% set _favs = sh.get('favorite_beasts') or [] %}
+                        {% for _fav in _favs %}
+                        <button type="button" class="mini-ws-fav-btn"
+                                data-char-id="{{ c.id }}"
+                                data-slug="{{ _fav.get('slug','') | e }}"
+                                style="display:flex;justify-content:space-between;align-items:center;width:100%;padding:5px 10px;min-height:32px;font-size:11px;background:transparent;border:none;border-bottom:1px solid var(--border);cursor:pointer;color:var(--fg);gap:8px;text-align:left;box-sizing:border-box;"><!-- compact panel: 32px -->
+                          <span style="font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ _fav.get('name','?') }}</span>
+                          <span style="color:var(--fg-mute);font-size:10px;white-space:nowrap;flex-shrink:0;">CR {{ _fav.get('cr','?') }} · {{ _fav.get('hp','?') }}hp</span>
+                        </button>
+                        {% else %}
+                        <p style="margin:0;padding:8px 10px;font-size:11px;color:var(--fg-mute);font-style:italic;border-bottom:1px solid var(--border);">No favorites yet — add some via Browse</p>
+                        {% endfor %}
+                        <button type="button" class="mini-ws-browse-btn"
+                                data-char-id="{{ c.id }}" data-source="wild-shape"
+                                style="display:flex;align-items:center;width:100%;padding:5px 10px;min-height:32px;font-size:11px;background:transparent;border:none;cursor:pointer;color:var(--accent);font-weight:600;gap:4px;box-sizing:border-box;"><!-- compact panel: 32px -->
+                          ⊕ Browse all…
+                        </button>
+                      </div>
+                    </div>
+                    {% endif %}
+                    {% if _tf.has_poly %}
+                    <button type="button" class="mini-transform-btn"
+                            data-char-id="{{ c.id }}" data-source="polymorph"
+                            title="Cast Polymorph on yourself — target beast CR ≤ {{ (_char_lv / 4) | int }}"
+                            style="font-size:10px;padding:3px 9px;background:rgba(167,139,250,.12);border:1px solid var(--border);color:var(--fg);border-radius:4px;cursor:pointer;">🦌 Polymorph</button>
+                    {% endif %}
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endif %}
+                </div><!-- /mini-body (dnd5e) -->
             {% else %}
+                {# Generic template card header #}
+                <div class="mini-header" data-char-id="{{ c.id }}">
+                    <button class="char-fav" data-char-id="{{ c.id }}" title="Favourite" style="padding:4px;min-height:32px;min-width:24px;">☆</button>
+                    <div class="mini-header-info">
+                        <div class="mini-header-name">{{ c.name }} <span class="conc-dot" id="conc-dot-{{ c.id }}" style="display:none;" title="Concentrating">🧿</span></div>
+                        <div class="mini-header-sub">{{ c.template or 'Generic' }}</div>
+                    </div>
+                    <span class="mini-header-arrow">▶</span>
+                </div>
+                <div class="mini-body">
                 {% if sh.get('summary') %}
                 <p class="mini-summary">{{ sh.get('summary', '')[:180] }}</p>
                 {% endif %}
@@ -1246,8 +1392,10 @@
                 {% if not sh.get('summary') and not sh.get('stats') %}
                 <p class="no-chars-msg">No sheet data yet.</p>
                 {% endif %}
+                </div><!-- /mini-body (generic) -->
             {% endif %}
             </div>
+            <div class="mini-footer">
             {# Open the standalone sheet in a new tab. The popup-modal path
                  (window.openSheet) was retired in v0.35.3 — inline <script>s in
                  the sheet template were stripped by the modal injector, leaving
@@ -1256,6 +1404,7 @@
                href="/campaign/{{ campaign.id }}/character/{{ c.id }}/sheet"
                target="_blank" rel="noopener">Open full sheet →</a>
             <div class="conc-section" id="conc-section-{{ c.id }}" data-char-id="{{ c.id }}"></div>
+            </div><!-- /mini-footer -->
         </div>
         {% endif %}
         {% endfor %}
@@ -1304,9 +1453,14 @@
             let activeTag = null;
             let searchQuery = '';
             // Per-folder open/closed state (folder name → bool). New
-            // folders default to open; closed state is sticky across
-            // re-renders within the same page session.
-            const folderOpen = {};
+            // folders default to open; closed state is persisted in
+            // localStorage so it survives page reloads.
+            const _ENC_FOLDER_KEY = 'vtt_enc_folders_' + CAMPAIGN_ID;
+            let folderOpen = {};
+            try { folderOpen = JSON.parse(localStorage.getItem(_ENC_FOLDER_KEY) || '{}'); } catch (_) {}
+            function _saveFolderOpen() {
+                try { localStorage.setItem(_ENC_FOLDER_KEY, JSON.stringify(folderOpen)); } catch (_) {}
+            }
 
             function plural(n, one, many) { return n === 1 ? one : many; }
 
@@ -1333,10 +1487,10 @@
                 chip.textContent = tag;
                 const active = !!opts.active;
                 chip.style.cssText =
-                    'font-size:9px;padding:1px 6px;border-radius:8px;' +
-                    'background:' + (active ? '#3a2f15' : 'var(--bg)') + ';' +
-                    'color:' + (active ? '#d4a84a' : 'var(--fg-mute)') + ';' +
-                    'border:1px solid ' + (active ? '#6e5828' : 'var(--border)') + ';' +
+                    'font-size:11px;padding:2px 7px;border-radius:4px;' +
+                    'background:' + (active ? '#3a2f15' : 'var(--accent-bg)') + ';' +
+                    'color:' + (active ? '#d4a84a' : 'var(--accent)') + ';' +
+                    'border:1px solid ' + (active ? '#6e5828' : 'var(--accent-border)') + ';' +
                     (opts.clickable ? 'cursor:pointer;' : '');
                 return chip;
             }
@@ -1349,9 +1503,10 @@
                 const isCurrent = !!e.is_current;
                 // Currently-running encounter: cyan-tinted border + bg so
                 // it's easy to spot inside the list when expanded.
-                row.style.cssText = 'padding:6px 8px;margin-bottom:4px;background:' +
+                row.style.cssText = 'padding:6px 8px;border-radius:8px;background:' +
                     (isCurrent ? '#142a30' : 'var(--bg-2)') + ';border:1px solid ' +
-                    (isCurrent ? '#2a4f5a' : 'var(--border)') + ';border-radius:4px;color:var(--fg);';
+                    (isCurrent ? '#2a4f5a' : 'rgba(167,139,250,.28)') + ';' +
+                    'box-shadow:0 2px 8px rgba(0,0,0,.18);color:var(--fg);';
                 row.title = buildPreviewTitle(e);
 
                 // ── view mode ──
@@ -1366,8 +1521,9 @@
                 thumbWrap.style.cssText = 'position:relative;flex-shrink:0;width:52px;min-height:56px;border-radius:3px;overflow:hidden;background:var(--bg);border:1px solid var(--border);';
                 const thumbImg = document.createElement('div');
                 thumbImg.style.cssText = 'position:absolute;inset:0;background-size:cover;background-position:center;';
-                if (e.map_image_url) {
-                    thumbImg.style.backgroundImage = 'url("' + e.map_image_url + '")';
+                const thumbSrc = e.map_thumbnail_url || e.map_image_url;
+                if (thumbSrc) {
+                    thumbImg.style.backgroundImage = 'url("' + thumbSrc + '")';
                 } else if (e.map_name) {
                     thumbImg.textContent = e.map_name.slice(0,1).toUpperCase();
                     thumbImg.style.cssText += 'display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--fg-mute);';
@@ -1402,21 +1558,21 @@
                 updateBtn.type = 'button';
                 updateBtn.textContent = '💾';
                 updateBtn.title = 'Update — re-snapshot the current state into this encounter (overwrites in place).';
-                updateBtn.style.cssText = 'font-size:10px;padding:2px 6px;flex-shrink:0;';
+                updateBtn.className = 'enc-action-btn';
                 updateBtn.addEventListener('click', () => updateEncounter(e, updateBtn));
 
                 const dupBtn = document.createElement('button');
                 dupBtn.type = 'button';
                 dupBtn.textContent = '📋';
                 dupBtn.title = 'Duplicate — make a copy with "(copy)" appended to the name.';
-                dupBtn.style.cssText = 'font-size:10px;padding:2px 6px;flex-shrink:0;';
+                dupBtn.className = 'enc-action-btn';
                 dupBtn.addEventListener('click', () => duplicateEncounter(e, dupBtn));
 
                 const editBtn = document.createElement('button');
                 editBtn.type = 'button';
                 editBtn.textContent = '✎';
                 editBtn.title = 'Rename / edit notes / edit tags';
-                editBtn.style.cssText = 'font-size:10px;padding:2px 6px;flex-shrink:0;';
+                editBtn.className = 'enc-action-btn';
                 editBtn.addEventListener('click', () => {
                     view.style.display = 'none';
                     edit.style.display = '';
@@ -1439,7 +1595,8 @@
                 delBtn.type = 'button';
                 delBtn.textContent = '🗑';
                 delBtn.title = 'Delete this saved encounter';
-                delBtn.style.cssText = 'font-size:10px;padding:2px 6px;flex-shrink:0;color:var(--danger);';
+                delBtn.className = 'enc-action-btn';
+                delBtn.style.color = 'var(--danger)';
                 delBtn.addEventListener('click', () => deleteEncounter(e));
 
                 titleRow.appendChild(updateBtn);
@@ -1497,28 +1654,28 @@
                 editName.type = 'text';
                 editName.value = e.name || '';
                 editName.placeholder = 'Encounter name';
-                editName.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;';
+                editName.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;';
                 const editDesc = document.createElement('input');
                 editDesc.type = 'text';
                 editDesc.value = e.description || '';
                 editDesc.placeholder = 'Notes';
-                editDesc.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;';
+                editDesc.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;';
                 const editTags = document.createElement('input');
                 editTags.type = 'text';
                 editTags.setAttribute('list', 'enc-tag-list');
                 editTags.value = (e.tags || []).join(', ');
                 editTags.placeholder = 'Comma-separated';
-                editTags.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;';
+                editTags.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;';
                 const editFolder = document.createElement('input');
                 editFolder.type = 'text';
                 editFolder.setAttribute('list', 'enc-folder-list');
                 editFolder.value = e.folder || '';
                 editFolder.placeholder = 'Folder';
-                editFolder.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;';
+                editFolder.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;';
                 // Map / playlist / mode dropdowns built from the page-render
                 // data. Defaults preselected to the encounter's current binding.
                 const editMap = document.createElement('select');
-                editMap.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;padding:3px 4px;';
+                editMap.style.cssText = 'width:100%;box-sizing:border-box;font-size:11px;';
                 const noneMapOpt = document.createElement('option');
                 noneMapOpt.value = '';
                 noneMapOpt.textContent = '— no map bound —';
@@ -1531,7 +1688,7 @@
                     editMap.appendChild(opt);
                 });
                 const editPlaylist = document.createElement('select');
-                editPlaylist.style.cssText = 'font-size:11px;padding:3px 4px;';
+                editPlaylist.style.cssText = 'font-size:11px;';
                 const nonePlOpt = document.createElement('option');
                 nonePlOpt.value = '';
                 nonePlOpt.textContent = '— no playlist —';
@@ -1544,7 +1701,7 @@
                     editPlaylist.appendChild(opt);
                 });
                 const editMode = document.createElement('select');
-                editMode.style.cssText = 'font-size:11px;padding:3px 4px;';
+                editMode.style.cssText = 'font-size:11px;';
                 editMode.title = 'Playlist playback mode';
                 ['order','shuffle'].forEach(m => {
                     const opt = document.createElement('option');
@@ -1631,7 +1788,7 @@
                         const setBtn = document.createElement('button');
                         setBtn.type = 'button';
                         setBtn.textContent = 'Set';
-                        setBtn.style.cssText = 'font-size:9px;padding:1px 5px;flex-shrink:0;';
+                        setBtn.className = 'enc-spawn-btn';
                         const mapMismatch = (e.map_id == null) || (e.map_id !== MAP_ID);
                         setBtn.disabled = mapMismatch;
                         // Title hints at which mode the click will use —
@@ -1680,7 +1837,7 @@
                         const clrBtn = document.createElement('button');
                         clrBtn.type = 'button';
                         clrBtn.textContent = 'Clear';
-                        clrBtn.style.cssText = 'font-size:9px;padding:1px 5px;flex-shrink:0;';
+                        clrBtn.className = 'enc-spawn-btn';
                         clrBtn.disabled = !sp;
                         clrBtn.addEventListener('click', async () => {
                             clrBtn.disabled = true;
@@ -1728,7 +1885,7 @@
                 const saveEdit = document.createElement('button');
                 saveEdit.type = 'button';
                 saveEdit.textContent = 'Save';
-                saveEdit.style.cssText = 'font-size:11px;padding:3px 10px;';
+                saveEdit.className = 'enc-modal-btn';
                 saveEdit.addEventListener('click', async () => {
                     const newName = (editName.value || '').trim();
                     if (!newName) { editName.focus(); return; }
@@ -1762,7 +1919,7 @@
                 const cancelEdit = document.createElement('button');
                 cancelEdit.type = 'button';
                 cancelEdit.textContent = 'Cancel';
-                cancelEdit.style.cssText = 'font-size:11px;padding:3px 10px;';
+                cancelEdit.className = 'enc-modal-btn';
                 cancelEdit.addEventListener('click', () => {
                     editName.value = e.name || '';
                     editDesc.value = e.description || '';
@@ -1798,6 +1955,7 @@
                     rows = rows.filter(e => (e.tags || []).includes(activeTag));
                     // Auto-expand every folder that has a matching encounter
                     rows.forEach(e => { folderOpen[(e.folder || '').trim()] = true; });
+                    _saveFolderOpen();
                 }
                 if (searchQuery) {
                     const q = searchQuery.toLowerCase();
@@ -1815,13 +1973,28 @@
                     rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
                 }
                 renderFilterBar();
-                if (!rows.length) {
+                // Always pin the active encounter at the top regardless of search/filter.
+                const currentEnc = allRows.find(e => e.is_current);
+                rows = rows.filter(e => !e.is_current);
+                if (!rows.length && !currentEnc) {
                     let msg = 'None saved yet — save the current state below.';
                     if (searchQuery) msg = 'No encounters match "' + searchQuery + '".';
                     else if (activeTag) msg = 'No encounters with tag "' + activeTag + '".';
                     list.innerHTML = '<em>' + msg + '</em>';
                     return;
                 }
+                list.innerHTML = '';
+                if (currentEnc) {
+                    const pinLabel = document.createElement('div');
+                    pinLabel.style.cssText = 'font-size:9px;text-transform:uppercase;letter-spacing:0.6px;font-weight:700;color:var(--accent);margin-bottom:4px;padding-left:2px;';
+                    pinLabel.textContent = '▶ Active';
+                    list.appendChild(pinLabel);
+                    list.appendChild(buildRow(currentEnc));
+                    const divider = document.createElement('div');
+                    divider.style.cssText = 'border-top:1px solid var(--border);margin:8px 0;';
+                    list.appendChild(divider);
+                }
+                if (!rows.length) return;
                 // Group by folder; "" → "Unfiled" group rendered last.
                 const groups = new Map();
                 rows.forEach(e => {
@@ -1833,7 +2006,6 @@
                     .filter(n => n)
                     .sort((a, b) => a.localeCompare(b, undefined, {sensitivity: 'base'}));
                 if (groups.has('')) folderNames.push('');
-                list.innerHTML = '';
                 folderNames.forEach(folder => {
                     const items = groups.get(folder);
                     // Default closed; the per-folder open state is sticky
@@ -1841,34 +2013,26 @@
                     const isOpen = !!folderOpen[folder];
                     const wrap = document.createElement('details');
                     if (isOpen) wrap.open = true;
-                    wrap.style.cssText = 'margin-bottom:4px;';
+                    wrap.style.cssText = 'margin-bottom:8px;border:1px solid rgba(167,139,250,.3);border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.16);';
                     const summary = document.createElement('summary');
-                    summary.style.cssText = 'cursor:pointer;font-size:13px;color:var(--fg-mute);padding:3px 0;list-style:none;display:flex;align-items:center;gap:5px;';
-                    // Chevron — points right when collapsed, rotates 90°
-                    // down on open. Same affordance as the panel-level
-                    // .enc-chevron above so the expand-ability of folder
-                    // rows is visually obvious.
+                    summary.style.cssText = 'cursor:pointer;font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.4px;padding:6px 10px;list-style:none;display:flex;align-items:center;gap:6px;background:linear-gradient(135deg,rgba(167,139,250,.14),rgba(108,180,255,.09));user-select:none;';
                     const chev = document.createElement('span');
                     chev.textContent = '▶';
-                    chev.style.cssText = 'font-size:8px;color:var(--fg-mute);transition:transform .15s;display:inline-block;flex-shrink:0;' + (isOpen ? 'transform:rotate(90deg);' : '');
+                    chev.style.cssText = 'font-size:8px;color:var(--accent);transition:transform .15s;display:inline-block;flex-shrink:0;' + (isOpen ? 'transform:rotate(90deg);' : '');
                     summary.appendChild(chev);
                     const label = document.createElement('span');
                     label.textContent = (folder || 'Unfiled') + ' (' + items.length + ')';
-                    label.style.fontWeight = isOpen ? '700' : '400';
                     summary.appendChild(label);
-                    summary.addEventListener('click', (ev) => {
-                        // Toggle happens natively; capture the next
-                        // open state so the sticky map stays in sync,
-                        // and spin the chevron to match.
+                    summary.addEventListener('click', () => {
                         setTimeout(() => {
                             folderOpen[folder] = wrap.open;
+                            _saveFolderOpen();
                             chev.style.transform = wrap.open ? 'rotate(90deg)' : '';
-                            label.style.fontWeight = wrap.open ? '700' : '400';
                         }, 0);
                     });
                     wrap.appendChild(summary);
                     const body = document.createElement('div');
-                    body.style.cssText = 'padding-top:3px;';
+                    body.style.cssText = 'padding:6px 6px;display:flex;flex-direction:column;gap:5px;';
                     items.forEach(e => body.appendChild(buildRow(e)));
                     wrap.appendChild(body);
                     list.appendChild(wrap);
@@ -2168,16 +2332,34 @@
 <!-- ── GM Tools drawer ── -->
 <div id="gm-tools-drawer" class="drawer-panel">
     <div class="drawer-body">
+        <!-- ── Session controls ── -->
+        <div style="margin-bottom:10px;border:1px solid rgba(167,139,250,.25);border-radius:8px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.12);">
+            <div style="background:linear-gradient(135deg,rgba(167,139,250,.13),rgba(108,180,255,.08));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚡ Session</div>
+            <div style="padding:8px 10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+                {% if campaign.session_active %}
+                <form method="post" action="/campaign/{{ campaign.id }}/session/end" style="display:contents;">
+                    <button type="submit" title="End session and return players to the lobby" style="flex:1;font-size:12px;">⏹ End Session</button>
+                </form>
+                <span style="font-size:10px;color:var(--accent);white-space:nowrap;">● Live</span>
+                {% else %}
+                <form method="post" action="/campaign/{{ campaign.id }}/session/start" style="display:contents;">
+                    <button type="submit" title="Open the tabletop to players" style="flex:1;font-size:12px;">▶ Start Session</button>
+                </form>
+                <span style="font-size:10px;color:var(--fg-mute);white-space:nowrap;">Offline</span>
+                {% endif %}
+                <a href="/campaign/{{ campaign.id }}/settings" class="btn-link" style="flex-shrink:0;font-size:12px;">⚙ Settings</a>
+            </div>
+        </div>
         <!-- ── Encounters ── -->
-        <details id="encounters-panel"
-                 style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
-            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:8px;">
+        <details id="encounters-panel" class="gm-panel">
+            <summary>
                 <span class="enc-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
                 <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚔ Encounters</h4>
                 <span id="enc-current-chip"
                       title="Currently loaded encounter"
-                      style="display:none;margin-left:auto;font-size:10px;color:#6cb;background:#142a30;border:1px solid #2a4f5a;border-radius:3px;padding:1px 6px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+                      style="display:none;margin-left:auto;font-size:9px;padding:1px 6px;border-radius:8px;background:#3a2f15;color:#d4a84a;border:1px solid #6e5828;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
             </summary>
+            <div class="gm-panel-body">
             <input type="search" id="enc-search" placeholder="Search by name or tag…"
                    style="width:100%;box-sizing:border-box;font-size:11px;padding:4px 6px;margin-bottom:4px;">
             <div style="display:flex;align-items:center;gap:8px;font-size:10px;color:var(--fg-mute);margin-bottom:6px;flex-wrap:wrap;">
@@ -2245,28 +2427,32 @@
                 </div>
             </details>
             <datalist id="enc-tag-list"></datalist>
+            </div><!-- /gm-panel-body (encounters) -->
         </details>
 
         <!-- ── Token Management ── -->
-        <details id="token-management-panel" open
-                 style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
-            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:8px;">
+        <details id="token-management-panel" class="gm-panel" open>
+            <summary>
                 <span class="tm-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
                 <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">🎯 Token Management</h4>
             </summary>
-            <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+            <div class="gm-panel-body">
+            <div style="display:flex;justify-content:flex-end;gap:6px;margin-bottom:6px;">
+                <button type="button" onclick="renderTokenTracker()" title="Refresh token list"
+                        style="font-size:11px;padding:3px 8px;">⟳ Refresh</button>
                 <button type="button" id="add-token-btn"
                         style="font-size:11px;padding:3px 10px;">+ Add Token</button>
             </div>
             <div id="token-tracker-list"></div>
+            </div><!-- /gm-panel-body (token management) -->
         </details>
 
-        <details id="music-panel" open
-                 style="margin-bottom:14px;">
-            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:8px;">
+        <details id="music-panel" class="gm-panel" open>
+            <summary>
                 <span class="music-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
                 <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">🎵 Music</h4>
             </summary>
+            <div class="gm-panel-body">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; gap:8px;">
             <span id="gm-now-playing-label" class="muted" style="font-size:12px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                 {% if now_playing %}▶ {{ now_playing.name }}{% else %}Nothing playing{% endif %}
@@ -2347,6 +2533,7 @@
         {% else %}
         <p class="muted">No playlists yet. Create one in <a href="/campaign/{{ campaign.id }}/settings#audio">campaign settings</a>.</p>
         {% endif %}
+            </div><!-- /gm-panel-body (music) -->
         </details><!-- /#music-panel -->
     </div>
 </div>
@@ -2437,6 +2624,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 <script id="initial-data" type="application/json">
 {{ {"tokens": token_data, "characters": char_data, "templates": tmpl_data} | tojson }}
 </script>
+<script src="/static/action_buttons.js"></script>
 <script src="/static/beast_picker.js"></script>
 <script src="/static/tabletop.js"></script>
 <script src="/static/audio.js"></script>
@@ -2457,6 +2645,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             tab.classList.add('active');
             panel.classList.add('open');
             try { localStorage.setItem(STORAGE_KEY, targetId); } catch (e) {}
+            if (targetId === 'roll-log-drawer') {
+                const body = panel.querySelector('.drawer-body');
+                if (body) requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
+            }
         }
     }
 
@@ -2572,10 +2764,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const isFav = favs.has(id);
                 btn.textContent = isFav ? '★' : '☆';
                 btn.classList.toggle('active', isFav);
-                /* Re-order: move the char-row and its detail to top/bottom */
-                const row = btn.closest('.char-row');
-                const detail = row && document.getElementById('char-detail-' + id);
-                if (row) row.dataset.favOrder = isFav ? '0' : '1';
+                const detail = document.getElementById('char-detail-' + id);
                 if (detail) detail.dataset.favOrder = isFav ? '0' : '1';
             });
             /* Sort DOM nodes by favOrder */
@@ -2593,19 +2782,26 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             });
         });
 
-        document.querySelectorAll('.char-expand-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const id = btn.dataset.charId;
-                const detail = document.getElementById('char-detail-' + id);
-                if (!detail) return;
-                const isOpen = detail.classList.toggle('open');
-                btn.textContent = isOpen ? '▼' : '▶';
+        function _toggleCharDetail(charId) {
+            const detail = document.getElementById('char-detail-' + charId);
+            if (!detail) return;
+            const isOpen = detail.classList.toggle('open');
+            const arrow = document.querySelector(`.mini-header[data-char-id="${charId}"] .mini-header-arrow`);
+            if (arrow) arrow.classList.toggle('open', isOpen);
+        }
+        window._toggleCharDetail = _toggleCharDetail;
+
+        // Clicking the card header opens/closes the sheet; fav star is excluded.
+        document.querySelectorAll('.mini-header[data-char-id]').forEach(hdr => {
+            hdr.addEventListener('click', (ev) => {
+                if (ev.target.closest('.char-fav')) return;
+                _toggleCharDetail(hdr.dataset.charId);
             });
         });
 
-        /* Mini-sheet roll buttons — post directly to the roll API */
-        document.getElementById('player-char-list').addEventListener('click', async (ev) => {
-            const btn = ev.target.closest('.mini-roll-btn');
+        /* Mini-sheet roll buttons (abilities) and skill buttons — post directly to the roll API */
+        document.getElementById('players-drawer').addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('.mini-roll-btn, .mini-sk-btn');
             if (!btn) return;
             const expr = btn.dataset.expr;
             const note = btn.dataset.note || '';
@@ -2641,7 +2837,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (countEl) countEl.textContent = `${total - used}/${total}`;
         }
 
-        document.getElementById('player-char-list').addEventListener('click', async (ev) => {
+        document.getElementById('players-drawer').addEventListener('click', async (ev) => {
             const btn = ev.target.closest('.mini-cast-btn');
             if (!btn) return;
             const charId = parseInt(btn.dataset.charId, 10);
@@ -2835,7 +3031,58 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             } catch { /* silent — display already updated */ }
         }
 
-        document.getElementById('player-char-list').addEventListener('click', (ev) => {
+        function _setMiniTab(charId, tab) {
+            const tabsEl = document.querySelector(`.mini-tabs[data-char-id="${charId}"]`);
+            if (!tabsEl) return;
+            const validTabs = Array.from(tabsEl.querySelectorAll('.mini-tab-btn')).map(b => b.dataset.tab);
+            if (!validTabs.includes(tab)) tab = validTabs[0] || 'skills';
+            tabsEl.querySelectorAll('.mini-tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tab);
+            });
+            const contentEl = document.querySelector(`.mini-tab-content[data-char-id="${charId}"]`);
+            if (contentEl) {
+                contentEl.querySelectorAll('.mini-tab-panel').forEach(panel => {
+                    panel.classList.toggle('active', panel.dataset.panel === tab);
+                });
+            }
+            try { localStorage.setItem('vtt_minitab_' + charId, tab); } catch {}
+        }
+
+        // Restore saved tab state on page load
+        document.querySelectorAll('.mini-tabs[data-char-id]').forEach(el => {
+            _setMiniTab(el.dataset.charId, localStorage.getItem('vtt_minitab_' + el.dataset.charId) || 'skills');
+        });
+
+        function _setAbMode(charId, mode) {
+            document.querySelectorAll(`.mini-ab-toggle[data-char-id="${charId}"] .mini-ab-toggle-btn`).forEach(b => {
+                b.classList.toggle('active', b.dataset.mode === mode);
+            });
+            document.querySelectorAll(`.mini-ab-grid[data-char-id="${charId}"] .mini-ab-btn`).forEach(btn => {
+                const save = mode === 'save';
+                btn.dataset.expr = save ? btn.dataset.saveExpr : btn.dataset.checkExpr;
+                btn.dataset.note = save ? btn.dataset.saveNote : btn.dataset.checkNote;
+                const modEl = btn.querySelector('.mac-btn-mod');
+                if (modEl) modEl.textContent = save ? btn.dataset.saveMod : btn.dataset.checkMod;
+            });
+        }
+
+        function _doMiniTransform(charId, slug, source) {
+            fetch(`/api/campaign/${CAMPAIGN_ID}/character/${charId}/transform`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ slug, source, free_pick: false }),
+            }).then(async resp => {
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({ detail: 'Transform failed' }));
+                    throw new Error(err.detail || `HTTP ${resp.status}`);
+                }
+                window.location.reload();
+            }).catch(e => {
+                (window.showToast || window._toast || alert)('Transform failed: ' + e.message, 'error');
+            });
+        }
+
+        document.getElementById('players-drawer').addEventListener('click', (ev) => {
             const sBtn = ev.target.closest('.mini-short-rest-btn');
             if (sBtn) { _miniRest(sBtn, 'short'); return; }
             const lBtn = ev.target.closest('.mini-long-rest-btn');
@@ -2846,6 +3093,82 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const field  = hpBtn.dataset.field;
                 const delta  = hpBtn.classList.contains('mini-hp-plus') ? 1 : -1;
                 _miniHpStep(charId, field, delta);
+                return;
+            }
+            // Section tab switching
+            const tabBtn = ev.target.closest('.mini-tab-btn');
+            if (tabBtn) {
+                _setMiniTab(tabBtn.dataset.charId, tabBtn.dataset.tab);
+                return;
+            }
+            // Ability Check / Save toggle
+            const abToggleBtn = ev.target.closest('.mini-ab-toggle-btn');
+            if (abToggleBtn) {
+                _setAbMode(abToggleBtn.dataset.charId, abToggleBtn.dataset.mode);
+                return;
+            }
+            // Wild Shape dropdown — toggle open/closed
+            const wsTrigger = ev.target.closest('.mini-ws-trigger');
+            if (wsTrigger) {
+                ev.stopPropagation();
+                const dd = wsTrigger.closest('.mini-ws-wrap')?.querySelector('.mini-ws-dropdown');
+                const arrow = wsTrigger.querySelector('.mini-ws-arrow');
+                if (!dd) return;
+                const opening = dd.style.display === 'none';
+                document.querySelectorAll('.mini-ws-dropdown').forEach(d => { d.style.display = 'none'; });
+                document.querySelectorAll('.mini-ws-arrow').forEach(a => { a.style.transform = ''; });
+                if (opening) {
+                    dd.style.display = 'block';
+                    if (arrow) arrow.style.transform = 'rotate(180deg)';
+                }
+                return;
+            }
+            // Wild Shape dropdown — direct transform from a favorite
+            const wsFavBtn = ev.target.closest('.mini-ws-fav-btn');
+            if (wsFavBtn) {
+                ev.stopPropagation();
+                const charId = parseInt(wsFavBtn.dataset.charId, 10);
+                const slug   = wsFavBtn.dataset.slug;
+                const dd = wsFavBtn.closest('.mini-ws-dropdown');
+                if (dd) dd.style.display = 'none';
+                const arrow = wsFavBtn.closest('.mini-ws-wrap')?.querySelector('.mini-ws-arrow');
+                if (arrow) arrow.style.transform = '';
+                _doMiniTransform(charId, slug, 'wild-shape');
+                return;
+            }
+            // Wild Shape dropdown — Browse all (opens full beast picker)
+            const wsBrowseBtn = ev.target.closest('.mini-ws-browse-btn');
+            if (wsBrowseBtn) {
+                ev.stopPropagation();
+                const dd = wsBrowseBtn.closest('.mini-ws-dropdown');
+                if (dd) dd.style.display = 'none';
+                const arrow = wsBrowseBtn.closest('.mini-ws-wrap')?.querySelector('.mini-ws-arrow');
+                if (arrow) arrow.style.transform = '';
+                const charId  = parseInt(wsBrowseBtn.dataset.charId, 10);
+                const source  = wsBrowseBtn.dataset.source || 'wild-shape';
+                const bar     = wsBrowseBtn.closest('.mini-transform-bar');
+                const druidLv = parseInt(bar?.dataset.druidLv, 10) || 0;
+                const isMoon  = bar?.dataset.moon === 'true';
+                const charLv  = parseInt(bar?.dataset.charLv, 10) || 1;
+                let favorites = [];
+                try { favorites = JSON.parse(bar?.dataset.favorites || '[]') || []; } catch { favorites = []; }
+                if (!window.BeastPicker) {
+                    (window.showToast || alert)('Beast picker not loaded', 'error');
+                    return;
+                }
+                window.BeastPicker.open({
+                    campaignId: CAMPAIGN_ID,
+                    characterId: charId,
+                    source,
+                    druidLevel: druidLv,
+                    isMoonDruid: isMoon,
+                    characterLevel: charLv,
+                    favorites,
+                    onFavoritesChange: (newList) => {
+                        if (bar) bar.dataset.favorites = JSON.stringify(newList || []);
+                    },
+                    onSuccess: () => window.location.reload(),
+                });
                 return;
             }
             // Wild Shape / Polymorph — opens the shared beast picker
@@ -2918,6 +3241,12 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             }
         });
 
+        // Close Wild Shape dropdown when clicking anywhere outside it.
+        document.addEventListener('click', () => {
+            document.querySelectorAll('.mini-ws-dropdown').forEach(d => { d.style.display = 'none'; });
+            document.querySelectorAll('.mini-ws-arrow').forEach(a => { a.style.transform = ''; });
+        });
+
         // Reload the tabletop when any character on the page transforms or
         // reverts. The mini-sheet is server-rendered Jinja; reloading is
         // the simplest way to get the new HP / AC / form badge in sync.
@@ -2931,7 +3260,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         });
 
         /* Mini-sheet strike (weapon attack) buttons — post to /attack */
-        document.getElementById('player-char-list').addEventListener('click', async (ev) => {
+        document.getElementById('players-drawer').addEventListener('click', async (ev) => {
             const btn = ev.target.closest('.mini-strike-btn');
             if (!btn) return;
             const charId = parseInt(btn.dataset.charId, 10);
@@ -3044,6 +3373,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             name: tok.label,
             initiative: 0, hp_current: hpCur, hp_max: hpMax,
             color, dex_mod: dexMod,
+            image_url: tok.image_url || null,
         };
     }
 
@@ -3052,6 +3382,171 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         return pct > 0.5
             ? getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6cb4ff'
             : pct > 0.25 ? '#e8a040' : 'var(--danger)';
+    }
+
+    function buildInitSheet(charId) {
+        const ch = allChars.find(c => c.id === charId);
+        if (!ch) return '';
+        const sh  = ch.sheet || {};
+        const ab  = sh.abilities || {};
+        const abi = s => Math.floor(((parseInt(s) || 10) - 10) / 2);
+        const fmt = n => (n >= 0 ? '+' : '') + n;
+        const STATS    = ['STR','DEX','CON','INT','WIS','CHA'];
+        const prof     = parseInt(sh.proficiency_bonus) || 2;
+        const skillMod = name => {
+            const sk = (sh.skills || {})[name] || {};
+            const base = abi(parseInt(ab[sk.ability]) || 10);
+            return base + prof * (sk.expertise ? 2 : sk.proficient ? 1 : 0);
+        };
+        const SEC = t => `<div style="font-size:9px;font-weight:700;color:var(--fg-mute);text-transform:uppercase;letter-spacing:0.5px;margin:8px 0 4px;">${t}</div>`;
+
+        let html = '<div style="padding:8px 10px 12px;">';
+
+        /* ── Quick stats ── */
+        const percSk  = (sh.skills || {}).Perception || {};
+        const percProf = percSk.expertise ? prof * 2 : percSk.proficient ? prof : 0;
+        const pp      = 10 + abi(parseInt(ab.WIS) || 10) + percProf;
+        const initMod = abi(parseInt(ab.DEX) || 10) + parseInt(sh.initiative_bonus || 0);
+        const quick = [];
+        if (sh.ac != null && sh.ac !== '') quick.push(`<span><b>AC</b> ${sh.ac}</span>`);
+        if (sh.speed) quick.push(`<span><b>Spd</b> ${sh.speed}</span>`);
+        quick.push(`<span><b>Init</b> ${fmt(initMod)}</span>`);
+        quick.push(`<span><b>PP</b> ${pp}</span>`);
+        html += `<div style="display:flex;gap:14px;margin-bottom:8px;flex-wrap:wrap;">${quick.join('')}</div>`;
+
+        /* ── Ability scores ── */
+        if (ch.template === 'dnd5e' || Object.keys(ab).length) {
+            html += `<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:3px;text-align:center;margin-bottom:4px;">`;
+            STATS.forEach(s => {
+                const score = parseInt(ab[s]) || 10;
+                const mod   = abi(score);
+                html += `<div style="border:1px solid var(--border);border-radius:4px;padding:2px 0;background:var(--input-bg);">
+                    <div style="font-size:8px;color:var(--fg-mute);">${s}</div>
+                    <div style="font-size:12px;font-weight:700;">${fmt(mod)}</div>
+                    <div style="font-size:8px;color:var(--fg-mute);">${score}</div>
+                </div>`;
+            });
+            html += '</div>';
+        }
+
+        /* ── Saving throws ── */
+        if (ch.template === 'dnd5e') {
+            const saves = sh.saving_throws || {};
+            html += SEC('Saving Throws');
+            html += `<div style="display:flex;gap:8px;flex-wrap:wrap;">`;
+            STATS.forEach(s => {
+                const isPro = saves[s];
+                const mod   = abi(parseInt(ab[s]) || 10) + (isPro ? prof : 0);
+                html += `<span style="font-size:11px;${isPro ? 'color:var(--fg);font-weight:600;' : 'color:var(--fg-mute);'}">${s} ${fmt(mod)}${isPro ? ' ◆' : ''}</span>`;
+            });
+            html += '</div>';
+        }
+
+        /* ── Attacks ── */
+        const attacks = Array.isArray(sh.attacks) ? sh.attacks : [];
+        if (attacks.length) {
+            html += SEC('Attacks');
+            attacks.forEach(atk => {
+                const hitStr = atk.bonus != null ? fmt(parseInt(atk.bonus) || 0) : '—';
+                html += `<div style="display:flex;gap:8px;font-size:11px;margin-bottom:3px;align-items:baseline;">
+                    <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${atk.name || 'Attack'}</span>
+                    <span style="color:var(--accent);font-weight:600;flex-shrink:0;">${hitStr}</span>
+                    <span style="color:var(--fg-mute);flex-shrink:0;">${atk.damage || ''}</span>
+                    ${atk.type ? `<span style="font-size:9px;color:var(--fg-mute);flex-shrink:0;">${atk.type}</span>` : ''}
+                </div>`;
+            });
+        }
+
+        /* ── Skills ── */
+        if (ch.template === 'dnd5e') {
+            const SKILL_LIST = [
+                'Acrobatics','Animal Handling','Arcana','Athletics','Deception',
+                'History','Insight','Intimidation','Investigation','Medicine',
+                'Nature','Perception','Performance','Persuasion','Religion',
+                'Sleight of Hand','Stealth','Survival',
+            ];
+            html += SEC('Skills');
+            html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px 8px;">`;
+            SKILL_LIST.forEach(name => {
+                const sk     = (sh.skills || {})[name] || {};
+                const mod    = skillMod(name);
+                const marker = sk.expertise ? '◈' : sk.proficient ? '◆' : '';
+                const hi     = sk.expertise || sk.proficient;
+                html += `<div style="display:flex;justify-content:space-between;font-size:10px;padding:1px 0;${hi ? 'color:var(--fg);' : 'color:var(--fg-mute);'}">
+                    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${marker ? marker + ' ' : ''}${name}</span>
+                    <span style="flex-shrink:0;font-weight:${hi ? '600' : '400'};margin-left:4px;">${fmt(mod)}</span>
+                </div>`;
+            });
+            html += '</div>';
+        }
+
+        /* ── Class features / resources ── */
+        const resources = (Array.isArray(sh.resources) ? sh.resources : []).filter(r => r.max > 0);
+        if (resources.length) {
+            html += SEC('Class Features');
+            html += `<div style="display:flex;flex-wrap:wrap;gap:4px;">`;
+            resources.forEach(r => {
+                const pct = r.current / r.max;
+                const col = r.current === 0 ? 'var(--danger)' : pct < 0.5 ? '#c8962a' : 'var(--accent)';
+                html += `<div style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--input-bg);border:1px solid var(--border);">
+                    ${r.name} <strong style="color:${col};">${r.current}/${r.max}</strong>
+                </div>`;
+            });
+            html += '</div>';
+        }
+
+        /* ── Spells ── */
+        const spells = Array.isArray(sh.spells) ? sh.spells : [];
+        const rawSlots = sh.spell_slots || {};
+        const slotsByLevel = {};
+        Object.values(rawSlots).forEach(byLvl => {
+            if (!byLvl || typeof byLvl !== 'object') return;
+            Object.entries(byLvl).forEach(([lvl, data]) => {
+                if (!slotsByLevel[lvl]) slotsByLevel[lvl] = {total: 0, used: 0};
+                slotsByLevel[lvl].total += parseInt(data.total || 0);
+                slotsByLevel[lvl].used  += parseInt(data.used  || 0);
+            });
+        });
+        const slotLevels = Object.keys(slotsByLevel).filter(l => slotsByLevel[l].total > 0).sort();
+        const preparedSpells = spells.filter(s => s.prepared !== false);
+
+        if (slotLevels.length || preparedSpells.length) {
+            html += SEC('Spells');
+            if (slotLevels.length) {
+                const ORD = ['','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
+                html += `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px;">`;
+                slotLevels.forEach(lvl => {
+                    const {total, used} = slotsByLevel[lvl];
+                    const rem = total - used;
+                    const col = rem === 0 ? 'var(--fg-mute)' : rem < total ? '#c8962a' : 'var(--accent)';
+                    html += `<div style="font-size:10px;padding:2px 7px;border-radius:4px;background:var(--input-bg);border:1px solid var(--border);">
+                        <span style="color:var(--fg-mute);">${ORD[parseInt(lvl)] || lvl}</span> <strong style="color:${col};">${rem}/${total}</strong>
+                    </div>`;
+                });
+                html += '</div>';
+            }
+            if (preparedSpells.length) {
+                const byLevel = {};
+                preparedSpells.forEach(s => {
+                    const lvl = parseInt(s.level) || 0;
+                    (byLevel[lvl] = byLevel[lvl] || []).push(s);
+                });
+                const ORD = ['Cantrips','1st','2nd','3rd','4th','5th','6th','7th','8th','9th'];
+                Object.keys(byLevel).sort((a, b) => a - b).forEach(lvl => {
+                    html += `<div style="font-size:9px;color:var(--fg-mute);margin-bottom:2px;">${ORD[parseInt(lvl)] || lvl + 'th'}</div>`;
+                    html += `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:5px;">`;
+                    byLevel[lvl].forEach(s => {
+                        html += `<div style="font-size:10px;padding:1px 6px;border-radius:4px;background:var(--input-bg);border:1px solid var(--border);white-space:nowrap;">
+                            ${s.concentration ? `<span style="color:var(--accent);font-size:8px;">C</span> ` : ''}${s.name}${s.ritual ? ` <span style="color:var(--fg-mute);font-size:8px;">R</span>` : ''}
+                        </div>`;
+                    });
+                    html += '</div>';
+                });
+            }
+        }
+
+        html += '</div>';
+        return html;
     }
 
     const HP_THRESHOLDS = {{ hp_thresholds | tojson }};
@@ -3069,6 +3564,18 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         const banner  = document.getElementById('battle-banner');
         const list    = document.getElementById('initiative-list');
         if (!list) return;
+
+        /* ① Return any mini-body nodes that were moved into open init entries */
+        list.querySelectorAll('.init-card-sheet .mini-body').forEach(mb => {
+            const charId = mb.closest('.init-entry')?.dataset.charId;
+            if (charId) document.querySelector(`#char-detail-${charId} .mini-sheet`)?.appendChild(mb);
+        });
+
+        /* ② Preserve which entries were expanded so rerender keeps them open */
+        const openIdxs = new Set(
+            [...list.querySelectorAll('.init-card-sheet.open')]
+                .map(s => s.closest('.init-entry')?.dataset.idx).filter(Boolean)
+        );
 
         if (roundEl) {
             roundEl.textContent = battle.active && battle.combatants.length
@@ -3089,55 +3596,120 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         list.innerHTML = battle.combatants.map((c, i) => {
             const isActive = battle.active && i === (battle.turn_index % battle.combatants.length);
             const col = hpColor(c.hp_current, c.hp_max);
-            if (IS_GM) {
-                return `<div class="init-row${isActive ? ' active-turn' : ''}" data-idx="${i}">
-                    <div class="init-swatch" style="background:${c.color || '#888'};"></div>
-                    <span class="init-name" title="${c.name}">${c.name}</span>
-                    <input class="init-init" type="number" value="${c.initiative}" data-idx="${i}" title="Initiative">
-                    <input class="init-hp-cur" type="number" value="${c.hp_current}" data-idx="${i}" title="Current HP" style="color:${col};">
-                    <span class="muted" style="font-size:9px;flex-shrink:0;">/</span>
-                    <input class="init-hp-max" type="number" value="${c.hp_max}" data-idx="${i}" title="Max HP">
-                    <button class="init-rm" data-idx="${i}" title="Remove">×</button>
+            /* True when a full mini-sheet card exists in the Characters section for this combatant */
+            const hasCharDetail = !!(c.char_id && document.getElementById('char-detail-' + c.char_id));
+            const tokenImg = c.image_url
+                ? `<img src="${c.image_url}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;border:1px solid rgba(167,139,250,.4);flex-shrink:0;" alt="">`
+                : `<div class="init-swatch" style="background:${c.color || '#888'};flex-shrink:0;margin-top:2px;"></div>`;
+
+            if (IS_GM || hasCharDetail) {
+                /* Card entry — GM always; player for own characters */
+                let editRow = '';
+                let staticSheet = '';
+                if (IS_GM) {
+                    editRow = `<div class="init-card-edit">
+                        <span style="font-size:10px;color:var(--fg-mute);flex-shrink:0;">Init</span>
+                        <input class="init-init" type="number" value="${c.initiative}" data-idx="${i}" title="Initiative">
+                        <span style="font-size:10px;color:var(--fg-mute);flex-shrink:0;margin-left:6px;">HP</span>
+                        <input class="init-hp-cur" type="number" value="${c.hp_current}" data-idx="${i}" title="Current HP" style="color:${col};">
+                        <span class="muted" style="font-size:9px;flex-shrink:0;">/</span>
+                        <input class="init-hp-max" type="number" value="${c.hp_max}" data-idx="${i}" title="Max HP">
+                        <button class="init-rm" data-idx="${i}" title="Remove" style="margin-left:auto;">×</button>
+                    </div>`;
+                    /* For non-owned chars the GM still needs the static stat panel */
+                    if (!hasCharDetail) staticSheet = buildInitSheet(c.char_id);
+                }
+                return `<div class="init-entry${isActive ? ' active-turn' : ''}" data-idx="${i}" data-char-id="${c.char_id || ''}">
+                    <div class="mini-header" data-idx="${i}" data-char-id="${c.char_id || ''}">
+                        ${tokenImg}
+                        <div class="mini-header-info">
+                            <div class="mini-header-name">${c.name}</div>
+                            <div class="mini-header-sub">Init <strong>${c.initiative}</strong> &nbsp;·&nbsp; HP <strong style="color:${col};">${c.hp_current}</strong> / ${c.hp_max}</div>
+                        </div>
+                        <span class="mini-header-arrow">▶</span>
+                    </div>
+                    <div class="init-card-sheet">
+                        ${editRow}${staticSheet}
+                    </div>
                 </div>`;
             } else {
+                /* Simple row — player view of combatants without a linked char-detail */
                 const label = hpThreshold(c.hp_current, c.hp_max);
-                return `<div class="init-row${isActive ? ' active-turn' : ''}" data-idx="${i}">
-                    <div class="init-swatch" style="background:${c.color || 'var(--fg-mute)'};"></div>
+                return `<div class="init-row${isActive ? ' active-turn' : ''}" data-idx="${i}" data-char-id="${c.char_id || ''}">
+                    ${tokenImg}
                     <span class="init-name" title="${c.name}">${c.name}</span>
                     <span class="init-threshold" style="color:${col};">${label}</span>
                 </div>`;
             }
         }).join('');
 
-        if (!IS_GM) return;
-
-        list.querySelectorAll('.init-init').forEach(inp => inp.addEventListener('change', () => {
-            battle.combatants[+inp.dataset.idx].initiative = parseInt(inp.value) || 0;
-            sortPreservingTurn();
-            pushBattle(); renderBattle();
-        }));
-        list.querySelectorAll('.init-hp-cur').forEach(inp => inp.addEventListener('change', () => {
-            battle.combatants[+inp.dataset.idx].hp_current = Math.max(0, parseInt(inp.value) || 0);
-            pushBattle(); renderBattle();
-        }));
-        list.querySelectorAll('.init-hp-max').forEach(inp => inp.addEventListener('change', () => {
-            battle.combatants[+inp.dataset.idx].hp_max = Math.max(0, parseInt(inp.value) || 0);
-            pushBattle(); renderBattle();
-        }));
-        list.querySelectorAll('.init-rm').forEach(btn => btn.addEventListener('click', () => {
-            const idx = +btn.dataset.idx;
-            const curId = battle.combatants[battle.turn_index % battle.combatants.length]?.id;
-            battle.combatants.splice(idx, 1);
-            if (battle.combatants.length) {
-                const newIdx = battle.combatants.findIndex(c => c.id === curId);
-                battle.turn_index = Math.max(0, newIdx >= 0 ? newIdx : 0);
-            } else {
-                battle.turn_index = 0; battle.active = false;
+        /* ③ Restore expanded entries and re-move mini-body for entries that were open */
+        openIdxs.forEach(idx => {
+            const entry = list.querySelector(`.init-entry[data-idx="${idx}"]`);
+            if (!entry) return;
+            const sheetEl = entry.querySelector('.init-card-sheet');
+            sheetEl?.classList.add('open');
+            entry.querySelector('.mini-header-arrow')?.classList.add('open');
+            const charId = entry.dataset.charId;
+            if (charId && sheetEl) {
+                const miniBody = document.querySelector(`#char-detail-${charId} .mini-sheet .mini-body`);
+                if (miniBody) sheetEl.appendChild(miniBody);
             }
-            pushBattle(); renderBattle();
-        }));
+        });
 
-        /* scroll active row into view */
+        /* ④ GM-specific input handlers */
+        if (IS_GM) {
+            list.querySelectorAll('.init-init').forEach(inp => inp.addEventListener('change', () => {
+                battle.combatants[+inp.dataset.idx].initiative = parseInt(inp.value) || 0;
+                sortPreservingTurn();
+                pushBattle(); renderBattle();
+            }));
+            list.querySelectorAll('.init-hp-cur').forEach(inp => inp.addEventListener('change', () => {
+                battle.combatants[+inp.dataset.idx].hp_current = Math.max(0, parseInt(inp.value) || 0);
+                pushBattle(); renderBattle();
+            }));
+            list.querySelectorAll('.init-hp-max').forEach(inp => inp.addEventListener('change', () => {
+                battle.combatants[+inp.dataset.idx].hp_max = Math.max(0, parseInt(inp.value) || 0);
+                pushBattle(); renderBattle();
+            }));
+            list.querySelectorAll('.init-rm').forEach(btn => btn.addEventListener('click', () => {
+                const idx = +btn.dataset.idx;
+                const curId = battle.combatants[battle.turn_index % battle.combatants.length]?.id;
+                battle.combatants.splice(idx, 1);
+                if (battle.combatants.length) {
+                    const newIdx = battle.combatants.findIndex(c => c.id === curId);
+                    battle.turn_index = Math.max(0, newIdx >= 0 ? newIdx : 0);
+                } else {
+                    battle.turn_index = 0; battle.active = false;
+                }
+                pushBattle(); renderBattle();
+            }));
+        }
+
+        /* ⑤ Expand/collapse for ALL card entries — moves mini-body in/out of the sheet slot */
+        list.querySelectorAll('.init-entry').forEach(entry => {
+            const headerEl = entry.querySelector('.mini-header');
+            const sheetEl  = entry.querySelector('.init-card-sheet');
+            if (!headerEl || !sheetEl) return;
+            const charId = entry.dataset.charId || '';
+            headerEl.addEventListener('click', ev => {
+                if (ev.target.closest('input') || ev.target.closest('button')) return;
+                const isOpen = sheetEl.classList.toggle('open');
+                headerEl.querySelector('.mini-header-arrow')?.classList.toggle('open', isOpen);
+                if (!charId) return;
+                if (isOpen) {
+                    /* Move the full mini-body into this initiative entry */
+                    const miniBody = document.querySelector(`#char-detail-${charId} .mini-sheet .mini-body`);
+                    if (miniBody) sheetEl.appendChild(miniBody);
+                } else {
+                    /* Return mini-body to its home in the Characters section */
+                    const miniBody = sheetEl.querySelector('.mini-body');
+                    if (miniBody) document.querySelector(`#char-detail-${charId} .mini-sheet`)?.appendChild(miniBody);
+                }
+            });
+        });
+
+        /* ⑥ Scroll active row into view */
         const activeRow = list.querySelector('.active-turn');
         if (activeRow) activeRow.scrollIntoView({ block: 'nearest' });
     }
@@ -3251,6 +3823,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 id: 'char_' + c.id + '_' + Date.now(),
                 char_id: c.id, name: c.name,
                 initiative: 0, hp_current: parseInt(hp.current || hpMax), hp_max: hpMax,
+                image_url: c.portrait_url || null,
                 color: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6cb4ff', dex_mod: dexMod,
             });
             pushBattle(); renderBattle(); renderCharPanel();
@@ -3305,11 +3878,74 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     });
 
     renderBattle();
+
+    /* Initiative row click → players open the Players-tab mini-sheet; GM uses inline expand */
+    if (!IS_GM) {
+        document.getElementById('initiative-list')?.addEventListener('click', ev => {
+            if (ev.target.closest('input') || ev.target.closest('button')) return;
+            const row = ev.target.closest('.init-row');
+            if (!row) return;
+            const charId = row.dataset.charId;
+            if (!charId) return;
+            if (window._toggleCharDetail) window._toggleCharDetail(charId);
+            document.getElementById('char-detail-' + charId)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+    }
 })();
 
 /* ── Roll toast ── */
 (function () {
     const container = document.getElementById('roll-toast-container');
+
+    /* SVG inner markup for each die face.
+       d4 is INVERTED (flat top, point bottom) — visually distinct from d20 (point top, flat bottom).
+       No inner lines on d8 — the horizontal line would cross the number. */
+    const DIE_SHAPES = {
+        4:   `<polygon points="7,8 93,8 50,92" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>`,
+        6:   `<rect x="10" y="10" width="80" height="80" rx="12" fill="none" stroke="currentColor" stroke-width="8"/>`,
+        8:   `<polygon points="50,8 92,50 50,92 8,50" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>`,
+        10:  `<polygon points="50,6 88,36 74,90 26,90 12,36" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>`,
+        12:  `<polygon points="50,8 88,33 76,77 24,77 12,33" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>`,
+        20:  `<polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/><polygon points="50,7 93,71.5 7,71.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" opacity="0.45"/><polygon points="93,28.5 50,93 7,28.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" opacity="0.45"/>`,
+        100: `<circle cx="50" cy="50" r="43" fill="none" stroke="currentColor" stroke-width="8"/><circle cx="50" cy="50" r="28" fill="none" stroke="currentColor" stroke-width="3" opacity="0.35"/>`,
+    };
+
+    /* Create an SVG die element with a <text> child for the number */
+    function makeDie(sides, size) {
+        const NS = 'http://www.w3.org/2000/svg';
+        const svg = document.createElementNS(NS, 'svg');
+        svg.setAttribute('class', 'rt-die');
+        svg.setAttribute('width', size);
+        svg.setAttribute('height', size);
+        svg.setAttribute('viewBox', '0 0 100 100');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.innerHTML = DIE_SHAPES[sides] || DIE_SHAPES[6];
+
+        const t = document.createElementNS(NS, 'text');
+        t.setAttribute('x', '50');
+        /* d4 is inverted (flat top, point bottom) — centroid in upper third.
+           d20 is upright (point top, flat bottom) — centroid in lower third. */
+        t.setAttribute('y', sides === 4 ? '38' : '54');
+        t.setAttribute('text-anchor', 'middle');
+        t.setAttribute('dominant-baseline', 'middle');
+        t.setAttribute('fill', 'currentColor');
+        t.setAttribute('font-size', sides >= 100 ? '26' : sides >= 20 ? '34' : '40');
+        t.setAttribute('font-weight', '800');
+        svg.appendChild(t);
+        return { svg, t };
+    }
+
+    /* Parse individual die values out of the breakdown string.
+       Format: "2d6[3,5]=8 +1d4[2]=2  =>  10" → [3, 5, 2] */
+    function parseDieVals(breakdown) {
+        const out = [];
+        const re = /\[([^\]]+)\]/g;
+        let m;
+        while ((m = re.exec(String(breakdown))) !== null) {
+            m[1].split(',').forEach(v => { const n = parseInt(v); if (!isNaN(n)) out.push(n); });
+        }
+        return out;
+    }
 
     function dismiss(toast) {
         if (toast.dataset.gone) return;
@@ -3321,34 +3957,85 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 
     document.addEventListener('vtt:ws-message', (ev) => {
         const msg = ev.detail;
-        if (msg.type !== 'roll' || msg.data.user_id !== ME.id) return;
+        if (msg.type !== 'roll') return;
         const r = msg.data;
+        /* Mirror appendRoll visibility rules — server broadcasts to all clients */
+        if (r.visibility === 'gm_only' && !ME.isGm) return;
+        if (r.visibility === 'gm_and_roller' && !ME.isGm && r.user_id !== ME.id) return;
 
         const toast = document.createElement('div');
-        toast.className = 'roll-toast';
+        toast.className = 'roll-toast rt-animating';
         toast.title = 'Click to dismiss';
 
         const lbl = document.createElement('div');
         lbl.className = 'rt-label';
-        lbl.textContent = '🎲 ' + (r.note || r.expression);
+        const roller = r.char_name || r.user_name;
+        lbl.textContent = r.user_id === ME.id
+            ? '🎲 ' + (r.note || r.expression)
+            : '🎲 ' + roller + ' — ' + (r.note || r.expression);
 
-        const tot = document.createElement('div');
-        tot.className = 'rt-total';
-        tot.textContent = r.total;
+        /* Build one die element per die in the expression (max 6).
+           Count is optional — "d20" treated as "1d20". */
+        const MAX_DICE = 6;
+        const sides = [];
+        for (const m of r.expression.matchAll(/(\d*)d(\d+)/gi)) {
+            const cnt = parseInt(m[1]) || 1;
+            for (let i = 0; i < cnt && sides.length < MAX_DICE; i++) sides.push(parseInt(m[2]));
+        }
+        if (!sides.length) sides.push(6);
 
-        const bkd = document.createElement('div');
-        bkd.className = 'rt-breakdown';
-        bkd.textContent = r.breakdown;
+        const n    = sides.length;
+        const sz   = n === 1 ? 82 : n <= 3 ? 60 : n <= 5 ? 46 : 38;
+        const dies = sides.map(s => makeDie(s, sz));
 
-        const hint = document.createElement('div');
-        hint.className = 'rt-dismiss';
-        hint.textContent = 'click to dismiss';
+        const diceRow = document.createElement('div');
+        diceRow.className = 'rt-dice';
+        dies.forEach(d => diceRow.appendChild(d.svg));
 
-        toast.append(lbl, tot, bkd, hint);
+        /* Sum line shown below the dice for multi-die rolls */
+        const sumEl = n > 1
+            ? Object.assign(document.createElement('div'), { className: 'rt-sum' })
+            : null;
+
+        toast.append(lbl, diceRow);
+        if (sumEl) toast.appendChild(sumEl);
         toast.addEventListener('click', () => dismiss(toast));
         container.appendChild(toast);
 
-        toast._timer = setTimeout(() => dismiss(toast), 10000);
+        /* Ease-out animation: each die independently cycles 1–sides */
+        const delays = [50, 55, 60, 75, 100, 150, 220, 320, 430];
+        let di = 0;
+        function tick() {
+            if (di < delays.length) {
+                dies.forEach((d, i) => { d.t.textContent = Math.floor(Math.random() * sides[i]) + 1; });
+                setTimeout(tick, delays[di++]);
+            } else {
+                toast.classList.remove('rt-animating');
+                if (n === 1) {
+                    /* Single die: show total directly (handles advantage/kh/kl correctly) */
+                    dies[0].t.textContent = r.total;
+                    dies[0].svg.classList.add('rt-die-landed');
+                } else {
+                    /* Multi-die: show per-die results parsed from breakdown */
+                    const vals = parseDieVals(r.breakdown);
+                    dies.forEach((d, i) => { d.t.textContent = vals[i] != null ? vals[i] : '?'; });
+                    sumEl.textContent = '= ' + r.total;
+                    sumEl.classList.add('rt-landed');
+                }
+
+                const bkd = document.createElement('div');
+                bkd.className = 'rt-breakdown';
+                bkd.textContent = r.breakdown;
+
+                const hint = document.createElement('div');
+                hint.className = 'rt-dismiss';
+                hint.textContent = 'click to dismiss';
+
+                toast.append(bkd, hint);
+                toast._timer = setTimeout(() => dismiss(toast), 10000);
+            }
+        }
+        tick();
     });
 })();
 </script>

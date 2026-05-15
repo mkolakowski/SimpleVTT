@@ -349,7 +349,7 @@ def campaign_view(
         .limit(100)
         .all()
     )
-    visible_rolls = [r for r in rolls if _filter_roll_for_user(r, user, campaign, db)]
+    visible_rolls = list(reversed([r for r in rolls if _filter_roll_for_user(r, user, campaign, db)]))
     members = (
         db.query(User)
         .join(CampaignMembership, CampaignMembership.user_id == User.id)
@@ -402,6 +402,7 @@ def campaign_view(
             # avatar in the picker without duplicating the merge logic.
             "portrait_url": c.portrait_url,
             "color": c.color,
+            "ring_style": c.ring_style,
         }
         for c in characters
     ]
@@ -3060,6 +3061,7 @@ def _encounter_to_dict(e: Encounter) -> dict:
         "map_id": e.map_id,
         "map_name": e.map.name if e.map else None,
         "map_image_url": e.map.image_url if e.map else None,
+        "map_thumbnail_url": e.map.thumbnail_url if e.map else None,
         "auto_play_playlist_id": e.auto_play_playlist_id,
         "auto_play_mode": e.auto_play_mode or "order",
         "auto_play_playlist_name": (
@@ -4124,6 +4126,51 @@ async def set_character_color(
     return {"ok": True}
 
 
+_VALID_RING_STYLES = {"solid", "dashed", "double", "glow", "spiked"}
+
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/ring-style")
+async def set_character_ring_style(
+    campaign_id: int,
+    char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Player or GM sets the token ring color and style for a character."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if char.owner_user_id != user.id and not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "Not your character")
+    body = await request.json()
+    raw_color = str(body.get("color", "")).strip()[:20]
+    if raw_color:
+        char.color = raw_color
+    ring_style = str(body.get("ring_style", "solid")).strip()
+    if ring_style not in _VALID_RING_STYLES:
+        ring_style = "solid"
+    char.ring_style = ring_style
+    db.commit()
+    await hub.broadcast(
+        campaign_id,
+        {
+            "type": "character_ring_update",
+            "data": {
+                "char_id": char.id,
+                "color": char.color,
+                "ring_style": ring_style,
+            },
+        },
+    )
+    return {"ok": True}
+
+
 # ----------- API: roll requests -----------
 
 def _resolve_stat_modifier(sheet: dict, template: str, stat_key: str) -> tuple[int, str]:
@@ -4491,7 +4538,13 @@ async def cast_spell(
         "spell_save_ability": spell.get("save_ability", ""),
         "spell_healing": spell.get("healing", ""),
         "spell_aoe_targets": max(1, int(spell.get("aoe_targets") or 1)),
+        "spell_attack_roll": bool(spell.get("attack_roll")),
         "spell_desc": spell.get("desc", "") or spell.get("description", ""),
+        # Structured action descriptors — present when the spell came from the
+        # file-based local_content tier with an `actions: list[Action]` array.
+        # Client's renderActionButtons consumes this directly; if empty the
+        # client synthesizes a single Action from the legacy fields above.
+        "actions": spell.get("actions") or [],
     }
 
     # Register heal claims so /apply_healing can validate and roll server-side
@@ -5003,20 +5056,54 @@ def _cr_to_float(cr_raw) -> float:
 
 
 def _fetch_open5e_creature(slug: str) -> dict:
-    """Pull a creature stat block from the Open5e v2 API. Raises HTTPException
-    on failure. Future work: prefer a local cache (``app/data/open5e``) when
-    available, falling back to the live API."""
+    """Pull a creature stat block from the Open5e v2 API.
+
+    First tries a direct slug lookup (/v2/creatures/{slug}/) which works for
+    v2 keys.  If that returns 404 (e.g. a v1-style slug like ``wolf`` passed
+    from a Quick Pick preset), converts the slug to a display name and retries
+    via a name search so transforms always succeed regardless of slug format.
+    """
     import json as _json
     import urllib.request as _urlreq
-    try:
-        req = _urlreq.Request(
-            f"{_OPEN5E_BASE}/v2/creatures/{slug}/",
-            headers={"User-Agent": "SimpleVTT/1.0"},
-        )
+    import urllib.error as _urlerr
+    import urllib.parse as _urlparse
+
+    def _get(url: str) -> dict:
+        req = _urlreq.Request(url, headers={"User-Agent": "SimpleVTT/1.0"})
         with _urlreq.urlopen(req, timeout=10) as r:
             return _json.loads(r.read())
+
+    try:
+        return _get(f"{_OPEN5E_BASE}/v2/creatures/{slug}/")
+    except _urlerr.HTTPError as exc:
+        if exc.code != 404:
+            raise HTTPException(502, f"Open5e unavailable: {exc}")
     except Exception as exc:
         raise HTTPException(502, f"Open5e unavailable: {exc}")
+
+    # Direct lookup 404'd — derive a human name from the slug and search.
+    # "brown-bear" → "brown bear", "giant-constrictor-snake" → "giant constrictor snake"
+    name_guess = slug.replace("-", " ")
+    try:
+        search_url = (
+            f"{_OPEN5E_BASE}/v2/creatures/"
+            f"?name__icontains={_urlparse.quote(name_guess)}&limit=10&type__key=beast"
+        )
+        data = _get(search_url)
+        results = data.get("results", [])
+        name_lower = name_guess.lower()
+        match = next(
+            (r for r in results if (r.get("name") or "").lower() == name_lower),
+            results[0] if results else None,
+        )
+        if match:
+            key = match.get("key") or match.get("slug") or ""
+            if key:
+                return _get(f"{_OPEN5E_BASE}/v2/creatures/{key}/")
+    except Exception:
+        pass
+
+    raise HTTPException(404, f"Creature '{slug}' not found in Open5e")
 
 
 @router.post("/api/campaign/{campaign_id}/character/{char_id}/transform")
@@ -5202,7 +5289,9 @@ async def transform_character(
                 break
         sheet["resources"] = resources
 
+    from sqlalchemy.orm.attributes import flag_modified
     char.sheet = sheet
+    flag_modified(char, "sheet")
     db.commit()
 
     await hub.broadcast(campaign_id, {
@@ -5331,7 +5420,9 @@ async def revert_character(
     sheet["active_form"] = None
     sheet["prior_form"] = None
 
+    from sqlalchemy.orm.attributes import flag_modified
     char.sheet = sheet
+    flag_modified(char, "sheet")
     db.commit()
 
     await hub.broadcast(campaign_id, {
@@ -6148,21 +6239,48 @@ def _creature_lite(m: dict) -> dict:
     }
 
 
+def _creature_full(m: dict) -> dict:
+    """Extended creature shape that adds abilities, actions, and speed
+    to the lite shape. Used by the beast picker detail panel."""
+    base = _creature_lite(m)
+    abilities = {}
+    for short, full_key in [
+        ("STR", "strength"), ("DEX", "dexterity"), ("CON", "constitution"),
+        ("INT", "intelligence"), ("WIS", "wisdom"), ("CHA", "charisma"),
+    ]:
+        val = _o5e_ability(m, short.lower(), full_key)
+        abilities[short] = val if val is not None else 10
+    actions = []
+    for a in (m.get("actions") or []):
+        if isinstance(a, dict):
+            name = (a.get("name") or "").strip()
+            desc = (a.get("desc") or "").strip()
+            if name or desc:
+                actions.append({"name": name, "desc": desc})
+    speed_raw = m.get("speed", {})
+    speed = {}
+    if isinstance(speed_raw, dict):
+        for k, v in speed_raw.items():
+            if v:
+                speed[k] = v
+    return {**base, "abilities": abilities, "actions": actions, "speed": speed}
+
+
 @router.get("/api/open5e/creature/{slug}")
 def open5e_creature_detail(
     slug: str,
     campaign_id: int | None = None,
+    full: bool = False,
     db: Session = Depends(get_db),
 ):
-    """Lite creature lookup by slug. The Wild Shape picker hits this
-    once per favorite when it opens so the ★ Favorites section can
-    render rows in the same shape as search results.
+    """Creature lookup by slug.
+
+    When ``full=true``, the response also includes ability scores, actions,
+    and speed — used by the beast picker detail panel.
 
     When ``campaign_id`` is supplied, a homebrew monster with this slug
-    in that campaign takes precedence over the Open5e fetch. Otherwise
-    the existing v2 lookup runs. Returns 404 when neither source has the
-    slug so the client can quietly skip dead favorites without breaking
-    the whole picker.
+    in that campaign takes precedence over the Open5e fetch.
+    Returns 404 when neither source has the slug.
     """
     slug = (slug or "").strip()
     if not slug:
@@ -6196,7 +6314,7 @@ def open5e_creature_detail(
         raise HTTPException(502, f"Open5e unavailable: {exc}")
     except Exception as exc:
         raise HTTPException(502, f"Open5e unavailable: {exc}")
-    return _creature_lite(monster)
+    return _creature_full(monster) if full else _creature_lite(monster)
 
 
 @router.get("/api/open5e/update-check")
@@ -6994,6 +7112,12 @@ def open5e_spells_proxy(
                     desc, _re.IGNORECASE)
                 aoe_targets = int(aoe_m.group(1)) if aoe_m else 1
 
+        # If the input record already carries a structured `actions` array
+        # (i.e. it came from the file-based local_content tier), pass it through
+        # so the client renders explicit Action buttons rather than re-deriving
+        # them from regex-scraped legacy fields.
+        explicit_actions = s.get("actions") or []
+
         return {
             "slug": s.get("slug", ""),
             "name": s.get("name", ""),
@@ -7008,7 +7132,33 @@ def open5e_spells_proxy(
             "healing": healing,
             "aoe_targets": aoe_targets,
             "desc": desc,
+            "actions": explicit_actions,
         }
+
+    # ── Local-content tier ──────────────────────────────────────────────────
+    # Two-tier resolver: homebrew volume files (per-campaign + global) first,
+    # then shipped SRD files. Only if both miss do we fall through to the
+    # Open5e mirror / live API below.
+    from .. import local_content as _lc
+    local_results, _local_total = _lc.search(
+        q=search,
+        type="spells",
+        campaign_id=campaign_id,
+        limit=200,  # search broadly; level/spell_list filter below applies
+    )
+    if local_results:
+        items = local_results
+        if spell_list:
+            sl = spell_list.lower()
+            items = [s for s in items
+                     if sl in [x.lower() for x in (s.get("spell_lists") or [])]]
+        if level >= 0:
+            items = [s for s in items
+                     if (s.get("level_int") or s.get("spell_level") or 0) == level]
+        if items:
+            return {"count": len(items), "results": [_fmt_spell(s) for s in items[:min(abs(limit), 100)]]}
+        # Local tier loaded records but none matched the class/level filter — fall
+        # through to Open5e so the picker isn't artificially empty.
 
     from ..open5e_local import is_ready, search_spells, get_spells_by_slugs
     cap = min(abs(limit), 100)
@@ -7162,12 +7312,15 @@ def _o5e_ability(m: dict, ability_key: str, full_key: str) -> int | None:
     """
     nested = m.get("ability_scores")
     if isinstance(nested, dict):
-        val = nested.get(ability_key)
-        if val is not None:
-            try:
-                return int(val)
-            except (TypeError, ValueError):
-                pass
+        # Try all known key formats: lowercase short ("str"), uppercase short
+        # ("STR"), and full name ("strength") — different Open5e builds vary.
+        for candidate in (ability_key, ability_key.upper(), full_key):
+            val = nested.get(candidate)
+            if val is not None:
+                try:
+                    return int(val)
+                except (TypeError, ValueError):
+                    pass
     val = m.get(full_key)
     if val is not None:
         try:
@@ -7824,6 +7977,46 @@ _MAP_DIR = _SETTINGS_UPLOAD_ROOT / "maps"
 _ALLOWED_IMG = {"image/png", "image/jpeg", "image/webp", "image/gif", "video/webm", "video/mp4"}
 
 
+def _make_map_thumbnail(data: bytes, content_type: str, map_dir: Path, stem: str) -> Optional[str]:
+    """Return a static JPEG thumbnail URL for GIFs (frame 0) and videos (ffmpeg).
+    Returns None for static images — callers fall back to image_url."""
+    if content_type == "image/gif":
+        try:
+            import io as _io
+            from PIL import Image as _PIL
+            with _PIL.open(_io.BytesIO(data)) as im:
+                im.seek(0)
+                frame = im.convert("RGB")
+                thumb_name = stem + "_thumb.jpg"
+                frame.save(str(map_dir / thumb_name), "JPEG", quality=80)
+                return f"/static/uploads/maps/{thumb_name}"
+        except Exception:
+            return None
+    if content_type in ("video/mp4", "video/webm"):
+        try:
+            import subprocess, tempfile, os as _os
+            thumb_name = stem + "_thumb.jpg"
+            thumb_path = map_dir / thumb_name
+            with tempfile.NamedTemporaryFile(suffix=".tmp", delete=False) as tf:
+                tf.write(data)
+                tf_path = tf.name
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-y", "-ss", "0.5", "-i", tf_path,
+                     "-vframes", "1", "-q:v", "3", str(thumb_path)],
+                    capture_output=True, timeout=30, check=True,
+                )
+                return f"/static/uploads/maps/{thumb_name}"
+            finally:
+                try:
+                    _os.unlink(tf_path)
+                except Exception:
+                    pass
+        except Exception:
+            return None
+    return None
+
+
 @router.post("/campaign/{campaign_id}/settings/characters")
 def settings_create_character(
     campaign_id: int,
@@ -7933,6 +8126,7 @@ async def settings_upload_map(
     if not campaign or not _user_is_gm(user, campaign, db):
         raise HTTPException(403, "GM only")
     image_url: Optional[str] = None
+    thumbnail_url: Optional[str] = None
     if image and image.filename:
         if image.content_type not in _ALLOWED_IMG:
             raise HTTPException(400, "Unsupported image type")
@@ -7941,7 +8135,8 @@ async def settings_upload_map(
             raise HTTPException(400, "Map image too large (>80 MB)")
         _MAP_DIR.mkdir(parents=True, exist_ok=True)
         ext = Path(image.filename).suffix.lower() or ".png"
-        fname = f"{uuid.uuid4().hex}{ext}"
+        stem = uuid.uuid4().hex
+        fname = f"{stem}{ext}"
         (_MAP_DIR / fname).write_bytes(data)
         image_url = f"/static/uploads/maps/{fname}"
         if image.content_type and image.content_type.startswith("image/"):
@@ -7952,6 +8147,7 @@ async def settings_upload_map(
                     width_px, height_px = _img.size
             except Exception:
                 pass
+        thumbnail_url = _make_map_thumbnail(data, image.content_type or "", _MAP_DIR, stem)
     try:
         gt = GridType(grid_type)
     except ValueError:
@@ -7960,6 +8156,7 @@ async def settings_upload_map(
         campaign_id=campaign_id,
         name=name.strip()[:120] or "Map",
         image_url=image_url,
+        thumbnail_url=thumbnail_url,
         grid_type=gt,
         grid_size_px=max(20, min(grid_size_px, 300)),
         width_px=max(200, min(width_px, 8000)),

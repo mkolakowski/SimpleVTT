@@ -44,6 +44,7 @@ services:
       GOOGLE_SSO_CLIENT_SECRET: ${GOOGLE_SSO_CLIENT_SECRET:-}
     volumes:
       - uploads_data:/app/app/static/uploads
+      - homebrew_data:/app/app/data/homebrew
     ports:
       - "${APP_PORT:-8013}:${APP_PORT:-8013}"
 
@@ -64,6 +65,7 @@ services:
       KEEP_WEEKLY: ${KEEP_WEEKLY:-4}
     volumes:
       - backup_data:/backups
+      - homebrew_data:/homebrew:ro
       - ./scripts/backup.sh:/usr/local/bin/backup.sh:ro
       - ./scripts/entrypoint-backup.sh:/usr/local/bin/entrypoint-backup.sh:ro
     entrypoint: ["/bin/sh", "/usr/local/bin/entrypoint-backup.sh"]
@@ -72,3 +74,4 @@ volumes:
   backup_data:
   db_data:
   uploads_data:
+  homebrew_data:

@@ -32,6 +32,15 @@
       "desc": "You can attempt to hide even when you are obscured only by a creature that is at least one size larger than you."
     }
   ],
+  "actions": [
+    {
+      "id": "lucky-reroll",
+      "name": "Lucky",
+      "desc": "When you roll a 1 on the d20 for an attack roll, ability check, or saving throw, you may reroll the die and must use the new roll.",
+      "category": "passive",
+      "reroll_trigger": "d20_natural_1"
+    }
+  ],
   "scope": "global",
   "source": "srd",
   "owner": null,

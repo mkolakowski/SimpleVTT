@@ -22,6 +22,8 @@
     const initialData = JSON.parse(document.getElementById('initial-data').textContent);
     let tokens = initialData.tokens || [];
     const characters = initialData.characters || [];
+    const charById = {};
+    characters.forEach(c => { charById[c.id] = c; });
     const templates = initialData.templates || [];
     // Currently-editing encounter context for spawn-point UI. When an
     // encounter row's edit form is open AND use_spawn_points is enabled
@@ -150,6 +152,60 @@
         });
     }
 
+    function _drawRing(cx, cy, r, color, style) {
+        ctx.save();
+        ctx.strokeStyle = color || '#000';
+        switch (style) {
+            case 'dashed':
+                ctx.setLineDash([5, 3]);
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                break;
+            case 'double':
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r + 3, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(cx, cy, r - 2, 0, Math.PI * 2);
+                ctx.stroke();
+                break;
+            case 'glow':
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = color || '#000';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.shadowBlur = 0;
+                break;
+            case 'spiked': {
+                const spikes = 8, outerR = r + 5, innerR = r;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                for (let i = 0; i < spikes * 2; i++) {
+                    const angle = (i * Math.PI) / spikes - Math.PI / 2;
+                    const rad = i % 2 === 0 ? outerR : innerR;
+                    const x = cx + rad * Math.cos(angle);
+                    const y = cy + rad * Math.sin(angle);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.stroke();
+                break;
+            }
+            default: // solid
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, Math.PI * 2);
+                ctx.stroke();
+        }
+        ctx.restore();
+    }
+
     function _drawCircleToken(t, cx, cy, r) {
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
@@ -173,13 +229,12 @@
         ctx.save();
         if (t.is_hidden) ctx.globalAlpha = 0.4;
         const isGif = ME.animateGifs && t.image_url && t.image_url.toLowerCase().includes('.gif');
+        const _char = charById[t.character_id] || {};
+        const _ringColor = _char.color || t.color || '#000';
+        const _ringStyle = _char.ring_style || 'solid';
         if (isGif) {
             // GIF: the overlay <img> renders the image; just draw the colour ring here.
-            ctx.beginPath();
-            ctx.arc(cx, cy, r, 0, Math.PI * 2);
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = t.color || '#000';
-            ctx.stroke();
+            _drawRing(cx, cy, r, _ringColor, _ringStyle);
         } else if (t.image_url) {
             const img = _loadTokenImage(t.image_url);
             if (img.complete && img.naturalWidth > 0) {
@@ -187,11 +242,7 @@
                 ctx.arc(cx, cy, r, 0, Math.PI * 2);
                 ctx.clip();
                 ctx.drawImage(img, cx - r, cy - r, r * 2, r * 2);
-                ctx.beginPath();
-                ctx.arc(cx, cy, r, 0, Math.PI * 2);
-                ctx.lineWidth = 2;
-                ctx.strokeStyle = t.color || '#000';
-                ctx.stroke();
+                _drawRing(cx, cy, r, _ringColor, _ringStyle);
             } else {
                 _drawCircleToken(t, cx, cy, r);
             }
@@ -870,6 +921,14 @@
                     if (color) el.dataset.charColor = color;
                     else delete el.dataset.charColor;
                 });
+            } else if (msg.type === 'character_ring_update') {
+                const { char_id, color, ring_style } = msg.data;
+                const ch = charById[char_id];
+                if (ch) {
+                    if (color    !== undefined) ch.color      = color;
+                    if (ring_style !== undefined) ch.ring_style = ring_style;
+                }
+                render();
             } else if (msg.type === 'roll_request') {
                 appendRollRequest(msg.data);
             } else if (msg.type === 'spell_cast') {
@@ -916,6 +975,13 @@
         }
     }
 
+    function _scrollRollLogToBottom() {
+        const ul = document.getElementById('roll-list');
+        if (!ul) return;
+        const body = ul.closest('.drawer-body');
+        if (body) body.scrollTop = body.scrollHeight;
+    }
+
     function appendRoll(r) {
         // Re-apply visibility filter on the client (server already does this
         // for non-broadcast targets but every client receives the same payload).
@@ -948,19 +1014,25 @@
         const li = document.createElement('li');
         li.innerHTML = `
             <div class="roll-card ${visClass}">
-                <div class="roll-card-header">
-                    <div class="roll-card-avatar">${avatarInner}</div>
-                    <span class="roll-card-user" data-uid="${r.user_id}"${color ? ` style="color:${escapeHTML(color)}"` : ''}>${escapeHTML(dispName)}</span>
-                    ${badgeText ? `<span class="roll-card-badge">${badgeText}</span>` : ''}
-                    <span class="roll-card-time">${hhmm}</span>
-                </div>
-                <div class="roll-card-body">
-                    ${r.note ? `<div class="roll-card-note">${escapeHTML(r.note)}</div>` : ''}
+                <div class="roll-card-total-col">
                     <span class="roll-card-total">${r.total}</span>
-                    <div class="roll-card-breakdown">${formatBreakdown(r.breakdown)}</div>
+                </div>
+                <div class="roll-card-right">
+                    <div class="roll-card-header">
+                        <div class="roll-card-avatar">${avatarInner}</div>
+                        <span class="roll-card-user" data-uid="${r.user_id}"${color ? ` style="color:${escapeHTML(color)}"` : ''}>${escapeHTML(dispName)}</span>
+                        ${badgeText ? `<span class="roll-card-badge">${badgeText}</span>` : ''}
+                        <span class="roll-card-time">${hhmm}</span>
+                    </div>
+                    <div class="roll-card-body">
+                        ${r.note ? `<div class="roll-card-note">${escapeHTML(r.note)}</div>` : ''}
+                        <div class="roll-card-expr">${escapeHTML(r.expression)}</div>
+                        <div class="roll-card-breakdown">${formatBreakdown(r.breakdown)}</div>
+                    </div>
                 </div>
             </div>`;
-        ul.prepend(li);
+        ul.appendChild(li);
+        _scrollRollLogToBottom();
     }
 
     function appendRollRequest(req) {
@@ -1044,7 +1116,8 @@
             }
         });
 
-        ul.prepend(li);
+        ul.appendChild(li);
+        _scrollRollLogToBottom();
     }
 
     // ---------- Toast (transient overlay notification) ----------
@@ -1076,6 +1149,28 @@
         return m ? m[1].replace(/\s+/g, '') : '';
     }
 
+    // ---------- Action button renderer ----------
+    // The shared helper lives in static/action_buttons.js (loaded before this
+    // file by tabletop.html so window.renderActionButtons is available here
+    // and on the character sheet). We just reference the global below.
+    const renderActionButtons = window.renderActionButtons;
+
+    // Build a synthetic single-Action from the legacy regex-derived WebSocket
+    // payload fields so existing cast_spell broadcasts keep rendering buttons
+    // even before the server emits `actions[]` natively for every spell.
+    function _synthesizeCastAction(d) {
+        return {
+            id: 'cast',
+            name: d.spell_name || 'Cast',
+            damage: _diceExprFromDamage(d.spell_damage || ''),
+            damage_type: '',
+            save_ability: d.spell_save_ability || '',
+            healing: (d.spell_healing || '').trim(),
+            aoe_targets: d.spell_aoe_targets || 1,
+            attack_roll: !!d.spell_attack_roll,
+        };
+    }
+
     function appendSpellCast(d) {
         const ul = document.getElementById('roll-list');
         if (!ul) return;
@@ -1094,24 +1189,13 @@
             ? 'Cantrip'
             : `Lv ${d.slot_level}${d.slot_level > d.spell_level ? ' (upcast)' : ''} slot`;
 
-        const damageExpr = _diceExprFromDamage(d.spell_damage || '');
-        const saveBtnHtml = d.spell_save_ability
-            ? `<button class="spell-cast-btn spell-cast-save-btn" type="button" title="Prompt all players for a ${escapeHTML(d.spell_save_ability)} save">📋 Prompt ${escapeHTML(d.spell_save_ability)} save</button>`
-            : '';
-        const damageBtnHtml = damageExpr
-            ? `<button class="spell-cast-btn spell-cast-dmg-btn" type="button" title="Roll ${escapeHTML(d.spell_damage)}">🎲 Roll damage (${escapeHTML(d.spell_damage)})</button>`
-            : '';
-        const healExpr = (d.spell_healing || '').trim();
-        const aoeTargets = d.spell_aoe_targets || 1;
-        const isAoe = aoeTargets > 1;
-        const chargeHtml = isAoe
-            ? ` <span class="heal-charge-tracker" data-claimed="0" data-max="${aoeTargets}">(0/${aoeTargets})</span>`
-            : '';
-        const healBtnHtml = healExpr
-            ? `<button class="spell-cast-btn spell-cast-heal-btn" type="button"
-                   data-cast-id="${escapeHTML(d.id)}" data-aoe="${isAoe ? '1' : '0'}"
-                   title="Roll ${escapeHTML(healExpr)} and apply to your character">🩹 Apply Healing (${escapeHTML(healExpr)})${chargeHtml}</button>`
-            : '';
+        // Action buttons come from `d.actions` (new shape) or are synthesized
+        // from the legacy regex-derived fields for backward compatibility.
+        const actions = (d.actions && d.actions.length) ? d.actions : [_synthesizeCastAction(d)];
+        // Keep `damageExpr` available for downstream code paths that already
+        // expect the single-string variable (openDamagePicker call below).
+        const _firstDamageAction = actions.find(a => a.damage || (a.damage_scaling && a.damage_scaling.length)) || {};
+        const damageExpr = _diceExprFromDamage(_firstDamageAction.damage || '');
 
         const metaBits = [];
         if (d.spell_school)        metaBits.push(escapeHTML(d.spell_school));
@@ -1134,24 +1218,26 @@
                     <div class="spell-cast-name">🪄 ${escapeHTML(d.spell_name || 'Spell')}</div>
                     ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
                     ${d.spell_desc ? `<div class="spell-cast-desc">${escapeHTML(d.spell_desc)}</div>` : ''}
-                    <div class="spell-cast-actions">
-                        ${saveBtnHtml}
-                        ${damageBtnHtml}
-                        ${healBtnHtml}
-                    </div>
+                    <div class="spell-cast-actions"></div>
                     <div class="spell-cast-results"></div>
                 </div>
             </div>`;
-        ul.prepend(li);
+        ul.appendChild(li);
+        _scrollRollLogToBottom();
 
-        const saveBtn = li.querySelector('.spell-cast-save-btn');
-        if (saveBtn) saveBtn.addEventListener('click', () => promptSpellSave(d, li, saveBtn));
-
-        const dmgBtn = li.querySelector('.spell-cast-dmg-btn');
-        if (dmgBtn) dmgBtn.addEventListener('click', () => openDamagePicker(d, damageExpr, li));
-
-        const healBtn = li.querySelector('.spell-cast-heal-btn');
-        if (healBtn) healBtn.addEventListener('click', () => _applyHealing(d, li, healBtn));
+        // Populate the actions slot via the shared renderer. Each handler maps
+        // to the existing per-button helper so behavior is unchanged.
+        const actionsSlot = li.querySelector('.spell-cast-actions');
+        actionsSlot.appendChild(renderActionButtons(actions, {
+            characterLevel: d.character_level || 1,
+            handlers: {
+                save:   (_action, btn) => promptSpellSave(d, li, btn),
+                damage: (_action, dmgExpr) => openDamagePicker(d, dmgExpr, li),
+                heal:   (_action, btn) => _applyHealing(d, li, btn),
+                // attack and toggle handlers are wired through where consumers
+                // need them — the spell-cast card itself only uses save/damage/heal.
+            },
+        }));
 
         // Stash the cast metadata on the element so the roll listener can
         // correlate save responses back to this card (matches by note prefix).
@@ -1255,7 +1341,8 @@
                     ${desc}
                 </div>
             </div>`;
-        ul.insertBefore(li, ul.firstChild);
+        ul.appendChild(li);
+        _scrollRollLogToBottom();
     }
 
     // ---------- Weapon-attack card ----------
@@ -1319,7 +1406,8 @@
                     <div class="spell-cast-results"></div>
                 </div>
             </div>`;
-        ul.prepend(li);
+        ul.appendChild(li);
+        _scrollRollLogToBottom();
 
         const saveBtn = li.querySelector('.weapon-atk-save-btn');
         if (saveBtn) saveBtn.addEventListener('click', () => promptAttackSave(d, li, saveBtn));
@@ -1481,6 +1569,12 @@
     }
 
     // ---------- Dice form ----------
+    document.getElementById('roll-expr-clear-btn')?.addEventListener('click', () => {
+        const exprInput = document.getElementById('roll-expr');
+        exprInput.value = '';
+        exprInput.focus();
+    });
+
     document.getElementById('roll-form').addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const expr = document.getElementById('roll-expr').value.trim();
@@ -1502,7 +1596,78 @@
         btn.addEventListener('click', () => {
             const exprEl = document.getElementById('roll-expr');
             const current = exprEl.value.trim();
-            exprEl.value = current ? current + '+' + btn.dataset.expr : btn.dataset.expr;
+            const newExpr = btn.dataset.expr;
+
+            if (!current) {
+                exprEl.value = newExpr;
+                return;
+            }
+
+            // Try to merge with an existing term of the same type (e.g. 1d20d + 1d20d → 2d20d)
+            const diceRe = /^(\d+)(d\d+\w*)$/i;
+            const newMatch = newExpr.match(diceRe);
+            if (newMatch) {
+                const newType = newMatch[2];
+                const newCount = parseInt(newMatch[1]);
+                const terms = current.split('+').map(t => t.trim());
+                let merged = false;
+                const newTerms = terms.map(term => {
+                    const m = term.match(diceRe);
+                    if (!merged && m && m[2] === newType) {
+                        merged = true;
+                        return (parseInt(m[1]) + newCount) + newType;
+                    }
+                    return term;
+                });
+                exprEl.value = merged ? newTerms.join('+') : current + '+' + newExpr;
+            } else {
+                exprEl.value = current + '+' + newExpr;
+            }
+        });
+    });
+
+    // ---------- Player tab dice form ----------
+    document.getElementById('roll-expr-clear-btn-p')?.addEventListener('click', () => {
+        const el = document.getElementById('roll-expr-p');
+        el.value = '';
+        el.focus();
+    });
+
+    document.getElementById('roll-form-p')?.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const expr = document.getElementById('roll-expr-p').value.trim();
+        const vis  = document.getElementById('roll-vis-p').value;
+        if (!expr) return;
+        const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ expression: expr, visibility: vis }),
+        });
+        if (!resp.ok) alert('Roll failed: ' + await resp.text());
+    });
+
+    document.querySelectorAll('.quick-die-p').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const exprEl   = document.getElementById('roll-expr-p');
+            const current  = exprEl.value.trim();
+            const newExpr  = btn.dataset.expr;
+            if (!current) { exprEl.value = newExpr; return; }
+            const diceRe   = /^(\d+)(d\d+\w*)$/i;
+            const newMatch = newExpr.match(diceRe);
+            if (newMatch) {
+                const newType  = newMatch[2];
+                const newCount = parseInt(newMatch[1]);
+                const terms    = current.split('+').map(t => t.trim());
+                let merged     = false;
+                const newTerms = terms.map(term => {
+                    const m = term.match(diceRe);
+                    if (!merged && m && m[2] === newType) { merged = true; return (parseInt(m[1]) + newCount) + newType; }
+                    return term;
+                });
+                exprEl.value = merged ? newTerms.join('+') : current + '+' + newExpr;
+            } else {
+                exprEl.value = current + '+' + newExpr;
+            }
         });
     });
 
@@ -1772,7 +1937,7 @@
                     info.innerHTML = `<div style="font-size:12px;font-weight:600;">${c.name}</div><div style="font-size:10px;color:var(--fg-mute);">${type}</div>`;
                     const btn = document.createElement('button');
                     btn.textContent = 'Import & Place';
-                    btn.style.cssText = 'font-size:11px;padding:4px 10px;white-space:nowrap;flex-shrink:0;';
+                    btn.style.cssText = 'font-size:11px;white-space:nowrap;flex-shrink:0;';
                     btn.addEventListener('click', async () => {
                         btn.disabled = true;
                         btn.textContent = 'Importing…';
@@ -2077,15 +2242,23 @@
             const memberOpts = (typeof MEMBERS !== 'undefined' ? MEMBERS : [])
                 .map(m => `<option value="${m.id}"${t.controller_user_id === m.id ? ' selected' : ''}>${escapeHTML(m.name)}</option>`)
                 .join('');
+            let portraitUrl = t.image_url || null;
+            if (!portraitUrl && t.character_id) {
+                const ch = characters.find(c => c.id === t.character_id);
+                portraitUrl = ch?.portrait_url || null;
+            }
+            const avatarHtml = portraitUrl
+                ? `<img class="tt-portrait" src="${escapeHTML(portraitUrl)}" alt="">`
+                : `<span class="tt-swatch" style="background:${escapeHTML(t.color || '#cc3333')}"></span>`;
             row.innerHTML = `
-                <span class="tt-swatch" style="background:${escapeHTML(t.color || '#cc3333')}"></span>
+                ${avatarHtml}
                 <span class="tt-name" contenteditable="true" spellcheck="false">${escapeHTML(t.label)}</span>
                 <button class="tt-btn tt-vis" title="${t.is_hidden ? 'Show token' : 'Hide token'}">${t.is_hidden ? '🚫' : '👁'}</button>
                 <label class="tt-btn tt-art-label" title="Upload art">
                     🖼<input class="tt-art-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
                 </label>
                 <select class="tt-ctrl">
-                    <option value="">No controller</option>
+                    <option value="">GM</option>
                     ${memberOpts}
                 </select>
                 <button class="tt-btn tt-sheet" title="Show sheet">📋</button>
@@ -2232,6 +2405,8 @@
     // handlers, …) was being stripped during injection — leaving those
     // features silently broken in the modal context. A new tab gets the
     // full standalone page with every inline script intact.
+    window.renderTokenTracker = renderTokenTracker;
+
     window.openSheet = function (charId) {
         if (!charId) return;
         window.open(

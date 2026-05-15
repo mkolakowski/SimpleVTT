@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi.templating import Jinja2Templates
 
 from .version import APP_VERSION, SCHEMA_VERSION
+from .config import get_settings
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -17,6 +18,7 @@ templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 # passing them in its context dict.
 templates.env.globals["APP_VERSION"] = APP_VERSION
 templates.env.globals["SCHEMA_VERSION"] = SCHEMA_VERSION
+templates.env.globals["APP_DEFAULT_THEME"] = get_settings().default_theme
 
 
 def _bold_dice_in_breakdown(value: str) -> Markup:

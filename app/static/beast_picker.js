@@ -70,6 +70,189 @@
         for (const [reqLv, cr] of table) if (lv >= reqLv) cap = cr;
         return cap;
     }
+    // Curated SRD beasts shown as "Quick Picks". Full stat blocks are
+    // embedded so ability scores, attacks, and traits display without
+    // any Open5e API call.
+    const _PRESETS = [
+      { slug:'cat', name:'Cat', cr:'0', type:'Beast', size:'Tiny', hp:2, ac:12, source:'SRD',
+        desc:'A small domestic animal valued for its silence and keen senses. Excellent for low-profile scouting.',
+        abilities:{STR:3,DEX:15,CON:10,INT:3,WIS:12,CHA:7}, speed:{walk:40,climb:30},
+        traits:['Keen Smell — advantage on Perception checks relying on smell.'],
+        actions:[{name:'Claws',desc:'Melee weapon attack: +0 to hit, reach 5 ft. Hit: 1 slashing damage.'}] },
+      { slug:'rat', name:'Rat', cr:'0', type:'Beast', size:'Tiny', hp:1, ac:10, source:'SRD',
+        desc:'A tiny rodent able to squeeze through tight spaces. Useful for infiltration and eavesdropping.',
+        abilities:{STR:2,DEX:11,CON:9,INT:2,WIS:10,CHA:4}, speed:{walk:20},
+        traits:['Keen Smell — advantage on Perception checks relying on smell.'],
+        actions:[{name:'Bite',desc:'Melee weapon attack: +0 to hit, reach 5 ft. Hit: 1 piercing damage.'}] },
+      { slug:'raven', name:'Raven', cr:'0', type:'Beast', size:'Tiny', hp:1, ac:12, source:'SRD',
+        desc:'An intelligent corvid capable of mimicking sounds. Ideal for aerial scouting and carrying messages.',
+        abilities:{STR:2,DEX:14,CON:8,INT:2,WIS:12,CHA:6}, speed:{walk:10,fly:50},
+        traits:['Mimicry — can mimic simple sounds; DC 10 Insight check to recognise as imitation.'],
+        actions:[{name:'Beak',desc:'Melee weapon attack: +4 to hit, reach 5 ft. Hit: 1 piercing damage.'}] },
+      { slug:'poisonous-snake', name:'Poisonous Snake', cr:'1/8', type:'Beast', size:'Tiny', hp:2, ac:13, source:'SRD',
+        desc:'A small venomous serpent. Useful for hiding in confined spaces and delivering a dangerous bite.',
+        abilities:{STR:2,DEX:15,CON:11,INT:1,WIS:10,CHA:3}, speed:{walk:30,swim:30},
+        traits:[],
+        actions:[{name:'Bite',desc:'Melee weapon attack: +4 to hit, reach 5 ft. Hit: 1 piercing damage, and the target must make a DC 10 Constitution saving throw or take 5 (2d4) poison damage.'}] },
+      { slug:'giant-rat', name:'Giant Rat', cr:'1/8', type:'Beast', size:'Small', hp:7, ac:12, source:'SRD',
+        desc:'An oversized rodent that hunts in packs. Better in a fight than a normal rat.',
+        abilities:{STR:7,DEX:15,CON:11,INT:2,WIS:10,CHA:4}, speed:{walk:30},
+        traits:['Keen Smell.','Pack Tactics — advantage on attacks when an ally is adjacent to the target.'],
+        actions:[{name:'Bite',desc:'Melee weapon attack: +4 to hit, reach 5 ft. Hit: 4 (1d4+2) piercing damage.'}] },
+      { slug:'wolf', name:'Wolf', cr:'1/4', type:'Beast', size:'Medium', hp:11, ac:13, source:'SRD',
+        desc:'A swift pack predator. Excellent for scouting, flanking, and knocking enemies prone.',
+        abilities:{STR:12,DEX:15,CON:12,INT:3,WIS:12,CHA:6}, speed:{walk:40},
+        traits:['Keen Hearing and Smell.','Pack Tactics — advantage on attacks when an ally is adjacent to the target.'],
+        actions:[{name:'Bite',desc:'Melee weapon attack: +4 to hit, reach 5 ft. Hit: 7 (2d4+2) piercing damage. The target must succeed on a DC 11 Strength saving throw or be knocked prone.'}] },
+      { slug:'panther', name:'Panther', cr:'1/4', type:'Beast', size:'Medium', hp:13, ac:12, source:'SRD',
+        desc:'A fast, agile ambush predator. Pounce can knock an enemy prone and allow a bonus-action bite.',
+        abilities:{STR:14,DEX:15,CON:10,INT:3,WIS:14,CHA:7}, speed:{walk:50,climb:40},
+        traits:['Keen Smell.','Pounce — if the panther moves 20 ft. toward a target and hits with a claw, the target must make a DC 12 Strength save or be knocked prone; the panther can then bite as a bonus action.'],
+        actions:[
+          {name:'Bite',desc:'Melee weapon attack: +4 to hit, reach 5 ft. Hit: 5 (1d6+2) piercing damage.'},
+          {name:'Claw',desc:'Melee weapon attack: +4 to hit, reach 5 ft. Hit: 4 (1d4+2) slashing damage.'} ] },
+      { slug:'giant-badger', name:'Giant Badger', cr:'1/4', type:'Beast', size:'Medium', hp:13, ac:10, source:'SRD',
+        desc:'A tenacious digger with a ferocious bite and strong claws. Can burrow through soft earth.',
+        abilities:{STR:13,DEX:10,CON:15,INT:2,WIS:12,CHA:5}, speed:{walk:30,burrow:10},
+        traits:['Keen Smell.'],
+        actions:[
+          {name:'Multiattack',desc:'The badger makes two attacks: one with its bite and one with its claws.'},
+          {name:'Bite',desc:'Melee weapon attack: +3 to hit, reach 5 ft. Hit: 4 (1d6+1) piercing damage.'},
+          {name:'Claws',desc:'Melee weapon attack: +3 to hit, reach 5 ft. Hit: 6 (2d4+1) slashing damage.'} ] },
+      { slug:'constrictor-snake', name:'Constrictor Snake', cr:'1/4', type:'Beast', size:'Large', hp:13, ac:12, source:'SRD',
+        desc:'A powerful serpent that grapples and crushes its prey. Good for locking down a single target.',
+        abilities:{STR:15,DEX:14,CON:12,INT:1,WIS:10,CHA:3}, speed:{walk:30,swim:30},
+        traits:[],
+        actions:[
+          {name:'Bite',desc:'Melee weapon attack: +4 to hit, reach 5 ft. Hit: 5 (1d6+2) piercing damage.'},
+          {name:'Constrict',desc:'Melee weapon attack: +4 to hit, reach 5 ft., one creature. Hit: 6 (1d8+2) bludgeoning damage, and the target is grappled (escape DC 14). Until this grapple ends, the creature is restrained.'} ] },
+      { slug:'black-bear', name:'Black Bear', cr:'1/2', type:'Beast', size:'Medium', hp:19, ac:11, source:'SRD',
+        desc:'A sturdy forest bear. A solid choice for early-level combat with reliable multi-attack.',
+        abilities:{STR:15,DEX:10,CON:14,INT:2,WIS:12,CHA:7}, speed:{walk:40,climb:30},
+        traits:['Keen Smell.'],
+        actions:[
+          {name:'Multiattack',desc:'The bear makes two attacks: one with its bite and one with its claws.'},
+          {name:'Bite',desc:'Melee weapon attack: +4 to hit, reach 5 ft. Hit: 5 (1d6+2) piercing damage.'},
+          {name:'Claws',desc:'Melee weapon attack: +4 to hit, reach 5 ft. Hit: 7 (2d4+2) slashing damage.'} ] },
+      { slug:'ape', name:'Ape', cr:'1/2', type:'Beast', size:'Medium', hp:19, ac:12, source:'SRD',
+        desc:'A strong primate with notable Intelligence for a beast. Can hurl rocks as a ranged attack.',
+        abilities:{STR:16,DEX:14,CON:14,INT:6,WIS:12,CHA:7}, speed:{walk:30,climb:30},
+        traits:[],
+        actions:[
+          {name:'Multiattack',desc:'The ape makes two fist attacks.'},
+          {name:'Fist',desc:'Melee weapon attack: +5 to hit, reach 5 ft. Hit: 6 (1d6+3) bludgeoning damage.'},
+          {name:'Rock',desc:'Ranged weapon attack: +5 to hit, range 25/50 ft. Hit: 6 (1d6+3) bludgeoning damage.'} ] },
+      { slug:'giant-wasp', name:'Giant Wasp', cr:'1/2', type:'Beast', size:'Medium', hp:13, ac:12, source:'SRD',
+        desc:'A flying insect with a potent venomous sting. Good for aerial harassment and poisoning targets.',
+        abilities:{STR:10,DEX:14,CON:10,INT:1,WIS:10,CHA:3}, speed:{walk:10,fly:50},
+        traits:[],
+        actions:[{name:'Sting',desc:'Melee weapon attack: +4 to hit, reach 5 ft. Hit: 5 (1d6+2) piercing damage, and the target must make a DC 11 Constitution saving throw, taking 10 (3d6) poison damage on a failed save, or half as much on a success. A failed save also poisons the target for 1 minute; it may repeat the save at end of each of its turns.'}] },
+      { slug:'brown-bear', name:'Brown Bear', cr:'1', type:'Beast', size:'Large', hp:34, ac:11, source:'SRD',
+        desc:'A large, powerful bear with impressive HP and multiattack. A druid staple at level 2.',
+        abilities:{STR:19,DEX:10,CON:16,INT:2,WIS:13,CHA:7}, speed:{walk:40,climb:30},
+        traits:['Keen Smell.'],
+        actions:[
+          {name:'Multiattack',desc:'The bear makes two attacks: one with its bite and one with its claws.'},
+          {name:'Bite',desc:'Melee weapon attack: +6 to hit, reach 5 ft. Hit: 8 (1d8+4) piercing damage.'},
+          {name:'Claws',desc:'Melee weapon attack: +6 to hit, reach 5 ft. Hit: 11 (2d6+4) slashing damage.'} ] },
+      { slug:'dire-wolf', name:'Dire Wolf', cr:'1', type:'Beast', size:'Large', hp:37, ac:14, source:'SRD',
+        desc:'A massive wolf with high AC and pack tactics. Outstanding for groups that can flank.',
+        abilities:{STR:17,DEX:15,CON:15,INT:3,WIS:12,CHA:7}, speed:{walk:50},
+        traits:['Keen Hearing and Smell.','Pack Tactics — advantage on attacks when an ally is adjacent to the target.'],
+        actions:[{name:'Bite',desc:'Melee weapon attack: +5 to hit, reach 5 ft. Hit: 10 (2d6+3) piercing damage. The target must succeed on a DC 13 Strength saving throw or be knocked prone.'}] },
+      { slug:'giant-spider', name:'Giant Spider', cr:'1', type:'Beast', size:'Medium', hp:26, ac:14, source:'SRD',
+        desc:'A web-spinning predator that can restrain targets from range and climb any surface.',
+        abilities:{STR:14,DEX:16,CON:12,INT:2,WIS:11,CHA:4}, speed:{walk:30,climb:30},
+        traits:['Spider Climb — can climb difficult surfaces including ceilings.','Web Sense — knows the location of any creature in contact with its webs.','Web Walker — ignores movement restrictions from webbing.'],
+        actions:[
+          {name:'Bite',desc:'Melee weapon attack: +5 to hit, reach 5 ft. Hit: 7 (1d8+3) piercing damage, and the target must make a DC 11 Constitution saving throw, taking 9 (2d8) poison damage on failure (half on success). If poison damage drops the target to 0 hp, it is stable but poisoned for 1 hour and paralyzed while poisoned.'},
+          {name:'Web (Recharge 5–6)',desc:'Ranged weapon attack: +5 to hit, range 30/60 ft. Hit: The target is restrained by webbing. As an action, the restrained target can make a DC 12 Strength check, bursting the webbing on a success.'} ] },
+      { slug:'tiger', name:'Tiger', cr:'1', type:'Beast', size:'Large', hp:37, ac:12, source:'SRD',
+        desc:'A stealthy ambush hunter. High STR and Pounce let it control the battlefield.',
+        abilities:{STR:17,DEX:15,CON:14,INT:3,WIS:12,CHA:8}, speed:{walk:40},
+        traits:['Keen Smell.','Pounce — if the tiger moves 20 ft. toward a target and hits with a claw, the target must make a DC 13 Strength save or be knocked prone; the tiger can then bite as a bonus action.'],
+        actions:[
+          {name:'Bite',desc:'Melee weapon attack: +5 to hit, reach 5 ft. Hit: 8 (1d10+3) piercing damage.'},
+          {name:'Claw',desc:'Melee weapon attack: +5 to hit, reach 5 ft. Hit: 7 (1d8+3) slashing damage.'} ] },
+      { slug:'giant-constrictor-snake', name:'Giant Constrictor Snake', cr:'2', type:'Beast', size:'Huge', hp:60, ac:12, source:'SRD',
+        desc:'A massive serpent that can restrain Large or smaller creatures indefinitely. Devastating grappler.',
+        abilities:{STR:19,DEX:14,CON:12,INT:1,WIS:10,CHA:3}, speed:{walk:30,swim:30},
+        traits:[],
+        actions:[
+          {name:'Bite',desc:'Melee weapon attack: +6 to hit, reach 10 ft. Hit: 11 (2d6+4) piercing damage.'},
+          {name:'Constrict',desc:'Melee weapon attack: +6 to hit, reach 5 ft. Hit: 13 (2d8+4) bludgeoning damage, and the target is grappled (escape DC 16). Until this grapple ends, the creature is restrained and the snake can\'t constrict another target.'} ] },
+      { slug:'polar-bear', name:'Polar Bear', cr:'2', type:'Beast', size:'Large', hp:42, ac:12, source:'SRD',
+        desc:'A powerful bear with exceptional STR and swim speed. Ideal for aquatic or arctic encounters.',
+        abilities:{STR:20,DEX:10,CON:16,INT:2,WIS:13,CHA:7}, speed:{walk:40,swim:30},
+        traits:['Keen Smell.'],
+        actions:[
+          {name:'Multiattack',desc:'The bear makes two attacks: one with its bite and one with its claws.'},
+          {name:'Bite',desc:'Melee weapon attack: +7 to hit, reach 5 ft. Hit: 9 (1d8+5) piercing damage.'},
+          {name:'Claws',desc:'Melee weapon attack: +7 to hit, reach 5 ft. Hit: 12 (2d6+5) slashing damage.'} ] },
+      { slug:'allosaurus', name:'Allosaurus', cr:'2', type:'Beast', size:'Large', hp:51, ac:13, source:'SRD',
+        desc:'A fast, aggressive theropod. Exceptional speed (60 ft.) and Pounce make it a fearsome charger.',
+        abilities:{STR:19,DEX:13,CON:17,INT:2,WIS:12,CHA:5}, speed:{walk:60},
+        traits:['Pounce — if the allosaurus moves 30 ft. toward a target and hits with a claw, the target must make a DC 13 Strength save or be knocked prone; the allosaurus can then bite as a bonus action.'],
+        actions:[
+          {name:'Bite',desc:'Melee weapon attack: +6 to hit, reach 5 ft. Hit: 15 (2d10+4) piercing damage.'},
+          {name:'Claw',desc:'Melee weapon attack: +6 to hit, reach 5 ft. Hit: 8 (1d8+4) slashing damage.'} ] },
+      { slug:'ankylosaurus', name:'Ankylosaurus', cr:'3', type:'Beast', size:'Huge', hp:68, ac:15, source:'SRD',
+        desc:'A heavily armoured dinosaur with a bone-crushing tail. Exceptional AC for its CR.',
+        abilities:{STR:19,DEX:11,CON:15,INT:2,WIS:12,CHA:5}, speed:{walk:30},
+        traits:[],
+        actions:[{name:'Tail',desc:'Melee weapon attack: +7 to hit, reach 10 ft. Hit: 18 (4d6+4) bludgeoning damage. If the target is a creature, it must succeed on a DC 14 Strength saving throw or be knocked prone.'}] },
+      { slug:'killer-whale', name:'Killer Whale', cr:'3', type:'Beast', size:'Huge', hp:90, ac:12, source:'SRD',
+        desc:'A massive apex predator built for the sea. Highest HP of any CR 3 beast; requires water to swim.',
+        abilities:{STR:19,DEX:10,CON:13,INT:3,WIS:12,CHA:7}, speed:{swim:60},
+        traits:['Echolocation — can\'t use blindsight while deafened.','Hold Breath — can hold its breath for 30 minutes.','Keen Hearing.'],
+        actions:[{name:'Bite',desc:'Melee weapon attack: +6 to hit, reach 5 ft. Hit: 21 (5d6+4) piercing damage.'}] },
+      { slug:'giant-scorpion', name:'Giant Scorpion', cr:'3', type:'Beast', size:'Large', hp:52, ac:15, source:'SRD',
+        desc:'A multi-limbed predator with grappling claws and a deadly poisonous sting.',
+        abilities:{STR:15,DEX:13,CON:15,INT:1,WIS:9,CHA:3}, speed:{walk:40},
+        traits:[],
+        actions:[
+          {name:'Multiattack',desc:'The scorpion makes three attacks: two with its claws and one with its sting.'},
+          {name:'Claw',desc:'Melee weapon attack: +4 to hit, reach 5 ft. Hit: 6 (1d8+2) bludgeoning damage, and the target is grappled (escape DC 12). The scorpion has two claws, each of which can grapple one target.'},
+          {name:'Sting',desc:'Melee weapon attack: +4 to hit, reach 5 ft. Hit: 7 (1d10+2) piercing damage, and the target must make a DC 12 Constitution saving throw, taking 22 (4d10) poison damage on a failed save, or half as much on a success.'} ] },
+      { slug:'elephant', name:'Elephant', cr:'4', type:'Beast', size:'Huge', hp:76, ac:12, source:'SRD',
+        desc:'A massive beast with a trampling charge that can knock down and stomp targets.',
+        abilities:{STR:22,DEX:9,CON:17,INT:3,WIS:11,CHA:6}, speed:{walk:40},
+        traits:['Trampling Charge — if the elephant moves 20 ft. toward a target and hits with a gore, the target must make a DC 12 Strength save or be knocked prone; the elephant can then stomp as a bonus action.'],
+        actions:[
+          {name:'Gore',desc:'Melee weapon attack: +8 to hit, reach 5 ft. Hit: 19 (3d6+6) piercing damage.'},
+          {name:'Stomp',desc:'Melee weapon attack: +8 to hit, reach 5 ft., one prone creature. Hit: 22 (3d8+6) bludgeoning damage.'} ] },
+      { slug:'triceratops', name:'Triceratops', cr:'5', type:'Beast', size:'Huge', hp:114, ac:13, source:'SRD',
+        desc:'A horned dinosaur with high HP and a devastating trampling charge. Solid frontliner.',
+        abilities:{STR:22,DEX:9,CON:17,INT:2,WIS:11,CHA:5}, speed:{walk:50},
+        traits:['Trampling Charge — if the triceratops moves 20 ft. toward a target and hits with a gore, the target must make a DC 13 Strength save or be knocked prone; the triceratops can then stomp as a bonus action.'],
+        actions:[
+          {name:'Gore',desc:'Melee weapon attack: +9 to hit, reach 5 ft. Hit: 24 (4d8+6) piercing damage.'},
+          {name:'Stomp',desc:'Melee weapon attack: +9 to hit, reach 5 ft., one prone creature. Hit: 22 (3d10+6) bludgeoning damage.'} ] },
+      { slug:'giant-crocodile', name:'Giant Crocodile', cr:'5', type:'Beast', size:'Huge', hp:114, ac:14, source:'SRD',
+        desc:'A heavily armoured aquatic ambush predator that grapples with its bite and can knock targets prone with its tail.',
+        abilities:{STR:21,DEX:9,CON:17,INT:2,WIS:10,CHA:7}, speed:{walk:30,swim:50},
+        traits:['Hold Breath — can hold its breath for 30 minutes.'],
+        actions:[
+          {name:'Multiattack',desc:'The crocodile makes two attacks: one with its bite and one with its tail.'},
+          {name:'Bite',desc:'Melee weapon attack: +8 to hit, reach 5 ft. Hit: 21 (3d10+5) piercing damage, and the target is grappled (escape DC 16). Until this grapple ends, the target is restrained and the crocodile can\'t bite another target.'},
+          {name:'Tail',desc:'Melee weapon attack: +8 to hit, reach 10 ft., one target not grappled by the crocodile. Hit: 14 (2d8+5) bludgeoning damage. If the target is a creature, it must succeed on a DC 16 Strength saving throw or be knocked prone.'} ] },
+      { slug:'mammoth', name:'Mammoth', cr:'6', type:'Beast', size:'Huge', hp:126, ac:13, source:'SRD',
+        desc:'A colossal prehistoric elephant with outstanding STR and CON. The most powerful non-Moon-Druid form at level 8.',
+        abilities:{STR:24,DEX:9,CON:21,INT:3,WIS:11,CHA:6}, speed:{walk:40},
+        traits:['Trampling Charge — if the mammoth moves 20 ft. toward a target and hits with a gore, the target must make a DC 18 Strength save or be knocked prone; the mammoth can then stomp as a bonus action.'],
+        actions:[
+          {name:'Gore',desc:'Melee weapon attack: +10 to hit, reach 10 ft. Hit: 25 (4d8+7) piercing damage.'},
+          {name:'Stomp',desc:'Melee weapon attack: +10 to hit, reach 5 ft., one prone creature. Hit: 29 (4d10+7) bludgeoning damage.'} ] },
+      { slug:'tyrannosaurus-rex', name:'Tyrannosaurus Rex', cr:'8', type:'Beast', size:'Huge', hp:136, ac:13, source:'SRD',
+        desc:'The apex predator of the preset list. Enormous bite damage and grapple on a hit; Moon Druids only (level 12+).',
+        abilities:{STR:25,DEX:10,CON:19,INT:2,WIS:12,CHA:9}, speed:{walk:50},
+        traits:[],
+        actions:[
+          {name:'Multiattack',desc:'The T. rex makes two attacks: one with its bite and one with its tail. It can\'t make both attacks against the same target.'},
+          {name:'Bite',desc:'Melee weapon attack: +10 to hit, reach 10 ft. Hit: 33 (4d12+7) piercing damage. If the target is Medium or smaller, it is grappled (escape DC 17). Until this grapple ends, the target is restrained and the T. rex can\'t bite another target.'},
+          {name:'Tail',desc:'Melee weapon attack: +10 to hit, reach 10 ft. Hit: 20 (3d8+7) bludgeoning damage.'} ] },
+    ];
+
     function _toast(msg, kind) {
         if (typeof window._toast === 'function') return window._toast(msg, kind);
         if (typeof window.showToast === 'function') return window.showToast(msg, kind);
@@ -175,13 +358,28 @@
                 : `${favPart}${shown} of ${all.length} on this page match the beast / CR filter`;
         }
 
+        // Presets filtered by CR cap and name query; skip any already shown
+        // in the Favorites section to avoid duplicate rows.
+        const favSlugSet = new Set(favResults.map(r => r.slug));
+        const presetMatches = _PRESETS.filter(r => {
+            if (qLower && !String(r.name || '').toLowerCase().includes(qLower)) return false;
+            if (!free && _parseCr(r.cr) > _state.cap) return false;
+            if (favSlugSet.has(r.slug)) return false;
+            return true;
+        });
+
         const sections = [];
         if (favResults.length) {
             sections.push(_sectionHeader('★ Favorites'));
             sections.push(favResults.map(r => _rowHtml(r, true)).join(''));
         }
+        if (presetMatches.length) {
+            sections.push(_sectionHeader('⚡ Quick Picks'));
+            sections.push(presetMatches.map(r => _rowHtml(r, favSet.has(r.slug))).join(''));
+        }
         if (filtered.length) {
-            if (favResults.length) sections.push(_sectionHeader(qLower ? 'Other matches' : 'All beasts'));
+            const hasAbove = favResults.length || presetMatches.length;
+            if (hasAbove) sections.push(_sectionHeader(qLower ? 'Other matches' : 'All beasts'));
             sections.push(filtered.map(r => _rowHtml(r, favSet.has(r.slug))).join(''));
         }
         if (!sections.length) {
@@ -194,48 +392,138 @@
         listPanel.innerHTML = sections.join('');
     }
 
-    function _findInState(slug) {
-        // Selection can come from either the Favorites section or the
-        // live search results, so look in both lists.
-        const inResults = (_state?.results || []).find(r => r.slug === slug);
-        if (inResults) return inResults;
-        return (_state?.favoriteResults || []).find(r => r.slug === slug);
+    function _abilityMod(score) {
+        const mod = Math.floor((parseInt(score, 10) - 10) / 2);
+        return mod >= 0 ? `+${mod}` : `${mod}`;
     }
 
-    function _renderDetail(slug) {
-        const detail = $('bp-detail-panel');
-        if (!detail || !_state) return;
-        const m = _findInState(slug);
-        if (!m) return;
-        _state.selected = m;
-        $('bp-confirm-btn').disabled = false;
+    function _findInState(slug) {
+        const inResults = (_state?.results || []).find(r => r.slug === slug);
+        if (inResults) return inResults;
+        const inFavs = (_state?.favoriteResults || []).find(r => r.slug === slug);
+        if (inFavs) return inFavs;
+        return _PRESETS.find(r => r.slug === slug) || null;
+    }
+
+    function _buildDetailHtml(m, full) {
         const free = $('bp-free-pick').checked;
         const typeOk = _str(m.type).toLowerCase() === 'beast';
-        const crOk   = _parseCr(m.cr) <= _state.cap;
+        const crOk   = _parseCr(m.cr) <= (_state?.cap ?? 0);
         let warn = '';
         if (!free) {
-            if (!typeOk) warn = `<div style="padding:8px 10px;margin-top:6px;background:var(--s-err-bg);border:1px solid var(--s-danger);color:var(--s-err-fg);border-radius:5px;font-size:11px;">⚠ Not a beast — enable Free pick to override.</div>`;
-            else if (!crOk) warn = `<div style="padding:8px 10px;margin-top:6px;background:var(--s-err-bg);border:1px solid var(--s-danger);color:var(--s-err-fg);border-radius:5px;font-size:11px;">⚠ CR ${m.cr} exceeds your cap of ${_crStr(_state.cap)} — enable Free pick to override.</div>`;
+            if (!typeOk) warn = `<div style="padding:8px 10px;margin-top:8px;background:var(--s-err-bg);border:1px solid var(--s-danger);color:var(--s-err-fg);border-radius:5px;font-size:11px;">⚠ Not a beast — enable Free pick to override.</div>`;
+            else if (!crOk) warn = `<div style="padding:8px 10px;margin-top:8px;background:var(--s-err-bg);border:1px solid var(--s-danger);color:var(--s-err-fg);border-radius:5px;font-size:11px;">⚠ CR ${m.cr} exceeds your cap of ${_crStr(_state.cap)} — enable Free pick to override.</div>`;
         }
-        const isPoly = _state.opts.source === 'polymorph';
-        detail.innerHTML = `
+        const isPoly = _state?.opts?.source === 'polymorph';
+        const abils = full?.abilities;
+        const abilBlock = abils ? `
+            <div style="margin-top:10px;">
+                <table style="width:100%;border-collapse:collapse;font-size:11px;text-align:center;">
+                    <thead><tr>${['STR','DEX','CON','INT','WIS','CHA'].map(a =>
+                        `<th style="color:var(--s-mute);font-weight:600;padding:2px 0;width:16.6%;">${a}</th>`).join('')}</tr></thead>
+                    <tbody><tr>${['STR','DEX','CON','INT','WIS','CHA'].map(a => {
+                        const v = abils[a] ?? 10;
+                        return `<td style="color:var(--s-fg);padding:2px 0;">${v}<br><span style="color:var(--s-mute);font-size:10px;">${_abilityMod(v)}</span></td>`;
+                    }).join('')}</tr></tbody>
+                </table>
+            </div>` : '';
+
+        const speedParts = [];
+        if (full?.speed && typeof full.speed === 'object') {
+            for (const [k, v] of Object.entries(full.speed)) {
+                if (v) speedParts.push(`${k} ${v} ft`);
+            }
+        }
+        const speedStr = speedParts.length
+            ? ` · <strong>Speed</strong> ${speedParts.join(', ')}`
+            : (m.speed ? ` · <strong>Speed</strong> ${_esc(String(m.speed))} ft` : '');
+
+        let traitsHtml = '';
+        if (full?.traits?.length) {
+            traitsHtml = `<div style="margin-top:10px;">
+                <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--s-mute);text-transform:uppercase;margin-bottom:4px;">Traits</div>
+                ${full.traits.map(t => `<div style="font-size:11px;color:var(--s-mute);margin-bottom:3px;">• ${_esc(t)}</div>`).join('')}
+            </div>`;
+        }
+
+        let actionsHtml = '';
+        if (full?.actions?.length) {
+            actionsHtml = `<div style="margin-top:10px;">
+                <div style="font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--s-mute);text-transform:uppercase;margin-bottom:4px;">Actions</div>
+                ${full.actions.map(a => `
+                    <div style="margin-bottom:6px;">
+                        <span style="font-size:11px;font-weight:700;color:var(--s-fg);">${_esc(a.name)}.</span>
+                        <span style="font-size:11px;color:var(--s-mute);"> ${_esc(a.desc)}</span>
+                    </div>`).join('')}
+            </div>`;
+        }
+
+        const descHtml = full?.desc
+            ? `<p style="font-size:11px;color:var(--s-mute);margin-top:8px;margin-bottom:0;line-height:1.45;font-style:italic;">${_esc(full.desc)}</p>`
+            : '';
+
+        return `
             <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;">
                 <h3 style="margin:0;font-size:18px;color:var(--s-fg);">${_esc(m.name)}</h3>
                 <span style="font-size:12px;color:var(--s-mute);">CR ${_esc(m.cr || '0')}</span>
             </div>
             <div style="font-size:11px;color:var(--s-mute);margin-top:2px;">${_esc(_str(m.size))} ${_esc(_str(m.type))}</div>
-            <div style="display:flex;gap:14px;margin-top:10px;flex-wrap:wrap;font-size:12px;color:var(--s-fg);">
+            ${descHtml}
+            <div style="display:flex;gap:14px;margin-top:8px;flex-wrap:wrap;font-size:12px;color:var(--s-fg);">
                 <span><strong>HP</strong> ${_esc(m.hp ?? '?')}</span>
-                <span><strong>AC</strong> ${_esc(m.ac ?? '?')}</span>
+                <span><strong>AC</strong> ${_esc(m.ac ?? '?')}</span>${speedStr}
             </div>
+            ${abilBlock}
+            ${traitsHtml}
+            ${actionsHtml}
             ${warn}
             <p style="font-size:11px;color:var(--s-mute);margin-top:10px;line-height:1.45;">
-                On Transform, the server fetches the full stat block from Open5e and replaces your HP, AC, speed,
+                Transforms replace your HP, AC, speed,
                 ${isPoly ? '<strong>all ability scores</strong>' : 'STR / DEX / CON (keeps your INT / WIS / CHA)'},
-                skills, saves, and attacks with the beast's. Your class features, spells, and inventory are preserved.
+                skills, saves, and attacks. Class features, spells, and inventory are preserved.
                 Click <strong>Revert</strong> on the active-form banner to switch back.
             </p>
         `;
+    }
+
+    async function _renderDetail(slug) {
+        const detail = $('bp-detail-panel');
+        if (!detail || !_state) return;
+        const base = _findInState(slug);
+        if (!base) return;
+
+        _state.selected = base;
+        $('bp-confirm-btn').disabled = false;
+        // Presets carry embedded stat blocks — use them immediately so the
+        // panel is complete without any API call.
+        const localFull = base.abilities ? base : null;
+        detail.innerHTML = _buildDetailHtml(base, localFull);
+        // Still try to enrich from Open5e (resolves canonical v2 slug,
+        // may add extra data). Failures are silently ignored.
+        _renderDetailFull(base, detail).catch(() => {});
+    }
+
+    async function _renderDetailFull(m, detail) {
+        if (!_state) return;
+        try {
+            const cid = _state.opts?.campaignId ? `&campaign_id=${_state.opts.campaignId}` : '';
+            const resp = await fetch(`/api/open5e/creature/${encodeURIComponent(m.slug)}?full=1${cid}`);
+            if (resp.ok) {
+                const full = await resp.json();
+                // Use the slug from the server response as the canonical v2 slug
+                const resolved = { ...m, slug: full.slug || m.slug };
+                _state.selected = resolved;
+                $('bp-confirm-btn').disabled = false;
+                detail.innerHTML = _buildDetailHtml(resolved, full);
+            } else {
+                // Full fetch failed — already showing basic detail, leave it.
+                _state.selected = m;
+                $('bp-confirm-btn').disabled = false;
+            }
+        } catch {
+            _state.selected = m;
+            $('bp-confirm-btn').disabled = false;
+        }
     }
 
     async function _runSearch() {
@@ -272,9 +560,13 @@
             _state.totalCount = data.count || 0;
             _renderList();
         } catch (e) {
-            listPanel.innerHTML = `<div style="padding:14px;color:var(--s-danger);font-size:12px;">Error: ${e.message}</div>`;
+            // Search failed (e.g. Open5e unreachable). Clear results and
+            // re-render so Quick Picks and Favorites still appear.
+            _state.results = [];
+            _state.totalCount = 0;
+            _renderList();
             const statusEl = $('bp-status');
-            if (statusEl) statusEl.textContent = '';
+            if (statusEl) statusEl.textContent = `Search unavailable: ${e.message}`;
         }
     }
 

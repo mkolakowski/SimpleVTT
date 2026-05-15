@@ -13,6 +13,18 @@
   "multiclass_prereq_abilities": {"str": 13},
   "multiclass_prereq_mode": "all",
   "multiclass_proficiencies": "Shields, simple weapons, martial weapons",
+  "actions": [
+    {
+      "id": "rage-toggle",
+      "name": "Rage",
+      "desc": "Enter or end a rage as a bonus action. While raging: advantage on STR checks/saves, +damage on STR melee, resistance to bludgeoning/piercing/slashing.",
+      "min_level": 1,
+      "category": "bonus_action",
+      "resource_key": "rage",
+      "cost": 1,
+      "active_toggle": true
+    }
+  ],
   "scope": "global",
   "source": "srd",
   "owner": null,

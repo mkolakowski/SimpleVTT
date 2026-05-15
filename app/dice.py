@@ -73,13 +73,17 @@ def roll(expression: str) -> RollResult:
                 raise DiceParseError("Dice must have positive count and sides")
             if count > MAX_DICE:
                 raise DiceParseError(f"Too many dice (max {MAX_DICE})")
-            # Advantage/disadvantage shortcut on a single d20-style die
+            # Advantage/disadvantage shortcut: each count is one adv/dis roll
             if mod in ("a", "d"):
-                # 2dX, keep highest or lowest 1
-                rolls = [random.randint(1, sides) for _ in range(2)]
-                kept = max(rolls) if mod == "a" else min(rolls)
-                desc = f"[{','.join(str(r) for r in rolls)}]{'kh1' if mod=='a' else 'kl1'}"
-                subtotal = kept
+                suffix = "kh1" if mod == "a" else "kl1"
+                pair_descs = []
+                subtotal = 0
+                for _ in range(count):
+                    pair = [random.randint(1, sides), random.randint(1, sides)]
+                    kept = max(pair) if mod == "a" else min(pair)
+                    pair_descs.append(f"[{','.join(str(r) for r in pair)}]{suffix}")
+                    subtotal += kept
+                desc = " ".join(pair_descs)
             elif mod.startswith("kh") or mod.startswith("kl"):
                 k = int(mod[2:])
                 if k <= 0 or k > count:

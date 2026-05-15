@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"
-      data-theme="{{ user.theme if user and user.theme else 'dark' }}"
+      data-theme="{{ user.theme if user and user.theme else APP_DEFAULT_THEME }}"
       data-font="{{ user.font_preference or '' }}"
       style="--ui-scale: {{ user.ui_scale if user and user.ui_scale else 1.0 }}; --font-scale: {{ user.font_scale if user and user.font_scale else 1.0 }};">
 <head>

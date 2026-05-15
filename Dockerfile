@@ -17,8 +17,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY app /app/app
 
-# Create dirs for uploaded maps and tokens
-RUN mkdir -p /app/app/static/uploads/maps /app/app/static/uploads/tokens
+# Create dirs for uploaded maps and tokens, and the homebrew volume mountpoint
+# (so the volume can mount cleanly on a fresh container before anything is
+# written to it).
+RUN mkdir -p /app/app/static/uploads/maps /app/app/static/uploads/tokens /app/app/data/homebrew
 
 # Listening port — overridable via APP_PORT env var.
 ENV APP_PORT=8013

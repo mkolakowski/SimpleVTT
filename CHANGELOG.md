@@ -8,6 +8,697 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [1.7.0] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** File-based content framework for spells / items / monsters / feats / backgrounds / conditions, ships ~860 SRD JSON files, homebrew Docker volume, shared Action button descriptor.
+**Description:** Adds a file-based content framework that ships the full WotC SRD 5.1 baseline as ~860 per-slug JSON files committed to the repo (319 spells, 322 monsters, 292 items, 15 conditions, 1 feat, 1 background). A new `homebrew_data` Docker volume holds GM-authored homebrew at `/app/app/data/homebrew/<system>/<scope>/<type>/<slug>.json` and is backed up alongside the Postgres dump. A new `/admin/homebrew` page lets admins create, edit, delete, import-from-Open5e, and paste-JSON homebrew records, all written as files (no DB rows). A shared `Action` Pydantic descriptor drives every interactive button (damage / save / attack / healing / active toggle / reroll trigger / damage scaling) so future content types declare their own UI. **Additive only** — the existing `Custom*` DB-backed homebrew remains fully functional and the schema is unchanged; a future 2.0.0 PR will replace those endpoints with redirects to the new file-based authoring and drop the `custom_*` tables (the migration is staged in `app/_migrate_v52.py` but not yet wired).
+
+### Added
+- `app/action_schema.py` — shared `Action` / `ActionScalingTier` / `AreaShape` / `UpcastEntry` Pydantic models.
+- `app/content_schemas.py` — nine per-type schemas (`Spell`, `Item`, `Feat`, `Monster`, `Background`, `Condition`, `ClassFeature`, `SubclassFeature`, `Race`) + `TYPE_REGISTRY`.
+- `app/local_content.py` — file-based resolver with `resolve` / `search` / `write_homebrew` / `delete_homebrew`, path-traversal protection, atomic writes, mtime cache, and campaign-scope precedence over global.
+- `scripts/build_srd_content.py` — developer tool that pulls Open5e API SRD content into per-slug JSON files. SRD-only by default (filters on `document__slug == "wotc-srd"`); `--include-all` widens to every Open5e document.
+- `app/data/local/dnd5e/spells/` — 319 SRD spell files.
+- `app/data/local/dnd5e/monsters/` — 322 SRD monster files with unified `actions: list[Action]` (replaces the legacy four-list shape).
+- `app/data/local/dnd5e/items/` — 292 SRD item files (~30 magic items + weapons + armor).
+- `app/data/local/dnd5e/feats/` — 1 SRD feat file (Grappler — the SRD 5.1 example).
+- `app/data/local/dnd5e/backgrounds/` — 1 SRD background file.
+- `app/data/local/dnd5e/conditions/` — 15 SRD condition files.
+- `app/routes/homebrew_routes.py` — `GET /admin/homebrew` list + `POST /admin/homebrew/{type}/{new,<slug>/edit,<slug>/delete,import/open5e/<slug>,import/upload}`, plus read-only `GET /api/content/{type}/{slug}` for client-side resolution.
+- `app/templates/admin/homebrew/list.html` — combined list/edit/import page with type tabs and inline JSON textareas.
+- `app/static/action_buttons.js` — shared `renderActionButtons` + `renderActionCards` + `data-actions` auto-init hook, loaded by both `tabletop.html` and `sheet_dnd5e.html`.
+- `homebrew_data` Docker volume mounted at `/app/app/data/homebrew` on both `app` and `backup` services.
+- `has_spells` / `has_feats` / `has_items` / `has_backgrounds` capability flags on `GameSystem` (all True for dnd5e).
+- Demo action backfills on shipped JSON: Sneak Attack (rogue.json, 10 scaling tiers), Rage (barbarian.json, active toggle + resource link), Lucky (lightfoot-halfling.json, reroll trigger).
+- `app/_migrate_v52.py` — staged but unwired migration helper for a future 2.0.0 destructive cutover (exports `Custom*` rows to homebrew files, drops the tables). Public function `run_v52_migration(engine)` is callable but not yet invoked from `_apply_inline_migrations`.
+
+### Changed
+- `app/local_features.py` — rewritten as a thin shim that delegates to `local_content`. Public API (`resolve_class` / `resolve_subclass` / `resolve_race` / `resolve_background` / `resolve_feat` / `record_miss` / `list_local_*`) is preserved; the DB-backed Custom* provider functions are removed. 15 callers in `tabletop_routes.py` are unaffected.
+- `app/routes/tabletop_routes.py` — `/api/open5e/spells` consults the new `local_content` tier before falling back to the Open5e mirror / live API. `_fmt_spell` honors explicit `actions: list[Action]` when present; falls back to regex extraction. `cast_spell` broadcasts `actions` + `spell_attack_roll` over the WebSocket so the client uses `renderActionButtons` natively.
+- `app/static/tabletop.js` — `appendSpellCast` delegates button emission to the shared `renderActionButtons` helper; legacy regex-derived fields are synthesized into a single Action on the fly when the server doesn't ship `actions`.
+- `app/templates/sheet_dnd5e.html` — racial traits panel now fetches `/api/content/races/<slug>` on load and renders the race's `actions` array via `renderActionCards`. (Class/feat/inventory integration is a follow-up.)
+- `app/templates/tabletop.html`, `app/templates/sheet_dnd5e.html` — both load the new `/static/action_buttons.js`.
+- `app/game_systems.py` — `GameSystem` dataclass gains four `has_*` flags.
+- `docker-compose.yml`, `Dockerfile`, `scripts/backup.sh` — new `homebrew_data` volume mounted at `/app/app/data/homebrew`; `backup.sh` now also produces a `*.homebrew.tar.gz` artifact alongside the Postgres dump with matching retention.
+
+---
+
+## [1.6.14] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** D20 shape redesigned to hexagon; d100 added to D&D 5e dice tray
+**Description:** The d20 roll-toast icon is now a hexagon with star-of-David inner lines (two overlapping triangles at 45% opacity), making it immediately distinct from the d4 inverted triangle. The text Y-position is updated to the hexagon centroid (54). The d100 quick-die button is added to the D&D 5e dice tray (it was already present in the generic system).
+
+### Changed
+- Roll toast: d20 shape is now a hexagon + star-of-David inner lines (Option B)
+- Roll toast: d20 text Y-position updated to hexagon centroid (54)
+
+### Added
+- D&D 5e dice tray: d100 quick-die button
+
+---
+
+## [1.6.13] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Fix roll toast silently broken — IS_GM out of scope
+**Description:** Since v1.6.9, every incoming roll WebSocket message threw a silent `ReferenceError: IS_GM is not defined` inside the toast IIFE, so the toast never appeared. `IS_GM` is a block-scoped `const` defined only inside the Battle/Initiative Tracker IIFE and is not accessible in the toast IIFE. Fixed by replacing both occurrences with `ME.isGm`, which is globally available. The toast now correctly fires (or is suppressed) for all roll types and visibility levels.
+
+### Fixed
+- Roll toast: replaced out-of-scope `IS_GM` with `ME.isGm` so the toast fires for all rolls the user is allowed to see
+
+---
+
+## [1.6.12] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Fix dice shapes (d4/d20 distinct); enable skill + ability rolls from mini-sheet
+**Description:** Three fixes in one. (1) d4 is now an **inverted** triangle (flat top, point at bottom) making it immediately visually distinct from d20 (upright triangle, point at top). d20 inner Y-lines are thickened (stroke-width 5, opacity 0.6) to clearly signal the icosahedron pattern. The text Y-position is adjusted per shape: d4 → 38 (upper third), d20 → 63 (lower third). (2) The die regex now accepts expressions without a leading count (`d20` treated as `1d20`). (3) The `#players-drawer` click delegation is extended to also match `.mini-sk-btn`, so all 18 skill buttons now fire rolls with the correct expression and note. Ability buttons already had `.mini-roll-btn` and were working.
+
+### Fixed
+- Roll toast: d4 shape is now an inverted triangle (flat top, point bottom) — no longer confused with d20
+- Roll toast: d20 inner Y-lines increased to stroke-width 5 / opacity 0.6 for clear icosahedron marking
+- Roll toast: die parser now handles expressions without a leading count (e.g. `d20`, `d6+2`)
+- Mini-sheet: skill buttons now fire rolls (delegation handler extended to `.mini-sk-btn`)
+
+---
+
+## [1.6.11] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Roll numbers now rendered inside die SVGs
+**Description:** The rolling number is now displayed inside each die shape rather than in a separate element below. Each die is a DOM-built SVG with a `<text>` child that cycles independently (1–sides) during the ease-out animation. On landing: single-die rolls show `r.total` inside the die with a bounce-scale animation; multi-die rolls parse per-die results from the breakdown string (`[3,5]` → 3 and 5) and show them inside each die, with a "= total" sum line beneath. The d8 inner horizontal line was removed since it crossed the number; d4/d20 decorative lines don't conflict because they avoid the centroid zone.
+
+### Changed
+- Roll toast: numbers now appear inside the die SVG shapes (single die: 82 px; 2–3 dice: 60 px; 4–5: 46 px; 6: 38 px)
+- Roll toast: each die cycles its own 1–sides range independently during the animation
+- Roll toast: on landing, single die shows the final total; multi-die shows per-die parsed values + "= total" sum
+- Roll toast: d8 shape no longer has an inner horizontal line (would overlap the number)
+
+---
+
+## [1.6.10] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Dice shape icons in roll toast; one icon per die rolled
+**Description:** The roll toast now displays an inline SVG icon for each die in the expression — roll `2d6+1d8` and you see two d6 shapes and one d8 shape wobbling during the animation. Icons are stroke-only outlines in the accent colour: d4 (triangle), d6 (rounded square), d8 (diamond), d10 (pentagon-kite), d12 (pentagon), d20 (triangle with inner lines), d100 (concentric circles). Up to 6 icons are shown; they scale down automatically for 4–6 dice. The icons wobble alternately during the rolling animation and stop when the result lands.
+
+### Added
+- Roll toast: SVG die-shape icons (d4/d6/d8/d10/d12/d20/d100) between the label and the rolling number
+- Roll toast: die icons wobble during the animation and settle on landing
+
+---
+
+## [1.6.9] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Roll toast fires for all visible rolls, not just own rolls
+**Description:** Previously the roll toast only appeared for the current user's own rolls. It now fires for every roll the user is allowed to see, using the same visibility rules as the roll log: `gm_only` toasts are suppressed for non-GMs, `gm_and_roller` toasts are suppressed for players who aren't the roller, and `public` rolls show to everyone. When someone else's roll triggers the toast, their character/display name is prepended to the label line (e.g. "🎲 Thorn — 1d20+5").
+
+### Changed
+- Roll toast: now shown for any roll visible to the current user, not just own rolls
+- Roll toast: label includes the roller's name when showing someone else's roll
+- Roll toast: visibility correctly gated (`gm_only` hidden from players, `gm_and_roller` hidden from uninvolved players)
+
+---
+
+## [1.6.8] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Dice tray in Player tab; ease-out roll animation
+**Description:** A Dice panel now lives in the Player tab so players can roll without switching tabs. It has the same expression input, visibility select, quick-die buttons, and merge logic as the Roll Log tray. The roll animation is reworked from a fixed 70 ms interval to an ease-out timing curve (50 → 55 → 60 → 75 → 100 → 150 → 220 → 320 → 430 ms per frame) so it tumbles fast at first then slows to a suspenseful crawl before landing.
+
+### Added
+- Player tab: collapsible Dice panel with roll form, visibility selector, and quick-die buttons
+
+### Changed
+- Roll animation: replaced fixed-interval flicker with ease-out timing curve for suspense
+
+---
+
+## [1.6.7] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Roll popup works on mobile; dice cycling animation; remove 4d6kh3 quick-die
+**Description:** Three small polish changes to rolling UX. On mobile the roll result popup was being hidden behind browser chrome at `bottom: 24px`; it now appears as a vertically-centred overlay instead. A brief dice-cycling animation (9 frames of random numbers at 70 ms each) precedes the real result, which lands with a bounce-scale effect. The `4d6kh3` quick-die button is removed from the D&D 5e dice tray — it was for one-time ability score generation during character creation and does not belong in the combat tray.
+
+### Changed
+- Roll popup: on mobile (≤640 px) the toast is centred on-screen instead of pinned at `bottom: 24px`
+- Roll popup: the result number cycles through random values for ~630 ms before landing on the real total with a bounce animation
+- D&D 5e quick dice: removed `4d6kh3` button
+
+---
+
+## [1.6.6] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Redesign HP stat block in mini-sheet with two-zone layout
+**Description:** The HP area of the D&D 5e mini-sheet is reworked into a cleaner two-zone layout. The primary row shows a large current HP number flanked by circular −/+ step buttons, with AC and Speed as side chips in a column to the right. A footer row groups Temporary HP (with its own step buttons), hit dice, and the Short/Long rest buttons. Replaced the old 4-column `.msb-combat` grid.
+
+### Changed
+- Mini-sheet HP stat block: redesigned as primary row (HP stepper + AC/Speed chips) + footer row (Temp HP + hit dice + rest buttons)
+- HP step buttons changed from rectangular (36 px) to 26 px circles for a more compact look
+- Temp HP stepper moved to the footer row alongside hit dice and rest buttons
+
+---
+
+## [1.6.5] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Initiative tracker shows portraits for all combatants including GM
+**Description:** The initiative tracker now shows the token portrait (image_url → colour swatch fallback) for every combatant entry, including GM entries which previously always rendered a plain 10 px colour dot. The `.init-swatch` CSS is bumped to 24 px to match the portrait image size so the column is consistent when no art is set.
+
+### Changed
+- Initiative tracker: GM card entries now show token portrait instead of a fixed colour swatch; falls back to swatch if no image is set
+- `.init-swatch` CSS size increased from 10 px to 24 px to match portrait dimensions
+
+---
+
+## [1.6.4] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Remove session/settings buttons from topbar
+**Description:** Start/End Session and Campaign Settings are now exclusively in the GM Tools Session card (added in 1.6.2). The duplicate buttons in the top row have been removed entirely, and the now-unused mobile CSS rule hiding them is also cleaned up.
+
+### Changed
+- Topbar: Start/End Session button and Campaign Settings link removed (accessible via GM Tools → Session card)
+
+---
+
+## [1.6.3] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Token management shows portraits and labels controller as GM
+**Description:** Two small UX improvements to the Token Management panel. The "No controller" label in the controller dropdown is renamed to "GM" — clearer and shorter. Each token row now shows the token's portrait as a 28 px circle: it uses the token's own art (`image_url`) first, falls back to the linked character's portrait (`portrait_url`), and falls back to the colour swatch for tokens with neither.
+
+### Changed
+- Token Management: controller dropdown default option renamed from "No controller" to "GM"
+- Token Management: token rows now show a 28 px circular portrait (token art → character portrait → colour swatch)
+
+---
+
+## [1.6.2] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Condense mobile topbar; move session controls to GM Tools
+**Description:** On mobile (≤640 px) the campaign topbar is condensed to just the campaign title — the thumbnail and GM action buttons are hidden. Session controls (Start/End Session and Campaign Settings link) are moved to a permanent Session card at the top of the GM Tools drawer, so they are always reachable on any screen size. The topbar GM actions are hidden via media query on mobile but the buttons remain in GM Tools.
+
+### Changed
+- Mobile topbar: thumbnail and GM action buttons hidden on mobile; topbar collapses to a single title line
+- GM Tools: new Session card at the top with Start/End Session button, live status indicator, and Campaign Settings link
+
+---
+
+## [1.6.1] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Initiative tracker uses full mini-sheet cards inline
+**Description:** Clicking a combatant entry in the initiative tracker now expands the full interactive mini-sheet (HP +/− controls, ability roll buttons, skill/attack/spell tabs, rest buttons, wild shape) directly inside the tracker. The `.mini-body` DOM node is physically moved from the Characters section into the initiative card on expand and returned on collapse, so all existing event handlers continue working without duplication. For players this applies to their own characters; other combatants remain simple rows. For GMs this applies to their own characters in addition to the existing editable Init/HP inputs; other-player characters still show the static `buildInitSheet()` panel. All mini-sheet button handlers were re-delegated from `#player-char-list` to `#players-drawer` so they fire regardless of whether the buttons are in the Characters section or the initiative tracker.
+
+### Changed
+- Initiative tracker: expanding a combatant card for a linked own-character shows the full interactive mini-sheet (HP, abilities, skills, attacks, spells, rests) inline instead of a read-only stat panel
+- Mini-sheet button event delegation widened from `#player-char-list` to `#players-drawer` so all handlers work when the sheet is displayed inside the initiative tracker
+
+---
+
+## [1.6.0] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Server-default theme env var and spell row shading in character sheets
+**Description:** Two improvements. (1) A new `APP_DEFAULT_THEME` environment variable lets server operators set the theme applied to new/unauthenticated sessions instead of hardcoding "dark". Any valid theme slug is accepted; the default remains "dark". (2) Spell rows in the D&D 5e character sheet now have alternating row shading (even rows use the input background, odd rows use the card background) so long spell lists are easier to scan.
+
+### Added
+- `APP_DEFAULT_THEME` env var: operators can set the server-wide default UI theme (valid: `dark`, `midnight`, `dim`, `light`, `forest`, `bubblegum`, `fire`, `oled`, `hobbiton`, `hearthstone`, `mosswood`, `inkwell`, `forge`, `sepia`); defaults to `dark`
+
+### Changed
+- D&D 5e sheet → Spells: spell rows now have alternating background shading for readability
+
+---
+
+## [1.5.10] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** GM initiative entries use mini-sheet card style with editable stats in body
+**Description:** GM initiative tracker entries now use the same gradient-header card design as the Players-tab character mini-sheets. The header (always visible) shows the colour swatch, character name, current initiative, and HP. Clicking anywhere on the header expands a body showing editable initiative/HP inputs and remove button, followed by the character stat panel (AC, Speed, ability scores, attacks). Open/closed state is preserved across re-renders (e.g. when HP is edited). Active-turn entries get a brighter gradient on the header to maintain the highlight.
+
+### Changed
+- GM initiative tracker: entries redesigned to match mini-sheet card style; header shows name, initiative, and HP; body contains edit controls and character stats
+- Open/expanded state is preserved when `renderBattle()` re-renders after an edit
+
+---
+
+## [1.5.9] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Dice roller and roll request combined into a single card
+**Description:** The dice roller form and GM Roll Request panel at the bottom of the roll log drawer are now grouped inside a single "🎲 Dice Roller" card (gradient header, accent border, drop shadow). The roll request remains a collapsible sub-section within the card — its own outer card border and shadow are stripped so it blends flush into the parent card, separated only by a thin divider line.
+
+### Changed
+- Roll log drawer: dice roller form, quick-dice buttons, and GM Roll Request panel are now contained in a single unified card
+
+---
+
+## [1.5.8] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Roll log redesign — side-column total layout
+**Description:** Roll log entries are redesigned with a side-column layout (Option B). Each card now has a narrow accent-tinted column on the left containing the roll total, and the right side holds a compact header (avatar, name, visibility badge, time) above the expression and breakdown. Visibility colouring (GM-only = danger red, GM+roller = amber) is expressed through the column background and border rather than a left stripe. Spell-cast, weapon-attack, and feature-used cards are unaffected.
+
+### Changed
+- Roll log: entries redesigned with side-column total layout; total moves to an accent-tinted left column, header simplified (no gradient), breakdown below expression in the right panel
+- Roll log: visibility colour applied to total column background instead of left border stripe
+
+---
+
+## [1.5.7] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** GM initiative entries expand inline to show character mini-sheet
+**Description:** In the GM initiative tracker, clicking a combatant's name now expands that entry in place, showing a compact character sheet: AC, Speed, Initiative modifier, Passive Perception, a 6-stat ability score grid, and up to 6 attacks with hit bonus and damage. The row becomes a card with the existing controls as the header and the stat panel as a collapsible body. Manual combatants (no linked character) remain non-expandable. Players still get the previous behaviour (clicking opens the Players-tab mini-sheet card).
+
+### Changed
+- GM initiative tracker: each linked-character entry is a card that expands inline on name-click to show AC, Speed, Initiative mod, Passive Perception, ability scores, and attacks
+- Player initiative tracker: name click still opens the Players-tab mini-sheet (unchanged)
+
+---
+
+## [1.5.6] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Initiative click-to-open mini-sheet, token art in player initiative, sepia theme
+**Description:** Three improvements. (1) Initiative tracker rows with a linked character now open that character's mini-sheet when clicked (both GM and player views); the name is underline-dotted to hint interactivity. (2) Player initiative rows show the character's portrait/token art as a 24 px circle instead of the plain colour swatch; falls back to the swatch when no image is set. (3) New "Sepia" dark theme — warm amber ink on a deep espresso background, added alongside the fantasy theme set.
+
+### Added
+- Initiative tracker: clicking a row with a linked character opens (or closes) that character's mini-sheet and scrolls it into view
+- Initiative tracker: player view shows token art portrait as a circular thumbnail next to each combatant name
+- Settings → Appearance: new **Sepia** theme (dark amber/espresso palette matching the fantasy theme set)
+
+### Changed
+- `combatantFromToken` and char-picker now store `image_url` on each combatant for use by the player initiative render
+
+---
+
+## [1.5.5] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Card styling for roll log, initiative tracker, and pinned active encounter
+**Description:** Three visual consistency updates. (1) Roll log cards, roll-request cards, and spell-cast cards all gain the accent-tinted border and drop shadow matching the new interface style; the card header now uses the gradient background with a 2px accent border-bottom (colour-coded per visibility: purple for public, red for GM-only, amber for GM+roller). (2) Initiative tracker rows are now individual rounded cards with an accent-tinted border and shadow; the active-turn row uses the full accent border instead of a left-only stripe. (3) The active/loaded encounter is always pinned at the top of the Encounters panel above the folder groups, regardless of search or tag filters; it is not duplicated inside its folder.
+
+### Added
+- Encounters panel: active encounter is always shown pinned above folder groups with an "▶ Active" label and a divider; it is excluded from folder groups to avoid duplication
+
+### Changed
+- Roll log: roll cards, roll-request cards, and spell-cast cards updated to match the site-wide card style (accent border, drop shadow, gradient header with 2px accent border-bottom)
+- Roll log: header border-bottom colour-coded to match visibility — accent for public, danger for GM-only, amber for GM+roller
+- Initiative tracker: rows changed from flat bottom-bordered items to individual rounded cards; active-turn row highlighted with full accent border and glow shadow
+
+---
+
+## [1.5.4] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Encounter items and folder groups rendered as mini cards
+**Description:** Each saved encounter in the Encounters panel is now rendered as a rounded mini card (accent-tinted border, box-shadow, 8px radius) instead of a flat bordered row. The currently-active encounter keeps its cyan tint. Folder groups are also styled as cards with the same gradient header treatment as the GM Tools panels — accent-coloured folder name, chevron, overflow:hidden — with encounter cards stacked inside the folder body.
+
+### Changed
+- Encounters panel: each encounter row is a rounded mini card with accent border and drop shadow
+- Encounters panel: folder group wrappers styled as cards with gradient header (matching GM Tools panel card style); chevron now accent-coloured
+- Active encounter retains its cyan highlight inside the new card shape
+
+---
+
+## [1.5.3] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Card styling for GM Tools and Roll Request collapsible panels
+**Description:** The three GM Tools panels (Encounters, Token Management, Music) and the GM-only Roll Request panel in the dice drawer now share the same card visual treatment as the character mini-sheets: accent-tinted border, 8px border-radius, drop shadow, gradient header that highlights on hover, and a 2px accent border-bottom on the header when open. The custom per-panel marker/chevron CSS is consolidated into a single `.gm-panel` class. Content inside each panel is padded via a `gm-panel-body` wrapper.
+
+### Changed
+- GM Tools drawer: Encounters, Token Management, and Music panels styled as cards matching the character sheet card design
+- Dice/Roll Log drawer: Roll Request (GM-only) panel also styled as a card
+- Per-panel `summary::marker` and chevron CSS consolidated into a single `.gm-panel` selector
+
+---
+
+## [1.5.2] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Mini-sheet always shows as a card; header is the sole open/close toggle
+**Description:** The separate character name row above the expanded card is removed. The card (with its gradient header) is now always visible — clicking the header expands or collapses the body. The fav star and concentration dot are moved into the card header. The generic-template sheet also gets a styled card header. The favourites re-ordering logic is updated to sort `char-detail` nodes directly (no longer requires a `char-row` sibling).
+
+### Changed
+- Tabletop Players tab: character cards are always visible as styled cards; the flat name/expand-button row is removed
+- Fav star (☆/★) and concentration dot (🧿) moved into the card header
+- Clicking anywhere on the card header (except the fav star) opens/closes the body
+- Generic-template characters also get a styled card header showing the character name and template type
+- `applyFavs()` now sorts `char-detail` cards directly instead of pairing `char-row` + `char-detail` siblings
+
+---
+
+## [1.5.1] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Mini-sheet card style and header as open/close toggle
+**Description:** The D&D 5e (and generic) mini-sheet panel is now presented as a card: rounded corners, accent-coloured border, drop shadow, and no ambient padding so the gradient header bleeds cleanly to the card edges. The expand/collapse arrow button has been removed from the character name row; instead, clicking the gradient header (or the character name row) opens and closes the card. The header shows a ▶ arrow that rotates 90° when the card is open, and highlights on hover to make its interactivity clear.
+
+### Changed
+- Tabletop mini-sheet: presented as a rounded card with border, box-shadow, and overflow-hidden
+- Tabletop mini-sheet: header is now the primary open/close toggle (▶ arrow indicator, hover highlight); the separate expand button on the character name row has been removed
+- Character name row click still also opens/closes the card for convenience
+
+---
+
+## [1.5.0] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Option A — full D&D 5e mini-sheet redesign with stat block header and tab strip
+**Description:** Complete visual redesign of the D&D 5e mini-sheet panel in the tabletop Players tab. The old flat list of rows is replaced by a structured layout with three zones: (1) a gradient header showing character name, class(es), race, and level; (2) a compact stat block with HP/Temp/AC/Speed in a 4-column grid and a rest bar beneath it; (3) a 3-row ability grid showing modifier values prominently (raw scores removed) above roll buttons, with the Check/Save toggle retained. Below the ability grid, a tab strip organises Skills, Attacks, and Spells into separate panels — tabs only appear when that section has content. Active tab is persisted per-character in `localStorage`. All existing JS data attributes and behaviour (HP live-edit, Short/Long rest, ability rolls, attacks, spells, Wild Shape transform) are preserved unchanged.
+
+### Added
+- Tabletop mini-sheet: gradient header zone showing character name, class/race/level subtitle
+- Tabletop mini-sheet: compact stat-block grid — HP (editable), Temp HP, AC, Speed in a 4-column row; Hit Dice and Short/Long rest buttons on the row below
+- Tabletop mini-sheet: tab strip (Skills | Attacks | Spells) — Attacks and Spells tabs only rendered when the character has content for them; active tab persisted to `localStorage`
+
+### Changed
+- D&D 5e mini-sheet layout fully redesigned — raw ability scores removed; modifiers shown at larger size (`mac-mod-lg`); sheet body reorganised into header / stat block / abilities / tabbed content zones
+- Tab content replaces the previous always-visible collapsible sections for Skills, Attacks, and Spells; Wild Shape bar remains below tabs
+
+---
+
+## [1.4.9] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Fix internal server error — unclosed Jinja2 block after spells section
+**Description:** v1.4.8 introduced a Jinja2 template error that caused a 500 on every tabletop page load. When the Wild Shape block was inserted after the Spells section, the `{% endif %}` that closed the `{% if _spell_vis.any %}` block was accidentally consumed by the replacement and not restored, leaving the block open. Added the missing `{% endif %}` after the spells collapsible closing tag.
+
+### Fixed
+- Tabletop page: 500 internal server error caused by an unclosed `{% if _spell_vis.any %}` Jinja2 block introduced in v1.4.8
+
+---
+
+## [1.4.8] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Fix Wild Shape never appearing; move to below spells; ability toggle Check/Save
+**Description:** Two bugs fixed and one new UI feature. (1) The Wild Shape / Polymorph transform bar was never shown because Jinja2 `{% set %}` inside `{% for %}` loops does not write back to the outer scope — `_druid_lv`, `_moon`, and `_has_poly` were always their initial values. The block is rewritten using `namespace()` so loop assignments propagate correctly. Legacy top-level `class`/`level` fields are also checked as a fallback. (2) The transform bar is moved from above Abilities to below Spells, matching the user's requested position. (3) The two separate Check and Save button rows in the Abilities grid are replaced with a single row of combined buttons. A Check/Save pill toggle above the grid switches all six buttons between ability check and saving throw mode, keeping the layout compact while giving quick access to both rolls.
+
+### Fixed
+- Wild Shape / Polymorph bar was never rendered for any character — Jinja2 loop scoping bug caused `_druid_lv` and `_has_poly` to always be their default (0 / false); rewritten with `namespace()`
+- Legacy `class`/`level` top-level sheet fields now also count toward druid level detection (in addition to the classes roster)
+
+### Changed
+- Tabletop mini-sheet: Wild Shape / Polymorph bar moved to below the Spells section
+- Abilities grid: the separate Check and Save rows (12 buttons) are replaced by 6 combined buttons with a Check / Save pill toggle; clicking the toggle switches all buttons between ability check and saving throw rolls without changing the layout
+
+---
+
+## [1.4.7] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Clicking character name row toggles mini-sheet open/closed
+**Description:** In the tabletop Players tab, the character name and the blank space around it now toggle the mini-sheet panel open or closed, the same as clicking the ▶/▼ expand button. The fav-star button on the left and the expand button on the right are excluded so their own actions still work. The name text gains a pointer cursor to signal it is interactive.
+
+### Changed
+- Tabletop Players tab: clicking the character name or blank row area expands/collapses the mini-sheet (previously only the ▶ button did this)
+
+---
+
+## [1.4.6] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Wild Shape favorites dropdown on tabletop mini-sheet
+**Description:** The Wild Shape button in the tabletop mini-sheet is now a dropdown. Clicking "🐺 Wild Shape ▾" expands a panel that lists the druid's saved favorite beasts as direct-transform buttons (name + CR + HP shown per row). Clicking any row immediately posts to the transform API and reloads the page — no full beast picker modal required. A "⊕ Browse all…" button at the bottom of the dropdown opens the full beast picker for searching/adding favorites. When no favorites are saved yet, the dropdown shows a prompt to use Browse. The dropdown closes when clicking outside or selecting a beast. The ▾ arrow rotates to ▴ while open.
+
+### Added
+- Tabletop mini-sheet: Wild Shape button is now a dropdown listing saved favorites as one-click transform buttons
+- Each favorite row shows creature name, CR, and HP; clicking transforms immediately without opening the picker modal
+- "Browse all…" entry at the bottom opens the full beast picker (same path as before)
+- Dropdown closes on outside click; arrow rotates to indicate open/closed state
+
+### Changed
+- Wild Shape button changed from a direct picker-open button to a dropdown trigger; full picker accessible via "Browse all…"
+
+---
+
+## [1.4.5] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Fix Wild Shape not replacing STR/DEX/CON with beast's physical stats
+**Description:** After a Wild Shape or Polymorph transform, the character sheet was not reliably showing the beast's physical ability scores (STR/DEX/CON). Two bugs fixed: (1) `_o5e_ability` only tried the lowercase 3-letter key (`str`) when reading nested `ability_scores` from the Open5e v2 API — if the endpoint returns uppercase (`STR`) or full-name (`strength`) keys the scores silently fell back to 10; now all three variants are tried. (2) SQLAlchemy's plain `JSON` column does not always detect a JSON dict mutation as dirty even when re-assigned; `flag_modified(char, "sheet")` is now called before every `db.commit()` in the transform and revert endpoints to guarantee the change is written.
+
+### Fixed
+- Wild Shape / Polymorph: STR/DEX/CON (and other ability scores) now correctly replaced with the beast's stats after transforming
+- `_o5e_ability` now tries lowercase short (`str`), uppercase short (`STR`), and full name (`strength`) keys inside `ability_scores`, so ability scores are correctly parsed regardless of which Open5e API build is in use
+- Transform and revert endpoints: `flag_modified(char, "sheet")` added before every commit to ensure SQLAlchemy detects the JSON mutation and persists it
+
+---
+
+## [1.4.4] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Embed full SRD stat blocks in Quick Pick presets — works completely offline
+**Description:** Previously, Quick Pick preset rows only carried HP and AC; ability scores, attacks, speed, and traits only appeared if the Open5e background fetch succeeded. All 27 preset beasts now have fully embedded SRD stat blocks (STR/DEX/CON/INT/WIS/CHA, all speed types, traits such as Pack Tactics / Keen Smell / Pounce / Spider Climb, complete action descriptions with attack bonuses and damage dice, and a one-sentence description summarising each form's Wild Shape use case). The detail panel renders the complete stat block immediately on row click with no API dependency. The Open5e background fetch still runs when available and may enrich data further, but the preset is fully usable without it.
+
+### Changed
+- All 27 Quick Pick presets now embed full SRD stat blocks: abilities, speed (all movement types), traits, actions, and a description
+- Beast picker detail panel: traits section added (bullet list of passive abilities); description shown in italics below the creature type line; speed now shows all movement types (walk, fly, swim, burrow, climb) instead of walk-only
+- Preset detail is rendered immediately on click — no API call required for complete stat display
+
+---
+
+## [1.4.3] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Token Ring panel collapsed by default
+**Description:** The Token Ring colour/style picker on the character sheet now starts collapsed. A clickable "Token Ring ▶" header expands it; clicking again collapses it. No state is persisted — it re-collapses on each page load.
+
+### Changed
+- Character sheet: Token Ring panel is collapsed by default; click the header row to expand/collapse
+
+---
+
+## [1.4.2] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Fix beast picker 502 — presets select instantly, backend resolves v1 slugs via name search
+**Description:** v1.4.1's preset slug resolution fired a `/api/open5e/monsters` search on every row click, which returned 502 and left the Transform button permanently disabled when Open5e was unreachable. Presets now select immediately using their cached stats (same path as search results), with full stats fetched in the background and silently ignored on failure. The backend `_fetch_open5e_creature` now falls back to a name-search when a direct slug lookup 404s, so v1-style slugs (`wolf`) resolve to the correct v2 key automatically. `_runSearch` now calls `_renderList()` even on failure so Quick Picks and Favorites remain visible when the search API is down.
+
+### Fixed
+- Beast picker: opening the picker / clicking a preset no longer shows 502 when Open5e is unreachable
+- Preset rows now select instantly (HP/AC shown from local data); Transform button enables immediately
+- `_fetch_open5e_creature`: v1-style slugs that 404 on `/v2/creatures/{slug}/` are automatically resolved via name search (`brown-bear` → search → `brown-bear-a5esrd`)
+- Beast picker: Quick Picks and Favorites remain visible even when the `/api/open5e/monsters` search returns an error
+
+---
+
+## [1.4.1] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Fix Quick Picks transform failure; add ability scores and attacks to beast detail panel
+**Description:** Quick Picks (preset beasts) could not transform because they used Open5e v1-style slugs (`wolf`) while the backend fetches from the v2 API which uses different keys. Selecting a preset now triggers a name-search to resolve the real v2 slug before sending to the transform endpoint. The detail panel in the beast picker also now shows a full ability score table (STR/DEX/CON/INT/WIS/CHA with modifiers), speed, and all actions/attacks when any beast (preset, favorite, or search result) is selected, via a new `?full=1` mode on the creature-detail endpoint.
+
+### Fixed
+- Wild Shape Quick Picks could not transform — preset slugs were v1-style and did not match Open5e v2 keys; clicking a preset now resolves the correct v2 slug via a name search before enabling Transform
+
+### Added
+- Beast picker detail panel: ability score grid (STR/DEX/CON/INT/WIS/CHA + modifiers), speed, and full action/attack list shown for every selected beast
+- `GET /api/open5e/creature/{slug}?full=1` — returns ability scores, actions, and speed in addition to the lite shape; used by the picker detail panel
+
+---
+
+## [1.4.0] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Wild Shape quick-pick presets in the beast picker
+**Description:** The Wild Shape beast picker now shows a "⚡ Quick Picks" section populated from a hardcoded list of 27 common SRD beasts, automatically filtered to the druid's current CR cap. Players can pick Wolf, Brown Bear, Dire Wolf, Tiger, and many others without typing a search term. The presets respect the Free Pick toggle (shows all 27 when on), de-duplicate against the ★ Favorites section so each beast only appears once, and are fully selectable for the Transform action. No schema change.
+
+### Added
+- Wild Shape / Beast Picker: "⚡ Quick Picks" section with 27 curated SRD beasts (Cat, Rat, Raven, Poisonous Snake, Giant Rat, Wolf, Panther, Giant Badger, Constrictor Snake, Black Bear, Ape, Giant Wasp, Brown Bear, Dire Wolf, Giant Spider, Tiger, Giant Constrictor Snake, Polar Bear, Allosaurus, Ankylosaurus, Killer Whale, Giant Scorpion, Elephant, Triceratops, Giant Crocodile, Mammoth, Tyrannosaurus Rex)
+- Presets are filtered by CR cap at render time; Free Pick shows all 27; presets already in Favorites are hidden to avoid duplicate rows
+- `_findInState()` extended to resolve clicks on preset rows (no live-search result required)
+
+---
+
+## [1.3.0] - 2026-05-13
+
+**Schema version:** 51
+**Commit summary:** Token ring colour and style picker on the character sheet
+**Description:** Players can now customise the decorative ring drawn around their token on the tabletop directly from their character sheet. A new "Token Ring" panel appears below the portrait (edit mode, campaign characters only) with a colour swatch and five ring-style choices: Solid, Dashed, Double, Glow, and Spiked. Changes are broadcast in real time over WebSocket so every connected client sees the updated ring immediately. Ring style is stored in a new `ring_style` column on the `characters` table (schema v51). The canvas reads both the character's preferred colour and style from a `charById` lookup map, allowing per-character ring customisation independently of the per-token GM colour override.
+
+### Added
+- Character sheet: "Token Ring" panel below portrait — colour swatch + five ring-style buttons (Solid, Dashed, Double, Glow, Spiked) with inline SVG previews
+- `POST /api/campaign/{id}/character/{id}/ring-style` — player or GM sets ring colour and style; broadcasts `character_ring_update` over WebSocket
+- Five canvas ring styles in `tabletop.js`: `_drawRing()` with solid, dashed, double-concentric, glow (canvas shadow), and 8-point spiked star
+
+### Changed
+- `tabletop.js`: `drawToken()` now reads ring colour and style from a `charById` lookup (`character.color`, `character.ring_style`) instead of using only `t.color`
+- `tabletop.js`: new `character_ring_update` WebSocket handler updates `charById` and re-renders the canvas
+- `char_data` payload now includes `ring_style` so the canvas has the value on page load
+
+### Schema
+- `characters.ring_style VARCHAR(20)` — nullable, defaults to `solid` when absent (schema v51)
+
+---
+
+## [1.2.11] - 2026-05-13
+
+**Schema version:** 50
+**Commit summary:** Fix spell slot and resource pip buttons stretched into ovals by global min-height rule
+**Description:** The global `button { min-height: 44px }` rule introduced in v1.2.7 was overriding the explicit `height` on the 18 px spell slot pips and 14 px resource pips, causing them to stretch vertically into ovals. Added `min-height:0` to both pip button inline styles so they can render at their intended square size while still being governed by the global rule everywhere else.
+
+### Fixed
+- Character sheet: spell slot pips restored to 18×18 px circles (`min-height:0` added to inline style)
+- Character sheet: class resource pips restored to 14×14 px circles (`min-height:0` added to inline style)
+
+---
+
+## [1.2.10] - 2026-05-13
+
+**Schema version:** 50
+**Commit summary:** Touch target remediation phase 3 — D&D 5e character sheet section buttons
+**Description:** Added `.sheet-section-btn { font-size: 11px; min-height: 44px; padding: 0 10px; }` to the `sheet_dnd5e.html` `<style>` block and replaced inline `font-size:11px;padding:2px 8px` / `padding:3px 10px` overrides on 24 section-header action buttons with the new class. Complex buttons with custom visual styles (rest buttons, browser close/search, filter chips) had only their padding overrides removed. All elements now derive their 44 px minimum tap height from the global `button { min-height: 44px }` rule with no conflicting padding overrides. Completes the three-phase touch target remediation.
+
+### Changed
+- `sheet_dnd5e.html`: `.sheet-section-btn` CSS class added (44 px min-height)
+- `sheet_dnd5e.html`: 24 section-header buttons converted to `.sheet-section-btn` — `#char-edit-btn`, `#bg-sync-btn`, `#feats-add-btn`, `#mc-add-class-btn`, `#hp-rolls-apply-max`, `#hp-rolls-fill-avg`, `#ab-edit-btn`, `#ab-done-btn`, `#st-edit-btn`, `#st-done-btn`, `#sk-edit-btn`, `#sk-done-btn`, `#browse-weapons-btn`, `#add-custom-attack-btn`, `#spell-browser-btn`, `#add-custom-spell-btn`, `#hide-unprepared-btn`, `#sc-autofill-btn`, `#resources-sync-btn`, `#resources-add-btn`, `#wild-shape-btn`, `#polymorph-btn`, `#browse-items-btn`, `#add-custom-item-btn`, `#sync-race-btn`, `#sync-class-btn`
+- `sheet_dnd5e.html`: padding overrides removed from `#short-rest-btn`, `#long-rest-btn`, `.defense-custom-add-btn`, `#ib-search-btn`, `#ib-close-btn`, `#sb-search-btn`, `#sb-close-btn`, `.ib-cat` chips, `.sb-lvl` chips
+
+---
+
+## [1.2.9] - 2026-05-13
+
+**Schema version:** 50
+**Commit summary:** Touch target remediation phase 2 — tabletop encounter panel and roll-request controls
+**Description:** Replaced all inline `padding` and `font-size` style strings on JS-created encounter-library buttons with named CSS classes (`.enc-action-btn`, `.enc-modal-btn`, `.enc-spawn-btn`) in the tabletop `<style>` block. Removed padding overrides from the encounter edit form inputs and selects, the roll-request panel buttons and visibility select, the audio-enable button, and the Import & Place button in `tabletop.js`. All elements now inherit the global 44 px (standard) or 32 px (compact) min-height rules without inline overrides fighting them.
+
+### Changed
+- `tabletop.html`: encounter action icon buttons (💾 📋 ✎ 🗑) now use `.enc-action-btn` CSS class (32 px min-height, compact panel)
+- `tabletop.html`: encounter edit Save / Cancel buttons now use `.enc-modal-btn` CSS class (44 px min-height)
+- `tabletop.html`: spawn-point Set / Clear buttons now use `.enc-spawn-btn` CSS class (32 px min-height, compact panel)
+- `tabletop.html`: encounter edit form inputs and selects no longer override padding — inherit global 44 px min-height
+- `tabletop.html`: roll-request panel `#rr-send-btn`, `#rr-clear-btn`, `#rr-vis` select — padding overrides removed
+- `tabletop.html`: `#audio-enable` button — padding override removed
+- `tabletop.js`: Import & Place button — padding override removed
+
+---
+
+## [1.2.8] - 2026-05-13
+
+**Schema version:** 50
+**Commit summary:** Touch target remediation phase 1 — campaign settings selects
+**Description:** Removed the inline `padding` overrides from the playlist category select and the encounter-library sort select in campaign settings. Both now fall through to the global `select { min-height: 44px }` rule introduced in v1.2.7. The `.track-actions` audio buttons were already compliant via the global `button` rule and required no changes.
+
+### Fixed
+- Campaign settings: playlist category `<select>` (`pl-category-select`) no longer overrides padding — inherits global 44 px min-height
+- Campaign settings: encounter library sort `<select>` (`enc-lib-sort`) no longer overrides padding — inherits global 44 px min-height
+
+---
+
+## [1.2.7] - 2026-05-13
+
+**Schema version:** 50
+**Commit summary:** Enforce Apple 44px minimum touch targets across the tabletop UI
+**Description:** Added `min-height: 44px` to the global `button` rule (with `display: inline-flex; align-items: center; justify-content: center`) and to `input`/`select` in `style.css`, so all standard interactive elements meet Apple's HIG minimum by default. Compact button classes inside the tabletop's dense panels (mini-sheet, tracker, concentration controls) are overridden to 32–36 px — a large improvement from the previous 12–17 px — with 44 px applied to standalone action buttons (quick-die, rest, roll-request presets, character-expand, open-full). CLAUDE.md updated with a standing rule covering future touch-target requirements.
+
+### Changed
+- `style.css`: base `button` rule gains `min-height: 44px; display: inline-flex; align-items: center; justify-content: center`
+- `style.css`: `input` (non-checkbox/radio/range) and `select` gain `min-height: 44px`
+- `tabletop.html`: `.char-expand-btn`, `.mini-open-full`, `.mini-rest-btn`, `.rr-quick`, `.rr-dc-preset` → `min-height: 44px`
+- `tabletop.html`: `.tt-btn`, `.tt-ctrl`, `.mini-hp-step`, `.mac-btn`, `.mini-sk-btn`, `.conc-controls button` → `min-height: 36px`
+- `tabletop.html`: `.mini-roll-btn`, `.mini-cast-btn`, `.mini-strike-btn` → `min-height: 32px`
+- `CLAUDE.md`: added touch-target rule requiring 44 px on standard elements and ≥32 px on compact panel elements
+
+---
+
+## [1.2.6] - 2026-05-13
+
+**Schema version:** 50
+**Commit summary:** Show roll expression in roll log cards
+**Description:** Each roll log card now displays the original formula (e.g. `3d20d`, `1d20+5`) as a small monospace line above the large total, matching exactly what was typed in the roller input. Both the server-rendered history cards and live WebSocket cards are updated.
+
+### Added
+- Roll log: formula line (`.roll-card-expr`) above the total on every roll card, showing the original expression as typed
+
+---
+
+## [1.2.5] - 2026-05-13
+
+**Schema version:** 50
+**Commit summary:** Enlarge roll-expression clear button touch target for iPad/mobile
+**Description:** The ✕ clear button inside the roll expression field had a ~12×14 px tap area, which is far too small for touch devices and caused it to appear non-functional on iPad. The button now spans the full height of the input row and is 44 px wide, meeting Apple's minimum 44×44 px touch-target guideline. The input's right padding is increased to match so typed text never slides under the button.
+
+### Fixed
+- Dice roller: ✕ clear button touch target enlarged to 44 px wide × full input height; reliable on iPad and other touch devices
+
+---
+
+## [1.2.4] - 2026-05-13
+
+**Schema version:** 50
+**Commit summary:** Fix dice parser to correctly handle count > 1 on advantage/disadvantage rolls
+**Description:** When the client consolidates repeated quick-die clicks into e.g. `3d20d`, the dice parser was ignoring the count and only rolling a single disadvantage pair (2 dice). It now rolls one pair per count, keeps the appropriate value from each pair, and sums the results. The breakdown reflects each pair: `3d20d[14,6]kl1 [3,11]kl1 [17,2]kl1=11 => 11`.
+
+### Fixed
+- Dice parser: `Nd20d` / `Nd20a` now rolls N independent advantage/disadvantage pairs instead of silently ignoring the count
+
+---
+
+## [1.2.3] - 2026-05-13
+
+**Schema version:** 50
+**Commit summary:** Reverse roll log order — newest entries at the bottom
+**Description:** The roll log now shows the oldest entries at the top and the newest at the bottom, matching a chat-style reading direction. The drawer body auto-scrolls to the bottom whenever a new card is appended and whenever the Roll Log tab is opened.
+
+### Changed
+- Roll log: entries are displayed oldest-to-newest (newest at bottom) instead of newest-to-oldest
+- Roll log: drawer body auto-scrolls to the latest entry on new roll, and when the Roll Log tab is opened
+
+---
+
+## [1.2.2] - 2026-05-13
+
+**Schema version:** 50
+**Commit summary:** Consolidate repeated quick-die clicks into a single dice term
+**Description:** Clicking the same quick-die button multiple times now merges the dice count into a single term instead of concatenating separate expressions. For example, clicking d20 three times produces `3d20` rather than `1d20+1d20+1d20`. Works for all die types including advantage/disadvantage and keep-highest modifiers (e.g. three dis clicks → `3d20d`).
+
+### Fixed
+- Dice roller: repeated quick-die clicks now consolidate into one term (e.g. `3d20d` instead of `1d20d+1d20d+1d20d`)
+
+---
+
+## [1.2.1] - 2026-05-13
+
+**Schema version:** 50
+**Commit summary:** Roll formula clear button
+**Description:** A ✕ button appears inside the roll expression input once the user starts typing. Clicking it clears the formula and returns focus to the input.
+
+### Added
+- Dice roller: ✕ button inside the roll expression field clears the typed formula; button is hidden when the field is empty
+
+---
+
+## [1.2.0] - 2026-05-13
+
+**Schema version:** 50
+**Commit summary:** Animated map thumbnails, encounter folder persistence, UI polish
+**Description:** GIF and video maps now generate a static JPEG thumbnail on upload (Pillow frame 0 for GIFs; ffmpeg for MP4/WebM) — the thumbnail is used in encounter cards so animated content displays instantly without loading the full animation. Encounter folder open/closed state is now persisted to localStorage per campaign, surviving page reloads. The current-encounter chip in the Encounters panel header now uses the amber tag-chip style (matching active tag chips). A ⟳ Refresh button is added to the Token Management panel. The player sound panel is simplified to: track name, progress bar, enable-audio button, and mute + volume slider — removing the category volume slider, resync button, and settings link.
+
+### Added
+- Maps: static JPEG thumbnail generated on upload for GIFs (Pillow frame 0) and videos (ffmpeg at 0.5 s); `thumbnail_url` stored in the database and returned in encounter API responses
+- Encounters: `map_thumbnail_url` field in the encounter API response; `buildRow` uses it in preference to `map_image_url` for the card thumbnail
+- Token Management panel: ⟳ Refresh button rerenders the token tracker list without reloading the page
+- Encounter folders: open/closed state saved to `localStorage` keyed by campaign ID — persists across page reloads
+
+### Changed
+- Encounters: current-encounter chip in the panel header now styled as an amber tag chip (matching active tag filter chips) instead of the previous cyan chip
+- Player sound panel: simplified to track name (summary), progress bar, enable-audio button, and mute + volume slider row; category volume section, resync button, and category-volumes link removed
+
+### Schema
+- v50: `ALTER TABLE maps ADD COLUMN thumbnail_url VARCHAR(500)`
+
+---
+
 ## [1.1.0] - 2026-05-13
 
 **Schema version:** 49

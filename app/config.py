@@ -48,6 +48,7 @@ class Settings(BaseModel):
     character_templates: List[str] = Field(
         default_factory=lambda: ["generic", "dnd5e"]
     )
+    default_theme: str = "dark"
 
     # Derived/runtime settings
     database_url: str = ""
@@ -76,6 +77,7 @@ def get_settings() -> Settings:
         character_templates=_env_list(
             "CHARACTER_TEMPLATES", ["generic", "dnd5e"]
         ),
+        default_theme=os.environ.get("APP_DEFAULT_THEME", "dark"),
     )
 
     db_url = os.environ.get("DATABASE_URL")

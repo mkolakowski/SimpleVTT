@@ -142,3 +142,25 @@
     --theme-grain-opacity: 0.05;
 }
 
+[data-theme="sepia"] {
+    --bg:          #2c1f0e;
+    --bg-2:        #3a2a14;
+    --fg:          #e8d8b8;
+    --fg-mute:     #a08060;
+    --accent:      #c4893a;       /* aged amber ink */
+    --danger:      #b84a2a;       /* faded cinnabar */
+    --border:      #5a3e1e;
+    --input-bg:    #261808;
+    --btn-bg:      #4a2e10;
+    --btn-hover:   #5e3c18;
+    --error-bg:    #4a2010;
+    --error-fg:    #f0c8a0;
+    /* flavor */
+    --theme-paper: #2c1f0e;
+    --theme-rule:  #7a5828;
+    --theme-warm:  #c4893a;
+    --theme-cool:  #6a5040;       /* sepia shadow */
+    --theme-glow:  rgba(196, 137, 58, 0.28);
+    --theme-grain-opacity: 0.06;
+}
+

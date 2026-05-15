@@ -13,6 +13,28 @@
   "multiclass_prereq_abilities": {"dex": 13},
   "multiclass_prereq_mode": "all",
   "multiclass_proficiencies": "Light armor, one skill of your choice, thieves' tools",
+  "actions": [
+    {
+      "id": "sneak-attack",
+      "name": "Sneak Attack",
+      "desc": "Once per turn, add extra damage to one attack roll against a creature you have advantage on (or that has an ally within 5 ft.). The attack must use a finesse or ranged weapon.",
+      "min_level": 1,
+      "category": "bonus_action",
+      "damage_type": "varies",
+      "damage_scaling": [
+        {"level": 1,  "damage": "1d6"},
+        {"level": 3,  "damage": "2d6"},
+        {"level": 5,  "damage": "3d6"},
+        {"level": 7,  "damage": "4d6"},
+        {"level": 9,  "damage": "5d6"},
+        {"level": 11, "damage": "6d6"},
+        {"level": 13, "damage": "7d6"},
+        {"level": 15, "damage": "8d6"},
+        {"level": 17, "damage": "9d6"},
+        {"level": 19, "damage": "10d6"}
+      ]
+    }
+  ],
   "scope": "global",
   "source": "srd",
   "owner": null,

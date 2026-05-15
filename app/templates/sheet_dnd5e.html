@@ -38,7 +38,8 @@
         <div style="display:flex;gap:14px;margin-bottom:12px;align-items:flex-start;">
 
             {# Portrait column — doubled from 96px to 192px for the full sheet #}
-            <div style="flex-shrink:0;position:relative;width:192px;">
+            <div style="flex-shrink:0;width:192px;display:flex;flex-direction:column;gap:8px;">
+                <div style="position:relative;">
                 {% if char.portrait_url %}
                 {% set _is_gif = char.portrait_url.lower().endswith('.gif') or '.gif?' in char.portrait_url.lower() %}
                 {% if _is_gif and not animate_gifs %}
@@ -71,6 +72,45 @@
                        style="position:absolute;bottom:4px;right:4px;background:var(--s-input);border:1px solid var(--s-border);border-radius:3px;padding:2px 5px;cursor:pointer;font-size:12px;line-height:1;color:var(--s-mute);">
                     📷<input type="file" id="portrait-upload-input" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;">
                 </label>
+                {% endif %}
+                </div>
+
+                {# ── Token ring colour + style picker ── #}
+                {% if can_edit and char.campaign_id %}
+                {% set _cur_ring_style = char.ring_style or 'solid' %}
+                <div id="ring-style-panel"
+                     data-campaign-id="{{ char.campaign_id }}"
+                     data-char-id="{{ char.id }}"
+                     style="background:var(--s-card);border:1px solid var(--s-border);border-radius:6px;padding:8px;">
+                    <div id="ring-style-toggle" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;">
+                        <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Token Ring</span>
+                        <span id="ring-style-chevron" style="font-size:9px;color:var(--s-mute);">▶</span>
+                    </div>
+                    <div id="ring-style-body" style="display:none;margin-top:6px;">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+                        <span style="font-size:11px;color:var(--s-mute);">Color</span>
+                        <input type="color" id="ring-color-input"
+                               value="{{ char.color or '#cc3333' }}"
+                               style="width:36px;height:28px;min-height:0;padding:1px;border-radius:3px;cursor:pointer;border:1px solid var(--s-border);">
+                        <span id="ring-save-status" style="font-size:10px;color:var(--s-mute);"></span>
+                    </div>
+                    <div style="font-size:11px;color:var(--s-mute);margin-bottom:5px;">Style</div>
+                    <div style="display:flex;gap:4px;flex-wrap:wrap;">
+                        {%- for _rs, _rl, _svg in [
+                            ('solid',  'Solid',  '<circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-width="2"/>'),
+                            ('dashed', 'Dashed', '<circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="5,3"/>'),
+                            ('double', 'Double', '<circle cx="16" cy="16" r="14" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="16" r="10" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+                            ('glow',   'Glow',   '<defs><filter id="ring-gf"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><circle cx="16" cy="16" r="12" fill="none" stroke="currentColor" stroke-width="2.5" filter="url(#ring-gf)"/>'),
+                            ('spiked', 'Spiked', '<polygon points="16,1 20.2,5.8 26.6,5.4 26.2,11.8 31,16 26.2,20.2 26.6,26.6 20.2,26.2 16,31 11.8,26.2 5.4,26.6 5.8,20.2 1,16 5.8,11.8 5.4,5.4 11.8,5.8" fill="none" stroke="currentColor" stroke-width="1.5"/>'),
+                        ] -%}
+                        <button type="button" class="ring-style-btn" data-style="{{ _rs }}" title="{{ _rl }}"
+                                style="width:40px;height:40px;min-height:0;padding:4px;border-radius:6px;{% if _cur_ring_style == _rs %}border:2px solid var(--s-accent);color:var(--s-accent);{% else %}border:1px solid var(--s-border);color:var(--s-mute);{% endif %}background:var(--s-input);">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">{{ _svg | safe }}</svg>
+                        </button>
+                        {%- endfor %}
+                    </div>
+                    </div>{# /ring-style-body #}
+                </div>
                 {% endif %}
             </div>
 
@@ -106,7 +146,7 @@
                         </div>
                     </div>
                     {% if can_edit %}
-                    <button type="button" id="char-edit-btn" style="font-size:11px;padding:2px 8px;flex-shrink:0;white-space:nowrap;margin-top:2px;">✏ Edit</button>
+                    <button type="button" id="char-edit-btn" class="sheet-section-btn" style="flex-shrink:0;white-space:nowrap;margin-top:2px;">✏ Edit</button>
                     {% endif %}
                 </div>
 
@@ -164,8 +204,8 @@
                         </div>
                         {% if can_edit %}
                         <div style="display:flex;gap:5px;margin-top:7px;padding-top:7px;border-top:1px solid var(--s-border);">
-                            <button type="button" id="short-rest-btn" title="Spend one hit die: roll d{die} + CON to recover HP" style="flex:1;font-size:11px;padding:4px 8px;background:var(--s-btn);border:1px solid var(--s-border);color:var(--s-fg);border-radius:4px;cursor:pointer;font-weight:600;">⚡ Short Rest</button>
-                            <button type="button" id="long-rest-btn" title="Restore HP to max, recover half max hit dice, reset spell slots" style="flex:1;font-size:11px;padding:4px 8px;background:var(--s-btn);border:1px solid var(--s-border);color:var(--s-fg);border-radius:4px;cursor:pointer;font-weight:600;">💤 Long Rest</button>
+                            <button type="button" id="short-rest-btn" title="Spend one hit die: roll d{die} + CON to recover HP" style="flex:1;font-size:11px;background:var(--s-btn);border:1px solid var(--s-border);color:var(--s-fg);border-radius:4px;cursor:pointer;font-weight:600;">⚡ Short Rest</button>
+                            <button type="button" id="long-rest-btn" title="Restore HP to max, recover half max hit dice, reset spell slots" style="flex:1;font-size:11px;background:var(--s-btn);border:1px solid var(--s-border);color:var(--s-fg);border-radius:4px;cursor:pointer;font-weight:600;">💤 Long Rest</button>
                         </div>
                         {% endif %}
                     </div>
@@ -252,7 +292,7 @@
                     <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Background</span>
                     <strong id="bg-name" style="font-size:13px;color:var(--s-fg);"></strong>
                     <span id="bg-source-badge" style="display:none;font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#d4a84a;background:#3a2f15;border:1px solid #6e5828;border-radius:3px;padding:1px 6px;">Custom</span>
-                    <button type="button" id="bg-sync-btn" title="Re-fetch background detail" style="margin-left:auto;font-size:11px;padding:2px 8px;">↻ Sync</button>
+                    <button type="button" id="bg-sync-btn" title="Re-fetch background detail" class="sheet-section-btn" style="margin-left:auto;">↻ Sync</button>
                 </div>
                 <div id="bg-feature" style="margin-top:6px;display:none;">
                     <div class="ft-title"><span id="bg-feature-name"></span></div>
@@ -265,7 +305,7 @@
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
                     <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Feats</span>
                     <span id="feats-count" style="font-size:11px;color:var(--s-mute);"></span>
-                    <button type="button" id="feats-add-btn" style="margin-left:auto;font-size:11px;padding:3px 10px;">+ Add feat</button>
+                    <button type="button" id="feats-add-btn" class="sheet-section-btn" style="margin-left:auto;">+ Add feat</button>
                 </div>
                 <div id="feats-list" style="display:flex;flex-direction:column;gap:6px;"></div>
                 <div id="feats-add-panel" style="display:none;margin-top:8px;padding:8px;background:var(--s-input);border:1px solid var(--s-border);border-radius:4px;">
@@ -279,7 +319,7 @@
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">
                     <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--s-mute);">Classes &amp; Levels</span>
                     <span id="mc-total-display" style="font-size:11px;color:var(--s-mute);">Total: <span id="mc-total-lv" style="color:var(--s-fg);font-weight:700;">{{ sheet.get('level',1) }}</span> / 20</span>
-                    <button type="button" id="mc-add-class-btn" style="margin-left:auto;font-size:11px;padding:3px 10px;">+ Add Class</button>
+                    <button type="button" id="mc-add-class-btn" class="sheet-section-btn" style="margin-left:auto;">+ Add Class</button>
                 </div>
                 <div id="mc-class-list" style="display:flex;flex-direction:column;gap:6px;"></div>
                 <p id="mc-hint" class="muted" style="font-size:11px;margin:6px 0 0;">Pick a class, optional subclass, and how many levels you have in it. Total of all classes is capped at 20.</p>
@@ -303,10 +343,10 @@
                     </span>
                     <button type="button" id="hp-rolls-apply-max"
                             title="Set Max HP to the sum of every per-level entry"
-                            style="font-size:11px;padding:3px 10px;">Apply sum → Max HP</button>
+                            class="sheet-section-btn">Apply sum → Max HP</button>
                     <button type="button" id="hp-rolls-fill-avg"
                             title="Fill every empty slot with the class average (⌊dN/2⌋+1 + CON)"
-                            style="font-size:11px;padding:3px 10px;">Use average for empty</button>
+                            class="sheet-section-btn">Use average for empty</button>
                 </div>
                 <div id="hp-rolls-banner"
                      style="display:none;background:rgba(247,176,77,.10);border:1px solid #f7b04d;color:#f7b04d;border-radius:5px;padding:7px 10px;margin-bottom:8px;font-size:11px;line-height:1.45;">
@@ -513,14 +553,16 @@
             color: var(--s-label);
             line-height: 1.5;
         }
+        /* ── Section button touch targets ── */
+        .sheet-section-btn { font-size: 11px; min-height: 44px; padding: 0 10px; }
         </style>
 
         <fieldset>
             <legend>
                 Abilities
                 {% if can_edit %}
-                <button type="button" id="ab-edit-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">✏ Edit</button>
-                <button type="button" id="ab-done-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;display:none;">✓ Done</button>
+                <button type="button" id="ab-edit-btn" class="sheet-section-btn" style="margin-left:8px;">✏ Edit</button>
+                <button type="button" id="ab-done-btn" class="sheet-section-btn" style="margin-left:4px;display:none;">✓ Done</button>
                 {% endif %}
             </legend>
 
@@ -565,8 +607,8 @@
         <fieldset>
             <legend>Saving Throws
                 {% if can_edit %}
-                <button type="button" id="st-edit-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">✏ Edit</button>
-                <button type="button" id="st-done-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;display:none;">✓ Done</button>
+                <button type="button" id="st-edit-btn" class="sheet-section-btn" style="margin-left:8px;">✏ Edit</button>
+                <button type="button" id="st-done-btn" class="sheet-section-btn" style="margin-left:4px;display:none;">✓ Done</button>
                 {% endif %}
             </legend>
 
@@ -615,8 +657,8 @@
         <fieldset>
             <legend>Skills
                 {% if can_edit %}
-                <button type="button" id="sk-edit-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">✏ Edit</button>
-                <button type="button" id="sk-done-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;display:none;">✓ Done</button>
+                <button type="button" id="sk-edit-btn" class="sheet-section-btn" style="margin-left:8px;">✏ Edit</button>
+                <button type="button" id="sk-done-btn" class="sheet-section-btn" style="margin-left:4px;display:none;">✓ Done</button>
                 {% endif %}
             </legend>
 
@@ -800,7 +842,7 @@
                     <input type="text" class="defense-custom-input" placeholder="+ Custom entry (e.g. BPS from nonmagical attacks)"
                            style="flex:1;font-size:11px;padding:3px 8px;background:var(--s-input);border:1px solid var(--s-border);border-radius:4px;color:var(--s-fg);">
                     <button type="button" class="defense-custom-add-btn"
-                            style="font-size:11px;padding:3px 9px;background:var(--s-card);border:1px solid var(--s-border);border-radius:4px;color:var(--s-mute);cursor:pointer;">Add</button>
+                            style="font-size:11px;background:var(--s-card);border:1px solid var(--s-border);border-radius:4px;color:var(--s-mute);cursor:pointer;">Add</button>
                 </div>
                 {% endif %}
             </div>
@@ -816,8 +858,8 @@
         <fieldset id="attacks-fieldset">
             <legend>Attacks
                 {% if can_edit %}
-                <button type="button" id="browse-weapons-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">🔍 Browse Items</button>
-                <button type="button" id="add-custom-attack-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;">+ Custom</button>
+                <button type="button" id="browse-weapons-btn" class="sheet-section-btn" style="margin-left:8px;">🔍 Browse Items</button>
+                <button type="button" id="add-custom-attack-btn" class="sheet-section-btn" style="margin-left:4px;">+ Custom</button>
                 {% endif %}
             </legend>
 
@@ -864,19 +906,19 @@
                     <span style="font-size:14px;font-weight:700;color:var(--s-fg);">🔍 Item Browser</span>
                     <input type="text" id="ib-search" placeholder="Search items…"
                            style="flex:1;max-width:280px;font-size:12px;">
-                    <button type="button" id="ib-search-btn" style="font-size:12px;padding:4px 12px;">Search</button>
+                    <button type="button" id="ib-search-btn" style="font-size:12px;">Search</button>
                     <button type="button" id="ib-close-btn"
-                            style="margin-left:auto;font-size:12px;padding:4px 12px;background:var(--s-err-bg);border-color:var(--s-danger);color:var(--s-err-fg);">✕ Close</button>
+                            style="margin-left:auto;font-size:12px;background:var(--s-err-bg);border-color:var(--s-danger);color:var(--s-err-fg);">✕ Close</button>
                 </div>
                 <div style="display:flex;gap:5px;flex-wrap:wrap;padding:8px 14px;
                             background:var(--bg);border-bottom:1px solid var(--s-border);flex-shrink:0;align-items:center;">
                     <span style="font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;margin-right:4px;">Type</span>
                     <button type="button" class="ib-cat" data-cat="weapons"
-                            style="font-size:11px;padding:3px 12px;border-radius:10px;background:var(--accent-bg2);border-color:var(--s-accent);color:var(--s-accent);">Weapons</button>
+                            style="font-size:11px;border-radius:10px;background:var(--accent-bg2);border-color:var(--s-accent);color:var(--s-accent);">Weapons</button>
                     <button type="button" class="ib-cat" data-cat="armor"
-                            style="font-size:11px;padding:3px 12px;border-radius:10px;background:transparent;border-color:var(--s-border);color:var(--s-mute);">Armor</button>
+                            style="font-size:11px;border-radius:10px;background:transparent;border-color:var(--s-border);color:var(--s-mute);">Armor</button>
                     <button type="button" class="ib-cat" data-cat="magicitems"
-                            style="font-size:11px;padding:3px 12px;border-radius:10px;background:transparent;border-color:var(--s-border);color:var(--s-mute);">Magic Items</button>
+                            style="font-size:11px;border-radius:10px;background:transparent;border-color:var(--s-border);color:var(--s-mute);">Magic Items</button>
                     <label id="ib-prof-only-wrap" style="margin-left:auto;display:flex;align-items:center;gap:5px;font-size:11px;color:var(--s-mute);cursor:pointer;">
                         <input type="checkbox" id="ib-prof-only" checked>
                         <span>Proficient only</span>
@@ -902,13 +944,13 @@
         <fieldset id="spells-fieldset">
             <legend>Spells
                 {% if can_edit %}
-                <button type="button" id="spell-browser-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">🔍 Browse Spells</button>
-                <button type="button" id="add-custom-spell-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;">+ Custom</button>
+                <button type="button" id="spell-browser-btn" class="sheet-section-btn" style="margin-left:8px;">🔍 Browse Spells</button>
+                <button type="button" id="add-custom-spell-btn" class="sheet-section-btn" style="margin-left:4px;">+ Custom</button>
                 {% endif %}
                 {# "Hide Unprepared" toggle is purely visual — available to readonly viewers too. #}
-                <button type="button" id="hide-unprepared-btn" style="display:none;font-size:11px;padding:2px 8px;margin-left:4px;" title="Toggle visibility of unprepared leveled spells">👁 Showing all</button>
+                <button type="button" id="hide-unprepared-btn" class="sheet-section-btn" style="display:none;margin-left:4px;" title="Toggle visibility of unprepared leveled spells">👁 Showing all</button>
                 {% if can_edit %}
-                <button type="button" id="sc-autofill-btn" style="display:none;font-size:11px;padding:2px 8px;margin-left:4px;" title="Recompute spell slots for every spellcasting class on this sheet">⚡ Auto-fill Slots</button>
+                <button type="button" id="sc-autofill-btn" class="sheet-section-btn" style="display:none;margin-left:4px;" title="Recompute spell slots for every spellcasting class on this sheet">⚡ Auto-fill Slots</button>
                 {% endif %}
             </legend>
 
@@ -1005,9 +1047,9 @@
                     <span style="font-size:14px;font-weight:700;color:var(--s-fg);">🔍 Spell Browser</span>
                     <input type="text" id="sb-search" placeholder="Search spells…"
                            style="flex:1;max-width:280px;font-size:12px;">
-                    <button type="button" id="sb-search-btn" style="font-size:12px;padding:4px 12px;">Search</button>
+                    <button type="button" id="sb-search-btn" style="font-size:12px;">Search</button>
                     <button type="button" id="sb-close-btn"
-                            style="margin-left:auto;font-size:12px;padding:4px 12px;background:var(--s-err-bg);border-color:var(--s-danger);color:var(--s-err-fg);">✕ Close</button>
+                            style="margin-left:auto;font-size:12px;background:var(--s-err-bg);border-color:var(--s-danger);color:var(--s-err-fg);">✕ Close</button>
                 </div>
 
                 {# Class-context selector — which class is "casting" this spell.
@@ -1028,12 +1070,12 @@
                             background:var(--bg);border-bottom:1px solid var(--s-border);flex-shrink:0;align-items:center;">
                     <span style="font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;margin-right:4px;">Level</span>
                     <button type="button" class="sb-lvl" data-lvl="all"
-                            style="font-size:11px;padding:3px 10px;border-radius:10px;background:var(--accent-bg2);border-color:var(--s-accent);color:var(--s-accent);">All</button>
+                            style="font-size:11px;border-radius:10px;background:var(--accent-bg2);border-color:var(--s-accent);color:var(--s-accent);">All</button>
                     <button type="button" class="sb-lvl" data-lvl="0"
-                            style="font-size:11px;padding:3px 10px;border-radius:10px;background:transparent;border-color:var(--s-border);color:var(--s-mute);">Cantrip</button>
+                            style="font-size:11px;border-radius:10px;background:transparent;border-color:var(--s-border);color:var(--s-mute);">Cantrip</button>
                     {% for lvl in range(1, 10) %}
                     <button type="button" class="sb-lvl" data-lvl="{{ lvl }}"
-                            style="font-size:11px;padding:3px 10px;border-radius:10px;background:transparent;border-color:var(--s-border);color:var(--s-mute);">{{ lvl }}</button>
+                            style="font-size:11px;border-radius:10px;background:transparent;border-color:var(--s-border);color:var(--s-mute);">{{ lvl }}</button>
                     {% endfor %}
                 </div>
 
@@ -1073,7 +1115,7 @@
                     pip.type = 'button';
                     const isUsed = i < used;
                     pip.style.cssText = [
-                        'width:18px','height:18px','border-radius:50%',
+                        'width:18px','height:18px','min-height:0','border-radius:50%',
                         'padding:0','cursor:pointer',
                         'transition:background .15s,border-color .15s,opacity .15s',
                         isUsed
@@ -1121,10 +1163,10 @@
         <fieldset id="resources-fieldset" class="collapsible" data-collapse-key="resources">
             <legend><span class="fs-chevron">▼</span>Class Resources
                 {% if can_edit %}
-                <button type="button" id="resources-sync-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;" title="Re-seed counters from your class + level. Player-added entries are kept.">↻ Auto-fill</button>
-                <button type="button" id="resources-add-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;" title="Add a custom feature counter">+ Add</button>
-                <button type="button" id="wild-shape-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;display:none;" title="Transform into a beast (Druid level 2+)">🐺 Wild Shape</button>
-                <button type="button" id="polymorph-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;display:none;" title="Transform into a beast via the Polymorph spell">🦌 Polymorph</button>
+                <button type="button" id="resources-sync-btn" class="sheet-section-btn" style="margin-left:8px;" title="Re-seed counters from your class + level. Player-added entries are kept.">↻ Auto-fill</button>
+                <button type="button" id="resources-add-btn" class="sheet-section-btn" style="margin-left:4px;" title="Add a custom feature counter">+ Add</button>
+                <button type="button" id="wild-shape-btn" class="sheet-section-btn" style="margin-left:4px;display:none;" title="Transform into a beast (Druid level 2+)">🐺 Wild Shape</button>
+                <button type="button" id="polymorph-btn" class="sheet-section-btn" style="margin-left:4px;display:none;" title="Transform into a beast via the Polymorph spell">🦌 Polymorph</button>
                 <span id="resources-status" style="font-size:11px;margin-left:6px;color:var(--s-mute);"></span>
                 {% endif %}
             </legend>
@@ -1162,8 +1204,8 @@
         <fieldset id="inventory-fieldset" class="collapsible" data-collapse-key="inventory">
             <legend><span class="fs-chevron">▼</span>Inventory
                 {% if can_edit %}
-                <button type="button" id="browse-items-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;">🔍 Browse Items</button>
-                <button type="button" id="add-custom-item-btn" style="font-size:11px;padding:2px 8px;margin-left:4px;">+ Custom</button>
+                <button type="button" id="browse-items-btn" class="sheet-section-btn" style="margin-left:8px;">🔍 Browse Items</button>
+                <button type="button" id="add-custom-item-btn" class="sheet-section-btn" style="margin-left:4px;">+ Custom</button>
                 {% endif %}
             </legend>
             {# AC breakdown — updated by the AC modifier engine whenever equip state changes #}
@@ -1303,11 +1345,17 @@
                     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
                         <span style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--muted,#888);text-transform:uppercase;">Racial Traits</span>
                         {% if can_edit %}
-                        <button type="button" id="sync-race-btn" style="font-size:11px;padding:2px 8px;" title="Re-fetch racial traits from Open5e">↻ Sync</button>
+                        <button type="button" id="sync-race-btn" class="sheet-section-btn" title="Re-fetch racial traits from Open5e">↻ Sync</button>
                         <span id="sync-race-status" style="font-size:11px;margin-left:4px;"></span>
                         {% endif %}
                     </div>
                     <div id="rt-display" style="{% if not rt %}display:none;{% endif %}"></div>
+                    {# File-based content framework: declarative racial actions
+                       fetched from /api/content/races/<slug> and rendered via
+                       window.renderActionCards. Lightfoot Halfling ships with a
+                       Lucky action; future demo backfills will populate more.  #}
+                    <div id="race-actions-slot" data-race-slug="{{ (sheet.get('race') or '') | lower | replace(' ','-') }}"
+                         style="margin-top:6px"></div>
                     <p id="rt-empty" class="muted" style="font-size:12px;margin:4px 0 0;{% if rt %}display:none;{% endif %}">{% if can_edit %}Auto-filled when you select a race.{% else %}—{% endif %}</p>
                 </div>
 
@@ -1317,7 +1365,7 @@
         <fieldset class="collapsible" data-collapse-key="class-prof">
             <legend><span class="fs-chevron">▼</span>Class Proficiencies
                 {% if can_edit %}
-                <button type="button" id="sync-class-btn" style="font-size:11px;padding:2px 8px;margin-left:8px;" title="Re-fetch class details from Open5e for every class on this character">↻ Sync</button>
+                <button type="button" id="sync-class-btn" class="sheet-section-btn" style="margin-left:8px;" title="Re-fetch class details from Open5e for every class on this character">↻ Sync</button>
                 <span id="sync-class-status" style="font-size:11px;margin-left:6px;"></span>
                 {% endif %}
             </legend>
@@ -1546,8 +1594,30 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
     } catch (e) { /* swallow — non-fatal */ }
 })();
 </script>
+<script src="/static/action_buttons.js"></script>
 <script src="/static/beast_picker.js"></script>
 <script src="/static/sheet.js"></script>
+<script>
+// ── Race-actions loader ──────────────────────────────────────────────────────
+// Fetches the character's race record via the file-based content resolver and
+// renders its `actions: list[Action]` array into the racial-traits panel.
+// Surfaces e.g. Lightfoot Halfling's Lucky reroll as a passive trait card.
+(function () {
+    const slot = document.getElementById('race-actions-slot');
+    if (!slot) return;
+    const slug = slot.getAttribute('data-race-slug');
+    if (!slug) return;
+    fetch(`/api/content/races/${encodeURIComponent(slug)}`, { credentials: 'same-origin' })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+            if (!data || !data.record) return;
+            const actions = (data.record.actions || []);
+            if (!actions.length) return;
+            slot.appendChild(window.renderActionCards(actions));
+        })
+        .catch(() => { /* race not in local content — fine; trait list still renders */ });
+})();
+</script>
 <script>
 (function () {
     const inp = document.getElementById('portrait-upload-input');
@@ -1588,6 +1658,64 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             }
         } catch (e) { alert('Upload failed'); }
         inp.value = '';
+    });
+})();
+</script>
+<script>
+(function () {
+    const panel = document.getElementById('ring-style-panel');
+    if (!panel) return;
+
+    const _toggle = document.getElementById('ring-style-toggle');
+    const _body   = document.getElementById('ring-style-body');
+    const _chev   = document.getElementById('ring-style-chevron');
+    _toggle?.addEventListener('click', () => {
+        const open = _body.style.display !== 'none';
+        _body.style.display = open ? 'none' : '';
+        _chev.textContent   = open ? '▶' : '▼';
+    });
+
+    const campaignId = panel.dataset.campaignId;
+    const charId     = panel.dataset.charId;
+    const colorInput = document.getElementById('ring-color-input');
+    const statusEl   = document.getElementById('ring-save-status');
+    const styleBtns  = panel.querySelectorAll('.ring-style-btn');
+    let currentStyle = panel.querySelector('.ring-style-btn[data-style="{{ char.ring_style or 'solid' }}"]')?.dataset.style || 'solid';
+    let flashTimer = null;
+
+    function flash(msg) {
+        statusEl.textContent = msg;
+        clearTimeout(flashTimer);
+        flashTimer = setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    }
+
+    async function save(color, style) {
+        try {
+            const resp = await fetch(`/api/campaign/${campaignId}/character/${charId}/ring-style`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ color, ring_style: style }),
+            });
+            flash(resp.ok ? '✓ Saved' : '✗ Error');
+        } catch { flash('✗ Error'); }
+    }
+
+    let colorDebounce = null;
+    colorInput.addEventListener('input', () => {
+        clearTimeout(colorDebounce);
+        colorDebounce = setTimeout(() => save(colorInput.value, currentStyle), 500);
+    });
+
+    styleBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentStyle = btn.dataset.style;
+            styleBtns.forEach(b => {
+                const sel = b === btn;
+                b.style.border = sel ? '2px solid var(--s-accent)' : '1px solid var(--s-border)';
+                b.style.color  = sel ? 'var(--s-accent)'           : 'var(--s-mute)';
+            });
+            save(colorInput.value, currentStyle);
+        });
     });
 })();
 </script>
@@ -2005,7 +2133,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         return false;
     }
 
-    function spellRowHtml(s, idx) {
+    function spellRowHtml(s, idx, rowPos = 0) {
         const sc = _scData();
         // Cantrips are always available — show a fixed icon; no checkbox needed.
         // Subclass-granted spells are always prepared (locked checkbox) and get
@@ -2043,7 +2171,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             `<button type="button" class="sp-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:var(--s-danger);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
         const icons = (s.concentration ? ' ⏱' : '') + (s.ritual ? ' ®' : '');
         return `
-        <div class="sp-row" style="border:1px solid var(--s-border);border-radius:4px;margin-bottom:3px;">
+        <div class="sp-row" style="border:1px solid var(--s-border);border-radius:4px;margin-bottom:3px;background:${rowPos % 2 === 0 ? 'var(--s-input)' : 'var(--s-card)'};">
             <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;">
                 ${prepCtrl}
                 <button type="button" class="sp-expand" data-idx="${idx}"
@@ -2229,7 +2357,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             const spellIdxs = (byLvl[lvl] || []).slice().sort(_sortSpells);
             if (spellIdxs.length) {
                 spellsContainer.insertAdjacentHTML('beforeend',
-                    spellIdxs.map(idx => spellRowHtml(spells[idx], idx)).join(''));
+                    spellIdxs.map((idx, pos) => spellRowHtml(spells[idx], idx, pos)).join(''));
             } else {
                 spellsContainer.insertAdjacentHTML('beforeend',
                     `<div class="muted" style="font-size:11px;font-style:italic;padding:2px 4px;">No ${lvl === 0 ? 'cantrips' : 'spells'} learned at this level yet.</div>`);
@@ -4871,7 +4999,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 const isAvail = i < cur;
                 pips.push(`<button type="button" class="res-pip" data-key="${k}" data-idx="${i}"
                     title="${isAvail ? 'Click to spend' : 'Click to restore'}"
-                    style="width:14px;height:14px;border-radius:50%;padding:0;cursor:${CAN_EDIT ? 'pointer' : 'default'};
+                    style="width:14px;height:14px;min-height:0;border-radius:50%;padding:0;cursor:${CAN_EDIT ? 'pointer' : 'default'};
                            transition:background .15s,border-color .15s,opacity .15s;
                            ${isAvail
                                 ? 'background:var(--s-accent);border:2px solid var(--s-accent);'

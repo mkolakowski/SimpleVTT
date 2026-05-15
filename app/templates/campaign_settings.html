@@ -621,7 +621,7 @@
             <strong class="pl-name">{{ pl.name }}</strong>
             <input class="pl-name-input" type="text" value="{{ pl.name|e }}" style="display:none;font-weight:bold;flex:1;min-width:0;">
             <span class="muted pl-count">({{ pl.tracks|length }} track{{ '' if pl.tracks|length == 1 else 's' }})</span>
-            <select class="pl-category-select" data-playlist-id="{{ pl.id }}" style="font-size:11px;padding:2px 4px;margin-left:4px;" title="Audio category">
+            <select class="pl-category-select" data-playlist-id="{{ pl.id }}" style="margin-left:4px;" title="Audio category">
                 <option value="music" {% if pl.category == 'music' %}selected{% endif %}>Music</option>
                 <option value="sfx" {% if pl.category == 'sfx' %}selected{% endif %}>SFX</option>
                 <option value="environment" {% if pl.category == 'environment' %}selected{% endif %}>Environment</option>
@@ -1068,7 +1068,7 @@
         {# flex-direction:row override: the global ``label`` rule in
            style.css sets ``flex-direction: column`` which would
            otherwise stack "Sort" above the select. #}
-        <label style="display:inline-flex;flex-direction:row;align-items:center;gap:6px;white-space:nowrap;font-size:12px;color:var(--fg-mute);">Sort<select id="enc-lib-sort" style="font-size:12px;padding:2px 6px;">
+        <label style="display:inline-flex;flex-direction:row;align-items:center;gap:6px;white-space:nowrap;font-size:12px;color:var(--fg-mute);">Sort<select id="enc-lib-sort" style="font-size:12px;">
                 <option value="recent">Recent</option>
                 <option value="name">A–Z</option>
             </select></label>
