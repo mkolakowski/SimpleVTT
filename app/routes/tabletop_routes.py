@@ -4919,6 +4919,181 @@ async def cast_spell(
     return {"ok": True, "id": cast_id, "slot": updated_slot}
 
 
+# ----------- Death save state machine (v2.1.0) -----------
+#
+# 5e death saving throws: when a character drops to 0 HP they enter the
+# "dying" state and roll a d20 each turn. 10+ = success, <10 = failure;
+# 3 successes → stable, 3 failures → dead. Natural 20 regains 1 HP +
+# wakes them up; natural 1 counts as two failures. Damage while at 0 HP
+# auto-ticks a failure (two on a crit); damage that exceeds max HP at 0
+# is instant death (massive damage rule).
+#
+# Every endpoint that mutates ``Character.sheet["hp"]["current"]`` MUST
+# route through ``_apply_hp_change`` so the state machine stays in
+# lockstep with HP. Direct ``sheet["hp"]["current"] = …`` assignments
+# bypass the machine and leave the character in an inconsistent state.
+
+# Valid death save status values. Kept as a constant so the override and
+# stabilize endpoints can validate against the same set.
+_DEATH_SAVE_STATUSES = ("alive", "dying", "stable", "dead")
+
+
+def _apply_hp_change(
+    char: Character,
+    new_current: int,
+    *,
+    is_damage: bool = False,
+    is_crit: bool = False,
+    damage_amount: int = 0,
+) -> dict:
+    """Set ``Character.sheet["hp"]["current"]`` to ``new_current`` and run
+    the death save state machine. The single source of truth for HP
+    transitions in v2.1.0+.
+
+    Args:
+        char: The Character row to mutate (modified in-place).
+        new_current: Target HP value after the change. Clamped at 0.
+        is_damage: True if the change is a damage source. Enables the
+            damage-at-0 auto-failure tick and the massive-damage rule.
+            Callers that just *set* HP (manual sheet save, GM edit, /heal)
+            should leave this False.
+        is_crit: True for critical-hit damage. Ticks two failures instead
+            of one when applied to a dying character.
+        damage_amount: Raw damage value applied this event (before temp
+            HP absorption). Used to evaluate the massive-damage threshold.
+
+    Returns:
+        A dict with the post-mutation state for the caller to echo back
+        and broadcast:
+            - hp: {current, max, temp}
+            - death_saves: {status, successes, failures}
+            - status_changed: bool
+            - became_dying / became_dead: bool flags for the caller
+              to surface in the log / toast
+    """
+    sheet = dict(char.sheet or {})
+    hp = dict(sheet.get("hp") or {})
+    ds = dict(sheet.get("death_saves") or {})
+
+    max_hp = int(hp.get("max") or 0)
+    old_current = int(hp.get("current") or 0)
+    old_status = ds.get("status") or "alive"
+    successes = int(ds.get("successes") or 0)
+    failures = int(ds.get("failures") or 0)
+
+    new_status = old_status
+    became_dying = False
+    became_dead = False
+
+    new_current = max(0, int(new_current))
+
+    if new_current > 0:
+        # HP positive — healing or set. Wake from dying/stable.
+        # "Dead" does NOT auto-revive on healing per the v2.1.0 plan
+        # (revivify/resurrection requires the GM override endpoint).
+        if old_status in ("dying", "stable"):
+            new_status = "alive"
+            successes = 0
+            failures = 0
+    else:
+        # new_current == 0
+        if old_status == "alive":
+            # Crossing into 0 HP. Massive-damage rule: if remaining
+            # damage past 0 ≥ max_hp, instant death.
+            if is_damage and max_hp > 0:
+                remaining = max(0, damage_amount - old_current)
+                if remaining >= max_hp:
+                    new_status = "dead"
+                    became_dead = True
+                    successes = 0
+                    failures = 0
+                else:
+                    new_status = "dying"
+                    became_dying = True
+                    successes = 0
+                    failures = 0
+            else:
+                # Non-damage set to 0 (manual edit). Treat as dying with
+                # zero counters; no auto-failure.
+                new_status = "dying"
+                became_dying = True
+                successes = 0
+                failures = 0
+        elif old_status == "dying":
+            if is_damage:
+                # Per RAW: any damage at 0 HP = 1 failure (2 on crit);
+                # damage_amount ≥ max_hp = instant death.
+                if max_hp > 0 and damage_amount >= max_hp:
+                    new_status = "dead"
+                    became_dead = True
+                    successes = 0
+                    failures = 0
+                else:
+                    failures += 2 if is_crit else 1
+                    if failures >= 3:
+                        new_status = "dead"
+                        became_dead = True
+                        successes = 0
+                        failures = 0
+        elif old_status == "stable":
+            if is_damage:
+                # Damage to a stable character drops them back to dying
+                # with an immediate failure tick.
+                if max_hp > 0 and damage_amount >= max_hp:
+                    new_status = "dead"
+                    became_dead = True
+                    successes = 0
+                    failures = 0
+                else:
+                    new_status = "dying"
+                    became_dying = True
+                    failures = 2 if is_crit else 1
+                    successes = 0
+        # ``dead`` stays dead until GM override.
+
+    hp["current"] = new_current
+    hp.setdefault("max", 0)
+    hp.setdefault("temp", 0)
+    ds["status"] = new_status
+    ds["successes"] = successes
+    ds["failures"] = failures
+
+    sheet["hp"] = hp
+    sheet["death_saves"] = ds
+    char.sheet = sheet
+
+    return {
+        "hp": hp,
+        "death_saves": ds,
+        "status_changed": new_status != old_status,
+        "became_dying": became_dying,
+        "became_dead": became_dead,
+    }
+
+
+def _set_death_save_state(
+    char: Character,
+    *,
+    status: str | None = None,
+    successes: int | None = None,
+    failures: int | None = None,
+) -> dict:
+    """Manually patch parts of the death save state without touching HP.
+    Used by the GM override + stabilize endpoints. Returns the updated
+    ``death_saves`` dict for the caller to broadcast."""
+    sheet = dict(char.sheet or {})
+    ds = dict(sheet.get("death_saves") or {"status": "alive", "successes": 0, "failures": 0})
+    if status is not None:
+        ds["status"] = status
+    if successes is not None:
+        ds["successes"] = max(0, int(successes))
+    if failures is not None:
+        ds["failures"] = max(0, int(failures))
+    sheet["death_saves"] = ds
+    char.sheet = sheet
+    return ds
+
+
 # ----------- API: apply healing from roll-log card -----------
 
 @router.post("/api/campaign/{campaign_id}/apply_healing")
@@ -4968,22 +5143,20 @@ async def apply_healing(
         rolled = 0
         breakdown = ""
 
-    # Apply HP (capped at max)
-    sheet = dict(char.sheet or {})
-    hp = dict(sheet.get("hp") or {})
-    hp_cur = int(hp.get("current") or 0)
-    hp_max = int(hp.get("max") or 0)
+    # Apply HP through the death-save state machine (heals wake the
+    # character from dying/stable per v2.1.0 design).
+    hp_before = char.sheet.get("hp") or {}
+    hp_cur = int(hp_before.get("current") or 0)
+    hp_max = int(hp_before.get("max") or 0)
     new_cur = min(hp_max, hp_cur + rolled) if hp_max > 0 else (hp_cur + rolled)
-    hp["current"] = new_cur
-    sheet["hp"] = hp
-    char.sheet = sheet
+    result = _apply_hp_change(char, new_cur)
     db.commit()
 
     # Track claim
     claimed.add(user.id)
     claimed_count = len(claimed)
 
-    new_hp = {"current": new_cur, "max": hp_max, "temp": int(hp.get("temp") or 0)}
+    new_hp = result["hp"]
     await hub.broadcast(campaign_id, {
         "type": "heal_applied",
         "data": {
@@ -4999,6 +5172,18 @@ async def apply_healing(
             "max_targets": max_targets,
         },
     })
+    if result["status_changed"]:
+        await hub.broadcast(campaign_id, {
+            "type": "character_death_save",
+            "data": {
+                "character_id": char.id,
+                "status": result["death_saves"]["status"],
+                "successes": int(result["death_saves"]["successes"]),
+                "failures": int(result["death_saves"]["failures"]),
+                "hp": new_hp,
+                "source": "heal",
+            },
+        })
     return {"ok": True, "rolled": rolled, "breakdown": breakdown, "new_hp": new_hp,
             "claimed_count": claimed_count, "max_targets": max_targets}
 
@@ -5078,7 +5263,7 @@ async def rest_character(
     sheet["resources"] = new_resources
 
     if rest_type == "long":
-        hp["current"] = hp_max if hp_max > 0 else hp_cur
+        long_rest_new_cur = hp_max if hp_max > 0 else hp_cur
         hp["temp"] = 0
         hd["max"] = hd_max
         hd["current"] = min(hd_max, hd_cur + max(1, hd_max // 2)) if hd_max > 0 else hd_cur
@@ -5110,7 +5295,23 @@ async def rest_character(
         sheet["hp"] = hp
         sheet["hit_dice"] = hd
         char.sheet = sheet
+        # Long rest restores HP to max and clears any dying/stable state.
+        # Route through the death-save state machine so the broadcast +
+        # tracker UI stay in sync.
+        hp_result = _apply_hp_change(char, long_rest_new_cur)
         db.commit()
+        if hp_result["status_changed"]:
+            await hub.broadcast(campaign_id, {
+                "type": "character_death_save",
+                "data": {
+                    "character_id": char.id,
+                    "status": hp_result["death_saves"]["status"],
+                    "successes": int(hp_result["death_saves"]["successes"]),
+                    "failures": int(hp_result["death_saves"]["failures"]),
+                    "hp": hp_result["hp"],
+                    "source": "long_rest",
+                },
+            })
 
         # Broadcast slot-pip updates so any open sheet / mini-sheet re-renders
         for cslug, lvl, total in broadcasts:
@@ -5143,7 +5344,7 @@ async def rest_character(
             except Exception:
                 pass
 
-        return {"ok": True, "type": "long", "hp": hp, "hit_dice": hd, "resources": refilled_resources}
+        return {"ok": True, "type": "long", "hp": hp_result["hp"], "hit_dice": hd, "resources": refilled_resources}
 
     # Short rest
     if hd_cur <= 0:
@@ -5171,13 +5372,28 @@ async def rest_character(
         breakdown = ""
 
     new_hp = min(hp_max, hp_cur + recovered) if hp_max > 0 else (hp_cur + recovered)
-    hp["current"] = new_hp
     hd["current"] = hd_cur - 1
     hd["max"] = hd_max
     sheet["hp"] = hp
     sheet["hit_dice"] = hd
     char.sheet = sheet
+    # Short rest healing goes through the state machine so a dying
+    # character who somehow ends up able to take a short rest (e.g. via
+    # the GM rolling them stable then back up) cleanly wakes them.
+    hp_result = _apply_hp_change(char, new_hp)
     db.commit()
+    if hp_result["status_changed"]:
+        await hub.broadcast(campaign_id, {
+            "type": "character_death_save",
+            "data": {
+                "character_id": char.id,
+                "status": hp_result["death_saves"]["status"],
+                "successes": int(hp_result["death_saves"]["successes"]),
+                "failures": int(hp_result["death_saves"]["failures"]),
+                "hp": hp_result["hp"],
+                "source": "short_rest",
+            },
+        })
 
     # Broadcast resource refills for any short-rest resources (Action Surge,
     # Channel Divinity, Ki, Superiority Dice, …) so live panels re-pip.
@@ -5198,7 +5414,7 @@ async def rest_character(
     return {
         "ok": True,
         "type": "short",
-        "hp": hp,
+        "hp": hp_result["hp"],
         "hit_dice": hd,
         "expression": expr,
         "recovered": recovered,
@@ -8039,7 +8255,8 @@ def get_sheet(
         raise HTTPException(404, "Not found")
     if not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(403, "Forbidden")
-    can_edit = _user_is_gm(user, campaign, db) or char.owner_user_id == user.id
+    is_gm = _user_is_gm(user, campaign, db)
+    can_edit = is_gm or char.owner_user_id == user.id
     template_name = "sheet_dnd5e.html" if char.template == "dnd5e" else "sheet_generic.html"
     sheet = char.sheet or get_template(char.template)
     if char.template == "dnd5e":
@@ -8051,6 +8268,7 @@ def get_sheet(
             "char": char,
             "sheet": sheet,
             "can_edit": can_edit,
+            "is_gm": is_gm,
             "campaign": campaign,
             "class_roster": class_levels_summary(sheet) if char.template == "dnd5e" else [],
             "animate_gifs": user.animate_gifs,
@@ -8075,6 +8293,7 @@ async def update_sheet(
         raise HTTPException(403, "Forbidden")
     if "name" in body:
         char.name = str(body["name"])[:120]
+    hp_result = None
     if "sheet" in body and isinstance(body["sheet"], dict):
         incoming = body["sheet"]
         existing = dict(char.sheet or {})
@@ -8085,13 +8304,20 @@ async def update_sheet(
         # forward from the persisted sheet whenever the client didn't send
         # them explicitly. hp_rolls is in the same category — populated
         # exclusively through the /sheet-fields PATCH from the edit panel
-        # picker.
+        # picker. ``death_saves`` (v2.1.0) is also server-managed — the
+        # full sheet POST shouldn't blow away dying/stable state.
         for k in ("active_form", "prior_form", "hp_rolls", "favorite_beasts",
                   "damage_resistances", "damage_immunities",
-                  "damage_vulnerabilities", "condition_immunities"):
+                  "damage_vulnerabilities", "condition_immunities",
+                  "death_saves"):
             if k in existing and k not in incoming:
                 incoming[k] = existing[k]
+        # Detect HP transitions so the state machine fires on full sheet save.
+        old_current = int((existing.get("hp") or {}).get("current") or 0)
+        new_current = int((incoming.get("hp") or {}).get("current") or 0)
         char.sheet = incoming
+        if old_current != new_current:
+            hp_result = _apply_hp_change(char, new_current)
     if "template" in body and body["template"] in ("generic", "dnd5e"):
         char.template = body["template"]
     db.commit()
@@ -8099,6 +8325,18 @@ async def update_sheet(
         campaign_id,
         {"type": "character_update", "data": {"id": char.id, "name": char.name}},
     )
+    if hp_result and hp_result["status_changed"]:
+        await hub.broadcast(campaign_id, {
+            "type": "character_death_save",
+            "data": {
+                "character_id": char.id,
+                "status": hp_result["death_saves"]["status"],
+                "successes": int(hp_result["death_saves"]["successes"]),
+                "failures": int(hp_result["death_saves"]["failures"]),
+                "hp": hp_result["hp"],
+                "source": "full_save",
+            },
+        })
     return {"ok": True}
 
 
@@ -8196,7 +8434,14 @@ async def patch_sheet_fields(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Merge a small set of pre-approved keys into a character's sheet JSON."""
+    """Merge a small set of pre-approved keys into a character's sheet JSON.
+
+    v2.1.0: when ``hp`` is included in the patch, route through
+    ``_apply_hp_change`` so the death save state machine sees the
+    transition (e.g. HP dropping to 0 → dying). The optional body field
+    ``hp_change_reason`` accepts ``"damage"`` to enable the auto-failure
+    tick / massive-damage rule; defaults to a plain set (no damage
+    semantics)."""
     body = await request.json()
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     char = db.query(Character).filter(Character.id == char_id).first()
@@ -8204,9 +8449,291 @@ async def patch_sheet_fields(
         raise HTTPException(404, "Not found")
     if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
         raise HTTPException(403, "Forbidden")
-    char.sheet = _apply_sheet_patch(char.sheet, body)
+
+    # Extract HP separately so we can route it through the state machine.
+    incoming_hp = body.get("hp") if isinstance(body.get("hp"), dict) else None
+    body_for_patch = {k: v for k, v in body.items() if k != "hp"}
+    char.sheet = _apply_sheet_patch(char.sheet, body_for_patch)
+
+    hp_result = None
+    if incoming_hp is not None and "current" in incoming_hp:
+        # Preserve max/temp by writing them first, then routing current
+        # through the state machine.
+        sheet = dict(char.sheet or {})
+        existing_hp = dict(sheet.get("hp") or {})
+        if "max" in incoming_hp:
+            existing_hp["max"] = int(incoming_hp.get("max") or 0)
+        if "temp" in incoming_hp:
+            existing_hp["temp"] = max(0, int(incoming_hp.get("temp") or 0))
+        sheet["hp"] = existing_hp
+        char.sheet = sheet
+
+        reason = str(body.get("hp_change_reason") or "set").lower()
+        is_damage = reason == "damage"
+        is_crit = bool(body.get("is_crit"))
+        damage_amount = int(body.get("damage_amount") or 0)
+        hp_result = _apply_hp_change(
+            char,
+            int(incoming_hp.get("current") or 0),
+            is_damage=is_damage,
+            is_crit=is_crit,
+            damage_amount=damage_amount,
+        )
+
     db.commit()
-    return {"ok": True}
+
+    if hp_result and hp_result["status_changed"]:
+        await hub.broadcast(campaign_id, {
+            "type": "character_death_save",
+            "data": {
+                "character_id": char.id,
+                "status": hp_result["death_saves"]["status"],
+                "successes": int(hp_result["death_saves"]["successes"]),
+                "failures": int(hp_result["death_saves"]["failures"]),
+                "hp": hp_result["hp"],
+                "source": "sheet_patch",
+            },
+        })
+    return {"ok": True, "hp": hp_result["hp"] if hp_result else None,
+            "death_saves": hp_result["death_saves"] if hp_result else None}
+
+
+# ----------- API: death saving throws (v2.1.0) -----------
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/death-save")
+async def roll_death_save(
+    campaign_id: int,
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Roll a death saving throw for a dying character.
+
+    Per RAW: 10+ = success, <10 = failure, nat 20 wakes the character
+    with 1 HP, nat 1 counts as two failures, 3 successes → stable,
+    3 failures → dead. The roll lands in the campaign roll log so the
+    table sees it.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not campaign or not char or char.campaign_id != campaign_id:
+        raise HTTPException(404, "Not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Forbidden")
+
+    ds = dict((char.sheet or {}).get("death_saves") or {})
+    status = ds.get("status") or "alive"
+    if status != "dying":
+        raise HTTPException(409, f"Character is {status}, not dying — cannot roll a death save")
+
+    successes = int(ds.get("successes") or 0)
+    failures = int(ds.get("failures") or 0)
+
+    import random as _random
+    raw = _random.randint(1, 20)
+
+    outcome = ""
+    regained = False
+    if raw == 20:
+        outcome = "regain_consciousness"
+        regained = True
+    elif raw == 1:
+        failures += 2
+        outcome = "crit_fail"
+    elif raw >= 10:
+        successes += 1
+        outcome = "success"
+    else:
+        failures += 1
+        outcome = "fail"
+
+    if regained:
+        # Wake up: HP set to 1, status alive, counters cleared
+        hp_result = _apply_hp_change(char, 1)
+        new_ds = dict(char.sheet.get("death_saves") or {})
+        new_hp = hp_result["hp"]
+    else:
+        # Threshold checks
+        if failures >= 3:
+            new_status = "dead"
+            successes = 0
+            failures = 0
+        elif successes >= 3:
+            new_status = "stable"
+            successes = 0
+            failures = 0
+        else:
+            new_status = "dying"
+        _set_death_save_state(char, status=new_status, successes=successes, failures=failures)
+        new_ds = dict(char.sheet.get("death_saves") or {})
+        new_hp = dict(char.sheet.get("hp") or {})
+
+    # Persist roll record so the campaign log sees it
+    note_label = {
+        "success": f"💀 Death Save: SUCCESS ({new_ds.get('successes', 0)}/3)",
+        "fail": f"💀 Death Save: FAILURE ({new_ds.get('failures', 0)}/3)",
+        "crit_fail": "💀 Death Save: CRITICAL FAILURE (2 failures)",
+        "regain_consciousness": "💀 Death Save: NATURAL 20 — regain consciousness!",
+    }.get(outcome, "💀 Death Save")
+    rec = DiceRoll(
+        campaign_id=campaign_id,
+        user_id=user.id,
+        expression="1d20",
+        breakdown=f"1d20[{raw}]={raw}  =>  {raw}",
+        total=raw,
+        visibility=Visibility.PUBLIC,
+        note=note_label[:200],
+    )
+    db.add(rec)
+    db.commit()
+    db.refresh(rec)
+
+    # Roller / character info for the broadcast (matches /roll endpoint shape)
+    _char_name = char.name
+    _portrait_url = char.portrait_url
+    _membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id, CampaignMembership.user_id == user.id)
+        .first()
+    )
+    _player_color = (
+        _membership.color if _membership and _membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    _user_color = (char.color if char.color else _player_color)
+
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "id": rec.id,
+            "user_id": user.id,
+            "user_name": user.display_name,
+            "char_name": _char_name,
+            "user_color": _user_color,
+            "portrait_url": _portrait_url,
+            "expression": rec.expression,
+            "breakdown": rec.breakdown,
+            "total": rec.total,
+            "visibility": rec.visibility.value,
+            "note": rec.note,
+            "created_at": rec.created_at.isoformat() if rec.created_at else None,
+            "kind": "death_save",
+            "death_save_outcome": outcome,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "character_death_save",
+        "data": {
+            "character_id": char.id,
+            "status": new_ds.get("status"),
+            "successes": int(new_ds.get("successes") or 0),
+            "failures": int(new_ds.get("failures") or 0),
+            "hp": new_hp,
+            "source": "roll",
+            "outcome": outcome,
+            "raw": raw,
+        },
+    })
+
+    return {
+        "ok": True,
+        "raw": raw,
+        "outcome": outcome,
+        "status": new_ds.get("status"),
+        "successes": int(new_ds.get("successes") or 0),
+        "failures": int(new_ds.get("failures") or 0),
+        "hp": new_hp,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/death-save/override")
+async def override_death_save(
+    campaign_id: int,
+    char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """GM-only: manually set a character's death save status and counters.
+    Used for narrative beats and misclick recovery. Body: ``{status, successes,
+    failures}`` — any field omitted is left alone."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not campaign or not char or char.campaign_id != campaign_id:
+        raise HTTPException(404, "Not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+
+    body = await request.json()
+    status_in = body.get("status")
+    if status_in is not None and status_in not in _DEATH_SAVE_STATUSES:
+        raise HTTPException(400, f"status must be one of {_DEATH_SAVE_STATUSES}")
+
+    # If transitioning to "alive" from a 0-HP state, bump HP to 1 so the
+    # state is internally consistent (alive at 0 HP would immediately fall
+    # back to dying on the next state machine pass).
+    if status_in == "alive":
+        sheet = dict(char.sheet or {})
+        hp = dict(sheet.get("hp") or {})
+        if int(hp.get("current") or 0) <= 0:
+            hp["current"] = 1
+            sheet["hp"] = hp
+            char.sheet = sheet
+
+    new_ds = _set_death_save_state(
+        char,
+        status=status_in,
+        successes=body.get("successes"),
+        failures=body.get("failures"),
+    )
+    db.commit()
+
+    await hub.broadcast(campaign_id, {
+        "type": "character_death_save",
+        "data": {
+            "character_id": char.id,
+            "status": new_ds.get("status"),
+            "successes": int(new_ds.get("successes") or 0),
+            "failures": int(new_ds.get("failures") or 0),
+            "hp": dict(char.sheet.get("hp") or {}),
+            "source": "gm_override",
+        },
+    })
+    return {"ok": True, "death_saves": new_ds, "hp": char.sheet.get("hp")}
+
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/stabilize")
+async def stabilize_character(
+    campaign_id: int,
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """GM-only: set a dying character to ``stable``. Equivalent to a
+    successful DC 10 Medicine check by an ally (auto-resolution of the
+    Medicine roll is deferred to a Phase 3 follow-up)."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not campaign or not char or char.campaign_id != campaign_id:
+        raise HTTPException(404, "Not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+
+    new_ds = _set_death_save_state(char, status="stable", successes=0, failures=0)
+    db.commit()
+
+    await hub.broadcast(campaign_id, {
+        "type": "character_death_save",
+        "data": {
+            "character_id": char.id,
+            "status": "stable",
+            "successes": 0,
+            "failures": 0,
+            "hp": dict(char.sheet.get("hp") or {}),
+            "source": "stabilize",
+        },
+    })
+    return {"ok": True, "death_saves": new_ds}
 
 
 # ----------- WebSocket -----------
@@ -8336,7 +8863,8 @@ def character_sheet_page(
         raise HTTPException(404, "Not found")
     if not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(403, "Not a member")
-    can_edit = _user_is_gm(user, campaign, db) or char.owner_user_id == user.id
+    is_gm = _user_is_gm(user, campaign, db)
+    can_edit = is_gm or char.owner_user_id == user.id
     sheet_template = "sheet_dnd5e.html" if char.template == "dnd5e" else "sheet_generic.html"
     page_sheet = char.sheet or get_template(char.template)
     if char.template == "dnd5e":
@@ -8350,6 +8878,7 @@ def character_sheet_page(
             "char": char,
             "sheet": page_sheet,
             "can_edit": can_edit,
+            "is_gm": is_gm,
             "sheet_template": sheet_template,
             "system": get_system(campaign.game_system),
             "class_roster": class_levels_summary(page_sheet) if char.template == "dnd5e" else [],

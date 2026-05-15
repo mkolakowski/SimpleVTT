@@ -205,6 +205,7 @@ def standalone_character_sheet(
             "char": char,
             "sheet": char.sheet or get_template(char.template),
             "can_edit": True,
+            "is_gm": False,  # standalone characters have no campaign / GM
             "sheet_template": sheet_template,
         },
     )

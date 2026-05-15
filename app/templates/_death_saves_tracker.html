@@ -1,0 +1,57 @@
+{# ──────────────────────────────────────────────────────────────────────────
+   Death Saves tracker partial (v2.1.0)
+
+   Renders three success dots, three failure dots, and a status badge for
+   a character's death-save state. Auto-hides when the character is
+   ``alive`` (the default — most characters are not dying). Wired into
+   the D&D 5e sheet header and the mini-sheet over the tabletop.
+
+   Required context:
+     - char         : Character row (uses .id for endpoint URLs)
+     - sheet        : sheet dict (uses sheet.death_saves)
+     - campaign     : Campaign row (uses .id for endpoint URLs) — may be
+                       None for standalone-character render; buttons hide
+                       in that case since no campaign endpoint exists.
+     - can_edit     : bool — owner or GM (controls "Roll Death Save" button)
+     - is_gm        : bool — GM only (controls "Stabilize" button)
+   ────────────────────────────────────────────────────────────────────── #}
+{% set ds = (sheet.get('death_saves') or {}) %}
+{% set status = ds.get('status') or 'alive' %}
+{% set successes = ds.get('successes') or 0 %}
+{% set failures = ds.get('failures') or 0 %}
+<div class="death-saves-tracker"
+     data-character-id="{{ char.id }}"
+     data-status="{{ status }}"
+     data-successes="{{ successes }}"
+     data-failures="{{ failures }}"
+     style="{% if status == 'alive' %}display:none;{% endif %}">
+    <div class="death-saves-row">
+        <span class="death-saves-label">Death Saves</span>
+        <span class="death-saves-status death-saves-status-{{ status }}">{{ status|upper }}</span>
+    </div>
+    <div class="death-saves-pips-row">
+        <span class="death-saves-pips-label" title="Successes">✓</span>
+        {% for i in range(3) %}
+            <span class="death-saves-pip death-saves-pip-success{% if i < successes %} death-saves-pip-on{% endif %}"></span>
+        {% endfor %}
+        <span class="death-saves-pips-spacer"></span>
+        <span class="death-saves-pips-label" title="Failures">✗</span>
+        {% for i in range(3) %}
+            <span class="death-saves-pip death-saves-pip-failure{% if i < failures %} death-saves-pip-on{% endif %}"></span>
+        {% endfor %}
+    </div>
+    {% if campaign and can_edit and status == 'dying' %}
+    <div class="death-saves-actions">
+        <button type="button" class="death-saves-roll-btn" data-action="roll-death-save"
+                data-campaign-id="{{ campaign.id }}" data-character-id="{{ char.id }}">
+            🎲 Roll Death Save
+        </button>
+        {% if is_gm %}
+        <button type="button" class="death-saves-stabilize-btn" data-action="stabilize"
+                data-campaign-id="{{ campaign.id }}" data-character-id="{{ char.id }}">
+            🩹 Stabilize
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>

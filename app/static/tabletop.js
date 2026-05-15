@@ -942,6 +942,8 @@
                 _onHealApplied(msg.data);
             } else if (msg.type === 'feature_used') {
                 _appendFeatureUsed(msg.data);
+            } else if (msg.type === 'character_death_save') {
+                _onCharacterDeathSave(msg.data);
             }
         };
         ws.onclose = () => setTimeout(connectWs, 2000);
@@ -1320,6 +1322,68 @@
             window._updateMiniHpDisplay(d.char_id, d.new_hp);
         }
     }
+
+    // ---------- Death save broadcast handler (v2.1.0) ----------
+    function _onCharacterDeathSave(d) {
+        if (!d || !d.character_id) return;
+        // Update every tracker on the page for this character
+        const successes = Math.max(0, parseInt(d.successes ?? 0, 10) || 0);
+        const failures = Math.max(0, parseInt(d.failures ?? 0, 10) || 0);
+        const status = d.status || 'alive';
+        document.querySelectorAll(
+            `.death-saves-tracker[data-character-id="${d.character_id}"]`
+        ).forEach(el => {
+            el.dataset.status = status;
+            el.dataset.successes = String(successes);
+            el.dataset.failures = String(failures);
+            el.style.display = (status === 'alive') ? 'none' : '';
+            const badge = el.querySelector('.death-saves-status');
+            if (badge) {
+                badge.textContent = status.toUpperCase();
+                badge.className = `death-saves-status death-saves-status-${status}`;
+            }
+            el.querySelectorAll('.death-saves-pip-success').forEach((p, i) =>
+                p.classList.toggle('death-saves-pip-on', i < successes));
+            el.querySelectorAll('.death-saves-pip-failure').forEach((p, i) =>
+                p.classList.toggle('death-saves-pip-on', i < failures));
+            const actions = el.querySelector('.death-saves-actions');
+            if (actions) actions.style.display = (status === 'dying') ? '' : 'none';
+        });
+        // Sync HP display in the player-drawer mini-sheet (when present)
+        if (d.hp && typeof window._updateMiniHpDisplay === 'function') {
+            window._updateMiniHpDisplay(d.character_id, d.hp);
+        }
+    }
+
+    // ---------- Death save button delegation (v2.1.0) ----------
+    document.addEventListener('click', async (ev) => {
+        const rollBtn = ev.target.closest('[data-action="roll-death-save"]');
+        const stabBtn = ev.target.closest('[data-action="stabilize"]');
+        if (!rollBtn && !stabBtn) return;
+        const btn = rollBtn || stabBtn;
+        const cid = btn.dataset.campaignId;
+        const charId = btn.dataset.characterId;
+        if (!cid || !charId) return;
+        const url = rollBtn
+            ? `/api/campaign/${cid}/character/${charId}/death-save`
+            : `/api/campaign/${cid}/character/${charId}/stabilize`;
+        if (stabBtn && !confirm('Stabilize this character? They will remain unconscious at 0 HP until healed.')) return;
+        btn.disabled = true;
+        try {
+            const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                showToast(err.detail || 'Death save action failed', 'error');
+                return;
+            }
+            // Server broadcasts character_death_save → _onCharacterDeathSave
+            // updates the tracker UI. Nothing to do here.
+        } catch (e) {
+            showToast('Action error: ' + (e.message || e), 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    });
 
     // ---------- Class-feature use card ----------
     // Compact roll-log card announcing that a character used a class /
@@ -2073,6 +2137,39 @@
                 statsGrid.appendChild(cell);
             });
             wrap.appendChild(statsGrid);
+
+            // Death saves tracker (v2.1.0). Visible only when status != alive.
+            const ds = sh.death_saves || {};
+            const dsStatus = ds.status || 'alive';
+            const dsTracker = document.createElement('div');
+            dsTracker.className = 'death-saves-tracker mini-death-saves';
+            dsTracker.dataset.characterId = char.id;
+            dsTracker.dataset.status = dsStatus;
+            dsTracker.dataset.successes = ds.successes || 0;
+            dsTracker.dataset.failures = ds.failures || 0;
+            if (dsStatus === 'alive') dsTracker.style.display = 'none';
+            const dsSuccesses = ds.successes || 0;
+            const dsFailures = ds.failures || 0;
+            const canRoll = (char.owner_user_id === ME.id) || ME.isGm;
+            dsTracker.innerHTML = `
+                <div class="death-saves-row">
+                    <span class="death-saves-label">Death Saves</span>
+                    <span class="death-saves-status death-saves-status-${dsStatus}">${dsStatus.toUpperCase()}</span>
+                </div>
+                <div class="death-saves-pips-row">
+                    <span class="death-saves-pips-label" title="Successes">✓</span>
+                    ${[0,1,2].map(i => `<span class="death-saves-pip death-saves-pip-success${i < dsSuccesses ? ' death-saves-pip-on' : ''}"></span>`).join('')}
+                    <span class="death-saves-pips-spacer"></span>
+                    <span class="death-saves-pips-label" title="Failures">✗</span>
+                    ${[0,1,2].map(i => `<span class="death-saves-pip death-saves-pip-failure${i < dsFailures ? ' death-saves-pip-on' : ''}"></span>`).join('')}
+                </div>
+                ${dsStatus === 'dying' ? `
+                <div class="death-saves-actions">
+                    ${canRoll ? `<button type="button" class="death-saves-roll-btn" data-action="roll-death-save" data-campaign-id="${CAMPAIGN_ID}" data-character-id="${char.id}">🎲 Roll Death Save</button>` : ''}
+                    ${ME.isGm ? `<button type="button" class="death-saves-stabilize-btn" data-action="stabilize" data-campaign-id="${CAMPAIGN_ID}" data-character-id="${char.id}">🩹 Stabilize</button>` : ''}
+                </div>` : ''}
+            `;
+            wrap.appendChild(dsTracker);
 
             // Abilities
             const abLbl = document.createElement('div');

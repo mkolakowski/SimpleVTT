@@ -311,3 +311,102 @@ table.skills td, table.skills th { border-bottom: 1px solid var(--border); paddi
 .sheet h2 { margin-top: 0; }
 .stat-row { display: flex; gap: 4px; margin-bottom: 4px; }
 .stat-row input { flex: 1; }
+
+/* ── Death Saves tracker (v2.1.0) ───────────────────────────────────────
+   Renders pip-style success/failure trackers in the sheet HP block + the
+   mini-sheet over the tabletop. Status badge is color-coded per state.
+   Compact 32px height fits the dense sheet layout (HIG-exempt panel,
+   matches the rest of the dnd5e sheet's per-row controls). */
+.death-saves-tracker {
+    margin-top: 8px;
+    padding-top: 7px;
+    border-top: 1px solid var(--s-border, var(--border));
+    font-size: 11px;
+}
+.death-saves-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.death-saves-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--s-mute, var(--fg-mute));
+}
+.death-saves-status {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 1px 6px;
+    border-radius: 3px;
+    letter-spacing: .04em;
+}
+.death-saves-status-dying  { background: #5a1a1a; color: #ffb4b4; animation: ds-pulse 2s ease-in-out infinite; }
+.death-saves-status-stable { background: #5a3a1a; color: #ffd28a; }
+.death-saves-status-dead   { background: #1a1a1a; color: #8a8a8a; }
+.death-saves-status-alive  { background: #1a4a1a; color: #b4ffb4; }
+@keyframes ds-pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.6; }
+}
+.death-saves-pips-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+.death-saves-pips-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--s-mute, var(--fg-mute));
+    width: 14px;
+    text-align: center;
+}
+.death-saves-pip {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1px solid var(--s-border, var(--border));
+    background: transparent;
+    transition: background-color .15s ease;
+}
+.death-saves-pip-success.death-saves-pip-on { background: #4ade80; border-color: #4ade80; }
+.death-saves-pip-failure.death-saves-pip-on { background: #f87171; border-color: #f87171; }
+.death-saves-pips-spacer {
+    width: 10px;
+}
+.death-saves-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+}
+/* HIG exempt — compact tracker panel. Matches the .mini-rest-btn pattern.
+   32px min so it stays accessible under Apple's 44pt rule for dense UI. */
+.death-saves-roll-btn,
+.death-saves-stabilize-btn {
+    min-height: 32px;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+}
+.death-saves-roll-btn {
+    background: #5a1a1a;
+    color: #ffd4d4;
+    border-color: #7a3a3a;
+}
+.death-saves-roll-btn:hover { background: #6a2a2a; }
+.death-saves-stabilize-btn {
+    background: #5a3a1a;
+    color: #ffe0a8;
+    border-color: #7a5a3a;
+}
+.death-saves-stabilize-btn:hover { background: #6a4a2a; }
+.death-saves-roll-btn:disabled,
+.death-saves-stabilize-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

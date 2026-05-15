@@ -186,6 +186,8 @@
                                    {% if not can_edit %}readonly{% endif %}>
                             <span style="font-size:10px;color:var(--s-mute);">HP</span>
                         </div>
+                        {# Death-saves tracker (v2.1.0). Auto-hidden when status is alive. #}
+                        {% include "_death_saves_tracker.html" %}
                     </div>
 
                     {# Hit Die / Recovery block #}
@@ -4974,6 +4976,144 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
     document.getElementById('short-rest-btn')?.addEventListener('click', () => {
         if (typeof window._mcRefillResources === 'function') {
             window._mcRefillResources('short');
+        }
+    });
+})();
+
+/* ── Death Saves (v2.1.0) ───────────────────────────────────────────────────
+   Wires the "Roll Death Save" and "Stabilize" buttons in the death-saves
+   tracker partial, plus a helper that re-renders any tracker on the page
+   from a {status, successes, failures} payload (used by the response
+   handlers AND by the tabletop's WebSocket handler when the same character
+   has trackers open in multiple places).
+   ──────────────────────────────────────────────────────────────────────── */
+(function () {
+    const _CAMPAIGN_ID = (typeof CAMPAIGN_ID !== 'undefined') ? CAMPAIGN_ID : null;
+    if (!_CAMPAIGN_ID) return;  // standalone sheets have no campaign endpoints
+
+    function _toast(msg, kind) {
+        if (typeof window.showToast === 'function') return window.showToast(msg, kind);
+        try { alert(msg); } catch {}
+    }
+
+    // Update every tracker on the page for this character. Idempotent;
+    // safe to call from the WebSocket handler too.
+    function updateTracker(characterId, data) {
+        const status = data?.status || 'alive';
+        const successes = Math.max(0, parseInt(data?.successes ?? 0, 10) || 0);
+        const failures = Math.max(0, parseInt(data?.failures ?? 0, 10) || 0);
+        document.querySelectorAll(
+            `.death-saves-tracker[data-character-id="${characterId}"]`
+        ).forEach(el => {
+            el.dataset.status = status;
+            el.dataset.successes = String(successes);
+            el.dataset.failures = String(failures);
+            el.style.display = (status === 'alive') ? 'none' : '';
+            // Status badge
+            const badge = el.querySelector('.death-saves-status');
+            if (badge) {
+                badge.textContent = status.toUpperCase();
+                badge.className = `death-saves-status death-saves-status-${status}`;
+            }
+            // Success pips
+            const successPips = el.querySelectorAll('.death-saves-pip-success');
+            successPips.forEach((pip, i) => {
+                pip.classList.toggle('death-saves-pip-on', i < successes);
+            });
+            // Failure pips
+            const failurePips = el.querySelectorAll('.death-saves-pip-failure');
+            failurePips.forEach((pip, i) => {
+                pip.classList.toggle('death-saves-pip-on', i < failures);
+            });
+            // Action buttons appear only when dying. Re-show/hide.
+            const actions = el.querySelector('.death-saves-actions');
+            if (actions) actions.style.display = (status === 'dying') ? '' : 'none';
+        });
+    }
+    // Expose so the tabletop's WebSocket handler can call it.
+    window.updateDeathSavesTracker = updateTracker;
+
+    // Update local HP input(s) so the +0 (dying) state shows immediately
+    // without a refresh.
+    function _setLocalHP(newHp) {
+        if (!newHp) return;
+        const cur = document.getElementById('hp-current-input');
+        if (cur && newHp.current !== undefined) {
+            cur.value = newHp.current;
+        }
+    }
+
+    // ── Roll Death Save ──────────────────────────────────────────────
+    document.addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('[data-action="roll-death-save"]');
+        if (!btn) return;
+        const cid = btn.dataset.campaignId;
+        const charId = btn.dataset.characterId;
+        if (!cid || !charId) return;
+        btn.disabled = true;
+        try {
+            const resp = await fetch(
+                `/api/campaign/${cid}/character/${charId}/death-save`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+            );
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                _toast(err.detail || 'Death save failed', 'error');
+                return;
+            }
+            const data = await resp.json();
+            updateTracker(charId, data);
+            _setLocalHP(data.hp);
+            // Roll toast for the d20 result (matches the existing roll pipeline)
+            if (typeof window.showRollToast === 'function') {
+                const outcomeText = {
+                    'success': 'SUCCESS',
+                    'fail': 'FAILURE',
+                    'crit_fail': 'CRITICAL FAILURE',
+                    'regain_consciousness': 'REGAIN CONSCIOUSNESS',
+                }[data.outcome] || data.outcome;
+                window.showRollToast({
+                    expression: '1d20',
+                    total: data.raw,
+                    breakdown: `d20=${data.raw}`,
+                    note: `💀 Death Save → ${outcomeText}`,
+                });
+            } else {
+                _toast(`Death Save: ${data.raw} → ${data.outcome}`, 'info');
+            }
+        } catch (e) {
+            _toast('Death save error: ' + (e.message || e), 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // ── Stabilize (GM only — button is server-side rendered) ─────────
+    document.addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('[data-action="stabilize"]');
+        if (!btn) return;
+        const cid = btn.dataset.campaignId;
+        const charId = btn.dataset.characterId;
+        if (!cid || !charId) return;
+        if (!confirm('Stabilize this character? They will remain unconscious at 0 HP until healed.')) return;
+        btn.disabled = true;
+        try {
+            const resp = await fetch(
+                `/api/campaign/${cid}/character/${charId}/stabilize`,
+                { method: 'POST', headers: { 'Content-Type': 'application/json' } }
+            );
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                _toast(err.detail || 'Stabilize failed', 'error');
+                return;
+            }
+            const data = await resp.json();
+            updateTracker(charId, data.death_saves);
+            _toast('Character stabilized.', 'info');
+        } catch (e) {
+            _toast('Stabilize error: ' + (e.message || e), 'error');
+        } finally {
+            btn.disabled = false;
         }
     });
 })();
