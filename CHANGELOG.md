@@ -10,7 +10,14 @@ Application version and database schema version are also published at runtime by
 
 ---
 
-## [2.1.7] - 2026-05-15
+## [2.1.8] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Add a "Lighting" entry to the TODO backlog under Maps & Map Editor — GM-placed light sources with flicker, integrated with fog-of-war and player vision.
+**Description:** Captures the lighting feature for future implementation: torches / lanterns / campfires / magical lights with per-source radius, colour, and flicker behaviour. Player vision is constrained by attached lights (tokens illuminate what their light reaches, plus revealed fog); GM sees all. Depends on the Maps 2.0 / Map Editor Framework groundwork (fog-of-war LOS + wall segments) landing first so shadows compute correctly.
+
+### Changed
+- `TODO.md`: new "Lighting" entry under Maps & Map Editor.
 
 **Schema version:** 52
 **Commit summary:** Add a "Homebrew Clone" entry to the TODO backlog under GM Tools — a Clone button on every homebrew record (feats / backgrounds / races / subclasses / monsters / classes) that duplicates the source JSON as "Copy of \<name\>" and opens the new entry in the editor.
