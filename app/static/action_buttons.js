@@ -40,6 +40,36 @@
         return btn;
     }
 
+    // ── Transient toast notifications (1.10.0) ──
+    // Same .vtt-toast / #vtt-toast-stack styling the tabletop already uses
+    // (CSS lives in style.css so both pages get it). tabletop.js also defines
+    // window.showToast for its own toasts; we only register ours if no such
+    // function already exists so we never clobber the page that loads
+    // tabletop.js first.
+    function _showToast(msg, kind) {
+        let stack = document.getElementById('vtt-toast-stack');
+        if (!stack) {
+            stack = document.createElement('div');
+            stack.id = 'vtt-toast-stack';
+            document.body.appendChild(stack);
+        }
+        const t = document.createElement('div');
+        t.className = 'vtt-toast' + (kind ? ' vtt-toast-' + kind : '');
+        t.textContent = msg;
+        stack.appendChild(t);
+        // Force a reflow so the fade-in transition runs.
+        // eslint-disable-next-line no-unused-expressions
+        t.offsetHeight;
+        t.classList.add('vtt-toast-show');
+        setTimeout(() => {
+            t.classList.remove('vtt-toast-show');
+            setTimeout(() => t.remove(), 260);
+        }, 4200);
+    }
+    if (typeof window.showToast !== 'function') {
+        window.showToast = _showToast;
+    }
+
     function _pickDamageTier(scaling, level) {
         if (!scaling || !scaling.length) return null;
         const eligible = scaling.filter(t => (t.level || 1) <= level);

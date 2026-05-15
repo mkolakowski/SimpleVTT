@@ -1,3 +1,75 @@
+/* ── Roll-result toast (rich, animated) ──────────────────────────────────
+   Shared by every page that loads roll_toast.js. The popup animates dice
+   shapes cycling 1..N before landing on the actual roll result, then
+   shows the breakdown and a "click to dismiss" hint. Lives in style.css
+   so the tabletop and character-sheet pages render identical styling. */
+#roll-toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 150; display: flex; flex-direction: column-reverse; align-items: center; gap: 8px; pointer-events: none; }
+.roll-toast { background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 10px; padding: 12px 20px; min-width: 160px; max-width: 320px; text-align: center; box-shadow: 0 6px 24px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer; animation: rt-in 0.18s ease; }
+.rt-label { font-size: 11px; color: var(--accent); margin-bottom: 5px; letter-spacing: 0.2px; }
+.rt-total { font-size: 38px; font-weight: 700; line-height: 1; color: var(--fg); }
+.rt-total.rt-rolling { color: var(--fg-mute); }
+.rt-total.rt-landed { animation: rt-land 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.rt-breakdown { font-size: 11px; color: var(--fg-mute); margin-top: 5px; }
+.rt-dismiss { font-size: 9px; color: var(--fg-mute); margin-top: 6px; opacity: 0.6; }
+.roll-toast.rt-out { animation: rt-out 0.35s ease forwards; }
+@keyframes rt-in { from { opacity:0; transform:translateY(10px) scale(0.94); } to { opacity:1; transform:none; } }
+@keyframes rt-out { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(10px) scale(0.94); } }
+@keyframes rt-land { from { transform: scale(1.35); opacity: 0.7; } to { transform: scale(1); opacity: 1; } }
+.rt-dice { display: flex; justify-content: center; align-items: center; gap: 5px; margin: 6px 0 2px; flex-wrap: wrap; }
+.rt-die { flex-shrink: 0; color: var(--accent); opacity: 0.65; }
+.roll-toast.rt-animating .rt-die { animation: die-wobble 0.22s ease-in-out infinite alternate; }
+.roll-toast.rt-animating .rt-die:nth-child(2n) { animation-direction: alternate-reverse; animation-delay: 0.11s; }
+.roll-toast.rt-animating .rt-die:nth-child(3n) { animation-delay: 0.07s; }
+@keyframes die-wobble { from { transform: rotate(-8deg) scale(0.93); } to { transform: rotate(8deg) scale(1.07); } }
+.rt-sum { font-size: 20px; font-weight: 800; color: var(--fg); margin-top: 4px; }
+.rt-sum.rt-landed { animation: rt-land 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.rt-die.rt-die-landed { animation: rt-die-land 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes rt-die-land { from { transform: scale(1.22); opacity: 0.7; } to { transform: none; opacity: 1; } }
+@media (max-width: 640px) {
+    #roll-toast-container { bottom: unset; top: 50%; transform: translate(-50%, -50%); z-index: 500; }
+    .roll-toast { min-width: 200px; padding: 18px 28px; }
+    .rt-total { font-size: 52px; }
+}
+
+/* ── Delete-character button (1.11.0) ────────────────────────────────────
+   Used on the My Characters list page and on the full-sheet breadcrumb. */
+.btn-char-delete {
+    padding: 5px 12px; font-size: 12px; font-weight: 500;
+    background: transparent; color: #c66; border: 1px solid #6e3838;
+    border-radius: 4px; cursor: pointer;
+}
+.btn-char-delete:hover { background: #3a1c1c; border-color: #9b4848; color: #f99; }
+
+/* ── Toast notifications ─────────────────────────────────────────────────
+   Shared by the tabletop page and the character-sheet page (used by
+   window.showToast in action_buttons.js + tabletop.js). Lives in style.css
+   so both pages get the styling without duplicating the rules. */
+#vtt-toast-stack {
+    position: fixed; left: 50%; bottom: 26px;
+    transform: translateX(-50%);
+    z-index: 10000;
+    display: flex; flex-direction: column; gap: 6px; align-items: center;
+    pointer-events: none;
+}
+.vtt-toast {
+    pointer-events: auto;
+    background: var(--bg-2, #1a1d27);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 5px;
+    padding: 8px 14px;
+    font-size: 12px; font-weight: 500;
+    box-shadow: 0 6px 20px rgba(0,0,0,.4);
+    opacity: 0; transform: translateY(8px);
+    transition: opacity .22s ease, transform .22s ease;
+    max-width: 400px;
+}
+.vtt-toast.vtt-toast-show { opacity: 1; transform: translateY(0); }
+.vtt-toast.vtt-toast-error { border-left-color: var(--danger); }
+.vtt-toast.vtt-toast-success { border-left-color: #4ade80; }
+.vtt-toast.vtt-toast-info { border-left-color: var(--accent); }
+
 /* ── Theme tokens ──────────────────────────────────────────────────────── */
 
 /* Dark (default) */

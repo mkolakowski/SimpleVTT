@@ -1354,7 +1354,9 @@
                        fetched from /api/content/races/<slug> and rendered via
                        window.renderActionCards. Lightfoot Halfling ships with a
                        Lucky action; future demo backfills will populate more.  #}
-                    <div id="race-actions-slot" data-race-slug="{{ (sheet.get('race') or '') | lower | replace(' ','-') }}"
+                    <div id="race-actions-slot"
+                         data-race-name="{{ (sheet.get('race') or '') }}"
+                         data-race-slug="{{ (sheet.get('race_slug') or '') }}"
                          style="margin-top:6px"></div>
                     <p id="rt-empty" class="muted" style="font-size:12px;margin:4px 0 0;{% if rt %}display:none;{% endif %}">{% if can_edit %}Auto-filled when you select a race.{% else %}—{% endif %}</p>
                 </div>
@@ -1595,6 +1597,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
 })();
 </script>
 <script src="/static/action_buttons.js"></script>
+<script src="/static/roll_toast.js"></script>
 <script src="/static/beast_picker.js"></script>
 <script src="/static/sheet.js"></script>
 <script>
@@ -1602,20 +1605,57 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
 // Fetches the character's race record via the file-based content resolver and
 // renders its `actions: list[Action]` array into the racial-traits panel.
 // Surfaces e.g. Lightfoot Halfling's Lucky reroll as a passive trait card.
+//
+// Race-name normalization: characters created before the file-based race
+// picker have legacy strings like "Halfling (Lightfoot)" stored as their
+// race. Naively slugifying that gives `halfling-(lightfoot)` which doesn't
+// match any shipped file. We generate a small set of candidate slugs and
+// try them in order: the explicit `_slug` if the sheet has one, the bare
+// slugified text, and a transposed form for the "X (Y)" pattern that
+// produces `<y>-<x>` (so "Halfling (Lightfoot)" -> "lightfoot-halfling").
 (function () {
     const slot = document.getElementById('race-actions-slot');
     if (!slot) return;
-    const slug = slot.getAttribute('data-race-slug');
-    if (!slug) return;
-    fetch(`/api/content/races/${encodeURIComponent(slug)}`, { credentials: 'same-origin' })
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
-            if (!data || !data.record) return;
-            const actions = (data.record.actions || []);
-            if (!actions.length) return;
+    const explicit = slot.getAttribute('data-race-slug') || '';
+    const name = slot.getAttribute('data-race-name') || '';
+    const candidates = [];
+    function _slug(s) {
+        return (s || '').toLowerCase()
+            .replace(/[^a-z0-9 -]/g, ' ')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+    }
+    if (explicit) candidates.push(explicit);
+    if (name) {
+        candidates.push(_slug(name));
+        // "X (Y)" -> try "<y> <x>" transposition too, so legacy
+        // "Halfling (Lightfoot)" maps to the canonical lightfoot-halfling
+        // slug used by the shipped file.
+        const m = name.match(/^(.+?)\s*\((.+?)\)\s*$/);
+        if (m) candidates.push(_slug(m[2] + ' ' + m[1]));
+    }
+    async function _try(slug) {
+        if (!slug) return false;
+        try {
+            const r = await fetch('/api/content/races/' + encodeURIComponent(slug),
+                                  { credentials: 'same-origin' });
+            if (!r.ok) return false;
+            const data = await r.json();
+            const actions = (data && data.record && data.record.actions) || [];
+            if (!actions.length) return true;  // hit but no actions; nothing to render
             slot.appendChild(window.renderActionCards(actions));
-        })
-        .catch(() => { /* race not in local content — fine; trait list still renders */ });
+            return true;
+        } catch (e) { return false; }
+    }
+    (async () => {
+        const tried = new Set();
+        for (const s of candidates) {
+            if (!s || tried.has(s)) continue;
+            tried.add(s);
+            if (await _try(s)) return;
+        }
+    })();
 })();
 </script>
 <script>
@@ -3743,6 +3783,46 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         let body; try { body = await resp.json(); } catch { body = null; }
                         (window.showToast || function(m){ alert(m); })(
                             'Strike failed: ' + (body ? JSON.stringify(body) : await resp.text()), 'error');
+                        return;
+                    }
+                    // Surface the rich roll-toast on the sheet itself. The
+                    // attack endpoint now echoes both totals + breakdowns
+                    // back in the JSON response (in addition to broadcasting
+                    // via WS), so we can fire two popups without needing a
+                    // WebSocket connection on the sheet page: one for the
+                    // attack roll and one for the damage roll.
+                    let data; try { data = await resp.json(); } catch { data = null; }
+                    if (data && typeof window.showRollToast === 'function') {
+                        const me = (window.ME && window.ME.id) || null;
+                        const nm = data.attack_name || 'Attack';
+                        if (data.is_save) {
+                            // Save-DC attacks don't have an attack-roll d20;
+                            // jump straight to the damage roll if present.
+                        } else if (data.attack_breakdown) {
+                            window.showRollToast({
+                                expression: '1d20',
+                                total: data.attack_total,
+                                breakdown: data.attack_breakdown,
+                                note: '🎯 ' + nm + ' — attack',
+                                visibility: 'public',
+                                user_id: me,
+                            });
+                        }
+                        if (data.damage_breakdown) {
+                            const dmgNote = '🎲 ' + nm + (data.damage_type ? ' — ' + data.damage_type : ' — damage');
+                            // Try to extract the dice expression from the
+                            // breakdown so the popup animates the right number
+                            // of dice. Fallback to "1d6" if parsing fails.
+                            const exprMatch = data.damage_breakdown.match(/(\d+d\d+(?:[+-]\d+)?)/);
+                            window.showRollToast({
+                                expression: exprMatch ? exprMatch[1] : '1d6',
+                                total: data.damage_total,
+                                breakdown: data.damage_breakdown,
+                                note: dmgNote,
+                                visibility: 'public',
+                                user_id: me,
+                            });
+                        }
                     }
                 } finally {
                     btn.disabled = false;
@@ -4217,20 +4297,44 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         } catch (e) { return; }
         const actions = (data && data.record && data.record.actions) || [];
         if (!actions.length) return;
+        const toast = (typeof window.showToast === 'function') ? window.showToast : (() => {});
         async function _postRoll(expression, action) {
-            if (!cid || !expression) return;
+            if (!cid || !expression) {
+                toast('No active campaign for roll.', 'error');
+                return;
+            }
+            const note = (data.record.name || slug) + ' · ' + (action && action.name || '');
             try {
-                await fetch('/api/campaign/' + cid + '/roll', {
+                const r = await fetch('/api/campaign/' + cid + '/roll', {
                     method: 'POST', credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        expression: expression, visibility: 'public',
-                        note: (data.record.name || slug) + ' · ' + (action && action.name || ''),
+                        expression: expression, visibility: 'public', note: note,
                     }),
                 });
-            } catch (e) {}
+                if (!r.ok) { toast('Roll failed: HTTP ' + r.status, 'error'); return; }
+                const j = await r.json();
+                if (typeof window.showRollToast === 'function') {
+                    window.showRollToast({
+                        expression: expression,
+                        total: j.total,
+                        breakdown: j.breakdown,
+                        note: note,
+                        visibility: 'public',
+                        user_id: (window.ME && window.ME.id) || null,
+                        user_name: (window.ME && window.ME.displayName) || '',
+                        char_name: '',
+                    });
+                } else {
+                    const head = '🎲 ' + note + ' — ' + expression;
+                    const body = (j && j.breakdown) ? ' = ' + j.breakdown : '';
+                    const tail = (j && j.total != null) ? ' → ' + j.total : '';
+                    toast(head + body + tail, 'success');
+                }
+            } catch (e) {
+                toast('Roll error: ' + (e && e.message || e), 'error');
+            }
         }
-        const toast = (typeof window.showToast === 'function') ? window.showToast : (() => {});
         slot.appendChild(window.renderActionButtons(actions, {
             characterLevel: 1,
             handlers: {
@@ -4775,18 +4879,42 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         }
 
         const conStr = (conMod >= 0 ? '+' : '') + conMod;
-        _toast(`⚡ Short rest: 1d${dieSize}=${dieRoll} ${conStr} = +${recover} HP`, 'info');
+        const expr = `1d${dieSize}${conStr}`;
+        const note = '⚡ Short rest hit die';
 
-        // Also broadcast to the campaign roll log so the table sees it
+        // Surface the shared rich roll-toast with the dice the player just
+        // spent. The breakdown is synthesized in the same `Nd[..]=total +mod
+        // => grand` shape that roll_toast.js's _parseDieVals walks, so the
+        // single d-shape animates and lands on the rolled value.
+        const breakdown = `1d${dieSize}[${dieRoll}]=${dieRoll}${conStr} => ${recover}`;
+        if (typeof window.showRollToast === 'function') {
+            window.showRollToast({
+                expression: expr,
+                total: recover,
+                breakdown: breakdown,
+                note: note,
+                visibility: 'public',
+                user_id: (window.ME && window.ME.id) || null,
+                user_name: (window.ME && window.ME.displayName) || '',
+                char_name: '',
+            });
+        } else {
+            _toast(`⚡ Short rest: 1d${dieSize}=${dieRoll} ${conStr} = +${recover} HP`, 'info');
+        }
+
+        // Also broadcast to the campaign roll log so the table sees it.
+        // (The server rolls its own d{N} for the log entry — independent of
+        // the client roll above. Local HP and the popup stay in sync with
+        // each other; only the log entry diverges. Pre-existing behaviour.)
         if (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) {
             try {
                 await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        expression: `1d${dieSize}${conStr}`,
+                        expression: expr,
                         visibility: 'public',
-                        note: '⚡ Short rest hit die',
+                        note: note,
                     }),
                 });
             } catch {}
@@ -5545,9 +5673,11 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
     // ── Roll handler ──────────────────────────────────────────────────
     async function _rollFor(cslug, idx, die, classLabel) {
         const con = _conMod();
+        const conStr = (con >= 0 ? '+' : '') + con;
         let total = 0;
-        const expr = `1d${die}${con >= 0 ? '+' : ''}${con}`;
-        const note = `${classLabel} Lv ${idx + 1} HP`;
+        let breakdown = '';
+        const expr = `1d${die}${conStr}`;
+        const note = '🩸 ' + classLabel + ' Lv ' + (idx + 1) + ' HP';
 
         // Prefer the campaign roll endpoint so the table sees the roll;
         // fall back to local random for standalone characters.
@@ -5556,20 +5686,38 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 const resp = await fetch(`/api/campaign/${_CAMPAIGN_ID}/roll`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ expression: expr, visibility: 'public', note: '🩸 ' + note }),
+                    body: JSON.stringify({ expression: expr, visibility: 'public', note: note }),
                 });
                 if (resp.ok) {
                     const data = await resp.json();
                     total = Math.max(1, parseInt(data.total, 10) || 1);
+                    breakdown = data.breakdown || '';
                 }
             } catch { /* fall back below */ }
         }
         if (!total) {
             const r = 1 + Math.floor(Math.random() * die);
             total = Math.max(1, r + con);
+            breakdown = `1d${die}[${r}]=${r}${conStr} => ${total}`;
         }
         await _setValue(cslug, idx, total);
-        _toast(`🎲 ${note}: ${expr} = ${total} HP`, 'info');
+
+        // Surface the rich animated roll-toast so the player sees what they
+        // rolled per level rather than a fire-and-forget text line.
+        if (typeof window.showRollToast === 'function') {
+            window.showRollToast({
+                expression: expr,
+                total: total,
+                breakdown: breakdown,
+                note: note,
+                visibility: 'public',
+                user_id: (window.ME && window.ME.id) || null,
+                user_name: (window.ME && window.ME.displayName) || '',
+                char_name: '',
+            });
+        } else {
+            _toast(`🎲 ${classLabel} Lv ${idx + 1}: ${expr} = ${total} HP`, 'info');
+        }
     }
 
     // ── Wire-up ────────────────────────────────────────────────────────

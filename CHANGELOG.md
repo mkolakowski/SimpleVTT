@@ -8,6 +8,53 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [1.11.0] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Player-initiated character delete on /characters; tabletop's animated roll-result popup is now application-wide and fires on the character sheet when action buttons roll.
+**Description:** Three player-sheet improvements aimed at making the new file-based action buttons (1.9.0) testable end-to-end without bouncing between the tabletop and the sheet. (1) Players can now delete characters they own from the `/characters` page — a 🗑 Delete button on each card POSTs to the new owner-scoped delete endpoint, with a native confirm() guard. (2) The simple text toast popup is now shared between the tabletop and the sheet via `app/static/action_buttons.js`. (3) The richer animated dice-shape roll-toast (hex d20 with the result, breakdown, "click to dismiss") was lifted out of an inline `tabletop.html` IIFE into a shared `app/static/roll_toast.js` module that's loaded on both the tabletop and the character-sheet pages. Sheet action handlers now fire `window.showRollToast(rollData)` directly after a successful `/api/campaign/{id}/roll` post, so rolling Sneak Attack from a Rogue's sheet shows the same animated d6-hex popup the tabletop already displayed for the same broadcast.
+
+### Added
+- `POST /characters/{char_id}/delete` (in `app/routes/user_routes.py`). Owner-scoped: a player can only delete characters they own (`char.owner_user_id == user.id`); admins may delete any character. Redirects back to `/characters`. The `Token.character_id` FK is `ondelete="SET NULL"` so deletion doesn't strand any tabletop tokens.
+- 🗑 Delete button on each character card in `all_characters.html` (both in-campaign and standalone sections), with a native `confirm()` that names the character so players don't fire it by accident.
+- 🗑 Delete button in the **full-sheet breadcrumb header** (`character_page.html`) so the player can drop a test character without leaving the sheet. Shown only when the viewer owns the character or is an admin — matches the delete endpoint's permission so the button never 403s. Same `confirm()` guard. The `.btn-char-delete` rule moved to `app/static/style.css` so both the list page and the sheet page share styling.
+- `window.showToast(msg, kind)` in `app/static/action_buttons.js`. Same API and styling as the existing tabletop toast, but available on the character sheet pages too. Guards `if (typeof window.showToast !== 'function')` so the tabletop's `showToast` (defined inside `tabletop.js`'s IIFE) keeps winning when both files load on the same page.
+- `app/static/roll_toast.js` — shared module for the rich animated roll popup. Two entry points: the existing `vtt:ws-message` CustomEvent listener (unchanged tabletop broadcast path) and a new `window.showRollToast(rollData)` for direct invocation (used by the sheet handlers). Auto-creates `#roll-toast-container` on any page that doesn't ship the element.
+- `.vtt-toast` family + `.roll-toast` / `#roll-toast-container` / `.rt-*` rules + `@keyframes` moved into `app/static/style.css` so every page that loads style.css gets identical styling.
+
+### Changed
+- `_populateContentActions` (sheet.js) and `_loadItemActions` (sheet_dnd5e.html) action handlers now read the `/api/campaign/{id}/roll` response and call `window.showRollToast({expression, total, breakdown, note, …})` so the player sees the animated d6-hex popup on the sheet. Falls back to the plain text toast if `roll_toast.js` failed to load.
+- `wireDnd5eRollButtons` (sheet.js) — clicking an **ability check, saving throw, or skill** on the D&D 5e sheet now fires the shared roll-popup directly from the POST response. Previously the function relied on a WebSocket broadcast echo that no longer fires on the sheet (legacy WS was removed earlier in 1.11.0), so the player never saw their result. Fixed by reading the response body and calling `window.showRollToast(...)` exactly the way the action-button handlers do.
+- **Short-rest hit-die** and **per-level HP roll** handlers (`sheet_dnd5e.html`) now fire `window.showRollToast(...)` with a synthesized breakdown so the player sees the d-shape pop the result. Short rest uses the client's roll directly; per-level HP uses the server's roll-endpoint response when in a campaign, falling back to a local random for standalone characters.
+- **Weapon attack** (`/api/campaign/{id}/attack`) now echoes the attack total, attack breakdown, damage total, damage breakdown, attack name, damage type, and save info back in its JSON response (in addition to the existing `weapon_attack` WebSocket broadcast that the tabletop's roll-card already consumes). The sheet's `.atk-strike` click handler reads the response and fires two roll-toasts in sequence — one for the attack d20 + bonus, one for the damage dice — so the rolling player sees both popups on the sheet without needing a WebSocket connection. Save-DC attacks skip the attack popup and jump straight to the damage popup.
+- Inline `<style>` blocks in `tabletop.html` for both the simple toast and the rich roll toast replaced with comments pointing to `style.css`.
+- The 148-line inline roll-toast IIFE in `tabletop.html` excised; replaced with a single `<script src="/static/roll_toast.js">` tag.
+- `tabletop.html` and `sheet_dnd5e.html` both load `roll_toast.js` immediately after `action_buttons.js`.
+
+### Removed
+- Inline legacy roll-toast block in `app/templates/character_page.html`. The page used to open its own WebSocket connection and render a simpler popup (label + total + breakdown, no animated dice) whenever its own user-id was the roller. Together with the new direct `window.showRollToast(...)` call from `_postRoll`, this fired **twice** for every sheet roll — once from the rich module (with dice grid) and once from the legacy code (plain). Removing the legacy block leaves a single rich popup. The sheet still uses the shared `/static/roll_toast.js`. (`character_page.html` also lost its duplicate `.roll-toast` / `.rt-*` `<style>` block — the canonical CSS now lives in `style.css`.)
+
+### Project rules
+- **`CLAUDE.md`: every commit ships a version bump.** PATCH (`0.0.x`) is now the default — internal refactors, comment-only edits, docstring tweaks, dependency nudges all bump PATCH minimum. MINOR / MAJOR bumps still apply per the existing SemVer rules and replace (don't stack on) the PATCH bump.
+- **`CLAUDE.md`: one commit per change.** Tighter wording — every conceptually-distinct change must be its own commit with its own version bump and CHANGELOG entry. No batching unrelated edits into one release. Multi-file edits are fine when they're a single coherent change (one feature, one bug, one refactor); unrelated edits go in separate commits at separate versions.
+- **`CLAUDE.md`: MAJOR bumps archive the changelog.** When `APP_VERSION`'s MAJOR segment increments (e.g. `1.x.x` → `2.0.0`), rename the existing `CHANGELOG.md` to `CHANGELOG_v<N>.md` (where N is the outgoing major), start a fresh `CHANGELOG.md` with just the new MAJOR.0.0 entry plus a `> For pre-X.0.0 history, see CHANGELOG_v<N>.md` pointer at the top.
+- All three rules apply going forward from this commit. Pre-existing patches already folded into the 1.11.0 line ride along under this one entry rather than being retroactively split into 1.10.1 / 1.10.2 / etc.
+
+---
+
+## [1.9.1] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Fix character sheet bugs surfaced on legacy characters — empty class block from a pre-1.1.0 `_appendSourceBadge` cross-IIFE ReferenceError, and 502 race-traits sync on "X (Y)" race-name slugs.
+**Description:** Two related bugs were rendering the D&D 5e character sheet unusable for legacy characters. First, `_renderSubclassBlock` called `_appendSourceBadge` from a different IIFE than the one that defined it (a regression that's been latent since v1.1.0 but only fires when `subclass_features_data.source` is populated, which happens after a Sync). The uncaught `ReferenceError` aborted rendering before the Rogue / Wizard / etc. class block could be appended, leaving the "Class, Subclass & Race Features" panel empty. Second, legacy characters store race strings like "Halfling (Lightfoot)" which the naive slugifier turned into `halfling-(lightfoot)` — parens and all — missing every local file and falling all the way through to Open5e, which 502'd. Both paths now try a "X (Y)" → `<y>-<x>` transposition (so "Halfling (Lightfoot)" maps to the canonical `lightfoot-halfling` slug) and walk a small candidate list before reporting failure.
+
+### Fixed
+- `app/static/sheet.js`: `_renderSubclassBlock`'s `_appendSourceBadge(heading, subSource, 'subclasses')` call no longer throws `ReferenceError` for sync'd characters. Helper exposed on `window._appendSourceBadge` and the call site guards against missing functions. Class / subclass blocks now render reliably.
+- `app/static/sheet.js`: the race-sync button generates a list of candidate slugs (explicit `data-slug`, naive slugification, parens-transposed "X (Y)" → `<y>-<x>`) and tries each in turn before showing an error.
+- `app/templates/sheet_dnd5e.html`: the file-based race-actions slot does the same multi-candidate fetch instead of building one bad slug in Jinja.
+
+---
+
 ## [1.9.0] - 2026-05-14
 
 **Schema version:** 51

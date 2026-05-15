@@ -161,6 +161,27 @@ def create_standalone_character(
     return RedirectResponse("/characters", status_code=303)
 
 
+@router.post("/characters/{char_id}/delete")
+def delete_my_character(
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Player-initiated character delete. Owner-scoped: a player can only
+    delete characters they own. Admins may delete any character (useful when
+    a player asks the GM to clean up an old one). Tokens are cascade-cleared
+    by the ``ondelete="SET NULL"`` on ``Token.character_id``, so the deletion
+    doesn't strand any references on the tabletop side."""
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if char.owner_user_id != user.id and not user.is_admin:
+        raise HTTPException(403, "Not your character")
+    db.delete(char)
+    db.commit()
+    return RedirectResponse("/characters", status_code=303)
+
+
 @router.get("/character/{char_id}/sheet", response_class=HTMLResponse)
 def standalone_character_sheet(
     char_id: int,

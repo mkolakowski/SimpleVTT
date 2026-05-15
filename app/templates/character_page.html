@@ -13,25 +13,8 @@
 }
 .sheet-breadcrumb a { color: var(--accent); }
 
-/* Roll toast — same as tabletop */
-#roll-toast-container {
-    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-    z-index: 150; display: flex; flex-direction: column-reverse;
-    align-items: center; gap: 8px; pointer-events: none;
-}
-.roll-toast {
-    background: #131c1a; border: 1px solid #3a6a50; border-radius: 10px;
-    padding: 12px 20px; min-width: 160px; max-width: 280px; text-align: center;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer;
-    animation: rt-in 0.18s ease;
-}
-.rt-label  { font-size: 11px; color: #6cb; margin-bottom: 5px; letter-spacing: 0.2px; }
-.rt-total  { font-size: 38px; font-weight: 700; line-height: 1; color: #e8e8ee; }
-.rt-breakdown { font-size: 11px; color: #667; margin-top: 5px; }
-.rt-dismiss { font-size: 9px; color: #445; margin-top: 6px; }
-.roll-toast.rt-out { animation: rt-out 0.35s ease forwards; }
-@keyframes rt-in  { from { opacity:0; transform:translateY(10px) scale(0.94); } to { opacity:1; transform:none; } }
-@keyframes rt-out { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(10px) scale(0.94); } }
+/* Roll-toast styles moved to /static/style.css (1.11.0); the popup itself
+   is rendered by /static/roll_toast.js, loaded by sheet_dnd5e.html. */
 
 /* Keep the sheet form readable at full width */
 .sheet { max-width: 100%; }
@@ -42,14 +25,24 @@
 {% block content %}
 <div class="sheet-page-wrap">
 
-    <div class="sheet-breadcrumb">
-        <a href="/">Lobby</a> ›
-        {% if campaign %}
-        <a href="/campaign/{{ campaign.id }}/characters">{{ campaign.name }}</a> ›
-        {% else %}
-        <a href="/characters">My Characters</a> ›
+    {% set _can_delete = (char.owner_user_id == user.id) or user.is_admin %}
+    <div class="sheet-breadcrumb" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <div>
+            <a href="/">Lobby</a> ›
+            {% if campaign %}
+            <a href="/campaign/{{ campaign.id }}/characters">{{ campaign.name }}</a> ›
+            {% else %}
+            <a href="/characters">My Characters</a> ›
+            {% endif %}
+            {{ char.name }}
+        </div>
+        {% if _can_delete %}
+        <form method="post" action="/characters/{{ char.id }}/delete"
+              onsubmit="return confirm('Permanently delete &quot;{{ char.name|e }}&quot;? This cannot be undone.');"
+              style="margin:0;">
+            <button type="submit" class="btn-char-delete" title="Permanently delete this character">🗑 Delete character</button>
+        </form>
         {% endif %}
-        {{ char.name }}
     </div>
 
     <div id="roll-toast-container"></div>
@@ -76,52 +69,13 @@
 
     {% include sheet_template %}
 
-    {% if campaign %}
-    <script>
-    // ── Roll toasts via WebSocket (campaign characters only) ──
-    (function () {
-        const container = document.getElementById('roll-toast-container');
-
-        function dismiss(toast) {
-            if (toast.dataset.gone) return;
-            toast.dataset.gone = '1';
-            clearTimeout(toast._timer);
-            toast.classList.add('rt-out');
-            setTimeout(() => toast.remove(), 370);
-        }
-
-        function showToast(r) {
-            const toast = document.createElement('div');
-            toast.className = 'roll-toast';
-            toast.title = 'Click to dismiss';
-            const lbl = document.createElement('div'); lbl.className = 'rt-label'; lbl.textContent = '🎲 ' + (r.note || r.expression);
-            const tot = document.createElement('div'); tot.className = 'rt-total'; tot.textContent = r.total;
-            const bkd = document.createElement('div'); bkd.className = 'rt-breakdown'; bkd.textContent = r.breakdown;
-            const hint = document.createElement('div'); hint.className = 'rt-dismiss'; hint.textContent = 'click to dismiss';
-            toast.append(lbl, tot, bkd, hint);
-            toast.addEventListener('click', () => dismiss(toast));
-            container.appendChild(toast);
-            toast._timer = setTimeout(() => dismiss(toast), 10000);
-        }
-
-        const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        let ws;
-        function connect() {
-            ws = new WebSocket(`${wsProto}${location.host}/ws/campaign/${CAMPAIGN_ID}`);
-            ws.addEventListener('message', ev => {
-                try {
-                    const msg = JSON.parse(ev.data);
-                    if (msg.type === 'roll' && msg.data.user_id === ME.id) {
-                        showToast(msg.data);
-                    }
-                } catch (_) {}
-            });
-            ws.addEventListener('close', () => setTimeout(connect, 3000));
-        }
-        connect();
-    })();
-    </script>
-    {% endif %}
+    {# Legacy WS-driven roll-toast removed in 1.11.0. The shared
+       /static/roll_toast.js module is now loaded by sheet_dnd5e.html and
+       fires `window.showRollToast(...)` directly from the sheet's action-
+       button handler immediately after the /api/campaign/{id}/roll POST
+       returns, giving the rolling player an animated d-shape popup with
+       no WS round-trip. The legacy script duplicated this popup whenever
+       both fired, so it's gone. #}
 
 </div>
 {% endblock %}

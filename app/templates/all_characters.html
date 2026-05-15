@@ -59,6 +59,10 @@
     border-radius: 4px; text-decoration: none;
 }
 .btn-sheet:hover { background: #3a5780; text-decoration: none; }
+.char-card-footer { gap: 8px; justify-content: space-between; }
+.char-card-footer form { margin: 0; }
+/* .btn-char-delete rules moved to app/static/style.css (1.11.0) so the
+   full-sheet breadcrumb on character_page.html can use the same styling. */
 </style>
 {% endblock %}
 
@@ -286,6 +290,10 @@
                     {% endif %}
                 </div>
                 <div class="char-card-footer">
+                    <form method="post" action="/characters/{{ char.id }}/delete"
+                          onsubmit="return confirm('Permanently delete &quot;{{ char.name|e }}&quot;? This cannot be undone.');">
+                        <button type="submit" class="btn-char-delete" title="Permanently delete this character">🗑 Delete</button>
+                    </form>
                     <a href="/campaign/{{ c.id }}/character/{{ char.id }}/sheet" class="btn-sheet">View Sheet →</a>
                 </div>
             </li>
@@ -340,6 +348,10 @@
                 {% endif %}
             </div>
             <div class="char-card-footer">
+                <form method="post" action="/characters/{{ char.id }}/delete"
+                      onsubmit="return confirm('Permanently delete &quot;{{ char.name|e }}&quot;? This cannot be undone.');">
+                    <button type="submit" class="btn-char-delete" title="Permanently delete this character">🗑 Delete</button>
+                </form>
                 <a href="/character/{{ char.id }}/sheet" class="btn-sheet">View Sheet →</a>
             </div>
         </li>

@@ -453,8 +453,27 @@
                 if (!resp.ok) {
                     const txt = await resp.text();
                     alert('Roll failed: ' + txt);
+                    return;
                 }
-                // Result will appear in the roll log via the WebSocket broadcast.
+                // Fire the shared rich roll-toast (animated dice + breakdown) so
+                // the player sees their save/check/skill result right on the
+                // sheet. The sheet no longer keeps a WS connection so the
+                // broadcast path doesn't fire here — direct invocation only.
+                try {
+                    const j = await resp.json();
+                    if (typeof window.showRollToast === 'function') {
+                        window.showRollToast({
+                            expression: expr,
+                            total: j.total,
+                            breakdown: j.breakdown,
+                            note: note,
+                            visibility: visibility,
+                            user_id: (window.ME && window.ME.id) || null,
+                            user_name: (window.ME && window.ME.displayName) || '',
+                            char_name: '',
+                        });
+                    }
+                } catch (e) { /* roll succeeded server-side; popup is non-fatal */ }
             });
         });
     }
@@ -546,7 +565,12 @@
         badge.title = spec.title;
         badge.style.cssText = 'font-size:10px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;border-radius:3px;padding:1px 6px;' + spec.css;
         headerEl.appendChild(badge);
+        // Exposed globally so the multi-class IIFE further down the file can
+        // reuse it without redeclaring (pre-existing _renderSubclassBlock call
+        // at the heading-badge insertion was throwing ReferenceError because
+        // closure-scoped names don't cross IIFE boundaries).
     }
+    window._appendSourceBadge = _appendSourceBadge;
 
     function populateSelect(sel, items, currentName) {
         sel.innerHTML = '';
@@ -1247,23 +1271,61 @@
         });
     }
 
+    // Build a list of slug candidates from the race select. Legacy characters
+    // store display strings like "Halfling (Lightfoot)" rather than the
+    // canonical `lightfoot-halfling` slug used by the shipped file. We try the
+    // option's explicit data-slug first (set when the option came from the
+    // file-based picker), then the naive slugification of the visible text,
+    // then a transposed "X (Y)" -> "<y> <x>" form so the parens variant maps
+    // back to the canonical slug instead of 502-ing through Open5e.
+    function _raceSlugCandidates(sel) {
+        const out = [];
+        const explicit = selectedSlug(sel);
+        if (explicit) out.push(explicit);
+        const txt = (sel && sel.value || '').trim();
+        if (!txt) return out;
+        const naive = txt.toLowerCase()
+            .replace(/[^a-z0-9 -]/g, ' ')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+        if (naive && out.indexOf(naive) === -1) out.push(naive);
+        const m = txt.match(/^(.+?)\s*\((.+?)\)\s*$/);
+        if (m) {
+            const transposed = (m[2] + ' ' + m[1]).toLowerCase()
+                .replace(/[^a-z0-9 -]/g, ' ')
+                .replace(/\s+/g, '-')
+                .replace(/-+/g, '-')
+                .replace(/^-|-$/g, '');
+            if (transposed && out.indexOf(transposed) === -1) out.push(transposed);
+        }
+        return out;
+    }
+
     const syncRaceBtn = document.getElementById('sync-race-btn');
     if (syncRaceBtn) {
         syncRaceBtn.addEventListener('click', async function () {
-            const slug = selectedSlug(raceSelect) || (raceSelect && raceSelect.value.trim().toLowerCase().replace(/\s+/g, '-'));
-            if (!slug) { setSyncMsg('sync-race-status', 'No race selected', '#e07070'); return; }
+            const candidates = _raceSlugCandidates(raceSelect);
+            if (!candidates.length) { setSyncMsg('sync-race-status', 'No race selected', '#e07070'); return; }
             syncRaceBtn.disabled = true; syncRaceBtn.textContent = '↻ Syncing…';
+            const _cidS = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+            let lastError = null;
             try {
-                const _cidS = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
-                const r = await fetch('/api/open5e/race-detail?slug=' + encodeURIComponent(slug)
-                    + (_cidS ? '&campaign_id=' + _cidS : ''));
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                const d = await r.json();
-                const ta = document.querySelector('textarea[name="race_traits"]');
-                if (ta && d.text) ta.value = d.text;
-                renderRaceTraits(d);
-                _saveRaceCache(d);
-                setSyncMsg('sync-race-status', d.traits && d.traits.length ? '✓ Synced' : 'No traits found', d.traits && d.traits.length ? '#6cb' : '#e07070');
+                for (const slug of candidates) {
+                    try {
+                        const r = await fetch('/api/open5e/race-detail?slug=' + encodeURIComponent(slug)
+                            + (_cidS ? '&campaign_id=' + _cidS : ''));
+                        if (!r.ok) { lastError = new Error('HTTP ' + r.status); continue; }
+                        const d = await r.json();
+                        const ta = document.querySelector('textarea[name="race_traits"]');
+                        if (ta && d.text) ta.value = d.text;
+                        renderRaceTraits(d);
+                        _saveRaceCache(d);
+                        setSyncMsg('sync-race-status', d.traits && d.traits.length ? '✓ Synced' : 'No traits found', d.traits && d.traits.length ? '#6cb' : '#e07070');
+                        return;
+                    } catch (err) { lastError = err; }
+                }
+                throw lastError || new Error('Race not found');
             } catch (err) {
                 setSyncMsg('sync-race-status', 'Error: ' + err.message, '#e07070');
             } finally {
@@ -1462,21 +1524,52 @@
             if (action && action.name) parts.push(action.name);
             return parts.join(' · ');
         }
+        const toast = (typeof window.showToast === 'function') ? window.showToast : ((m) => console.log(m));
         async function _postRoll(expression, action) {
-            if (!cid || !expression) return;
+            if (!cid || !expression) {
+                toast('No active campaign for roll.', 'error');
+                return;
+            }
+            const note = _noteFor(action);
             try {
-                await fetch('/api/campaign/' + cid + '/roll', {
+                const r = await fetch('/api/campaign/' + cid + '/roll', {
                     method: 'POST', credentials: 'same-origin',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         expression: expression,
                         visibility: 'public',
-                        note: _noteFor(action),
+                        note: note,
                     }),
                 });
-            } catch (e) { /* roll-log will simply not show the entry */ }
+                if (!r.ok) {
+                    toast('Roll failed: HTTP ' + r.status, 'error');
+                    return;
+                }
+                const j = await r.json();
+                // Pop the rich tabletop roll-toast (animated dice + breakdown).
+                // The page-wide module lives in /static/roll_toast.js.
+                if (typeof window.showRollToast === 'function') {
+                    window.showRollToast({
+                        expression: expression,
+                        total: j.total,
+                        breakdown: j.breakdown,
+                        note: note,
+                        visibility: 'public',
+                        user_id: (window.ME && window.ME.id) || null,
+                        user_name: (window.ME && window.ME.displayName) || '',
+                        char_name: '',
+                    });
+                } else {
+                    // Fallback to the plain text toast if roll_toast.js isn't loaded.
+                    const head = '🎲 ' + (note ? note + ' — ' : '') + expression;
+                    const body = j.breakdown ? ' = ' + j.breakdown : '';
+                    const tail = (j.total != null) ? ' → ' + j.total : '';
+                    toast(head + body + tail, 'success');
+                }
+            } catch (e) {
+                toast('Roll error: ' + (e && e.message || e), 'error');
+            }
         }
-        const toast = (typeof window.showToast === 'function') ? window.showToast : ((m) => console.log(m));
 
         const frag = window.renderActionButtons(actions, {
             characterLevel: characterLevel,
@@ -1851,7 +1944,12 @@
         lbl.textContent = className + (subName ? ' - ' + subName : ' - (no subclass)');
         heading.appendChild(lbl);
         const subSource = entry.subclass_features_data && entry.subclass_features_data.source;
-        if (subSource) _appendSourceBadge(heading, subSource, 'subclasses');
+        // `_appendSourceBadge` is defined in a different IIFE (closure-scoped);
+        // reach for the globally-exposed `window._appendSourceBadge` so this
+        // call doesn't throw and break the rest of the class-block render.
+        if (subSource && typeof window._appendSourceBadge === 'function') {
+            window._appendSourceBadge(heading, subSource, 'subclasses');
+        }
         if (!isReadonly) {
             const sync = document.createElement('button');
             sync.type = 'button';

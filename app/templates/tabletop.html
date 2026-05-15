@@ -283,31 +283,9 @@
     }
     .token-picker-cancel:hover { color: var(--fg); }
 
-    /* ── Toast notifications ── */
-    #vtt-toast-stack {
-        position: fixed; left: 50%; bottom: 26px;
-        transform: translateX(-50%);
-        z-index: 10000;
-        display: flex; flex-direction: column; gap: 6px; align-items: center;
-        pointer-events: none;
-    }
-    .vtt-toast {
-        pointer-events: auto;
-        background: var(--bg-2, #1a1d27);
-        color: var(--fg);
-        border: 1px solid var(--border);
-        border-left: 3px solid var(--accent);
-        border-radius: 5px;
-        padding: 8px 14px;
-        font-size: 12px; font-weight: 500;
-        box-shadow: 0 6px 20px rgba(0,0,0,.4);
-        opacity: 0; transform: translateY(8px);
-        transition: opacity .22s ease, transform .22s ease;
-        max-width: 400px;
-    }
-    .vtt-toast.vtt-toast-show { opacity: 1; transform: translateY(0); }
-    .vtt-toast.vtt-toast-error { border-left-color: var(--danger); }
-    .vtt-toast.vtt-toast-success { border-left-color: #4ade80; }
+    /* Toast styles moved to app/static/style.css (1.10.0) so the character
+       sheet page can use the same .vtt-toast / #vtt-toast-stack classes
+       via the shared showToast helper in action_buttons.js. */
 
     /* ── Concentration tracking ── */
     .conc-section { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
@@ -507,35 +485,8 @@
     .mini-strike-btn { background: rgba(251,184,138,.10); border: 1px solid rgba(251,184,138,.4); color: #fbb88a; border-radius: 3px; padding: 1px 7px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; line-height: 1.4; min-height: 32px; }
     .mini-strike-btn:hover { background: rgba(251,184,138,.22); }
     .mini-strike-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    /* Roll toast */
-    #roll-toast-container { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); z-index: 150; display: flex; flex-direction: column-reverse; align-items: center; gap: 8px; pointer-events: none; }
-    .roll-toast { background: var(--accent-bg); border: 1px solid var(--accent-border); border-radius: 10px; padding: 12px 20px; min-width: 160px; max-width: 320px; text-align: center; box-shadow: 0 6px 24px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer; animation: rt-in 0.18s ease; }
-    .rt-label { font-size: 11px; color: var(--accent); margin-bottom: 5px; letter-spacing: 0.2px; }
-    .rt-total { font-size: 38px; font-weight: 700; line-height: 1; color: var(--fg); }
-    .rt-total.rt-rolling { color: var(--fg-mute); }
-    .rt-total.rt-landed { animation: rt-land 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
-    .rt-breakdown { font-size: 11px; color: var(--fg-mute); margin-top: 5px; }
-    .rt-dismiss { font-size: 9px; color: var(--fg-mute); margin-top: 6px; opacity: 0.6; }
-    .roll-toast.rt-out { animation: rt-out 0.35s ease forwards; }
-    @keyframes rt-in { from { opacity:0; transform:translateY(10px) scale(0.94); } to { opacity:1; transform:none; } }
-    @keyframes rt-out { from { opacity:1; transform:none; } to { opacity:0; transform:translateY(10px) scale(0.94); } }
-    @keyframes rt-land { from { transform: scale(1.35); opacity: 0.7; } to { transform: scale(1); opacity: 1; } }
-    /* Dice icons */
-    .rt-dice { display: flex; justify-content: center; align-items: center; gap: 5px; margin: 6px 0 2px; flex-wrap: wrap; }
-    .rt-die { flex-shrink: 0; color: var(--accent); opacity: 0.65; }
-    .roll-toast.rt-animating .rt-die { animation: die-wobble 0.22s ease-in-out infinite alternate; }
-    .roll-toast.rt-animating .rt-die:nth-child(2n) { animation-direction: alternate-reverse; animation-delay: 0.11s; }
-    .roll-toast.rt-animating .rt-die:nth-child(3n) { animation-delay: 0.07s; }
-    @keyframes die-wobble { from { transform: rotate(-8deg) scale(0.93); } to { transform: rotate(8deg) scale(1.07); } }
-    .rt-sum { font-size: 20px; font-weight: 800; color: var(--fg); margin-top: 4px; }
-    .rt-sum.rt-landed { animation: rt-land 0.28s cubic-bezier(0.34, 1.56, 0.64, 1); }
-    .rt-die.rt-die-landed { animation: rt-die-land 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
-    @keyframes rt-die-land { from { transform: scale(1.22); opacity: 0.7; } to { transform: none; opacity: 1; } }
-    @media (max-width: 640px) {
-        #roll-toast-container { bottom: unset; top: 50%; transform: translate(-50%, -50%); z-index: 500; }
-        .roll-toast { min-width: 200px; padding: 18px 28px; }
-        .rt-total { font-size: 52px; }
-    }
+    /* Roll-toast styles moved to app/static/style.css (1.11.0) so the
+       character-sheet pages share the same popup via roll_toast.js. */
 
     /* Token tracker */
     .tt-row { display: flex; align-items: center; gap: 4px; padding: 4px 2px; border-bottom: 1px solid var(--border); min-width: 0; }
@@ -2648,6 +2599,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 {{ {"tokens": token_data, "characters": char_data, "templates": tmpl_data} | tojson }}
 </script>
 <script src="/static/action_buttons.js"></script>
+<script src="/static/roll_toast.js"></script>
 <script src="/static/beast_picker.js"></script>
 <script src="/static/tabletop.js"></script>
 <script src="/static/audio.js"></script>
@@ -3916,151 +3868,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     }
 })();
 
-/* ── Roll toast ── */
-(function () {
-    const container = document.getElementById('roll-toast-container');
-
-    /* SVG inner markup for each die face.
-       d4 is INVERTED (flat top, point bottom) — visually distinct from d20 (point top, flat bottom).
-       No inner lines on d8 — the horizontal line would cross the number. */
-    const DIE_SHAPES = {
-        4:   `<polygon points="7,8 93,8 50,92" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>`,
-        6:   `<rect x="10" y="10" width="80" height="80" rx="12" fill="none" stroke="currentColor" stroke-width="8"/>`,
-        8:   `<polygon points="50,8 92,50 50,92 8,50" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>`,
-        10:  `<polygon points="50,6 88,36 74,90 26,90 12,36" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>`,
-        12:  `<polygon points="50,8 88,33 76,77 24,77 12,33" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>`,
-        20:  `<polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/><polygon points="50,7 93,71.5 7,71.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" opacity="0.45"/><polygon points="93,28.5 50,93 7,28.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" opacity="0.45"/>`,
-        100: `<circle cx="50" cy="50" r="43" fill="none" stroke="currentColor" stroke-width="8"/><circle cx="50" cy="50" r="28" fill="none" stroke="currentColor" stroke-width="3" opacity="0.35"/>`,
-    };
-
-    /* Create an SVG die element with a <text> child for the number */
-    function makeDie(sides, size) {
-        const NS = 'http://www.w3.org/2000/svg';
-        const svg = document.createElementNS(NS, 'svg');
-        svg.setAttribute('class', 'rt-die');
-        svg.setAttribute('width', size);
-        svg.setAttribute('height', size);
-        svg.setAttribute('viewBox', '0 0 100 100');
-        svg.setAttribute('aria-hidden', 'true');
-        svg.innerHTML = DIE_SHAPES[sides] || DIE_SHAPES[6];
-
-        const t = document.createElementNS(NS, 'text');
-        t.setAttribute('x', '50');
-        /* d4 is inverted (flat top, point bottom) — centroid in upper third.
-           d20 is upright (point top, flat bottom) — centroid in lower third. */
-        t.setAttribute('y', sides === 4 ? '38' : '54');
-        t.setAttribute('text-anchor', 'middle');
-        t.setAttribute('dominant-baseline', 'middle');
-        t.setAttribute('fill', 'currentColor');
-        t.setAttribute('font-size', sides >= 100 ? '26' : sides >= 20 ? '34' : '40');
-        t.setAttribute('font-weight', '800');
-        svg.appendChild(t);
-        return { svg, t };
-    }
-
-    /* Parse individual die values out of the breakdown string.
-       Format: "2d6[3,5]=8 +1d4[2]=2  =>  10" → [3, 5, 2] */
-    function parseDieVals(breakdown) {
-        const out = [];
-        const re = /\[([^\]]+)\]/g;
-        let m;
-        while ((m = re.exec(String(breakdown))) !== null) {
-            m[1].split(',').forEach(v => { const n = parseInt(v); if (!isNaN(n)) out.push(n); });
-        }
-        return out;
-    }
-
-    function dismiss(toast) {
-        if (toast.dataset.gone) return;
-        toast.dataset.gone = '1';
-        clearTimeout(toast._timer);
-        toast.classList.add('rt-out');
-        setTimeout(() => toast.remove(), 370);
-    }
-
-    document.addEventListener('vtt:ws-message', (ev) => {
-        const msg = ev.detail;
-        if (msg.type !== 'roll') return;
-        const r = msg.data;
-        /* Mirror appendRoll visibility rules — server broadcasts to all clients */
-        if (r.visibility === 'gm_only' && !ME.isGm) return;
-        if (r.visibility === 'gm_and_roller' && !ME.isGm && r.user_id !== ME.id) return;
-
-        const toast = document.createElement('div');
-        toast.className = 'roll-toast rt-animating';
-        toast.title = 'Click to dismiss';
-
-        const lbl = document.createElement('div');
-        lbl.className = 'rt-label';
-        const roller = r.char_name || r.user_name;
-        lbl.textContent = r.user_id === ME.id
-            ? '🎲 ' + (r.note || r.expression)
-            : '🎲 ' + roller + ' — ' + (r.note || r.expression);
-
-        /* Build one die element per die in the expression (max 6).
-           Count is optional — "d20" treated as "1d20". */
-        const MAX_DICE = 6;
-        const sides = [];
-        for (const m of r.expression.matchAll(/(\d*)d(\d+)/gi)) {
-            const cnt = parseInt(m[1]) || 1;
-            for (let i = 0; i < cnt && sides.length < MAX_DICE; i++) sides.push(parseInt(m[2]));
-        }
-        if (!sides.length) sides.push(6);
-
-        const n    = sides.length;
-        const sz   = n === 1 ? 82 : n <= 3 ? 60 : n <= 5 ? 46 : 38;
-        const dies = sides.map(s => makeDie(s, sz));
-
-        const diceRow = document.createElement('div');
-        diceRow.className = 'rt-dice';
-        dies.forEach(d => diceRow.appendChild(d.svg));
-
-        /* Sum line shown below the dice for multi-die rolls */
-        const sumEl = n > 1
-            ? Object.assign(document.createElement('div'), { className: 'rt-sum' })
-            : null;
-
-        toast.append(lbl, diceRow);
-        if (sumEl) toast.appendChild(sumEl);
-        toast.addEventListener('click', () => dismiss(toast));
-        container.appendChild(toast);
-
-        /* Ease-out animation: each die independently cycles 1–sides */
-        const delays = [50, 55, 60, 75, 100, 150, 220, 320, 430];
-        let di = 0;
-        function tick() {
-            if (di < delays.length) {
-                dies.forEach((d, i) => { d.t.textContent = Math.floor(Math.random() * sides[i]) + 1; });
-                setTimeout(tick, delays[di++]);
-            } else {
-                toast.classList.remove('rt-animating');
-                if (n === 1) {
-                    /* Single die: show total directly (handles advantage/kh/kl correctly) */
-                    dies[0].t.textContent = r.total;
-                    dies[0].svg.classList.add('rt-die-landed');
-                } else {
-                    /* Multi-die: show per-die results parsed from breakdown */
-                    const vals = parseDieVals(r.breakdown);
-                    dies.forEach((d, i) => { d.t.textContent = vals[i] != null ? vals[i] : '?'; });
-                    sumEl.textContent = '= ' + r.total;
-                    sumEl.classList.add('rt-landed');
-                }
-
-                const bkd = document.createElement('div');
-                bkd.className = 'rt-breakdown';
-                bkd.textContent = r.breakdown;
-
-                const hint = document.createElement('div');
-                hint.className = 'rt-dismiss';
-                hint.textContent = 'click to dismiss';
-
-                toast.append(bkd, hint);
-                toast._timer = setTimeout(() => dismiss(toast), 10000);
-            }
-        }
-        tick();
-    });
-})();
+/* Roll toast moved to /static/roll_toast.js (1.11.0) so the character
+   sheet shares the same animated dice popup. The shared module reads
+   the same `vtt:ws-message` CustomEvent we still dispatch below. */
 </script>
 
 {% if is_gm %}

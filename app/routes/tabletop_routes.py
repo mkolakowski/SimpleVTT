@@ -5633,7 +5633,23 @@ async def use_attack(
         "is_save": is_save,
     }
     await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
-    return {"ok": True, "id": attack_id}
+    # Return the attack + damage totals so the sheet's .atk-strike handler can
+    # fire the shared roll-toast immediately. The broadcast still drives the
+    # tabletop's roll-card path; this echo gives the rolling player a popup
+    # without needing a WebSocket connection on the sheet page.
+    return {
+        "ok": True,
+        "id": attack_id,
+        "attack_total": attack_total,
+        "attack_breakdown": attack_breakdown,
+        "damage_total": damage_total,
+        "damage_breakdown": damage_breakdown,
+        "attack_name": name,
+        "damage_type": damage_type,
+        "is_save": is_save,
+        "save_ability": save_ability if is_save else "",
+        "save_dc": save_dc if is_save else 0,
+    }
 
 
 # ----------- API: Open5e item proxy (weapons / armor / magic items) -----------

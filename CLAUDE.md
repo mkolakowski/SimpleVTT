@@ -2,19 +2,28 @@
 
 ## Always update the changelog and version when making changes
 
-Every time you make a user-visible, behavior-changing, or schema-changing edit you **must** update both `app/version.py` and `CHANGELOG.md` before finishing. Read `CHANGELOG.md` in full at the start of any version-related work — the file contains detailed bump rules and a required entry format in its header section.
+**Every commit ships its own version bump.** One conceptually-distinct change = one commit = one version bump = one CHANGELOG entry. No batching unrelated edits into a single release: if you fix three unrelated bugs in a session, ship three commits at e.g. `1.11.1`, `1.11.2`, `1.11.3` — not one commit at `1.11.0` listing all three under `### Fixed`. The only thing that may legitimately span multiple files in a single commit is a single coherent change (one feature, one bug, one refactor) that needs the multi-file edit to be reviewable. Read `CHANGELOG.md` in full at the start of any version-related work — the file contains detailed bump rules and a required entry format in its header section.
 
 **Quick rules:**
 
-- `APP_VERSION` lives in `app/version.py` and follows SemVer:
-  - **PATCH** — bug fixes, copy tweaks, no schema change.
-  - **MINOR** — new backward-compatible feature or additive schema change.
-  - **MAJOR** — breaking API/config/schema change that requires operator action.
+- `APP_VERSION` lives in `app/version.py` and follows SemVer. **Pick the highest bump that applies** — every commit bumps at least PATCH:
+  - **PATCH** (`0.0.x`) — **the default**. Bumps on every commit, including pure bug fixes, copy tweaks, comment-only edits, refactors with no behavior change, dependency updates, doc edits, etc. There is no such thing as a "no bump" commit.
+  - **MINOR** — new backward-compatible feature or additive schema change. (A MINOR bump satisfies the "every commit ships a bump" rule too — you don't bump PATCH on top.)
+  - **MAJOR** — breaking API/config/schema change that requires operator action. (Same — replaces the PATCH bump for that release. **Also triggers the changelog-archive rule below.**)
 - `SCHEMA_VERSION` (also in `app/version.py`) increments by **+1** for every migration block added to `_apply_inline_migrations()` in `app/database.py`.
 - Add a new `## [X.Y.Z] - YYYY-MM-DD` section at the **top** of the changelog (below the instructions header). Use today's UTC date.
 - Every entry must include: heading, `**Schema version:** N`, `**Commit summary:**`, `**Description:**`, and at least one categorised change list (`### Added`, `### Changed`, `### Fixed`, `### Schema`, etc.).
 - Also update the version badge in the first paragraph of `README.md` to match.
 - Do **not** edit version numbers anywhere else — `app/version.py` is the single source of truth.
+
+**On MAJOR version bumps, archive the prior changelog.**
+
+When `APP_VERSION`'s MAJOR segment increments (e.g. `1.x.x` → `2.0.0`):
+
+1. **Rename** the existing `CHANGELOG.md` to `CHANGELOG_v<N>.md` where `<N>` is the **outgoing** major version (e.g. `CHANGELOG_v1.md` when cutting `2.0.0`). Keep the file at the repo root so it's grep-able next to the active `CHANGELOG.md`.
+2. **Create a fresh `CHANGELOG.md`** that opens with the same header preamble (the `# Changelog` heading + the keep-a-changelog / SemVer one-liner + the version-management pointer paragraph) and then the new `## [X.0.0] - YYYY-MM-DD` entry at the top. No older entries belong in the new file.
+3. **Add a pointer line** at the very top of the active `CHANGELOG.md`, just under the header, in the form: `> For pre-X.0.0 history, see [CHANGELOG_v<N>.md](CHANGELOG_v<N>.md).` so future readers find the archive.
+4. The archive file is read-only after the rename — never back-patch entries into it. If a `1.x.x` bug fix lands after `2.0.0` ships, it goes on the active `CHANGELOG.md` under its own `2.x.y` entry.
 
 ## Touch targets must meet Apple's 44×44pt minimum
 
