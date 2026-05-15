@@ -10,7 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
-## [2.0.3] - 2026-05-15
+## [2.0.4] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Move the Demo Mode design into a dedicated planning file; trim the TODO entry to a one-line pointer.
+**Description:** The Demo Mode TODO entry had grown to a multi-paragraph brief and would have grown further as design decisions accumulated (hourly auto-reset, surgical wipe strategy, NPC tokens in the seeded encounter, safety guards, verification). Detailed plans don't fit the TODO format — it's meant to be scannable. Moves the full plan to a new `docs/plans/` directory and shrinks the TODO entry to one sentence plus a link. Establishes the convention: any feature whose plan exceeds a paragraph gets its own file under `docs/plans/`.
+
+### Added
+- `docs/plans/demo-mode.md` — full design plan for the planned v2.1.0 Demo Mode feature: in-process asyncio reset loop, tag-based surgical wipe, seed module with NPC-populated tavern encounter, bundled-asset strategy, safety guards, and verification steps.
+- `docs/plans/` directory for future feature design docs.
+
+### Changed
+- `TODO.md`: Demo Mode entry trimmed from ~12 lines to one sentence + a link to the plan file.
 
 **Schema version:** 52
 **Commit summary:** Credit Open5e in the per-file `_attribution` of every shipped SRD JSON record; regenerate all 984 files from the live Open5e API with the new credit chain.

@@ -203,11 +203,7 @@ Add a few darker sepia/warm-brown colour themes as alternatives to the existing 
 ## Development & Testing
 
 ### Demo Mode
-An opt-in mode (toggled via `DEMO_MODE=true` env var) that seeds the database with a realistic sample dataset on startup, making it easy to test new features end-to-end without manually creating campaigns, characters, and maps each time. Planned scope:
-- **Seed data** — one GM account, two or three player accounts (with known credentials listed in the app's login page when demo mode is active), a sample campaign with memberships, a pre-uploaded battle map, a set of characters (at least one D&D 5e sheet with full stat blocks, skills, spells, and inventory), and a short roll history
-- **Reset endpoint** — a GM-accessible button (or admin-only `/demo/reset` route) that wipes and re-seeds the dataset without restarting the container, so a feature can be retested from a clean state quickly
-- **Guard rails** — demo mode should be clearly labelled in the UI (a banner or badge) so it is never accidentally left on in production; certain destructive actions (user deletion, campaign deletion) could be blocked or auto-restored on reset
-- **Configuration** — the seed content should live in a single `app/demo_seed.py` module so it is easy to extend when new features are added (e.g. adding a demo encounter when the encounter system ships)
+Public-demo deployment with hourly auto-reset and a pre-seeded sample campaign (3 users, 1 battle map, 2 player characters with full D&D 5e sheets, 5 NPC tokens for a starter combat encounter, sample homebrew, roll history). See [`docs/plans/demo-mode.md`](docs/plans/demo-mode.md) for the full design.
 
 ---
 
