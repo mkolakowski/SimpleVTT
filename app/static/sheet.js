@@ -1426,6 +1426,72 @@
             .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    // ── Shared helper: render content-record actions into a slot (1.9.0) ──
+    // Fetches /api/content/<type>/<slug> and, on success, mounts the record's
+    // ``actions: list[Action]`` array into ``slot`` via window.renderActionButtons.
+    // The damage handler posts to /api/campaign/{id}/roll so the roll shows up
+    // in the log with a note naming the action source. Other handlers (save /
+    // heal / attack / toggle) are wired through to reasonable defaults: damage
+    // and attack roll to the dice endpoint, healing handled like damage with a
+    // self-target stub, toggle / save surface a toast so the player knows the
+    // hook fired even though no automation is wired yet. ``actionLabelPrefix``
+    // is prepended to the roll-log note so a generic "Sneak Attack" reads as
+    // "Rogue · Sneak Attack" once it's coming from the class panel.
+    async function _populateContentActions(slot, contentType, slug, opts) {
+        if (!slot || !slug || typeof window.renderActionButtons !== 'function') return;
+        opts = opts || {};
+        const characterLevel = opts.characterLevel || 1;
+        const labelPrefix = opts.actionLabelPrefix || '';
+        const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+        const url = '/api/content/' + encodeURIComponent(contentType) + '/' + encodeURIComponent(slug)
+            + (cid ? '?campaign_id=' + cid : '');
+        let data;
+        try {
+            const r = await fetch(url, { credentials: 'same-origin' });
+            if (!r.ok) return;
+            data = await r.json();
+        } catch (e) {
+            return;
+        }
+        const actions = (data && data.record && data.record.actions) || [];
+        if (!actions.length) return;
+
+        function _noteFor(action) {
+            const parts = [];
+            if (labelPrefix) parts.push(labelPrefix);
+            if (action && action.name) parts.push(action.name);
+            return parts.join(' · ');
+        }
+        async function _postRoll(expression, action) {
+            if (!cid || !expression) return;
+            try {
+                await fetch('/api/campaign/' + cid + '/roll', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        expression: expression,
+                        visibility: 'public',
+                        note: _noteFor(action),
+                    }),
+                });
+            } catch (e) { /* roll-log will simply not show the entry */ }
+        }
+        const toast = (typeof window.showToast === 'function') ? window.showToast : ((m) => console.log(m));
+
+        const frag = window.renderActionButtons(actions, {
+            characterLevel: characterLevel,
+            handlers: {
+                damage: (action, damageExpr) => _postRoll(damageExpr, action),
+                attack: (action) => _postRoll('1d20', action),  // bare attack roll; modifier added at roll time
+                heal:   (action) => _postRoll(action.healing, action),
+                save:   (action) => toast('Save prompt for ' + (action.name || 'action') + ' — wire targeting from the roll-request panel.'),
+                toggle: (action) => toast((action.active_toggle ? 'Toggle ' : 'Use ') + (action.name || 'action') + ' — resource tracking coming soon.'),
+            },
+        });
+        slot.appendChild(frag);
+    }
+    window._populateContentActions = _populateContentActions;
+
     function _readRoster() {
         try {
             const arr = JSON.parse(dataEl.value || '[]');
@@ -1797,6 +1863,22 @@
             heading.appendChild(sync);
         }
         target.appendChild(heading);
+
+        // ── File-based class actions slot (1.9.0) ──
+        // Renders the Action descriptors declared on the class's local-content
+        // record (e.g. Rogue's Sneak Attack damage_scaling, Barbarian's Rage
+        // toggle). The slot is populated asynchronously from
+        // /api/content/class_features/<slug>; if the record has no actions, or
+        // local content isn't available, the slot stays empty and nothing
+        // breaks downstream.
+        const classActionsSlot = document.createElement('div');
+        classActionsSlot.className = 'class-actions-slot';
+        classActionsSlot.style.cssText = 'margin-bottom:10px;';
+        target.appendChild(classActionsSlot);
+        _populateContentActions(classActionsSlot, 'class_features', _slug(className), {
+            characterLevel: lvl,
+            actionLabelPrefix: className,
+        });
 
         // If the subclass is set but its features haven't been cached yet,
         // show a quiet hint but DON'T return early — we still want the

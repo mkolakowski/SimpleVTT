@@ -4197,6 +4197,52 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
 
     function syncInventory() { invData.value = JSON.stringify(inventory); }
 
+    // ── File-based item-content resolver (1.9.0) ──
+    // Inventory entries that carry a `_slug` (set when the item came from the
+    // item picker) can be looked up via /api/content/items/<slug>. Magic items
+    // typically carry an `actions: list[Action]` array — e.g. Wand of Magic
+    // Missiles has an "Expend Charge" action with damage. The detail panel's
+    // expand handler calls this on first open, lazy-loading the actions into
+    // the slot without round-tripping for items that are never expanded.
+    async function _loadItemActions(slug, slot) {
+        if (!slot || !slug || typeof window.renderActionButtons !== 'function') return;
+        const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+        const url = '/api/content/items/' + encodeURIComponent(slug)
+            + (cid ? '?campaign_id=' + cid : '');
+        let data;
+        try {
+            const r = await fetch(url, { credentials: 'same-origin' });
+            if (!r.ok) return;  // item not in local content tier — fine
+            data = await r.json();
+        } catch (e) { return; }
+        const actions = (data && data.record && data.record.actions) || [];
+        if (!actions.length) return;
+        async function _postRoll(expression, action) {
+            if (!cid || !expression) return;
+            try {
+                await fetch('/api/campaign/' + cid + '/roll', {
+                    method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        expression: expression, visibility: 'public',
+                        note: (data.record.name || slug) + ' · ' + (action && action.name || ''),
+                    }),
+                });
+            } catch (e) {}
+        }
+        const toast = (typeof window.showToast === 'function') ? window.showToast : (() => {});
+        slot.appendChild(window.renderActionButtons(actions, {
+            characterLevel: 1,
+            handlers: {
+                damage: (action, dmg) => _postRoll(dmg, action),
+                attack: (action) => _postRoll('1d20', action),
+                heal:   (action) => _postRoll(action.healing, action),
+                save:   (action) => toast('Save prompt for ' + (action.name || 'item action') + '.'),
+                toggle: (action) => toast('Toggle ' + (action.name || 'item action') + ' — resource tracking coming soon.'),
+            },
+        }));
+    }
+
     // ── AC modifier engine ──
     function _dexMod() {
         const dex = parseInt(document.querySelector('[name="abilities.DEX"]')?.value, 10) || 10;
@@ -4320,12 +4366,13 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 ${qtyCtrl}
                 ${rmBtn}
             </div>
-            <div class="inv-detail" data-idx="${idx}" style="display:none;padding:6px 10px;border-top:1px dashed var(--s-border);font-size:12px;color:var(--s-mute);">
+            <div class="inv-detail" data-idx="${idx}" data-slug="${_esc(item._slug || '')}" data-actions-loaded="0" style="display:none;padding:6px 10px;border-top:1px dashed var(--s-border);font-size:12px;color:var(--s-mute);">
                 <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:${item.desc ? '5px' : '0'};">
                     <span>${_esc(_typeLabel(item.type))}</span>
                     ${item.weight ? `<span>${_esc(item.weight)} lb each</span>` : ''}
                 </div>
                 ${item.desc ? `<div style="line-height:1.5;color:var(--s-mute);white-space:pre-wrap;">${_esc(item.desc)}</div>` : ''}
+                <div class="inv-actions-slot" style="margin-top:6px;"></div>
             </div>
         </div>`;
     }
@@ -4487,6 +4534,13 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 const open = d.style.display === 'none';
                 d.style.display = open ? '' : 'none';
                 btn.textContent = open ? '▼' : '▶';
+                // File-based item resolver (1.9.0). On first open, if the
+                // inventory entry has a ``_slug`` from the item picker, fetch
+                // the content record and render its actions inside the detail.
+                if (open && d.dataset.actionsLoaded === '0' && d.dataset.slug) {
+                    d.dataset.actionsLoaded = '1';
+                    _loadItemActions(d.dataset.slug, d.querySelector('.inv-actions-slot'));
+                }
             }));
 
         updateTotalWeight();
@@ -6236,6 +6290,28 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             body.style.cssText = 'padding:8px 10px;border-top:1px solid var(--s-border);font-size:12px;color:var(--s-fg);line-height:1.5;white-space:pre-wrap;';
             body.textContent = feat.desc;
             card.appendChild(body);
+        }
+        // File-based actions slot (1.9.0). Lazy-fetches /api/content/feats/<slug>
+        // the first time the feat card expands, and renders the file's actions
+        // as description cards. Most SRD feats are passive (no button-bearing
+        // fields) so we use renderActionCards rather than renderActionButtons.
+        if (feat.slug && typeof window.renderActionCards === 'function') {
+            const actionsSlot = document.createElement('div');
+            actionsSlot.style.cssText = 'padding:0 10px 8px;border-top:1px solid var(--s-border);';
+            card.appendChild(actionsSlot);
+            let _loaded = false;
+            card.addEventListener('toggle', async () => {
+                if (_loaded || !card.open) return;
+                _loaded = true;
+                try {
+                    const r = await fetch('/api/content/feats/' + encodeURIComponent(feat.slug),
+                                          { credentials: 'same-origin' });
+                    if (!r.ok) return;
+                    const data = await r.json();
+                    const acts = (data && data.record && data.record.actions) || [];
+                    if (acts.length) actionsSlot.appendChild(window.renderActionCards(acts));
+                } catch (e) { /* feat slug not in local content tier — fine */ }
+            });
         }
         return card;
     }

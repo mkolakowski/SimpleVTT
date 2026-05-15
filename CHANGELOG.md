@@ -8,6 +8,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [1.9.0] - 2026-05-14
+
+**Schema version:** 51
+**Commit summary:** Sheet UI integration for the 1.7.0 file-based content framework — class-feature, feat, and inventory-item actions now render on the D&D 5e character sheet.
+**Description:** Completes the sheet-side wiring promised in 1.7.0. Each class block on the sheet now renders the Action descriptors declared on its `class_features` content record above the subclass feature cards — so Rogue characters see a 🎲 "Roll Sneak Attack (Nd6)" button scaled to their Rogue level, Barbarian characters see ⚡ "Rage" toggle, and any feat or magic item with an `actions: list[Action]` array surfaces its buttons in the corresponding panel. Buttons hit the existing `POST /api/campaign/{id}/roll` endpoint so the result lands in the campaign roll log with a note identifying the action source. Lazy-fetched per content record so the sheet doesn't round-trip for empty-actions records.
+
+### Added
+- `_populateContentActions(slot, type, slug, opts)` helper in `app/static/sheet.js`. Fetches `/api/content/<type>/<slug>` and mounts the record's `actions` array via `window.renderActionButtons` with a default damage/attack/heal handler that posts to `/api/campaign/{id}/roll`.
+- Class-actions slot inside `_renderSubclassBlock`. Appears between the class heading and the subclass feature cards. Honours the character's level in that class so `damage_scaling` tiers (e.g. Sneak Attack 1d6 → 10d6) resolve correctly.
+- Lazy actions render inside `_renderFeatCard`: on first expand of a feat card the slot fetches `/api/content/feats/<slug>` and renders the record's actions as description cards (`renderActionCards`) — most SRD feats are passive so we don't try to wire button handlers without a clear semantic for the feat.
+- Inventory item-ref resolver: each inventory entry's `_slug` (set when the item came from the picker) becomes a deferred fetch of `/api/content/items/<slug>` the first time the detail panel is expanded. Magic items with declared actions (e.g. Wand of Magic Missiles "Expend Charge") render an inline 🎲 button under the item details.
+
+### Changed
+- `.inv-detail` rows now carry `data-slug` + `data-actions-loaded` markers, and the expand handler triggers the lazy fetch on first open.
+
+### Out of scope (deliberately, deferred)
+- **Resource-tracking toggle handlers** (Rage, Wildshape, Ki, Bardic Inspiration). The buttons render and surface a toast; integration with `dnd5e_class_resources.js` counters is a separate PR.
+- **Save-prompt targeting from action buttons.** A spell or class action's `save_ability` button currently shows a toast pointing the GM to the Roll Request panel (1.8.0). Auto-prompting the targeted players from an action button is a follow-up that needs the action descriptor to declare its targets.
+- **Spell-attack modifier on the attack-roll button.** Action `attack_roll: true` posts a bare `1d20` for now. Adding the character's spell-attack modifier needs a stat-lookup step similar to the roll-request endpoint's `stat_key` resolution.
+
+---
+
 ## [1.8.0] - 2026-05-14
 
 **Schema version:** 51
