@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.2.0] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Phase 1 of the Advantage & Disadvantage tracking feature — server-side `_apply_roll_state` upgrade for single-d20 expressions, tri-state Adv/Normal/Dis pill on the mini-sheet + full sheet, live WebSocket sync, manual `2d20kh1` / `2d20kl1` / `1d20a` / `1d20d` buttons preserved as one-shot overrides.
+**Description:** Implements the design plan in `docs/plans/advantage-disadvantage.md`. A character with `roll_state.value = "advantage"` or `"disadvantage"` set on their sheet has every single-d20 ability check, save, attack, or skill check auto-upgraded server-side to `2d20kh1` / `2d20kl1` before rolling. The upgrade happens inside `/api/campaign/{id}/roll` and `/api/campaign/{id}/attack` so all roll surfaces (mini-sheet ability/skill buttons, action-button payloads, sheet-side weapon attacks, roll-request prompts) benefit without per-handler wiring. Manual `adv` / `dis` dice buttons keep working unchanged — the regex contract only matches single-d20 expressions, so `2d20kh1` / `2d20kl1` / `1d20a` / `1d20d` submissions are detected and tagged `(manual …)` in the log without server modification. Initiative is automatically exempt: it's rolled client-side via `Math.random()` and never reaches the server. Roll log notes get `(auto advantage)` / `(auto disadvantage)` / `(manual advantage)` / `(manual disadvantage)` suffixes appended server-side so players see clearly *why* the dice doubled.
+
+### Added
+- `_apply_roll_state(expression, roll_state) -> (new_expression, applied)` helper in `app/routes/tabletop_routes.py`. Pure function — 17 unit tests cover auto-upgrade (1d20, 1d20+5, 1d20+5-2), manual detection (2d20kh1, 2d20kl1, 1d20a, 1d20d shorthand), non-d20 expression passthrough (4d6kh3, 3d8+5), multi-dice passthrough (1d20+1d4), and edge cases (empty string, whitespace, null state).
+- `_roll_state_note_suffix(applied)` helper that returns the human-readable parenthetical for each `applied` value.
+- `POST /api/campaign/{id}/character/{char_id}/roll-state` — sets / clears the character's roll_state. Body: `{value: "advantage" | "disadvantage" | null}`. GM or character owner only. Broadcasts a `character_roll_state` WebSocket event.
+- `app/templates/_roll_state_pill.html` — reusable Jinja partial. Tri-state pill with three buttons (Adv / Normal / Dis); the active state is color-coded (green / neutral / red) and the click handler posts to the new endpoint.
+- Roll-state pill rendered in:
+  - The sidebar `.mini-sheet` (rendered in `tabletop.html` per character)
+  - The full character sheet header (in `sheet_dnd5e.html`, next to the death-saves tracker)
+- WebSocket handler `_onCharacterRollState(d)` in `app/static/tabletop.js` updates every pill on the page for the matching `character_id`. Click delegation on `[data-action="set-roll-state"]` posts to the endpoint and optimistically updates the pill before the broadcast lands.
+- CSS in `app/static/style.css` — `.roll-state-pill` family: tri-state button styling with active-state colour for advantage (green tint) / disadvantage (red tint) / normal (accent border).
+
+### Changed
+- `/api/campaign/{id}/roll` now accepts optional `character_id` and `skip_roll_state` body fields. The character lookup that already attributes the roll log entry is performed before rolling so the helper can inspect `roll_state`. If no `character_id` is supplied, falls back to the rolling user's first character in the campaign (matches the pre-existing behaviour). The broadcast `roll` event and the JSON response now include `roll_state_applied: "auto_advantage" | "auto_disadvantage" | "manual_advantage" | "manual_disadvantage" | null`.
+- `/api/campaign/{id}/attack` routes its `1d20+bonus` (and bare `1d20`) attack expression through the helper before rolling. The `weapon_attack` WS broadcast and the JSON response carry `roll_state_applied`.
+- Roll-log `note` field is suffixed server-side with `(auto advantage)` / `(auto disadvantage)` / `(manual advantage)` / `(manual disadvantage)` so the rolling player and the GM both see why a 2d20kh1/kl1 showed up. Length still capped at 200 chars.
+
+### Not in Phase 1 (per the plan)
+- Elven Accuracy (3d20 keep highest) — deferred.
+- Auto-clear on long rest — deferred.
+- Roll-request prompts pre-marking adv/dis on the request itself — each player's own roll_state still applies; the prompt is transparent.
+- NPC / monster tokens — Phase 1 only applies to player characters with a sheet. Adding adv/dis to NPC tokens requires Token-level state and is deferred to a later phase.
+
+---
+
 ## [2.1.8] - 2026-05-15
 
 **Schema version:** 52

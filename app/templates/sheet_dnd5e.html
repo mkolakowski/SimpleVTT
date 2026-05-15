@@ -186,7 +186,8 @@
                                    {% if not can_edit %}readonly{% endif %}>
                             <span style="font-size:10px;color:var(--s-mute);">HP</span>
                         </div>
-                        {# Death-saves tracker (v2.1.0). Auto-hidden when status is alive. #}
+                        {# Roll-state pill (v2.2.0) + Death-saves tracker (v2.1.0). #}
+                        {% include "_roll_state_pill.html" %}
                         {% include "_death_saves_tracker.html" %}
                     </div>
 

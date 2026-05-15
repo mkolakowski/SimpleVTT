@@ -1,0 +1,46 @@
+{# ──────────────────────────────────────────────────────────────────────────
+   Roll-state pill partial (v2.2.0)
+
+   Renders the per-character tri-state Advantage / Normal / Disadvantage
+   toggle. When set, the server auto-upgrades single-d20 expressions
+   posted through /roll and /attack to 2d20kh1 / 2d20kl1.
+
+   Required context:
+     - char         : Character row (uses .id for the endpoint URL)
+     - sheet        : sheet dict (reads sheet.roll_state.value)
+     - campaign     : Campaign row (uses .id for the endpoint URL) — may
+                       be None for standalone-character render; buttons
+                       become inert when there's no campaign.
+     - can_edit     : bool — owner or GM (controls click handlers)
+   ────────────────────────────────────────────────────────────────────── #}
+{% set rs = (sheet.get('roll_state') or {}) %}
+{% set rs_value = rs.get('value') %}
+<div class="roll-state-pill"
+     data-character-id="{{ char.id }}"
+     data-value="{{ rs_value or '' }}">
+    <span class="roll-state-label">Roll</span>
+    <button type="button"
+            class="roll-state-btn roll-state-btn-adv{% if rs_value == 'advantage' %} roll-state-btn-on{% endif %}"
+            data-action="set-roll-state"
+            data-campaign-id="{{ campaign.id if campaign else '' }}"
+            data-character-id="{{ char.id }}"
+            data-value="advantage"
+            {% if not can_edit %}disabled{% endif %}
+            title="Advantage: 2d20 keep highest">Adv</button>
+    <button type="button"
+            class="roll-state-btn roll-state-btn-norm{% if not rs_value %} roll-state-btn-on{% endif %}"
+            data-action="set-roll-state"
+            data-campaign-id="{{ campaign.id if campaign else '' }}"
+            data-character-id="{{ char.id }}"
+            data-value=""
+            {% if not can_edit %}disabled{% endif %}
+            title="Normal: 1d20">Normal</button>
+    <button type="button"
+            class="roll-state-btn roll-state-btn-dis{% if rs_value == 'disadvantage' %} roll-state-btn-on{% endif %}"
+            data-action="set-roll-state"
+            data-campaign-id="{{ campaign.id if campaign else '' }}"
+            data-character-id="{{ char.id }}"
+            data-value="disadvantage"
+            {% if not can_edit %}disabled{% endif %}
+            title="Disadvantage: 2d20 keep lowest">Dis</button>
+</div>

@@ -1059,8 +1059,9 @@
                         {% endif %}
                     </div>
                 </div>
-                {# Death-saves tracker (v2.1.3): on the always-visible sidebar mini-sheet. #}
+                {# Roll-state pill (v2.2.0) + Death-saves tracker (v2.1.3). #}
                 {% with char=c, sheet=sh, can_edit=_is_owner %}
+                  {% include "_roll_state_pill.html" %}
                   {% include "_death_saves_tracker.html" %}
                 {% endwith %}
                 {# ── Abilities: name · modifier · roll button (raw score row removed) ── #}

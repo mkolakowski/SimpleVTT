@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re as _re
 import time as _time
 import uuid
 from datetime import timezone
@@ -4301,6 +4302,7 @@ async def roll_dice(
     expr = str(body.get("expression", "")).strip()
     visibility_str = str(body.get("visibility", "public")).lower()
     note = str(body.get("note", ""))[:200]
+    skip_roll_state = bool(body.get("skip_roll_state"))
     try:
         visibility = Visibility(visibility_str)
     except ValueError:
@@ -4308,6 +4310,41 @@ async def roll_dice(
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(403, "Not a member")
+
+    # Look up the rolling user's character so we can (a) apply roll_state
+    # to single-d20 expressions and (b) attribute the roll in the log.
+    # Explicit ``character_id`` in the body wins (lets a GM roll for a
+    # specific char); falls back to the user's first character.
+    _char = None
+    explicit_char_id = body.get("character_id")
+    if explicit_char_id:
+        try:
+            _char = (
+                db.query(Character)
+                .filter(Character.id == int(explicit_char_id),
+                        Character.campaign_id == campaign_id)
+                .first()
+            )
+        except (TypeError, ValueError):
+            _char = None
+    if _char is None:
+        _char = (
+            db.query(Character)
+            .filter(Character.campaign_id == campaign_id, Character.owner_user_id == user.id)
+            .first()
+        )
+
+    # v2.2.0: apply roll_state to single-d20 expressions before rolling.
+    # Manual 2d20kh1 / 2d20kl1 are detected but left unchanged; the note
+    # is annotated either way so the log distinguishes auto vs manual.
+    roll_state_applied = ""
+    if not skip_roll_state:
+        rs = (_char.sheet or {}).get("roll_state") if _char else None
+        expr, roll_state_applied = _apply_roll_state(expr, rs)
+    note_suffix = _roll_state_note_suffix(roll_state_applied)
+    if note_suffix:
+        note = (note + note_suffix)[:200]
+
     try:
         result = dice_mod.roll(expr)
     except dice_mod.DiceParseError as e:
@@ -4324,12 +4361,6 @@ async def roll_dice(
     db.add(rec)
     db.commit()
     db.refresh(rec)
-    # Look up roller's character, then resolve color (char > player > gm) and portrait
-    _char = (
-        db.query(Character)
-        .filter(Character.campaign_id == campaign_id, Character.owner_user_id == user.id)
-        .first()
-    )
     _char_name   = _char.name        if _char else None
     _portrait_url = _char.portrait_url if _char else None
     _membership = (
@@ -4359,10 +4390,12 @@ async def roll_dice(
                 "visibility": rec.visibility.value,
                 "note": rec.note,
                 "created_at": rec.created_at.isoformat() if rec.created_at else None,
+                "roll_state_applied": roll_state_applied or None,
             },
         },
     )
-    return {"ok": True, "total": rec.total, "breakdown": rec.breakdown}
+    return {"ok": True, "total": rec.total, "breakdown": rec.breakdown,
+            "roll_state_applied": roll_state_applied or None}
 
 
 @router.post("/api/campaign/{campaign_id}/member_color")
@@ -5097,6 +5130,87 @@ def _set_death_save_state(
     sheet["death_saves"] = ds
     char.sheet = sheet
     return ds
+
+
+# ----------- Roll-state (advantage/disadvantage) — v2.2.0 -----------
+#
+# Per-character "roll state" toggled via the tri-state pill on the
+# mini-sheet / full sheet. When set, the server upgrades single-d20
+# expressions sent through /roll and /attack to 2d20kh1 (advantage) or
+# 2d20kl1 (disadvantage) before rolling. Manual buttons that produce
+# 2d20kh1 / 2d20kl1 directly bypass the auto-upgrade (the regex only
+# matches single-d20). See docs/plans/advantage-disadvantage.md.
+
+# Matches exactly a single 1d20 with optional +N/-N modifiers and
+# whitespace. Rejects 1d20a / 1d20d (manual shorthand), 2d20kh1/kl1
+# (manual long form), and any multi-dice expression (damage, ability
+# gen, etc.). Group 1 captures the trailing modifier string.
+_SINGLE_D20_RE = _re.compile(
+    r'^\s*1d20((?:\s*[+-]\s*\d+)*)\s*$',
+    _re.IGNORECASE,
+)
+
+# Manual adv/dis detection in the *submitted* expression (before any
+# server upgrade). Matches both the long form (2d20kh1 / 2d20kl1) and
+# the shorthand (1d20a / 1d20d) that dice.py expands.
+_MANUAL_ADV_RE = _re.compile(r'(?i)\b(?:2d20kh1|1d20a)\b')
+_MANUAL_DIS_RE = _re.compile(r'(?i)\b(?:2d20kl1|1d20d)\b')
+
+
+def _apply_roll_state(
+    expression: str,
+    roll_state: dict | None,
+) -> tuple[str, str]:
+    """Upgrade a single-d20 expression to 2d20kh1 (advantage) or 2d20kl1
+    (disadvantage) per the character's stored ``roll_state.value``.
+
+    Returns ``(new_expression, applied)`` where ``applied`` is:
+
+    - ``"auto_advantage"`` / ``"auto_disadvantage"`` — server upgraded
+    - ``"manual_advantage"`` / ``"manual_disadvantage"`` — caller submitted
+      a manual 2d20kh1 / 1d20a / 2d20kl1 / 1d20d expression
+    - ``""`` — no upgrade and no manual flag
+
+    Manual takes precedence over auto: if the submitted expression is
+    already adv/dis, ``new_expression`` is the original and ``applied``
+    reflects the manual form.
+    """
+    expr = expression or ""
+
+    # 1) Detect manual adv/dis on the original expression first. If
+    # the caller explicitly picked adv/dis, that wins — we don't double
+    # up, and we tag the log with "manual ...".
+    if _MANUAL_ADV_RE.search(expr):
+        return expr, "manual_advantage"
+    if _MANUAL_DIS_RE.search(expr):
+        return expr, "manual_disadvantage"
+
+    # 2) Auto upgrade only when the character has a roll_state set AND
+    # the expression is a single-d20 form.
+    value = None
+    if isinstance(roll_state, dict):
+        value = roll_state.get("value")
+    if value not in ("advantage", "disadvantage"):
+        return expr, ""
+
+    m = _SINGLE_D20_RE.match(expr)
+    if not m:
+        return expr, ""
+    modifiers = m.group(1) or ""
+    if value == "advantage":
+        return "2d20kh1" + modifiers, "auto_advantage"
+    return "2d20kl1" + modifiers, "auto_disadvantage"
+
+
+def _roll_state_note_suffix(applied: str) -> str:
+    """Human-readable tag for ``applied`` from _apply_roll_state, suitable
+    for appending to the roll's ``note`` field. Empty string for no-op."""
+    return {
+        "auto_advantage":     " (auto advantage)",
+        "auto_disadvantage":  " (auto disadvantage)",
+        "manual_advantage":   " (manual advantage)",
+        "manual_disadvantage":" (manual disadvantage)",
+    }.get(applied, "")
 
 
 # ----------- API: apply healing from roll-log card -----------
@@ -6095,11 +6209,16 @@ async def use_attack(
     # Build the to-hit expression. Accept "+5", "5", "1d4+3" etc.
     attack_total = None
     attack_breakdown = ""
+    attack_roll_state_applied = ""
     if not is_save and attack_bonus_raw:
         bonus_expr = attack_bonus_raw if attack_bonus_raw.startswith(("+", "-"))\
             or any(c.isalpha() for c in attack_bonus_raw)\
             else "+" + attack_bonus_raw
         atk_expr = "1d20" + (bonus_expr if bonus_expr.startswith(("+", "-")) else "+" + bonus_expr)
+        # v2.2.0: apply character roll_state to the attack d20.
+        atk_expr, attack_roll_state_applied = _apply_roll_state(
+            atk_expr, (char.sheet or {}).get("roll_state"),
+        )
         try:
             r = dice_mod.roll(atk_expr)
             attack_total = r.total
@@ -6109,8 +6228,11 @@ async def use_attack(
             attack_breakdown = ""
     elif not is_save:
         # No bonus given — flat d20
+        atk_expr, attack_roll_state_applied = _apply_roll_state(
+            "1d20", (char.sheet or {}).get("roll_state"),
+        )
         try:
-            r = dice_mod.roll("1d20")
+            r = dice_mod.roll(atk_expr)
             attack_total = r.total
             attack_breakdown = r.breakdown
         except dice_mod.DiceParseError:
@@ -6164,6 +6286,7 @@ async def use_attack(
         "save_ability": save_ability if is_save else "",
         "desc": desc,
         "is_save": is_save,
+        "roll_state_applied": attack_roll_state_applied or None,
     }
     await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
     # Return the attack + damage totals so the sheet's .atk-strike handler can
@@ -6182,6 +6305,7 @@ async def use_attack(
         "is_save": is_save,
         "save_ability": save_ability if is_save else "",
         "save_dc": save_dc if is_save else 0,
+        "roll_state_applied": attack_roll_state_applied or None,
     }
 
 
@@ -8739,6 +8863,51 @@ async def stabilize_character(
         },
     })
     return {"ok": True, "death_saves": new_ds}
+
+
+# ----------- API: roll-state toggle (v2.2.0) -----------
+
+@router.post("/api/campaign/{campaign_id}/character/{char_id}/roll-state")
+async def set_roll_state(
+    campaign_id: int,
+    char_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Set or clear a character's roll-state. Body: ``{value: "advantage"
+    | "disadvantage" | null}``. While set, single-d20 expressions sent
+    through /roll and /attack are auto-upgraded to 2d20kh1 / 2d20kl1
+    per the v2.2.0 plan. Manual 2d20kh1 / 2d20kl1 / 1d20a / 1d20d
+    submissions remain unchanged and are tagged with "(manual …)" in
+    the roll log. Owner or GM only."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not campaign or not char or char.campaign_id != campaign_id:
+        raise HTTPException(404, "Not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Forbidden")
+
+    body = await request.json()
+    value = body.get("value")
+    if value not in ("advantage", "disadvantage", None):
+        raise HTTPException(400, "value must be 'advantage', 'disadvantage', or null")
+
+    sheet = dict(char.sheet or {})
+    rs = dict(sheet.get("roll_state") or {})
+    rs["value"] = value
+    sheet["roll_state"] = rs
+    char.sheet = sheet
+    db.commit()
+
+    await hub.broadcast(campaign_id, {
+        "type": "character_roll_state",
+        "data": {
+            "character_id": char.id,
+            "value": value,
+        },
+    })
+    return {"ok": True, "value": value}
 
 
 # ----------- WebSocket -----------

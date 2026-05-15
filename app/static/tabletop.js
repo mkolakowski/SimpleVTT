@@ -944,6 +944,8 @@
                 _appendFeatureUsed(msg.data);
             } else if (msg.type === 'character_death_save') {
                 _onCharacterDeathSave(msg.data);
+            } else if (msg.type === 'character_roll_state') {
+                _onCharacterRollState(msg.data);
             }
         };
         ws.onclose = () => setTimeout(connectWs, 2000);
@@ -1380,6 +1382,55 @@
             // updates the tracker UI. Nothing to do here.
         } catch (e) {
             showToast('Action error: ' + (e.message || e), 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // ---------- Roll-state broadcast handler (v2.2.0) ----------
+    function _onCharacterRollState(d) {
+        if (!d || !d.character_id) return;
+        const value = d.value || '';
+        document.querySelectorAll(
+            `.roll-state-pill[data-character-id="${d.character_id}"]`
+        ).forEach(pill => {
+            pill.dataset.value = value;
+            pill.querySelectorAll('.roll-state-btn').forEach(btn => {
+                const matches = (btn.dataset.value || '') === value;
+                btn.classList.toggle('roll-state-btn-on', matches);
+            });
+        });
+    }
+
+    // ---------- Roll-state pill click delegation (v2.2.0) ----------
+    document.addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('[data-action="set-roll-state"]');
+        if (!btn) return;
+        const cid = btn.dataset.campaignId;
+        const charId = btn.dataset.characterId;
+        if (!cid || !charId) return;
+        const value = btn.dataset.value || null;  // empty string → null
+        btn.disabled = true;
+        try {
+            const resp = await fetch(
+                `/api/campaign/${cid}/character/${charId}/roll-state`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: value || null }),
+                }
+            );
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                showToast(err.detail || 'Failed to set roll state', 'error');
+                return;
+            }
+            // Optimistic local update — the WS broadcast will also call
+            // _onCharacterRollState shortly, but updating now avoids the
+            // brief flicker.
+            _onCharacterRollState({ character_id: charId, value: value || '' });
+        } catch (e) {
+            showToast('Roll-state error: ' + (e.message || e), 'error');
         } finally {
             btn.disabled = false;
         }

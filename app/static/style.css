@@ -410,3 +410,65 @@ table.skills td, table.skills th { border-bottom: 1px solid var(--border); paddi
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+/* ── Roll-state pill (v2.2.0) ───────────────────────────────────────────
+   Tri-state Adv / Normal / Dis toggle. Renders in both the Jinja sidebar
+   mini-sheet and the full character sheet header. Three small buttons,
+   color-coded so the active state pops at a glance. Compact 28px height
+   fits the dense sheet layout (HIG-exempt panel, matches the death-saves
+   tracker styling). */
+.roll-state-pill {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 8px;
+    padding-top: 7px;
+    border-top: 1px solid var(--s-border, var(--border));
+}
+.roll-state-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--s-mute, var(--fg-mute));
+    margin-right: 4px;
+}
+.roll-state-btn {
+    min-height: 28px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--fg-mute);
+    transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+.roll-state-btn:hover:not(:disabled) {
+    color: var(--fg);
+    border-color: var(--fg-mute);
+}
+.roll-state-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.roll-state-btn-on {
+    color: var(--fg);
+    font-weight: 700;
+}
+.roll-state-btn-adv.roll-state-btn-on {
+    background: #1a4a1a;
+    border-color: #4ade80;
+    color: #b4ffb4;
+}
+.roll-state-btn-dis.roll-state-btn-on {
+    background: #5a1a1a;
+    border-color: #f87171;
+    color: #ffb4b4;
+}
+.roll-state-btn-norm.roll-state-btn-on {
+    background: var(--input-bg);
+    border-color: var(--accent);
+    color: var(--fg);
+}
