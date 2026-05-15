@@ -1001,7 +1001,10 @@
         <div id="player-char-list">
         {% set shown = namespace(count=0) %}
         {% for c in characters %}
-        {% if c.owner_user_id == user.id %}
+        {# v2.1.5: GMs see every PC in the Characters panel so the init #}
+        {# tracker can steal the rich .mini-body for any combatant (was: #}
+        {# falling back to the static buildInitSheet view for non-own PCs). #}
+        {% if c.owner_user_id == user.id or is_gm %}
         {% set shown.count = shown.count + 1 %}
         <div class="char-detail" id="char-detail-{{ c.id }}" data-char-id="{{ c.id }}">
             <div class="mini-sheet">
