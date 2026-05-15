@@ -1700,10 +1700,10 @@
                 <span class="pl-chevron">▸</span>
                 <span class="pl-name"><strong>{{ cc.name }}</strong></span>
                 <span class="pl-count muted">(d{{ cc.hit_die }} · {{ (cc.features or [])|length }} feature{{ '' if (cc.features or [])|length == 1 else 's' }})</span>
-                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cc.class_slug }}</code></span>
+                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cc.slug }}</code></span>
             </summary>
             <div class="playlist-body">
-                <form method="post" action="/campaign/{{ campaign.id }}/custom-classes/{{ cc.id }}" class="stacked">
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-classes/{{ cc.slug }}" class="stacked">
                     <label>Name <input name="name" value="{{ cc.name }}" required maxlength="120"></label>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                         <label>Hit die (4–12)
@@ -1786,7 +1786,7 @@
                         <button type="submit">Save changes</button>
                     </div>
                 </form>
-                <form method="post" action="/campaign/{{ campaign.id }}/custom-classes/{{ cc.id }}/delete"
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-classes/{{ cc.slug }}/delete"
                       onsubmit="return confirm('Delete homebrew class &quot;{{ cc.name }}&quot;? Character sheets that reference its slug will fall back to the built-in SRD content of the same slug (if any).')"
                       style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
                     <button type="submit" class="danger">Delete this class</button>
@@ -1903,10 +1903,10 @@
                 <span class="pl-chevron">▸</span>
                 <span class="pl-name"><strong>{{ cs.name }}</strong></span>
                 <span class="pl-count muted">({{ cs.class_slug }} · {{ (cs.features or [])|length }} feature{{ '' if (cs.features or [])|length == 1 else 's' }})</span>
-                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cs.sub_slug }}</code></span>
+                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cs.sub_slug }}</code></span>{# v2.0.0: cs is a dict; URL uses combined_slug for the file path. #}
             </summary>
             <div class="playlist-body">
-                <form method="post" action="/campaign/{{ campaign.id }}/custom-subclasses/{{ cs.id }}" class="stacked">
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-subclasses/{{ cs.combined_slug }}" class="stacked">
                     <label>Name <input name="name" value="{{ cs.name }}" required maxlength="120"></label>
                     <label>Parent class slug <input name="class_slug" value="{{ cs.class_slug }}" required maxlength="60" pattern="[a-z0-9-]+"
                            title="Lowercase letters, numbers, dashes — typically the Open5e class slug, e.g. 'druid' or 'fighter'"></label>
@@ -1922,7 +1922,7 @@
                         <button type="submit">Save changes</button>
                     </div>
                 </form>
-                <form method="post" action="/campaign/{{ campaign.id }}/custom-subclasses/{{ cs.id }}/delete"
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-subclasses/{{ cs.combined_slug }}/delete"
                       onsubmit="return confirm('Delete homebrew subclass &quot;{{ cs.name }}&quot;? Character sheets that reference its slug will fall back to the built-in SRD content of the same slug (if any), or render empty features.')"
                       style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
                     <button type="submit" class="danger">Delete this subclass</button>
@@ -1986,10 +1986,10 @@
                 <span class="pl-chevron">▸</span>
                 <span class="pl-name"><strong>{{ cr.name }}</strong></span>
                 <span class="pl-count muted">({{ cr.size or '—' }} · {{ cr.speed }} ft · {{ (cr.traits or [])|length }} trait{{ '' if (cr.traits or [])|length == 1 else 's' }})</span>
-                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cr.race_slug }}</code></span>
+                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cr.slug }}</code></span>{# v2.0.0: cr is a dict; cr.id / cr.race_slug → cr.slug. #}
             </summary>
             <div class="playlist-body">
-                <form method="post" action="/campaign/{{ campaign.id }}/custom-races/{{ cr.id }}" class="stacked">
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-races/{{ cr.slug }}" class="stacked">
                     <label>Name <input name="name" value="{{ cr.name }}" required maxlength="120"></label>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                         <label>Size
@@ -2032,7 +2032,7 @@
                         <button type="submit">Save changes</button>
                     </div>
                 </form>
-                <form method="post" action="/campaign/{{ campaign.id }}/custom-races/{{ cr.id }}/delete"
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-races/{{ cr.slug }}/delete"
                       onsubmit="return confirm('Delete homebrew race &quot;{{ cr.name }}&quot;? Character sheets that reference its slug will fall back to the SRD race of the same slug (if any), or render empty.')"
                       style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
                     <button type="submit" class="danger">Delete this race</button>
@@ -2118,10 +2118,10 @@
                 <span class="pl-chevron">▸</span>
                 <span class="pl-name"><strong>{{ cm.name }}</strong></span>
                 <span class="pl-count muted">({{ cm.size }} {{ cm.type }} · CR {{ cm.challenge_rating }} · AC {{ cm.armor_class }} · HP {{ cm.hit_points }})</span>
-                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cm.monster_slug }}</code></span>
+                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cm.slug }}</code></span>
             </summary>
             <div class="playlist-body">
-                <form method="post" action="/campaign/{{ campaign.id }}/custom-monsters/{{ cm.id }}" class="stacked">
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-monsters/{{ cm.slug }}" class="stacked">
                     <label>Name <input name="name" value="{{ cm.name }}" required maxlength="120"></label>
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
                         <label>Size
@@ -2186,8 +2186,8 @@
                         <label>Languages <input name="languages" value="{{ cm.languages or '' }}" maxlength="500" placeholder="Common, Draconic"></label>
                     </fieldset>
                     <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
-                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Actions ({{ (cm.actions or [])|length }})</legend>
-                        <div data-features-editor data-features='{{ cm.actions | tojson | forceescape }}'></div>
+                        <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Actions ({{ (cm.actions_split or [])|length }})</legend>
+                        <div data-features-editor data-features='{{ cm.actions_split | tojson | forceescape }}'></div>
                         <input type="hidden" name="actions_json" />
                     </fieldset>
                     <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
@@ -2209,7 +2209,7 @@
                         <button type="submit">Save changes</button>
                     </div>
                 </form>
-                <form method="post" action="/campaign/{{ campaign.id }}/custom-monsters/{{ cm.id }}/delete"
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-monsters/{{ cm.slug }}/delete"
                       onsubmit="return confirm('Delete homebrew monster &quot;{{ cm.name }}&quot;? Token templates and beast favorites that reference its slug will lose the link.')"
                       style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
                     <button type="submit" class="danger">Delete this monster</button>
@@ -2334,10 +2334,11 @@
                 <span class="pl-chevron">▸</span>
                 <span class="pl-name"><strong>{{ cb.name }}</strong></span>
                 <span class="pl-count muted">{% if cb.feature_name %}({{ cb.feature_name }}){% endif %}</span>
-                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cb.background_slug }}</code></span>
+                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cb.slug }}</code></span>
             </summary>
             <div class="playlist-body">
-                <form method="post" action="/campaign/{{ campaign.id }}/custom-backgrounds/{{ cb.id }}" class="stacked">
+                {# v2.0.0: file-based dict; cb.id / cb.background_slug → cb.slug. #}
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-backgrounds/{{ cb.slug }}" class="stacked">
                     <label>Name <input name="name" value="{{ cb.name }}" required maxlength="120"></label>
                     <label>Description <textarea name="description" rows="3" maxlength="8000">{{ cb.description or '' }}</textarea></label>
                     <label>Skill proficiencies <input name="skill_proficiencies" value="{{ cb.skill_proficiencies or '' }}" maxlength="500" placeholder="Insight, Religion"></label>
@@ -2353,7 +2354,7 @@
                         <button type="submit">Save changes</button>
                     </div>
                 </form>
-                <form method="post" action="/campaign/{{ campaign.id }}/custom-backgrounds/{{ cb.id }}/delete"
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-backgrounds/{{ cb.slug }}/delete"
                       onsubmit="return confirm('Delete homebrew background &quot;{{ cb.name }}&quot;?')"
                       style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
                     <button type="submit" class="danger">Delete this background</button>
@@ -2401,15 +2402,18 @@
 
     {% if custom_feats %}
         {% for cf in custom_feats %}
+        {# v2.0.0: cf is a dict from local_content.search('feats', …). The
+           legacy `cf.id` (int) and `cf.feat_slug` fields have been replaced
+           with the single `cf.slug` that addresses the underlying JSON file. #}
         <details class="playlist-card" style="margin-top:14px;">
             <summary>
                 <span class="pl-chevron">▸</span>
                 <span class="pl-name"><strong>{{ cf.name }}</strong></span>
                 <span class="pl-count muted">{% if cf.prerequisite %}(Prereq: {{ cf.prerequisite }}){% endif %}</span>
-                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cf.feat_slug }}</code></span>
+                <span class="pl-count muted" style="margin-left:auto;"><code>{{ cf.slug }}</code></span>
             </summary>
             <div class="playlist-body">
-                <form method="post" action="/campaign/{{ campaign.id }}/custom-feats/{{ cf.id }}" class="stacked">
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-feats/{{ cf.slug }}" class="stacked">
                     <label>Name <input name="name" value="{{ cf.name }}" required maxlength="120"></label>
                     <label>Prerequisite <input name="prerequisite" value="{{ cf.prerequisite or '' }}" maxlength="500" placeholder="Strength 13 or higher"></label>
                     <label>Description <textarea name="desc" rows="6" maxlength="8000">{{ cf.desc or '' }}</textarea></label>
@@ -2417,7 +2421,7 @@
                         <button type="submit">Save changes</button>
                     </div>
                 </form>
-                <form method="post" action="/campaign/{{ campaign.id }}/custom-feats/{{ cf.id }}/delete"
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-feats/{{ cf.slug }}/delete"
                       onsubmit="return confirm('Delete homebrew feat &quot;{{ cf.name }}&quot;?')"
                       style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
                     <button type="submit" class="danger">Delete this feat</button>

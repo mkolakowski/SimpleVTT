@@ -23,17 +23,11 @@ from ..auth import hash_password, require_admin
 from ..config import get_settings
 from ..database import get_db
 from ..game_systems import get_system, system_choices
-from .. import local_features
+from .. import local_content, local_features
 from ..models import (
     Campaign,
     CampaignMembership,
     Character,
-    CustomBackground,
-    CustomClass,
-    CustomFeat,
-    CustomMonster,
-    CustomRace,
-    CustomSubclass,
     GridType,
     Map,
     Token,
@@ -405,6 +399,49 @@ def _fmt_ts(ts: float | None) -> str:
     return _dt.datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d %H:%M UTC")
 
 
+def _enumerate_homebrew(type_dir: str, system: str = "dnd5e") -> list[dict]:
+    """Walk every homebrew file across every scope for a given content type.
+    Returns each loaded record plus synthetic ``_campaign_id`` (int|None) +
+    ``_scope`` (str) + ``_mtime`` keys so callers can build the admin table.
+    v2.0.0 audit helper — replaces the per-table SQL joins."""
+    out: list[dict] = []
+    root = local_content.HOMEBREW_ROOT / system
+    if not root.is_dir():
+        return out
+    model = local_content.TYPE_REGISTRY.get(type_dir)
+    if model is None:
+        return out
+    for scope_dir in sorted(root.iterdir()):
+        if not scope_dir.is_dir():
+            continue
+        scope = scope_dir.name
+        cid: int | None = None
+        if scope.startswith("campaign-") and scope[9:].isdigit():
+            cid = int(scope[9:])
+        elif scope != "global":
+            continue
+        type_path = scope_dir / type_dir
+        if not type_path.is_dir():
+            continue
+        for p in sorted(type_path.iterdir()):
+            if not p.name.endswith(".json"):
+                continue
+            rec = local_content._load_and_validate(p, model)
+            if rec is None:
+                continue
+            try:
+                mtime = p.stat().st_mtime
+            except OSError:
+                mtime = None
+            out.append({
+                **rec,
+                "_campaign_id": cid,
+                "_scope": scope,
+                "_mtime": mtime,
+            })
+    return out
+
+
 @router.get("/stubs", response_class=HTMLResponse)
 def admin_stubs(
     request: Request,
@@ -420,74 +457,78 @@ def admin_stubs(
         }
         for m in misses_raw
     ]
-    # DB-backed homebrew (CustomSubclass rows) — campaign-scoped overrides
-    # authored via the GM settings form. Joined to Campaign so the table
-    # can show "which campaign" and "by whom" without N+1 lookups in the
-    # template.
-    custom_rows = (
-        db.query(CustomSubclass, Campaign, User)
-        .join(Campaign, Campaign.id == CustomSubclass.campaign_id)
-        .outerjoin(User, User.id == CustomSubclass.created_by_user_id)
-        .order_by(Campaign.name, CustomSubclass.class_slug, CustomSubclass.name)
-        .all()
-    )
+    # v2.0.0: file-based homebrew audit. The six per-type DB joins are
+    # replaced by directory walks against the homebrew volume. Campaign +
+    # creator names are resolved in-process; the volumes are small enough
+    # that a single batch lookup beats per-record N+1 ORM hits.
+    camp_index = {c.id: c.name for c in db.query(Campaign).all()}
+    user_index = {u.id: u.display_name for u in db.query(User).all()}
+
+    def _campaign_name(cid: int | None) -> str:
+        if cid is None:
+            return "(global)"
+        return camp_index.get(cid) or f"campaign-{cid}"
+
+    def _creator_name(rec: dict) -> str | None:
+        owner = rec.get("owner")
+        if isinstance(owner, int):
+            return user_index.get(owner)
+        return None
+
+    def _ts_fmt(mtime: float | None) -> str:
+        if not mtime:
+            return ""
+        return _dt.datetime.utcfromtimestamp(mtime).strftime("%Y-%m-%d %H:%M UTC")
+
+    def _sort_key(r: dict) -> tuple:
+        return (_campaign_name(r["_campaign_id"]), (r.get("name") or "").lower())
+
     custom_subclasses_db = [
         {
-            "id": cs.id,
-            "campaign_id": cs.campaign_id,
-            "campaign_name": camp.name,
-            "class_slug": cs.class_slug,
-            "sub_slug": cs.sub_slug,
-            "name": cs.name,
-            "feature_count": len(cs.features or []),
-            "created_by": creator.display_name if creator else None,
-            "updated_at_fmt": cs.updated_at.strftime("%Y-%m-%d %H:%M UTC") if cs.updated_at else "",
+            "id": rec.get("slug"),  # combined "<class>__<sub>"
+            "slug": rec.get("slug"),
+            "campaign_id": rec["_campaign_id"],
+            "campaign_name": _campaign_name(rec["_campaign_id"]),
+            "class_slug": (rec.get("slug") or "").partition("__")[0] or (rec.get("class_slug") or ""),
+            "sub_slug": (rec.get("slug") or "").partition("__")[2] or (rec.get("slug") or ""),
+            "name": rec.get("name"),
+            "feature_count": len(rec.get("features") or []) if isinstance(rec.get("features"), list) else 0,
+            "created_by": _creator_name(rec),
+            "updated_at_fmt": _ts_fmt(rec.get("_mtime")),
         }
-        for cs, camp, creator in custom_rows
+        for rec in sorted(_enumerate_homebrew("subclass_features"), key=_sort_key)
     ]
-    custom_class_rows = (
-        db.query(CustomClass, Campaign, User)
-        .join(Campaign, Campaign.id == CustomClass.campaign_id)
-        .outerjoin(User, User.id == CustomClass.created_by_user_id)
-        .order_by(Campaign.name, CustomClass.name)
-        .all()
-    )
-    def _prereq_summary(cc) -> str:
-        mca = cc.multiclass_prereq_abilities or {}
+
+    def _prereq_summary_dict(rec: dict) -> str:
+        mca = rec.get("multiclass_prereq_abilities") or {}
         if not mca:
             return "—"
         parts = [f"{k.upper()} {v}" for k, v in mca.items()]
-        joiner = " or " if (cc.multiclass_prereq_mode or "all") == "any" else ", "
+        joiner = " or " if (rec.get("multiclass_prereq_mode") or "all") == "any" else ", "
         return joiner.join(parts)
 
     custom_classes_db = [
         {
-            "id": cc.id,
-            "campaign_id": cc.campaign_id,
-            "campaign_name": camp.name,
-            "class_slug": cc.class_slug,
-            "name": cc.name,
-            "hit_die": cc.hit_die,
-            "spellcasting_ability": cc.spellcasting_ability or "",
-            "feature_count": len(cc.features or []),
-            "spell_count": len(cc.spell_list or []),
-            "resource_count": len(cc.resources or []),
-            "multiclass_summary": _prereq_summary(cc),
-            "created_by": creator.display_name if creator else None,
-            "updated_at_fmt": cc.updated_at.strftime("%Y-%m-%d %H:%M UTC") if cc.updated_at else "",
+            "id": rec.get("slug"),
+            "slug": rec.get("slug"),
+            "campaign_id": rec["_campaign_id"],
+            "campaign_name": _campaign_name(rec["_campaign_id"]),
+            "class_slug": rec.get("slug"),
+            "name": rec.get("name"),
+            "hit_die": rec.get("hit_die"),
+            "spellcasting_ability": rec.get("spellcasting_ability") or "",
+            "feature_count": len(rec.get("features") or []) if isinstance(rec.get("features"), list) else 0,
+            "spell_count": len(rec.get("spell_list") or []),
+            "resource_count": len(rec.get("resources") or []),
+            "multiclass_summary": _prereq_summary_dict(rec),
+            "created_by": _creator_name(rec),
+            "updated_at_fmt": _ts_fmt(rec.get("_mtime")),
         }
-        for cc, camp, creator in custom_class_rows
+        for rec in sorted(_enumerate_homebrew("class_features"), key=_sort_key)
     ]
-    custom_race_rows = (
-        db.query(CustomRace, Campaign, User)
-        .join(Campaign, Campaign.id == CustomRace.campaign_id)
-        .outerjoin(User, User.id == CustomRace.created_by_user_id)
-        .order_by(Campaign.name, CustomRace.name)
-        .all()
-    )
 
-    def _ab_summary(cr) -> str:
-        bonuses = cr.ability_bonuses or []
+    def _ab_summary_dict(rec: dict) -> str:
+        bonuses = rec.get("ability_bonuses") or []
         if not bonuses:
             return "—"
         return ", ".join(
@@ -497,88 +538,75 @@ def admin_stubs(
 
     custom_races_db = [
         {
-            "id": cr.id,
-            "campaign_id": cr.campaign_id,
-            "campaign_name": camp.name,
-            "race_slug": cr.race_slug,
-            "name": cr.name,
-            "size": cr.size or "—",
-            "speed": cr.speed,
-            "ability_summary": _ab_summary(cr),
-            "trait_count": len(cr.traits or []),
-            "created_by": creator.display_name if creator else None,
-            "updated_at_fmt": cr.updated_at.strftime("%Y-%m-%d %H:%M UTC") if cr.updated_at else "",
+            "id": rec.get("slug"),
+            "slug": rec.get("slug"),
+            "campaign_id": rec["_campaign_id"],
+            "campaign_name": _campaign_name(rec["_campaign_id"]),
+            "race_slug": rec.get("slug"),
+            "name": rec.get("name"),
+            "size": rec.get("size") or "—",
+            "speed": rec.get("speed"),
+            "ability_summary": _ab_summary_dict(rec),
+            "trait_count": len(rec.get("traits") or []),
+            "created_by": _creator_name(rec),
+            "updated_at_fmt": _ts_fmt(rec.get("_mtime")),
         }
-        for cr, camp, creator in custom_race_rows
+        for rec in sorted(_enumerate_homebrew("races"), key=_sort_key)
     ]
 
-    custom_monster_rows = (
-        db.query(CustomMonster, Campaign, User)
-        .join(Campaign, Campaign.id == CustomMonster.campaign_id)
-        .outerjoin(User, User.id == CustomMonster.created_by_user_id)
-        .order_by(Campaign.name, CustomMonster.name)
-        .all()
-    )
+    def _action_count(rec: dict) -> int:
+        # Unified actions[] with category discriminator at v2.0.0.
+        return len(rec.get("actions") or [])
 
     custom_monsters_db = [
         {
-            "id": cm.id,
-            "campaign_id": cm.campaign_id,
-            "campaign_name": camp.name,
-            "monster_slug": cm.monster_slug,
-            "name": cm.name,
-            "size": cm.size or "—",
-            "type": cm.type or "—",
-            "cr": cm.challenge_rating or "0",
-            "ac": cm.armor_class,
-            "hp": cm.hit_points,
-            "action_count": len(cm.actions or []) + len(cm.reactions or []) + len(cm.special_abilities or []) + len(cm.legendary_actions or []),
-            "created_by": creator.display_name if creator else None,
-            "updated_at_fmt": cm.updated_at.strftime("%Y-%m-%d %H:%M UTC") if cm.updated_at else "",
+            "id": rec.get("slug"),
+            "slug": rec.get("slug"),
+            "campaign_id": rec["_campaign_id"],
+            "campaign_name": _campaign_name(rec["_campaign_id"]),
+            "monster_slug": rec.get("slug"),
+            "name": rec.get("name"),
+            "size": rec.get("size") or "—",
+            "type": rec.get("type") or "—",
+            "cr": rec.get("challenge_rating") or "0",
+            "ac": rec.get("armor_class"),
+            "hp": rec.get("hit_points"),
+            "action_count": _action_count(rec),
+            "created_by": _creator_name(rec),
+            "updated_at_fmt": _ts_fmt(rec.get("_mtime")),
         }
-        for cm, camp, creator in custom_monster_rows
+        for rec in sorted(_enumerate_homebrew("monsters"), key=_sort_key)
     ]
 
-    custom_background_rows = (
-        db.query(CustomBackground, Campaign, User)
-        .join(Campaign, Campaign.id == CustomBackground.campaign_id)
-        .outerjoin(User, User.id == CustomBackground.created_by_user_id)
-        .order_by(Campaign.name, CustomBackground.name)
-        .all()
-    )
     custom_backgrounds_db = [
         {
-            "id": cb.id,
-            "campaign_id": cb.campaign_id,
-            "campaign_name": camp.name,
-            "background_slug": cb.background_slug,
-            "name": cb.name,
-            "feature_name": cb.feature_name or "—",
-            "skill_proficiencies": cb.skill_proficiencies or "",
-            "created_by": creator.display_name if creator else None,
-            "updated_at_fmt": cb.updated_at.strftime("%Y-%m-%d %H:%M UTC") if cb.updated_at else "",
+            "id": rec.get("slug"),
+            "slug": rec.get("slug"),
+            "campaign_id": rec["_campaign_id"],
+            "campaign_name": _campaign_name(rec["_campaign_id"]),
+            "background_slug": rec.get("slug"),
+            "name": rec.get("name"),
+            "feature_name": rec.get("feature_name") or "—",
+            "skill_proficiencies": rec.get("skill_proficiencies") or "",
+            "created_by": _creator_name(rec),
+            "updated_at_fmt": _ts_fmt(rec.get("_mtime")),
         }
-        for cb, camp, creator in custom_background_rows
+        for rec in sorted(_enumerate_homebrew("backgrounds"), key=_sort_key)
     ]
-    custom_feat_rows = (
-        db.query(CustomFeat, Campaign, User)
-        .join(Campaign, Campaign.id == CustomFeat.campaign_id)
-        .outerjoin(User, User.id == CustomFeat.created_by_user_id)
-        .order_by(Campaign.name, CustomFeat.name)
-        .all()
-    )
+
     custom_feats_db = [
         {
-            "id": cf.id,
-            "campaign_id": cf.campaign_id,
-            "campaign_name": camp.name,
-            "feat_slug": cf.feat_slug,
-            "name": cf.name,
-            "prerequisite": cf.prerequisite or "—",
-            "created_by": creator.display_name if creator else None,
-            "updated_at_fmt": cf.updated_at.strftime("%Y-%m-%d %H:%M UTC") if cf.updated_at else "",
+            "id": rec.get("slug"),
+            "slug": rec.get("slug"),
+            "campaign_id": rec["_campaign_id"],
+            "campaign_name": _campaign_name(rec["_campaign_id"]),
+            "feat_slug": rec.get("slug"),
+            "name": rec.get("name"),
+            "prerequisite": rec.get("prerequisite") or "—",
+            "created_by": _creator_name(rec),
+            "updated_at_fmt": _ts_fmt(rec.get("_mtime")),
         }
-        for cf, camp, creator in custom_feat_rows
+        for rec in sorted(_enumerate_homebrew("feats"), key=_sort_key)
     ]
 
     return templates.TemplateResponse(
@@ -613,90 +641,105 @@ def admin_stubs_json(
 ):
     """JSON snapshot of the same data the HTML view renders. Useful for
     scripted authoring pipelines (e.g. a script that diffs misses against
-    on-disk overrides to suggest the next file to write)."""
+    on-disk overrides to suggest the next file to write).
+
+    v2.0.0: all homebrew now lives in per-slug JSON files under the
+    homebrew Docker volume; this endpoint walks that volume rather than
+    the dropped ``custom_*`` tables.
+    """
+    def _by_campaign_then_name(r: dict) -> tuple:
+        return (r["_campaign_id"] if r["_campaign_id"] is not None else -1, (r.get("name") or "").lower())
+
     return {
         "local_classes": local_features.list_local_classes(),
         "local_subclasses": local_features.list_local_subclasses(),
         "local_races": local_features.list_local_races(),
         "custom_classes_db": [
             {
-                "id": cc.id,
-                "campaign_id": cc.campaign_id,
-                "class_slug": cc.class_slug,
-                "name": cc.name,
-                "hit_die": cc.hit_die,
-                "spellcasting_ability": cc.spellcasting_ability or "",
-                "feature_count": len(cc.features or []),
-                "spell_count": len(cc.spell_list or []),
-                "resource_count": len(cc.resources or []),
-                "multiclass_prereq_abilities": cc.multiclass_prereq_abilities or {},
-                "multiclass_prereq_mode": cc.multiclass_prereq_mode or "all",
-                "multiclass_proficiencies": cc.multiclass_proficiencies or "",
+                "id": rec.get("slug"),
+                "slug": rec.get("slug"),
+                "campaign_id": rec["_campaign_id"],
+                "class_slug": rec.get("slug"),
+                "name": rec.get("name"),
+                "hit_die": rec.get("hit_die"),
+                "spellcasting_ability": rec.get("spellcasting_ability") or "",
+                "feature_count": len(rec.get("features") or []) if isinstance(rec.get("features"), list) else 0,
+                "spell_count": len(rec.get("spell_list") or []),
+                "resource_count": len(rec.get("resources") or []),
+                "multiclass_prereq_abilities": rec.get("multiclass_prereq_abilities") or {},
+                "multiclass_prereq_mode": rec.get("multiclass_prereq_mode") or "all",
+                "multiclass_proficiencies": rec.get("multiclass_proficiencies") or "",
             }
-            for cc in db.query(CustomClass).order_by(CustomClass.campaign_id, CustomClass.name).all()
+            for rec in sorted(_enumerate_homebrew("class_features"), key=_by_campaign_then_name)
         ],
         "custom_subclasses_db": [
             {
-                "id": cs.id,
-                "campaign_id": cs.campaign_id,
-                "class_slug": cs.class_slug,
-                "sub_slug": cs.sub_slug,
-                "name": cs.name,
-                "feature_count": len(cs.features or []),
+                "id": rec.get("slug"),
+                "slug": rec.get("slug"),
+                "campaign_id": rec["_campaign_id"],
+                "class_slug": (rec.get("slug") or "").partition("__")[0] or (rec.get("class_slug") or ""),
+                "sub_slug": (rec.get("slug") or "").partition("__")[2] or (rec.get("slug") or ""),
+                "name": rec.get("name"),
+                "feature_count": len(rec.get("features") or []) if isinstance(rec.get("features"), list) else 0,
             }
-            for cs in db.query(CustomSubclass).order_by(CustomSubclass.campaign_id, CustomSubclass.name).all()
+            for rec in sorted(_enumerate_homebrew("subclass_features"), key=_by_campaign_then_name)
         ],
         "custom_races_db": [
             {
-                "id": cr.id,
-                "campaign_id": cr.campaign_id,
-                "race_slug": cr.race_slug,
-                "name": cr.name,
-                "size": cr.size or "",
-                "speed": cr.speed,
-                "ability_bonuses": cr.ability_bonuses or [],
-                "trait_count": len(cr.traits or []),
+                "id": rec.get("slug"),
+                "slug": rec.get("slug"),
+                "campaign_id": rec["_campaign_id"],
+                "race_slug": rec.get("slug"),
+                "name": rec.get("name"),
+                "size": rec.get("size") or "",
+                "speed": rec.get("speed"),
+                "ability_bonuses": rec.get("ability_bonuses") or [],
+                "trait_count": len(rec.get("traits") or []),
             }
-            for cr in db.query(CustomRace).order_by(CustomRace.campaign_id, CustomRace.name).all()
+            for rec in sorted(_enumerate_homebrew("races"), key=_by_campaign_then_name)
         ],
         "custom_monsters_db": [
             {
-                "id": cm.id,
-                "campaign_id": cm.campaign_id,
-                "monster_slug": cm.monster_slug,
-                "name": cm.name,
-                "size": cm.size or "",
-                "type": cm.type or "",
-                "cr": cm.challenge_rating or "0",
-                "ac": cm.armor_class,
-                "hp": cm.hit_points,
-                "action_count": len(cm.actions or []),
-                "reaction_count": len(cm.reactions or []),
-                "special_count": len(cm.special_abilities or []),
-                "legendary_count": len(cm.legendary_actions or []),
+                "id": rec.get("slug"),
+                "slug": rec.get("slug"),
+                "campaign_id": rec["_campaign_id"],
+                "monster_slug": rec.get("slug"),
+                "name": rec.get("name"),
+                "size": rec.get("size") or "",
+                "type": rec.get("type") or "",
+                "cr": rec.get("challenge_rating") or "0",
+                "ac": rec.get("armor_class"),
+                "hp": rec.get("hit_points"),
+                # Per-category counts derived from the unified actions[] list.
+                "action_count": sum(1 for a in (rec.get("actions") or []) if (a or {}).get("category") in (None, "", "action")),
+                "reaction_count": sum(1 for a in (rec.get("actions") or []) if (a or {}).get("category") == "reaction"),
+                "special_count": sum(1 for a in (rec.get("actions") or []) if (a or {}).get("category") == "special_ability"),
+                "legendary_count": sum(1 for a in (rec.get("actions") or []) if (a or {}).get("category") == "legendary_action"),
             }
-            for cm in db.query(CustomMonster).order_by(CustomMonster.campaign_id, CustomMonster.name).all()
+            for rec in sorted(_enumerate_homebrew("monsters"), key=_by_campaign_then_name)
         ],
         "custom_backgrounds_db": [
             {
-                "id": cb.id,
-                "campaign_id": cb.campaign_id,
-                "background_slug": cb.background_slug,
-                "name": cb.name,
-                "feature_name": cb.feature_name or "",
-                "skill_proficiencies": cb.skill_proficiencies or "",
+                "id": rec.get("slug"),
+                "slug": rec.get("slug"),
+                "campaign_id": rec["_campaign_id"],
+                "background_slug": rec.get("slug"),
+                "name": rec.get("name"),
+                "feature_name": rec.get("feature_name") or "",
+                "skill_proficiencies": rec.get("skill_proficiencies") or "",
             }
-            for cb in db.query(CustomBackground).order_by(CustomBackground.campaign_id, CustomBackground.name).all()
+            for rec in sorted(_enumerate_homebrew("backgrounds"), key=_by_campaign_then_name)
         ],
         "custom_feats_db": [
             {
-                "id": cf.id,
-                "campaign_id": cf.campaign_id,
-                "feat_slug": cf.feat_slug,
-                "name": cf.name,
-                "prerequisite": cf.prerequisite or "",
+                "id": rec.get("slug"),
+                "slug": rec.get("slug"),
+                "campaign_id": rec["_campaign_id"],
+                "feat_slug": rec.get("slug"),
+                "name": rec.get("name"),
+                "prerequisite": rec.get("prerequisite") or "",
             }
-            for cf in db.query(CustomFeat).order_by(CustomFeat.campaign_id, CustomFeat.name).all()
+            for rec in sorted(_enumerate_homebrew("feats"), key=_by_campaign_then_name)
         ],
         "misses": local_features.list_misses(),
     }

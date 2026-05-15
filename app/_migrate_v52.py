@@ -35,7 +35,7 @@ from typing import Any
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
-from .local_content import features_to_markdown, write_homebrew
+from .local_content import write_homebrew
 
 log = logging.getLogger(__name__)
 
@@ -65,8 +65,10 @@ def _maybe_json(value: Any) -> Any:
 def _dump_custom_class(row: Any) -> dict:
     """``CustomClass`` row → ``ClassFeature`` JSON dict.
 
-    The structured ``features`` JSON list flattens to a markdown blob to
-    match the shipped class_features schema (where ``features: str``).
+    Keeps the structured ``features`` list of ``{name, desc, level}`` dicts
+    intact so the campaign-settings feature editor round-trips. The schema
+    types ``features`` as ``Any`` to accept both this shape and the shipped
+    SRD markdown blob.
     """
     return {
         "slug": row.class_slug,
@@ -79,7 +81,7 @@ def _dump_custom_class(row: Any) -> dict:
         "prof_skills": row.prof_skills or "",
         "spellcasting_ability": row.spellcasting_ability or "",
         "equipment": row.equipment or "",
-        "features": features_to_markdown(_maybe_json(row.features) or []),
+        "features": _maybe_json(row.features) or [],
         "multiclass_prereq_abilities": _maybe_json(row.multiclass_prereq_abilities) or {},
         "multiclass_prereq_mode": row.multiclass_prereq_mode or "all",
         "multiclass_proficiencies": row.multiclass_proficiencies or "",
@@ -235,6 +237,7 @@ def _dump_custom_background(row: Any) -> dict:
     return {
         "slug": row.background_slug,
         "name": row.name,
+        "description": getattr(row, "description", "") or "",
         "skill_proficiencies": row.skill_proficiencies or "",
         "tool_proficiencies": row.tool_proficiencies or "",
         "languages": row.languages or "",

@@ -39,12 +39,6 @@ from ..models import (
     CampaignMembership,
     Character,
     ConcentrationEffect,
-    CustomBackground,
-    CustomClass,
-    CustomFeat,
-    CustomMonster,
-    CustomRace,
-    CustomSubclass,
     DiceRoll,
     Encounter,
     GridType,
@@ -58,6 +52,7 @@ from ..models import (
     Visibility,
 )
 from ..realtime import hub
+from .. import local_content
 from ..sheet_templates import (
     class_levels_summary,
     class_slug as _class_slug,
@@ -493,41 +488,88 @@ def campaign_settings(
         .all()
     )
     tmpl_objs = db.query(TokenTemplate).filter(TokenTemplate.campaign_id == campaign_id).order_by(TokenTemplate.name).all()
-    custom_subclasses = (
-        db.query(CustomSubclass)
-        .filter(CustomSubclass.campaign_id == campaign_id)
-        .order_by(CustomSubclass.class_slug, CustomSubclass.name)
-        .all()
+    # v2.0.0: file-based subclasses. The file's `slug` field carries the
+    # combined `<class>__<sub>` form so each entry is addressable by a single
+    # path-safe key. We also expose split `class_slug` / `sub_slug` for the
+    # template form's existing field names.
+    _subclass_records, _ = local_content.search(
+        type="subclass_features", campaign_id=campaign_id, limit=500,
     )
-    custom_classes = (
-        db.query(CustomClass)
-        .filter(CustomClass.campaign_id == campaign_id)
-        .order_by(CustomClass.name)
-        .all()
+    custom_subclasses = []
+    for _r in _subclass_records:
+        if _r.get("_source") != "local-homebrew":
+            continue
+        _combined = _r.get("slug") or ""
+        if "__" in _combined:
+            _cls, _, _sub = _combined.partition("__")
+        else:
+            _cls, _sub = _r.get("class_slug") or "", _combined
+        custom_subclasses.append({
+            **_r,
+            "class_slug": _cls,
+            "sub_slug": _sub,
+            "combined_slug": _combined,
+        })
+    # Match the legacy ORM ordering: by parent class, then by subclass name.
+    custom_subclasses.sort(key=lambda r: (r.get("class_slug") or "", (r.get("name") or "").lower()))
+    # v2.0.0: file-based class_features. Project the homebrew records back to
+    # the legacy template field names (``class_slug``) so the existing edit
+    # form keeps working without template changes; the schema types
+    # ``features`` as Any so the editor's structured list round-trips.
+    _class_records, _ = local_content.search(
+        type="class_features", campaign_id=campaign_id, limit=500,
     )
-    custom_races = (
-        db.query(CustomRace)
-        .filter(CustomRace.campaign_id == campaign_id)
-        .order_by(CustomRace.name)
-        .all()
+    custom_classes = []
+    for _c in _class_records:
+        if _c.get("_source") != "local-homebrew":
+            continue
+        custom_classes.append({
+            **_c,
+            "class_slug": _c.get("slug"),  # template legacy alias
+        })
+    custom_classes.sort(key=lambda r: (r.get("name") or "").lower())
+    # v2.0.0: file-based races.
+    custom_races, _ = local_content.search(
+        type="races", campaign_id=campaign_id, limit=500,
     )
-    custom_monsters = (
-        db.query(CustomMonster)
-        .filter(CustomMonster.campaign_id == campaign_id)
-        .order_by(CustomMonster.name)
-        .all()
+    # v2.0.0: file-based monsters. The Pydantic Monster model stores a single
+    # `actions: list[Action]` array with a `category` discriminator; the
+    # template's edit form expects the 4 legacy split lists. We split here so
+    # the per-textarea editor populates correctly.
+    _monster_records, _ = local_content.search(
+        type="monsters", campaign_id=campaign_id, limit=500,
     )
-    custom_backgrounds = (
-        db.query(CustomBackground)
-        .filter(CustomBackground.campaign_id == campaign_id)
-        .order_by(CustomBackground.name)
-        .all()
+    custom_monsters = []
+    for _m in _monster_records:
+        if _m.get("_source") != "local-homebrew":
+            continue
+        # Split unified actions back into category buckets for the template.
+        _by_cat: dict[str, list] = {"action": [], "reaction": [], "special_ability": [], "legendary_action": []}
+        for _a in _m.get("actions") or []:
+            _cat = (_a.get("category") or "action")
+            if _cat in _by_cat:
+                _by_cat[_cat].append({"name": _a.get("name"), "desc": _a.get("desc"), "level": _a.get("min_level")})
+        custom_monsters.append({
+            **_m,
+            "monster_slug": _m.get("slug"),  # template legacy alias
+            # Split actions for the 4-textarea form:
+            "actions_split": _by_cat["action"],
+            "reactions": _by_cat["reaction"],
+            "special_abilities": _by_cat["special_ability"],
+            "legendary_actions": _by_cat["legendary_action"],
+        })
+    custom_monsters.sort(key=lambda r: (r.get("name") or "").lower())
+    # v2.0.0: file-based backgrounds (see custom_feats above for the pattern).
+    custom_backgrounds, _ = local_content.search(
+        type="backgrounds", campaign_id=campaign_id, limit=500,
     )
-    custom_feats = (
-        db.query(CustomFeat)
-        .filter(CustomFeat.campaign_id == campaign_id)
-        .order_by(CustomFeat.name)
-        .all()
+    # File-based homebrew at v2.0.0: feats live as JSON files under the
+    # homebrew Docker volume rather than rows in custom_feats. The records
+    # carry the same display fields the template expects (name, prerequisite,
+    # desc) plus the new `slug` field (replacing the legacy int `id` for URL
+    # addressing). See app/local_content.py for the resolver.
+    custom_feats, _custom_feats_total = local_content.search(
+        type="feats", campaign_id=campaign_id, limit=500,
     )
     # ── Encounters (Phase 1, v0.64.0) ────────────────────────────────────
     # Read-only listing of saved encounters; save / load / edit / delete
@@ -839,36 +881,41 @@ def create_custom_subclass(
         raise HTTPException(400, "Name does not yield a valid slug — use letters or numbers")
     features = _parse_custom_subclass_features(features_json)
 
-    if db.query(CustomSubclass).filter(
-        CustomSubclass.campaign_id == campaign_id,
-        CustomSubclass.class_slug == cls_slug,
-        CustomSubclass.sub_slug == sub_slug,
-    ).first():
+    combined = f"{cls_slug}__{sub_slug}"
+    existing = local_content.resolve(combined, type="subclass_features", campaign_id=campaign_id)
+    if existing and existing[1] == "local-homebrew":
         raise HTTPException(
             400,
             f"A homebrew subclass with slug '{sub_slug}' already exists for class '{cls_slug}' in this campaign",
         )
-
-    row = CustomSubclass(
-        campaign_id=campaign_id,
-        class_slug=cls_slug,
-        sub_slug=sub_slug,
-        name=name_n,
-        flavor=(flavor or "").strip()[:4000],
-        features=features,
-        created_by_user_id=user.id,
-    )
-    db.add(row)
-    db.commit()
+    try:
+        local_content.write_homebrew(
+            {
+                "slug": combined,
+                "name": name_n,
+                "class_slug": cls_slug,
+                "subclass_flavor": (flavor or "").strip()[:4000],
+                "features": features,
+                "actions": [],
+                "system": "dnd5e",
+                "scope": f"campaign-{campaign_id}",
+                "source": "homebrew",
+                "owner": user.id,
+            },
+            type="subclass_features",
+            scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-subclasses", status_code=303
     )
 
 
-@router.post("/campaign/{campaign_id}/custom-subclasses/{sub_id}")
+@router.post("/campaign/{campaign_id}/custom-subclasses/{combined_slug}")
 def update_custom_subclass(
     campaign_id: int,
-    sub_id: int,
+    combined_slug: str,
     name: str = Form(...),
     class_slug: str = Form(...),
     flavor: str = Form(""),
@@ -876,20 +923,15 @@ def update_custom_subclass(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Update name / class / flavor / features in place.
-
-    The ``sub_slug`` is intentionally NOT regenerated from the new name —
-    character sheets reference it, so renaming a subclass changes its
-    display name but keeps the saved slug. To rename the slug, delete and
-    recreate (and re-pick on affected sheets).
-    """
+    """v2.0.0: file-based subclass update. ``combined_slug`` is the file's
+    `<class>__<sub>` identifier. Reassigning the parent class effectively
+    means moving to a new file path; we write the new file under the new
+    combined slug and delete the old file."""
     _require_gm_for_campaign(campaign_id, user, db)
-    row = db.query(CustomSubclass).filter(
-        CustomSubclass.id == sub_id,
-        CustomSubclass.campaign_id == campaign_id,
-    ).first()
-    if not row:
+    hit = local_content.resolve(combined_slug, type="subclass_features", campaign_id=campaign_id)
+    if not hit or hit[1] != "local-homebrew":
         raise HTTPException(404, "Custom subclass not found")
+    existing = hit[0]
 
     name_n = (name or "").strip()[:120]
     new_cls = _slugify_for_subclass(class_slug, max_len=60)
@@ -899,48 +941,65 @@ def update_custom_subclass(
         raise HTTPException(400, "Parent class is required")
     features = _parse_custom_subclass_features(features_json)
 
-    if new_cls != row.class_slug:
-        # Class reassignment could collide if another homebrew already uses
-        # this sub_slug under the new parent class. Reject rather than
-        # auto-rename.
-        collision = db.query(CustomSubclass).filter(
-            CustomSubclass.campaign_id == campaign_id,
-            CustomSubclass.class_slug == new_cls,
-            CustomSubclass.sub_slug == row.sub_slug,
-            CustomSubclass.id != sub_id,
-        ).first()
-        if collision:
+    old_cls, _, old_sub = combined_slug.partition("__")
+    if not old_sub:
+        old_sub = combined_slug  # legacy file without class prefix
+    new_combined = f"{new_cls}__{old_sub}"
+
+    if new_combined != combined_slug:
+        # Class reassignment: would the new combined slug collide with another
+        # homebrew under the same campaign? Reject rather than overwrite.
+        collision = local_content.resolve(new_combined, type="subclass_features", campaign_id=campaign_id)
+        if collision and collision[1] == "local-homebrew":
             raise HTTPException(
                 400,
-                f"Class '{new_cls}' already has a homebrew subclass with slug '{row.sub_slug}'",
+                f"Class '{new_cls}' already has a homebrew subclass with slug '{old_sub}'",
             )
 
-    row.name = name_n
-    row.class_slug = new_cls
-    row.flavor = (flavor or "").strip()[:4000]
-    row.features = features
-    db.commit()
+    try:
+        local_content.write_homebrew(
+            {
+                **existing,
+                "slug": new_combined,
+                "name": name_n,
+                "class_slug": new_cls,
+                "subclass_flavor": (flavor or "").strip()[:4000],
+                "features": features,
+                "scope": f"campaign-{campaign_id}",
+                "source": "homebrew",
+            },
+            type="subclass_features",
+            scope=f"campaign-{campaign_id}",
+        )
+        # Remove the old file if the combined slug changed (class reassignment).
+        if new_combined != combined_slug:
+            local_content.delete_homebrew(
+                combined_slug, type="subclass_features", scope=f"campaign-{campaign_id}",
+            )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-subclasses", status_code=303
     )
 
 
-@router.post("/campaign/{campaign_id}/custom-subclasses/{sub_id}/delete")
+@router.post("/campaign/{campaign_id}/custom-subclasses/{combined_slug}/delete")
 def delete_custom_subclass(
     campaign_id: int,
-    sub_id: int,
+    combined_slug: str,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    """v2.0.0: file-based subclass delete by combined `<class>__<sub>` slug."""
     _require_gm_for_campaign(campaign_id, user, db)
-    row = db.query(CustomSubclass).filter(
-        CustomSubclass.id == sub_id,
-        CustomSubclass.campaign_id == campaign_id,
-    ).first()
-    if not row:
+    try:
+        removed = local_content.delete_homebrew(
+            combined_slug, type="subclass_features", scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not removed:
         raise HTTPException(404, "Custom subclass not found")
-    db.delete(row)
-    db.commit()
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-subclasses", status_code=303
     )
@@ -1200,43 +1259,47 @@ def create_custom_class(
     })
     mc_mode = _normalize_multiclass_mode(mc_prereq_mode)
 
-    if db.query(CustomClass).filter(
-        CustomClass.campaign_id == campaign_id,
-        CustomClass.class_slug == cls_slug,
-    ).first():
+    scope = f"campaign-{campaign_id}"
+    existing = local_content.resolve(cls_slug, type="class_features", campaign_id=campaign_id)
+    if existing and existing[1] == "local-homebrew":
         raise HTTPException(400, f"A homebrew class with slug '{cls_slug}' already exists in this campaign")
 
-    row = CustomClass(
-        campaign_id=campaign_id,
-        class_slug=cls_slug,
-        name=name_n,
-        hit_die=hd,
-        prof_armor=(prof_armor or "").strip()[:500],
-        prof_weapons=(prof_weapons or "").strip()[:500],
-        prof_tools=(prof_tools or "").strip()[:500],
-        prof_saving_throws=(prof_saving_throws or "").strip()[:120],
-        prof_skills=(prof_skills or "").strip()[:500],
-        spellcasting_ability=spc,
-        equipment=(equipment or "").strip()[:4000],
-        features=features,
-        spell_list=spell_list,
-        resources=resources,
-        multiclass_prereq_abilities=mc_prereqs,
-        multiclass_prereq_mode=mc_mode,
-        multiclass_proficiencies=(multiclass_proficiencies or "").strip()[:500],
-        created_by_user_id=user.id,
+    local_content.write_homebrew(
+        {
+            "slug": cls_slug,
+            "name": name_n,
+            "hit_die": hd,
+            "prof_armor": (prof_armor or "").strip()[:500],
+            "prof_weapons": (prof_weapons or "").strip()[:500],
+            "prof_tools": (prof_tools or "").strip()[:500],
+            "prof_saving_throws": (prof_saving_throws or "").strip()[:120],
+            "prof_skills": (prof_skills or "").strip()[:500],
+            "spellcasting_ability": spc,
+            "equipment": (equipment or "").strip()[:4000],
+            "features": features,
+            "spell_list": spell_list,
+            "resources": resources,
+            "multiclass_prereq_abilities": mc_prereqs,
+            "multiclass_prereq_mode": mc_mode,
+            "multiclass_proficiencies": (multiclass_proficiencies or "").strip()[:500],
+            "actions": [],
+            "system": "dnd5e",
+            "scope": scope,
+            "source": "homebrew",
+            "owner": user.id,
+        },
+        type="class_features",
+        scope=scope,
     )
-    db.add(row)
-    db.commit()
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-classes", status_code=303
     )
 
 
-@router.post("/campaign/{campaign_id}/custom-classes/{class_id}")
+@router.post("/campaign/{campaign_id}/custom-classes/{class_slug}")
 def update_custom_class(
     campaign_id: int,
-    class_id: int,
+    class_slug: str,
     name: str = Form(...),
     hit_die: str = Form("8"),
     prof_armor: str = Form(""),
@@ -1260,15 +1323,14 @@ def update_custom_class(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Update everything but ``class_slug``. Sheets reference it; renames
+    """Update everything but the slug. Sheets reference it; renames
     change the display name only. Delete + recreate to change the slug."""
     _require_gm_for_campaign(campaign_id, user, db)
-    row = db.query(CustomClass).filter(
-        CustomClass.id == class_id,
-        CustomClass.campaign_id == campaign_id,
-    ).first()
-    if not row:
+    scope = f"campaign-{campaign_id}"
+    existing = local_content.resolve(class_slug, type="class_features", campaign_id=campaign_id)
+    if not existing or existing[1] != "local-homebrew":
         raise HTTPException(404, "Custom class not found")
+    prev = existing[0]
 
     name_n = (name or "").strip()[:120]
     if not name_n:
@@ -1284,22 +1346,33 @@ def update_custom_class(
     })
     mc_mode = _normalize_multiclass_mode(mc_prereq_mode)
 
-    row.name = name_n
-    row.hit_die = hd
-    row.prof_armor = (prof_armor or "").strip()[:500]
-    row.prof_weapons = (prof_weapons or "").strip()[:500]
-    row.prof_tools = (prof_tools or "").strip()[:500]
-    row.prof_saving_throws = (prof_saving_throws or "").strip()[:120]
-    row.prof_skills = (prof_skills or "").strip()[:500]
-    row.spellcasting_ability = spc
-    row.equipment = (equipment or "").strip()[:4000]
-    row.features = features
-    row.spell_list = spell_list
-    row.resources = resources
-    row.multiclass_prereq_abilities = mc_prereqs
-    row.multiclass_prereq_mode = mc_mode
-    row.multiclass_proficiencies = (multiclass_proficiencies or "").strip()[:500]
-    db.commit()
+    local_content.write_homebrew(
+        {
+            "slug": class_slug,
+            "name": name_n,
+            "hit_die": hd,
+            "prof_armor": (prof_armor or "").strip()[:500],
+            "prof_weapons": (prof_weapons or "").strip()[:500],
+            "prof_tools": (prof_tools or "").strip()[:500],
+            "prof_saving_throws": (prof_saving_throws or "").strip()[:120],
+            "prof_skills": (prof_skills or "").strip()[:500],
+            "spellcasting_ability": spc,
+            "equipment": (equipment or "").strip()[:4000],
+            "features": features,
+            "spell_list": spell_list,
+            "resources": resources,
+            "multiclass_prereq_abilities": mc_prereqs,
+            "multiclass_prereq_mode": mc_mode,
+            "multiclass_proficiencies": (multiclass_proficiencies or "").strip()[:500],
+            "actions": prev.get("actions") or [],
+            "system": "dnd5e",
+            "scope": scope,
+            "source": "homebrew",
+            "owner": prev.get("owner") or user.id,
+        },
+        type="class_features",
+        scope=scope,
+    )
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-classes", status_code=303
     )
@@ -1332,13 +1405,18 @@ def custom_class_resources(
         if not is_member:
             raise HTTPException(403, "Not a member of this campaign")
 
-    rows = db.query(CustomClass).filter(CustomClass.campaign_id == campaign_id).all()
+    records, _ = local_content.search(
+        type="class_features", campaign_id=campaign_id, limit=500,
+    )
     results: list[dict] = []
-    for cc in rows:
-        for rec in (cc.resources or []):
+    for rec_file in records:
+        if rec_file.get("_source") != "local-homebrew":
+            continue
+        cls_slug = rec_file.get("slug") or ""
+        for rec in (rec_file.get("resources") or []):
             if not isinstance(rec, dict):
                 continue
-            results.append({**rec, "class": cc.class_slug, "subclass": None})
+            results.append({**rec, "class": cls_slug, "subclass": None})
     return {"results": results}
 
 
@@ -1448,22 +1526,18 @@ def multiclass_check(
     }
 
 
-@router.post("/campaign/{campaign_id}/custom-classes/{class_id}/delete")
+@router.post("/campaign/{campaign_id}/custom-classes/{class_slug}/delete")
 def delete_custom_class(
     campaign_id: int,
-    class_id: int,
+    class_slug: str,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
     _require_gm_for_campaign(campaign_id, user, db)
-    row = db.query(CustomClass).filter(
-        CustomClass.id == class_id,
-        CustomClass.campaign_id == campaign_id,
-    ).first()
-    if not row:
+    scope = f"campaign-{campaign_id}"
+    ok = local_content.delete_homebrew(class_slug, type="class_features", scope=scope)
+    if not ok:
         raise HTTPException(404, "Custom class not found")
-    db.delete(row)
-    db.commit()
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-classes", status_code=303
     )
@@ -1558,36 +1632,41 @@ def create_custom_race(
     # Traits share the features list shape — same parser, same rules.
     traits = _parse_custom_subclass_features(traits_json)
 
-    if db.query(CustomRace).filter(
-        CustomRace.campaign_id == campaign_id,
-        CustomRace.race_slug == race_slug,
-    ).first():
+    existing = local_content.resolve(race_slug, type="races", campaign_id=campaign_id)
+    if existing and existing[1] == "local-homebrew":
         raise HTTPException(400, f"A homebrew race with slug '{race_slug}' already exists in this campaign")
-
-    row = CustomRace(
-        campaign_id=campaign_id,
-        race_slug=race_slug,
-        name=name_n,
-        ability_bonuses=ab_bonuses,
-        size=size_n,
-        speed=speed_n,
-        age=(age or "").strip()[:1000],
-        alignment=(alignment or "").strip()[:1000],
-        languages=(languages or "").strip()[:1000],
-        traits=traits,
-        created_by_user_id=user.id,
-    )
-    db.add(row)
-    db.commit()
+    try:
+        local_content.write_homebrew(
+            {
+                "slug": race_slug,
+                "name": name_n,
+                "ability_bonuses": ab_bonuses,
+                "size": size_n,
+                "speed": speed_n,
+                "age": (age or "").strip()[:1000],
+                "alignment": (alignment or "").strip()[:1000],
+                "languages": (languages or "").strip()[:1000],
+                "traits": traits,
+                "actions": [],
+                "system": "dnd5e",
+                "scope": f"campaign-{campaign_id}",
+                "source": "homebrew",
+                "owner": user.id,
+            },
+            type="races",
+            scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-races", status_code=303
     )
 
 
-@router.post("/campaign/{campaign_id}/custom-races/{race_id}")
+@router.post("/campaign/{campaign_id}/custom-races/{race_slug}")
 def update_custom_race(
     campaign_id: int,
-    race_id: int,
+    race_slug: str,
     name: str = Form(...),
     size: str = Form(""),
     speed: str = Form("30"),
@@ -1604,15 +1683,13 @@ def update_custom_race(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Update everything but ``race_slug``. Sheets reference it; renames
-    change display name only."""
+    """v2.0.0: file-based race update by slug. ``race_slug`` is immutable —
+    the form only mutates the display name and other fields."""
     _require_gm_for_campaign(campaign_id, user, db)
-    row = db.query(CustomRace).filter(
-        CustomRace.id == race_id,
-        CustomRace.campaign_id == campaign_id,
-    ).first()
-    if not row:
+    hit = local_content.resolve(race_slug, type="races", campaign_id=campaign_id)
+    if not hit or hit[1] != "local-homebrew":
         raise HTTPException(404, "Custom race not found")
+    existing = hit[0]
 
     name_n = (name or "").strip()[:120]
     if not name_n:
@@ -1630,36 +1707,49 @@ def update_custom_race(
     })
     traits = _parse_custom_subclass_features(traits_json)
 
-    row.name = name_n
-    row.ability_bonuses = ab_bonuses
-    row.size = size_n
-    row.speed = speed_n
-    row.age = (age or "").strip()[:1000]
-    row.alignment = (alignment or "").strip()[:1000]
-    row.languages = (languages or "").strip()[:1000]
-    row.traits = traits
-    db.commit()
+    try:
+        local_content.write_homebrew(
+            {
+                **existing,
+                "slug": existing.get("slug") or race_slug,
+                "name": name_n,
+                "ability_bonuses": ab_bonuses,
+                "size": size_n,
+                "speed": speed_n,
+                "age": (age or "").strip()[:1000],
+                "alignment": (alignment or "").strip()[:1000],
+                "languages": (languages or "").strip()[:1000],
+                "traits": traits,
+                "scope": f"campaign-{campaign_id}",
+                "source": "homebrew",
+            },
+            type="races",
+            scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-races", status_code=303
     )
 
 
-@router.post("/campaign/{campaign_id}/custom-races/{race_id}/delete")
+@router.post("/campaign/{campaign_id}/custom-races/{race_slug}/delete")
 def delete_custom_race(
     campaign_id: int,
-    race_id: int,
+    race_slug: str,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    """v2.0.0: file-based race delete by slug."""
     _require_gm_for_campaign(campaign_id, user, db)
-    row = db.query(CustomRace).filter(
-        CustomRace.id == race_id,
-        CustomRace.campaign_id == campaign_id,
-    ).first()
-    if not row:
+    try:
+        removed = local_content.delete_homebrew(
+            race_slug, type="races", scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not removed:
         raise HTTPException(404, "Custom race not found")
-    db.delete(row)
-    db.commit()
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-races", status_code=303
     )
@@ -1738,6 +1828,35 @@ def _parse_ability_score(label: str, raw: str) -> int:
     return n
 
 
+def _coalesce_monster_actions(actions_json: str, reactions_json: str,
+                              special_abilities_json: str, legendary_actions_json: str) -> list[dict]:
+    """v2.0.0 helper: take the 4 legacy action-list JSON form fields and
+    fold them into the single ``actions: list[Action]`` array shape that
+    the Monster Pydantic model uses, with a ``category`` discriminator on
+    each entry. Mirrors the migration helper in app/_migrate_v52.py."""
+    import re as _re
+    out: list[dict] = []
+    for raw, cat in (
+        (actions_json,            "action"),
+        (reactions_json,          "reaction"),
+        (special_abilities_json,  "special_ability"),
+        (legendary_actions_json,  "legendary_action"),
+    ):
+        for entry in _parse_custom_subclass_features(raw):
+            if not isinstance(entry, dict):
+                continue
+            name = (entry.get("name") or "").strip()
+            slug_id = _re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or f"unnamed-{cat}"
+            out.append({
+                "id": entry.get("id") or slug_id,
+                "name": name,
+                "desc": entry.get("desc") or "",
+                "min_level": entry.get("level") or 1,
+                "category": cat,
+            })
+    return out
+
+
 @router.post("/campaign/{campaign_id}/custom-monsters")
 def create_custom_monster(
     campaign_id: int,
@@ -1801,54 +1920,58 @@ def create_custom_monster(
     })
     cr = _parse_cr(challenge_rating)
 
-    if db.query(CustomMonster).filter(
-        CustomMonster.campaign_id == campaign_id,
-        CustomMonster.monster_slug == monster_slug,
-    ).first():
+    existing_hit = local_content.resolve(monster_slug, type="monsters", campaign_id=campaign_id)
+    if existing_hit and existing_hit[1] == "local-homebrew":
         raise HTTPException(400, f"A homebrew monster with slug '{monster_slug}' already exists in this campaign")
-
-    row = CustomMonster(
-        campaign_id=campaign_id,
-        monster_slug=monster_slug,
-        name=name_n,
-        size=size_n,
-        type=type_n,
-        alignment=(alignment or "").strip()[:120],
-        armor_class=ac,
-        armor_desc=(armor_desc or "").strip()[:120],
-        hit_points=hp,
-        hit_dice=(hit_dice or "").strip()[:40],
-        speed=speed,
-        strength=_parse_ability_score("STR", strength),
-        dexterity=_parse_ability_score("DEX", dexterity),
-        constitution=_parse_ability_score("CON", constitution),
-        intelligence=_parse_ability_score("INT", intelligence),
-        wisdom=_parse_ability_score("WIS", wisdom),
-        charisma=_parse_ability_score("CHA", charisma),
-        damage_vulnerabilities=(damage_vulnerabilities or "").strip()[:500],
-        damage_resistances=(damage_resistances or "").strip()[:500],
-        damage_immunities=(damage_immunities or "").strip()[:500],
-        condition_immunities=(condition_immunities or "").strip()[:500],
-        senses=(senses or "").strip()[:500],
-        languages=(languages or "").strip()[:500],
-        challenge_rating=cr,
-        actions=_parse_custom_subclass_features(actions_json),
-        reactions=_parse_custom_subclass_features(reactions_json),
-        special_abilities=_parse_custom_subclass_features(special_abilities_json),
-        legendary_actions=_parse_custom_subclass_features(legendary_actions_json),
-        created_by_user_id=user.id,
-    )
-    db.add(row)
-    db.commit()
+    try:
+        local_content.write_homebrew(
+            {
+                "slug": monster_slug,
+                "name": name_n,
+                "size": size_n,
+                "type": type_n,
+                "alignment": (alignment or "").strip()[:120],
+                "armor_class": ac,
+                "armor_desc": (armor_desc or "").strip()[:120],
+                "hit_points": hp,
+                "hit_dice": (hit_dice or "").strip()[:40],
+                "speed": speed,
+                "strength": _parse_ability_score("STR", strength),
+                "dexterity": _parse_ability_score("DEX", dexterity),
+                "constitution": _parse_ability_score("CON", constitution),
+                "intelligence": _parse_ability_score("INT", intelligence),
+                "wisdom": _parse_ability_score("WIS", wisdom),
+                "charisma": _parse_ability_score("CHA", charisma),
+                "damage_vulnerabilities": (damage_vulnerabilities or "").strip()[:500],
+                "damage_resistances": (damage_resistances or "").strip()[:500],
+                "damage_immunities": (damage_immunities or "").strip()[:500],
+                "condition_immunities": (condition_immunities or "").strip()[:500],
+                "senses": (senses or "").strip()[:500],
+                "languages": (languages or "").strip()[:500],
+                "challenge_rating": cr,
+                # v2.0.0 unified action list with category discriminator.
+                "actions": _coalesce_monster_actions(
+                    actions_json, reactions_json, special_abilities_json, legendary_actions_json,
+                ),
+                "system": "dnd5e",
+                "scope": f"campaign-{campaign_id}",
+                "source": "homebrew",
+                "owner": user.id,
+            },
+            type="monsters",
+            scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-monsters", status_code=303
     )
 
 
-@router.post("/campaign/{campaign_id}/custom-monsters/{monster_id}")
+@router.post("/campaign/{campaign_id}/custom-monsters/{monster_slug}")
 def update_custom_monster(
     campaign_id: int,
-    monster_id: int,
+    monster_slug: str,
     name: str = Form(...),
     size: str = Form("Medium"),
     type: str = Form("beast"),
@@ -1882,15 +2005,13 @@ def update_custom_monster(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Update everything but ``monster_slug``. Token templates and beast
-    favorites reference it; renames change display name only."""
+    """v2.0.0: file-based monster update by slug. ``monster_slug`` is immutable —
+    token templates and beast-favorites reference it."""
     _require_gm_for_campaign(campaign_id, user, db)
-    row = db.query(CustomMonster).filter(
-        CustomMonster.id == monster_id,
-        CustomMonster.campaign_id == campaign_id,
-    ).first()
-    if not row:
+    hit = local_content.resolve(monster_slug, type="monsters", campaign_id=campaign_id)
+    if not hit or hit[1] != "local-homebrew":
         raise HTTPException(404, "Custom monster not found")
+    existing = hit[0]
 
     name_n = (name or "").strip()[:120]
     if not name_n:
@@ -1915,54 +2036,66 @@ def update_custom_monster(
     })
     cr = _parse_cr(challenge_rating)
 
-    row.name = name_n
-    row.size = size_n
-    row.type = type_n
-    row.alignment = (alignment or "").strip()[:120]
-    row.armor_class = ac
-    row.armor_desc = (armor_desc or "").strip()[:120]
-    row.hit_points = hp
-    row.hit_dice = (hit_dice or "").strip()[:40]
-    row.speed = speed
-    row.strength = _parse_ability_score("STR", strength)
-    row.dexterity = _parse_ability_score("DEX", dexterity)
-    row.constitution = _parse_ability_score("CON", constitution)
-    row.intelligence = _parse_ability_score("INT", intelligence)
-    row.wisdom = _parse_ability_score("WIS", wisdom)
-    row.charisma = _parse_ability_score("CHA", charisma)
-    row.damage_vulnerabilities = (damage_vulnerabilities or "").strip()[:500]
-    row.damage_resistances = (damage_resistances or "").strip()[:500]
-    row.damage_immunities = (damage_immunities or "").strip()[:500]
-    row.condition_immunities = (condition_immunities or "").strip()[:500]
-    row.senses = (senses or "").strip()[:500]
-    row.languages = (languages or "").strip()[:500]
-    row.challenge_rating = cr
-    row.actions = _parse_custom_subclass_features(actions_json)
-    row.reactions = _parse_custom_subclass_features(reactions_json)
-    row.special_abilities = _parse_custom_subclass_features(special_abilities_json)
-    row.legendary_actions = _parse_custom_subclass_features(legendary_actions_json)
-    db.commit()
+    try:
+        local_content.write_homebrew(
+            {
+                **existing,
+                "slug": existing.get("slug") or monster_slug,
+                "name": name_n,
+                "size": size_n,
+                "type": type_n,
+                "alignment": (alignment or "").strip()[:120],
+                "armor_class": ac,
+                "armor_desc": (armor_desc or "").strip()[:120],
+                "hit_points": hp,
+                "hit_dice": (hit_dice or "").strip()[:40],
+                "speed": speed,
+                "strength": _parse_ability_score("STR", strength),
+                "dexterity": _parse_ability_score("DEX", dexterity),
+                "constitution": _parse_ability_score("CON", constitution),
+                "intelligence": _parse_ability_score("INT", intelligence),
+                "wisdom": _parse_ability_score("WIS", wisdom),
+                "charisma": _parse_ability_score("CHA", charisma),
+                "damage_vulnerabilities": (damage_vulnerabilities or "").strip()[:500],
+                "damage_resistances": (damage_resistances or "").strip()[:500],
+                "damage_immunities": (damage_immunities or "").strip()[:500],
+                "condition_immunities": (condition_immunities or "").strip()[:500],
+                "senses": (senses or "").strip()[:500],
+                "languages": (languages or "").strip()[:500],
+                "challenge_rating": cr,
+                "actions": _coalesce_monster_actions(
+                    actions_json, reactions_json, special_abilities_json, legendary_actions_json,
+                ),
+                "scope": f"campaign-{campaign_id}",
+                "source": "homebrew",
+            },
+            type="monsters",
+            scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-monsters", status_code=303
     )
 
 
-@router.post("/campaign/{campaign_id}/custom-monsters/{monster_id}/delete")
+@router.post("/campaign/{campaign_id}/custom-monsters/{monster_slug}/delete")
 def delete_custom_monster(
     campaign_id: int,
-    monster_id: int,
+    monster_slug: str,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    """v2.0.0: file-based monster delete by slug."""
     _require_gm_for_campaign(campaign_id, user, db)
-    row = db.query(CustomMonster).filter(
-        CustomMonster.id == monster_id,
-        CustomMonster.campaign_id == campaign_id,
-    ).first()
-    if not row:
+    try:
+        removed = local_content.delete_homebrew(
+            monster_slug, type="monsters", scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not removed:
         raise HTTPException(404, "Custom monster not found")
-    db.delete(row)
-    db.commit()
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-monsters", status_code=303
     )
@@ -1984,6 +2117,7 @@ def create_custom_background(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    """v2.0.0: file-based homebrew create. See create_custom_feat for the pattern."""
     _require_gm_for_campaign(campaign_id, user, db)
     name_n = (name or "").strip()[:120]
     if not name_n:
@@ -1991,35 +2125,41 @@ def create_custom_background(
     slug = _slugify_for_subclass(name_n, max_len=60)
     if not slug:
         raise HTTPException(400, "Name does not yield a valid slug — use letters or numbers")
-    if db.query(CustomBackground).filter(
-        CustomBackground.campaign_id == campaign_id,
-        CustomBackground.background_slug == slug,
-    ).first():
+    existing = local_content.resolve(slug, type="backgrounds", campaign_id=campaign_id)
+    if existing and existing[1] == "local-homebrew":
         raise HTTPException(400, f"A homebrew background with slug '{slug}' already exists in this campaign")
-    row = CustomBackground(
-        campaign_id=campaign_id,
-        background_slug=slug,
-        name=name_n,
-        description=(description or "").strip()[:8000],
-        skill_proficiencies=(skill_proficiencies or "").strip()[:500],
-        tool_proficiencies=(tool_proficiencies or "").strip()[:500],
-        languages=(languages or "").strip()[:500],
-        equipment=(equipment or "").strip()[:4000],
-        feature_name=(feature_name or "").strip()[:160],
-        feature_desc=(feature_desc or "").strip()[:4000],
-        created_by_user_id=user.id,
-    )
-    db.add(row)
-    db.commit()
+    try:
+        local_content.write_homebrew(
+            {
+                "slug": slug,
+                "name": name_n,
+                "description": (description or "").strip()[:8000],
+                "skill_proficiencies": (skill_proficiencies or "").strip()[:500],
+                "tool_proficiencies": (tool_proficiencies or "").strip()[:500],
+                "languages": (languages or "").strip()[:500],
+                "equipment": (equipment or "").strip()[:4000],
+                "feature_name": (feature_name or "").strip()[:160],
+                "feature_desc": (feature_desc or "").strip()[:4000],
+                "actions": [],
+                "system": "dnd5e",
+                "scope": f"campaign-{campaign_id}",
+                "source": "homebrew",
+                "owner": user.id,
+            },
+            type="backgrounds",
+            scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-backgrounds", status_code=303
     )
 
 
-@router.post("/campaign/{campaign_id}/custom-backgrounds/{bg_id}")
+@router.post("/campaign/{campaign_id}/custom-backgrounds/{bg_slug}")
 def update_custom_background(
     campaign_id: int,
-    bg_id: int,
+    bg_slug: str,
     name: str = Form(...),
     description: str = Form(""),
     skill_proficiencies: str = Form(""),
@@ -2031,46 +2171,58 @@ def update_custom_background(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    """v2.0.0: file-based homebrew update by slug."""
     _require_gm_for_campaign(campaign_id, user, db)
-    row = db.query(CustomBackground).filter(
-        CustomBackground.id == bg_id,
-        CustomBackground.campaign_id == campaign_id,
-    ).first()
-    if not row:
+    hit = local_content.resolve(bg_slug, type="backgrounds", campaign_id=campaign_id)
+    if not hit or hit[1] != "local-homebrew":
         raise HTTPException(404, "Custom background not found")
+    existing = hit[0]
     name_n = (name or "").strip()[:120]
     if not name_n:
         raise HTTPException(400, "Name is required")
-    row.name = name_n
-    row.description = (description or "").strip()[:8000]
-    row.skill_proficiencies = (skill_proficiencies or "").strip()[:500]
-    row.tool_proficiencies = (tool_proficiencies or "").strip()[:500]
-    row.languages = (languages or "").strip()[:500]
-    row.equipment = (equipment or "").strip()[:4000]
-    row.feature_name = (feature_name or "").strip()[:160]
-    row.feature_desc = (feature_desc or "").strip()[:4000]
-    db.commit()
+    try:
+        local_content.write_homebrew(
+            {
+                **existing,
+                "slug": existing.get("slug") or bg_slug,
+                "name": name_n,
+                "description": (description or "").strip()[:8000],
+                "skill_proficiencies": (skill_proficiencies or "").strip()[:500],
+                "tool_proficiencies": (tool_proficiencies or "").strip()[:500],
+                "languages": (languages or "").strip()[:500],
+                "equipment": (equipment or "").strip()[:4000],
+                "feature_name": (feature_name or "").strip()[:160],
+                "feature_desc": (feature_desc or "").strip()[:4000],
+                "scope": f"campaign-{campaign_id}",
+                "source": "homebrew",
+            },
+            type="backgrounds",
+            scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-backgrounds", status_code=303
     )
 
 
-@router.post("/campaign/{campaign_id}/custom-backgrounds/{bg_id}/delete")
+@router.post("/campaign/{campaign_id}/custom-backgrounds/{bg_slug}/delete")
 def delete_custom_background(
     campaign_id: int,
-    bg_id: int,
+    bg_slug: str,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    """v2.0.0: file-based homebrew delete by slug."""
     _require_gm_for_campaign(campaign_id, user, db)
-    row = db.query(CustomBackground).filter(
-        CustomBackground.id == bg_id,
-        CustomBackground.campaign_id == campaign_id,
-    ).first()
-    if not row:
+    try:
+        removed = local_content.delete_homebrew(
+            bg_slug, type="backgrounds", scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not removed:
         raise HTTPException(404, "Custom background not found")
-    db.delete(row)
-    db.commit()
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-backgrounds", status_code=303
     )
@@ -2087,6 +2239,10 @@ def create_custom_feat(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    """Create a campaign-scoped homebrew feat as a JSON file in the homebrew
+    Docker volume. The slug is derived from the name and must be unique
+    within the campaign-scope directory. v2.0.0: replaces the legacy
+    CustomFeat DB write path."""
     _require_gm_for_campaign(campaign_id, user, db)
     name_n = (name or "").strip()[:120]
     if not name_n:
@@ -2094,71 +2250,97 @@ def create_custom_feat(
     slug = _slugify_for_subclass(name_n, max_len=80)
     if not slug:
         raise HTTPException(400, "Name does not yield a valid slug — use letters or numbers")
-    if db.query(CustomFeat).filter(
-        CustomFeat.campaign_id == campaign_id,
-        CustomFeat.feat_slug == slug,
-    ).first():
+    # Uniqueness check against the file-based homebrew. Note: resolve() walks
+    # campaign-scope first, then global — we only care about a clash inside
+    # this campaign's scope so the broader-tier records don't false-positive.
+    existing = local_content.resolve(slug, type="feats", campaign_id=campaign_id)
+    if existing and (existing[1] == "local-homebrew"):
         raise HTTPException(400, f"A homebrew feat with slug '{slug}' already exists in this campaign")
-    row = CustomFeat(
-        campaign_id=campaign_id,
-        feat_slug=slug,
-        name=name_n,
-        prerequisite=(prerequisite or "").strip()[:500],
-        desc=(desc or "").strip()[:8000],
-        created_by_user_id=user.id,
-    )
-    db.add(row)
-    db.commit()
+    try:
+        local_content.write_homebrew(
+            {
+                "slug": slug,
+                "name": name_n,
+                "prerequisite": (prerequisite or "").strip()[:500],
+                "desc": (desc or "").strip()[:8000],
+                "actions": [],
+                "system": "dnd5e",
+                "scope": f"campaign-{campaign_id}",
+                "source": "homebrew",
+                "owner": user.id,
+            },
+            type="feats",
+            scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-feats", status_code=303
     )
 
 
-@router.post("/campaign/{campaign_id}/custom-feats/{feat_id}")
+@router.post("/campaign/{campaign_id}/custom-feats/{feat_slug}")
 def update_custom_feat(
     campaign_id: int,
-    feat_id: int,
+    feat_slug: str,
     name: str = Form(...),
     prerequisite: str = Form(""),
     desc: str = Form(""),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    """Update a campaign-scoped homebrew feat by slug. v2.0.0: feat_slug
+    replaces the legacy int feat_id in the URL contract — the file-based
+    backing has no integer primary key."""
     _require_gm_for_campaign(campaign_id, user, db)
-    row = db.query(CustomFeat).filter(
-        CustomFeat.id == feat_id,
-        CustomFeat.campaign_id == campaign_id,
-    ).first()
-    if not row:
+    hit = local_content.resolve(feat_slug, type="feats", campaign_id=campaign_id)
+    if not hit or hit[1] != "local-homebrew":
         raise HTTPException(404, "Custom feat not found")
+    existing = hit[0]
     name_n = (name or "").strip()[:120]
     if not name_n:
         raise HTTPException(400, "Name is required")
-    row.name = name_n
-    row.prerequisite = (prerequisite or "").strip()[:500]
-    row.desc = (desc or "").strip()[:8000]
-    db.commit()
+    # Atomic rewrite: preserve actions, owner, attribution; replace editable
+    # fields with the form payload.
+    try:
+        local_content.write_homebrew(
+            {
+                **existing,
+                "slug": existing.get("slug") or feat_slug,
+                "name": name_n,
+                "prerequisite": (prerequisite or "").strip()[:500],
+                "desc": (desc or "").strip()[:8000],
+                "scope": f"campaign-{campaign_id}",
+                "source": "homebrew",
+            },
+            type="feats",
+            scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-feats", status_code=303
     )
 
 
-@router.post("/campaign/{campaign_id}/custom-feats/{feat_id}/delete")
+@router.post("/campaign/{campaign_id}/custom-feats/{feat_slug}/delete")
 def delete_custom_feat(
     campaign_id: int,
-    feat_id: int,
+    feat_slug: str,
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
+    """Delete a campaign-scoped homebrew feat by slug. v2.0.0: feat_slug
+    replaces the legacy int feat_id in the URL contract."""
     _require_gm_for_campaign(campaign_id, user, db)
-    row = db.query(CustomFeat).filter(
-        CustomFeat.id == feat_id,
-        CustomFeat.campaign_id == campaign_id,
-    ).first()
-    if not row:
+    try:
+        removed = local_content.delete_homebrew(
+            feat_slug, type="feats", scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not removed:
         raise HTTPException(404, "Custom feat not found")
-    db.delete(row)
-    db.commit()
     return RedirectResponse(
         f"/campaign/{campaign_id}/settings#custom-feats", status_code=303
     )
@@ -2176,75 +2358,54 @@ def delete_custom_feat(
 HOMEBREW_EXPORT_VERSION = 1
 
 
-def _class_to_dict(c: CustomClass) -> dict:
+# _class_to_dict / _subclass_to_dict / _race_to_dict helpers removed in
+# v2.0.0 — export endpoint inlines projections from local_content results.
+
+
+def _monster_record_to_export(r: dict) -> dict:
+    """Helper: project a file-based monster record back to the legacy export
+    shape (with `monster_slug` + 4 split action lists). v2.0.0."""
+    by_cat: dict[str, list] = {"action": [], "reaction": [], "special_ability": [], "legendary_action": []}
+    for a in r.get("actions") or []:
+        cat = a.get("category") or "action"
+        if cat in by_cat:
+            by_cat[cat].append({"name": a.get("name"), "desc": a.get("desc"), "level": a.get("min_level")})
     return {
-        "class_slug": c.class_slug, "name": c.name, "hit_die": c.hit_die,
-        "prof_armor": c.prof_armor or "", "prof_weapons": c.prof_weapons or "",
-        "prof_tools": c.prof_tools or "", "prof_saving_throws": c.prof_saving_throws or "",
-        "prof_skills": c.prof_skills or "", "spellcasting_ability": c.spellcasting_ability or "",
-        "equipment": c.equipment or "", "features": c.features or [],
-        "spell_list": c.spell_list or [],
-        "multiclass_prereq_abilities": c.multiclass_prereq_abilities or {},
-        "multiclass_prereq_mode": c.multiclass_prereq_mode or "all",
-        "multiclass_proficiencies": c.multiclass_proficiencies or "",
-        "resources": c.resources or [],
+        "monster_slug": r.get("slug"),
+        "name": r.get("name"),
+        "size": r.get("size") or "Medium",
+        "type": r.get("type") or "beast",
+        "alignment": r.get("alignment") or "unaligned",
+        "armor_class": r.get("armor_class"),
+        "armor_desc": r.get("armor_desc") or "",
+        "hit_points": r.get("hit_points"),
+        "hit_dice": r.get("hit_dice") or "",
+        "speed": r.get("speed") or {"walk": 30},
+        "strength": r.get("strength"), "dexterity": r.get("dexterity"),
+        "constitution": r.get("constitution"), "intelligence": r.get("intelligence"),
+        "wisdom": r.get("wisdom"), "charisma": r.get("charisma"),
+        "damage_vulnerabilities": r.get("damage_vulnerabilities") or "",
+        "damage_resistances": r.get("damage_resistances") or "",
+        "damage_immunities": r.get("damage_immunities") or "",
+        "condition_immunities": r.get("condition_immunities") or "",
+        "senses": r.get("senses") or "",
+        "languages": r.get("languages") or "",
+        "challenge_rating": r.get("challenge_rating") or "0",
+        "actions": by_cat["action"],
+        "reactions": by_cat["reaction"],
+        "special_abilities": by_cat["special_ability"],
+        "legendary_actions": by_cat["legendary_action"],
     }
 
 
-def _subclass_to_dict(s: CustomSubclass) -> dict:
-    return {
-        "class_slug": s.class_slug, "sub_slug": s.sub_slug, "name": s.name,
-        "flavor": s.flavor or "", "features": s.features or [],
-    }
+# _background_to_dict helper removed in v2.0.0 — export endpoint inlines
+# the legacy-field-name projection from local_content.search results.
 
 
-def _race_to_dict(r: CustomRace) -> dict:
-    return {
-        "race_slug": r.race_slug, "name": r.name,
-        "ability_bonuses": r.ability_bonuses or [],
-        "size": r.size or "", "speed": r.speed, "age": r.age or "",
-        "alignment": r.alignment or "", "languages": r.languages or "",
-        "traits": r.traits or [],
-    }
-
-
-def _monster_to_dict(m: CustomMonster) -> dict:
-    return {
-        "monster_slug": m.monster_slug, "name": m.name, "size": m.size or "Medium",
-        "type": m.type or "beast", "alignment": m.alignment or "unaligned",
-        "armor_class": m.armor_class, "armor_desc": m.armor_desc or "",
-        "hit_points": m.hit_points, "hit_dice": m.hit_dice or "",
-        "speed": m.speed or {"walk": 30},
-        "strength": m.strength, "dexterity": m.dexterity, "constitution": m.constitution,
-        "intelligence": m.intelligence, "wisdom": m.wisdom, "charisma": m.charisma,
-        "damage_vulnerabilities": m.damage_vulnerabilities or "",
-        "damage_resistances": m.damage_resistances or "",
-        "damage_immunities": m.damage_immunities or "",
-        "condition_immunities": m.condition_immunities or "",
-        "senses": m.senses or "", "languages": m.languages or "",
-        "challenge_rating": m.challenge_rating or "0",
-        "actions": m.actions or [], "reactions": m.reactions or [],
-        "special_abilities": m.special_abilities or [],
-        "legendary_actions": m.legendary_actions or [],
-    }
-
-
-def _background_to_dict(b: CustomBackground) -> dict:
-    return {
-        "background_slug": b.background_slug, "name": b.name,
-        "description": b.description or "",
-        "skill_proficiencies": b.skill_proficiencies or "",
-        "tool_proficiencies": b.tool_proficiencies or "",
-        "languages": b.languages or "", "equipment": b.equipment or "",
-        "feature_name": b.feature_name or "", "feature_desc": b.feature_desc or "",
-    }
-
-
-def _feat_to_dict(f: CustomFeat) -> dict:
-    return {
-        "feat_slug": f.feat_slug, "name": f.name,
-        "prerequisite": f.prerequisite or "", "desc": f.desc or "",
-    }
+# _feat_to_dict helper removed in v2.0.0 — the export endpoint now reads
+# directly from local_content.search() and projects to the legacy field-name
+# shape inline. Other Custom* types still have their helpers until their own
+# Phase C step lands.
 
 
 @router.get("/api/campaign/{campaign_id}/homebrew/export")
@@ -2264,12 +2425,94 @@ def export_homebrew(
         "version": HOMEBREW_EXPORT_VERSION,
         "campaign": campaign.name,
         "exported_at": _dt.utcnow().isoformat() + "Z",
-        "classes":      [_class_to_dict(c)      for c in db.query(CustomClass).filter(CustomClass.campaign_id == campaign_id).order_by(CustomClass.name).all()],
-        "subclasses":   [_subclass_to_dict(s)   for s in db.query(CustomSubclass).filter(CustomSubclass.campaign_id == campaign_id).order_by(CustomSubclass.name).all()],
-        "races":        [_race_to_dict(r)       for r in db.query(CustomRace).filter(CustomRace.campaign_id == campaign_id).order_by(CustomRace.name).all()],
-        "monsters":     [_monster_to_dict(m)    for m in db.query(CustomMonster).filter(CustomMonster.campaign_id == campaign_id).order_by(CustomMonster.name).all()],
-        "backgrounds":  [_background_to_dict(b) for b in db.query(CustomBackground).filter(CustomBackground.campaign_id == campaign_id).order_by(CustomBackground.name).all()],
-        "feats":        [_feat_to_dict(f)       for f in db.query(CustomFeat).filter(CustomFeat.campaign_id == campaign_id).order_by(CustomFeat.name).all()],
+        # Classes: v2.0.0 — file-based homebrew tier, project to legacy `class_slug`.
+        "classes": [
+            {
+                "class_slug": r.get("slug"),
+                "name": r.get("name"),
+                "hit_die": r.get("hit_die") or 8,
+                "prof_armor": r.get("prof_armor") or "",
+                "prof_weapons": r.get("prof_weapons") or "",
+                "prof_tools": r.get("prof_tools") or "",
+                "prof_saving_throws": r.get("prof_saving_throws") or "",
+                "prof_skills": r.get("prof_skills") or "",
+                "spellcasting_ability": r.get("spellcasting_ability") or "",
+                "equipment": r.get("equipment") or "",
+                "features": r.get("features") or [],
+                "spell_list": r.get("spell_list") or [],
+                "multiclass_prereq_abilities": r.get("multiclass_prereq_abilities") or {},
+                "multiclass_prereq_mode": r.get("multiclass_prereq_mode") or "all",
+                "multiclass_proficiencies": r.get("multiclass_proficiencies") or "",
+                "resources": r.get("resources") or [],
+            }
+            for r in local_content.search(type="class_features", campaign_id=campaign_id, limit=500)[0]
+            if r.get("_source") == "local-homebrew"
+        ],
+        # Subclasses: v2.0.0 — file-based homebrew tier, project from combined
+        # `<class>__<sub>` slug back to split fields the importer accepts.
+        "subclasses": [
+            {
+                "class_slug": (r.get("slug") or "").partition("__")[0] or r.get("class_slug") or "",
+                "sub_slug": (r.get("slug") or "").partition("__")[2] or r.get("slug") or "",
+                "name": r.get("name"),
+                "flavor": r.get("subclass_flavor") or r.get("flavor") or "",
+                "features": r.get("features") or [],
+            }
+            for r in local_content.search(type="subclass_features", campaign_id=campaign_id, limit=500)[0]
+            if r.get("_source") == "local-homebrew"
+        ],
+        # Races: v2.0.0 — file-based homebrew tier, project to legacy `race_slug`.
+        "races": [
+            {
+                "race_slug": r.get("slug"),
+                "name": r.get("name"),
+                "ability_bonuses": r.get("ability_bonuses") or [],
+                "size": r.get("size") or "",
+                "speed": r.get("speed"),
+                "age": r.get("age") or "",
+                "alignment": r.get("alignment") or "",
+                "languages": r.get("languages") or "",
+                "traits": r.get("traits") or [],
+            }
+            for r in local_content.search(type="races", campaign_id=campaign_id, limit=500)[0]
+            if r.get("_source") == "local-homebrew"
+        ],
+        "monsters": [
+            _monster_record_to_export(r)
+            for r in local_content.search(type="monsters", campaign_id=campaign_id, limit=500)[0]
+            if r.get("_source") == "local-homebrew"
+        ],
+        # Backgrounds: v2.0.0 — file-based homebrew tier, projected back to
+        # the legacy `background_slug` field for round-tripping.
+        "backgrounds": [
+            {
+                "background_slug": r.get("slug"),
+                "name": r.get("name"),
+                "description": r.get("description") or "",
+                "skill_proficiencies": r.get("skill_proficiencies") or "",
+                "tool_proficiencies": r.get("tool_proficiencies") or "",
+                "languages": r.get("languages") or "",
+                "equipment": r.get("equipment") or "",
+                "feature_name": r.get("feature_name") or "",
+                "feature_desc": r.get("feature_desc") or "",
+            }
+            for r in local_content.search(type="backgrounds", campaign_id=campaign_id, limit=500)[0]
+            if r.get("_source") == "local-homebrew"
+        ],
+        # Feats: v2.0.0 — read from file-based homebrew tier and project back
+        # to the legacy `feat_slug` field name so existing exports round-trip
+        # cleanly when re-imported (the importer accepts either `feat_slug`
+        # or the new `slug` field).
+        "feats": [
+            {
+                "feat_slug": r.get("slug"),
+                "name": r.get("name"),
+                "prerequisite": r.get("prerequisite") or "",
+                "desc": r.get("desc") or "",
+            }
+            for r in local_content.search(type="feats", campaign_id=campaign_id, limit=500)[0]
+            if r.get("_source") == "local-homebrew"
+        ],
     }
 
 
@@ -2405,36 +2648,32 @@ async def import_homebrew(
     }
 
     def _existing_class(slug: str) -> bool:
-        return db.query(CustomClass).filter(
-            CustomClass.campaign_id == campaign_id, CustomClass.class_slug == slug
-        ).first() is not None
+        hit = local_content.resolve(slug, type="class_features", campaign_id=campaign_id)
+        return bool(hit and hit[1] == "local-homebrew")
 
     def _existing_subclass(class_slug: str, sub_slug: str) -> bool:
-        return db.query(CustomSubclass).filter(
-            CustomSubclass.campaign_id == campaign_id,
-            CustomSubclass.class_slug == class_slug,
-            CustomSubclass.sub_slug == sub_slug,
-        ).first() is not None
+        combined = f"{class_slug}__{sub_slug}"
+        hit = local_content.resolve(combined, type="subclass_features", campaign_id=campaign_id)
+        return bool(hit and hit[1] == "local-homebrew")
 
     def _existing_race(slug: str) -> bool:
-        return db.query(CustomRace).filter(
-            CustomRace.campaign_id == campaign_id, CustomRace.race_slug == slug
-        ).first() is not None
+        hit = local_content.resolve(slug, type="races", campaign_id=campaign_id)
+        return bool(hit and hit[1] == "local-homebrew")
 
     def _existing_monster(slug: str) -> bool:
-        return db.query(CustomMonster).filter(
-            CustomMonster.campaign_id == campaign_id, CustomMonster.monster_slug == slug
-        ).first() is not None
+        hit = local_content.resolve(slug, type="monsters", campaign_id=campaign_id)
+        return bool(hit and hit[1] == "local-homebrew")
 
     def _existing_background(slug: str) -> bool:
-        return db.query(CustomBackground).filter(
-            CustomBackground.campaign_id == campaign_id, CustomBackground.background_slug == slug
-        ).first() is not None
+        hit = local_content.resolve(slug, type="backgrounds", campaign_id=campaign_id)
+        return bool(hit and hit[1] == "local-homebrew")
 
     def _existing_feat(slug: str) -> bool:
-        return db.query(CustomFeat).filter(
-            CustomFeat.campaign_id == campaign_id, CustomFeat.feat_slug == slug
-        ).first() is not None
+        # v2.0.0: file-based homebrew tier. resolve() returns the highest-
+        # priority hit including shipped SRD; we only want to mark "already
+        # exists" if the campaign's own homebrew file claims the slug.
+        hit = local_content.resolve(slug, type="feats", campaign_id=campaign_id)
+        return bool(hit and hit[1] == "local-homebrew")
 
     # ── Classes ─────────────────────────────────────────────────────────
     for row in (body.get("classes") or [])[:200]:
@@ -2450,24 +2689,33 @@ async def import_homebrew(
             if _existing_class(slug):
                 stats["classes"]["skipped"] += 1
                 continue
-            db.add(CustomClass(
-                campaign_id=campaign_id, class_slug=slug, name=name,
-                hit_die=_safe_int(row.get("hit_die"), 8),
-                prof_armor=_safe_str(row.get("prof_armor"), 500),
-                prof_weapons=_safe_str(row.get("prof_weapons"), 500),
-                prof_tools=_safe_str(row.get("prof_tools"), 500),
-                prof_saving_throws=_safe_str(row.get("prof_saving_throws"), 120),
-                prof_skills=_safe_str(row.get("prof_skills"), 500),
-                spellcasting_ability=_safe_str(row.get("spellcasting_ability"), 10).lower(),
-                equipment=_safe_str(row.get("equipment"), 4000),
-                features=row.get("features") if isinstance(row.get("features"), list) else [],
-                spell_list=row.get("spell_list") if isinstance(row.get("spell_list"), list) else [],
-                multiclass_prereq_abilities=row.get("multiclass_prereq_abilities") if isinstance(row.get("multiclass_prereq_abilities"), dict) else {},
-                multiclass_prereq_mode=_safe_str(row.get("multiclass_prereq_mode") or "all", 8),
-                multiclass_proficiencies=_safe_str(row.get("multiclass_proficiencies"), 500),
-                resources=row.get("resources") if isinstance(row.get("resources"), list) else [],
-                created_by_user_id=user.id,
-            ))
+            local_content.write_homebrew(
+                {
+                    "slug": slug,
+                    "name": name,
+                    "hit_die": _safe_int(row.get("hit_die"), 8),
+                    "prof_armor": _safe_str(row.get("prof_armor"), 500),
+                    "prof_weapons": _safe_str(row.get("prof_weapons"), 500),
+                    "prof_tools": _safe_str(row.get("prof_tools"), 500),
+                    "prof_saving_throws": _safe_str(row.get("prof_saving_throws"), 120),
+                    "prof_skills": _safe_str(row.get("prof_skills"), 500),
+                    "spellcasting_ability": _safe_str(row.get("spellcasting_ability"), 10).lower(),
+                    "equipment": _safe_str(row.get("equipment"), 4000),
+                    "features": row.get("features") if isinstance(row.get("features"), list) else [],
+                    "spell_list": row.get("spell_list") if isinstance(row.get("spell_list"), list) else [],
+                    "multiclass_prereq_abilities": row.get("multiclass_prereq_abilities") if isinstance(row.get("multiclass_prereq_abilities"), dict) else {},
+                    "multiclass_prereq_mode": _safe_str(row.get("multiclass_prereq_mode") or "all", 8),
+                    "multiclass_proficiencies": _safe_str(row.get("multiclass_proficiencies"), 500),
+                    "resources": row.get("resources") if isinstance(row.get("resources"), list) else [],
+                    "actions": [],
+                    "system": "dnd5e",
+                    "scope": f"campaign-{campaign_id}",
+                    "source": "homebrew",
+                    "owner": user.id,
+                },
+                type="class_features",
+                scope=f"campaign-{campaign_id}",
+            )
             stats["classes"]["created"] += 1
         except Exception:
             stats["classes"]["errors"] += 1
@@ -2487,12 +2735,22 @@ async def import_homebrew(
             if _existing_subclass(class_slug, sub_slug):
                 stats["subclasses"]["skipped"] += 1
                 continue
-            db.add(CustomSubclass(
-                campaign_id=campaign_id, class_slug=class_slug, sub_slug=sub_slug,
-                name=name, flavor=_safe_str(row.get("flavor"), 4000),
-                features=row.get("features") if isinstance(row.get("features"), list) else [],
-                created_by_user_id=user.id,
-            ))
+            local_content.write_homebrew(
+                {
+                    "slug": f"{class_slug}__{sub_slug}",
+                    "name": name,
+                    "class_slug": class_slug,
+                    "subclass_flavor": _safe_str(row.get("flavor"), 4000),
+                    "features": row.get("features") if isinstance(row.get("features"), list) else [],
+                    "actions": [],
+                    "system": "dnd5e",
+                    "scope": f"campaign-{campaign_id}",
+                    "source": "homebrew",
+                    "owner": user.id,
+                },
+                type="subclass_features",
+                scope=f"campaign-{campaign_id}",
+            )
             stats["subclasses"]["created"] += 1
         except Exception:
             stats["subclasses"]["errors"] += 1
@@ -2511,17 +2769,25 @@ async def import_homebrew(
             if _existing_race(slug):
                 stats["races"]["skipped"] += 1
                 continue
-            db.add(CustomRace(
-                campaign_id=campaign_id, race_slug=slug, name=name,
-                ability_bonuses=row.get("ability_bonuses") if isinstance(row.get("ability_bonuses"), list) else [],
-                size=_safe_str(row.get("size"), 40),
-                speed=_safe_int(row.get("speed"), 30),
-                age=_safe_str(row.get("age"), 1000),
-                alignment=_safe_str(row.get("alignment"), 1000),
-                languages=_safe_str(row.get("languages"), 1000),
-                traits=row.get("traits") if isinstance(row.get("traits"), list) else [],
-                created_by_user_id=user.id,
-            ))
+            local_content.write_homebrew(
+                {
+                    "slug": slug, "name": name,
+                    "ability_bonuses": row.get("ability_bonuses") if isinstance(row.get("ability_bonuses"), list) else [],
+                    "size": _safe_str(row.get("size"), 40),
+                    "speed": _safe_int(row.get("speed"), 30),
+                    "age": _safe_str(row.get("age"), 1000),
+                    "alignment": _safe_str(row.get("alignment"), 1000),
+                    "languages": _safe_str(row.get("languages"), 1000),
+                    "traits": row.get("traits") if isinstance(row.get("traits"), list) else [],
+                    "actions": [],
+                    "system": "dnd5e",
+                    "scope": f"campaign-{campaign_id}",
+                    "source": "homebrew",
+                    "owner": user.id,
+                },
+                type="races",
+                scope=f"campaign-{campaign_id}",
+            )
             stats["races"]["created"] += 1
         except Exception:
             stats["races"]["errors"] += 1
@@ -2540,35 +2806,64 @@ async def import_homebrew(
             if _existing_monster(slug):
                 stats["monsters"]["skipped"] += 1
                 continue
-            db.add(CustomMonster(
-                campaign_id=campaign_id, monster_slug=slug, name=name,
-                size=_safe_str(row.get("size") or "Medium", 40),
-                type=_safe_str(row.get("type") or "beast", 60).lower(),
-                alignment=_safe_str(row.get("alignment"), 120),
-                armor_class=_safe_int(row.get("armor_class"), 10),
-                armor_desc=_safe_str(row.get("armor_desc"), 120),
-                hit_points=_safe_int(row.get("hit_points"), 1),
-                hit_dice=_safe_str(row.get("hit_dice"), 40),
-                speed=row.get("speed") if isinstance(row.get("speed"), dict) else {"walk": 30},
-                strength=_safe_int(row.get("strength"), 10),
-                dexterity=_safe_int(row.get("dexterity"), 10),
-                constitution=_safe_int(row.get("constitution"), 10),
-                intelligence=_safe_int(row.get("intelligence"), 10),
-                wisdom=_safe_int(row.get("wisdom"), 10),
-                charisma=_safe_int(row.get("charisma"), 10),
-                damage_vulnerabilities=_safe_str(row.get("damage_vulnerabilities"), 500),
-                damage_resistances=_safe_str(row.get("damage_resistances"), 500),
-                damage_immunities=_safe_str(row.get("damage_immunities"), 500),
-                condition_immunities=_safe_str(row.get("condition_immunities"), 500),
-                senses=_safe_str(row.get("senses"), 500),
-                languages=_safe_str(row.get("languages"), 500),
-                challenge_rating=_safe_str(row.get("challenge_rating") or "0", 20),
-                actions=row.get("actions") if isinstance(row.get("actions"), list) else [],
-                reactions=row.get("reactions") if isinstance(row.get("reactions"), list) else [],
-                special_abilities=row.get("special_abilities") if isinstance(row.get("special_abilities"), list) else [],
-                legendary_actions=row.get("legendary_actions") if isinstance(row.get("legendary_actions"), list) else [],
-                created_by_user_id=user.id,
-            ))
+            # Coalesce the 4 legacy split lists from the import payload into
+            # the unified actions array with category labels.
+            import re as _re
+            _unified: list[dict] = []
+            for _src_key, _cat in (
+                ("actions", "action"),
+                ("reactions", "reaction"),
+                ("special_abilities", "special_ability"),
+                ("legendary_actions", "legendary_action"),
+            ):
+                _list = row.get(_src_key)
+                if not isinstance(_list, list):
+                    continue
+                for _entry in _list:
+                    if not isinstance(_entry, dict):
+                        continue
+                    _nm = (_entry.get("name") or "").strip()
+                    _slug_id = _re.sub(r"[^a-z0-9]+", "-", _nm.lower()).strip("-") or f"unnamed-{_cat}"
+                    _unified.append({
+                        "id": _entry.get("id") or _slug_id,
+                        "name": _nm,
+                        "desc": _entry.get("desc") or "",
+                        "min_level": _entry.get("level") or 1,
+                        "category": _cat,
+                    })
+            local_content.write_homebrew(
+                {
+                    "slug": slug, "name": name,
+                    "size": _safe_str(row.get("size") or "Medium", 40),
+                    "type": _safe_str(row.get("type") or "beast", 60).lower(),
+                    "alignment": _safe_str(row.get("alignment"), 120),
+                    "armor_class": _safe_int(row.get("armor_class"), 10),
+                    "armor_desc": _safe_str(row.get("armor_desc"), 120),
+                    "hit_points": _safe_int(row.get("hit_points"), 1),
+                    "hit_dice": _safe_str(row.get("hit_dice"), 40),
+                    "speed": row.get("speed") if isinstance(row.get("speed"), dict) else {"walk": 30},
+                    "strength": _safe_int(row.get("strength"), 10),
+                    "dexterity": _safe_int(row.get("dexterity"), 10),
+                    "constitution": _safe_int(row.get("constitution"), 10),
+                    "intelligence": _safe_int(row.get("intelligence"), 10),
+                    "wisdom": _safe_int(row.get("wisdom"), 10),
+                    "charisma": _safe_int(row.get("charisma"), 10),
+                    "damage_vulnerabilities": _safe_str(row.get("damage_vulnerabilities"), 500),
+                    "damage_resistances": _safe_str(row.get("damage_resistances"), 500),
+                    "damage_immunities": _safe_str(row.get("damage_immunities"), 500),
+                    "condition_immunities": _safe_str(row.get("condition_immunities"), 500),
+                    "senses": _safe_str(row.get("senses"), 500),
+                    "languages": _safe_str(row.get("languages"), 500),
+                    "challenge_rating": _safe_str(row.get("challenge_rating") or "0", 20),
+                    "actions": _unified,
+                    "system": "dnd5e",
+                    "scope": f"campaign-{campaign_id}",
+                    "source": "homebrew",
+                    "owner": user.id,
+                },
+                type="monsters",
+                scope=f"campaign-{campaign_id}",
+            )
             stats["monsters"]["created"] += 1
         except Exception:
             stats["monsters"]["errors"] += 1
@@ -2587,17 +2882,25 @@ async def import_homebrew(
             if _existing_background(slug):
                 stats["backgrounds"]["skipped"] += 1
                 continue
-            db.add(CustomBackground(
-                campaign_id=campaign_id, background_slug=slug, name=name,
-                description=_safe_str(row.get("description"), 8000),
-                skill_proficiencies=_safe_str(row.get("skill_proficiencies"), 500),
-                tool_proficiencies=_safe_str(row.get("tool_proficiencies"), 500),
-                languages=_safe_str(row.get("languages"), 500),
-                equipment=_safe_str(row.get("equipment"), 4000),
-                feature_name=_safe_str(row.get("feature_name"), 160),
-                feature_desc=_safe_str(row.get("feature_desc"), 4000),
-                created_by_user_id=user.id,
-            ))
+            local_content.write_homebrew(
+                {
+                    "slug": slug, "name": name,
+                    "description": _safe_str(row.get("description"), 8000),
+                    "skill_proficiencies": _safe_str(row.get("skill_proficiencies"), 500),
+                    "tool_proficiencies": _safe_str(row.get("tool_proficiencies"), 500),
+                    "languages": _safe_str(row.get("languages"), 500),
+                    "equipment": _safe_str(row.get("equipment"), 4000),
+                    "feature_name": _safe_str(row.get("feature_name"), 160),
+                    "feature_desc": _safe_str(row.get("feature_desc"), 4000),
+                    "actions": [],
+                    "system": "dnd5e",
+                    "scope": f"campaign-{campaign_id}",
+                    "source": "homebrew",
+                    "owner": user.id,
+                },
+                type="backgrounds",
+                scope=f"campaign-{campaign_id}",
+            )
             stats["backgrounds"]["created"] += 1
         except Exception:
             stats["backgrounds"]["errors"] += 1
@@ -2616,12 +2919,21 @@ async def import_homebrew(
             if _existing_feat(slug):
                 stats["feats"]["skipped"] += 1
                 continue
-            db.add(CustomFeat(
-                campaign_id=campaign_id, feat_slug=slug, name=name,
-                prerequisite=_safe_str(row.get("prerequisite"), 500),
-                desc=_safe_str(row.get("desc"), 8000),
-                created_by_user_id=user.id,
-            ))
+            # v2.0.0: write directly to the homebrew file volume.
+            local_content.write_homebrew(
+                {
+                    "slug": slug, "name": name,
+                    "prerequisite": _safe_str(row.get("prerequisite"), 500),
+                    "desc": _safe_str(row.get("desc"), 8000),
+                    "actions": [],
+                    "system": "dnd5e",
+                    "scope": f"campaign-{campaign_id}",
+                    "source": "homebrew",
+                    "owner": user.id,
+                },
+                type="feats",
+                scope=f"campaign-{campaign_id}",
+            )
             stats["feats"]["created"] += 1
         except Exception:
             stats["feats"]["errors"] += 1
@@ -6101,19 +6413,18 @@ def user_gm_campaigns(
     return [{"id": c.id, "name": c.name} for c in primary + [c for c in co_gm if c.id not in seen]]
 
 
-def _custom_monster_lite(row: CustomMonster) -> dict:
-    """Return a homebrew monster in the same lite shape the beast picker
-    receives from Open5e v2 (after normalisation). ``is_custom`` is a
-    forward-compatible flag the picker can use to render a badge.
-    """
+def _custom_monster_lite(row: dict) -> dict:
+    """Return a file-based homebrew monster record in the same lite shape the
+    beast picker receives from Open5e v2 (after normalisation). v2.0.0: the
+    input is now a local_content dict (not a CustomMonster row)."""
     return {
-        "slug": row.monster_slug,
-        "name": row.name,
-        "cr": row.challenge_rating or "0",
-        "type": row.type or "",
-        "size": row.size or "",
-        "hp": row.hit_points,
-        "ac": row.armor_class,
+        "slug": row.get("slug"),
+        "name": row.get("name"),
+        "cr": row.get("challenge_rating") or "0",
+        "type": row.get("type") or "",
+        "size": row.get("size") or "",
+        "hp": row.get("hit_points"),
+        "ac": row.get("armor_class"),
         "source": "Custom",
         "is_custom": True,
     }
@@ -6176,18 +6487,21 @@ def open5e_monsters_proxy(
     custom_rows: list[dict] = []
     custom_slugs: set[str] = set()
     if campaign_id:
-        q = db.query(CustomMonster).filter(CustomMonster.campaign_id == campaign_id)
-        if search:
-            q = q.filter(CustomMonster.name.ilike(f"%{search}%"))
+        records, _ = local_content.search(
+            type="monsters", campaign_id=campaign_id, q=search, limit=min(abs(limit), 50),
+        )
+        rows = [r for r in records if r.get("_source") == "local-homebrew"]
         if type_filter:
-            q = q.filter(CustomMonster.type == type_filter.strip().lower())
-        rows = q.order_by(CustomMonster.name).limit(min(abs(limit), 50)).all()
+            tf = type_filter.strip().lower()
+            rows = [r for r in rows if (r.get("type") or "").lower() == tf]
         if cr_max:
             cap = _cr_to_float(cr_max)
-            rows = [r for r in rows if _cr_to_float(r.challenge_rating) <= cap]
+            rows = [r for r in rows if _cr_to_float(r.get("challenge_rating") or "0") <= cap]
         for r in rows:
             custom_rows.append(_custom_monster_lite(r))
-            custom_slugs.add(r.monster_slug)
+            slug_v = r.get("slug")
+            if slug_v:
+                custom_slugs.add(slug_v)
 
     def _build_url(use_filters: bool) -> str:
         # Open5e v2 is django-filter based and silently ignores DRF's
@@ -6335,18 +6649,11 @@ def open5e_creature_detail(
     slug = (slug or "").strip()
     if not slug:
         raise HTTPException(400, "slug required")
-    # 1. Campaign homebrew first.
+    # 1. Campaign homebrew first (v2.0.0: file-based).
     if campaign_id:
-        row = (
-            db.query(CustomMonster)
-            .filter(
-                CustomMonster.campaign_id == campaign_id,
-                CustomMonster.monster_slug == slug.lower(),
-            )
-            .first()
-        )
-        if row:
-            return _custom_monster_lite(row)
+        hit = local_content.resolve(slug.lower(), type="monsters", campaign_id=campaign_id)
+        if hit and hit[1] == "local-homebrew":
+            return _custom_monster_lite(hit[0])
     # 2. Live Open5e v2.
     import json as _json
     import urllib.request as _urlreq
@@ -6630,20 +6937,33 @@ def open5e_subclasses_proxy(
     custom_results: list[dict] = []
     custom_slugs: set[str] = set()
     if campaign_id:
-        q = db.query(CustomSubclass).filter(CustomSubclass.campaign_id == campaign_id)
-        if class_slug:
-            q = q.filter(CustomSubclass.class_slug == class_slug)
-        if search:
-            q = q.filter(CustomSubclass.name.ilike(f"%{search}%"))
-        for row in q.order_by(CustomSubclass.name).limit(cap).all():
+        # v2.0.0: file-based subclasses. The file's `slug` is the combined
+        # `<class>__<sub>` form; we split for the response shape that the
+        # picker UI already consumes (it shows `slug` = the bare sub_slug
+        # and filters by class_slug separately).
+        records, _ = local_content.search(
+            type="subclass_features", campaign_id=campaign_id, q=search, limit=cap,
+        )
+        for rec in records:
+            if rec.get("_source") != "local-homebrew":
+                continue
+            combined = rec.get("slug") or ""
+            cls_part, _, sub_part = combined.partition("__")
+            if not sub_part:
+                sub_part = combined
+                cls_part = rec.get("class_slug") or ""
+            if class_slug and cls_part != class_slug:
+                continue
+            if not sub_part:
+                continue
             custom_results.append({
-                "name": row.name,
-                "slug": row.sub_slug,
-                "flavor": (row.flavor or "")[:300],
+                "name": rec.get("name") or sub_part,
+                "slug": sub_part,
+                "flavor": (rec.get("subclass_flavor") or rec.get("flavor") or "")[:300],
                 "source": "Custom",
                 "is_custom": True,
             })
-            custom_slugs.add(row.sub_slug)
+            custom_slugs.add(sub_part)
 
     def _dedupe(results: list[dict]) -> list[dict]:
         return [r for r in results if r.get("slug") not in custom_slugs]
@@ -6737,18 +7057,22 @@ def open5e_classes_proxy(
     custom_results: list[dict] = []
     custom_slugs: set[str] = set()
     if campaign_id:
-        q = db.query(CustomClass).filter(CustomClass.campaign_id == campaign_id)
-        if search:
-            q = q.filter(CustomClass.name.ilike(f"%{search}%"))
-        for row in q.order_by(CustomClass.name).limit(cap).all():
+        records, _ = local_content.search(
+            q=search or "", type="class_features",
+            campaign_id=campaign_id, limit=cap,
+        )
+        for rec in records:
+            if rec.get("_source") != "local-homebrew":
+                continue
+            slug = rec.get("slug")
             custom_results.append({
-                "name": row.name,
-                "slug": row.class_slug,
-                "hit_die": row.hit_die,
+                "name": rec.get("name"),
+                "slug": slug,
+                "hit_die": rec.get("hit_die") or 8,
                 "source": "Custom",
                 "is_custom": True,
             })
-            custom_slugs.add(row.class_slug)
+            custom_slugs.add(slug)
 
     # Shipped FS classes sit between campaign homebrew and Open5e — same
     # arrangement as races. If Open5e is unreachable the picker still
@@ -6834,18 +7158,23 @@ def open5e_races_proxy(
     custom_results: list[dict] = []
     custom_slugs: set[str] = set()
     if campaign_id:
-        q = db.query(CustomRace).filter(CustomRace.campaign_id == campaign_id)
-        if search:
-            q = q.filter(CustomRace.name.ilike(f"%{search}%"))
-        for row in q.order_by(CustomRace.name).limit(cap).all():
+        records, _ = local_content.search(
+            type="races", campaign_id=campaign_id, q=search, limit=cap,
+        )
+        for rec in records:
+            if rec.get("_source") != "local-homebrew":
+                continue
+            slug = rec.get("slug") or ""
+            if not slug:
+                continue
             custom_results.append({
-                "name": row.name,
-                "slug": row.race_slug,
-                "size": row.size or "",
+                "name": rec.get("name") or slug,
+                "slug": slug,
+                "size": rec.get("size") or "",
                 "source": "Custom",
                 "is_custom": True,
             })
-            custom_slugs.add(row.race_slug)
+            custom_slugs.add(slug)
 
     # Shipped FS races sit between campaign homebrew and Open5e — so if
     # Open5e is unreachable the picker still lists the SRD baseline, and
@@ -6933,18 +7262,23 @@ def open5e_backgrounds_proxy(
     custom_results: list[dict] = []
     custom_slugs: set[str] = set()
     if campaign_id:
-        q = db.query(CustomBackground).filter(CustomBackground.campaign_id == campaign_id)
-        if search:
-            q = q.filter(CustomBackground.name.ilike(f"%{search}%"))
-        for row in q.order_by(CustomBackground.name).limit(cap).all():
+        records, _ = local_content.search(
+            type="backgrounds", campaign_id=campaign_id, q=search, limit=cap,
+        )
+        for rec in records:
+            if rec.get("_source") != "local-homebrew":
+                continue
+            slug = rec.get("slug") or ""
+            if not slug:
+                continue
             custom_results.append({
-                "name": row.name,
-                "slug": row.background_slug,
-                "feature": row.feature_name or "",
+                "name": rec.get("name") or slug,
+                "slug": slug,
+                "feature": rec.get("feature_name") or "",
                 "source": "Custom",
                 "is_custom": True,
             })
-            custom_slugs.add(row.background_slug)
+            custom_slugs.add(slug)
 
     def _dedupe(results: list[dict]) -> list[dict]:
         return [r for r in results if r.get("slug") not in custom_slugs]
@@ -7038,18 +7372,28 @@ def open5e_feats_proxy(
     custom_results: list[dict] = []
     custom_slugs: set[str] = set()
     if campaign_id:
-        q = db.query(CustomFeat).filter(CustomFeat.campaign_id == campaign_id)
-        if search:
-            q = q.filter(CustomFeat.name.ilike(f"%{search}%"))
-        for row in q.order_by(CustomFeat.name).limit(cap).all():
+        # v2.0.0: campaign-scoped homebrew lives in the file-based content tier.
+        # local_content.search returns dicts whose key set matches the Pydantic
+        # Feat model, plus `_source` ("local-homebrew" for files we wrote, or
+        # "local-srd" for shipped content). We only count `local-homebrew` here
+        # to preserve the "Custom" badge the picker UI uses.
+        records, _ = local_content.search(
+            type="feats", campaign_id=campaign_id, q=search, limit=cap,
+        )
+        for rec in records:
+            if rec.get("_source") != "local-homebrew":
+                continue
+            slug = rec.get("slug") or ""
+            if not slug:
+                continue
             custom_results.append({
-                "name": row.name,
-                "slug": row.feat_slug,
-                "prerequisite": row.prerequisite or "",
+                "name": rec.get("name") or slug,
+                "slug": slug,
+                "prerequisite": rec.get("prerequisite") or "",
                 "source": "Custom",
                 "is_custom": True,
             })
-            custom_slugs.add(row.feat_slug)
+            custom_slugs.add(slug)
 
     def _dedupe(results: list[dict]) -> list[dict]:
         return [r for r in results if r.get("slug") not in custom_slugs]
@@ -7220,16 +7564,10 @@ def open5e_spells_proxy(
     # spell_lists field contains <homebrew slug>" (which would always be
     # empty — Open5e doesn't know about the homebrew).
     if spell_list and campaign_id:
-        homebrew = (
-            db.query(CustomClass)
-            .filter(
-                CustomClass.campaign_id == campaign_id,
-                CustomClass.class_slug == spell_list.lower(),
-            )
-            .first()
-        )
+        _hb = local_content.resolve(spell_list.lower(), type="class_features", campaign_id=campaign_id)
+        homebrew = _hb[0] if (_hb and _hb[1] == "local-homebrew") else None
         if homebrew:
-            curated = homebrew.spell_list or []
+            curated = homebrew.get("spell_list") or []
             if not curated:
                 return {"count": 0, "results": []}
             # Local mirror is preferred — single in-memory lookup.  Without

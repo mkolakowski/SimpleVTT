@@ -204,63 +204,15 @@ def _apply_inline_migrations() -> None:
         if user_cols_v21 and "font_scale" not in user_cols_v21:
             conn.execute(text("ALTER TABLE users ADD COLUMN font_scale FLOAT NOT NULL DEFAULT 1.0"))
 
-    # ---- Schema v22 (0.42.0): custom_subclasses table ----
-    from .models import CustomSubclass
-    CustomSubclass.__table__.create(bind=engine, checkfirst=True)
-
-    # ---- Schema v23 (0.45.0): custom_classes table ----
-    from .models import CustomClass
-    CustomClass.__table__.create(bind=engine, checkfirst=True)
-
-    # ---- Schema v24 (0.46.0): custom_classes.spell_list ----
-    cc_cols = _column_names("custom_classes")
-    with engine.begin() as conn:
-        if cc_cols and "spell_list" not in cc_cols:
-            # JSON column type varies by dialect — use TEXT and rely on
-            # SQLAlchemy's JSON serialisation on read/write. Default to an
-            # empty list literal so existing rows don't need a backfill.
-            if engine.dialect.name == "postgresql":
-                conn.execute(text("ALTER TABLE custom_classes ADD COLUMN spell_list JSON NOT NULL DEFAULT '[]'"))
-            else:
-                conn.execute(text("ALTER TABLE custom_classes ADD COLUMN spell_list TEXT NOT NULL DEFAULT '[]'"))
-
-    # ---- Schema v25 (0.47.0): custom_classes multiclass prerequisite fields ----
-    cc_cols_v25 = _column_names("custom_classes")
-    with engine.begin() as conn:
-        if cc_cols_v25 and "multiclass_prereq_abilities" not in cc_cols_v25:
-            if engine.dialect.name == "postgresql":
-                conn.execute(text("ALTER TABLE custom_classes ADD COLUMN multiclass_prereq_abilities JSON NOT NULL DEFAULT '{}'"))
-            else:
-                conn.execute(text("ALTER TABLE custom_classes ADD COLUMN multiclass_prereq_abilities TEXT NOT NULL DEFAULT '{}'"))
-        if cc_cols_v25 and "multiclass_prereq_mode" not in cc_cols_v25:
-            conn.execute(text("ALTER TABLE custom_classes ADD COLUMN multiclass_prereq_mode VARCHAR(8) NOT NULL DEFAULT 'all'"))
-        if cc_cols_v25 and "multiclass_proficiencies" not in cc_cols_v25:
-            conn.execute(text("ALTER TABLE custom_classes ADD COLUMN multiclass_proficiencies VARCHAR(500) NOT NULL DEFAULT ''"))
-
-    # ---- Schema v26 (0.48.0): custom_classes.resources ----
-    cc_cols_v26 = _column_names("custom_classes")
-    with engine.begin() as conn:
-        if cc_cols_v26 and "resources" not in cc_cols_v26:
-            if engine.dialect.name == "postgresql":
-                conn.execute(text("ALTER TABLE custom_classes ADD COLUMN resources JSON NOT NULL DEFAULT '[]'"))
-            else:
-                conn.execute(text("ALTER TABLE custom_classes ADD COLUMN resources TEXT NOT NULL DEFAULT '[]'"))
-
-    # ---- Schema v27 (0.49.0): custom_races table ----
-    from .models import CustomRace
-    CustomRace.__table__.create(bind=engine, checkfirst=True)
-
-    # ---- Schema v28 (0.50.0): custom_monsters table ----
-    from .models import CustomMonster
-    CustomMonster.__table__.create(bind=engine, checkfirst=True)
-
-    # ---- Schema v29 (0.51.0): custom_backgrounds table ----
-    from .models import CustomBackground
-    CustomBackground.__table__.create(bind=engine, checkfirst=True)
-
-    # ---- Schema v30 (0.51.0): custom_feats table ----
-    from .models import CustomFeat
-    CustomFeat.__table__.create(bind=engine, checkfirst=True)
+    # ---- Schema v22-v30 (0.42.0 - 0.51.0): custom_* tables ----
+    # Historical: v22-v30 created the custom_subclasses, custom_classes,
+    # custom_races, custom_monsters, custom_backgrounds, custom_feats tables
+    # plus several ALTER COLUMN steps. v52 (below) exports all of these to
+    # per-slug JSON files under the homebrew Docker volume, then DROPs every
+    # table. We keep the v22-v30 schema-version stamps for upgrade-path
+    # bookkeeping but no longer execute the CREATE statements: any database
+    # upgrading from before v52 still has the tables (v52 exports & drops);
+    # any database initialised at v2.0.0+ never needs them.
 
     # ---- Schema v31 (0.54.0): users.animate_gifs preference ----
     user_cols_v31 = _column_names("users")
@@ -508,12 +460,16 @@ def _apply_inline_migrations() -> None:
                     "NOT NULL DEFAULT 'dnd5e'"
                 ))
 
-    # NOTE: a v52 migration that would export Custom* rows to file-based
-    # homebrew and drop the Custom* tables is staged in app/_migrate_v52.py
-    # but NOT wired in here yet. Enabling it is a follow-up PR that also
-    # needs to replace the ~150 Custom*-based references in tabletop_routes.py
-    # with redirects to /admin/homebrew. See the v2.0.0 plan in
-    # ~/.claude/plans/optimized-waddling-pizza.md for the full sequencing.
+    # ---- Schema v52 (2.0.0): export Custom* rows to homebrew volume, drop tables ----
+    # Forward-only, destructive: every row in the six ``custom_*`` tables is
+    # written to per-slug JSON files under the homebrew Docker volume, then
+    # the tables are DROPPED. Idempotent — once the tables are gone, this
+    # block is a no-op. Operators MUST back up Postgres before upgrading;
+    # see CHANGELOG.md for verification steps. The dump+drop logic lives in
+    # ``app/_migrate_v52.py`` so the helpers can be unit-tested without the
+    # full inline-migration framework around them.
+    from ._migrate_v52 import run_v52_migration
+    run_v52_migration(engine)
 
 
 def _make_character_campaign_nullable(inspector) -> None:

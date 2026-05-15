@@ -72,7 +72,10 @@ class ClassFeature(_ProvenanceMixin):
     prof_skills: str = ""
     spellcasting_ability: str = ""
     equipment: str = ""
-    features: str = ""
+    # ``Any`` so shipped SRD files (markdown string) and homebrew records
+    # (list of {name, desc, level} dicts authored in the campaign-settings
+    # editor) both load through the same schema. Mirrors SubclassFeature.
+    features: Any = ""
     multiclass_prereq_abilities: dict = Field(default_factory=dict)
     multiclass_prereq_mode: str = "all"
     multiclass_proficiencies: str = ""
@@ -136,6 +139,7 @@ class Feat(_ProvenanceMixin):
 class Background(_ProvenanceMixin):
     slug: str
     name: str
+    description: str = ""            # top-of-card prose (CustomBackground had this; added v2.0.0)
     skill_proficiencies: str = ""
     tool_proficiencies: str = ""
     languages: str = ""

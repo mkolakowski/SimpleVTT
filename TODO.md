@@ -85,6 +85,15 @@ Two methods for players to generate ability scores during character creation:
 - **Point buy** — players spend a fixed pool of points (standard D&D 5e: 27 points, scores 8–15 before racial bonuses) with an interactive cost table shown in the sheet UI. Should enforce the budget in real time and show remaining points.
 - **Dice rolling** — roll 4d6 drop lowest for each attribute, with an in-sheet button per score and a "Re-roll all" option. Should show the individual dice results before committing. Optionally allow the GM to lock or unlock rerolls per campaign.
 
+### Class Resource Tracking in Mini-Sheet
+Review every D&D 5e class and subclass resource and surface the most commonly used ones in the mini-sheet panel. Current mini-sheet only shows HP and basic rolls. Resources to audit and add:
+- **Rage** (Barbarian) — uses per long rest; toggle button to mark active (grants resistance, damage bonus) with a use counter
+- **Ki points** (Monk), **Sorcery points** (Sorcerer), **Superiority dice** (Battle Master Fighter), **Bardic Inspiration** — numeric trackers with per-rest reset
+- **Channel Divinity**, **Second Wind**, **Action Surge**, **Lay on Hands** pool — binary or pool trackers
+- **Wild Shape** uses (Druid), **Arcane Recovery** (Wizard) — per-rest binary toggles
+
+Goal: a compact resource row below HP in the mini-sheet that auto-populates based on the character's class(es). Resources should persist server-side (stored in the character JSON) and broadcast updates via WebSocket so the GM can see resource consumption in real time.
+
 ### Dynamic Character Art Updates
 When a player updates their character portrait on their sheet, the change should propagate in real time to the tabletop — updating the token image, the player list, and any other places the portrait is displayed — without requiring a page reload. Should use the existing WebSocket broadcast infrastructure so all connected clients (GM and other players) see the new art immediately.
 
@@ -106,10 +115,53 @@ The roll-request panel currently broadcasts the prompt to everyone in the campai
 
 ---
 
+## Combat
+
+### Advantage & Disadvantage Tracking
+Track per-character advantage/disadvantage state and automatically apply it to relevant rolls rather than requiring players to manually pick the `adv`/`dis` dice buttons.
+
+- **Phase 1 — Manual toggle:** A per-character toggle in the mini-sheet (or token context menu) that marks a character as having advantage or disadvantage. When set, any roll that would normally use a d20 (ability checks, attack rolls, saving throws) automatically uses `1d20a` or `1d20d` instead. The toggle state is visible to both the player and the GM.
+- **Phase 2 — Condition automation:** Common conditions that impose advantage/disadvantage (Blinded, Prone, Restrained, Invisible, etc.) set the toggle automatically when applied via the conditions system. Conflicting sources (one granting advantage, one granting disadvantage) cancel out to a straight roll per 5e rules.
+- **Phase 3 — Context-aware rolls:** Attack rolls against a prone target within 5 ft grant advantage automatically; ranged attacks against a prone target impose disadvantage — requiring the combat/movement system to be aware of token positions and conditions.
+
+Phase 1 can ship independently; Phases 2 and 3 depend on the conditions system and Combat 2.0 movement tracking respectively.
+
+### Combat 2.0 — Action Economy Tracking
+Full per-turn action economy tracker surfaced in the initiative tracker and each player's mini-sheet. Tracks the four action types defined by D&D 5e:
+
+- **Action** — one per turn; used for attacks, casting most spells, Dash/Disengage/Dodge/Help/Hide/Ready
+- **Bonus action** — one per turn; class features, certain spells, off-hand attacks
+- **Movement** — up to the character's speed (in feet); partially consumed by moving between tokens (requires Maps 2.0 grid distance awareness)
+- **Free action / Reaction** — one reaction per round; tracked separately, auto-resets at the start of the character's next turn
+
+UI: a compact row of four icons in the initiative tracker entry and mini-sheet. Clicking an icon marks it spent (greyed out). At the start of a character's turn the GM can click "New Turn" to reset all four. The GM can also manually mark/unmark any action for any combatant. State is broadcast over WebSocket so all clients stay in sync.
+
+---
+
 ## Maps & Map Editor
 
 ### Bulk Map Upload
 Allow GMs and admins to upload multiple map images at once (e.g. a zip or multi-file picker) rather than one at a time. Should probably show a progress indicator and let the user assign names/grid settings to each before committing.
+
+### Map Generator
+Procedural in-browser map generation — produce a playable battle map without any external upload. Minimum viable output: a dungeon room layout (walls, corridors, door placements) rendered to a canvas the GM can place tokens on immediately. Stretch goals: biome presets (dungeon, wilderness, tavern interior), adjustable density/size parameters, and one-click export as a PNG that feeds into the existing map upload flow.
+
+### Bundled Art Assets (Maps, Player Tokens, Monster Tokens)
+Source and bundle a starter set of free-to-use art so new campaigns have something to work with out of the box. Three separate asset packs:
+- **Battle maps** — a handful of generic scenes (dungeon room, tavern, forest clearing, city street) usable as starting maps
+- **Player tokens** — a set of generic adventurer portraits (warrior, rogue, mage, cleric, ranger, etc.)
+- **Monster tokens** — common encounter creatures (goblin, skeleton, orc, wolf, spider, etc.)
+
+Licensing requirements: CC0 or CC BY with attribution in a bundled `CREDITS.md`. Consider AI-generated art (e.g. Stable Diffusion with a permissive licence) as a practical source for a consistent style across all three packs. Assets should ship inside the Docker image under `app/static/bundled/` so they are available without any upload step.
+
+### Maps 2.0 — Advanced Map Features
+Extends the existing battle map canvas with GM-controlled environmental features. Builds on the Map Editor Framework groundwork below; these items represent the prioritised feature set for a Maps 2.0 milestone.
+
+- **Combat movement locking** — when a combat encounter is active, token movement is capped at the character's speed (in feet). Each move broadcasts the distance consumed; the token becomes unmovable once the movement budget is exhausted for that turn. Requires grid scale (ft per square/hex) to be set on the map. Integrates with Combat 2.0 action economy tracking.
+- **Fog of war** — GM-controlled per-cell reveal overlay. Players see black/obscured cells until the GM reveals them. Two modes: manual brush reveal (GM paints explored areas) and auto-reveal based on token line-of-sight. GM always sees the full map.
+- **Walls & doors** — the GM places wall segments (line tools) directly on the battle map. Wall data is saved at the map level (not per-encounter) so the same map always loads with its walls intact. Doors are interactive wall segments: players and GMs can toggle them open/closed, which updates the fog-of-war LOS calculation in real time.
+- **Dedicated wall editor** — a separate editing mode (toggle in the GM toolbar) for placing, moving, and deleting wall segments. Should be distinct from normal token-interaction mode to prevent accidental edits during play. Wall data stored as a JSON array of line segments on the `BattleMap` record.
+- **Clickable map items** — hotspots placed by the GM that trigger a description popup or roll prompt when a token moves onto or a player clicks them.
 
 ### Map Editor Framework
 Groundwork for in-browser map authoring tools. Planned capabilities:
@@ -145,6 +197,50 @@ On small screens, replace the current sidebar with a proper slide-out drawer tri
 
 ### Darker Sepia Themes
 Add a few darker sepia/warm-brown colour themes as alternatives to the existing dark theme. Candidates: a deep parchment (dark tan background, inked-brown text), a candlelit tavern (very dark brown with amber accents), and a burnt manuscript (near-black with faded sepia highlights). Should slot into the existing theme system with new CSS variable sets — no structural changes needed.
+
+---
+
+## Development & Testing
+
+### Demo Mode
+An opt-in mode (toggled via `DEMO_MODE=true` env var) that seeds the database with a realistic sample dataset on startup, making it easy to test new features end-to-end without manually creating campaigns, characters, and maps each time. Planned scope:
+- **Seed data** — one GM account, two or three player accounts (with known credentials listed in the app's login page when demo mode is active), a sample campaign with memberships, a pre-uploaded battle map, a set of characters (at least one D&D 5e sheet with full stat blocks, skills, spells, and inventory), and a short roll history
+- **Reset endpoint** — a GM-accessible button (or admin-only `/demo/reset` route) that wipes and re-seeds the dataset without restarting the container, so a feature can be retested from a clean state quickly
+- **Guard rails** — demo mode should be clearly labelled in the UI (a banner or badge) so it is never accidentally left on in production; certain destructive actions (user deletion, campaign deletion) could be blocked or auto-restored on reset
+- **Configuration** — the seed content should live in a single `app/demo_seed.py` module so it is easy to extend when new features are added (e.g. adding a demo encounter when the encounter system ships)
+
+---
+
+## Rules Reference
+
+### SRD Rules in Full Text
+Surface the complete D&D 5e Systems Reference Document (SRD 5.1, CC BY 4.0) as searchable in-app reference text. Players and GMs should be able to look up rules without leaving the VTT. Planned scope:
+- Full SRD text indexed and searchable by keyword (conditions, actions, spells, equipment, etc.)
+- Contextual links from the character sheet and encounter panels (e.g. clicking a condition name opens its SRD entry)
+- Offline-capable: content bundled in the Docker image rather than fetched at runtime
+- GM can pin a rule snippet to the tabletop panel for the whole table to see during play
+
+Content source: the official SRD 5.1 PDF / markdown release from Wizards of the Coast, licensed CC BY 4.0. Attribution required in-app.
+
+### Page Number References in Official Content
+Where SimpleVTT surfaces content from official published sourcebooks (e.g. PHB, MM, DMG) — in spell descriptions, class features, item entries — investigate whether page numbers can be shown alongside the source citation (e.g. "PHB p.218").
+
+**Licensing review required before implementing:** displaying page numbers from non-SRD sourcebooks may constitute a reference to copyrighted content even if the page number itself is a fact. Consult the D&D 5e SRD licence terms and any Fan Content Policy. If page numbers are only shown for SRD-sourced content (which is CC BY 4.0), no additional licensing concern applies — SRD content should be safe. Non-SRD sourcebook page numbers should be gated on legal sign-off.
+
+---
+
+## Legal & Compliance
+
+### Full Audit for Licensed Material
+Systematic review of all content bundled in or served by SimpleVTT to ensure nothing included exceeds its licence terms. Scope:
+
+- **SRD content (spells, monsters, items, classes, races)** — confirm all data served via the Open5e mirror or shipped FS files is SRD 5.1 / CC BY 4.0 material only; flag any non-SRD entries (e.g. setting-specific content, post-SRD sourcebook expansions)
+- **Images and art** — audit every image in `app/static/` (including any bundled token/map art) against its licence; ensure CC0 or CC BY assets have attribution in `CREDITS.md`
+- **Fonts** — verify Google Fonts licences (currently all SIL OFL 1.1 — should be clean)
+- **Third-party JS/CSS libraries** — list all vendored or CDN-loaded libraries and confirm licences are compatible with self-hosting
+- **Any AI-generated art** — confirm the generation tool's output licence (some tools claim copyright on outputs; others release CC0); document the tool and settings used for each asset
+
+Output: a `CREDITS.md` file at the repo root listing every third-party asset, its licence, and its source URL, plus a checklist of items that need further review or replacement.
 
 ---
 
