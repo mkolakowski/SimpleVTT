@@ -994,6 +994,24 @@
     </div>
 </div>
 
+{# v2.3.17: hidden pool of monster mini-sheets. Rendered for the GM so
+   the init tracker can steal the rich mini-body (HP / AC / abilities /
+   skills / attacks tabs) when expanding a monster combatant row — same
+   pattern as PC mini-sheets above. ``is_monster=True`` suppresses
+   PC-only sections (rest buttons / wild shape / transform bar / spell
+   slot pip JS) inside the partial. Pool stays display:none so it
+   doesn't clutter the Characters panel; only the moved mini-body
+   inside the init tracker is visible. #}
+{% if is_gm and monster_templates %}
+<div id="monster-mini-sheet-pool" style="display:none;" aria-hidden="true">
+    {% for c in monster_templates %}
+    {% with is_monster = true %}
+    {% include "_mini_sheet_card.html" %}
+    {% endwith %}
+    {% endfor %}
+</div>
+{% endif %}
+
 {% if is_gm %}
         {# Click-to-set mode banner — shown over the canvas while the GM
            is arming a spawn from an encounter's edit form. #}
@@ -3296,8 +3314,16 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         list.innerHTML = battle.combatants.map((c, i) => {
             const isActive = battle.active && i === (battle.turn_index % battle.combatants.length);
             const col = hpColor(c.hp_current, c.hp_max);
-            /* True when a full mini-sheet card exists in the Characters section for this combatant */
-            const hasCharDetail = !!(c.char_id && document.getElementById('char-detail-' + c.char_id));
+            /* v2.3.17: unified ``slotId`` — the data-char-id key the
+             * mini-body steal logic uses to find this combatant's
+             * pre-rendered mini-sheet. PCs use the Character id; monsters
+             * use ``monster-{token_template_id}`` matching the id stamped
+             * on ``#char-detail-monster-{tid}`` in the monster pool div
+             * rendered by the GM-only ``monster_templates`` loop. */
+            const slotId = c.char_id
+                ? String(c.char_id)
+                : (c.token_template_id ? 'monster-' + c.token_template_id : '');
+            const hasCharDetail = !!(slotId && document.getElementById('char-detail-' + slotId));
             const tokenImg = c.image_url
                 ? `<img src="${c.image_url}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;border:1px solid rgba(167,139,250,.4);flex-shrink:0;" alt="">`
                 : `<div class="init-swatch" style="background:${c.color || '#888'};flex-shrink:0;margin-top:2px;"></div>`;
@@ -3316,17 +3342,19 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         <input class="init-hp-max" type="number" value="${c.hp_max}" data-idx="${i}" title="Max HP">
                         <button class="init-rm" data-idx="${i}" title="Remove" style="margin-left:auto;">×</button>
                     </div>`;
-                    /* For non-owned chars the GM still needs the static stat panel.
-                     * For monsters (no char_id) we render the new monster sheet
-                     * with click-to-roll attack/damage/save buttons. */
+                    /* Fallback when no pre-rendered mini-sheet exists:
+                     * PCs without a sheet card → buildInitSheet (legacy
+                     * static stat panel); monsters whose TokenTemplate
+                     * wasn't in the pool → buildMonsterInitSheet (the
+                     * one-line "Open full sheet" link). */
                     if (!hasCharDetail) {
                         staticSheet = c.char_id
                             ? buildInitSheet(c.char_id)
                             : buildMonsterInitSheet(c);
                     }
                 }
-                return `<div class="init-entry${isActive ? ' active-turn' : ''}" data-idx="${i}" data-char-id="${c.char_id || ''}">
-                    <div class="mini-header" data-idx="${i}" data-char-id="${c.char_id || ''}">
+                return `<div class="init-entry${isActive ? ' active-turn' : ''}" data-idx="${i}" data-char-id="${slotId}">
+                    <div class="mini-header" data-idx="${i}" data-char-id="${slotId}">
                         ${tokenImg}
                         <div class="mini-header-info">
                             <div class="mini-header-name">${c.name}</div>

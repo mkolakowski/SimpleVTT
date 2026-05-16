@@ -45,7 +45,12 @@
                 {% set _hd_max_v = (_hd_obj.get('max') if _hd_obj.get('max') is not none else sh.get('level', 1)) | int %}
                 {% set _hd_cur_v = (_hd_obj.get('current') if _hd_obj.get('current') is not none else _hd_max_v) | int %}
                 {% set _hd_die = sh.get('class_hit_die','') or 'd8' %}
-                {% set _is_owner = c.owner_user_id == user.id or is_gm %}
+                {# v2.3.17: ``and not is_monster`` so the GM-owner check
+                   doesn't grant edit affordances (HP step, short/long
+                   rest, death saves, roll-state pill) on monster
+                   mini-sheets — those endpoints expect a real Character
+                   row and would 404 for TokenTemplate-backed cards. #}
+                {% set _is_owner = (c.owner_user_id == user.id or is_gm) and not is_monster %}
                 <div class="mini-statblock mini-stat-row"
                      data-char-id="{{ c.id }}"
                      data-hp-cur="{{ (_hp.get('current') or 0) | int }}"
@@ -300,7 +305,10 @@
                 {% set _af       = sh.get('active_form') %}
                 {% set _show_ws  = _tf.druid_lv >= 2 %}
                 {% set _char_lv  = (sh.get('level') or 1) | int %}
-                {% if _af or _show_ws or _tf.has_poly %}
+                {# v2.3.17: Wild Shape / Polymorph bar is PC-only — monsters
+                   don't shape-shift through the druid mechanic. Suppressed
+                   for monster mini-sheets. #}
+                {% if (_af or _show_ws or _tf.has_poly) and not is_monster %}
                 <div class="mini-transform-bar"
                      data-char-id="{{ c.id }}"
                      data-druid-lv="{{ _tf.druid_lv }}"
@@ -393,10 +401,21 @@
             {# Open the standalone sheet in a new tab. The popup-modal path
                  (window.openSheet) was retired in v0.35.3 — inline <script>s in
                  the sheet template were stripped by the modal injector, leaving
-                 features like Wild Shape / Class Resources broken there. #}
+                 features like Wild Shape / Class Resources broken there.
+                 v2.3.17: monsters route to the monster-template sheet URL
+                 instead of /character/{id}/sheet, and pick up the 2.3.15
+                 drawer-intercept class so the link opens in the slide-out
+                 drawer over the tabletop. #}
+            {% if is_monster %}
+            <a class="mini-open-full btn-link monster-sheet-link"
+               data-monster-name="{{ c.name }}"
+               href="/campaign/{{ campaign.id }}/monster-template/{{ c.template_id }}/sheet"
+               target="_blank" rel="noopener">Open full sheet →</a>
+            {% else %}
             <a class="mini-open-full btn-link"
                href="/campaign/{{ campaign.id }}/character/{{ c.id }}/sheet"
                target="_blank" rel="noopener">Open full sheet →</a>
+            {% endif %}
             <div class="conc-section" id="conc-section-{{ c.id }}" data-char-id="{{ c.id }}"></div>
             </div><!-- /mini-footer -->
         </div>

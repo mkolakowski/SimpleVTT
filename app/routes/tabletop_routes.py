@@ -404,6 +404,35 @@ def campaign_view(
     ]
     token_data = [_token_dict(t) for t in tokens]
     tmpl_data = [{"id": t.id, "name": t.name, "image_url": t.image_url, "tags": t.tags or [], "template": t.template, "sheet": t.sheet or {}} for t in tmpl_objs]
+
+    # v2.3.17: synthesize a "character-like" view of every GM-accessible
+    # monster TokenTemplate so the per-character mini-sheet partial (the
+    # one extracted in 2.3.16) can render for them too — the GM's init
+    # tracker then steals the rich mini-body the same way it steals PC
+    # mini-sheets. Filtered to dnd5e templates that carry combat data
+    # (abilities or attacks/actions) so the pool doesn't include blank
+    # tokens or generic-template entries. Sheet is projected via the
+    # 2.3.10/11 adapter so monster_slug pointers resolve and structured
+    # actions fold into ``sheet.attacks`` for the mini-sheet attacks tab.
+    monster_templates: list = []
+    if is_gm:
+        for _t in tmpl_objs:
+            if (_t.template or "dnd5e") != "dnd5e":
+                continue
+            _ms = _monster_template_to_sheet(_t, campaign.id)
+            if not (_ms.get("abilities") or _ms.get("attacks") or _ms.get("actions")):
+                continue
+            monster_templates.append(_SyntheticMonsterChar(
+                id=f"monster-{_t.id}",
+                name=_t.name or "Monster",
+                sheet=_ms,
+                template=_t.template or "dnd5e",
+                owner_user_id=0,
+                campaign_id=campaign.id,
+                portrait_url=_t.image_url,
+                template_id=_t.id,
+            ))
+
     user_color_map, user_portrait_map, user_char_name_map = _build_user_maps(db, campaign)
     conc_effects = db.query(ConcentrationEffect).filter(ConcentrationEffect.campaign_id == campaign_id).all()
     conc_by_char = {
@@ -436,6 +465,7 @@ def campaign_view(
             "char_data": char_data,
             "token_data": token_data,
             "tmpl_data": tmpl_data,
+            "monster_templates": monster_templates,
             "user_color_map": user_color_map,
             "user_portrait_map": user_portrait_map,
             "user_char_name_map": user_char_name_map,
@@ -9124,13 +9154,13 @@ class _SyntheticMonsterChar:
 
     __slots__ = (
         "id", "name", "sheet", "template", "owner_user_id", "campaign_id",
-        "color", "portrait_url", "ring_style",
+        "color", "portrait_url", "ring_style", "template_id",
     )
 
     def __init__(
         self,
         *,
-        id: int,
+        id,
         name: str,
         sheet: dict,
         template: str = "dnd5e",
@@ -9139,7 +9169,14 @@ class _SyntheticMonsterChar:
         color: Optional[str] = None,
         portrait_url: Optional[str] = None,
         ring_style: Optional[str] = None,
+        template_id: Optional[int] = None,
     ) -> None:
+        # ``id`` may be a numeric TokenTemplate primary key (used by the
+        # 2.3.10 standalone monster sheet route) or a string like
+        # ``"monster-22"`` (used by the 2.3.17 mini-sheet pool, where DOM
+        # ids need to NOT collide with real Character primary keys). The
+        # partial stamps it into ``id=`` / ``data-char-id=`` attributes
+        # directly; downstream JS parses or branches as needed.
         self.id = id
         self.name = name
         self.sheet = sheet
@@ -9149,6 +9186,12 @@ class _SyntheticMonsterChar:
         self.color = color or "#888"
         self.portrait_url = portrait_url
         self.ring_style = ring_style or "solid"
+        # ``template_id``: the underlying TokenTemplate primary key as an
+        # int, even when ``id`` is the string form. The mini-sheet partial
+        # uses this to build the ``/monster-template/{tid}/sheet`` URL
+        # for the "Open full sheet" link without needing to parse the
+        # ``"monster-N"`` prefix off ``id``.
+        self.template_id = template_id
 
 
 def _monster_dict_to_sheet(m: dict, *, base: Optional[dict] = None) -> dict:

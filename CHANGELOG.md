@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.17] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Render mini-sheet cards for every GM-accessible monster `TokenTemplate` (using the 2.3.16 partial) into a hidden pool div, and extend the init-tracker mini-body steal logic to find them. When the GM expands a monster combatant row, they now see the same compact PC-style mini-sheet (HP/AC/Speed/abilities/skills/attacks tabs) instead of the prior one-line "Open full sheet" link. Click handlers are scoped to safe operations in this commit; 2.3.18 wires the remaining attack/strike paths.
+**Description:** Direct response to the user's request after seeing 2.3.15: "make the sheets in the GM initiative use this sheet" (showed the existing PC mini-sheet). The 2.3.16 partial extraction made this tractable — this commit synthesizes a character-like object for each monster `TokenTemplate` (id `"monster-{tid}"` so DOM ids don't collide with real Character primary keys) via the 2.3.10/11 sheet projection adapter, then renders the partial into a `#monster-mini-sheet-pool` hidden div. The init tracker's render now computes a unified `slotId` per combatant (`c.char_id` for PCs, `"monster-{token_template_id}"` for monsters) and the existing `#char-detail-{slotId}` lookup + mini-body steal logic just works for both. PC-only sections (HP step buttons, short/long rest buttons, wild-shape/polymorph transform bar, death saves, roll-state pill `can_edit`) suppress on monster mini-sheets via an `is_monster` flag passed through `{% with %}` — those endpoints expect a real `Character` row and would 404 for monsters. The "Open full sheet" link in the mini-footer routes to the 2.3.10 monster sheet URL for monsters and carries the 2.3.15 `monster-sheet-link` class so a click opens the sheet in the slide-out drawer.
+
+### Added
+- `app/routes/tabletop_routes.py` — builds a `monster_templates` list in the tabletop route (GM-only), filtering to dnd5e templates that carry combat data (`abilities` or `attacks` or `actions` keys). Each becomes a `_SyntheticMonsterChar` with `id="monster-{tid}"` + a new `template_id` slot so the partial can emit the `/monster-template/{tid}/sheet` URL without parsing the id prefix.
+- `app/templates/tabletop.html` — `#monster-mini-sheet-pool` hidden `display:none` div that renders `_mini_sheet_card.html` for each monster template with `{% with is_monster=true %}`. The init tracker steals from this pool exactly like it does from the visible Characters panel today.
+
+### Changed
+- `app/templates/_mini_sheet_card.html` — `_is_owner` now also requires `not is_monster`, which gates off HP step buttons, short/long rest buttons, the roll-state pill `can_edit`, and the death-saves tracker for monsters in one place. Wild-shape/polymorph bar wrapped with `and not is_monster`. "Open full sheet" link branches to the monster URL + `monster-sheet-link` class when rendering a monster.
+- `app/templates/tabletop.html` `renderBattle` — unified `slotId` per combatant (PC `char_id` or `monster-{token_template_id}`) so `hasCharDetail` + the steal selector + the open/close handler all key off the same identifier for both PCs and monsters.
+- `app/routes/tabletop_routes.py` `_SyntheticMonsterChar` — `id` accepts both int (2.3.10 route) and str (2.3.17 mini-sheet pool); added `template_id` slot for the monster-sheet URL.
+
+### Notes
+- Skills, ability checks, ability/save toggle, and tab switching all work on monster mini-sheets in this commit — those handlers either don't hit a backend endpoint or hit `/roll` which already tolerates a missing/invalid `character_id` (falls back to the rolling user's first character).
+- The Strike (weapon attack) and Cast Spell handlers POST to character-specific endpoints (`/attack`, `/cast_spell`) that require a real `Character` row — those would fail silently or error toast for monster mini-sheets in this commit. 2.3.18 wires them to `/roll` with a built expression instead, mirroring the 2.3.9 inline-button approach but using the mini-sheet's own attack data.
+
+---
+
 ## [2.3.16] - 2026-05-16
 
 **Schema version:** 52
