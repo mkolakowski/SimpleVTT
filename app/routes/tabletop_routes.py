@@ -812,7 +812,7 @@ def _slugify_for_subclass(value: str, max_len: int = 80) -> str:
     return s[:max_len]
 
 
-def _parse_custom_subclass_features(raw: str) -> list:
+def _parse_custom_subclass_features(raw: str, *, extra_keys: tuple[str, ...] = ()) -> list:
     """Parse and normalise the features JSON textarea.
 
     Required shape::
@@ -825,6 +825,13 @@ def _parse_custom_subclass_features(raw: str) -> list:
     ``level`` may be null/missing. ``desc`` may be empty. Raises
     ``HTTPException(400, ...)`` with a human-readable message on any
     structural problem so the form can render it back to the GM.
+
+    ``extra_keys`` (v2.3.8): names of optional additional keys to preserve
+    verbatim from each input dict. Used by the monster-actions coalescer
+    to pass through the structured attack fields (``attack_roll``,
+    ``attack_bonus``, ``damage``, ``damage_type``, ``save_ability``,
+    ``save_dc``) that the action-mode editor now emits. Default empty
+    tuple keeps the strict feature/trait behavior unchanged.
     """
     if not raw or not raw.strip():
         return []
@@ -856,7 +863,11 @@ def _parse_custom_subclass_features(raw: str) -> list:
                     400, f"Features JSON: entry #{i} 'level' must be an integer (got {lvl_raw!r})"
                 )
         desc = (item.get("desc") or "").strip()
-        out.append({"name": name[:160], "level": level_norm, "desc": desc[:4000]})
+        rec: dict = {"name": name[:160], "level": level_norm, "desc": desc[:4000]}
+        for ek in extra_keys:
+            if ek in item:
+                rec[ek] = item[ek]
+        out.append(rec)
     return out
 
 
@@ -1849,8 +1860,13 @@ def _coalesce_monster_actions(actions_json: str, reactions_json: str,
     ``attack_bonus``, ``damage``, ``damage_type``, ``save_ability``,
     ``save_dc``) that the action-mode editor now emits on the Actions
     fieldset, so the homebrew monster's stat-block view can render
-    Attack / Save / Damage buttons via ``renderActionButtons``."""
+    Attack / Save / Damage buttons via ``renderActionButtons``. Passed
+    through via the shared parser's ``extra_keys`` parameter."""
     import re as _re
+    _attack_keys = (
+        "attack_roll", "attack_bonus", "damage", "damage_type",
+        "save_ability", "save_dc",
+    )
     out: list[dict] = []
     for raw, cat in (
         (actions_json,            "action"),
@@ -1858,7 +1874,7 @@ def _coalesce_monster_actions(actions_json: str, reactions_json: str,
         (special_abilities_json,  "special_ability"),
         (legendary_actions_json,  "legendary_action"),
     ):
-        for entry in _parse_custom_subclass_features(raw):
+        for entry in _parse_custom_subclass_features(raw, extra_keys=_attack_keys):
             if not isinstance(entry, dict):
                 continue
             name = (entry.get("name") or "").strip()
@@ -1870,15 +1886,12 @@ def _coalesce_monster_actions(actions_json: str, reactions_json: str,
                 "min_level": entry.get("level") or 1,
                 "category": cat,
             }
-            # Attack-mode pass-through. The editor only emits these keys for
-            # Actions (the Pydantic model applies defaults for everything
-            # omitted), but we accept them on any category for forward-
-            # compatibility — e.g. a Legendary action that itself involves
-            # an attack roll.
-            for k in ("attack_roll", "attack_bonus", "damage", "damage_type",
-                      "save_ability", "save_dc"):
-                if k in entry and entry[k] not in (None, "", False, 0):
-                    rec[k] = entry[k]
+            # Accept the attack keys on any category for forward-compatibility
+            # (e.g. a Legendary action that itself involves an attack roll).
+            for k in _attack_keys:
+                v = entry.get(k)
+                if v not in (None, "", False, 0):
+                    rec[k] = v
             out.append(rec)
     return out
 
@@ -9081,6 +9094,192 @@ def character_sheet_page(
             "sheet_template": sheet_template,
             "system": get_system(campaign.game_system),
             "class_roster": class_levels_summary(page_sheet) if char.template == "dnd5e" else [],
+            "animate_gifs": user.animate_gifs,
+        },
+    )
+
+
+# ----------- Monster sheet (v2.3.10) -----------
+# Reuse sheet_dnd5e.html for monsters by projecting a TokenTemplate (stat
+# block + structured actions) into the same context shape the character
+# sheet expects. Gives GMs PC-parity click-to-roll for ability checks,
+# saves, skills, and structured attacks without rebuilding a parallel UI.
+# See docs in monster_page.html + the adapter below.
+
+
+class _SyntheticMonsterChar:
+    """Stand-in for a ``Character`` ORM object so ``sheet_dnd5e.html`` (and
+    its wrapper ``monster_page.html``) can render a monster's stat block
+    without needing a DB-backed Character row. Only the attributes the
+    template actually reads need to exist — see the template scan in
+    docs/plans/monster-sheet.md (when written) or grep ``char\\.`` in
+    ``app/templates/sheet_dnd5e.html`` to confirm the surface.
+
+    Intentionally NOT a SQLAlchemy model: the monster lives in
+    ``TokenTemplate`` (and optionally a homebrew JSON file), not in
+    ``characters``. Saving to the character API would 404, so the
+    monster sheet renders with ``can_edit=False`` and the form's
+    data-readonly flag suppresses save buttons.
+    """
+
+    __slots__ = (
+        "id", "name", "sheet", "template", "owner_user_id", "campaign_id",
+        "color", "portrait_url", "ring_style",
+    )
+
+    def __init__(
+        self,
+        *,
+        id: int,
+        name: str,
+        sheet: dict,
+        template: str = "dnd5e",
+        owner_user_id: int = 0,
+        campaign_id: int = 0,
+        color: Optional[str] = None,
+        portrait_url: Optional[str] = None,
+        ring_style: Optional[str] = None,
+    ) -> None:
+        self.id = id
+        self.name = name
+        self.sheet = sheet
+        self.template = template
+        self.owner_user_id = owner_user_id
+        self.campaign_id = campaign_id
+        self.color = color or "#888"
+        self.portrait_url = portrait_url
+        self.ring_style = ring_style or "solid"
+
+
+def _monster_template_to_sheet(tmpl: TokenTemplate) -> dict:
+    """Project a monster TokenTemplate's stat block + structured actions
+    into the dict shape that ``sheet_dnd5e.html`` consumes.
+
+    The template's source-of-truth for clickable attacks is ``sheet.attacks``
+    (character schema: ``{name, atk_bonus, damage, damage_type, save_dc,
+    save_ability, description}``). Two paths can populate that list for a
+    monster:
+
+    1. SRD imports — ``_open5e_to_dnd5e_sheet`` already regex-extracts
+       attacks into ``sheet.attacks`` at import time. We use those as-is.
+    2. Homebrew with structured actions (v2.3.8 editor output) — the
+       monster carries ``sheet.actions: list[Action]`` with first-class
+       fields like ``attack_roll`` / ``attack_bonus`` / ``damage_type`` /
+       ``save_ability`` / ``save_dc``. We append those (filtered to entries
+       that actually have an attack/damage/save) to the attacks list,
+       remapping ``attack_bonus`` → ``atk_bonus`` to match the character
+       schema's key.
+
+    The two sources can coexist on the same monster (and they will, for a
+    homebrew that was first imported then enhanced). De-dupe by name so a
+    homebrew action that overrides an SRD-imported one shadows the original.
+    All other sheet keys pass through unchanged.
+    """
+    sheet = dict(tmpl.sheet or {})
+    actions = sheet.get("actions") or []
+    if not actions:
+        return sheet
+
+    existing_attacks = list(sheet.get("attacks") or [])
+    by_name = {
+        (a.get("name") or "").strip().lower(): i
+        for i, a in enumerate(existing_attacks)
+        if isinstance(a, dict)
+    }
+
+    for a in actions:
+        if not isinstance(a, dict):
+            continue
+        if not (a.get("attack_roll") or a.get("damage") or a.get("save_ability")):
+            continue
+        name = (a.get("name") or "Action").strip()
+        save_ability_raw = (a.get("save_ability") or "").strip().upper()
+        atk_entry = {
+            "name": name,
+            "atk_bonus": a.get("attack_bonus") or "",
+            "damage": a.get("damage") or "",
+            "damage_type": a.get("damage_type") or "",
+            "save_dc": (a.get("save_dc") or None) if a.get("save_dc") else None,
+            "save_ability": save_ability_raw or None,
+            "description": a.get("desc") or "",
+        }
+        key = name.lower()
+        if key in by_name:
+            existing_attacks[by_name[key]] = atk_entry
+        else:
+            existing_attacks.append(atk_entry)
+            by_name[key] = len(existing_attacks) - 1
+
+    sheet["attacks"] = existing_attacks
+    return sheet
+
+
+@router.get(
+    "/campaign/{campaign_id}/monster-template/{template_id}/sheet",
+    response_class=HTMLResponse,
+)
+def monster_template_sheet_page(
+    campaign_id: int,
+    template_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.3.10: full sheet view for a monster ``TokenTemplate``, reusing
+    ``sheet_dnd5e.html`` so the GM gets PC-parity click-to-roll for
+    ability checks, saves, skills, and structured attacks.
+
+    GM-only because monsters are GM-visibility data in this codebase.
+    Read-only — ``can_edit=False`` makes the sheet's form render with
+    ``data-readonly="1"``, which the sheet JS uses to suppress save
+    buttons. The form fields stay populated though, because
+    ``wireDnd5eRollButtons`` reads ability/skill/save state via
+    ``form.querySelector('[name="..."]').value``.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    tmpl = (
+        db.query(TokenTemplate)
+        .filter(TokenTemplate.id == template_id,
+                TokenTemplate.campaign_id == campaign_id)
+        .first()
+    )
+    if not tmpl:
+        raise HTTPException(404, "Monster template not found")
+
+    sheet = _monster_template_to_sheet(tmpl)
+    if (tmpl.template or "dnd5e") == "dnd5e":
+        normalize_dnd5e_sheet(sheet)
+    sheet_template = (
+        "sheet_dnd5e.html"
+        if (tmpl.template or "dnd5e") == "dnd5e"
+        else "sheet_generic.html"
+    )
+    synthetic = _SyntheticMonsterChar(
+        id=template_id,
+        name=tmpl.name or "Monster",
+        sheet=sheet,
+        template=tmpl.template or "dnd5e",
+        owner_user_id=0,
+        campaign_id=campaign_id,
+        portrait_url=tmpl.image_url,
+    )
+    return templates.TemplateResponse(
+        "monster_page.html",
+        {
+            "request": request,
+            "user": user,
+            "campaign": campaign,
+            "char": synthetic,
+            "sheet": sheet,
+            "can_edit": False,
+            "is_gm": True,
+            "sheet_template": sheet_template,
+            "system": get_system(campaign.game_system),
+            "class_roster": [],
             "animate_gifs": user.animate_gifs,
         },
     )

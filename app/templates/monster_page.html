@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{# v2.3.10 — full sheet view for monster TokenTemplates. Mirrors
+   character_page.html but with a monster-appropriate breadcrumb and no
+   "delete character" affordance (the underlying template_id is not a
+   Character row; the /characters/{id}/delete endpoint would 404). The
+   included sheet_template (sheet_dnd5e.html) reads ``char`` and ``sheet``
+   exactly like the PC version — the route hands it a SyntheticChar
+   stand-in built from the TokenTemplate. #}
+{% block title %}{{ char.name }} — {{ campaign.name }} (Monster){% endblock %}
+{% block head %}
+<style>
+.sheet-page-wrap { max-width: 780px; margin: 0 auto; }
+.sheet-breadcrumb { font-size: 13px; margin-bottom: 14px; color: var(--fg-mute); }
+.sheet-breadcrumb a { color: var(--accent); }
+.sheet { max-width: 100%; }
+.sheet fieldset { margin-bottom: 10px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sheet-page-wrap">
+    <div class="sheet-breadcrumb">
+        <a href="/">Lobby</a> ›
+        <a href="/campaign/{{ campaign.id }}">{{ campaign.name }}</a> ›
+        🐲 {{ char.name }}
+        <span style="color:var(--fg-mute);font-size:11px;margin-left:8px;">(monster — read-only)</span>
+    </div>
+
+    <div id="roll-toast-container"></div>
+
+    <script>
+        const CAMPAIGN_ID = {{ campaign.id }};
+        const CHAR_ID     = {{ char.id }};
+        const ME = { id: {{ user.id }} };
+        // Monster sheets are GM-only and don't persist edits — the close
+        // hook just sends the GM back to the campaign tabletop.
+        window.closeSheet = function () {
+            window.location.href = '/campaign/{{ campaign.id }}';
+        };
+    </script>
+
+    {% include sheet_template %}
+</div>
+{% endblock %}

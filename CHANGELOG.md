@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.10] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** First slice of the "Unified Monster Sheet" TODO — adds a server-side adapter + new GET route that renders the existing `sheet_dnd5e.html` for any monster `TokenTemplate`, giving GMs PC-parity click-to-roll for ability checks, saves, skills, and structured attacks without rebuilding a parallel UI. Replaces the in-tracker minimal stat-block (2.3.9) wiring in the next commit.
+**Description:** Pivot decision after testing 2.3.9 — building bespoke monster-row buttons in the init tracker means reinventing roll wiring, advantage/disadvantage application, breakdown rendering, roll-log integration, and the click-to-toggle skill/save UI that the PC sheet already does end-to-end. Cheaper to reuse the PC sheet against a synthesized "monster character" projection. This commit lands the plumbing: (1) `_SyntheticMonsterChar` — a SQLAlchemy-free stand-in exposing only the attributes `sheet_dnd5e.html` actually reads (id, name, sheet, template, owner_user_id, campaign_id, color, portrait_url, ring_style); (2) `_monster_template_to_sheet(tmpl)` — projects `TokenTemplate.sheet + sheet.actions` into the dict shape the character template consumes, folding any homebrew 2.3.8 structured-action entries (`attack_roll` / `attack_bonus` / `damage_type` / `save_ability` / `save_dc`) into the character-style `sheet.attacks` list and de-duping by name so a homebrew override shadows an SRD-imported same-name attack; (3) new GET `/campaign/{cid}/monster-template/{tid}/sheet` (GM-only, read-only — `can_edit=False`) that renders a new slim `monster_page.html` wrapper which mirrors `character_page.html` minus the delete affordance and with a monster breadcrumb. The wrapper still `{% include sheet_template %}`s `sheet_dnd5e.html`, so all the existing roll-button wiring, adv/dis pill, skill toggles, and damage rolls work for free — they read state via `form.querySelector('[name="..."]').value` against the populated (but read-only) form fields. Init-tracker hookup lands in 2.3.11.
+
+### Added
+- `app/templates/monster_page.html` — slim wrapper around `sheet_dnd5e.html` with a monster-appropriate breadcrumb and no delete-character button. Defines `CAMPAIGN_ID` / `CHAR_ID` / `ME` and a `closeSheet()` that returns to the campaign tabletop.
+- `app/routes/tabletop_routes.py` `_SyntheticMonsterChar` — `__slots__` stand-in for the Character ORM object. Intentionally not a SQLAlchemy model; the underlying entity is a TokenTemplate, not a Character row.
+- `app/routes/tabletop_routes.py` `_monster_template_to_sheet(tmpl)` — pure-function projection of TokenTemplate.sheet + structured actions into the character-sheet dict shape. Pass-through for everything except actions; folds structured `attack_roll` / `save_ability` action entries into `sheet.attacks` with the character key conventions (`atk_bonus`, not `attack_bonus`; UPPER-case `save_ability`).
+- `app/routes/tabletop_routes.py` new GET route `/campaign/{cid}/monster-template/{tid}/sheet` rendering `monster_page.html` with the synthesized context.
+
+### Notes
+- The next commit (2.3.11) swaps the in-tracker monster-row buttons (added in 2.3.9) for an "Open monster sheet" button that opens this new URL. The 2.3.9 inline buttons stay as fallback until the new sheet experience is validated.
+- Spell / multiclass / class-feature sections in `sheet_dnd5e.html` are gated by `{% if %}` guards on `sheet.classes` / `sheet.spells` / `sheet.spell_slots` — monsters that don't populate those just don't render those sections. No template fork required for this slice.
+- Edit-monster flow still happens through the existing homebrew editor in campaign settings (not the new sheet view). The new sheet is read-only by design — it's a play-time tool, not an authoring tool.
+
+---
+
 ## [2.3.9] - 2026-05-15
 
 **Schema version:** 52
