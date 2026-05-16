@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.5] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Fix the demo wipe failing with `ForeignKeyViolation` on `fk_campaign_active_map` — the demo campaign's `active_map_id` pointed at a map the wipe was trying to delete, the constraint has no `ondelete` clause, so every on-boot reseed (and every scheduled reset) failed with `IntegrityError` and the demo dataset never got refreshed.
+**Description:** Surfaced while verifying the 2.3.4 user-theme fix on the local stack. App-startup logs showed `demo seed (boot) failed: (psycopg2.errors.ForeignKeyViolation) update or delete on table "maps" violates foreign key constraint "fk_campaign_active_map" on table "campaigns"` — the wipe tried `DELETE FROM maps WHERE campaign_id = 1` while `campaigns.active_map_id = 1` still referenced it. The constraint at `app/models.py:99-101` is declared with `use_alter=True` to break the campaigns↔maps circular FK, and has no `ondelete`, so a delete of any referenced map raises. Fix is one extra statement in `wipe()`: before deleting maps, run an `UPDATE campaigns SET active_map_id = NULL WHERE id IN (...)` for the demo campaigns. This unblocks the existing delete and also makes the wipe re-runnable (the existing version left the DB stuck because the failed transaction rolled back and the next boot would hit the same error).
+
+### Fixed
+- `app/demo_seed.py` — `wipe()` now NULLs each demo campaign's `active_map_id` before deleting its maps. Without this, every on-boot reseed and every scheduled reset raised `IntegrityError` and left the demo dataset stale.
+
+### Notes
+- Side effect: combined with the 2.3.4 user-theme default change, the next successful reseed will recreate the three demo users with `theme = APP_DEFAULT_THEME` (i.e. `sepia` for any operator using the recommended config). Existing demo-user rows from a pre-2.3.4 deploy are deleted-and-recreated by the wipe.
+- Redeploy with `docker compose up -d --build app`. The on-boot reseed will now succeed.
+
+---
+
 ## [2.3.4] - 2026-05-15
 
 **Schema version:** 52

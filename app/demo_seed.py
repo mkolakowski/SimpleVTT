@@ -108,6 +108,14 @@ def wipe(db: Session) -> dict[str, int]:
             .filter(Character.campaign_id.in_(demo_campaign_ids))
             .delete(synchronize_session=False)
         )
+        # Null out campaigns.active_map_id before deleting maps —
+        # ``fk_campaign_active_map`` has no ondelete clause (and can't
+        # easily get one because the FK is declared with ``use_alter`` to
+        # break the campaigns↔maps cycle), so a DELETE on maps while a
+        # demo campaign still points at one raises ForeignKeyViolation.
+        db.query(Campaign).filter(
+            Campaign.id.in_(demo_campaign_ids)
+        ).update({Campaign.active_map_id: None}, synchronize_session=False)
         # Maps
         counts["maps"] = (
             db.query(Map)
