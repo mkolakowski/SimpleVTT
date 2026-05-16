@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.2.4] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Fix roll-state pill buttons being unresponsive on the full D&D 5e character sheet — the click handler lived in `tabletop.js`, which doesn't load on the standalone sheet page.
+**Description:** 2.2.0 added the click delegation for `[data-action="set-roll-state"]` to `app/static/tabletop.js`. That file only loads on the tabletop page (`tabletop.html`); the full sheet (`character_page.html` → `sheet_dnd5e.html`) doesn't include it. So the pill rendered correctly on the sheet (since 2.2.3 promoted it to a full-width row), but clicks did nothing — there was no handler listening. Adds a duplicate delegated handler inside `sheet_dnd5e.html`'s inline script block, matching the pattern already used for the Roll Death Save / Stabilize buttons (which suffered the same context separation when they were added in 2.1.0).
+
+### Fixed
+- `app/templates/sheet_dnd5e.html` — inline script now delegates `[data-action="set-roll-state"]` clicks to a fetch against `/api/campaign/{id}/character/{id}/roll-state`, with optimistic local pill update via a new `_updateRollStatePill(charId, value)` helper. Buttons on the full sheet are now responsive whether the page is opened standalone or inside the campaign tabletop.
+
+---
+
 ## [2.2.3] - 2026-05-15
 
 **Schema version:** 52

@@ -5122,6 +5122,51 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             btn.disabled = false;
         }
     });
+
+    // ── Roll-state pill (v2.2.4 — full sheet handler) ────────────────
+    // tabletop.js has the same delegation but doesn't load on the full
+    // sheet page. Without this handler the pill renders but the buttons
+    // do nothing when clicked from the sheet.
+    function _updateRollStatePill(charId, value) {
+        document.querySelectorAll(
+            `.roll-state-pill[data-character-id="${charId}"]`
+        ).forEach(pill => {
+            pill.dataset.value = value || '';
+            pill.querySelectorAll('.roll-state-btn').forEach(b => {
+                const matches = (b.dataset.value || '') === (value || '');
+                b.classList.toggle('roll-state-btn-on', matches);
+            });
+        });
+    }
+    document.addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('[data-action="set-roll-state"]');
+        if (!btn) return;
+        const cid = btn.dataset.campaignId;
+        const charId = btn.dataset.characterId;
+        if (!cid || !charId) return;
+        const value = btn.dataset.value || null;
+        btn.disabled = true;
+        try {
+            const resp = await fetch(
+                `/api/campaign/${cid}/character/${charId}/roll-state`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ value: value || null }),
+                }
+            );
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                _toast(err.detail || 'Failed to set roll state', 'error');
+                return;
+            }
+            _updateRollStatePill(charId, value || '');
+        } catch (e) {
+            _toast('Roll-state error: ' + (e.message || e), 'error');
+        } finally {
+            btn.disabled = false;
+        }
+    });
 })();
 
 /* ── Class Resources panel ─────────────────────────────────────────────────
