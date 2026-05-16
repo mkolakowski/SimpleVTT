@@ -1,8 +1,23 @@
 # Death Saving Throws — Design Plan
 
-**Status:** Planned. Not yet implemented.
-**Target version:** v2.x.0 — next available MINOR (sequencing TBD against other planned MINOR features).
+**Status:** Phase 1 shipped in **v2.1.0**, refined in **v2.1.1** (always-on tracker visibility, healing also clears `dead`), gained adv/dis interaction in **v2.2.0**, gained cross-character rollover fix in **v2.2.2** / **v2.3.18**.
+**Phases 2–4 still deferred** — see [Implementation status](#implementation-status) below for the per-phase breakdown.
 **Tracked in:** [`TODO.md`](../../TODO.md) → Combat → Death Saving Throws.
+
+---
+
+## Implementation status
+
+(Annotation pass v2.3.26 — audited against CHANGELOG_v1 / CHANGELOG / code.)
+
+- ✅ **Phase 1 — Manual rolls + auto state on HP changes** — done in v2.1.0. State machine in `_apply_hp_change`, three endpoints (`/death-save`, `/death-save/override`, `/stabilize`), `_death_saves_tracker.html` partial, mini-sheet + full sheet UI, GM token-context override, massive-damage instant-kill, adv/dis interaction (v2.2.0).
+- 🔄 **v2.1.1 refinements** — tracker is now always visible (not hide-when-alive), and healing also clears `dead` status (the original "GM override required to revive" rule was confusing in practice).
+- ⏸ **Phase 2 — Reserved slot** — never populated. The original Phase 2 ("damage at 0 = auto failures") was pulled into Phase 1 from day one.
+- ⏸ **Phase 3 — Initiative auto-prompt + Medicine check + stable countdown** — deferred. Auto-prompt on initiative turn requires the Initiative Tracker Roll Prompt TODO. Medicine check + stable countdown both wait on a session-time concept the project doesn't have.
+- ⏸ **Phase 4 — NPC death saves with per-token toggle** — deferred. Monsters drop dead at 0 HP per RAW; a "boss should roll saves" toggle hasn't been requested.
+- ❌ **Self-stabilize features / revivify automation** — explicitly out of scope from day one. Still out of scope.
+
+---
 
 ---
 
@@ -83,7 +98,7 @@ The full character sheet exposes a "Stabilize" button that sets status to `stabl
 
 ## Phase scope
 
-### Phase 1 — Manual rolls + auto state on HP changes (ships now)
+### Phase 1 — Manual rolls + auto state on HP changes (ships now) — ✅ shipped v2.1.0
 
 - HP hits 0 → auto-transition to `dying`, save counters initialized
 - "Roll Death Save" button rolls `1d20`, applies result per RAW
@@ -95,17 +110,17 @@ The full character sheet exposes a "Stabilize" button that sets status to `stabl
 - GM-only "Stabilize" button on the full sheet
 - Nat 20 and nat 1 special cases handled
 
-### Phase 2 — (reserved)
+### Phase 2 — (reserved) — ⏸ never populated
 
-Phase 2 was originally "damage at 0 = auto failures" but that's been pulled into Phase 1. Reserved slot for whatever else turns out to matter (e.g., richer status broadcast for the initiative tracker, exhaustion-on-revive variant rule support).
+Phase 2 was originally "damage at 0 = auto failures" but that's been pulled into Phase 1. Reserved slot for whatever else turns out to matter (e.g., richer status broadcast for the initiative tracker, exhaustion-on-revive variant rule support). **As of v2.3.26 nothing has landed here.**
 
-### Phase 3 — Initiative & stabilize automation (later, after combat improvements)
+### Phase 3 — Initiative & stabilize automation (later, after combat improvements) — ⏸ deferred
 
 - Initiative tracker auto-prompts the dying character's player on their turn ("Your character is dying. Roll a death save.")
 - Medicine check button auto-resolves stabilize for an adjacent ally (Medicine DC 10 = success → status `stable`)
 - Track stable-countdown (RAW: 1d4 hours until 1 HP) — gated on a session-time concept the project doesn't yet have
 
-### Phase 4 — NPC death saves (much later, optional GM toggle)
+### Phase 4 — NPC death saves (much later, optional GM toggle) — ⏸ deferred
 
 - Per-token "use death saves" flag the GM enables on bosses or major NPCs
 - Stores death save state on the Token row instead of the Character.sheet

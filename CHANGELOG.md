@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.26] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Docs-only: annotate the three design plans in `docs/plans/` with implementation status so future readers can see at a glance which phases shipped and which are still deferred. No code change.
+**Description:** All three plan docs (`death-saves.md`, `advantage-disadvantage.md`, `demo-mode.md`) opened with "Status: Planned. Not yet implemented." even though every Phase 1 has shipped (some over a year ago in this fictional timeline). Updates each plan's top-of-file Status block to reflect the actual shipped versions, adds a new "Implementation status" section right under the Status block that itemises each phase / deliverable with ✅ / ⏸ / ❌ markers and the version where it landed, and annotates the inline Phase headers in the body with the same markers. The original design content (architectural decisions, file lists, verification steps, scope boundaries) is preserved unchanged — those remain useful historical reference for anyone wanting to understand why the implementation chose the shape it did.
+
+### Changed
+- `docs/plans/death-saves.md` — Status: Phase 1 shipped v2.1.0; refinements v2.1.1 (always-on tracker visibility, healing also clears `dead`); adv/dis interaction v2.2.0; cross-character rollover fix v2.2.2 / v2.3.18. Phase 2 reserved-but-never-populated. Phases 3 + 4 deferred (depend on session-time concept and per-NPC stat-block death save toggle that haven't shipped).
+- `docs/plans/advantage-disadvantage.md` — Status: Phase 1 shipped v2.2.0; refined v2.2.2 / v2.2.3 (full-width pill row); cross-character regression re-fixed v2.3.18. Phase 2 (condition automation) deferred — depends on a conditions system. Phase 3 (positional rolls) deferred — depends on Maps 2.0 grid distance.
+- `docs/plans/demo-mode.md` — Status: shipped v2.3.0 (originally targeted v2.1.0 in this plan); fix train v2.3.1 / v2.3.2 / v2.3.5 (Starlette compat, env-var forwarding, FK ordering bug); enrichment v2.3.22 (Goblin Captain) and v2.3.25 (GM Cleric). Per-visitor accounts, edge rate-limiting, and demo-only feature flags remain explicitly out of scope.
+
+### Notes
+- The annotation pass leaves all original plan content intact so the architectural rationale, verification matrices, and out-of-scope lists remain useful future reference. Only the headers + a new Implementation status section are new.
+- Future plan docs added under `docs/plans/` should follow the same convention: top-of-file Status header that's updated as implementation lands, plus inline phase annotations.
+
+---
+
 ## [2.3.25] - 2026-05-16
 
 **Schema version:** 52

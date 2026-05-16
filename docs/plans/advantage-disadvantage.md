@@ -1,8 +1,23 @@
 # Advantage & Disadvantage Tracking — Design Plan
 
-**Status:** Planned. Not yet implemented.
-**Target version:** v2.x.0 — next available MINOR (sequencing TBD against other planned MINOR features).
+**Status:** Phase 1 shipped in **v2.2.0**, refined in **v2.2.2** (full-sheet skill-click cross-character rollover fix) and **v2.2.3** (pill promoted from cramped HP card to a full-width row). Cross-character rollover regression caught + re-fixed at **v2.3.18** when the mini-sheet handlers moved to document-level delegation.
+**Phases 2 + 3 still deferred** — see [Implementation status](#implementation-status) below for the per-phase breakdown.
 **Tracked in:** [`TODO.md`](../../TODO.md) → Combat → Advantage & Disadvantage Tracking.
+
+---
+
+## Implementation status
+
+(Annotation pass v2.3.26 — audited against CHANGELOG / code.)
+
+- ✅ **Phase 1 — Manual toggle** — done in v2.2.0. `Character.sheet.roll_state`, `_apply_roll_state()` server helper with the regex contract, `POST /character/{id}/roll-state` endpoint, `_roll_state_pill.html` partial on mini-sheet + full sheet, GM token-context "Roll state" submenu (v2.3.17), roll-log `(auto …)` / `(manual …)` indicators, initiative exempt via `skip_roll_state`, damage rolls unaffected.
+- 🔄 **Cross-character rollover** — initial bug where the GM's pill bled into other characters' rolls fixed in v2.2.2 (full sheet path) and again in v2.3.18 (mini-sheet handlers moved to document-level delegation; monster mini-sheets always set `skip_roll_state: true`).
+- ⏸ **Phase 2 — Condition automation** — deferred. The `adv_sources` / `dis_sources` list + auto-cancel logic depends on a conditions system the project doesn't have yet.
+- ⏸ **Phase 3 — Context-aware rolls** — deferred. 5-ft-melee advantage / prone disadvantage depends on Maps 2.0 grid-distance awareness, also not yet shipped.
+- ❌ **Elven Accuracy / 3d20kh1** — explicitly out of scope from day one; deferred to a feats-action follow-up.
+- ❌ **NPC / monster token adv/dis** — out of scope from day one. Partially addressed in v2.3.18: monster mini-sheet rolls pass `skip_roll_state: true` so the GM's own char's pill never bleeds into monster checks, but monsters themselves still don't have a settable pill.
+
+---
 
 ---
 
@@ -91,17 +106,17 @@ Players see clearly *why* the dice doubled.
 
 ## Phase scope
 
-### Phase 1 — Manual toggle (ships now)
+### Phase 1 — Manual toggle (ships now) — ✅ shipped v2.2.0
 
 Manual set/clear via UI; server intercepts single-d20 expressions; WebSocket broadcasts state change so other clients refresh. Manual buttons preserved as override. Self-contained.
 
-### Phase 2 — Condition automation (later, after conditions system lands)
+### Phase 2 — Condition automation (later, after conditions system lands) — ⏸ deferred
 
 Conditions like Blinded / Prone / Restrained / Invisible / Poisoned push entries onto `adv_sources` or `dis_sources` lists. Effective state is computed (any adv + any dis → cancels to normal; per 5e RAW, multiple advs don't stack). Removing a condition pops its entry. Manual toggle becomes one source on the list (`source: "manual"`) so it composes cleanly.
 
 Backward-compatible — Phase 1 manual state migrates to `adv_sources: ["manual"]`.
 
-### Phase 3 — Context-aware rolls (later, after Maps 2.0)
+### Phase 3 — Context-aware rolls (later, after Maps 2.0) — ⏸ deferred
 
 Attack rolls against a token within 5 ft of a prone target → auto-advantage. Ranged attacks against a prone target → auto-disadvantage. Needs the combat system to know token positions and target identity, which Maps 2.0 brings.
 

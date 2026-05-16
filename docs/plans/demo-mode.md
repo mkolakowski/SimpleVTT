@@ -1,8 +1,29 @@
 # Demo Mode — Design Plan
 
-**Status:** Planned. Not yet implemented.
-**Target version:** v2.1.0 (MINOR — additive feature, no schema change).
+**Status:** Shipped in **v2.3.0** (originally targeted at v2.1.0 in this plan but landed later as part of the v2.3 train).
+Subsequent fixes + enrichments: **v2.3.1** (Starlette 1.0 compat), **v2.3.2** (`DEMO_*` env vars forwarded to compose container), **v2.3.5** (demo wipe FK ordering fix), **v2.3.22** (homebrew Goblin Captain authored end-to-end via the new structured editor), **v2.3.25** (GM gets a Cleric character).
 **Tracked in:** [`TODO.md`](../../TODO.md) → Development & Testing → Demo Mode.
+
+---
+
+## Implementation status
+
+(Annotation pass v2.3.26 — audited against CHANGELOG / code.)
+
+- ✅ **Reset mechanism** — done in v2.3.0. `app/demo_scheduler.py` registers a FastAPI startup hook that runs `reset_and_reseed()` in-process every `DEMO_RESET_INTERVAL_MINUTES` minutes (clamped 5–1440, default 60). `DEMO_RESET_ON_BOOT=true` seeds on container start.
+- ✅ **Surgical tag-based wipe strategy** — done in v2.3.0. Delete-by-email / delete-by-slug; no `is_demo` column needed. Fixed FK ordering bug at v2.3.5 (`campaigns.active_map_id` had to be nulled before deleting maps).
+- ✅ **Seed module** — done in v2.3.0. `app/demo_seed.py` with all `seed_*` helpers + `reset_and_reseed(db)` orchestration. Enriched in v2.3.22 (Goblin Captain) and v2.3.25 (GM Cleric); now seeds 3 characters / 9 tokens / 4 token templates.
+- ✅ **Bundled demo assets** — done in v2.3.0. `app/static/demo/maps/tavern.png`, `tokens/rogue.png`, `tokens/wizard.png` (no audio shipped — `tavern.ogg`/`battle.ogg` were skipped at the original landing per the v2.3.0 release notes). Goblin Captain and Cleric use color swatches; no PNGs yet.
+- ✅ **Demo banner with countdown** — done in v2.3.0. `app/templates/_demo_banner.html` non-dismissible top banner with JS countdown that reloads the page at T+0.
+- ✅ **Demo credentials box on login** — done in v2.3.0. Gated on `DEMO_CREDENTIALS_VISIBLE=true`.
+- ✅ **`POST /admin/demo/reset`** — done in v2.3.0. Admin-only on-demand reset endpoint in `app/routes/admin_routes.py`.
+- ✅ **Config vars** — done in v2.3.0. `DEMO_MODE`, `DEMO_RESET_INTERVAL_MINUTES`, `DEMO_RESET_ON_BOOT`, `DEMO_CREDENTIALS_VISIBLE` in `app/config.py` + `.env.example`. Compose forwarding fixed in v2.3.2 (the original landing forgot to forward the env vars from `.env` into the `app` container, so `DEMO_MODE=true` had no effect inside Docker).
+- ✅ **Safety guards** — done in v2.3.0. Documented in the changelog as part of the lifespan handler safeguards.
+- ⏸ **Per-visitor ephemeral accounts** — explicitly deferred from day one. Three shared demo accounts; multiple simultaneous visitors share session state.
+- ⏸ **Rate limiting at the demo URL** — explicitly deferred from day one. Cloudflare or equivalent at the edge if traffic becomes a problem.
+- ⏸ **Demo-specific feature flags** — explicitly out of scope from day one. Still out of scope.
+
+---
 
 ---
 
