@@ -1,0 +1,402 @@
+{#
+  Mini-sheet card for a single character (or, v2.3.17+, a synthesized
+  monster TokenTemplate). Receives:
+
+    - c          → character-like object with ``id``, ``name``, ``sheet``,
+                   ``template``, ``owner_user_id``, ``color``, ``portrait_url``,
+                   ``ring_style``, ``campaign_id``. PCs are SQLAlchemy
+                   ``Character`` rows; monsters are the synthetic dict built
+                   by ``_monster_template_card_dict`` in tabletop_routes.py.
+    - is_monster → True for monster TokenTemplates, False for real PCs.
+                   Suppresses sections that don't apply to monsters
+                   (rest buttons, wild shape / polymorph, transform bar).
+                   When False, the partial behaves exactly as the pre-v2.3.16
+                   inline rendering did.
+
+  Globals available from the caller scope: ``user``, ``is_gm``, ``campaign``,
+  any ``window._*`` partials referenced by this card. Do not rely on the
+  outer ``{% for %}`` loop's variables here — the partial is included from
+  multiple loops.
+#}
+        <div class="char-detail" id="char-detail-{{ c.id }}" data-char-id="{{ c.id }}">
+            <div class="mini-sheet">
+            {% set sh = c.sheet or {} %}
+            {% if c.template == 'dnd5e' %}
+                {% set prof = (sh.get('proficiency_bonus') or 2) | int %}
+                {% set ab_map = sh.get('abilities') or {} %}
+                {% set save_map = sh.get('saving_throws') or {} %}
+                {% set skill_map = sh.get('skills') or {} %}
+                {# ── Combined classes (needed by spells panel later) ── #}
+                {% set _mc = sh.get('classes') or [] %}
+                {% set _mc_sorted = _mc | sort(attribute='level', reverse=True) %}
+                {# ── Card header — always visible, click to open/close ── #}
+                <div class="mini-header" data-char-id="{{ c.id }}">
+                    <button class="char-fav" data-char-id="{{ c.id }}" title="Favourite" style="padding:4px;min-height:32px;min-width:24px;">☆</button>
+                    <div class="mini-header-info">
+                        <div class="mini-header-name">{{ c.name }} <span class="conc-dot" id="conc-dot-{{ c.id }}" style="display:none;" title="Concentrating">🧿</span></div>
+                        <div class="mini-header-sub">{% if _mc_sorted %}{% for _cc in _mc_sorted %}{{ _cc.get('class','') }} {{ _cc.get('level',1) }}{% if not loop.last %} · {% endif %}{% endfor %}{% elif sh.get('class') %}{{ sh.get('class','') }} {{ sh.get('level',1) }}{% endif %}{% if sh.get('race') %} · {{ sh.get('race') }}{% endif %}</div>
+                    </div>
+                    <span class="mini-header-arrow">▶</span>
+                </div>
+                <div class="mini-body">
+                {# ── Compact stat block (HP / Temp / AC / Speed / HD / Rests) ── #}
+                {% set _hp = sh.get('hp') or {} %}
+                {% set _hd_obj = sh.get('hit_dice') or {} %}
+                {% set _hd_max_v = (_hd_obj.get('max') if _hd_obj.get('max') is not none else sh.get('level', 1)) | int %}
+                {% set _hd_cur_v = (_hd_obj.get('current') if _hd_obj.get('current') is not none else _hd_max_v) | int %}
+                {% set _hd_die = sh.get('class_hit_die','') or 'd8' %}
+                {% set _is_owner = c.owner_user_id == user.id or is_gm %}
+                <div class="mini-statblock mini-stat-row"
+                     data-char-id="{{ c.id }}"
+                     data-hp-cur="{{ (_hp.get('current') or 0) | int }}"
+                     data-hp-max="{{ (_hp.get('max') or 0) | int }}"
+                     data-hp-temp="{{ (_hp.get('temp') or 0) | int }}">
+                    {# ── Primary row: HP stepper + AC / Speed chips ── #}
+                    <div class="msb-primary">
+                        <div class="msb-hp-zone">
+                            <span class="msb-label">HP</span>
+                            <div class="msb-hp-stepper">
+                                {% if _is_owner %}
+                                <button type="button" class="mini-hp-step mini-hp-minus" data-char-id="{{ c.id }}" data-field="hp" title="Lose HP">−</button>
+                                {% endif %}
+                                <span class="msb-hp-cur mini-hp-cur">{{ (_hp.get('current') or 0) | int }}</span>
+                                <span class="msb-hp-max mini-hp-max">/ {{ (_hp.get('max') or 0) | int }}</span>
+                                {% if _is_owner %}
+                                <button type="button" class="mini-hp-step mini-hp-plus" data-char-id="{{ c.id }}" data-field="hp" title="Gain HP">+</button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="msb-stat-chips">
+                            <div class="msb-chip">
+                                <span class="msb-label">AC</span>
+                                <span class="msb-val">{{ sh.get('ac','—') }}</span>
+                            </div>
+                            <div class="msb-chip">
+                                <span class="msb-label">Spd</span>
+                                <span class="msb-val">{{ sh.get('speed','—') }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {# ── Footer row: Temp HP + Hit Dice + Rest buttons ── #}
+                    <div class="msb-rest" data-char-id="{{ c.id }}">
+                        <div class="msb-temp-zone" title="Temporary HP">
+                            <span class="msb-label">Tmp</span>
+                            {% if _is_owner %}
+                            <button type="button" class="mini-hp-step mini-hp-minus" data-char-id="{{ c.id }}" data-field="temp">−</button>
+                            {% endif %}
+                            <span class="msb-val mini-hp-temp">{{ (_hp.get('temp') or 0) | int }}</span>
+                            {% if _is_owner %}
+                            <button type="button" class="mini-hp-step mini-hp-plus" data-char-id="{{ c.id }}" data-field="temp">+</button>
+                            {% endif %}
+                        </div>
+                        <span class="msb-hd" title="Hit dice — spend on a short rest">🎲 <span class="mini-rest-hd-cur">{{ _hd_cur_v }}</span>/<span class="mini-rest-hd-max">{{ _hd_max_v }}</span> <em>{{ _hd_die }}</em></span>
+                        {% if _is_owner %}
+                        <button type="button" class="mini-rest-btn mini-short-rest-btn" data-char-id="{{ c.id }}" data-char-name="{{ c.name }}" title="Short rest: roll d{{ _hd_die }}+CON to recover HP">⚡ Short</button>
+                        <button type="button" class="mini-rest-btn mini-long-rest-btn" data-char-id="{{ c.id }}" data-char-name="{{ c.name }}" title="Long rest: restore HP, HD, spell slots">💤 Long</button>
+                        {% endif %}
+                    </div>
+                </div>
+                {# Roll-state pill (v2.2.0) + Death-saves tracker (v2.1.3). #}
+                {% with char=c, sheet=sh, can_edit=_is_owner %}
+                  {% include "_roll_state_pill.html" %}
+                  {% include "_death_saves_tracker.html" %}
+                {% endwith %}
+                {# ── Abilities: name · modifier · roll button (raw score row removed) ── #}
+                <div class="mini-ab-header">
+                    <span class="mini-section-label" style="margin:0;flex:1;">Abilities</span>
+                    <div class="mini-ab-toggle" data-char-id="{{ c.id }}">
+                        <button type="button" class="mini-ab-toggle-btn active" data-char-id="{{ c.id }}" data-mode="check">Check</button>
+                        <button type="button" class="mini-ab-toggle-btn" data-char-id="{{ c.id }}" data-mode="save">Save</button>
+                    </div>
+                </div>
+                <div class="mini-ab-grid" data-char-id="{{ c.id }}">
+                    {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+                    {% set is_save_prof = save_map.get(ab, false) %}
+                    <span class="mac-name{{ ' mac-name-prof' if is_save_prof else '' }}" title="{{ 'Save proficiency' if is_save_prof else '' }}">{{ ab }}</span>
+                    {% endfor %}
+                    {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+                    {% set score = (ab_map.get(ab) or 10) | int %}
+                    {% set mod = ((score - 10) // 2) %}
+                    <span class="mac-mod mac-mod-lg">{{ ('+' if mod >= 0 else '') ~ (mod | string) }}</span>
+                    {% endfor %}
+                    {% for ab in ['STR','DEX','CON','INT','WIS','CHA'] %}
+                    {% set score = (ab_map.get(ab) or 10) | int %}
+                    {% set mod = ((score - 10) // 2) %}
+                    {% set mod_str = ('+' if mod >= 0 else '') ~ (mod | string) %}
+                    {% set is_prof = save_map.get(ab, false) %}
+                    {% set sv = mod + (prof if is_prof else 0) %}
+                    {% set sv_str = ('+' if sv >= 0 else '') ~ (sv | string) %}
+                    <button class="mini-roll-btn mac-btn mini-ab-btn"
+                            data-check-expr="1d20{{ mod_str }}"
+                            data-check-note="{{ c.name }}: {{ ab }} check"
+                            data-check-mod="{{ mod_str }}"
+                            data-save-expr="1d20{{ sv_str }}"
+                            data-save-note="{{ c.name }}: {{ ab }} save{{ ' (prof)' if is_prof else '' }}"
+                            data-save-mod="{{ sv_str }}"
+                            data-expr="1d20{{ mod_str }}"
+                            data-note="{{ c.name }}: {{ ab }} check"
+                            title="{{ ab }} · Check {{ mod_str }} / Save {{ sv_str }}{{ ' ★' if is_prof else '' }}">
+                        <span class="mac-btn-ab">{{ ab }}</span>
+                        <span class="mac-btn-mod">{{ mod_str }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+                {# ── Section tabs: Skills · Attacks · Spells ── #}
+                {% set attacks_list = sh.get('attacks') or [] %}
+                {% set spells_list = sh.get('spells') or [] %}
+                {% set spell_slots_map = sh.get('spell_slots') or {} %}
+                {% set _PREPARED_CASTERS = ['cleric','druid','paladin','wizard','artificer'] %}
+                {% set _primary_slug = (sh.get('class') or '') | string | lower | trim | replace(' ', '-') %}
+                {% set _spell_vis = namespace(any=false) %}
+                {% for s in spells_list %}
+                {% set s_lvl = (s.level or 0) | int %}
+                {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
+                {% set _is_prepared = s_cls in _PREPARED_CASTERS %}
+                {% if not (_is_prepared and s_lvl > 0 and not s.prepared) %}
+                {% set _spell_vis.any = true %}
+                {% endif %}
+                {% endfor %}
+                <div class="mini-tabs" data-char-id="{{ c.id }}">
+                    <button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="skills">Skills</button>
+                    {% if attacks_list %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="attacks">Attacks</button>{% endif %}
+                    {% if _spell_vis.any %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="spells">Spells</button>{% endif %}
+                </div>
+                <div class="mini-tab-content" data-char-id="{{ c.id }}">
+                    {# ── Skills panel ── #}
+                    <div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="skills">
+                        {% set SKILLS_LIST = [
+                            ('Acrobatics','DEX'),('Animal Handling','WIS'),('Arcana','INT'),
+                            ('Athletics','STR'),('Deception','CHA'),('History','INT'),
+                            ('Insight','WIS'),('Intimidation','CHA'),('Investigation','INT'),
+                            ('Medicine','WIS'),('Nature','INT'),('Perception','WIS'),
+                            ('Performance','CHA'),('Persuasion','CHA'),('Religion','INT'),
+                            ('Sleight of Hand','DEX'),('Stealth','DEX'),('Survival','WIS')
+                        ] %}
+                        <div class="mini-skills-grid">
+                        {% for sname, sab in SKILLS_LIST %}
+                        {% set s_score = (ab_map.get(sab) or 10) | int %}
+                        {% set s_mod = ((s_score - 10) // 2) %}
+                        {% set sk = skill_map.get(sname) or {} %}
+                        {% set is_sk_prof = sk.get('proficient', false) %}
+                        {% set is_sk_exp = sk.get('expertise', false) %}
+                        {% set sk_bonus = s_mod + (prof * 2 if is_sk_exp else prof if is_sk_prof else 0) %}
+                        {% set sk_str = (('+' if sk_bonus >= 0 else '') ~ (sk_bonus | string)) %}
+                        <button class="mini-sk-btn{{ ' is-exp' if is_sk_exp else ' is-prof' if is_sk_prof else '' }}"
+                                data-expr="1d20{{ sk_str }}"
+                                data-note="{{ c.name }}: {{ sname }}{{ ' (expertise)' if is_sk_exp else ' (prof)' if is_sk_prof else '' }}"
+                                title="{{ 'Expertise' if is_sk_exp else 'Proficient' if is_sk_prof else '' }}">
+                            <span class="mini-sk-dot"></span>
+                            <span class="mini-sk-name">{{ sname }}</span>
+                            <span class="mini-sk-ab">{{ sab }}</span>
+                            <span class="mini-sk-mod">{{ sk_str }}</span>
+                        </button>
+                        {% endfor %}
+                        </div>
+                    </div>
+                    {# ── Attacks panel ── #}
+                    {% if attacks_list %}
+                    <div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="attacks">
+                        <div class="mini-attacks">
+                        {% for a in attacks_list %}
+                        {% set a_save_dc = (a.save_dc or 0) | int %}
+                        {% set a_is_save = a_save_dc > 0 and a.save_ability %}
+                        {% set a_atk_bonus = a.attack_bonus or a.bonus or '' %}
+                        <div class="mini-attack-row" title="{{ a.name }}{% if a.range %} · {{ a.range }}{% endif %}">
+                            <span class="mini-attack-name">{{ a.name }}</span>
+                            {% if a_atk_bonus and not a_is_save %}<span class="mini-attack-tag atk">{{ a_atk_bonus }}</span>{% endif %}
+                            {% if a.damage %}<span class="mini-attack-tag dmg">{{ a.damage }}</span>{% endif %}
+                            {% if a_is_save %}<span class="mini-attack-tag save">DC {{ a_save_dc }} {{ a.save_ability }}</span>{% endif %}
+                            <button type="button" class="mini-strike-btn" data-char-id="{{ c.id }}" data-attack-idx="{{ loop.index0 }}" data-attack-name="{{ a.name }}" title="Strike with {{ a.name }}">🗡 Strike</button>
+                        </div>
+                        {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {# ── Spells panel ── #}
+                    {% if _spell_vis.any %}
+                    <div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="spells">
+                        <div class="mini-spells" data-char-id="{{ c.id }}">
+                        {% set _iter_classes = (_mc_sorted if _mc_sorted else (
+                            [{'class': sh.get('class',''), 'level': sh.get('level',1)}] if sh.get('class') else []
+                        )) %}
+                        {% set _is_multiclass = (_iter_classes | length) > 1 %}
+                        {% for lvl_i in range(10) %}
+                            {% set _level_has = namespace(any=false) %}
+                            {% for _cc in _iter_classes %}
+                            {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+                            {% set _cc_is_prepared = _cc_slug in _PREPARED_CASTERS %}
+                            {% for s in spells_list %}
+                            {% set s_lvl = (s.level or 0) | int %}
+                            {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
+                            {% if s_lvl == lvl_i and s_cls == _cc_slug and not (_cc_is_prepared and s_lvl > 0 and not s.prepared) %}
+                            {% set _level_has.any = true %}
+                            {% endif %}
+                            {% endfor %}
+                            {% endfor %}
+                            {% if _level_has.any %}
+                            <div class="mini-spell-level">{{ 'Cantrips' if lvl_i == 0 else 'Level ' ~ lvl_i ~ ' Spells' }}</div>
+                            {% if lvl_i >= 1 %}
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                            {% for _cc in _iter_classes %}
+                            {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+                            {% set _cc_label = _cc.get('class') %}
+                            {% set _cc_slots = spell_slots_map.get(_cc_slug) or {} %}
+                            {% set slot = _cc_slots.get(lvl_i | string) or {} %}
+                            {% set slot_total = (slot.get('total') or 0) | int %}
+                            {% set slot_used = (slot.get('used') or 0) | int %}
+                            {% if slot_total > 0 %}
+                            <div class="mini-slot-row" data-char-id="{{ c.id }}" data-class-slug="{{ _cc_slug }}" data-slot-level="{{ lvl_i }}" data-total="{{ slot_total }}" data-used="{{ slot_used }}">
+                                <span class="mini-slot-label">{{ _cc_label if _is_multiclass else 'Slots' }}</span>
+                                <span class="mini-slot-pips">
+                                {% for i in range(slot_total) %}<span class="mini-slot-pip{{ ' used' if i < slot_used else '' }}"></span>{% endfor %}
+                                </span>
+                                <span class="mini-slot-count">{{ slot_total - slot_used }}/{{ slot_total }}</span>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                            </div>
+                            {% endif %}
+                            {% for _cc in _iter_classes %}
+                            {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+                            {% set _cc_label = _cc.get('class') %}
+                            {% set _cc_is_prepared = _cc_slug in _PREPARED_CASTERS %}
+                            {% for s in spells_list %}
+                            {% set s_lvl = (s.level or 0) | int %}
+                            {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
+                            {% if s_lvl == lvl_i and s_cls == _cc_slug and not (_cc_is_prepared and s_lvl > 0 and not s.prepared) %}
+                            <div class="mini-spell-row" title="{{ s.name }}{% if s.casting_time %} · {{ s.casting_time }}{% endif %}{% if s.range %} · {{ s.range }}{% endif %}">
+                                <span class="mini-spell-name">{{ s.name }}{% if s.concentration %} <span class="mini-spell-tag" title="Concentration">⏱</span>{% endif %}{% if s.ritual %} <span class="mini-spell-tag" title="Ritual">®</span>{% endif %}</span>
+                                {% if _is_multiclass %}<span class="mini-spell-tag cls">{{ _cc_label }}</span>{% endif %}
+                                {% if s.damage %}<span class="mini-spell-tag dmg">{{ s.damage }}</span>{% endif %}
+                                {% if s.save_ability %}<span class="mini-spell-tag save">{{ s.save_ability }} save</span>{% endif %}
+                                <button type="button" class="mini-cast-btn" data-char-id="{{ c.id }}" data-spell-idx="{{ loop.index0 }}" data-spell-name="{{ s.name }}" data-spell-level="{{ s_lvl }}" data-class-slug="{{ s_cls }}" title="Cast {{ s.name }}{% if s_lvl > 0 %} (uses Lv {{ s_lvl }} slot for {{ _cc_label or 'this class' }}){% endif %}">🪄 Cast</button>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                            {% endfor %}
+                            {% endif %}
+                        {% endfor %}
+                        </div>{# /.mini-spells #}
+                    </div>
+                    {% endif %}
+                </div>{# /.mini-tab-content #}
+                {# ── Wild Shape / Polymorph / Revert ──
+                     Uses namespace() so loop assignments are visible outside the loop.
+                     Also checks legacy top-level class/level fields as fallback. #}
+                {% if c.owner_user_id == user.id or is_gm %}
+                {% set _tf = namespace(druid_lv=0, moon=false, has_poly=false) %}
+                {% for _cc in (sh.get('classes') or []) %}
+                    {% if (_cc.get('class') or '') | trim | lower == 'druid' %}
+                        {% if (_cc.get('level') or 0) | int > _tf.druid_lv %}{% set _tf.druid_lv = (_cc.get('level') or 0) | int %}{% endif %}
+                        {% if 'moon' in (_cc.get('subclass') or '') | lower %}{% set _tf.moon = true %}{% endif %}
+                    {% endif %}
+                {% endfor %}
+                {% if (sh.get('class') or '') | trim | lower == 'druid' %}
+                    {% if (sh.get('level') or 0) | int > _tf.druid_lv %}{% set _tf.druid_lv = (sh.get('level') or 0) | int %}{% endif %}
+                {% endif %}
+                {% for _sp in (sh.get('spells') or []) %}
+                    {% if (_sp.get('name') or '') | trim | lower == 'polymorph' %}{% set _tf.has_poly = true %}{% endif %}
+                {% endfor %}
+                {% set _af       = sh.get('active_form') %}
+                {% set _show_ws  = _tf.druid_lv >= 2 %}
+                {% set _char_lv  = (sh.get('level') or 1) | int %}
+                {% if _af or _show_ws or _tf.has_poly %}
+                <div class="mini-transform-bar"
+                     data-char-id="{{ c.id }}"
+                     data-druid-lv="{{ _tf.druid_lv }}"
+                     data-moon="{{ 'true' if _tf.moon else 'false' }}"
+                     data-char-lv="{{ _char_lv }}"
+                     data-favorites='{{ (sh.get("favorite_beasts") or []) | tojson }}'
+                     style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:4px 8px;margin-top:8px;background:rgba(167,139,250,.06);border:1px solid var(--border);border-radius:5px;">
+                    {% if _af %}
+                    <span style="font-size:11px;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:5px;flex:1;min-width:0;">
+                        <span style="font-size:14px;line-height:1;">{% if _af.get('source') == 'polymorph' %}🦌{% else %}🐺{% endif %}</span>
+                        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ _af.get('name','?') }}</span>
+                        <span class="muted" style="font-weight:normal;font-size:10px;">CR {{ _af.get('cr','?') }}</span>
+                    </span>
+                    <button type="button" class="mini-revert-btn"
+                            data-char-id="{{ c.id }}" data-char-name="{{ c.name }}"
+                            style="font-size:10px;padding:3px 9px;background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:4px;cursor:pointer;font-weight:700;">
+                        ✨ Revert
+                    </button>
+                    {% else %}
+                    <span class="muted" style="font-size:10px;">Transform:</span>
+                    {% if _show_ws %}
+                    <div class="mini-ws-wrap" style="flex-basis:100%;">
+                      <button type="button" class="mini-ws-trigger"
+                              data-char-id="{{ c.id }}"
+                              title="Druid Lv {{ _tf.druid_lv }} — Wild Shape into a beast"
+                              style="display:flex;align-items:center;justify-content:space-between;width:100%;font-size:11px;padding:4px 10px;min-height:32px;background:rgba(108,180,255,.12);border:1px solid var(--border);color:var(--fg);border-radius:4px;cursor:pointer;font-weight:600;gap:6px;box-sizing:border-box;"><!-- compact panel: 32px -->
+                        <span>🐺 Wild Shape</span>
+                        <span class="mini-ws-arrow" style="font-size:10px;opacity:.55;transition:transform .15s;" aria-hidden="true">▾</span>
+                      </button>
+                      <div class="mini-ws-dropdown" style="display:none;margin-top:3px;border:1px solid var(--border);border-radius:5px;overflow:hidden;">
+                        {% set _favs = sh.get('favorite_beasts') or [] %}
+                        {% for _fav in _favs %}
+                        <button type="button" class="mini-ws-fav-btn"
+                                data-char-id="{{ c.id }}"
+                                data-slug="{{ _fav.get('slug','') | e }}"
+                                style="display:flex;justify-content:space-between;align-items:center;width:100%;padding:5px 10px;min-height:32px;font-size:11px;background:transparent;border:none;border-bottom:1px solid var(--border);cursor:pointer;color:var(--fg);gap:8px;text-align:left;box-sizing:border-box;"><!-- compact panel: 32px -->
+                          <span style="font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ _fav.get('name','?') }}</span>
+                          <span style="color:var(--fg-mute);font-size:10px;white-space:nowrap;flex-shrink:0;">CR {{ _fav.get('cr','?') }} · {{ _fav.get('hp','?') }}hp</span>
+                        </button>
+                        {% else %}
+                        <p style="margin:0;padding:8px 10px;font-size:11px;color:var(--fg-mute);font-style:italic;border-bottom:1px solid var(--border);">No favorites yet — add some via Browse</p>
+                        {% endfor %}
+                        <button type="button" class="mini-ws-browse-btn"
+                                data-char-id="{{ c.id }}" data-source="wild-shape"
+                                style="display:flex;align-items:center;width:100%;padding:5px 10px;min-height:32px;font-size:11px;background:transparent;border:none;cursor:pointer;color:var(--accent);font-weight:600;gap:4px;box-sizing:border-box;"><!-- compact panel: 32px -->
+                          ⊕ Browse all…
+                        </button>
+                      </div>
+                    </div>
+                    {% endif %}
+                    {% if _tf.has_poly %}
+                    <button type="button" class="mini-transform-btn"
+                            data-char-id="{{ c.id }}" data-source="polymorph"
+                            title="Cast Polymorph on yourself — target beast CR ≤ {{ (_char_lv / 4) | int }}"
+                            style="font-size:10px;padding:3px 9px;background:rgba(167,139,250,.12);border:1px solid var(--border);color:var(--fg);border-radius:4px;cursor:pointer;">🦌 Polymorph</button>
+                    {% endif %}
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endif %}
+                </div><!-- /mini-body (dnd5e) -->
+            {% else %}
+                {# Generic template card header #}
+                <div class="mini-header" data-char-id="{{ c.id }}">
+                    <button class="char-fav" data-char-id="{{ c.id }}" title="Favourite" style="padding:4px;min-height:32px;min-width:24px;">☆</button>
+                    <div class="mini-header-info">
+                        <div class="mini-header-name">{{ c.name }} <span class="conc-dot" id="conc-dot-{{ c.id }}" style="display:none;" title="Concentrating">🧿</span></div>
+                        <div class="mini-header-sub">{{ c.template or 'Generic' }}</div>
+                    </div>
+                    <span class="mini-header-arrow">▶</span>
+                </div>
+                <div class="mini-body">
+                {% if sh.get('summary') %}
+                <p class="mini-summary">{{ sh.get('summary', '')[:180] }}</p>
+                {% endif %}
+                {% if sh.get('stats') %}
+                <div class="mini-kv">
+                    {% for k, v in sh.get('stats', {}).items() %}
+                    <span class="mini-kv-pair"><span class="mk">{{ k }}</span>{{ v }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if not sh.get('summary') and not sh.get('stats') %}
+                <p class="no-chars-msg">No sheet data yet.</p>
+                {% endif %}
+                </div><!-- /mini-body (generic) -->
+            {% endif %}
+            </div>
+            <div class="mini-footer">
+            {# Open the standalone sheet in a new tab. The popup-modal path
+                 (window.openSheet) was retired in v0.35.3 — inline <script>s in
+                 the sheet template were stripped by the modal injector, leaving
+                 features like Wild Shape / Class Resources broken there. #}
+            <a class="mini-open-full btn-link"
+               href="/campaign/{{ campaign.id }}/character/{{ c.id }}/sheet"
+               target="_blank" rel="noopener">Open full sheet →</a>
+            <div class="conc-section" id="conc-section-{{ c.id }}" data-char-id="{{ c.id }}"></div>
+            </div><!-- /mini-footer -->
+        </div>

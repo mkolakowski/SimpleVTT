@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.16] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Pure refactor — extract the per-character mini-sheet card (lines 984–1365 of `app/templates/tabletop.html`, ~382 lines covering the dnd5e mini-sheet + the generic-template fallback + the mini-footer) into a new `_mini_sheet_card.html` partial so a follow-up commit can reuse the same UI for monster TokenTemplates in the GM init tracker. No behavior change for PCs.
+**Description:** Setup commit for the "make monster init-tracker rows look like the PC mini-sheet" feature (user request after seeing 2.3.15 land). The mini-sheet had been inlined inside the `{% for c in characters %}` loop, which made it impossible to render for any source other than a `Character` ORM row. The partial takes `c` (character-like object) and reads `user` / `is_gm` / `campaign` from the caller scope; renders identical HTML to the previous inline version. The outer loop's `{% if c.owner_user_id == user.id or is_gm %}` visibility gate stays in the parent template, not the partial. Verified post-extraction: HTTP 200 page render, 32 mini-sheet markers in the rendered HTML (same count as pre-refactor), no Jinja errors in the app logs.
+
+### Added
+- `app/templates/_mini_sheet_card.html` — verbatim extraction of the per-character mini-sheet markup, with a header comment documenting the expected inputs (`c`, `is_monster`) and the caller-scope dependencies (`user`, `is_gm`, `campaign`). `is_monster` is reserved for 2.3.17 — this commit doesn't consume it yet.
+
+### Changed
+- `app/templates/tabletop.html` — replaced the inline mini-sheet block (lines 984–1365) with `{% include "_mini_sheet_card.html" %}`. Net diff is a 379-line reduction in the parent template.
+
+### Notes
+- This is a refactor, not a feature. The visible UI is identical; 2.3.17 will start consuming the partial from a second loop (over monster TokenTemplates) so the GM init tracker can steal monster mini-bodies the same way it steals PC ones today.
+- The partial intentionally does NOT contain the `{% if c.owner_user_id == user.id or is_gm %}` visibility gate from the original site — that's the caller's responsibility because monster mini-sheets will use a different gate (`{% if is_gm %}` unconditionally).
+
+---
+
 ## [2.3.15] - 2026-05-16
 
 **Schema version:** 52
