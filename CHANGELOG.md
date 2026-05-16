@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.34] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Revert the v2.3.17 monster mini-sheet swap and restore the v2.3.9 inline stat-block view in the GM initiative tracker — user preferred the denser inline AC/Spd chips + 6-cell ability mod grid + per-action 🎯/🎲/📋 buttons over the heavier PC-style mini-sheet. The v2.3.33 per-row "📋 Sheet" button stays so the full PC-style sheet is still one click away in the drawer when the GM wants it. User-reported.
+**Description:** v2.3.17 rendered every monster TokenTemplate into a hidden `#monster-mini-sheet-pool` div using the same partial PCs use, then stole the mini-body into the init-card-sheet on expand. The result was a tab-rich, multi-section card that obscured the at-a-glance combat info (HP, AC, all six ability mods, the per-action attack/damage/save buttons) under a Skills/Attacks/Spells tab gate. Reverts the pool render + the partial-based monster path; restores the v2.3.9 `buildMonsterInitSheet` that builds an inline AC/Spd + ability grid + per-action row layout directly into the init-card-sheet. The `.monster-strike-btn` CSS rule and the document-level click handler that POSTs the three roll kinds (attack / damage / save) to `/api/campaign/{cid}/roll` come back with it. The v2.3.33 "📋 Sheet" button on each init-entry header is unchanged — it still opens the v2.3.10 read-only standalone monster sheet in the v2.3.15 drawer for deeper inspection. Critical detail: the v2.3.9 inline render reads `tmpl.sheet` directly, which at the time the demo's `_npc_sheet` was minimal (`abilities: {STR:10, ...}` placeholder). New change in `tabletop_routes.py` runs every TokenTemplate's sheet through `_monster_template_to_sheet` server-side before serializing into `tmpl_data`, so the inline view now sees the real projected stats (Bandit Captain's STR 15 / DEX 16 etc., Goblin Captain's full structured action set, etc.) without any client-side resolve call.
+
+### Changed
+- `app/routes/tabletop_routes.py` tabletop route — `tmpl_data` build replaces each template's raw `sheet` with `_monster_template_to_sheet(t, campaign.id)` so the client sees the resolved stat block. For non-monster templates the adapter returns the input unchanged. Removes the v2.3.17 `monster_templates` context (no longer needed without the pool render).
+- `app/templates/tabletop.html` `buildMonsterInitSheet` — restored to the v2.3.9 inline layout (AC/Spd chips + 6-cell ability mod grid + per-action row with 🎯 Attack / 🎲 Dmg / 📋 Save buttons sourced from `sh.actions` or `sh.attacks`).
+- `app/templates/tabletop.html` `.monster-strike-btn` CSS — restored.
+- `app/templates/tabletop.html` `#initiative-list` document-level click handler — restored. Builds the appropriate `/roll` expression per `data-kind` (attack assembles `1d20+bonus`; damage sends the dice expression; save sends `expression: 0` + DC X SAVE note); all three POST with `skip_roll_state: true` so the GM's own char's adv/dis pill doesn't bleed in.
+
+### Removed
+- `#monster-mini-sheet-pool` div in `app/templates/tabletop.html` — the v2.3.17 hidden pool that fed monster mini-bodies into the init tracker via the body-steal logic. The init tracker now goes straight to `buildMonsterInitSheet` for combatants without a `char_id`.
+
+### Notes
+- `_SyntheticMonsterChar`, `_monster_template_to_sheet`, and the standalone `/campaign/{cid}/monster-template/{tid}/sheet` route all stay. The drawer still opens the read-only PC-style sheet for monsters when the GM clicks the v2.3.33 📋 Sheet button — that path is unchanged.
+- PCs continue to use the v2.3.16 `_mini_sheet_card.html` partial unchanged; only the monster path is reverted.
+- All four homebrew monsters (Bandit Captain / Bandit / Thug / Goblin Captain) seeded by `seed_homebrew_files` now render with real stats inline because the server pre-resolves the template sheet. The original v2.3.9 + minimal `_npc_sheet` combination would have shown 10/10/10 placeholders — fixed as a side effect of the `tmpl_data` resolve.
+
+---
+
 ## [2.3.33] - 2026-05-16
 
 **Schema version:** 52

@@ -485,6 +485,14 @@
     .mini-strike-btn { background: rgba(251,184,138,.10); border: 1px solid rgba(251,184,138,.4); color: #fbb88a; border-radius: 3px; padding: 1px 7px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; line-height: 1.4; min-height: 32px; }
     .mini-strike-btn:hover { background: rgba(251,184,138,.22); }
     .mini-strike-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* v2.3.34 (originally v2.3.9): GM-only click-to-roll buttons inside
+       the init-tracker monster card. Sized to the dense-panel 32px floor
+       (per CLAUDE.md) so the Attack / Dmg / Save trio stays one-line on
+       a narrow init panel. Restored after the 2.3.17 PC-mini-sheet swap
+       was reverted; user preferred the inline rollable view here. */
+    .monster-strike-btn { background: rgba(167,139,250,.10); border: 1px solid rgba(167,139,250,.4); color: #a78bfa; border-radius: 3px; padding: 2px 7px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; line-height: 1.4; min-height: 32px; }
+    .monster-strike-btn:hover { background: rgba(167,139,250,.22); }
+    .monster-strike-btn:disabled { opacity: 0.5; cursor: not-allowed; }
     /* Roll-toast styles moved to app/static/style.css (1.11.0) so the
        character-sheet pages share the same popup via roll_toast.js. */
 
@@ -1001,23 +1009,14 @@
     </div>
 </div>
 
-{# v2.3.17: hidden pool of monster mini-sheets. Rendered for the GM so
-   the init tracker can steal the rich mini-body (HP / AC / abilities /
-   skills / attacks tabs) when expanding a monster combatant row — same
-   pattern as PC mini-sheets above. ``is_monster=True`` suppresses
-   PC-only sections (rest buttons / wild shape / transform bar / spell
-   slot pip JS) inside the partial. Pool stays display:none so it
-   doesn't clutter the Characters panel; only the moved mini-body
-   inside the init tracker is visible. #}
-{% if is_gm and monster_templates %}
-<div id="monster-mini-sheet-pool" style="display:none;" aria-hidden="true">
-    {% for c in monster_templates %}
-    {% with is_monster = true %}
-    {% include "_mini_sheet_card.html" %}
-    {% endwith %}
-    {% endfor %}
-</div>
-{% endif %}
+{# v2.3.17 monster mini-sheet pool removed in v2.3.34 — user preferred
+   the older 2.3.9 inline stat-block view (AC/Spd chips + ability mod
+   grid + per-action attack/damage/save buttons) that
+   ``buildMonsterInitSheet`` produces directly from the resolved
+   ``tmpl.sheet`` (server-side projection in ``tabletop_routes.py``).
+   The 2.3.33 "📋 Sheet" button on each init entry still opens the
+   full read-only monster sheet in the 2.3.15 drawer, so the heavier
+   PC-style view is one click away when the GM wants it. #}
 
 {% if is_gm %}
         {# Click-to-set mode banner — shown over the canvas while the GM
@@ -3226,38 +3225,118 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             : pct > 0.25 ? '#e8a040' : 'var(--danger)';
     }
 
-    /* v2.3.14: monster init-tracker card. After the 2.3.10/11/12 pivot to
-     *  the full sheet view, this is just a tiny "Open full sheet" button
-     *  plus an AC/Spd quick-glance chip so the GM doesn't have to open
-     *  the sheet just to remember what the monster's AC is. The 2.3.9
-     *  inline ability grid + per-action 🎯/🎲/📋 strike buttons were
-     *  removed because they duplicated the full sheet's roll affordances
-     *  and were noticeably less polished. */
+    /* v2.3.9 (restored v2.3.34): monster stat-block for the init-tracker
+     *  GM card. Renders AC/Spd chips + a 6-cell ability mod grid + a
+     *  per-action row with click-to-roll 🎯 Attack / 🎲 Dmg / 📋 Save
+     *  buttons sourced from the token template's structured ``sheet.actions``
+     *  (homebrew) or regex-derived ``sheet.attacks`` (SRD). Data comes
+     *  from the pre-resolved ``tmpl.sheet`` (v2.3.34 routes the
+     *  ``_monster_template_to_sheet`` projection through ``tmpl_data``
+     *  server-side, so the minimal demo ``_npc_sheet`` slug pointers
+     *  show as real Bandit Captain / Goblin Captain / etc. stats here).
+     *  The 2.3.33 per-row "📋 Sheet" button in the init-entry header
+     *  still opens the full PC-style sheet in the drawer for deeper
+     *  inspection. Returns HTML only; click handlers wire up in the
+     *  ``.monster-strike-btn`` document listener below. */
     function buildMonsterInitSheet(combatant) {
         const tmpl = (combatant && combatant.token_template_id)
             ? allTemplates.find(t => t.id === combatant.token_template_id) : null;
         if (!tmpl) return '';
         const sh = tmpl.sheet || {};
+        const ab = sh.abilities || {};
+        const abi = s => Math.floor(((parseInt(s) || 10) - 10) / 2);
+        const fmt = n => (n >= 0 ? '+' : '') + n;
+        const STATS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
 
-        const chips = [];
-        if (sh.ac != null && sh.ac !== '') chips.push(`<span><b>AC</b> ${sh.ac}</span>`);
-        if (sh.speed) chips.push(`<span><b>Spd</b> ${sh.speed}</span>`);
-        const chipsHtml = chips.length
-            ? `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--fg-mute);">${chips.join('')}</div>`
-            : '';
+        let html = '<div style="padding:8px 10px 12px;">';
 
-        // v2.3.15: ``.monster-sheet-link`` class + data-monster-name attr
-        // let the drawer's delegated click handler intercept and open the
-        // sheet over the tabletop instead of in a new tab. Cmd/Ctrl/middle-
-        // click still falls through to the new-tab default.
-        const safeName = (combatant.name || tmpl.name || 'Monster').replace(/"/g, '&quot;');
-        return `<div style="padding:8px 10px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-            ${chipsHtml}
-            <a class="monster-sheet-link" data-monster-name="${safeName}"
-               href="/campaign/${CAMPAIGN_ID}/monster-template/${tmpl.id}/sheet" target="_blank" rel="noopener"
-               style="margin-left:auto;font-size:11px;padding:4px 10px;background:rgba(167,139,250,.10);border:1px solid rgba(167,139,250,.4);color:#a78bfa;border-radius:3px;text-decoration:none;display:inline-flex;align-items:center;min-height:32px;"
-               title="Open the full monster sheet — ability/skill/save/attack clicks land in the roll log">📋 Open full sheet</a>
-        </div>`;
+        // Quick chips — AC / Speed
+        const quick = [];
+        if (sh.ac != null && sh.ac !== '') quick.push(`<span><b>AC</b> ${sh.ac}</span>`);
+        if (sh.speed) quick.push(`<span><b>Spd</b> ${sh.speed}</span>`);
+        if (quick.length) html += `<div style="display:flex;gap:14px;margin-bottom:6px;flex-wrap:wrap;font-size:11px;">${quick.join('')}</div>`;
+
+        // Ability grid — 6 cells, each showing the modifier and raw score.
+        if (Object.keys(ab).length) {
+            html += `<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:3px;text-align:center;margin-bottom:6px;">`;
+            STATS.forEach(s => {
+                const score = parseInt(ab[s]) || 10;
+                const mod = abi(score);
+                html += `<div style="border:1px solid var(--border);border-radius:4px;padding:2px 0;background:var(--input-bg);">
+                    <div style="font-size:8px;color:var(--fg-mute);">${s}</div>
+                    <div style="font-size:12px;font-weight:700;">${fmt(mod)}</div>
+                    <div style="font-size:8px;color:var(--fg-mute);">${score}</div>
+                </div>`;
+            });
+            html += '</div>';
+        }
+
+        // Actions list — prefer the structured ``actions`` array (homebrew
+        // editor output) when present; fall back to the regex-derived
+        // ``attacks`` list from SRD imports. Both produce the same per-row
+        // shape consumed by the click handler below.
+        const fromActions = Array.isArray(sh.actions)
+            ? sh.actions.filter(a => a && (a.attack_roll || a.damage || a.save_ability))
+                  .map(a => ({
+                      name: a.name || 'Action',
+                      attack_bonus: a.attack_bonus || '',
+                      damage: a.damage || '',
+                      damage_type: a.damage_type || '',
+                      save_ability: (a.save_ability || '').toUpperCase(),
+                      save_dc: a.save_dc || 0,
+                      attack_roll: !!a.attack_roll,
+                  }))
+            : [];
+        const fromAttacks = (!fromActions.length && Array.isArray(sh.attacks))
+            ? sh.attacks.filter(a => a && (a.attack_bonus || a.atk_bonus || a.bonus || a.damage || a.save_ability))
+                  .map(a => ({
+                      name: a.name || 'Attack',
+                      attack_bonus: a.attack_bonus || a.atk_bonus || a.bonus || '',
+                      damage: a.damage || '',
+                      damage_type: a.damage_type || '',
+                      save_ability: (a.save_ability || '').toUpperCase(),
+                      save_dc: parseInt(a.save_dc) || 0,
+                      attack_roll: !!(a.attack_bonus || a.atk_bonus || a.bonus) && !(a.save_dc && a.save_ability),
+                  }))
+            : [];
+        const actions = fromActions.length ? fromActions : fromAttacks;
+        if (actions.length) {
+            html += '<div style="font-size:9px;font-weight:700;color:var(--fg-mute);text-transform:uppercase;letter-spacing:0.5px;margin:8px 0 4px;">Actions</div>';
+            html += '<div class="monster-init-actions" style="display:flex;flex-direction:column;gap:4px;">';
+            actions.forEach((a) => {
+                const tags = [];
+                if (a.attack_bonus) tags.push(`<span style="color:#fbb88a;font-weight:600;">${a.attack_bonus}</span>`);
+                if (a.damage) tags.push(`<span style="color:var(--fg-mute);">${a.damage}${a.damage_type ? ' ' + a.damage_type : ''}</span>`);
+                if (a.save_dc && a.save_ability) tags.push(`<span style="color:#a7e0c9;">DC ${a.save_dc} ${a.save_ability}</span>`);
+                const btns = [];
+                // ``data-monster-action`` carries the whole row so the
+                // delegated click handler doesn't need a lookup back into
+                // the template (the combatant could already be removed by
+                // then).
+                const payload = encodeURIComponent(JSON.stringify({
+                    combatant_name: combatant.name,
+                    ...a,
+                }));
+                if (a.attack_roll) {
+                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="attack" title="Roll attack — 1d20${a.attack_bonus || ''}">🎯 Attack</button>`);
+                }
+                if (a.damage) {
+                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="damage" title="Roll damage — ${a.damage}${a.damage_type ? ' ' + a.damage_type : ''}">🎲 Dmg</button>`);
+                }
+                if (a.save_dc && a.save_ability) {
+                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="save" title="Announce save — DC ${a.save_dc} ${a.save_ability}">📋 Save</button>`);
+                }
+                html += `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:3px 6px;background:var(--input-bg);border-radius:3px;font-size:11px;">
+                    <span style="font-weight:600;flex:1 1 auto;min-width:0;">${a.name}</span>
+                    ${tags.join(' ')}
+                    ${btns.join('')}
+                </div>`;
+            });
+            html += '</div>';
+        }
+
+        html += '</div>';
+        return html;
     }
 
     function buildInitSheet(charId) {
@@ -3815,6 +3894,70 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     });
 
     renderBattle();
+
+    /* v2.3.34 (restored from v2.3.9): monster stat-block click-to-roll.
+     * Delegated on the init-list element so init re-renders don't drop
+     * bindings. Each .monster-strike-btn carries a URI-encoded JSON
+     * payload {combatant_name, name, attack_bonus, damage, damage_type,
+     * save_ability, save_dc, attack_roll}; the data-kind attribute
+     * selects which roll to fire. Attack rolls assemble ``1d20+bonus``;
+     * damage rolls send the dice expression as-is; save "rolls" send a
+     * public DC announcement so the table sees it. All three POST to
+     * /api/campaign/{cid}/roll so the result lands in the shared roll
+     * log alongside PC rolls. ``skip_roll_state: true`` so the GM's
+     * own char's adv/dis pill doesn't bleed in. */
+    if (IS_GM) {
+        document.getElementById('initiative-list')?.addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('.monster-strike-btn');
+            if (!btn) return;
+            ev.stopPropagation();
+            const kind = btn.dataset.kind;
+            let action;
+            try {
+                action = JSON.parse(decodeURIComponent(btn.dataset.monsterAction || ''));
+            } catch { return; }
+            btn.disabled = true;
+            try {
+                let expression = '';
+                let note = '';
+                if (kind === 'attack') {
+                    const bonus = (action.attack_bonus || '').trim();
+                    const bonusExpr = bonus
+                        ? (bonus.startsWith('+') || bonus.startsWith('-') ? bonus : '+' + bonus)
+                        : '';
+                    expression = '1d20' + bonusExpr;
+                    note = `${action.combatant_name}: ${action.name} attack`;
+                } else if (kind === 'damage') {
+                    expression = action.damage || '';
+                    if (!expression) return;
+                    note = `${action.combatant_name}: ${action.name} damage`;
+                    if (action.damage_type) note += ` (${action.damage_type})`;
+                } else if (kind === 'save') {
+                    // Announce-only: roll d0 so the log shows the DC X SAVE prominently.
+                    expression = '0';
+                    note = `${action.combatant_name}: ${action.name} — DC ${action.save_dc} ${action.save_ability} save`;
+                } else {
+                    return;
+                }
+                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        expression,
+                        note,
+                        visibility: 'public',
+                        skip_roll_state: true,
+                    }),
+                });
+                if (!resp.ok) {
+                    const txt = await resp.text();
+                    (window.showToast || alert)(`Roll failed: ${txt}`, 'error');
+                }
+            } finally {
+                setTimeout(() => { btn.disabled = false; }, 400);
+            }
+        });
+    }
 
     /* Initiative row click → players open the Players-tab mini-sheet; GM uses inline expand */
     if (!IS_GM) {
