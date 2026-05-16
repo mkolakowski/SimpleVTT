@@ -3388,6 +3388,17 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 
         let html = '<div style="padding:8px 10px 12px;">';
 
+        // v2.3.12: link to the new full monster sheet (sheet_dnd5e.html
+        // projection of the TokenTemplate). The inline stat-block + strike
+        // buttons below stay as a quick-reference; the full sheet gives PC-
+        // parity ability/skill/save clicks via the existing sheet roll-
+        // button wiring.
+        html += `<div style="margin-bottom:8px;text-align:right;">
+            <a href="/campaign/${CAMPAIGN_ID}/monster-template/${tmpl.id}/sheet" target="_blank" rel="noopener"
+               style="font-size:11px;padding:4px 10px;background:rgba(167,139,250,.10);border:1px solid rgba(167,139,250,.4);color:#a78bfa;border-radius:3px;text-decoration:none;display:inline-block;min-height:32px;line-height:24px;"
+               title="Open the full monster sheet — ability/skill/save clicks land in the roll log">📋 Open full sheet ↗</a>
+        </div>`;
+
         // Quick chips (AC / Speed)
         const quick = [];
         if (sh.ac != null && sh.ac !== '') quick.push(`<span><b>AC</b> ${sh.ac}</span>`);

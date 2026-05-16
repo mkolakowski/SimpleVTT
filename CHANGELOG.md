@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.12] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Wire the GM init-tracker monster row to the new full monster sheet — adds a "📋 Open full sheet ↗" link at the top of the inline monster stat-block panel that opens `/campaign/{cid}/monster-template/{tid}/sheet` in a new tab. Completes the Unified Monster Sheet first slice.
+**Description:** Smallest possible UI hook — the 2.3.10/2.3.11 sheet already works as a standalone URL; this commit just makes it reachable from where the GM already is. The inline stat-block + strike buttons added in 2.3.9 stay below the new link as a quick-glance reference (no need to leave the tabletop just to see HP/AC/ability mods or fire a single attack). The link uses the same `.monster-strike-btn` purple palette so it looks like a related affordance. `target="_blank" rel="noopener"` so opening the sheet doesn't yank the GM off the tabletop mid-combat.
+
+### Added
+- `app/templates/tabletop.html` `buildMonsterInitSheet` — prepends a "📋 Open full sheet ↗" anchor pointing at the 2.3.10 monster-sheet URL. 32 px min-height per the CLAUDE.md dense-panel rule.
+
+### Notes
+- Wired as a link (not a modal) for the first iteration so the GM can keep the sheet open in a second tab while running combat. A modal/drawer variant that pops the sheet over the tabletop is a follow-up if the tab-management workflow feels heavy.
+- The 2.3.9 inline strike buttons (🎯 Attack / 🎲 Dmg / 📋 Save) stay in place as a quick-action fallback. If the full-sheet workflow turns out to dominate, those can be retired in a later commit.
+
+---
+
 ## [2.3.11] - 2026-05-16
 
 **Schema version:** 52
