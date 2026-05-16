@@ -97,10 +97,11 @@
        to render both dice with the kept one highlighted. */
     function _detectAdvDis(expression, breakdown) {
         const exprStr = String(expression || '');
-        // Long form: 2dN(kh1|kl1)
-        let m = /(?:^|[+\s-])2d(\d+)(kh1|kl1)\b/i.exec(exprStr);
+        const brkStr = String(breakdown || '');
         let isAdv;
         let sides;
+        // Long form: 2dN(kh1|kl1) in the submitted expression
+        let m = /(?:^|[+\s-])2d(\d+)(kh1|kl1)\b/i.exec(exprStr);
         if (m) {
             sides = parseInt(m[1]);
             isAdv = m[2].toLowerCase() === 'kh1';
@@ -108,14 +109,33 @@
             // Shorthand: dN(a|d) or 1dN(a|d). Dice.py expands both to a
             // pair internally and emits ]kh1/]kl1 in the breakdown.
             m = /(?:^|[+\s-])\d*d(\d+)([ad])\b/i.exec(exprStr);
-            if (!m) return null;
-            sides = parseInt(m[1]);
-            isAdv = m[2].toLowerCase() === 'a';
+            if (m) {
+                sides = parseInt(m[1]);
+                isAdv = m[2].toLowerCase() === 'a';
+            } else {
+                // v2.2.5: the server may have upgraded a single-d20 expression
+                // to 2d20kh1 / 2d20kl1 server-side without echoing the new
+                // expression back (e.g. the sheet's /roll callers pass the
+                // original ``1d20+stat``). Fall back to scanning the breakdown
+                // alone for the kept/dropped marker that dice.py always emits.
+                // Pattern: ``NdM<mod>[v1,v2]khK`` / ``...klK`` where K=1.
+                // ``<mod>`` is optional and may be ``kh1`` / ``kl1`` (long form)
+                // or ``a`` / ``d`` (shorthand) — dice.py emits the original
+                // expression's mod token before the result bracket.
+                const brBlind = /(\d+)d(\d+)(?:kh1|kl1|a|d)?\[(\d+),(\d+)\](kh1|kl1)/i.exec(brkStr);
+                if (!brBlind) return null;
+                sides = parseInt(brBlind[2]);
+                isAdv = brBlind[5].toLowerCase() === 'kh1';
+                const v1 = parseInt(brBlind[3]);
+                const v2 = parseInt(brBlind[4]);
+                const keptIdx = isAdv ? (v1 >= v2 ? 0 : 1) : (v1 <= v2 ? 0 : 1);
+                return { sides, isAdv, v1, v2, keptIdx };
+            }
         }
         const brRe = isAdv
             ? /\[(\d+),(\d+)\]kh1/i
             : /\[(\d+),(\d+)\]kl1/i;
-        const bm = brRe.exec(String(breakdown || ''));
+        const bm = brRe.exec(brkStr);
         if (!bm) return null;
         const v1 = parseInt(bm[1]);
         const v2 = parseInt(bm[2]);

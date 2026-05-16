@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.2.5] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Fix the 2.2.1 adv/dis dice-toast animation not firing on full-sheet rolls (skill checks, ability checks, attacks) — `_detectAdvDis` was only checking the client-supplied expression, which is the *original* (`1d20+5`) not the server-upgraded one (`2d20kh1+5`). Added a breakdown-only fallback so the toast detects the upgrade from the dice.py output marker.
+**Description:** When the server auto-upgrades a single-d20 expression to `2d20kh1` / `2d20kl1`, the new expression isn't echoed back in the `/roll` response — the sheet's `showRollToast(...)` call passes the *original* expression. That broke the 2.2.1 detection logic which scanned the expression for adv/dis markers (`2dNkh1`, `1dNa`, etc.); the original `1d20+5` doesn't match. The breakdown always carries the `]kh1` / `]kl1` marker from `dice.py`, so a breakdown-only scan is a reliable fallback. The fix adds that fallback inside `_detectAdvDis` after the two expression-pattern attempts fail: if the breakdown contains `NdM<mod>[v1,v2]kh1` or `...kl1`, we treat the roll as auto-upgraded adv/dis, infer sides from the breakdown's leading `NdM`, and surface kept/discarded dice the same way the 2.2.1 expression-driven path did. The new fallback covers all four toast invocation sites on the full sheet (skill / ability click, action-button damage, weapon attack, manual roll) since they all pass the original expression to `showRollToast`.
+
+### Fixed
+- `app/static/roll_toast.js` — `_detectAdvDis(expression, breakdown)` now scans the breakdown when the expression doesn't carry adv/dis markers. 10 unit tests cover the new server-upgraded path (`expr="1d20+5"` with `brk` containing `2d20kh1[…]kh1`), existing expression-driven paths (long form, shorthand), and the negative cases that must continue to return null (plain rolls, damage rolls, ability gen).
+
+---
+
 ## [2.2.4] - 2026-05-15
 
 **Schema version:** 52
