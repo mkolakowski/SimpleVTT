@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.1] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Fix two pre-existing Starlette 1.0 incompatibilities that broke *every* page render (not specific to demo mode but surfaced when demo mode was tested). One — Starlette 1.0 removed the legacy `TemplateResponse(name, context)` signature in favor of `TemplateResponse(request, name, context)`. Two — Starlette 1.0's `Jinja2Templates` no longer wires `ChainableUndefined` by default, so `{{ user.foo or '' }}` on the logged-out login page now raises `UndefinedError`.
+**Description:** When this codebase's environment upgraded to Starlette 1.0 (released 2026), every `TemplateResponse(name, context)` call site started passing the *context dict* as the template *name* parameter, which crashed inside Jinja's template cache lookup with `TypeError: unhashable type: 'dict'`. The 21 affected call sites are all in `app/routes/*.py`. Rather than touch every one (and risk missing one), this fix wraps `templates.TemplateResponse` in a thin shim that detects the legacy signature (first arg is a `str`), extracts `context["request"]`, and forwards to the new signature. Separately, Starlette 1.0 also drops the default `ChainableUndefined` setup, so `{{ user.theme }}` etc. on the login/register pages crashed with `UndefinedError`. Set `templates.env.undefined = ChainableUndefined` to restore the chain-friendly behavior every template here was written against.
+
+### Fixed
+- `app/templates.py` — wraps `templates.TemplateResponse` with `_compat_template_response` that accepts both the legacy `(name, context, ...)` and the new `(request, name, context, ...)` signatures. Lets us upgrade Starlette without sweeping every call site immediately; the shim is a stable forward-compatible layer.
+- `app/templates.py` — sets `templates.env.undefined = ChainableUndefined` so `{{ user.foo or '' }}` on logged-out pages evaluates to `''` instead of raising.
+
+### Notes
+- Both bugs existed before demo mode but only surfaced when demo mode was tested because demo mode is the first scenario that lands an unauthenticated visitor on the login page from a fresh install.
+- Long-term: sweep the 21 `TemplateResponse(name, context)` call sites to the new `(request, name, context)` form and drop the shim. Filed as a follow-up.
+
+---
+
 ## [2.3.0] - 2026-05-15
 
 **Schema version:** 52
