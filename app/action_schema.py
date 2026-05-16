@@ -70,7 +70,16 @@ class Action(BaseModel):
     damage_type: str = ""
     damage_scaling: list[ActionScalingTier] = Field(default_factory=list)
     attack_roll: bool = False
+    # To-hit string ("+5", "-1") used when ``attack_roll`` is true. Stored as
+    # a string (not int) for parity with the character-sheet attack schema
+    # and so the existing server-side ``1d20 + attack_bonus`` expression
+    # builder in ``tabletop_routes._resolve_attack`` round-trips unchanged.
+    # Empty means "no bonus" (raw 1d20).
+    attack_bonus: str = ""
     save_ability: str = ""
+    # DC for the save when ``save_ability`` is set. 0 means "DC not declared"
+    # — the prompt-save flow still works (the GM enters DC at prompt time).
+    save_dc: int = 0
     healing: str = ""
     aoe_targets: int = 1
     reroll_trigger: str = ""

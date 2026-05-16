@@ -60,32 +60,38 @@
         return form.querySelector('input[type="hidden"][name="features_json"]');
     }
 
-    /** Coerce a raw row reading to a clean object suitable for the server. */
-    function _normalizeRow(name, level, desc) {
-        const out = { name: (name || '').trim() };
-        const lvlTrim = (level || '').toString().trim();
-        if (lvlTrim === '') {
-            out.level = null;
-        } else {
-            const n = parseInt(lvlTrim, 10);
-            out.level = Number.isFinite(n) ? n : null;
-        }
-        out.desc = (desc || '').trim();
-        return out;
-    }
+    // 5e damage and ability lists for the action-mode dropdowns. Kept inline
+    // (not imported) so this script stays dependency-free.
+    const DAMAGE_TYPES = [
+        '', 'acid', 'bludgeoning', 'cold', 'fire', 'force', 'lightning',
+        'necrotic', 'piercing', 'poison', 'psychic', 'radiant', 'slashing', 'thunder',
+    ];
+    const SAVE_ABILITIES = ['', 'STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
 
-    function _createRow(initial) {
+    /** Build one editor row. ``mode`` is 'feature' (default) or 'action'. The
+     *  action mode appends a secondary input strip with attack_roll / to-hit
+     *  bonus / damage / damage_type / save_ability / save_dc — the structured
+     *  fields the renderActionButtons helper inspects to emit Attack / Save /
+     *  Damage buttons on the stat-block view. Inputs are stashed on
+     *  ``row._inputs`` so ``_serialize`` can read them without DOM indexing. */
+    function _createRow(initial, mode) {
+        initial = initial || {};
+        mode = mode || 'feature';
+
         const row = document.createElement('div');
         row.className = 'features-editor-row';
+        row.dataset.rowMode = mode;
         row.style.cssText =
             'display:grid;grid-template-columns:1fr 80px auto;gap:8px;align-items:start;' +
             'padding:8px;border:1px solid #2e3140;border-radius:6px;margin-bottom:8px;background:#1a1d24;';
 
         const nameInput = document.createElement('input');
         nameInput.type = 'text';
-        nameInput.placeholder = 'Feature name (e.g. Combat Wild Shape)';
+        nameInput.placeholder = mode === 'action'
+            ? 'Action name (e.g. Greatclub)'
+            : 'Feature name (e.g. Combat Wild Shape)';
         nameInput.maxLength = 160;
-        nameInput.value = (initial && initial.name) || '';
+        nameInput.value = initial.name || '';
         nameInput.style.cssText = 'font-weight:600;';
 
         const levelInput = document.createElement('input');
@@ -94,23 +100,21 @@
         levelInput.max = '20';
         levelInput.placeholder = 'Lvl';
         levelInput.title = 'Level the feature is gained at (blank = no level requirement)';
-        levelInput.value = (initial && initial.level != null) ? String(initial.level) : '';
+        levelInput.value = (initial.level != null) ? String(initial.level) : '';
 
         const deleteBtn = document.createElement('button');
         deleteBtn.type = 'button';
         deleteBtn.className = 'features-editor-delete';
         deleteBtn.textContent = '✕';
-        deleteBtn.title = 'Remove this feature';
+        deleteBtn.title = 'Remove this entry';
         deleteBtn.style.cssText = 'padding:4px 10px;color:#c66;background:#2a1a1a;border:1px solid #4a2a2a;border-radius:4px;cursor:pointer;';
-        deleteBtn.addEventListener('click', () => {
-            row.remove();
-        });
+        deleteBtn.addEventListener('click', () => row.remove());
 
         const descTa = document.createElement('textarea');
         descTa.placeholder = 'Description (markdown allowed; rolls + level refs are auto-detected on display)';
         descTa.rows = 3;
         descTa.maxLength = 4000;
-        descTa.value = (initial && initial.desc) || '';
+        descTa.value = initial.desc || '';
         descTa.style.cssText = 'grid-column:1 / span 3;font-family:inherit;font-size:13px;';
 
         row.appendChild(nameInput);
@@ -118,7 +122,99 @@
         row.appendChild(deleteBtn);
         row.appendChild(descTa);
 
+        const inputs = { nameInput, levelInput, descTa };
+
+        if (mode === 'action') {
+            const atkRow = document.createElement('div');
+            atkRow.className = 'features-editor-attack-row';
+            atkRow.style.cssText =
+                'grid-column:1 / span 3;display:grid;' +
+                'grid-template-columns:auto 80px 110px 130px 90px 70px;gap:6px;align-items:end;' +
+                'padding:8px 0 0 0;margin-top:4px;border-top:1px dashed #2e3140;font-size:11px;';
+
+            const attackWrap = document.createElement('label');
+            attackWrap.style.cssText = 'display:flex;align-items:center;gap:4px;color:var(--fg-mute);';
+            const attackRollCb = document.createElement('input');
+            attackRollCb.type = 'checkbox';
+            attackRollCb.checked = !!initial.attack_roll;
+            attackRollCb.title = 'Render an 🎯 Attack Roll button on the stat block';
+            attackWrap.appendChild(attackRollCb);
+            attackWrap.appendChild(document.createTextNode('Attack'));
+
+            const attackBonusInput = _mkLabeledInput('To-hit', '+5', initial.attack_bonus || '');
+            attackBonusInput.input.maxLength = 6;
+            attackBonusInput.input.title = 'Bonus added to the 1d20 attack roll. e.g. "+5", "-1". Leave blank for raw 1d20.';
+
+            const damageInput = _mkLabeledInput('Damage', '1d8+3', initial.damage || '');
+            damageInput.input.maxLength = 40;
+            damageInput.input.title = 'Damage dice expression. e.g. "1d8+3", "2d6". Empty = no damage button.';
+
+            const damageTypeSel = _mkLabeledSelect('Damage type', DAMAGE_TYPES, initial.damage_type || '');
+
+            const saveAbilitySel = _mkLabeledSelect('Save', SAVE_ABILITIES, (initial.save_ability || '').toUpperCase());
+            saveAbilitySel.select.title = 'If set, renders a "📋 Prompt save" button instead of (or alongside) an attack.';
+
+            const saveDcInput = _mkLabeledInput('DC', '15', initial.save_dc ? String(initial.save_dc) : '');
+            saveDcInput.input.type = 'number';
+            saveDcInput.input.min = '1';
+            saveDcInput.input.max = '40';
+
+            atkRow.appendChild(attackWrap);
+            atkRow.appendChild(attackBonusInput.wrap);
+            atkRow.appendChild(damageInput.wrap);
+            atkRow.appendChild(damageTypeSel.wrap);
+            atkRow.appendChild(saveAbilitySel.wrap);
+            atkRow.appendChild(saveDcInput.wrap);
+            row.appendChild(atkRow);
+
+            inputs.attackRollCb = attackRollCb;
+            inputs.attackBonusInput = attackBonusInput.input;
+            inputs.damageInput = damageInput.input;
+            inputs.damageTypeSel = damageTypeSel.select;
+            inputs.saveAbilitySel = saveAbilitySel.select;
+            inputs.saveDcInput = saveDcInput.input;
+        }
+
+        row._inputs = inputs;
         return row;
+    }
+
+    /** Helper: text-input column with a small label above it. Returns the
+     *  wrapper element and the inner ``<input>`` so callers can tweak attrs. */
+    function _mkLabeledInput(label, placeholder, value) {
+        const wrap = document.createElement('label');
+        wrap.style.cssText = 'display:flex;flex-direction:column;gap:2px;color:var(--fg-mute);';
+        const span = document.createElement('span');
+        span.textContent = label;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = placeholder;
+        input.value = value;
+        input.style.cssText = 'min-height:32px;padding:4px 6px;font-size:12px;';
+        wrap.appendChild(span);
+        wrap.appendChild(input);
+        return { wrap, input };
+    }
+
+    /** Helper: select column with a small label above it. ``options`` is a
+     *  list of strings; empty string renders as a blank option. */
+    function _mkLabeledSelect(label, options, value) {
+        const wrap = document.createElement('label');
+        wrap.style.cssText = 'display:flex;flex-direction:column;gap:2px;color:var(--fg-mute);';
+        const span = document.createElement('span');
+        span.textContent = label;
+        const select = document.createElement('select');
+        select.style.cssText = 'min-height:32px;padding:4px 6px;font-size:12px;';
+        options.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt;
+            o.textContent = opt || '—';
+            if (opt === value) o.selected = true;
+            select.appendChild(o);
+        });
+        wrap.appendChild(span);
+        wrap.appendChild(select);
+        return { wrap, select };
     }
 
     /** Serialize the rows in ``root`` into a JSON string. Drops rows whose
@@ -128,10 +224,38 @@
         const rows = root.querySelectorAll('.features-editor-row');
         const out = [];
         rows.forEach(row => {
-            const [nameInput, levelInput, , descTa] = row.children;
-            const rec = _normalizeRow(nameInput.value, levelInput.value, descTa.value);
-            // Drop rows the GM started filling out then abandoned.
-            if (!rec.name && !rec.desc) return;
+            const inputs = row._inputs;
+            if (!inputs) return;
+            const name = (inputs.nameInput.value || '').trim();
+            const desc = (inputs.descTa.value || '').trim();
+            if (!name && !desc) return;
+            const rec = { name, desc };
+            const lvlTrim = (inputs.levelInput.value || '').toString().trim();
+            if (lvlTrim === '') {
+                rec.level = null;
+            } else {
+                const n = parseInt(lvlTrim, 10);
+                rec.level = Number.isFinite(n) ? n : null;
+            }
+            // Attack-mode extras. Only include fields the GM actually set, so
+            // we don't bloat the JSON with empty defaults. The Pydantic model
+            // applies the defaults on the server side.
+            if (row.dataset.rowMode === 'action' && inputs.attackRollCb) {
+                if (inputs.attackRollCb.checked) rec.attack_roll = true;
+                const atkBonus = (inputs.attackBonusInput.value || '').trim();
+                if (atkBonus) rec.attack_bonus = atkBonus;
+                const dmg = (inputs.damageInput.value || '').trim();
+                if (dmg) rec.damage = dmg;
+                const dmgType = (inputs.damageTypeSel.value || '').trim();
+                if (dmgType) rec.damage_type = dmgType;
+                const saveAb = (inputs.saveAbilitySel.value || '').trim();
+                if (saveAb) rec.save_ability = saveAb.toLowerCase();
+                const saveDcRaw = (inputs.saveDcInput.value || '').toString().trim();
+                if (saveDcRaw) {
+                    const n = parseInt(saveDcRaw, 10);
+                    if (Number.isFinite(n) && n > 0) rec.save_dc = n;
+                }
+            }
             out.push(rec);
         });
         return JSON.stringify(out);
@@ -149,23 +273,24 @@
         }
         if (!Array.isArray(initial)) initial = [];
 
+        const mode = root.dataset.rowMode === 'action' ? 'action' : 'feature';
+
         const rowsContainer = document.createElement('div');
         rowsContainer.className = 'features-editor-rows';
         root.appendChild(rowsContainer);
 
-        initial.forEach(f => rowsContainer.appendChild(_createRow(f)));
+        initial.forEach(f => rowsContainer.appendChild(_createRow(f, mode)));
 
         const addBtn = document.createElement('button');
         addBtn.type = 'button';
         addBtn.className = 'features-editor-add';
-        addBtn.textContent = '+ Add feature';
+        addBtn.textContent = mode === 'action' ? '+ Add action' : '+ Add feature';
         addBtn.style.cssText =
             'padding:6px 14px;background:#252c45;color:#c8cce8;border:1px solid #3a4060;' +
             'border-radius:4px;cursor:pointer;font-size:12px;';
         addBtn.addEventListener('click', () => {
-            const row = _createRow();
+            const row = _createRow({}, mode);
             rowsContainer.appendChild(row);
-            // Focus the new row's name input so the GM can start typing immediately.
             row.querySelector('input[type="text"]').focus();
         });
         root.appendChild(addBtn);

@@ -545,11 +545,20 @@ def campaign_settings(
         if _m.get("_source") != "local-homebrew":
             continue
         # Split unified actions back into category buckets for the template.
+        # v2.3.8: also pass through the structured attack fields so the editor
+        # can re-render them after a save (otherwise the next form load would
+        # show them blank and a subsequent save would silently drop them).
         _by_cat: dict[str, list] = {"action": [], "reaction": [], "special_ability": [], "legendary_action": []}
         for _a in _m.get("actions") or []:
             _cat = (_a.get("category") or "action")
             if _cat in _by_cat:
-                _by_cat[_cat].append({"name": _a.get("name"), "desc": _a.get("desc"), "level": _a.get("min_level")})
+                _entry = {"name": _a.get("name"), "desc": _a.get("desc"), "level": _a.get("min_level")}
+                for _k in ("attack_roll", "attack_bonus", "damage", "damage_type",
+                           "save_ability", "save_dc"):
+                    _v = _a.get(_k)
+                    if _v not in (None, "", False, 0):
+                        _entry[_k] = _v
+                _by_cat[_cat].append(_entry)
         custom_monsters.append({
             **_m,
             "monster_slug": _m.get("slug"),  # template legacy alias
@@ -1834,7 +1843,13 @@ def _coalesce_monster_actions(actions_json: str, reactions_json: str,
     """v2.0.0 helper: take the 4 legacy action-list JSON form fields and
     fold them into the single ``actions: list[Action]`` array shape that
     the Monster Pydantic model uses, with a ``category`` discriminator on
-    each entry. Mirrors the migration helper in app/_migrate_v52.py."""
+    each entry. Mirrors the migration helper in app/_migrate_v52.py.
+
+    v2.3.8: preserves the structured attack fields (``attack_roll``,
+    ``attack_bonus``, ``damage``, ``damage_type``, ``save_ability``,
+    ``save_dc``) that the action-mode editor now emits on the Actions
+    fieldset, so the homebrew monster's stat-block view can render
+    Attack / Save / Damage buttons via ``renderActionButtons``."""
     import re as _re
     out: list[dict] = []
     for raw, cat in (
@@ -1848,13 +1863,23 @@ def _coalesce_monster_actions(actions_json: str, reactions_json: str,
                 continue
             name = (entry.get("name") or "").strip()
             slug_id = _re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or f"unnamed-{cat}"
-            out.append({
+            rec: dict = {
                 "id": entry.get("id") or slug_id,
                 "name": name,
                 "desc": entry.get("desc") or "",
                 "min_level": entry.get("level") or 1,
                 "category": cat,
-            })
+            }
+            # Attack-mode pass-through. The editor only emits these keys for
+            # Actions (the Pydantic model applies defaults for everything
+            # omitted), but we accept them on any category for forward-
+            # compatibility — e.g. a Legendary action that itself involves
+            # an attack roll.
+            for k in ("attack_roll", "attack_bonus", "damage", "damage_type",
+                      "save_ability", "save_dc"):
+                if k in entry and entry[k] not in (None, "", False, 0):
+                    rec[k] = entry[k]
+            out.append(rec)
     return out
 
 

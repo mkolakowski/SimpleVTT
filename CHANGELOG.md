@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.8] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Add structured attack fields to the homebrew-monster Actions editor — `attack_roll` toggle, to-hit bonus, damage / damage type, save ability / save DC. Round-trips through the monster POST handler and the actions-split read path so a re-save no longer drops the fields. Phase 1 of the "homebrew monster attacks → rollable buttons" TODO; rendering the buttons in the stat-block view lands in 2.3.9.
+**Description:** Extends `features_editor.js` with an opt-in `data-row-mode="action"` mode. When set, each row gets a secondary input strip below the existing name/level/desc with: an "Attack" checkbox (gates the 🎯 Attack Roll button on the stat block), a To-hit text input ("+5"), a Damage dice expression input ("1d8+3"), a Damage type dropdown (the standard 5e list), a Save ability dropdown (STR/DEX/CON/INT/WIS/CHA), and a Save DC number input. The two monster Actions fieldsets in `campaign_settings.html` (create + edit forms) now declare the mode; the three sibling fieldsets (Special Abilities / Reactions / Legendary) stay name+desc-only by design — those are mostly narrative. The `Action` Pydantic model gained two new optional fields (`attack_bonus: str = ""` and `save_dc: int = 0`) to match the character-sheet attack schema and so the existing server-side `1d20 + attack_bonus` expression builder at `tabletop_routes._resolve_attack` works unchanged. `_coalesce_monster_actions` now passes the new fields through into the unified `actions: list[Action]` array on the Monster model, and the actions_split read path (which feeds the editor's initial data) now includes them too — without that, a re-save would silently wipe any fields the GM set on a prior save. Editor serialization omits empty/default values so the on-disk JSON stays clean.
+
+### Added
+- `attack_bonus: str` and `save_dc: int` on `app.action_schema.Action`. Both default to empty/0 so existing JSON files (and existing Action records in flight) validate unchanged.
+- `data-row-mode="action"` on the two monster Actions fieldsets in `app/templates/campaign_settings.html` (the existing-monster edit form and the new-monster create form).
+- `_mkLabeledInput` / `_mkLabeledSelect` helpers in `app/static/features_editor.js` for the labelled column inputs used by the attack strip.
+
+### Changed
+- `app/static/features_editor.js` — `_createRow` and `_serialize` are now mode-aware. Action rows render the attack strip; serialization omits empty/default attack fields so the JSON stays compact. Inputs are stashed on `row._inputs` instead of pulled by DOM index, which was fragile.
+- `app/routes/tabletop_routes.py` `_coalesce_monster_actions` — preserves the six attack fields when folding the four split JSON lists into the unified `actions` array.
+- `app/routes/tabletop_routes.py` campaign-settings render path — when splitting `actions` back into the four buckets for the editor, also includes the attack fields so a re-load shows them populated.
+
+### Notes
+- Special abilities / reactions / legendary actions deliberately stay name+desc-only. The TODO scope notes this — adding the strip to all four fieldsets would be visual noise for entries that rarely involve a rollable attack.
+- The Pydantic model defaults mean existing SRD monster JSON files (which lack `attack_bonus` / `save_dc`) validate unchanged. The renderer in 2.3.9 will fall back to a raw 1d20 when `attack_bonus` is empty.
+
+---
+
 ## [2.3.7] - 2026-05-15
 
 **Schema version:** 52

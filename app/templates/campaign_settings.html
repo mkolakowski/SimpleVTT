@@ -2187,7 +2187,7 @@
                     </fieldset>
                     <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
                         <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Actions ({{ (cm.actions_split or [])|length }})</legend>
-                        <div data-features-editor data-features='{{ cm.actions_split | tojson | forceescape }}'></div>
+                        <div data-features-editor data-row-mode="action" data-features='{{ cm.actions_split | tojson | forceescape }}'></div>
                         <input type="hidden" name="actions_json" />
                     </fieldset>
                     <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
@@ -2293,7 +2293,7 @@
                 </fieldset>
                 <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
                     <legend style="padding:0 6px;font-size:12px;color:var(--fg-mute);">Actions</legend>
-                    <div data-features-editor data-features="[]"></div>
+                    <div data-features-editor data-row-mode="action" data-features="[]"></div>
                     <input type="hidden" name="actions_json" />
                 </fieldset>
                 <fieldset style="border:1px solid #2e3140;border-radius:6px;padding:10px 12px;">
