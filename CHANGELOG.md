@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.7] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Fix `features_editor.js` silently dropping edits made in any editor instance whose hidden input is not named `features_json` — specifically the race editor (`traits_json`) and all four monster sub-fieldsets (`actions_json`, `special_abilities_json`, `reactions_json`, `legendary_actions_json`). Resolved while scoping the "homebrew monster attack fields → rollable buttons" TODO, which is unbuildable on a broken sync layer.
+**Description:** Pre-existing bug: `_findHiddenInput(root)` did a form-wide query for `input[type="hidden"][name="features_json"]` regardless of which editor instance called it. On forms that don't have a `features_json` input — every race form and every monster form, both create and edit variants — the lookup returned `null` and the submit handler silently skipped the sync. Any GM edit to a homebrew monster's actions / special abilities / reactions / legendary actions, or a homebrew race's racial traits, was lost on save (the existing on-disk JSON was re-rendered on the next page load, so the UI looked like nothing happened). Fix replaces the hardcoded form-wide lookup with: (1) optional `data-target="<input-name>"` on the editor root, (2) fall back to the editor's `nextElementSibling` if that's a hidden input — which every current template already lays out that way (editor div followed immediately by the matching `<input type="hidden" name="..._json">`), (3) legacy form-wide `features_json` fallback so class/subclass editors keep working unchanged. Zero template changes required.
+
+### Fixed
+- `app/static/features_editor.js` — `_findHiddenInput` now resolves per-instance via data-target → next sibling → legacy features_json. Race traits and monster action edits now persist instead of being silently dropped on form submit.
+
+### Notes
+- Found while scoping the homebrew-monster rollable-attacks TODO (which is unbuildable until the sync layer works). Shipping this as its own commit so the bugfix is independently reviewable and revertable.
+- Discovered preexisting bug: docstring at the top of the file was also updated to describe the new resolution order.
+
+---
+
 ## [2.3.6] - 2026-05-15
 
 **Schema version:** 52

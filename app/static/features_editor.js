@@ -17,7 +17,10 @@
  * The script auto-initialises every [data-features-editor] in the document
  * on DOMContentLoaded and on any subsequent <details> open (so the editor
  * inside the "+ New custom subclass" collapsible card initialises lazily).
- * Each editor finds its sibling hidden input by name "features_json".
+ * Each editor finds its hidden input via (1) an optional ``data-target``
+ * attribute naming the input, (2) its next-element sibling if that's a
+ * hidden input (the convention every current template uses), or (3) a
+ * legacy form-wide lookup for ``features_json``.
  *
  * No external dependencies, no globals beyond a single
  * window.SimpleVTTFeaturesEditor namespace with init() and serializeAll().
@@ -33,10 +36,28 @@
         return el;
     }
 
-    /** Find the hidden features_json input inside the same form as ``root``. */
+    /** Locate the hidden input this editor instance should sync to. Resolution
+     *  order: (1) an explicit ``data-target`` on the editor root naming the
+     *  hidden input, (2) the editor's next-sibling element when it's a hidden
+     *  input — the convention every current template already uses (editor div
+     *  followed immediately by ``<input type="hidden" name="..._json">``),
+     *  (3) the legacy form-wide ``features_json`` lookup. (2) is what makes
+     *  this work for the monster form's four parallel editor instances
+     *  (actions_json / special_abilities_json / reactions_json /
+     *  legendary_actions_json) and the race form's traits_json, which the
+     *  legacy form-wide lookup silently dropped. */
     function _findHiddenInput(root) {
         const form = _closestForm(root);
-        return form ? form.querySelector('input[type="hidden"][name="features_json"]') : null;
+        if (!form) return null;
+        const targetName = root.dataset.target;
+        if (targetName) {
+            return form.querySelector(`input[type="hidden"][name="${targetName}"]`);
+        }
+        const sib = root.nextElementSibling;
+        if (sib && sib.tagName === 'INPUT' && sib.type === 'hidden') {
+            return sib;
+        }
+        return form.querySelector('input[type="hidden"][name="features_json"]');
     }
 
     /** Coerce a raw row reading to a clean object suitable for the server. */
