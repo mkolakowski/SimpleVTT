@@ -129,7 +129,7 @@
             atkRow.className = 'features-editor-attack-row';
             atkRow.style.cssText =
                 'grid-column:1 / span 3;display:grid;' +
-                'grid-template-columns:auto 80px 110px 130px 90px 70px;gap:6px;align-items:end;' +
+                'grid-template-columns:auto 80px 110px 130px 90px 70px 80px;gap:6px;align-items:end;' +
                 'padding:8px 0 0 0;margin-top:4px;border-top:1px dashed #2e3140;font-size:11px;';
 
             const attackWrap = document.createElement('label');
@@ -159,12 +159,24 @@
             saveDcInput.input.min = '1';
             saveDcInput.input.max = '40';
 
+            // v2.3.41: Charges/use — surfaces the schema's ``charges_max``
+            // field added in v2.3.40. A positive integer renders the
+            // ``cur/max`` pill + ↻ recharge button in the GM init tracker
+            // and disables the strike-button trio when spent. Blank/0
+            // means unlimited (the default for non-limited actions).
+            const chargesInput = _mkLabeledInput('Charges', '0', initial.charges_max ? String(initial.charges_max) : '');
+            chargesInput.input.type = 'number';
+            chargesInput.input.min = '0';
+            chargesInput.input.max = '99';
+            chargesInput.input.title = 'Uses per encounter (e.g. 1 for "Recharge 5-6" or "1/day"). Blank or 0 = unlimited.';
+
             atkRow.appendChild(attackWrap);
             atkRow.appendChild(attackBonusInput.wrap);
             atkRow.appendChild(damageInput.wrap);
             atkRow.appendChild(damageTypeSel.wrap);
             atkRow.appendChild(saveAbilitySel.wrap);
             atkRow.appendChild(saveDcInput.wrap);
+            atkRow.appendChild(chargesInput.wrap);
             row.appendChild(atkRow);
 
             inputs.attackRollCb = attackRollCb;
@@ -173,6 +185,7 @@
             inputs.damageTypeSel = damageTypeSel.select;
             inputs.saveAbilitySel = saveAbilitySel.select;
             inputs.saveDcInput = saveDcInput.input;
+            inputs.chargesInput = chargesInput.input;
         }
 
         row._inputs = inputs;
@@ -254,6 +267,13 @@
                 if (saveDcRaw) {
                     const n = parseInt(saveDcRaw, 10);
                     if (Number.isFinite(n) && n > 0) rec.save_dc = n;
+                }
+                // v2.3.41: charges_max only emitted when > 0 so the JSON
+                // stays terse for the (vast majority) unlimited-use case.
+                const chargesRaw = (inputs.chargesInput.value || '').toString().trim();
+                if (chargesRaw) {
+                    const n = parseInt(chargesRaw, 10);
+                    if (Number.isFinite(n) && n > 0) rec.charges_max = n;
                 }
             }
             out.push(rec);

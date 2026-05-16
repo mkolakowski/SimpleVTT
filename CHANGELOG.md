@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.41] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Surface the v2.3.40 `Action.charges_max` field in the homebrew Actions editor — every action row now carries a **Charges** number input alongside the existing Attack / Damage / Save fields, so GMs can mark an action as limited-use without hand-editing JSON. Blank or 0 = unlimited (the default); a positive integer (1, 2, 3…) drives the GM init tracker's per-combatant `cur/max` pill + ↻ recharge button + button-disabled-when-spent behaviour shipped in v2.3.40. User-reported gap.
+**Description:** v2.3.40 added the `charges_max` field to `Action` and wired the full init-tracker rendering / decrement / reset flow, but did not extend `features_editor.js` to surface it — GMs creating new homebrew monsters had to drop into the raw JSON tier (or wait for a hand-edit like the `app/demo_seed.py` Grixxa entry) to set the field, which the user (correctly) called out as a missing piece. This commit adds a seventh column to the action-row grid (now `auto 80px 110px 130px 90px 70px 80px`), an `_mkLabeledInput("Charges", "0", …)` widget with `type=number`, `min=0`, `max=99`, and a `title` tooltip explaining the semantics ("Uses per encounter (e.g. 1 for 'Recharge 5-6' or '1/day'). Blank or 0 = unlimited."). The serializer in `_serialize` emits `charges_max: N` only when N > 0, keeping the JSON terse for the unlimited-use majority (every existing action without an explicit cap stays unchanged on round-trip). No backend changes — the existing Pydantic `Action.charges_max: int = 0` default already handles blanks/missing keys.
+
+### Added
+- `app/static/features_editor.js` — Charges number input on every action-mode row. Surfaces in: monster Actions / Special Abilities / Reactions / Legendary Actions editors (campaign settings → 📋 Homebrew Monsters → expand an entry → any of the four action lists). Initial value reads from `initial.charges_max` so re-opening an entry shows the stored value.
+- `app/static/features_editor.js` `_serialize` — `charges_max: N` emitted only when N > 0 so unmodified rows stay JSON-clean.
+
+### Notes
+- Demo's Grixxa Frightful Howl (`charges_max: 1`) now round-trips through the UI — opening the homebrew editor for the Goblin Captain shows "1" in the Charges column for that action; saving without changes leaves the JSON identical.
+- The numeric input takes the same 32px dense-panel minimum as the surrounding inputs per CLAUDE.md.
+- Existing JSON sources (homebrew files, demo seeds) without the field stay valid — the Pydantic default makes `charges_max` absent ⇄ `0` interchangeable.
+
+---
+
 ## [2.3.40] - 2026-05-16
 
 **Schema version:** 52
