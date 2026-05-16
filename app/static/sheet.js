@@ -445,10 +445,20 @@
                 if (typeof CAMPAIGN_ID === 'undefined') return;
                 const visEl = document.getElementById('roll-vis');
                 const visibility = visEl ? visEl.value : 'public';
+                // v2.2.6: include character_id so the server applies *this*
+                // character's roll_state, not the user's first-character
+                // fallback (which mis-resolves when the user has multiple
+                // characters in the campaign — e.g. a test character with
+                // a stale roll_state still set).
+                const charId = (form && form.dataset && form.dataset.charId)
+                    ? parseInt(form.dataset.charId, 10)
+                    : (typeof CHAR_ID !== 'undefined' ? CHAR_ID : null);
+                const body = { expression: expr, visibility, note };
+                if (charId) body.character_id = charId;
                 const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ expression: expr, visibility, note }),
+                    body: JSON.stringify(body),
                 });
                 if (!resp.ok) {
                     const txt = await resp.text();

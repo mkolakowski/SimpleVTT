@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.2.6] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Fix the full-sheet skill click resolving to the *wrong* character's roll_state when the user has multiple characters in the campaign — same root cause as the 2.2.2 fix for the tabletop mini-sheet, just applied to the full sheet path. Also adds `roll_state` to `update_sheet`'s carry-forward list so a full sheet Save can't accidentally clobber the pill state.
+**Description:** Reported symptom: "log says (auto advantage) even when I select Dis on the full sheet." Server-side end-to-end DB trace confirmed the state machine works correctly when the right character is read — so the bug had to be in *which* character `/roll` was reading. The full sheet's skill click handler in `app/static/sheet.js` (wireDnd5eRollButtons) wasn't passing `character_id`, so the server fell back to "the rolling user's first character in this campaign" (the same fallback the mini-sheet had before 2.2.2). If the user has a second test character in the campaign with a stale `roll_state.value = "advantage"`, the fallback found that one and applied advantage instead of the dis the user just set on the open sheet's pill. Fix: thread `character_id` through the skill click using `form.dataset.charId` (or the global `CHAR_ID` const as fallback), mirroring the 2.2.2 pattern. Defensive: add `roll_state` to the carry-forward list in `update_sheet` so a full sheet Save can't clear the pill state by omission.
+
+### Fixed
+- `app/static/sheet.js` `wireDnd5eRollButtons` — skill / ability / save click now sends `character_id` (resolved from `form.dataset.charId` or the global `CHAR_ID`) in the `/roll` payload, so the server reads *this* character's `roll_state`, not a stale sibling's.
+
+### Changed (defensive)
+- `app/routes/tabletop_routes.py` `update_sheet` — added `roll_state` to the carry-forward list alongside `death_saves`, `hp_rolls`, etc. A full sheet Save no longer drops the pill state when the client's `buildSheet()` payload omits `roll_state` (which it always does — no form field).
+
+---
+
 ## [2.2.5] - 2026-05-15
 
 **Schema version:** 52

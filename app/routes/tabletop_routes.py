@@ -8438,7 +8438,7 @@ async def update_sheet(
         for k in ("active_form", "prior_form", "hp_rolls", "favorite_beasts",
                   "damage_resistances", "damage_immunities",
                   "damage_vulnerabilities", "condition_immunities",
-                  "death_saves"):
+                  "death_saves", "roll_state"):
             if k in existing and k not in incoming:
                 incoming[k] = existing[k]
         # Detect HP transitions so the state machine fires on full sheet save.
