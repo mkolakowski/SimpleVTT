@@ -9151,31 +9151,94 @@ class _SyntheticMonsterChar:
         self.ring_style = ring_style or "solid"
 
 
-def _monster_template_to_sheet(tmpl: TokenTemplate) -> dict:
+def _monster_dict_to_sheet(m: dict, *, base: Optional[dict] = None) -> dict:
+    """Project a Monster Pydantic dict (loaded by ``local_content.resolve``
+    from ``app/data/local/dnd5e/monsters/*.json`` or a homebrew JSON file)
+    into the sheet dict shape ``sheet_dnd5e.html`` consumes.
+
+    ``base`` is the TokenTemplate's existing sheet — any keys it carries
+    that we don't compute here (notes, custom overrides, etc.) pass
+    through unchanged. Anything we compute (HP, AC, abilities, speed,
+    race header, damage lists, actions) overrides the base.
+    """
+    import re as _re
+    out = dict(base or {})
+    hp = int(m.get("hit_points") or 10)
+    out["hp"] = {"current": hp, "max": hp, "temp": 0}
+    out["ac"] = int(m.get("armor_class") or 10)
+    speed_raw = m.get("speed") or {}
+    if isinstance(speed_raw, dict):
+        walk = speed_raw.get("walk") or 30
+        out["speed"] = int(walk) if str(walk).isdigit() else 30
+    else:
+        digits = _re.search(r"\d+", str(speed_raw))
+        out["speed"] = int(digits.group()) if digits else 30
+    out["abilities"] = {
+        "STR": int(m.get("strength") or 10),
+        "DEX": int(m.get("dexterity") or 10),
+        "CON": int(m.get("constitution") or 10),
+        "INT": int(m.get("intelligence") or 10),
+        "WIS": int(m.get("wisdom") or 10),
+        "CHA": int(m.get("charisma") or 10),
+    }
+    size = (m.get("size") or "").strip()
+    type_ = (m.get("type") or "").strip()
+    header_bits = " ".join(b for b in (size, type_) if b)
+    if header_bits:
+        out["race"] = header_bits
+    if m.get("alignment"):
+        out["background"] = m.get("alignment")
+    for key in ("damage_resistances", "damage_immunities",
+                "damage_vulnerabilities", "condition_immunities"):
+        raw = m.get(key)
+        if isinstance(raw, str) and raw.strip():
+            out[key] = [p.strip() for p in _re.split(r"[,;]", raw) if p.strip()]
+        elif isinstance(raw, list):
+            out[key] = [str(p) for p in raw]
+    # Pass the structured actions through so the caller's fold step picks
+    # them up. Caller handles attack-button projection.
+    if m.get("actions"):
+        out["actions"] = m.get("actions")
+    return out
+
+
+def _monster_template_to_sheet(tmpl: TokenTemplate, campaign_id: int) -> dict:
     """Project a monster TokenTemplate's stat block + structured actions
     into the dict shape that ``sheet_dnd5e.html`` consumes.
 
-    The template's source-of-truth for clickable attacks is ``sheet.attacks``
-    (character schema: ``{name, atk_bonus, damage, damage_type, save_dc,
-    save_ability, description}``). Two paths can populate that list for a
-    monster:
+    Source resolution order:
 
-    1. SRD imports — ``_open5e_to_dnd5e_sheet`` already regex-extracts
-       attacks into ``sheet.attacks`` at import time. We use those as-is.
-    2. Homebrew with structured actions (v2.3.8 editor output) — the
-       monster carries ``sheet.actions: list[Action]`` with first-class
-       fields like ``attack_roll`` / ``attack_bonus`` / ``damage_type`` /
-       ``save_ability`` / ``save_dc``. We append those (filtered to entries
-       that actually have an attack/damage/save) to the attacks list,
-       remapping ``attack_bonus`` → ``atk_bonus`` to match the character
-       schema's key.
+    1. ``tmpl.sheet["monster_slug"]`` — if the template is a pointer to a
+       shipped or homebrew monster (the minimal demo NPC seed shape — see
+       ``app/demo_seed.py _npc_sheet``), resolve via ``local_content`` and
+       overlay the full stat block. The pointer pattern keeps the
+       TokenTemplate rows tiny and the stat-block authoring in one place.
 
-    The two sources can coexist on the same monster (and they will, for a
-    homebrew that was first imported then enhanced). De-dupe by name so a
-    homebrew action that overrides an SRD-imported one shadows the original.
-    All other sheet keys pass through unchanged.
+    2. ``tmpl.sheet["actions"]`` (homebrew structured Action shape from the
+       v2.3.8 editor) and/or ``tmpl.sheet["attacks"]`` (legacy regex-
+       derived character schema from SRD imports via
+       ``_open5e_to_dnd5e_sheet``). The former gets folded into the latter
+       so the character template, which reads ``sheet.attacks``, sees a
+       unified list. De-duped by name so a homebrew override shadows an
+       SRD-imported same-name attack.
+
+    For SRD monsters where the Action's ``attack_bonus`` is null (shipped
+    files describe the to-hit only in the desc text), the projection regex-
+    extracts ``+N to hit`` from the desc so the attack button rolls
+    ``1d20+N`` instead of a raw 1d20.
     """
+    import re as _re
+
     sheet = dict(tmpl.sheet or {})
+    monster_slug = sheet.get("monster_slug")
+    if monster_slug:
+        resolved = local_content.resolve(
+            str(monster_slug), type="monsters", campaign_id=campaign_id,
+        )
+        if resolved is not None:
+            monster_dict, _src = resolved
+            sheet = _monster_dict_to_sheet(monster_dict, base=sheet)
+
     actions = sheet.get("actions") or []
     if not actions:
         return sheet
@@ -9194,9 +9257,17 @@ def _monster_template_to_sheet(tmpl: TokenTemplate) -> dict:
             continue
         name = (a.get("name") or "Action").strip()
         save_ability_raw = (a.get("save_ability") or "").strip().upper()
+        atk_bonus = a.get("attack_bonus") or ""
+        # SRD fallback: shipped monsters set attack_roll=true but leave
+        # attack_bonus null — the to-hit lives in the desc text. Regex it
+        # out so the attack button does ``1d20+N`` instead of raw 1d20.
+        if a.get("attack_roll") and not atk_bonus:
+            bonus_m = _re.search(r"([+-]\d+)\s*to hit", a.get("desc") or "")
+            if bonus_m:
+                atk_bonus = bonus_m.group(1)
         atk_entry = {
             "name": name,
-            "atk_bonus": a.get("attack_bonus") or "",
+            "atk_bonus": atk_bonus,
             "damage": a.get("damage") or "",
             "damage_type": a.get("damage_type") or "",
             "save_dc": (a.get("save_dc") or None) if a.get("save_dc") else None,
@@ -9250,7 +9321,7 @@ def monster_template_sheet_page(
     if not tmpl:
         raise HTTPException(404, "Monster template not found")
 
-    sheet = _monster_template_to_sheet(tmpl)
+    sheet = _monster_template_to_sheet(tmpl, campaign_id)
     if (tmpl.template or "dnd5e") == "dnd5e":
         normalize_dnd5e_sheet(sheet)
     sheet_template = (

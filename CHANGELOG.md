@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.11] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Fix the 2.3.10 monster-sheet route returning an essentially-empty sheet for the demo-style "pointer" TokenTemplate shape (the `_npc_sheet` seed in `app/demo_seed.py` stores only `{class:"NPC", monster_slug, level, abilities:{baseline 10s}}` and expects the stat block to resolve at view time). Adds slug resolution + a desc-text regex fallback so shipped SRD monsters get real to-hit bonuses on their attack buttons.
+**Description:** Two adapter improvements landed together because both are required to make a stock-deploy demo monster sheet useful: (1) `_monster_template_to_sheet` now reads `tmpl.sheet["monster_slug"]` and, if set, calls `local_content.resolve(slug, type="monsters", campaign_id=cid)` to load the full Monster Pydantic record (homebrew tier first, shipped SRD fallback) and overlays it onto the template's sheet via a new `_monster_dict_to_sheet(m, base=)` helper that projects HP / AC / abilities / speed / size+type header / damage-and-condition lists from the Monster shape into the character sheet's dict shape. The TokenTemplate's sheet then keeps any custom overrides (notes, slug, etc.) while picking up the real stat block. (2) Shipped SRD monster JSON files set `actions[].attack_roll = true` but leave `attack_bonus = null` — the to-hit lives only in the desc text ("Melee Weapon Attack: +5 to hit, ..."). The fold-into-attacks step now regex-extracts `([+-]\d+) to hit` from the desc when `attack_bonus` is empty, so the resulting `atk_bonus` populates "+5" and the attack button rolls `1d20+5` instead of a raw `1d20`. Verified locally: Bandit Captain template now renders STR 15 / DEX 16 / CON 14 / WIS 11 with two structured attacks (Scimitar +5 / 1d6+3 slashing, Dagger +5 / 1d4+3 piercing) on the new monster-sheet URL.
+
+### Added
+- `app/routes/tabletop_routes.py` `_monster_dict_to_sheet(m, *, base=None)` — projects a Monster Pydantic dict into the character sheet dict shape. Pass-through of any keys not derivable from the monster (notes, monster_slug, etc.) so the TokenTemplate's custom fields survive the overlay.
+
+### Changed
+- `app/routes/tabletop_routes.py` `_monster_template_to_sheet` — now takes `campaign_id` and, when `tmpl.sheet["monster_slug"]` is set, resolves the slug via `local_content.resolve(..., type="monsters", campaign_id=cid)` and overlays the full Monster stat block onto the template's sheet before the fold-into-attacks step. Also regex-extracts to-hit from the action desc when `attack_bonus` is null, covering the shipped SRD monster case where the to-hit is only in the desc text.
+- `monster_template_sheet_page` — passes `campaign_id` through to the adapter so homebrew-tier slugs resolve in the right scope.
+
+### Notes
+- Demo Bandit Captain TokenTemplate (`_npc_sheet("bandit-captain", "Bandit Captain")`) was the smoking-gun test case — before this commit the new monster-sheet route rendered a 10/10/10/10/10/10 Captain with no attacks. After this commit it renders the full Bandit Captain stat block with both attacks clickable.
+- The desc-text regex assumes the "+N to hit" convention used by SRD content. Homebrew monsters authored via the 2.3.8 editor already populate `attack_bonus` first-class so the regex never fires for them.
+
+---
+
 ## [2.3.10] - 2026-05-16
 
 **Schema version:** 52
