@@ -48,7 +48,7 @@ class Settings(BaseModel):
     character_templates: List[str] = Field(
         default_factory=lambda: ["generic", "dnd5e"]
     )
-    default_theme: str = "dark"
+    default_theme: str = "sepia"
 
     # Demo mode (v2.3.0). See docs/plans/demo-mode.md.
     # When ``demo_mode`` is true, the lifespan handler boots a background
@@ -88,7 +88,7 @@ def get_settings() -> Settings:
         character_templates=_env_list(
             "CHARACTER_TEMPLATES", ["generic", "dnd5e"]
         ),
-        default_theme=os.environ.get("APP_DEFAULT_THEME", "dark"),
+        default_theme=os.environ.get("APP_DEFAULT_THEME", "sepia"),
         demo_mode=_env_bool("DEMO_MODE", False),
         demo_reset_interval_minutes=max(5, min(1440, int(os.environ.get("DEMO_RESET_INTERVAL_MINUTES") or 60))),
         demo_reset_on_boot=_env_bool("DEMO_RESET_ON_BOOT", True),

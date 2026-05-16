@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.3] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Fix `APP_DEFAULT_THEME` never reaching the `app` container (same root cause as the 2.3.2 demo-var fix) and change the in-code default from `dark` to `sepia` so a stock deploy lands on the project's preferred fantasy theme.
+**Description:** Follow-up to 2.3.2: `APP_DEFAULT_THEME` is consumed in `app/config.py` and exposed as a Jinja global at `app/templates.py:29` (used by `base.html` to set `data-theme` for logged-out and brand-new users), but it was missing from the `app` service's `environment:` allow-list in both `docker-compose.yml` and `docker-compose.ghcr.yml`. So `APP_DEFAULT_THEME=sepia` in `.env` had no effect — every logged-out page rendered `data-theme="dark"`. Fix forwards the var with `${APP_DEFAULT_THEME:-sepia}` (matching `.env.example`) and bumps the Python-side fallback from `"dark"` to `"sepia"` in both spots in `app/config.py` so a deploy with no `.env` value at all agrees with the compose default.
+
+### Fixed
+- `docker-compose.yml` — forward `APP_DEFAULT_THEME` from `.env` into the `app` container with a `sepia` fallback.
+- `docker-compose.ghcr.yml` — same, for the GHCR-image variant.
+
+### Changed
+- `app/config.py` — `default_theme` field default and `get_settings()` env fallback both updated from `"dark"` to `"sepia"`. Users who explicitly set their theme in `/settings` are unaffected (`base.html` uses `user.theme` when present); only logged-out pages and brand-new users without a theme choice see the change.
+
+### Notes
+- Redeploy with `docker compose up -d --build app` — env-var changes only take effect on container recreation.
+
+---
+
 ## [2.3.2] - 2026-05-15
 
 **Schema version:** 52
