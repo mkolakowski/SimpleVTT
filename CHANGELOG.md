@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.33] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Init tracker: every combatant row now has a **📋 Sheet** button in its header that opens the relevant sheet (PC's full character sheet for player combatants, monster stat block for NPCs) in the 2.3.15 slide-out drawer. Completes the "GM never has to leave the init tracker" arc — every kind of mid-combat lookup (HP edit, attack roll, sheet read, expand mini-body) is reachable from the init tracker entry without finding a token on the map first. Closes the [`TODO.md`](TODO.md) → GM Tools → "Initiative Tracker — Open Sheet for Active Combatant" item.
+**Description:** The 2.3.15 drawer interceptor only matched `a.monster-sheet-link`; this commit generalizes the selector to `a.monster-sheet-link, a.character-sheet-link` and extends the label fallback to read either `data-monster-name` or `data-character-name`. `renderBattle` now stamps an Open Sheet anchor between the header info column and the expand chevron — PCs get the new `.character-sheet-link` class pointing at `/campaign/{cid}/character/{id}/sheet`; monsters get the existing `.monster-sheet-link` class pointing at `/campaign/{cid}/monster-template/{tid}/sheet`. Manual init entries (no `char_id` and no `token_template_id`) skip the button. The mini-header click handler that toggles the row's expand/collapse now also ignores clicks inside `a` elements (was only `input, button`) so the new anchor doesn't double-fire as both "open sheet" AND "expand row". Active-turn entries get a subtly stronger purple tint on the button to draw the GM's eye to whose turn it is.
+
+### Added
+- `app/templates/tabletop.html` `renderBattle` — Open Sheet anchor per init entry. PC link uses `.character-sheet-link` + `data-character-name`; monster link uses `.monster-sheet-link` + `data-monster-name`. `target="_blank" rel="noopener"` so Cmd/Ctrl-click pops the sheet in a new tab (the 2.3.15 drawer interceptor skips modifier-clicks for exactly this reason).
+- `app/templates/tabletop.html` `.init-sheet-btn` CSS rule — 32 px min-height (dense-panel floor per CLAUDE.md), purple palette matching the 2.3.14 monster-sheet link affordance, slightly stronger tint on `.init-entry.active-turn`.
+
+### Changed
+- `app/templates/tabletop.html` drawer link interceptor — selector generalized from `a.monster-sheet-link` to `a.monster-sheet-link, a.character-sheet-link`; label resolution falls back through `data-monster-name` → `data-character-name` → text content.
+- `app/templates/tabletop.html` mini-header expand/collapse handler — guard widened from `input, button` to `input, button, a` so the new Open Sheet anchor doesn't ALSO toggle the row.
+
+### Notes
+- Active-turn highlighting is the existing `.init-entry.active-turn` CSS plus the new heavier purple on the button; the TODO suggested "most prominent on the currently-active turn entry", which is already true visually.
+- PC sheets opened in the drawer iframe are fully interactive (not read-only) — the GM can roll abilities/skills/saves/attacks from inside the iframe and the rolls land in the campaign roll log on the parent tabletop via the existing WebSocket fanout. Same path the 2.3.10 monster sheet uses.
+- Sheet-button-click is deliberately separate from row-expand-click. Both work side-by-side: click the chevron area → expand the mini-body inline; click the Sheet button → open the full sheet in the drawer.
+
+---
+
 ## [2.3.32] - 2026-05-16
 
 **Schema version:** 52

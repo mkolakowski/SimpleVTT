@@ -506,6 +506,13 @@
     .init-entry { margin-bottom:4px; border:1px solid rgba(167,139,250,.25); border-radius:8px; overflow:hidden; box-shadow:0 2px 6px rgba(0,0,0,.15); background:var(--bg-2); }
     .init-entry.active-turn { border-color:var(--accent); box-shadow:0 2px 10px rgba(167,139,250,.28); }
     .init-entry.active-turn .mini-header { background:linear-gradient(135deg,rgba(167,139,250,.28),rgba(108,180,255,.18)); }
+    /* v2.3.33: per-entry "Open Sheet" button. Compact (32px min-height to
+       hit the dense-panel floor per CLAUDE.md), purple palette matching
+       the 2.3.14 monster-sheet link affordance, sits between the header
+       info column and the expand-arrow chevron. */
+    .init-sheet-btn { font-size:10px; padding:4px 8px; background:rgba(167,139,250,.10); border:1px solid rgba(167,139,250,.4); color:#a78bfa; border-radius:3px; text-decoration:none; display:inline-flex; align-items:center; min-height:32px; flex-shrink:0; white-space:nowrap; }
+    .init-sheet-btn:hover { background:rgba(167,139,250,.22); }
+    .init-entry.active-turn .init-sheet-btn { background:rgba(167,139,250,.20); border-color:rgba(167,139,250,.6); }
     .init-card-sheet { border-top:1px solid var(--border); font-size:11px; display:none; }
     .init-card-sheet.open { display:block; }
     /* mini-body/footer moved from char-detail into an open init-card-sheet stay visible */
@@ -2268,16 +2275,23 @@
         }
     });
 
-    // Intercept clicks on any monster-sheet link. Delegated on document so
-    // links added by re-renders (renderBattle re-runs frequently) keep working.
-    // Cmd/Ctrl/middle-click falls through to the browser's default new-tab
-    // behavior so power users can still pop the sheet out.
+    // Intercept clicks on any sheet-drawer link. v2.3.15 originally only
+    // matched ``a.monster-sheet-link``; v2.3.33 generalized to also catch
+    // ``a.character-sheet-link`` (PC sheets opened from the init-tracker
+    // Open Sheet button) so both flow through the same iframe drawer.
+    // Delegated on document so links added by re-renders (renderBattle
+    // re-runs frequently) keep working. Cmd/Ctrl/middle-click falls
+    // through to the browser's default new-tab behavior so power users
+    // can still pop the sheet out into a separate window.
     document.addEventListener('click', (ev) => {
-        const link = ev.target.closest('a.monster-sheet-link');
+        const link = ev.target.closest('a.monster-sheet-link, a.character-sheet-link');
         if (!link) return;
         if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button === 1) return;
         ev.preventDefault();
-        openDrawer(link.href, link.dataset.monsterName || link.textContent.trim());
+        const label = link.dataset.monsterName
+            || link.dataset.characterName
+            || link.textContent.trim();
+        openDrawer(link.href, label);
     });
 })();
 </script>
@@ -3497,6 +3511,26 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             : buildMonsterInitSheet(c);
                     }
                 }
+                /* v2.3.33: Open Sheet button — PCs link to the standalone
+                 * /character/{id}/sheet, monsters link to the 2.3.10
+                 * /monster-template/{tid}/sheet. Both get a sheet-drawer
+                 * class so the 2.3.15 link interceptor opens them in the
+                 * iframe drawer instead of a new tab. Manual entries (no
+                 * char_id and no token_template_id) skip the button. */
+                let sheetBtn = '';
+                if (c.char_id) {
+                    sheetBtn = `<a class="init-sheet-btn character-sheet-link"
+                        href="/campaign/${CAMPAIGN_ID}/character/${c.char_id}/sheet"
+                        target="_blank" rel="noopener"
+                        data-character-name="${c.name}"
+                        title="Open ${c.name}'s character sheet">📋 Sheet</a>`;
+                } else if (c.token_template_id) {
+                    sheetBtn = `<a class="init-sheet-btn monster-sheet-link"
+                        href="/campaign/${CAMPAIGN_ID}/monster-template/${c.token_template_id}/sheet"
+                        target="_blank" rel="noopener"
+                        data-monster-name="${c.name}"
+                        title="Open ${c.name}'s stat block">📋 Sheet</a>`;
+                }
                 return `<div class="init-entry${isActive ? ' active-turn' : ''}" data-idx="${i}" data-char-id="${slotId}">
                     <div class="mini-header" data-idx="${i}" data-char-id="${slotId}">
                         ${tokenImg}
@@ -3504,6 +3538,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             <div class="mini-header-name">${c.name}</div>
                             <div class="mini-header-sub">Init <strong>${c.initiative}</strong> &nbsp;·&nbsp; HP <strong style="color:${col};">${c.hp_current}</strong> / ${c.hp_max}</div>
                         </div>
+                        ${sheetBtn}
                         <span class="mini-header-arrow">▶</span>
                     </div>
                     <div class="init-card-sheet">
@@ -3571,7 +3606,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (!headerEl || !sheetEl) return;
             const charId = entry.dataset.charId || '';
             headerEl.addEventListener('click', ev => {
-                if (ev.target.closest('input') || ev.target.closest('button')) return;
+                // v2.3.33: ``a`` added so the new Open-Sheet button (an
+                // anchor link the 2.3.15 drawer interceptor handles)
+                // doesn't ALSO trigger the row expand/collapse.
+                if (ev.target.closest('input, button, a')) return;
                 const isOpen = sheetEl.classList.toggle('open');
                 headerEl.querySelector('.mini-header-arrow')?.classList.toggle('open', isOpen);
                 if (!charId) return;
