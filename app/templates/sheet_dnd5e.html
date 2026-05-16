@@ -949,6 +949,10 @@
         </div>
 
         {# ── Unified Spells fieldset ──────────────────────────────────── #}
+        {# v2.3.13: hidden on the monster sheet (spell-slot mechanics don't
+           apply to NPC stat blocks; monster spellcasting is described in
+           the Actions list instead). #}
+        {% if not is_monster_sheet %}
         <fieldset id="spells-fieldset">
             <legend>Spells
                 {% if can_edit %}
@@ -1459,6 +1463,7 @@
             <legend><span class="fs-chevron">▼</span>Notes</legend>
             <textarea name="notes" rows="3" style="width:100%;" {% if not can_edit %}readonly{% endif %}>{{ sheet.get('notes','') }}</textarea>
         </fieldset>
+        {% endif %}{# v2.3.13: closes ``{% if not is_monster_sheet %}`` opened above the Spells fieldset, hiding the whole PC-only block (Spells / overlays / Class Resources / Inventory / Class+Subclass+Race Features / Class Proficiencies / Notes) when rendering a monster #}
 
         {% if can_edit %}
             <div class="row">

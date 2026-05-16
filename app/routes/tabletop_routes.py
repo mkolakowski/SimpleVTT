@@ -9352,6 +9352,10 @@ def monster_template_sheet_page(
             "system": get_system(campaign.game_system),
             "class_roster": [],
             "animate_gifs": user.animate_gifs,
+            # v2.3.13: lets sheet_dnd5e.html hide PC-only sections
+            # (spells, inventory, class/subclass/race features, class
+            # resources, notes) that have no meaning for a monster.
+            "is_monster_sheet": True,
         },
     )
 

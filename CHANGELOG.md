@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.13] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Hide the PC-only sections (Spells / Class Resources / Inventory / Class+Subclass+Race Features / Class Proficiencies / Notes + the two slide-in overlays for the Spell and Item browsers) when rendering `sheet_dnd5e.html` for a monster, by gating the whole block on a new `is_monster_sheet` flag the route now passes. The character-details edit panel + multiclass picker + per-level HP rolls editor were already hidden because they sit behind `{% if can_edit %}` and the monster route renders read-only — so no extra wrapping needed there.
+**Description:** After 2.3.10/2.3.11/2.3.12 a GM clicking "Open full sheet" on a monster row got the full PC sheet, but the half of the sheet that has no meaning for an NPC (spell slots with "no spell slots configured" placeholders, an empty inventory, currency boxes, empty class-feature accordions, etc.) still rendered as scroll-padding clutter. One Jinja gate around the contiguous block from the Spells fieldset (line 952) through the Notes fieldset (line 1461) — also covers the Spell Browser overlay, Beast Picker overlay, and the inline spell-slot pip renderer that the gated sections own. The route sets `is_monster_sheet: True`; for the PC sheet route the variable is undefined, which evaluates falsy under the project's `ChainableUndefined` setup, so `{% if not is_monster_sheet %}` returns True and the sections render exactly as before. Verified locally: PC sheet renders unchanged; Bandit Captain monster sheet now shows only the header / roll-state pill / ability scores / saves / skills / defenses / conditions / attacks — the bits that actually have data.
+
+### Added
+- `is_monster_sheet: True` in the context dict passed by `monster_template_sheet_page` to `monster_page.html` (which forwards everything to `sheet_dnd5e.html`).
+
+### Changed
+- `app/templates/sheet_dnd5e.html` — wrapped lines 952–1461 (Spells fieldset, Spell Browser overlay, Beast Picker overlay, spell-slot pip renderer, Class Resources fieldset, Inventory fieldset, Class+Subclass+Race Features fieldset, Class Proficiencies fieldset, hidden Features textarea, Notes fieldset) in `{% if not is_monster_sheet %}` ... `{% endif %}`. Single contiguous gate so reviewers only have to verify two edit boundaries.
+
+### Notes
+- The edit panel (Character Details / multiclass / HP rolls / Background / Feats) sits behind `{% if can_edit %}` at line 251 and is already hidden on the monster sheet (`can_edit=False`).
+- If a future feature wants to add a section that *is* relevant for monsters (e.g. lair actions, legendary actions surfaced as buttons), it should go OUTSIDE the gate — between the Attacks fieldset and the Spells fieldset is a natural insertion point.
+
+---
+
 ## [2.3.12] - 2026-05-16
 
 **Schema version:** 52
