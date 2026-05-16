@@ -768,12 +768,56 @@ def seed_encounter(
 
 
 # ── Orchestration ───────────────────────────────────────────────────
+def _reset_sequences(db: Session) -> None:
+    """v2.3.27: reset Postgres auto-increment sequences for the URL-keyed
+    tables so each demo cycle hands out the same predictable ids
+    (``/campaign/1``, ``/campaign/1/character/1/sheet``,
+    ``/campaign/1/monster-template/22/sheet`` etc.) instead of drifting
+    upward (``/campaign/4`` → ``/campaign/5`` → ...) every reset.
+
+    Uses ``setval(seq, MAX(id), false)`` so the next INSERT picks
+    ``MAX(id) + 1`` — which is 1 when the table is empty (the normal
+    demo case post-wipe) and ``existing_max + 1`` when a real admin
+    has populated the table with non-demo rows (no conflict).
+
+    SQLite path is a no-op: SQLAlchemy's ``Integer primary_key=True``
+    maps to plain ``INTEGER PRIMARY KEY`` (no AUTOINCREMENT keyword),
+    and SQLite's default behavior is "next id = max(rowid) + 1" which
+    already gives stable demo ids after the wipe deletes everything.
+    Only Postgres's strict no-reuse `SERIAL` / `IDENTITY` exhibits the
+    creep the user noticed.
+
+    Scoped to the URL-visible tables (campaigns / characters /
+    token_templates) — tokens / maps / encounters / users etc. still
+    creep upward but their ids aren't bookmarked so it doesn't matter.
+    """
+    from sqlalchemy import text
+    bind = db.get_bind()
+    dialect = bind.dialect.name
+    if dialect != "postgresql":
+        return
+    tables = ("campaigns", "characters", "token_templates")
+    for t in tables:
+        try:
+            db.execute(text(
+                f"SELECT setval('{t}_id_seq', "
+                f"COALESCE((SELECT MAX(id) FROM {t}), 0) + 1, false)"
+            ))
+        except Exception as e:  # noqa: BLE001
+            log.warning("demo wipe: couldn't reset %s_id_seq: %s", t, e)
+    db.commit()
+
+
 def reset_and_reseed(db: Session) -> dict[str, int]:
     """Wipe demo records then re-seed. Returns a per-section count
     suitable for logging on every reset."""
     log.info("demo reset: wiping previous dataset…")
     wipe_counts = wipe(db)
     log.info("demo wipe: %s", wipe_counts)
+
+    # v2.3.27: ensure the post-wipe reseed gets stable ids (1, 1, 1, …)
+    # for the URL-keyed tables. See ``_reset_sequences`` for the why.
+    _reset_sequences(db)
 
     log.info("demo reset: seeding fresh dataset…")
     users = seed_users(db)

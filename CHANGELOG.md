@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.27] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Demo: reset Postgres auto-increment sequences after each wipe so the URL-keyed tables (campaigns / characters / token_templates) hand out stable ids cycle-over-cycle instead of drifting upward. After this commit a visitor opening the demo URL gets `/campaign/1/...` every time instead of `/campaign/4`, then `/campaign/5`, then `/campaign/6`, ... User-reported.
+**Description:** Postgres `SERIAL` / `IDENTITY` deliberately doesn't reuse deleted ids — when the demo wipe drops the campaign row and the reseed inserts a new one, the sequence hands out the next value rather than rolling back. The user noticed this in URLs (`/campaign/4` → `/campaign/5` → ...) after a few reset cycles; same drift was happening invisibly to character ids and token template ids. New `_reset_sequences(db)` helper runs after `wipe(db)` (which commits the deletes) and before `seed_users(db)`, calling `setval('<table>_id_seq', COALESCE(MAX(id), 0) + 1, false)` for each URL-keyed table. The `MAX(id) + 1` shape is safe even when a real admin has populated the table with non-demo rows — the sequence catches up to existing data instead of conflicting. SQLite path is a no-op because the project's `Integer primary_key=True` maps to plain `INTEGER PRIMARY KEY` (no AUTOINCREMENT), and SQLite's "next id = max(rowid) + 1" already gives stable demo ids after the wipe.
+
+### Added
+- `app/demo_seed.py` `_reset_sequences(db)` — Postgres-only helper that resets `campaigns_id_seq` / `characters_id_seq` / `token_templates_id_seq` to `MAX(id) + 1`. Logs a warning on failure but doesn't raise (so a sequence-rename or schema drift can't break the reset loop). Calls `db.commit()` so the next seed's INSERT sees the new sequence value.
+
+### Changed
+- `app/demo_seed.py` `reset_and_reseed` — calls `_reset_sequences(db)` between the wipe and the first `seed_*` so the reseed inserts pick up at id 1 (or `existing_max + 1` if a real admin has populated the table).
+
+### Notes
+- Only the three URL-keyed tables get the reset. Tokens / maps / encounters / users / dice rolls / memberships keep creeping upward but their ids aren't bookmarked so it doesn't matter (and resetting users would risk colliding with a real admin who's logged in at id 1).
+- On a fresh demo deploy with no real admin data, post-reseed ids are exactly `campaigns.id=1`, `characters.id={1, 2, 3}` (Pip / Thalindra / Tavik), `token_templates.id={1, 2, 3, 4}` (bandit-captain / bandit / thug / goblin-captain).
+
+---
+
 ## [2.3.26] - 2026-05-16
 
 **Schema version:** 52
