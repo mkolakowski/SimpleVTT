@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.15] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Open the monster sheet in a slide-out drawer over the tabletop instead of a new tab — keeps the GM oriented in the campaign view while running combat. Iframe-based so the sheet's own JS stays isolated and doesn't double-init against the tabletop's globals. Cmd/Ctrl-click on the link still falls through to the new-tab default for power users who want to pop it out permanently.
+**Description:** Final UX polish on the Unified Monster Sheet pivot. The 2.3.12 link opened the sheet in a new tab, which on most setups means tab-switching mid-combat — fine for prep, jarring during a turn. This commit adds a right-edge drawer (max 820 px / 92 vw wide) with a backdrop dim. A delegated click handler on `document` intercepts any `<a class="monster-sheet-link">` click and loads the link's `href` into an `<iframe>` inside the drawer; the iframe isolates the sheet's `wireDnd5eRollButtons` wiring from the parent tabletop's `CAMPAIGN_ID` / `ME` / `CHAR_ID` globals (no naming conflicts, no double-init). Rolls fired from inside the iframe still POST to `/api/campaign/{cid}/roll` and the server broadcasts the result over WebSocket to the parent tabletop's roll log — same wiring, no extra glue. Close via the × button, the backdrop, or Esc. The header has a small "↗ New tab" affordance for the GM who decides mid-session they want to keep the sheet open in a separate window.
+
+### Added
+- `app/templates/tabletop.html` `#monster-sheet-drawer` + `#monster-sheet-backdrop` markup (GM-only, gated on `{% if is_gm %}` so player clients never carry the DOM). 220 ms slide-in from the right via CSS `transform` transition.
+- `app/templates/tabletop.html` inline IIFE that wires the delegated click handler, drawer open/close, Esc-key dismissal, and backdrop-click dismissal. Cmd/Ctrl/Shift/middle-click bypasses the interception so the browser's default new-tab behavior wins for the power-user path.
+
+### Changed
+- `app/templates/tabletop.html` `buildMonsterInitSheet` — the "📋 Open full sheet" anchor now carries `class="monster-sheet-link"` + `data-monster-name="..."` so the drawer handler can intercept and label the drawer header. Removed the trailing "↗" arrow from the link text since the drawer slides in rather than navigating.
+
+### Notes
+- The sheet's in-iframe Close button (`closeSheet()` in `monster_page.html`) still does `window.location.href = '/campaign/{cid}'` which, inside the iframe, just navigates the iframe to the campaign page (the parent tabletop is unaffected). A `postMessage` to the parent to dismiss the drawer would be cleaner — filed as a follow-up.
+- Player-only clients never load the drawer markup or handler — monsters are GM-only data and the surface stays GM-only too.
+
+---
+
 ## [2.3.14] - 2026-05-16
 
 **Schema version:** 52

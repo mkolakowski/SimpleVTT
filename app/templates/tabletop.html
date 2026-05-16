@@ -2563,6 +2563,75 @@
 
 <div id="roll-toast-container"></div>
 
+{# v2.3.15: monster-sheet drawer. Intercepts clicks on the
+   ".monster-sheet-link" anchors emitted by buildMonsterInitSheet and
+   loads the target URL into an iframe so the GM can keep the tabletop
+   visible. Cmd/Ctrl-click still pops a new tab (browser default).
+   ESC, the close button, and clicking the backdrop all dismiss. #}
+{% if is_gm %}
+<div id="monster-sheet-backdrop" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.55);"></div>
+<div id="monster-sheet-drawer" style="display:none;position:fixed;top:0;right:0;bottom:0;width:min(820px,92vw);z-index:601;background:var(--bg);border-left:1px solid var(--border);box-shadow:-12px 0 32px rgba(0,0,0,.4);transform:translateX(100%);transition:transform 220ms ease;display:flex;flex-direction:column;">
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-2);border-bottom:1px solid var(--border);flex-shrink:0;">
+        <strong id="monster-sheet-drawer-title" style="font-size:13px;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Monster Sheet</strong>
+        <a id="monster-sheet-drawer-popout" href="#" target="_blank" rel="noopener" title="Open in a new tab" style="font-size:11px;color:var(--fg-mute);text-decoration:none;padding:4px 8px;border:1px solid var(--border);border-radius:3px;min-height:32px;display:inline-flex;align-items:center;">↗ New tab</a>
+        <button type="button" id="monster-sheet-drawer-close" title="Close (Esc)" style="background:none;border:1px solid var(--border);color:var(--fg);font-size:18px;line-height:1;width:32px;height:32px;cursor:pointer;border-radius:3px;flex-shrink:0;">×</button>
+    </div>
+    <iframe id="monster-sheet-drawer-iframe" src="about:blank" style="flex:1 1 auto;width:100%;border:0;background:var(--bg);"></iframe>
+</div>
+<script>
+(function () {
+    const drawer = document.getElementById('monster-sheet-drawer');
+    const backdrop = document.getElementById('monster-sheet-backdrop');
+    const iframe = document.getElementById('monster-sheet-drawer-iframe');
+    const titleEl = document.getElementById('monster-sheet-drawer-title');
+    const popoutEl = document.getElementById('monster-sheet-drawer-popout');
+    const closeBtn = document.getElementById('monster-sheet-drawer-close');
+    if (!drawer || !backdrop || !iframe) return;
+
+    function openDrawer(url, label) {
+        // Bring the iframe into view first, then translate the drawer in
+        // on the next frame so the slide animation runs from the right
+        // edge instead of just popping into place.
+        iframe.src = url;
+        popoutEl.href = url;
+        titleEl.textContent = label || 'Monster Sheet';
+        backdrop.style.display = 'block';
+        drawer.style.display = 'flex';
+        requestAnimationFrame(() => { drawer.style.transform = 'translateX(0)'; });
+    }
+
+    function closeDrawer() {
+        drawer.style.transform = 'translateX(100%)';
+        backdrop.style.display = 'none';
+        // Wait for the slide-out before clearing the iframe src so the
+        // PC sheet's JS gets a chance to flush any pending requests.
+        setTimeout(() => {
+            drawer.style.display = 'none';
+            iframe.src = 'about:blank';
+        }, 240);
+    }
+
+    backdrop.addEventListener('click', closeDrawer);
+    closeBtn.addEventListener('click', closeDrawer);
+    document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape' && drawer.style.display === 'flex') closeDrawer();
+    });
+
+    // Intercept clicks on any monster-sheet link. Delegated on document so
+    // links added by re-renders (renderBattle re-runs frequently) keep working.
+    // Cmd/Ctrl/middle-click falls through to the browser's default new-tab
+    // behavior so power users can still pop the sheet out.
+    document.addEventListener('click', (ev) => {
+        const link = ev.target.closest('a.monster-sheet-link');
+        if (!link) return;
+        if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.button === 1) return;
+        ev.preventDefault();
+        openDrawer(link.href, link.dataset.monsterName || link.textContent.trim());
+    });
+})();
+</script>
+{% endif %}
+
 {# Shared Wild Shape / Polymorph beast picker — mini-sheet uses it via window.BeastPicker #}
 {% include "_beast_picker_modal.html" %}
 
@@ -3380,11 +3449,17 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             ? `<div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--fg-mute);">${chips.join('')}</div>`
             : '';
 
+        // v2.3.15: ``.monster-sheet-link`` class + data-monster-name attr
+        // let the drawer's delegated click handler intercept and open the
+        // sheet over the tabletop instead of in a new tab. Cmd/Ctrl/middle-
+        // click still falls through to the new-tab default.
+        const safeName = (combatant.name || tmpl.name || 'Monster').replace(/"/g, '&quot;');
         return `<div style="padding:8px 10px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
             ${chipsHtml}
-            <a href="/campaign/${CAMPAIGN_ID}/monster-template/${tmpl.id}/sheet" target="_blank" rel="noopener"
+            <a class="monster-sheet-link" data-monster-name="${safeName}"
+               href="/campaign/${CAMPAIGN_ID}/monster-template/${tmpl.id}/sheet" target="_blank" rel="noopener"
                style="margin-left:auto;font-size:11px;padding:4px 10px;background:rgba(167,139,250,.10);border:1px solid rgba(167,139,250,.4);color:#a78bfa;border-radius:3px;text-decoration:none;display:inline-flex;align-items:center;min-height:32px;"
-               title="Open the full monster sheet — ability/skill/save/attack clicks land in the roll log">📋 Open full sheet ↗</a>
+               title="Open the full monster sheet — ability/skill/save/attack clicks land in the roll log">📋 Open full sheet</a>
         </div>`;
     }
 
