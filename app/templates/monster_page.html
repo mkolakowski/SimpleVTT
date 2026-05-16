@@ -24,6 +24,20 @@
         <a href="/campaign/{{ campaign.id }}">{{ campaign.name }}</a> ›
         🐲 {{ char.name }}
         <span style="color:var(--fg-mute);font-size:11px;margin-left:8px;">(monster — read-only)</span>
+        {# v2.3.42: GM "✏️ Edit" affordance — only shown when the monster
+           resolves to a local-homebrew source, so the GM lands directly
+           on the editable form in campaign settings. SRD / Open5e
+           monsters don't get the button (use the Clone button there to
+           fork an editable copy first). target=_top so the click breaks
+           out of the 2.3.15 iframe drawer; otherwise the settings page
+           would render inside the drawer and the GM couldn't navigate
+           back to the tabletop without closing the drawer manually. #}
+        {% if edit_homebrew_slug %}
+        <a href="/campaign/{{ campaign.id }}/settings#custom-monster-{{ edit_homebrew_slug }}"
+           target="_top"
+           style="margin-left:10px;color:var(--accent);font-size:12px;text-decoration:none;border:1px solid var(--accent-border);border-radius:4px;padding:2px 8px;background:var(--accent-bg);"
+           title="Open this monster's homebrew editor in campaign settings">✏️ Edit</a>
+        {% endif %}
     </div>
 
     <div id="roll-toast-container"></div>

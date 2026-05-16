@@ -9584,6 +9584,27 @@ def monster_template_sheet_page(
         if (tmpl.template or "dnd5e") == "dnd5e"
         else "sheet_generic.html"
     )
+    # v2.3.42: surface the homebrew slug to the template so it can render
+    # an "✏️ Edit" link in the breadcrumb that bounces the GM to the
+    # campaign-settings homebrew editor (anchored to the right entry).
+    # Only set when (a) the TokenTemplate points to a slug via
+    # ``sheet.monster_slug`` AND (b) the resolver tags the source as
+    # ``local-homebrew`` (not shipped SRD, not Open5e cache) — editing
+    # SRD content through the homebrew editor would silently fork it,
+    # which is what the existing "📋 Clone" button already does
+    # explicitly. ``raw_sheet`` reads the original sheet because
+    # ``_monster_template_to_sheet`` overlays the resolved monster onto
+    # ``sheet`` and the slug pointer survives the overlay too, but
+    # reading from the original keeps the intent obvious.
+    edit_homebrew_slug: Optional[str] = None
+    raw_sheet = tmpl.sheet or {}
+    raw_slug = raw_sheet.get("monster_slug")
+    if raw_slug:
+        resolved = local_content.resolve(
+            str(raw_slug), type="monsters", campaign_id=campaign_id,
+        )
+        if resolved is not None and resolved[1] == "local-homebrew":
+            edit_homebrew_slug = str(raw_slug)
     synthetic = _SyntheticMonsterChar(
         id=template_id,
         name=tmpl.name or "Monster",
@@ -9611,6 +9632,10 @@ def monster_template_sheet_page(
             # (spells, inventory, class/subclass/race features, class
             # resources, notes) that have no meaning for a monster.
             "is_monster_sheet": True,
+            # v2.3.42: homebrew slug for the "✏️ Edit" breadcrumb link;
+            # None for SRD / Open5e monsters or templates without a
+            # monster_slug pointer (those use Clone-then-edit flow).
+            "edit_homebrew_slug": edit_homebrew_slug,
         },
     )
 

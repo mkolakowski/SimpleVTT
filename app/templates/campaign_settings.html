@@ -2131,7 +2131,12 @@
 
     {% if custom_monsters %}
         {% for cm in custom_monsters %}
-        <details class="playlist-card" style="margin-top:14px;">
+        {# v2.3.42: per-monster anchor id so the v2.3.42 monster-sheet
+           "✏️ Edit" button can deep-link to a specific entry. The
+           bottom-of-file JS opens any <details> matching the URL hash
+           on load (and on hashchange), and scrolls it into view, so
+           the GM lands directly on the form they wanted to edit. #}
+        <details class="playlist-card" id="custom-monster-{{ cm.slug }}" style="margin-top:14px;">
             <summary>
                 <span class="pl-chevron">▸</span>
                 <span class="pl-name"><strong>{{ cm.name }}</strong></span>
@@ -3426,6 +3431,25 @@ document.querySelectorAll('.tmpl-card[data-tmpl-id]').forEach(card => {
         if (known[h]) {
             return { tab: h, sub: h === 'homebrew' ? 'classes' : null };
         }
+        // v2.3.42: per-entry deep links from the monster-sheet "✏️ Edit"
+        // button take the form ``#custom-monster-{slug}``. Map those
+        // (and the other five homebrew types, if they ever grow the
+        // same affordance) to the matching homebrew sub-tab. The
+        // _maybeOpenAnchorDetails call after _applySelection handles
+        // expanding the <details> for that slug.
+        const subPrefixes = {
+            'custom-monster-': 'monsters',
+            'custom-class-': 'classes',
+            'custom-subclass-': 'subclasses',
+            'custom-race-': 'races',
+            'custom-background-': 'backgrounds',
+            'custom-feat-': 'feats',
+        };
+        for (const prefix in subPrefixes) {
+            if (h.startsWith(prefix) && h.length > prefix.length) {
+                return { tab: 'homebrew', sub: subPrefixes[prefix] };
+            }
+        }
         // Otherwise see if the hash names a section we know about.
         const sec = h ? _sectionById(h) : null;
         if (sec) {
@@ -3433,6 +3457,27 @@ document.querySelectorAll('.tmpl-card[data-tmpl-id]').forEach(card => {
         }
         // Default landing tab.
         return { tab: 'basic', sub: null };
+    }
+
+    /* v2.3.42: when a deep-link hash names a specific homebrew <details>
+       (e.g. ``#custom-monster-goblin-captain``), open it and scroll it
+       into view. Runs after _applySelection so the section is already
+       visible. The `toggle` event fires once <details> opens, which the
+       existing features_editor.js / spell_picker.js / resources_editor.js
+       lazy-init hook picks up — so the GM lands on a fully-initialised
+       editor without the "click the chevron" extra step. */
+    function _maybeOpenAnchorDetails() {
+        const h = (location.hash || '').replace(/^#/, '');
+        if (!h) return;
+        const el = document.getElementById(h);
+        if (!el || el.tagName !== 'DETAILS') return;
+        if (!el.open) el.open = true;
+        // Defer the scroll one tick so the tab-switch reflow completes
+        // first; otherwise scrollIntoView may target the pre-show layout
+        // and end up off-screen.
+        setTimeout(() => {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 0);
     }
 
     function _updateUrlHash(tab, sub) {
@@ -3474,10 +3519,12 @@ document.querySelectorAll('.tmpl-card[data-tmpl-id]').forEach(card => {
     window.addEventListener('hashchange', () => {
         const { tab, sub } = _resolveFromHash();
         _applySelection(tab, sub);
+        _maybeOpenAnchorDetails();
     });
 
     const { tab, sub } = _resolveFromHash();
     _applySelection(tab, sub);
+    _maybeOpenAnchorDetails();
 })();
 </script>
 

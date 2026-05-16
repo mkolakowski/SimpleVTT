@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.42] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** **✏️ Edit** breadcrumb button on every monster sheet — when the underlying TokenTemplate resolves to a `local-homebrew` monster, the GM gets a one-click bounce to the campaign-settings homebrew editor anchored to that specific monster's `<details>` panel (auto-opens + scrolls into view + lazy-inits the features editor inside). Closes the gap between "look at the stat block" and "edit the stat block" — previously the GM had to navigate to settings → Homebrew tab → Monsters sub-tab → scroll → expand the right card by hand. User-requested.
+**Description:** Three coordinated pieces. (1) `monster_template_sheet_page` in `app/routes/tabletop_routes.py` now reads `tmpl.sheet["monster_slug"]` and runs it through `local_content.resolve`; only when the resolver tags the source as `local-homebrew` does it pass `edit_homebrew_slug=<slug>` into the template context. SRD and Open5e-cached monsters (where editing through the homebrew form would silently fork the source) get None instead — those stay read-only, matching the existing "📋 Clone" button's intentionally explicit fork flow. (2) `monster_page.html` renders the `✏️ Edit` button in the breadcrumb when `edit_homebrew_slug` is set, with `href="/campaign/{cid}/settings#custom-monster-{slug}"` and `target="_top"` so the click breaks out of the v2.3.15 iframe drawer (otherwise the settings page would render inside the drawer with no way back). (3) `campaign_settings.html` adds `id="custom-monster-{slug}"` to each homebrew monster's `<details>` element, extends `_resolveFromHash()` to map `custom-monster-*` / `custom-class-*` / `custom-subclass-*` / `custom-race-*` / `custom-background-*` / `custom-feat-*` prefixes to the matching homebrew sub-tab, and adds `_maybeOpenAnchorDetails()` which opens the matching `<details>` element and `scrollIntoView`s it on initial load and on hashchange. The `<details>` `toggle` event then drives the existing `features_editor.js` / `spell_picker.js` / `resources_editor.js` lazy-init hooks, so the GM lands on a fully-initialised editor with no extra click.
+
+### Added
+- `app/routes/tabletop_routes.py` `monster_template_sheet_page` — `edit_homebrew_slug` template variable, set to `tmpl.sheet["monster_slug"]` when the resolver returns source `local-homebrew`, None otherwise.
+- `app/templates/monster_page.html` — `✏️ Edit` breadcrumb link, gated on `edit_homebrew_slug`. `target="_top"` so the click escapes the v2.3.15 drawer iframe.
+- `app/templates/campaign_settings.html` — `id="custom-monster-{slug}"` on every per-monster `<details>` in the homebrew Monsters sub-tab so the v2.3.42 edit link can deep-link to a single entry.
+- `app/templates/campaign_settings.html` — `_resolveFromHash` recognises the six `custom-{type}-*` per-entry hash prefixes and routes them to the correct sub-tab. Future per-entry deep links to homebrew classes / subclasses / races / backgrounds / feats already work without further template changes (just add the `id="..."` to those `<details>` and a 📋 link in the relevant read-only view).
+- `app/templates/campaign_settings.html` — `_maybeOpenAnchorDetails()` opens the matching `<details>` element on initial load and on hashchange, then `scrollIntoView` so the GM lands on the form they wanted. The existing `toggle`-event lazy-init in `features_editor.js` picks up the open and initialises the row-based editor.
+
+### Notes
+- The edit button does not appear on SRD-imported monsters (e.g. a TokenTemplate created via the Open5e search) — those have no `monster_slug` pointer to a `local-homebrew` source, and editing the TokenTemplate's frozen-copy sheet would diverge from the SRD source rather than create a proper homebrew override. The Clone button on the homebrew tab is the right tool there (creates a homebrew copy first, then editable).
+- The button is GM-only because the entire monster sheet page is GM-only — the route check at the top of `monster_template_sheet_page` rejects non-GMs with 403 before any rendering happens.
+- The new `_maybeOpenAnchorDetails` only opens `<details>` elements (not the older `.settings-section` sections, which already auto-show via `_applySelection`). This keeps the section-name CRUD redirect behaviour (`…/settings#custom-monsters` → opens the Monsters sub-tab) unchanged.
+- The demo's four NPC monsters (Bandit Captain, Bandit, Thug, Goblin Captain Grixxa) are all homebrew — clicking 📋 Sheet on any of them in the init tracker, then ✏️ Edit, lands the GM directly on the form for that monster.
+
+---
+
 ## [2.3.41] - 2026-05-16
 
 **Schema version:** 52
