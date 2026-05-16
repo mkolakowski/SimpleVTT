@@ -1786,9 +1786,14 @@
                         <button type="submit">Save changes</button>
                     </div>
                 </form>
+                {# v2.3.37: Clone button — see custom-monsters Clone for the pattern. #}
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-classes/{{ cc.slug }}/clone"
+                      style="display:inline-block;margin-top:12px;margin-right:8px;">
+                    <button type="submit" title="Create an editable copy of this class in the campaign's homebrew scope">📋 Clone</button>
+                </form>
                 <form method="post" action="/campaign/{{ campaign.id }}/custom-classes/{{ cc.slug }}/delete"
                       onsubmit="return confirm('Delete homebrew class &quot;{{ cc.name }}&quot;? Character sheets that reference its slug will fall back to the built-in SRD content of the same slug (if any).')"
-                      style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
+                      style="display:inline-block;margin-top:12px;">
                     <button type="submit" class="danger">Delete this class</button>
                 </form>
             </div>
@@ -1922,9 +1927,17 @@
                         <button type="submit">Save changes</button>
                     </div>
                 </form>
+                {# v2.3.37: Clone button — subclass slug stays namespaced
+                   under its parent class so the clone is a sibling, not
+                   a flat root entry. See clone_custom_subclass in
+                   tabletop_routes.py. #}
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-subclasses/{{ cs.combined_slug }}/clone"
+                      style="display:inline-block;margin-top:12px;margin-right:8px;">
+                    <button type="submit" title="Create an editable copy of this subclass under the same parent class">📋 Clone</button>
+                </form>
                 <form method="post" action="/campaign/{{ campaign.id }}/custom-subclasses/{{ cs.combined_slug }}/delete"
                       onsubmit="return confirm('Delete homebrew subclass &quot;{{ cs.name }}&quot;? Character sheets that reference its slug will fall back to the built-in SRD content of the same slug (if any), or render empty features.')"
-                      style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
+                      style="display:inline-block;margin-top:12px;">
                     <button type="submit" class="danger">Delete this subclass</button>
                 </form>
             </div>
@@ -2032,9 +2045,14 @@
                         <button type="submit">Save changes</button>
                     </div>
                 </form>
+                {# v2.3.37: Clone button — see custom-monsters Clone for the pattern. #}
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-races/{{ cr.slug }}/clone"
+                      style="display:inline-block;margin-top:12px;margin-right:8px;">
+                    <button type="submit" title="Create an editable copy of this race in the campaign's homebrew scope">📋 Clone</button>
+                </form>
                 <form method="post" action="/campaign/{{ campaign.id }}/custom-races/{{ cr.slug }}/delete"
                       onsubmit="return confirm('Delete homebrew race &quot;{{ cr.name }}&quot;? Character sheets that reference its slug will fall back to the SRD race of the same slug (if any), or render empty.')"
-                      style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
+                      style="display:inline-block;margin-top:12px;">
                     <button type="submit" class="danger">Delete this race</button>
                 </form>
             </div>
@@ -2209,9 +2227,17 @@
                         <button type="submit">Save changes</button>
                     </div>
                 </form>
+                {# v2.3.37: Clone button — duplicates the homebrew JSON as
+                   "Copy of {name}" with a fresh ``copy-of-{slug}`` slug
+                   and bounces back to the homebrew tab so the GM can
+                   expand the new entry and tweak it. #}
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-monsters/{{ cm.slug }}/clone"
+                      style="display:inline-block;margin-top:12px;margin-right:8px;">
+                    <button type="submit" title="Create an editable copy of this monster in the campaign's homebrew scope">📋 Clone</button>
+                </form>
                 <form method="post" action="/campaign/{{ campaign.id }}/custom-monsters/{{ cm.slug }}/delete"
                       onsubmit="return confirm('Delete homebrew monster &quot;{{ cm.name }}&quot;? Token templates and beast favorites that reference its slug will lose the link.')"
-                      style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
+                      style="display:inline-block;margin-top:12px;">
                     <button type="submit" class="danger">Delete this monster</button>
                 </form>
             </div>
@@ -2354,9 +2380,14 @@
                         <button type="submit">Save changes</button>
                     </div>
                 </form>
+                {# v2.3.37: Clone button — see custom-monsters Clone above for the pattern. #}
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-backgrounds/{{ cb.slug }}/clone"
+                      style="display:inline-block;margin-top:12px;margin-right:8px;">
+                    <button type="submit" title="Create an editable copy of this background in the campaign's homebrew scope">📋 Clone</button>
+                </form>
                 <form method="post" action="/campaign/{{ campaign.id }}/custom-backgrounds/{{ cb.slug }}/delete"
                       onsubmit="return confirm('Delete homebrew background &quot;{{ cb.name }}&quot;?')"
-                      style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
+                      style="display:inline-block;margin-top:12px;">
                     <button type="submit" class="danger">Delete this background</button>
                 </form>
             </div>
@@ -2421,9 +2452,14 @@
                         <button type="submit">Save changes</button>
                     </div>
                 </form>
+                {# v2.3.37: Clone button — see custom-monsters Clone above for the pattern. #}
+                <form method="post" action="/campaign/{{ campaign.id }}/custom-feats/{{ cf.slug }}/clone"
+                      style="display:inline-block;margin-top:12px;margin-right:8px;">
+                    <button type="submit" title="Create an editable copy of this feat in the campaign's homebrew scope">📋 Clone</button>
+                </form>
                 <form method="post" action="/campaign/{{ campaign.id }}/custom-feats/{{ cf.slug }}/delete"
                       onsubmit="return confirm('Delete homebrew feat &quot;{{ cf.name }}&quot;?')"
-                      style="margin-top:12px;padding-top:12px;border-top:1px solid #2e3140;">
+                      style="display:inline-block;margin-top:12px;">
                     <button type="submit" class="danger">Delete this feat</button>
                 </form>
             </div>

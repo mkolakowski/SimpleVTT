@@ -2413,6 +2413,213 @@ def delete_custom_feat(
     )
 
 
+# ── Homebrew clone (v2.3.37) ────────────────────────────────────────────────
+# One generic helper + six thin route handlers. Each handler accepts the
+# type-specific URL contract (``feat_slug`` / ``bg_slug`` / ``monster_slug``
+# / ``race_slug`` / ``class_slug`` / ``combined_slug`` for subclasses) and
+# delegates the actual clone work to ``_clone_homebrew_record`` which
+# handles the source lookup, slug-collision-safe new slug generation, name
+# rewrite (``"Copy of <original>"``), and disk write. Each redirects back
+# to ``/campaign/{cid}/settings#custom-{type}`` so the GM sees the newly-
+# cloned entry in the homebrew list and can expand its editor inline. No
+# clone for shipped SRD content — only ``local-homebrew`` source records
+# can be cloned (the resolver source check guards against accidentally
+# forking SRD into homebrew).
+
+
+def _unique_clone_slug(base: str, content_type: str, campaign_id: int) -> str:
+    """Build a fresh, collision-safe homebrew slug for a clone.
+
+    Starts with ``copy-of-{base}`` (after re-slugifying — handles base slugs
+    that themselves came from "Copy of Copy of …" deep clones). If that
+    collides with an existing homebrew record in the campaign scope, appends
+    ``-2``, ``-3``, … until the resolver returns no hit. Bounded loop —
+    we'll never realistically iterate past a few attempts, but cap at 50
+    to be safe.
+    """
+    base = _slugify_for_subclass(base, max_len=60) or "clone"
+    candidate = _slugify_for_subclass(f"copy-of-{base}", max_len=80) or "copy"
+    suffix = 1
+    while suffix < 50:
+        hit = local_content.resolve(
+            candidate, type=content_type, campaign_id=campaign_id,
+        )
+        if not hit:
+            return candidate
+        suffix += 1
+        candidate = _slugify_for_subclass(f"copy-of-{base}-{suffix}", max_len=80)
+    raise HTTPException(500, "Could not generate a unique clone slug")
+
+
+def _clone_homebrew_record(
+    *,
+    campaign_id: int,
+    user: User,
+    db: Session,
+    src_slug: str,
+    content_type: str,
+    target_slug: Optional[str] = None,
+) -> str:
+    """Read a homebrew source record, write a clone with a fresh slug + a
+    'Copy of …' name. Returns the new slug. Raises 404 if the source
+    isn't a campaign-scope homebrew (won't clone shipped SRD content)
+    and 403 if the caller isn't the GM.
+
+    ``target_slug`` lets the subclass clone path supply a fully-qualified
+    ``{class_slug}-{subclass_slug}`` instead of letting the helper pick
+    a flat ``copy-of-{slug}`` — subclass slugs MUST stay namespaced by
+    their parent class so the resolver can route lookups correctly.
+    """
+    _require_gm_for_campaign(campaign_id, user, db)
+    hit = local_content.resolve(src_slug, type=content_type, campaign_id=campaign_id)
+    if not hit or hit[1] != "local-homebrew":
+        raise HTTPException(404, "Source homebrew record not found")
+    source, _ = hit
+    new_slug = target_slug or _unique_clone_slug(
+        src_slug, content_type, campaign_id,
+    )
+    new_name = f"Copy of {source.get('name') or src_slug}"
+    new_record = {
+        **source,
+        "slug": new_slug,
+        "name": new_name[:200],
+        "scope": f"campaign-{campaign_id}",
+        "source": "homebrew",
+    }
+    try:
+        local_content.write_homebrew(
+            new_record, type=content_type, scope=f"campaign-{campaign_id}",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return new_slug
+
+
+@router.post("/campaign/{campaign_id}/custom-feats/{feat_slug}/clone")
+def clone_custom_feat(
+    campaign_id: int, feat_slug: str,
+    db: Session = Depends(get_db), user: User = Depends(require_user),
+):
+    _clone_homebrew_record(
+        campaign_id=campaign_id, user=user, db=db,
+        src_slug=feat_slug, content_type="feats",
+    )
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-feats", status_code=303,
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-backgrounds/{bg_slug}/clone")
+def clone_custom_background(
+    campaign_id: int, bg_slug: str,
+    db: Session = Depends(get_db), user: User = Depends(require_user),
+):
+    _clone_homebrew_record(
+        campaign_id=campaign_id, user=user, db=db,
+        src_slug=bg_slug, content_type="backgrounds",
+    )
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-backgrounds", status_code=303,
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-races/{race_slug}/clone")
+def clone_custom_race(
+    campaign_id: int, race_slug: str,
+    db: Session = Depends(get_db), user: User = Depends(require_user),
+):
+    _clone_homebrew_record(
+        campaign_id=campaign_id, user=user, db=db,
+        src_slug=race_slug, content_type="races",
+    )
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-races", status_code=303,
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-monsters/{monster_slug}/clone")
+def clone_custom_monster(
+    campaign_id: int, monster_slug: str,
+    db: Session = Depends(get_db), user: User = Depends(require_user),
+):
+    _clone_homebrew_record(
+        campaign_id=campaign_id, user=user, db=db,
+        src_slug=monster_slug, content_type="monsters",
+    )
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-monsters", status_code=303,
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-classes/{class_slug}/clone")
+def clone_custom_class(
+    campaign_id: int, class_slug: str,
+    db: Session = Depends(get_db), user: User = Depends(require_user),
+):
+    _clone_homebrew_record(
+        campaign_id=campaign_id, user=user, db=db,
+        src_slug=class_slug, content_type="class_features",
+    )
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-classes", status_code=303,
+    )
+
+
+@router.post("/campaign/{campaign_id}/custom-subclasses/{combined_slug}/clone")
+def clone_custom_subclass(
+    campaign_id: int, combined_slug: str,
+    db: Session = Depends(get_db), user: User = Depends(require_user),
+):
+    """Subclass slugs are ``{class_slug}-{subclass_slug}`` to keep them
+    namespaced by parent class. Preserve the class prefix; only mutate
+    the subclass part so the clone stays a sibling of its parent class.
+    Falls back to letting ``_unique_clone_slug`` pick a flat name when
+    the source slug doesn't contain a recognizable class prefix."""
+    _require_gm_for_campaign(campaign_id, user, db)
+    hit = local_content.resolve(
+        combined_slug, type="subclass_features", campaign_id=campaign_id,
+    )
+    if not hit or hit[1] != "local-homebrew":
+        raise HTTPException(404, "Source homebrew subclass not found")
+    source, _ = hit
+    cls_slug = (source.get("class_slug") or "").strip()
+    sub_slug = (source.get("slug") or combined_slug).strip()
+    # Strip the class prefix from the combined slug to extract just the
+    # subclass portion, then re-prefix with ``copy-of-`` so the result
+    # stays under the same parent class. ``copy-of-...`` instead of
+    # ``...-copy`` matches the flat clones' convention.
+    if cls_slug and sub_slug.startswith(cls_slug + "-"):
+        bare_sub = sub_slug[len(cls_slug) + 1:]
+    else:
+        bare_sub = sub_slug
+    target_slug = None
+    if cls_slug and bare_sub:
+        candidate = _slugify_for_subclass(
+            f"{cls_slug}-copy-of-{bare_sub}", max_len=80,
+        )
+        # Collision check — append numeric suffix if needed.
+        suffix = 1
+        while suffix < 50:
+            hit = local_content.resolve(
+                candidate, type="subclass_features", campaign_id=campaign_id,
+            )
+            if not hit:
+                target_slug = candidate
+                break
+            suffix += 1
+            candidate = _slugify_for_subclass(
+                f"{cls_slug}-copy-of-{bare_sub}-{suffix}", max_len=80,
+            )
+    _clone_homebrew_record(
+        campaign_id=campaign_id, user=user, db=db,
+        src_slug=combined_slug, content_type="subclass_features",
+        target_slug=target_slug,
+    )
+    return RedirectResponse(
+        f"/campaign/{campaign_id}/settings#custom-subclasses", status_code=303,
+    )
+
+
 # ── Homebrew import / export / template ─────────────────────────────────────
 #
 # Bulk JSON I/O for every homebrew content type in one combined file. The

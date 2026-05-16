@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.37] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Homebrew **📋 Clone** button on every entry in campaign settings — feats, backgrounds, races, monsters, classes, and subclasses. Closes [`TODO.md`](TODO.md) → GM Tools → Homebrew Clone. Lets GMs spin off variants ("Grixxa" → "Veteran Goblin Captain", "Bandit" → "Wounded Bandit") without retyping every field.
+**Description:** One generic helper `_clone_homebrew_record(*, src_slug, content_type, target_slug=None)` in `app/routes/tabletop_routes.py`: GM-permission-check, resolve source via `local_content.resolve`, guard that source is `local-homebrew` (not shipped SRD), `_unique_clone_slug` to pick a `copy-of-{slug}` that doesn't collide, build new record with `name = "Copy of {original}"`, write via `local_content.write_homebrew`. Six thin POST endpoints — `/campaign/{cid}/custom-{feats|backgrounds|races|monsters|classes|subclasses}/{slug}/clone` — call the helper and redirect to the relevant `#custom-{type}` anchor on the settings page so the new entry shows in the list ready to edit. Subclasses get special handling because their slug is `{class_slug}-{subclass_slug}`: a dedicated route extracts the class prefix from the source slug and re-prefixes the clone as `{class_slug}-copy-of-{bare_sub}` so the clone stays a sibling under the same parent class instead of becoming a flat `copy-of-{combined}` root entry that the resolver couldn't route correctly. Template gets a 📋 Clone form alongside each existing Delete form (one per type, six places), styled inline-block + side-by-side so the row layout stays tight. No clone for shipped SRD content — `_clone_homebrew_record` rejects with 404 unless the resolver returned `source == "local-homebrew"`.
+
+### Added
+- `app/routes/tabletop_routes.py` `_unique_clone_slug(base, content_type, campaign_id)` — collision-safe `copy-of-{slug}` generator, appends `-2`/`-3`/… up to 50 attempts before giving up with a 500.
+- `app/routes/tabletop_routes.py` `_clone_homebrew_record(*, …)` — generic helper used by all six clone routes. GM-only via `_require_gm_for_campaign`; SRD source rejected via the resolver's source label check.
+- Six new POST routes: `clone_custom_feat` / `clone_custom_background` / `clone_custom_race` / `clone_custom_monster` / `clone_custom_class` / `clone_custom_subclass` (subclass route handles the namespaced-slug case before delegating).
+- Six 📋 Clone forms in `app/templates/campaign_settings.html`, one per homebrew type, rendered inline-block next to the existing Delete form. Tooltip on each clarifies the destination scope.
+
+### Notes
+- Demo usage: a GM exploring the demo can clone Grixxa (Goblin Captain) → "Copy of Goblin Captain" with slug `copy-of-goblin-captain`, then edit name + HP + actions to make a Veteran variant — proves the editor + clone end-to-end with no SRD lookup needed.
+- The clone preserves all source fields verbatim (`{**source, slug: new, name: new}`) so structured action lists, custom stat blocks, prerequisites, descs, etc. all carry over. Only `slug`, `name`, `scope`, and `source` are rewritten.
+- The collision-safe slug starts at `copy-of-{slug}` and bumps to `copy-of-{slug}-2`, `copy-of-{slug}-3`, … on conflict; this lets the GM clone the same source multiple times without manual disambiguation.
+- Shipped SRD content (e.g. `app/data/local/dnd5e/monsters/bandit-captain.json`) can't be cloned through this flow — by design. To fork SRD into homebrew, the GM uses the existing "Import" flow which creates a fresh homebrew record from an Open5e search. A "Fork SRD" button is a separate follow-up if there's demand.
+
+---
+
 ## [2.3.36] - 2026-05-16
 
 **Schema version:** 52
