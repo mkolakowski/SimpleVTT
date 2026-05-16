@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.24] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Revert the 2.3.23 debug overlay — collapsibles started working again after the 2.3.23 deploy (most likely a stale browser-cached version of an older JS asset; the new build invalidated the cache). Removes the production noise.
+**Description:** User reported the collapsibles regression fixed itself after the 2.3.23 debug deploy went out. The diagnostic overlay never reported a bad call site (because there wasn't one to catch) — the symptom was almost certainly a half-loaded asset bundle from the cache where, e.g., the partial-extracted markup was new but the consuming JS was old (or vice versa) and event handlers didn't bind to the right elements. A hard reload after the cache update fixed it; the same fix would have applied without the debug commit, but the debug deploy forced an asset rotation that cleared the issue.
+
+### Removed
+- `app/templates/tabletop.html` — TEMP diagnostic IIFE (monkey-patched `DOMTokenList` + `Element.prototype.classList`, fixed bottom-right overlay logging `.open` mutations and click targets). The patching added small overhead to every `.classList` access; reverting restores native performance.
+
+### Notes
+- The previous monster-sheet work (2.3.7–2.3.22) stays intact. The unified monster mini-sheet, drawer, structured attack rolls, and enriched demo Goblin Captain all keep functioning.
+- If the regression returns in the future, re-deploy the 2.3.23 commit (or cherry-pick the diagnostic IIFE back in) and the call-site overlay will surface the bad call.
+
+---
+
 ## [2.3.23] - 2026-05-16
 
 **Schema version:** 52
