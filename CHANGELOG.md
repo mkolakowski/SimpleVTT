@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.2.2] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Fix mini-sheet skill / ability click on the tabletop sidebar so it respects the *target character's* roll_state (advantage/disadvantage pill), not the rolling user's. Particularly affected GMs clicking a player's skill: the server was falling back to the GM's own character lookup and silently dropping the player's pill state.
+**Description:** 2.2.0's server-side adv/dis upgrade resolves the rolling character via the optional `character_id` body field, falling back to the rolling user's first character in the campaign when omitted. The mini-sheet click handler in `tabletop.html` (skill buttons and ability roll buttons) wasn't passing `character_id`, so for a GM clicking a player's mini-sheet, the lookup found the GM's own character (or nothing) and used *that* roll_state — making the player's pill appear broken. Threads `character_id` through the payload by walking up the DOM to the nearest `[data-char-id]` ancestor (works in both the Characters panel `.char-detail` wrappers and the Initiative Tracker's stolen `.mini-body` where the parent becomes `.init-entry`).
+
+### Fixed
+- `app/templates/tabletop.html` — the `players-drawer` click delegation for `.mini-roll-btn` / `.mini-sk-btn` now includes `character_id` in the `/roll` POST payload. Resolves the character by walking up to the nearest `[data-char-id]` ancestor so the rolled character's roll_state pill is honoured regardless of whether the GM or the player is doing the rolling.
+
+---
+
 ## [2.2.1] - 2026-05-15
 
 **Schema version:** 52

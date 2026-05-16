@@ -2757,7 +2757,12 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             });
         });
 
-        /* Mini-sheet roll buttons (abilities) and skill buttons — post directly to the roll API */
+        /* Mini-sheet roll buttons (abilities) and skill buttons — post directly to the roll API.
+           v2.2.2: include the rolled character's id in the payload so the
+           server applies *that* character's roll_state, not the rolling
+           user's. Without this, a GM clicking a skill on a player's
+           mini-sheet would have the server fall back to the GM's own
+           character — silently dropping the player's adv/dis pill. */
         document.getElementById('players-drawer').addEventListener('click', async (ev) => {
             const btn = ev.target.closest('.mini-roll-btn, .mini-sk-btn');
             if (!btn) return;
@@ -2766,12 +2771,21 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (!expr) return;
             const visEl = document.getElementById('roll-vis');
             const visibility = visEl ? visEl.value : 'public';
+            // Walk up to find the character this mini-sheet belongs to. The
+            // .char-detail wrapper, .mini-ab-grid, and .init-entry (when the
+            // mini-body has been stolen into the init tracker) all carry
+            // data-char-id, so closest('[data-char-id]') resolves the right
+            // character whichever surface the click happens on.
+            const charEl = btn.closest('[data-char-id]');
+            const charId = charEl ? parseInt(charEl.dataset.charId, 10) : null;
             btn.disabled = true;
             try {
+                const body = { expression: expr, visibility, note };
+                if (charId) body.character_id = charId;
                 const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ expression: expr, visibility, note }),
+                    body: JSON.stringify(body),
                 });
                 if (!resp.ok) alert('Roll failed: ' + await resp.text());
             } finally {
