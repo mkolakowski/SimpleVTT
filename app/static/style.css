@@ -259,6 +259,10 @@ button.danger { background: var(--danger); color: #fff; border-color: var(--dang
 }
 .topnav nav a, .topnav .user { margin-left: 12px; }
 .topnav .brand { font-weight: 700; font-size: 18px; }
+/* v2.3.29: version chip rendered inline next to the SimpleVTT brand so
+   the tabletop view (which suppresses the footer) still shows the
+   build version. Muted so it doesn't compete with the brand text. */
+.topnav .brand-version { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--fg-mute); }
 
 .container { padding: 16px; flex: 1; min-height: 0; overflow: auto; }
 

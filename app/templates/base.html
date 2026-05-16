@@ -55,7 +55,7 @@
     </script>
     {% include "_demo_banner.html" %}
     <header class="topnav">
-        <a href="/" class="brand">SimpleVTT</a>
+        <a href="/" class="brand">SimpleVTT<span class="brand-version" title="App version v{{ APP_VERSION }} · schema v{{ SCHEMA_VERSION }}">· v{{ APP_VERSION }}</span></a>
         <nav>
             {% if user %}
                 <span class="user">{{ user.display_name }}{% if user.is_admin %} <em>(admin)</em>{% endif %}</span>

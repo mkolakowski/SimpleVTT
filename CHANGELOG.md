@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.29] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Two user-requested UX tweaks. (1) Logged-in users who hit a non-existent page now get a `303 → /` instead of the JSON `{"detail":"Not Found"}` or browser-default 404. Anonymous 404s stay as-is so they don't leak page existence by branching per auth state. (2) Small muted version chip (`· v2.3.29`) rendered next to the SimpleVTT brand in the topnav so the tabletop view — which blanks the footer to reclaim vertical space — still surfaces the running version.
+**Description:** Extends the 2.3.28 `_auth_redirect_handler` in `app/main.py` to also catch 404 when the caller wants HTML AND the session carries a `user_id` (peeked from `request.session.get("user_id")` directly — no DB round-trip needed, since we only need "is anyone logged in" not the full User row). Returns `RedirectResponse("/", 303)`. 401 handling for `"Login required"` is unchanged. JSON / fetch callers (which always send `Accept: application/json`) and anonymous HTML callers fall through to Starlette's default handler. Version chip is a `<span class="brand-version">· v{APP_VERSION}</span>` appended inside the brand `<a>` so it inherits the link semantics; CSS rule in `style.css` sets it to 11px / `--fg-mute` so it doesn't compete visually with the brand. `title` attribute carries the schema version so hovering the brand surfaces both pieces.
+
+### Added
+- `app/main.py` `_auth_redirect_handler` — 404 branch. Logged-in HTML callers redirect to `/`; everything else delegates to `http_exception_handler` (Starlette's default).
+- `app/templates/base.html` — `<span class="brand-version">· v{{ APP_VERSION }}</span>` inside the brand `<a>` in the topnav. Title attribute exposes app version + schema version on hover.
+- `app/static/style.css` — `.topnav .brand-version` rule (11px, muted, 6px left margin) so the version chip sits compactly next to the brand without competing for visual weight.
+
+### Notes
+- Anonymous 404s deliberately keep the default behavior so the app doesn't leak page existence: an anonymous request to `/campaign/999` and `/some-truly-bad-url` both return the same generic 404, regardless of whether the campaign exists.
+- The chip lives in the global topnav (every page), not just the tabletop. The tabletop is the one place that *needed* it because it blanks the footer, but adding it globally is consistent and cheap. The footer still shows the long-form version line on every other page.
+
+---
+
 ## [2.3.28] - 2026-05-16
 
 **Schema version:** 52

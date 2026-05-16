@@ -59,18 +59,38 @@ app.include_router(user_routes.router)
 # client-side fetch interceptor in ``base.html`` handles them by
 # navigating to ``/login`` from JS. Other HTTPExceptions delegate to
 # Starlette's default handler.
+#
+# v2.3.29: same handler also catches 404 — for logged-in HTML callers,
+# redirect to ``/`` (the home / lobby) instead of showing a bare
+# "Not found" JSON or browser-default 404 page. Unauthenticated 404s
+# still fall through to the default handler (so they don't leak that a
+# specific URL exists by behaving differently per auth state — they
+# just see the same generic JSON).
 @app.exception_handler(HTTPException)
 async def _auth_redirect_handler(request: Request, exc: HTTPException):
-    if exc.status_code == 401 and exc.detail == "Login required":
-        accept = (request.headers.get("accept") or "").lower()
-        wants_html = "text/html" in accept and "application/json" not in accept
-        if wants_html:
-            next_path = request.url.path
-            if request.url.query:
-                next_path += "?" + request.url.query
-            return RedirectResponse(
-                f"/login?next={next_path}", status_code=303,
-            )
+    accept = (request.headers.get("accept") or "").lower()
+    wants_html = "text/html" in accept and "application/json" not in accept
+
+    if exc.status_code == 401 and exc.detail == "Login required" and wants_html:
+        next_path = request.url.path
+        if request.url.query:
+            next_path += "?" + request.url.query
+        return RedirectResponse(
+            f"/login?next={next_path}", status_code=303,
+        )
+
+    if exc.status_code == 404 and wants_html:
+        # Session middleware exposes the session dict on request.session.
+        # Peek for ``user_id`` (set by ``login_user`` in app/auth.py)
+        # without a DB round-trip — we don't need the User row, just
+        # "is anyone logged in here".
+        try:
+            user_id = request.session.get("user_id")
+        except (AttributeError, AssertionError):
+            user_id = None
+        if user_id:
+            return RedirectResponse("/", status_code=303)
+
     return await http_exception_handler(request, exc)
 
 
