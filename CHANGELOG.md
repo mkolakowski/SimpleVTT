@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.2] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Fix demo-mode env vars never reaching the `app` container — `docker-compose.yml` and `docker-compose.ghcr.yml` enumerate the env vars they forward, and the four `DEMO_*` vars added in 2.3.0 were omitted from that list, so `DEMO_MODE=true` in `.env` had no effect inside the container.
+**Description:** Reported on https://vtt-demo.iptater.net: `DEMO_MODE=true` and `DEMO_CREDENTIALS_VISIBLE=true` in `.env`, but the login page renders no banner and no credentials box. Both compose files declare `environment:` as an explicit allow-list rather than `env_file:`, so any var not listed there is simply not visible to the container. `app/config.py` then reads `os.environ.get("DEMO_MODE")`, gets `None`, falls back to `False`, and the Jinja globals (`DEMO_MODE`, `DEMO_CREDENTIALS_VISIBLE`) wired in `app/templates.py` evaluate to `False` for every render — gating off both the `_demo_banner.html` include in `base.html` and the `{% if DEMO_MODE and DEMO_CREDENTIALS_VISIBLE %}` block in `login.html`. Fix is mechanical: add the four `DEMO_*` keys to the `app` service's `environment:` block in both compose files, with `${VAR:-default}` fallbacks matching `.env.example`.
+
+### Fixed
+- `docker-compose.yml` — forward `DEMO_MODE`, `DEMO_RESET_INTERVAL_MINUTES`, `DEMO_RESET_ON_BOOT`, `DEMO_CREDENTIALS_VISIBLE` from `.env` into the `app` container.
+- `docker-compose.ghcr.yml` — same four `DEMO_*` vars added to the `app` service.
+
+### Notes
+- After pulling this fix, redeploy with `docker compose up -d --force-recreate app` (or the `ghcr.yml` equivalent) — env-var changes only take effect on container recreation, not a plain `restart`.
+- `APP_DEFAULT_THEME` is similarly missing from both compose files (a separate pre-existing bug — the live site renders `data-theme="dark"` regardless of the value in `.env`). Not fixed here to keep this commit scoped to the reported demo issue; tracked as a follow-up.
+
+---
+
 ## [2.3.1] - 2026-05-16
 
 **Schema version:** 52
