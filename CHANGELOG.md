@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.23] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** **TEMP DEBUG** — adds a fixed bottom-right overlay on the tabletop that captures clicks on mini-headers / init-entries and every add/remove/toggle of the `open` class on any element, with the calling stack frame, so we can diagnose a regression reported by the user where "all collapsibles briefly expand then instantly close." Static-code analysis isolated nothing — every handler returns early on non-matching targets and the partial extraction was verified byte-equivalent — so this commit moves diagnosis to runtime.
+**Description:** The user reports that opening any PC mini-sheet or monster mini-sheet in the tabletop (Characters drawer header click, init-tracker row expand) starts to expand and then instantly collapses. Static analysis of every document-level click handler I added in 2.3.18 / 2.3.20 / 2.3.21 confirms each early-returns on non-matching selectors. The partial extraction in 2.3.16 was confirmed byte-equivalent. So the cause must be a runtime interaction not visible in source. This commit installs a temp diagnostic: monkey-patches `DOMTokenList.prototype.{add,remove,toggle}` so any `'open'` class mutation logs `{element-token, caller}` to a fixed overlay; a capture-phase click listener also logs the click target. The user can click the offending header and screenshot the overlay; the sequence will identify which call site is removing `.open` mid-click. Self-removes via the ⊗ button when no longer needed.
+
+### Added
+- `app/templates/tabletop.html` top-of-script TEMP diagnostic IIFE. Patches `Element.prototype.classList` to back-reference the owning element so the patched `DOMTokenList` methods can identify which element is being mutated. Logs into a fixed overlay (`#__open_class_debug`-style) with caller stack-line truncation. To be removed in the next commit once the bug is diagnosed.
+
+### Notes
+- This commit deliberately ships a debug script to production. The monkey-patching of `Element.prototype.classList` and `DOMTokenList.prototype` has measurable overhead — every `.classList.add('whatever')` call goes through the wrapper — but the cost is small on a single page-load and the alternative (asking a non-technical user to navigate browser devtools) was worse. Revert in the next commit once the bug is fixed.
+
+---
+
 ## [2.3.22] - 2026-05-16
 
 **Schema version:** 52
