@@ -493,6 +493,16 @@
     .monster-strike-btn { background: rgba(167,139,250,.10); border: 1px solid rgba(167,139,250,.4); color: #a78bfa; border-radius: 3px; padding: 2px 7px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; line-height: 1.4; min-height: 32px; }
     .monster-strike-btn:hover { background: rgba(167,139,250,.22); }
     .monster-strike-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    /* v2.3.40: per-combatant charge counter for limited-use monster actions
+       (Recharge / X-per-day). The pill mirrors the existing damage/save
+       chips beside the action name; ``.spent`` dims it to amber to match
+       the disabled strike-button state. ``.monster-charge-reset`` is the
+       ↻ button; sized to the 32px dense-panel floor per CLAUDE.md. */
+    .monster-action-charges { font-size: 10px; font-weight: 700; color: #a7e0c9; background: rgba(167,224,201,.10); border: 1px solid rgba(167,224,201,.35); border-radius: 3px; padding: 1px 6px; line-height: 1.4; }
+    .monster-action-charges.spent { color: #f5b56b; background: rgba(245,181,107,.10); border-color: rgba(245,181,107,.35); }
+    .monster-charge-reset { background: rgba(167,224,201,.10); border: 1px solid rgba(167,224,201,.35); color: #a7e0c9; border-radius: 3px; padding: 0 8px; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0; line-height: 1; min-height: 32px; min-width: 32px; }
+    .monster-charge-reset:hover { background: rgba(167,224,201,.22); }
+    .monster-charge-reset:disabled { opacity: 0.4; cursor: not-allowed; }
     /* Roll-toast styles moved to app/static/style.css (1.11.0) so the
        character-sheet pages share the same popup via roll_toast.js. */
 
@@ -3301,58 +3311,92 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         // editor output) when present; fall back to the regex-derived
         // ``attacks`` list from SRD imports. Both produce the same per-row
         // shape consumed by the click handler below.
+        // v2.3.40: ``id`` and ``charges_max`` pass through so the strike
+        // handler can key per-combatant charge state and the rendered
+        // counter / disabled-button logic below can read it.
         const fromActions = Array.isArray(sh.actions)
             ? sh.actions.filter(a => a && (a.attack_roll || a.damage || a.save_ability))
                   .map(a => ({
+                      id: a.id || (a.name || 'action').toLowerCase().replace(/\s+/g, '-'),
                       name: a.name || 'Action',
                       attack_bonus: a.attack_bonus || '',
                       damage: a.damage || '',
                       damage_type: a.damage_type || '',
                       save_ability: (a.save_ability || '').toUpperCase(),
                       save_dc: a.save_dc || 0,
+                      charges_max: parseInt(a.charges_max) || 0,
                       attack_roll: !!a.attack_roll,
                   }))
             : [];
         const fromAttacks = (!fromActions.length && Array.isArray(sh.attacks))
             ? sh.attacks.filter(a => a && (a.attack_bonus || a.atk_bonus || a.bonus || a.damage || a.save_ability))
                   .map(a => ({
+                      id: a.id || (a.name || 'attack').toLowerCase().replace(/\s+/g, '-'),
                       name: a.name || 'Attack',
                       attack_bonus: a.attack_bonus || a.atk_bonus || a.bonus || '',
                       damage: a.damage || '',
                       damage_type: a.damage_type || '',
                       save_ability: (a.save_ability || '').toUpperCase(),
                       save_dc: parseInt(a.save_dc) || 0,
+                      charges_max: parseInt(a.charges_max) || 0,
                       attack_roll: !!(a.attack_bonus || a.atk_bonus || a.bonus) && !(a.save_dc && a.save_ability),
                   }))
             : [];
         const actions = fromActions.length ? fromActions : fromAttacks;
+        // v2.3.40: per-combatant charges state. Defaults each action with
+        // ``charges_max > 0`` to a fresh full bar on first render, then
+        // the strike handler decrements + saves. State lives in
+        // ``battle.combatants[i].action_charges[action.id]`` so it
+        // persists across re-renders and survives a localStorage round-
+        // trip.
+        if (!combatant.action_charges || typeof combatant.action_charges !== 'object') {
+            combatant.action_charges = {};
+        }
+        actions.forEach(a => {
+            if (a.charges_max > 0 && combatant.action_charges[a.id] == null) {
+                combatant.action_charges[a.id] = a.charges_max;
+            }
+        });
         if (actions.length) {
             html += '<div style="font-size:9px;font-weight:700;color:var(--fg-mute);text-transform:uppercase;letter-spacing:0.5px;margin:8px 0 4px;">Actions</div>';
             html += '<div class="monster-init-actions" style="display:flex;flex-direction:column;gap:4px;">';
             actions.forEach((a) => {
+                const charges_cur = (a.charges_max > 0)
+                    ? (combatant.action_charges[a.id] ?? a.charges_max) : null;
+                const spent = a.charges_max > 0 && charges_cur <= 0;
                 const tags = [];
                 if (a.attack_bonus) tags.push(`<span style="color:#fbb88a;font-weight:600;">${a.attack_bonus}</span>`);
                 if (a.damage) tags.push(`<span style="color:var(--fg-mute);">${a.damage}${a.damage_type ? ' ' + a.damage_type : ''}</span>`);
                 if (a.save_dc && a.save_ability) tags.push(`<span style="color:#a7e0c9;">DC ${a.save_dc} ${a.save_ability}</span>`);
+                if (a.charges_max > 0) {
+                    // Charge counter + ↻ recharge. ``aria-label`` so the
+                    // GM hears "Frightful Howl, 0 of 1 charges, recharge"
+                    // on a screen reader instead of the bare "0/1 ↻".
+                    tags.push(`<span class="monster-action-charges${spent ? ' spent' : ''}" aria-label="${charges_cur} of ${a.charges_max} charges">${charges_cur}/${a.charges_max}</span>`);
+                    tags.push(`<button type="button" class="monster-charge-reset" data-action-id="${a.id}" title="Recharge ${a.name} (set to ${a.charges_max}/${a.charges_max})"${charges_cur >= a.charges_max ? ' disabled' : ''}>↻</button>`);
+                }
                 const btns = [];
                 // ``data-monster-action`` carries the whole row so the
                 // delegated click handler doesn't need a lookup back into
                 // the template (the combatant could already be removed by
-                // then).
+                // then). v2.3.40 added ``action_id`` so the handler can
+                // decrement the right ``combatant.action_charges`` entry.
                 const payload = encodeURIComponent(JSON.stringify({
                     combatant_name: combatant.name,
+                    action_id: a.id,
+                    charges_max: a.charges_max,
                     ...a,
                 }));
                 if (a.attack_roll) {
-                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="attack" title="Roll attack — 1d20${a.attack_bonus || ''}">🎯 Attack</button>`);
+                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="attack"${spent ? ' disabled' : ''} title="Roll attack — 1d20${a.attack_bonus || ''}">🎯 Attack</button>`);
                 }
                 if (a.damage) {
-                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="damage" title="Roll damage — ${a.damage}${a.damage_type ? ' ' + a.damage_type : ''}">🎲 Dmg</button>`);
+                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="damage"${spent ? ' disabled' : ''} title="Roll damage — ${a.damage}${a.damage_type ? ' ' + a.damage_type : ''}">🎲 Dmg</button>`);
                 }
                 if (a.save_dc && a.save_ability) {
-                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="save" title="Announce save — DC ${a.save_dc} ${a.save_ability}">📋 Save</button>`);
+                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="save"${spent ? ' disabled' : ''} title="Announce save — DC ${a.save_dc} ${a.save_ability}">📋 Save</button>`);
                 }
-                html += `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:3px 6px;background:var(--input-bg);border-radius:3px;font-size:11px;">
+                html += `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:3px 6px;background:var(--input-bg);border-radius:3px;font-size:11px;${spent ? 'opacity:0.55;' : ''}">
                     <span style="font-weight:600;flex:1 1 auto;min-width:0;">${a.name}</span>
                     ${tags.join(' ')}
                     ${btns.join('')}
@@ -3934,6 +3978,33 @@ let CONC_DATA = {{ conc_by_char | tojson }};
      * own char's adv/dis pill doesn't bleed in. */
     if (IS_GM) {
         document.getElementById('initiative-list')?.addEventListener('click', async (ev) => {
+            // v2.3.40: ↻ recharge button — reset the per-combatant counter
+            // for this action back to its declared max. Handled before the
+            // strike branch because the reset lives in the same flex row.
+            const resetBtn = ev.target.closest('.monster-charge-reset');
+            if (resetBtn) {
+                ev.stopPropagation();
+                const row = resetBtn.closest('.init-row, .init-entry');
+                const idx = parseInt(row?.dataset.idx ?? '');
+                const actionId = resetBtn.dataset.actionId;
+                if (!Number.isFinite(idx) || !actionId) return;
+                const comb = (battle.combatants || [])[idx];
+                if (!comb) return;
+                if (!comb.action_charges || typeof comb.action_charges !== 'object') {
+                    comb.action_charges = {};
+                }
+                // Reset to a sentinel that the renderer will replace with
+                // ``charges_max`` on next render (avoids re-parsing the
+                // monster template here). Use a large positive integer so
+                // the ``?? a.charges_max`` fallback in the renderer takes
+                // over: setting to null/undefined would auto-refill, but
+                // we want to explicitly mark "freshly recharged" so the
+                // disabled state on ↻ recomputes.
+                delete comb.action_charges[actionId];
+                saveBattle();
+                renderBattle();
+                return;
+            }
             const btn = ev.target.closest('.monster-strike-btn');
             if (!btn) return;
             ev.stopPropagation();
@@ -3978,9 +4049,36 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 if (!resp.ok) {
                     const txt = await resp.text();
                     (window.showToast || alert)(`Roll failed: ${txt}`, 'error');
+                    return;
+                }
+                // v2.3.40: roll succeeded — if this action is limited-use,
+                // decrement the per-combatant counter once per click (we
+                // only fire on the first of the action's button trio that
+                // got pressed; if the GM rolls Attack and then Dmg for
+                // the same Frightful Howl the counter still ticks once
+                // per click — by design, since a hit-and-damage flow uses
+                // two separate UI presses and the GM controls the cadence).
+                const charges_max = parseInt(action.charges_max) || 0;
+                const action_id = action.action_id || '';
+                if (charges_max > 0 && action_id) {
+                    const row = btn.closest('.init-row, .init-entry');
+                    const idx = parseInt(row?.dataset.idx ?? '');
+                    const comb = Number.isFinite(idx) ? (battle.combatants || [])[idx] : null;
+                    if (comb) {
+                        if (!comb.action_charges || typeof comb.action_charges !== 'object') {
+                            comb.action_charges = {};
+                        }
+                        const cur = comb.action_charges[action_id] ?? charges_max;
+                        comb.action_charges[action_id] = Math.max(0, cur - 1);
+                        saveBattle();
+                        renderBattle();
+                    }
                 }
             } finally {
-                setTimeout(() => { btn.disabled = false; }, 400);
+                // renderBattle() may have replaced btn; the timeout below
+                // only matters for the unlimited-use case where the same
+                // DOM node sticks around.
+                setTimeout(() => { try { btn.disabled = false; } catch {} }, 400);
             }
         });
     }

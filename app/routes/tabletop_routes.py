@@ -9514,12 +9514,19 @@ def _monster_template_to_sheet(tmpl: TokenTemplate, campaign_id: int) -> dict:
             if bonus_m:
                 atk_bonus = bonus_m.group(1)
         atk_entry = {
+            # v2.3.40: pass through the structured Action's ``id`` so the
+            # client can key per-combatant charge state (combatant.
+            # action_charges[action_id]) and ``charges_max`` so the init-
+            # tracker view can render the N/M counter + disable buttons
+            # when the action is spent.
+            "id": a.get("id") or name.lower().replace(" ", "-"),
             "name": name,
             "atk_bonus": atk_bonus,
             "damage": a.get("damage") or "",
             "damage_type": a.get("damage_type") or "",
             "save_dc": (a.get("save_dc") or None) if a.get("save_dc") else None,
             "save_ability": save_ability_raw or None,
+            "charges_max": int(a.get("charges_max") or 0),
             "description": a.get("desc") or "",
         }
         key = name.lower()

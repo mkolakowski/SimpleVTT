@@ -641,6 +641,14 @@ def seed_homebrew_files(camp: Campaign) -> int:
                     "desc": "The goblin captain emits a piercing battle cry. Each creature within 30 feet that can hear it must succeed on a DC 12 Wisdom saving throw or become frightened of the goblin captain until the end of its next turn.",
                     "save_ability": "wis",
                     "save_dc": 12,
+                    # v2.3.40: "Recharge 5-6" modeled as 1 charge per
+                    # encounter — the GM clicks 📋 Save once, then
+                    # manually clicks the ↻ recharge button when the
+                    # die comes up at the start of a future turn. The
+                    # init-tracker view shows "1/1" → "0/1" + disables
+                    # the save button so the GM can't accidentally
+                    # double-fire it.
+                    "charges_max": 1,
                     "category": "action",
                 },
                 # Special abilities ride alongside actions on the unified

@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.40] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Per-combatant **charge tracking** for monster limited-use actions in the GM init tracker — actions with `charges_max > 0` (e.g. Frightful Howl 1/day, Recharge 5–6 breath weapons, X/short-rest specials) now render a `cur/max` pill next to the action name, decrement on every roll-button click (🎯 / 🎲 / 📋), and disable the strike buttons when spent. A `↻` recharge button per row resets the count back to max. User-requested.
+**Description:** Adds `charges_max: int = 0` to the shared `Action` schema in `app/action_schema.py` — zero means unlimited (the existing default; all prior actions stay usable indefinitely). The homebrew monster sheet adapter (`_monster_template_to_sheet` in `app/routes/tabletop_routes.py`) now passes `id` and `charges_max` through into the per-attack dict so the inline init view sees them alongside the existing attack_bonus / damage / save_dc fields. `buildMonsterInitSheet` in `app/templates/tabletop.html` initializes `combatant.action_charges[action.id] = charges_max` lazily on first render, renders the pill + ↻ button when `charges_max > 0`, and disables the strike-button trio when `charges_cur <= 0`. The `.monster-strike-btn` document-level click handler now decrements `combatant.action_charges[action_id]` (clamped at zero) on every successful POST `/roll`, calls `saveBattle()` + `renderBattle()` so the new count persists across re-renders and survives a localStorage round-trip. A sibling `.monster-charge-reset` handler `delete`s the per-action key so the next render reseeds it back to max (also `saveBattle()` + `renderBattle()`). State lives entirely client-side per combatant — the same Action instance shared across multiple combatants (e.g. three Bandits with "Heavy Crossbow Reload 1/round") gets separate per-row counts. The demo update on Grixxa's Frightful Howl (`charges_max: 1`) lets a fresh demo session prove the flow: roll the howl once, watch the buttons disable and the pill flip to amber `0/1`, click ↻ to recharge.
+**Description (cont):** Click-counter semantics: every click on a strike button decrements once, not once per combat round, since the GM is the one driving the cadence and a hit-and-damage flow uses two separate UI clicks. If the GM wants the howl to fire only when an attack actually lands, they click 🎯 first (decrements), see the d20 in the log, decide it hit, then click 🎲 — which decrements again. This is by design; the rare "I want to roll attack and damage but only consume one charge" case can be resolved by a single ↻ click between the two rolls.
+
+### Added
+- `app/action_schema.py` `Action.charges_max: int = 0` — declarative limited-use field on the shared Action schema. Zero (default) means unlimited; positive integer renders the cur/max pill + ↻ recharge button + button-disabled-when-spent semantics in the GM init tracker.
+- `app/templates/tabletop.html` `buildMonsterInitSheet` per-action `combatant.action_charges` initialization, `cur/max` pill rendering, `↻` recharge button rendering, button disabled-when-spent rendering. Per-combatant counts persist via the existing `saveBattle()` localStorage path.
+- `app/templates/tabletop.html` `.monster-strike-btn` click-handler decrement branch — on a successful `/roll` response, decrements `comb.action_charges[action_id]` (clamped at zero) and re-renders so the disabled state appears immediately.
+- `app/templates/tabletop.html` `.monster-charge-reset` click-handler — `delete`s the per-action key so the next render reseeds the count from `charges_max`. Resets are unbounded (no rate limit) — the GM is trusted to recharge correctly per short / long rest.
+- `app/templates/tabletop.html` CSS for `.monster-action-charges` (green pill, amber `.spent` variant) and `.monster-charge-reset` (32×32 dense-panel button per CLAUDE.md).
+- `app/demo_seed.py` Grixxa's Frightful Howl gets `charges_max: 1` so a fresh demo proves the flow end-to-end.
+
+### Changed
+- `app/routes/tabletop_routes.py` `_monster_template_to_sheet` `atk_entry` — added `id` and `charges_max` pass-through so the inline init view can key per-action charge state and the rendered counter / disabled-button logic can read it.
+
+### Notes
+- The shared `Action.charges_max` field is editor-ready but the homebrew monster Actions editor (`app/templates/_features_editor.html`) does not yet surface a numeric input for it — homebrew authors will hit it via the JSON-edit panel for now. Adding a "Charges/use" number input is a follow-up; the demo entry is hand-edited in `seed_homebrew_files`.
+- The full standalone monster sheet (`app/templates/sheet_dnd5e.html` with `is_monster_sheet=True`) does not yet render charges. The init-tracker view is the primary in-combat surface; the static sheet is a read-only reference and can stay un-counted for now.
+- The decrement key uses `action.id` (from the structured `actions` array) or falls back to a slugified name when missing (`"frightful howl"` → `"frightful-howl"`). Slugs are stable across re-renders so the per-combatant count survives template edits that leave the name intact.
+- The reset is by-delete-key rather than by-set-to-max so the renderer's `?? a.charges_max` fallback drives the value — keeps the source of truth (max) at the template level rather than duplicating it into per-combatant state.
+
+---
+
 ## [2.3.39] - 2026-05-16
 
 **Schema version:** 52

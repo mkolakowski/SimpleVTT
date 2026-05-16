@@ -80,6 +80,16 @@ class Action(BaseModel):
     # DC for the save when ``save_ability`` is set. 0 means "DC not declared"
     # — the prompt-save flow still works (the GM enters DC at prompt time).
     save_dc: int = 0
+    # v2.3.40: charges_max > 0 marks the action as limited-use (e.g.
+    # "Recharge 5-6", "1/day", "3/short rest"). The init-tracker
+    # monster card renders an N/M counter beside the action name and
+    # decrements on click; a ↻ recharge button resets to max. 0 means
+    # unlimited use (the existing default — every action without an
+    # explicit cap stays usable indefinitely). Per-combatant state
+    # lives on ``combatant.action_charges[action.id]`` in localStorage,
+    # not on the Action itself — same Action instance can be shared
+    # across multiple combatants with separate counts.
+    charges_max: int = 0
     healing: str = ""
     aoe_targets: int = 1
     reroll_trigger: str = ""
