@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.36] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Fix the 2.3.35 ship — restoring the outer `{% if not is_monster_sheet %}` that the previous edit accidentally dropped. 2.3.35's intent (gate Spells fieldset on caster status) was correct but its diff replaced the outer monster-hide opener instead of nesting inside it, orphaning the matching `{% endif %}` near the Notes fieldset and crashing every full-sheet render with `TemplateSyntaxError: Encountered unknown tag 'endif'`. Verified by Jinja-block-balance count (`ifs == endifs == 83`) and a clean HTTP 200 on all three demo PC sheets.
+**Description:** 2.3.35's Edit replaced the line `{% if not is_monster_sheet %}` with `{% if _is_caster %}` rather than INSERTING the new opener as a nested block. The 2.3.13 monster-hide endif at line 1479 then matched against... nothing, since the outer if was gone. Every full sheet render 500'd at template-parse time. Fix is a one-line re-insertion of `{% if not is_monster_sheet %}` above the new `{% set _is_caster %}` line so the structure is: outer 2.3.13 `if not is_monster_sheet` → inner 2.3.35 `if _is_caster` → Spells fieldset → inner endif → ...other fieldsets... → outer endif. Both the broken 2.3.35 commit and this fix kept in history; rolling back 2.3.35 alone would have lost the mini-sheet partial change too.
+
+### Fixed
+- `app/templates/sheet_dnd5e.html` — restored the `{% if not is_monster_sheet %}` opener at line 951 (was inadvertently overwritten in 2.3.35). The new 2.3.35 `{% set _is_caster %}` + `{% if _is_caster %}` now sit nested inside it.
+
+### Notes
+- Caught by HTTP smoke-test (`curl /campaign/1/character/2/sheet → 500`) after rebuild. Lesson for the file: when adding a nested if inside a long-spanning if block, double-check both the opener and the existing-block endif location.
+
+---
+
 ## [2.3.35] - 2026-05-16
 
 **Schema version:** 52

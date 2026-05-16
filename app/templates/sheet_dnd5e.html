@@ -961,6 +961,7 @@
            (defensive: if a player manually added a spell, don't hide
            it on them). Nested inside the 2.3.13 monster gate so the
            outer ``{% endif %}`` near the Notes fieldset still balances. #}
+        {% if not is_monster_sheet %}
         {% set _is_caster = sheet.get('class_spellcasting')
             or (sheet.get('spell_slots') and (sheet.get('spell_slots') | length) > 0)
             or (sheet.get('spells') and (sheet.get('spells') | length) > 0) %}
