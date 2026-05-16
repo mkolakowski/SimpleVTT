@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.9] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Render click-to-roll attack/damage/save buttons in the GM initiative-tracker monster card. Phase 3 of the "homebrew monster attacks → rollable buttons" TODO — completes the editor (2.3.8) → in-play rendering loop the user asked for.
+**Description:** Before this commit, expanding a monster row in the GM initiative tracker showed only the HP/initiative edit strip — `buildInitSheet(c.char_id)` returned empty for non-character combatants (no `char_id`). Now `combatantFromToken` stashes `token_template_id` on each combatant so a new `buildMonsterInitSheet(combatant)` helper can look up the source TokenTemplate and render a compact stat-block (AC / Speed chips, ability-mod grid) plus a per-action row with 🎯 Attack / 🎲 Dmg / 📋 Save buttons. The buttons POST to `/api/campaign/{cid}/roll` with the appropriate expression (`1d20+bonus` for attacks; the dice expression for damage; a `0` + note announcement for saves) so results land in the shared roll log alongside PC rolls. Action data comes from `tmpl.sheet.actions` (homebrew structured shape, populated by the 2.3.8 editor) when present, falling back to `tmpl.sheet.attacks` (SRD regex-derived shape from `_open5e_to_dnd5e_sheet`). Both populate the same per-row shape so the renderer doesn't fork. `skip_roll_state: true` on the POST so the GM's own character's adv/dis pill doesn't bleed into monster attacks.
+
+### Added
+- `buildMonsterInitSheet(combatant)` in `app/templates/tabletop.html` — renders the compact monster stat-block panel inside the init-tracker GM card. Reads from `tmpl.sheet.actions` (preferred) or `tmpl.sheet.attacks` (fallback) on the source TokenTemplate.
+- `token_template_id` field on the combatant object returned by `combatantFromToken` — kept on the in-memory battle state so the monster-sheet renderer can look up the source template even after the original token is removed from the map.
+- Delegated `.monster-strike-btn` click handler on the initiative list — GM-only, fires the three roll kinds (attack / damage / save) to `/api/campaign/{cid}/roll`.
+- `.monster-strike-btn` CSS (32 px min-height per CLAUDE.md dense-panel rule).
+
+### Notes
+- Saves render as an "announcement-only" log entry (`expression: "0"` + a descriptive `note`) — the GM still has to use the regular roll-request panel to push a per-player save prompt. A proper "Prompt save" button that hooks into the existing roll-request flow is a follow-up.
+- Existing SRD-imported monster TokenTemplates get the regex-derived `sheet.attacks` shape, which loses save info and damage type. Homebrew monsters authored through the 2.3.8 editor carry the full structured shape on `sheet.actions` and get richer buttons. Bringing SRD imports up to parity (parse the desc text into structured fields at import time) is a follow-up.
+- Player view unchanged — only GM combatant cards get the new sheet (consistent with current monster-data visibility rules).
+
+---
+
 ## [2.3.8] - 2026-05-15
 
 **Schema version:** 52
