@@ -3678,11 +3678,32 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 
     /* ── WebSocket sync ── */
     document.addEventListener('vtt:ws-message', ev => {
-        if (ev.detail.type !== 'battle_update') return;
-        if (IS_GM) return; // GM is the source of truth; ignore echo
-        battle = ev.detail.data;
-        saveBattle();
-        renderBattle();
+        const msg = ev.detail;
+        // Player-side battle sync — GM is the source of truth.
+        if (msg.type === 'battle_update' && !IS_GM) {
+            battle = msg.data;
+            saveBattle();
+            renderBattle();
+            return;
+        }
+        // v2.3.19: keep ``allTokens`` reactive so the GM's "From Map"
+        // button picks up tokens placed after page load (Library /
+        // Open5e / Players-tab adds all post-load). Previously
+        // ``allTokens`` was a frozen snapshot from ``initData.tokens``
+        // and the GM had to reload the page before a freshly-placed
+        // monster would roll into init. Token mutations don't trigger
+        // ``renderBattle`` here — already-added combatants don't need
+        // updating from a token event — but the next "From Map" click
+        // will see the new token.
+        if (msg.type === 'token_add') {
+            allTokens.push(msg.data);
+        } else if (msg.type === 'token_delete') {
+            const idx = allTokens.findIndex(t => t.id === msg.data.id);
+            if (idx >= 0) allTokens.splice(idx, 1);
+        } else if (msg.type === 'token_update') {
+            const t = allTokens.find(t => t.id === msg.data.id);
+            if (t) Object.assign(t, msg.data);
+        }
     });
 
     renderBattle();

@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.19] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Fix pre-existing bug where the init-tracker "From Map" button only saw tokens that existed at page load — tokens placed after load (Library, Open5e, Players-tab) silently failed to roll up unless the GM reloaded first. Reported by the user while testing the 2.3.16/17/18 monster mini-sheet work: "I added the Bandit Captain from the library, they will not appear in the init order."
+**Description:** The init-tracker IIFE keeps its own `allTokens` array that's initialized from `initData.tokens` at page load. The tabletop.js IIFE maintains a separate `tokens` array that IS reactive to the `token_add` / `token_delete` / `token_update` WebSocket messages, but the two IIFEs don't share state — `allTokens` was a frozen snapshot. So after placing a Bandit Captain from the Library tab post-load, clicking the init tracker's "From Map" button iterated the snapshot (which didn't include the new token) and the new bandit was silently skipped. Fix subscribes the init tracker's WS handler (which already exists for `battle_update` syncing) to the three token messages and updates `allTokens` in place. No `renderBattle` re-run on token events — already-added combatants don't change shape when their source token mutates — but the next "From Map" click sees the fresh list. Bug pre-dates 1.1.0; user encountered it now because they were testing the new monster mini-sheet flow against a fresh-placed bandit.
+
+### Fixed
+- `app/templates/tabletop.html` init-tracker WS handler — now handles `token_add` / `token_delete` / `token_update` in addition to the existing `battle_update` sync, keeping `allTokens` in sync with live token state so "From Map" sees post-load placements.
+
+### Notes
+- The fix is GM-side only as a side effect (only GMs interact with the init tracker's add controls), but the handler runs for all clients without harm. Player clients also benefit because their cached `allTokens` stays current if they ever need it.
+- Verified via grep that the three message types are the ones tabletop.js's own `tokens` array already responds to (line 880-902 of `app/static/tabletop.js`); mirroring the same set keeps the two arrays in sync indefinitely.
+
+---
+
 ## [2.3.18] - 2026-05-16
 
 **Schema version:** 52
