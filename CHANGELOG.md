@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.38] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Docs-only: add `docs/demo/image-prompts.md` with ready-to-paste image-generator prompts for every PC, every NPC type, and the Tavern Brawl battle map in the demo dataset. Model-agnostic (Midjourney / DALL-E / Stable Diffusion). Includes a "how to wire the generated PNG back into `seed_tokens`" checklist so the demo can grow from color-swatch tokens to fully-illustrated ones over time. No code change.
+**Description:** User-requested follow-up to the v2.3.32 README demo description. The seed already references shipped PNGs for the two original PCs (`rogue.png` / `wizard.png`) but every other entity — the GM's Brother Tavik (added v2.3.25), all six NPCs (Bandit Captain / Bandit ×3 / Thug / Goblin Captain), and the tavern map — currently render as color swatches because no token art exists. This doc carries character descriptions that match the seeded sheets verbatim (race, class, alignment, weapons, signature spells) so the rendered token has the right visual identity to slot into the demo's narrative. Each prompt is annotated with framing notes (3-quarter view, 1:1 aspect, isolated against transparent background, suitable for a 256-pixel circular token) and matched negative-prompt suggestions. A model-specific notes section at the bottom calls out Midjourney's `--ar 1:1 --style raw` flags, DALL-E's transparent-background limitation, and Stable Diffusion checkpoint suggestions. Closing section is a 6-step "after generation" checklist (background-remove, crop, downscale to 256×256, drop in `app/static/demo/tokens/`, wire `image_url` into the `Token(...)` row in `seed_tokens`, bump and ship) that mirrors the conventions the two shipped tokens already follow.
+
+### Added
+- `docs/demo/image-prompts.md` — character + map prompts for every demo entity. Organized as: token-file path table, style baseline, three PC sub-sections, four NPC sub-sections (Vex / Grixxa / Thug / Bandit ×3 variants), tavern battle-map prompt, model-specific notes, post-generation checklist.
+
+### Notes
+- The two shipped tokens (`rogue.png` for Pip, `wizard.png` for Thalindra) are referenced as the style baseline. New generations should match their painterly fantasy look.
+- The bandit trio (Alpha / Beta / Gamma) gets three minor-variation prompts rather than three independent prompts — the encounter places them as stat-identical mooks but the GM needs to tell them apart visually on the map. The prompt suggests Stable Diffusion's ControlNet OpenPose to share a pose across the trio if the operator wants consistency.
+- No version bumps for adding generated art alone — the docstring + checklist note that an art-drop commit is its own PATCH bump per CLAUDE.md.
+
+---
+
 ## [2.3.37] - 2026-05-16
 
 **Schema version:** 52
