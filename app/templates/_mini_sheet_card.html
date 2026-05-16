@@ -290,7 +290,26 @@
                                 {% if _is_multiclass %}<span class="mini-spell-tag cls">{{ _cc_label }}</span>{% endif %}
                                 {% if s.damage %}<span class="mini-spell-tag dmg">{{ s.damage }}</span>{% endif %}
                                 {% if s.save_ability %}<span class="mini-spell-tag save">{{ s.save_ability }} save</span>{% endif %}
-                                <button type="button" class="mini-cast-btn" data-char-id="{{ c.id }}" data-spell-idx="{{ loop.index0 }}" data-spell-name="{{ s.name }}" data-spell-level="{{ s_lvl }}" data-class-slug="{{ s_cls }}" title="Cast {{ s.name }}{% if s_lvl > 0 %} (uses Lv {{ s_lvl }} slot for {{ _cc_label or 'this class' }}){% endif %}">🪄 Cast</button>
+                                {# v2.3.21: stash spell roll fields on the button
+                                   so the cast handler can build /roll posts for
+                                   monster casts (TokenTemplate-backed mini-sheets
+                                   can't use /cast_spell which requires a real
+                                   Character row). Redundant for PCs (they use
+                                   /cast_spell via spell_index) but harmless. #}
+                                <button type="button" class="mini-cast-btn"
+                                        data-char-id="{{ c.id }}"
+                                        data-spell-idx="{{ loop.index0 }}"
+                                        data-spell-name="{{ s.name }}"
+                                        data-spell-level="{{ s_lvl }}"
+                                        data-class-slug="{{ s_cls }}"
+                                        data-spell-damage="{{ s.damage or '' }}"
+                                        data-spell-damage-type="{{ s.damage_type or '' }}"
+                                        data-spell-save-ability="{{ s.save_ability or '' }}"
+                                        data-spell-save-dc="{{ s.save_dc or '' }}"
+                                        data-spell-attack-roll="{{ '1' if s.attack_roll else '' }}"
+                                        data-spell-attack-bonus="{{ s.attack_bonus or s.atk_bonus or '' }}"
+                                        data-spell-healing="{{ s.healing or '' }}"
+                                        title="Cast {{ s.name }}{% if s_lvl > 0 %} (uses Lv {{ s_lvl }} slot for {{ _cc_label or 'this class' }}){% endif %}">🪄 Cast</button>
                             </div>
                             {% endif %}
                             {% endfor %}

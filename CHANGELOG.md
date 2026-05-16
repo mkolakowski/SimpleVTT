@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.21] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Branch the `.mini-cast-btn` (Spells-tab Cast button) handler for monsters — mirrors the 2.3.18 strike-handler pattern. Today demo monsters don't have `sheet.spell_slots` so the button doesn't render, but a future homebrew NPC caster (Bandit Mage, Veteran Cultist, etc.) would surface the gap: `/api/campaign/{cid}/cast_spell` requires a real Character row and would 404 on a TokenTemplate-backed mini-sheet. Closes out the polish items the user authorized after 2.3.19.
+**Description:** Two pieces. (1) Cast button stamps spell roll fields as data attrs (`data-spell-damage`, `data-spell-damage-type`, `data-spell-save-ability`, `data-spell-save-dc`, `data-spell-attack-roll`, `data-spell-attack-bonus`, `data-spell-healing`) so the monster branch can rebuild rolls without a /cast_spell round-trip. Redundant for PCs (they use the index+slot endpoint) but harmless. (2) Click handler moved from `#players-drawer` to `document` so it fires for mini-sheets wherever they live (Characters drawer, init-tracker after the body steal, monster pool when expanded). Monster branch posts up to four sequential `/roll` entries — attack roll, damage, healing, save announcement — same pattern as the strike handler. If a monster spell has none of the structured fields, a bare announcement (`expression: 0` + note "Monster casts SpellName") fires so the table at least sees something happened. PC path unchanged: still optimistically decrements the slot pip, still POSTs `/cast_spell`, still reverts the pip on error.
+
+### Added
+- `app/templates/_mini_sheet_card.html` — `data-spell-*` attributes stamped on every `.mini-cast-btn`. Mirrors the 2.3.18 attack-field stash pattern.
+
+### Changed
+- `app/templates/tabletop.html` — `.mini-cast-btn` click handler moved from `#players-drawer` to `document`. Added the monster branch that posts attack/damage/healing/save rolls to `/roll` instead of `/cast_spell`. PC behavior unchanged including the slot-pip optimistic decrement.
+
+### Notes
+- Closes the gap I flagged in the 2.3.18 changelog notes ("Cast Spell handler still posts to character-specific `/cast_spell`. ... A future homebrew monster with structured spell-slot data would surface that gap").
+- The monster path skips slot-pip mutation entirely — monster mini-sheets don't render the `_pre_caster_spell_slot_rows` section in the partial (gated on `_is_owner` / spell-slot data the monster's projected sheet doesn't carry), so there's no pip to decrement.
+
+---
+
 ## [2.3.20] - 2026-05-16
 
 **Schema version:** 52

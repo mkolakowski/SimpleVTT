@@ -2539,37 +2539,95 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (countEl) countEl.textContent = `${total - used}/${total}`;
         }
 
-        document.getElementById('players-drawer').addEventListener('click', async (ev) => {
+        /* v2.3.21: listener moved from #players-drawer to document so it
+         * fires for mini-sheets wherever the body lives (Characters
+         * drawer, init tracker after the steal, or monster pool moved
+         * into the init tracker). Monster branch builds /roll posts
+         * client-side from the data-spell-* attrs stashed on the button
+         * (mirrors the 2.3.18 strike branch); PCs unchanged. */
+        document.addEventListener('click', async (ev) => {
             const btn = ev.target.closest('.mini-cast-btn');
             if (!btn) return;
-            const charId = parseInt(btn.dataset.charId, 10);
-            const idx = parseInt(btn.dataset.spellIdx, 10);
-            const lvl = parseInt(btn.dataset.spellLevel, 10) || 0;
+            const rawCharId = btn.dataset.charId || '';
+            const isMonster = rawCharId.startsWith('monster-');
             const spellName = btn.dataset.spellName || 'Spell';
-            const classSlug = (btn.dataset.classSlug || '').toLowerCase();
-            if (!charId || isNaN(idx)) return;
-
-            // Optimistically decrement the matching (class, level) slot pip
-            let slotRow = null, prevUsed = 0;
-            if (lvl >= 1) {
-                const sel = classSlug
-                    ? `.mini-spells[data-char-id="${charId}"] .mini-slot-row[data-class-slug="${classSlug}"][data-slot-level="${lvl}"]`
-                    : `.mini-spells[data-char-id="${charId}"] .mini-slot-row[data-slot-level="${lvl}"]`;
-                slotRow = document.querySelector(sel);
-                if (slotRow) {
-                    const total = parseInt(slotRow.dataset.total) || 0;
-                    prevUsed = parseInt(slotRow.dataset.used) || 0;
-                    if (total <= 0 || prevUsed >= total) {
-                        (window.showToast || function (m) { alert(m); })(
-                            `No Lv ${lvl} spell slot available for ${spellName}.`, 'error');
-                        return;
-                    }
-                    slotRow.dataset.used = prevUsed + 1;
-                    _renderMiniSlotPips(slotRow);
-                }
-            }
             btn.disabled = true;
             try {
+                if (isMonster) {
+                    // Monster path: no spell slots, no /cast_spell — just
+                    // fire the same attack/damage/save/healing rolls the
+                    // 2.3.18 strike handler does for monster attacks. The
+                    // spell's structured fields live in the data-spell-*
+                    // attrs the partial stamps onto the button.
+                    const damage = (btn.dataset.spellDamage || '').trim();
+                    const damageType = (btn.dataset.spellDamageType || '').trim();
+                    const saveAbility = (btn.dataset.spellSaveAbility || '').trim().toUpperCase();
+                    const saveDc = parseInt(btn.dataset.spellSaveDc || '0', 10) || 0;
+                    const attackRoll = btn.dataset.spellAttackRoll === '1';
+                    const attackBonus = (btn.dataset.spellAttackBonus || '').trim();
+                    const healing = (btn.dataset.spellHealing || '').trim();
+                    const monsterName = btn.closest('.mini-sheet')?.querySelector('.mini-header-name')?.textContent?.trim() || 'Monster';
+                    const rolls = [];
+                    if (attackRoll) {
+                        const bonusExpr = attackBonus
+                            ? (attackBonus.startsWith('+') || attackBonus.startsWith('-') ? attackBonus : '+' + attackBonus)
+                            : '';
+                        rolls.push({ expression: '1d20' + bonusExpr, note: `${monsterName} casts ${spellName} — attack roll` });
+                    }
+                    if (damage) {
+                        rolls.push({ expression: damage, note: `${monsterName} casts ${spellName} — damage${damageType ? ' (' + damageType + ')' : ''}` });
+                    }
+                    if (healing) {
+                        rolls.push({ expression: healing, note: `${monsterName} casts ${spellName} — healing` });
+                    }
+                    if (saveAbility && saveDc) {
+                        rolls.push({ expression: '0', note: `${monsterName} casts ${spellName} — DC ${saveDc} ${saveAbility} save` });
+                    }
+                    if (!rolls.length) {
+                        // No structured roll fields — emit a bare announcement
+                        // so the table at least sees the cast happened.
+                        rolls.push({ expression: '0', note: `${monsterName} casts ${spellName}` });
+                    }
+                    for (const r of rolls) {
+                        const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ...r, visibility: 'public', skip_roll_state: true }),
+                        });
+                        if (!resp.ok) {
+                            (window.showToast || alert)(`Cast failed: ${await resp.text()}`, 'error');
+                            break;
+                        }
+                    }
+                    return;
+                }
+
+                // PC path: post to /cast_spell as before.
+                const charId = parseInt(rawCharId, 10);
+                const idx = parseInt(btn.dataset.spellIdx, 10);
+                const lvl = parseInt(btn.dataset.spellLevel, 10) || 0;
+                const classSlug = (btn.dataset.classSlug || '').toLowerCase();
+                if (!charId || isNaN(idx)) return;
+
+                // Optimistically decrement the matching (class, level) slot pip
+                let slotRow = null, prevUsed = 0;
+                if (lvl >= 1) {
+                    const sel = classSlug
+                        ? `.mini-spells[data-char-id="${charId}"] .mini-slot-row[data-class-slug="${classSlug}"][data-slot-level="${lvl}"]`
+                        : `.mini-spells[data-char-id="${charId}"] .mini-slot-row[data-slot-level="${lvl}"]`;
+                    slotRow = document.querySelector(sel);
+                    if (slotRow) {
+                        const total = parseInt(slotRow.dataset.total) || 0;
+                        prevUsed = parseInt(slotRow.dataset.used) || 0;
+                        if (total <= 0 || prevUsed >= total) {
+                            (window.showToast || function (m) { alert(m); })(
+                                `No Lv ${lvl} spell slot available for ${spellName}.`, 'error');
+                            return;
+                        }
+                        slotRow.dataset.used = prevUsed + 1;
+                        _renderMiniSlotPips(slotRow);
+                    }
+                }
                 const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
