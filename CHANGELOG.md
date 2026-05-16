@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.2.3] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Move the adv/dis roll-state pill (and the death-saves tracker, kept paired for layout consistency) out of the cramped HP card on the D&D 5e full sheet into a dedicated full-width row below the HP / Hit-Dice / Combat-stat chips header. They were already rendered there since 2.2.0 but tucked inside the narrow HP card next to Temp HP where they were easy to overlook.
+**Description:** The full sheet's vitals header is a three-column flex row (HP | Hit Dice | AC/Speed/Init/Prof chips). The roll-state pill was being included inside the HP card after the Temp HP stepper, which gave it a ~150px width and visually buried the three Adv/Normal/Dis buttons. Promotes the pill (and the paired death-saves tracker) to a full-width styled card directly below the header — visible at the same prominence as the HP block itself. Adds a CSS `:first-child` rule that suppresses the pill / tracker's top-border separator when they're the first element inside their container (they were designed to stack with a divider, which looks like a stray line as the first thing in a card).
+
+### Changed
+- `app/templates/sheet_dnd5e.html`: roll-state pill + death-saves tracker moved from inside the HP `.s-card` to a new dedicated full-width `.s-card` row sitting between the vitals header and the edit panel.
+- `app/static/style.css`: `.roll-state-pill:first-child` and `.death-saves-tracker:first-child` now drop their top margin / padding / border so they sit flush against the card top edge.
+
+---
+
 ## [2.2.2] - 2026-05-15
 
 **Schema version:** 52

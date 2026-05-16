@@ -186,9 +186,6 @@
                                    {% if not can_edit %}readonly{% endif %}>
                             <span style="font-size:10px;color:var(--s-mute);">HP</span>
                         </div>
-                        {# Roll-state pill (v2.2.0) + Death-saves tracker (v2.1.0). #}
-                        {% include "_roll_state_pill.html" %}
-                        {% include "_death_saves_tracker.html" %}
                     </div>
 
                     {# Hit Die / Recovery block #}
@@ -241,6 +238,14 @@
                 </div>{# end HP + hit die + chips #}
             </div>{# end identity+vitals column #}
         </div>{# end header flex #}
+
+        {# Roll-state pill (v2.2.3: moved out of the cramped HP card into #}
+        {# a prominent full-width row) + Death-saves tracker. Inside a    #}
+        {# styled card so both are easy to find. #}
+        <div style="background:var(--s-card);border:1px solid var(--s-border);border-radius:8px;padding:8px 12px;margin-bottom:12px;">
+            {% include "_roll_state_pill.html" %}
+            {% include "_death_saves_tracker.html" %}
+        </div>
 
         {# ── Edit panel (hidden by default) ──────────────────────────── #}
         {% if can_edit %}

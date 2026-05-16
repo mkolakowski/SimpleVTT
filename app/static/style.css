@@ -491,3 +491,14 @@ table.skills td, table.skills th { border-bottom: 1px solid var(--border); paddi
 .rt-die.rt-die-discarded text {
     text-decoration: line-through;
 }
+
+/* When the pill / tracker is the first child of its container (e.g.,
+   the dedicated card on the full character sheet added in 2.2.3),
+   suppress the top-border separator so we don't get a stray line
+   directly under the card's top edge. */
+.roll-state-pill:first-child,
+.death-saves-tracker:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
