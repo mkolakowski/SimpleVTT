@@ -86,6 +86,43 @@
         return out;
     }
 
+    /* Detect an advantage/disadvantage pair in the roll (2.2.1).
+       Looks at both the expression (2dNkh1 / 2dNkl1 long form or 1dNa /
+       1dNd shorthand) and the breakdown's bracketed pair to identify the
+       two-die group and which die was "kept". Returns:
+         { sides, isAdv, v1, v2, keptIdx }
+       or ``null`` if no adv/dis pair is present. ``keptIdx`` is the
+       index into ``[v1, v2]`` of the die that resolved to the total
+       (max for advantage, min for disadvantage). Used by ``showRollToast``
+       to render both dice with the kept one highlighted. */
+    function _detectAdvDis(expression, breakdown) {
+        const exprStr = String(expression || '');
+        // Long form: 2dN(kh1|kl1)
+        let m = /(?:^|[+\s-])2d(\d+)(kh1|kl1)\b/i.exec(exprStr);
+        let isAdv;
+        let sides;
+        if (m) {
+            sides = parseInt(m[1]);
+            isAdv = m[2].toLowerCase() === 'kh1';
+        } else {
+            // Shorthand: dN(a|d) or 1dN(a|d). Dice.py expands both to a
+            // pair internally and emits ]kh1/]kl1 in the breakdown.
+            m = /(?:^|[+\s-])\d*d(\d+)([ad])\b/i.exec(exprStr);
+            if (!m) return null;
+            sides = parseInt(m[1]);
+            isAdv = m[2].toLowerCase() === 'a';
+        }
+        const brRe = isAdv
+            ? /\[(\d+),(\d+)\]kh1/i
+            : /\[(\d+),(\d+)\]kl1/i;
+        const bm = brRe.exec(String(breakdown || ''));
+        if (!bm) return null;
+        const v1 = parseInt(bm[1]);
+        const v2 = parseInt(bm[2]);
+        const keptIdx = isAdv ? (v1 >= v2 ? 0 : 1) : (v1 <= v2 ? 0 : 1);
+        return { sides, isAdv, v1, v2, keptIdx };
+    }
+
     function _dismiss(toast) {
         if (toast.dataset.gone) return;
         toast.dataset.gone = '1';
@@ -126,6 +163,15 @@
         }
         if (!sides.length) sides.push(6);
 
+        /* v2.2.1: detect advantage/disadvantage and ensure both dice are
+           rendered. The shorthand form (1d20a / 1d20d) only generates a
+           single die from the expression-parsing loop above; push a
+           second die of the same sides so the toast shows both. */
+        const advDis = _detectAdvDis(r.expression, r.breakdown);
+        if (advDis && sides.length === 1 && sides[0] === advDis.sides) {
+            sides.push(advDis.sides);
+        }
+
         const n    = sides.length;
         const sz   = n === 1 ? 82 : n <= 3 ? 60 : n <= 5 ? 46 : 38;
         const dies = sides.map(s => _makeDie(s, sz));
@@ -163,6 +209,24 @@
                     dies.forEach((d, i) => { d.t.textContent = vals[i] != null ? vals[i] : '?'; });
                     sumEl.textContent = '= ' + r.total;
                     sumEl.classList.add('rt-landed');
+                }
+                /* v2.2.1: highlight kept vs discarded for advantage/disadvantage
+                   pairs. Both dice show their rolled value (handled by the
+                   multi-die branch above); the classes tint the kept die green
+                   (adv) or red (dis) and dim the discarded one. */
+                if (advDis && dies.length >= 2) {
+                    // Force the values in case the expression parser had n=1
+                    // (shorthand form) and _parseDieVals only returned one pair.
+                    dies[0].t.textContent = advDis.v1;
+                    dies[1].t.textContent = advDis.v2;
+                    const keptKindClass = advDis.isAdv ? 'rt-die-kept-adv' : 'rt-die-kept-dis';
+                    dies.forEach((d, i) => {
+                        if (i === advDis.keptIdx) {
+                            d.svg.classList.add('rt-die-kept', keptKindClass);
+                        } else if (i <= 1) {
+                            d.svg.classList.add('rt-die-discarded');
+                        }
+                    });
                 }
 
                 const bkd = document.createElement('div');

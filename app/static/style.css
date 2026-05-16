@@ -472,3 +472,22 @@ table.skills td, table.skills th { border-bottom: 1px solid var(--border); paddi
     border-color: var(--accent);
     color: var(--fg);
 }
+
+/* ── Advantage/Disadvantage dice in the roll toast (v2.2.1) ──────────────
+   When the toast renders an adv/dis pair, the kept die (max for adv, min
+   for dis) is tinted green/red and the discarded one is dimmed. Combines
+   with the existing .rt-die spin animation; classes only apply after
+   the spin lands. */
+.rt-die.rt-die-kept {
+    filter: drop-shadow(0 0 4px currentColor);
+    transition: color .2s ease, filter .2s ease;
+}
+.rt-die.rt-die-kept-adv  { color: #4ade80; }
+.rt-die.rt-die-kept-dis  { color: #f87171; }
+.rt-die.rt-die-discarded {
+    opacity: 0.35;
+    transition: opacity .2s ease;
+}
+.rt-die.rt-die-discarded text {
+    text-decoration: line-through;
+}

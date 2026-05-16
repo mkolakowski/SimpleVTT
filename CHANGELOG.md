@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.2.1] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Roll-toast popup now shows BOTH dice for advantage / disadvantage rolls with the kept die highlighted (green for adv, red for dis) and the discarded die dimmed + strike-through. Covers both the long form (`2d20kh1` / `2d20kl1`) and the shorthand (`1d20a` / `1d20d`).
+**Description:** Before this change, the toast for `2d20kh1` rendered both dice but treated them identically — players couldn't tell at a glance which one "won." The shorthand `1d20a` was worse: the expression-parsing regex saw only `1d20` so the toast rendered a single die showing the kept total, hiding the discarded value entirely. Now `_detectAdvDis(expression, breakdown)` parses both inputs to identify the two-die pair, the kind (adv vs dis), each die's value, and which index was kept (max for adv, min for dis). The toast forces a second die into the render for shorthand cases, applies the `rt-die-kept rt-die-kept-adv` / `rt-die-kept-dis` class to the kept die (color tint + glow), and applies `rt-die-discarded` to the other (opacity 0.35 + strikethrough). Animation behavior unchanged — the spin still cycles random values until landing, then the classes apply.
+
+### Added
+- `_detectAdvDis(expression, breakdown)` helper in `app/static/roll_toast.js`. 10 unit tests cover long form (`2d20kh1`, `2d20kl1`, with and without modifiers), shorthand (`1d20a`, `1d20d`, `d20a` no-count), tie cases, and non-adv/dis expressions (`1d20`, `1d8+3`, `4d6kh3`) which return null.
+- `.rt-die-kept` / `.rt-die-kept-adv` / `.rt-die-kept-dis` / `.rt-die-discarded` CSS classes in `app/static/style.css`.
+
+### Changed
+- `showRollToast` now detects adv/dis early and pushes a second die into the render array when the shorthand form leaves it underpopulated. After the spin lands, both dice are assigned their breakdown values explicitly (overriding any earlier `_parseDieVals` result) and the kept/discarded classes are applied.
+
+---
+
 ## [2.2.0] - 2026-05-15
 
 **Schema version:** 52
