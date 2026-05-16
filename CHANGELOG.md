@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.30] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Fix the 2.3.29 logged-in 404 redirect not actually firing — registered the handler on FastAPI's `HTTPException` subclass instead of Starlette's base class, which Starlette's routing layer uses when raising 404s for unmatched paths. Re-registered on `starlette.exceptions.HTTPException` (which FastAPI's subclass inherits from) so the handler catches both routing-layer 404s and explicit `raise HTTPException(...)` calls. The 2.3.28 401 "Login required" redirect kept working because that's an explicit FastAPI subclass raise.
+**Description:** Ship-broke 2.3.29 because the exception handler decorator was scoped to FastAPI's `HTTPException` only. FastAPI's class is `fastapi.HTTPException` which inherits from `starlette.exceptions.HTTPException`. When a route handler does `raise HTTPException(...)`, it raises the FastAPI subclass; when Starlette's routing layer can't match a path, it raises the BASE class. A handler registered on the subclass catches only the former, not the latter. Re-registering on `StarletteHTTPException` catches both. Verified locally: anonymous `/does-not-exist` → 404 (unchanged); logged-in `/does-not-exist` → 303 → `/`; anonymous `/campaign/99999` → 303 → `/login?next=/campaign/99999` (2.3.28 401 path unaffected).
+
+### Fixed
+- `app/main.py` `_auth_redirect_handler` — now decorated with `@app.exception_handler(StarletteHTTPException)` and typed against `StarletteHTTPException`. Removed the unused `from fastapi import HTTPException` import. Behavior change: routing-layer 404s now reach the handler.
+
+---
+
 ## [2.3.29] - 2026-05-16
 
 **Schema version:** 52

@@ -4,10 +4,11 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Request
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import register_oauth
@@ -66,8 +67,14 @@ app.include_router(user_routes.router)
 # still fall through to the default handler (so they don't leak that a
 # specific URL exists by behaving differently per auth state — they
 # just see the same generic JSON).
-@app.exception_handler(HTTPException)
-async def _auth_redirect_handler(request: Request, exc: HTTPException):
+# Register on Starlette's HTTPException — FastAPI's HTTPException
+# inherits from it, so the handler catches BOTH explicit
+# ``raise HTTPException(...)`` calls (FastAPI subclass) and Starlette's
+# own routing-layer 404s for unmatched paths (which use the base
+# class, not the FastAPI subclass — registering on the FastAPI class
+# would miss them).
+@app.exception_handler(StarletteHTTPException)
+async def _auth_redirect_handler(request: Request, exc: StarletteHTTPException):
     accept = (request.headers.get("accept") or "").lower()
     wants_html = "text/html" in accept and "application/json" not in accept
 
