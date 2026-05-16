@@ -42,6 +42,17 @@ VALID_THEMES = {
 }
 
 
+def _default_user_theme() -> str:
+    # Resolved at INSERT time (not import time) to avoid a circular
+    # import — settings -> models -> database -> models — and so that an
+    # operator changing ``APP_DEFAULT_THEME`` actually affects newly
+    # created users (registration, Google SSO, demo seed). The server-
+    # side fallback below stays a static literal because ``server_default``
+    # is rendered into the CREATE TABLE statement.
+    from .config import get_settings
+    return get_settings().default_theme
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -53,7 +64,7 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     is_disabled: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
-    theme: Mapped[str] = mapped_column(String(20), default="dark", server_default="dark")
+    theme: Mapped[str] = mapped_column(String(20), default=_default_user_theme, server_default="dark")
     # Per-user fantasy font preference (None = system default sans-serif)
     font_preference: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     # Per-user tab tint colors for the tabletop sidebar

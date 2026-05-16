@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.4] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Fix `APP_DEFAULT_THEME` being ignored for newly created users — the `User.theme` column had a hardcoded Python-side `default="dark"`, so every new user (registration, Google SSO, demo seed) was inserted with `theme="dark"` regardless of the operator's `APP_DEFAULT_THEME`, and the login-as-demo-user case fell through to the per-user value instead of the configured default.
+**Description:** Follow-up to 2.3.3. Symptom: after setting `APP_DEFAULT_THEME=sepia` and confirming logged-out pages render `data-theme="sepia"`, signing in as a demo user (or any newly created user) still rendered `data-theme="dark"`. Root cause: `app/models.py:56` set `default="dark"` on the `User.theme` column — a literal Python default — so every `User()` insert without an explicit `theme=` argument got `"dark"`. Template at `app/templates/base.html:3` then resolves `user.theme if user and user.theme else APP_DEFAULT_THEME`, picking the stored `"dark"` over the configured default. Fix swaps the Python-side `default=` to a callable `_default_user_theme` that lazily reads `get_settings().default_theme` at INSERT time (not import time, to avoid circular imports). `server_default="dark"` stays a static literal because it's rendered into `CREATE TABLE` — it's only a safety net for raw inserts, which the app does not perform. The next demo reset (or on-boot reseed) deletes and recreates the demo users, so they'll come back with the configured theme.
+
+### Fixed
+- `app/models.py` — `User.theme` Python-side default is now a callable that returns `get_settings().default_theme`. Affects every new user creation path (local register, Google SSO callback, demo seed). Existing users are unchanged.
+
+### Notes
+- Existing users in production keep whatever theme is already stored on their row. Only new inserts pick up the configured default.
+- Redeploy with `docker compose up -d --build app` to pick up the model change; on the demo deployment the on-boot reseed (when `DEMO_RESET_ON_BOOT=true`) will recreate the three demo users with the configured theme.
+
+---
+
 ## [2.3.3] - 2026-05-15
 
 **Schema version:** 52
