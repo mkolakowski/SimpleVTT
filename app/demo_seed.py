@@ -1,11 +1,13 @@
-"""Demo-mode seed dataset (v2.3.0).
+"""Demo-mode seed dataset (v2.3.0; enriched v2.3.22).
 
 A single source of truth for the public-demo dataset: three users
 (GM + two players), one campaign with both players as members, one
 battle map referencing a bundled placeholder image, two D&D 5e
-characters (Rogue 5 + Wizard 5), seven tokens (2 PCs + 5 NPCs for
-the seeded encounter), a small homebrew set, a short roll history,
-and one "Tavern Brawl" encounter snapshot.
+characters (Rogue 5 + Wizard 5), eight tokens (2 PCs + 6 NPCs for
+the seeded encounter — incl. a v2.3.22 homebrew Goblin Captain whose
+structured actions exercise the unified monster mini-sheet flow), a
+small homebrew set (one feat + one richly-authored monster), a short
+roll history, and one "Tavern Brawl" encounter snapshot.
 
 When ``DEMO_MODE`` is enabled, ``app/demo_scheduler.py`` calls
 ``reset_and_reseed`` on boot (optional, default on) and again every
@@ -372,11 +374,21 @@ def _npc_sheet(slug: str, label: str) -> dict:
 
 def seed_token_templates(db: Session, camp: Campaign) -> dict[str, TokenTemplate]:
     """One TokenTemplate per NPC role. Tokens reference these so right-
-    clicking on a token can resolve the stat block."""
+    clicking on a token can resolve the stat block.
+
+    v2.3.22: ``goblin-captain`` here is a pointer to the homebrew monster
+    JSON that ``seed_homebrew_files`` writes later in the orchestration —
+    ``_monster_template_to_sheet`` resolves the slug via local_content at
+    view time (homebrew tier first), so the order of operations within
+    ``reset_and_reseed`` works as long as the homebrew file lands before
+    the GM first opens its sheet. The homebrew tier overlays the full
+    structured action list (multiattack, scimitar, javelin, frightful
+    howl + pack tactics / nimble escape) onto this minimal pointer."""
     specs = [
         ("bandit-captain", "Bandit Captain"),
         ("bandit", "Bandit"),
         ("thug", "Thug"),
+        ("goblin-captain", "Goblin Captain"),
     ]
     out: dict[str, TokenTemplate] = {}
     for slug, label in specs:
@@ -418,13 +430,18 @@ def seed_tokens(
         x=200, y=600, size=1,
     ))
 
-    # NPCs — near the bar (right side)
+    # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
+    # (homebrew, authored through the v2.3.8 structured-action editor) to
+    # showcase the unified monster mini-sheet flow on the demo without
+    # any GM setup. Token index 7 — referenced by the encounter
+    # initiative_order below.
     npc_placements = [
         ("bandit-captain", "Vex (Bandit Captain)", 1100, 400, "#c84a4a"),
         ("bandit",         "Bandit Alpha",          1050, 500, "#c84a4a"),
         ("bandit",         "Bandit Beta",           1150, 500, "#c84a4a"),
         ("bandit",         "Bandit Gamma",          1100, 600, "#c84a4a"),
         ("thug",           "Thug",                  1200, 400, "#c84a4a"),
+        ("goblin-captain", "Grixxa (Goblin Captain)", 1250, 550, "#7c9c54"),
     ]
     for slug, label, x, y, color in npc_placements:
         tmpl = templates.get(slug)
@@ -472,7 +489,14 @@ def seed_homebrew_files(camp: Campaign) -> int:
     )
     written += 1
 
-    # Custom monster — a flavored variant of the Bandit Captain
+    # Custom monster — a goblin captain variant authored end-to-end through
+    # the v2.3.8 structured-action editor. v2.3.22: expanded from one action
+    # to a richer four-action loadout + two passive special abilities so the
+    # demo showcases the full breadth of the editor → projection → mini-sheet
+    # → click-to-roll pipeline that 2.3.7–2.3.21 built. Mix of attack-roll
+    # melee, attack-roll ranged, and a save-based AoE so the GM can click
+    # each tab on the new monster mini-sheet (rendered in the init tracker)
+    # and see all three roll patterns fire into the campaign roll log.
     write_homebrew(
         {
             "slug": "goblin-captain",
@@ -482,26 +506,73 @@ def seed_homebrew_files(camp: Campaign) -> int:
             "alignment": "neutral evil",
             "armor_class": 15,
             "armor_desc": "studded leather",
-            "hit_points": 24,
-            "hit_dice": "7d6",
+            "hit_points": 36,
+            "hit_dice": "8d6+8",
             "speed": {"walk": 30},
-            "strength": 12, "dexterity": 14, "constitution": 12,
-            "intelligence": 10, "wisdom": 10, "charisma": 10,
+            "strength": 12, "dexterity": 16, "constitution": 12,
+            "intelligence": 10, "wisdom": 12, "charisma": 13,
+            "damage_immunities": "",
+            "condition_immunities": "",
+            "senses": "darkvision 60 ft., passive Perception 11",
+            "languages": "Common, Goblin",
             "challenge_rating": "1",
-            "actions": [{
-                "id": "scimitar",
-                "name": "Scimitar",
-                "desc": "Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 5 (1d6 + 2) slashing damage.",
-                "damage": "1d6+2",
-                "damage_type": "slashing",
-                "attack_roll": True,
-                "category": "action",
-            }],
+            "actions": [
+                {
+                    "id": "multiattack",
+                    "name": "Multiattack",
+                    "desc": "The goblin captain makes two scimitar attacks, or one scimitar attack and one javelin attack.",
+                    "category": "action",
+                },
+                {
+                    "id": "scimitar",
+                    "name": "Scimitar",
+                    "desc": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 6 (1d6 + 3) slashing damage.",
+                    "damage": "1d6+3",
+                    "damage_type": "slashing",
+                    "attack_roll": True,
+                    "attack_bonus": "+5",
+                    "category": "action",
+                },
+                {
+                    "id": "javelin",
+                    "name": "Javelin",
+                    "desc": "Melee or Ranged Weapon Attack: +5 to hit, reach 5 ft. or range 30/120 ft., one target. Hit: 6 (1d6 + 3) piercing damage.",
+                    "damage": "1d6+3",
+                    "damage_type": "piercing",
+                    "attack_roll": True,
+                    "attack_bonus": "+5",
+                    "category": "action",
+                },
+                {
+                    "id": "frightful-howl",
+                    "name": "Frightful Howl (Recharge 5–6)",
+                    "desc": "The goblin captain emits a piercing battle cry. Each creature within 30 feet that can hear it must succeed on a DC 12 Wisdom saving throw or become frightened of the goblin captain until the end of its next turn.",
+                    "save_ability": "wis",
+                    "save_dc": 12,
+                    "category": "action",
+                },
+                # Special abilities ride alongside actions on the unified
+                # Monster.actions list with category="special_ability" — the
+                # 2.3.8 coalescer / 2.3.10 adapter / mini-sheet rendering
+                # all key off the category discriminator.
+                {
+                    "id": "pack-tactics",
+                    "name": "Pack Tactics",
+                    "desc": "The goblin captain has advantage on attack rolls against a creature if at least one of the goblin captain's allies is within 5 feet of the creature and the ally isn't incapacitated.",
+                    "category": "special_ability",
+                },
+                {
+                    "id": "nimble-escape",
+                    "name": "Nimble Escape",
+                    "desc": "The goblin captain can take the Disengage or Hide action as a bonus action on each of its turns.",
+                    "category": "special_ability",
+                },
+            ],
             "system": "dnd5e",
             "scope": scope,
             "source": "homebrew",
             "owner": None,
-            "_attribution": "Demo seed homebrew (v2.3.0).",
+            "_attribution": "Demo seed homebrew (v2.3.0; expanded v2.3.22).",
         },
         type="monsters",
         scope=scope,
@@ -553,9 +624,14 @@ def seed_encounter(
 ) -> Encounter:
     """One pre-staged 'Tavern Brawl' encounter referencing the seeded
     map + tokens with a deterministic initiative order."""
-    # Initiative order — pre-rolled, seven entries (PCs + 5 NPCs):
-    # Vex(17), Pip(15), Thalindra(13), Thug(11), Bandit_α(9), Bandit_β(7), Bandit_γ(5)
+    # Initiative order — pre-rolled, eight entries (PCs + 6 NPCs).
+    # v2.3.22: Grixxa (Goblin Captain) inserted between Vex and Pip to
+    # showcase the new monster mini-sheet up front (highest initiative
+    # the GM sees on encounter load → first row to expand). Goblin
+    # captain rolled an 18 (DEX +3, lucky d20=15). Token index 7 →
+    # matches the placement appended in seed_tokens above.
     initiative_order = [
+        {"name": "Grixxa (Goblin Captain)", "init": 18, "hp_max": 36, "hp_current": 36, "color": "#7c9c54", "token_idx": 7},
         {"name": "Vex (Bandit Captain)", "init": 17, "hp_max": 65, "hp_current": 65, "color": "#c84a4a", "token_idx": 2},
         {"name": chars[0].name,           "init": 15, "hp_max": 33, "hp_current": 33, "color": "#6cb4ff", "token_idx": 0},
         {"name": chars[1].name,           "init": 13, "hp_max": 27, "hp_current": 27, "color": "#4ade80", "token_idx": 1},
@@ -585,7 +661,9 @@ def seed_encounter(
         name="Tavern Brawl",
         description=(
             "The bandits have you cornered against the bar. Vex barks "
-            "orders. The thug cracks his knuckles. Initiative is rolled."
+            "orders, Grixxa the goblin captain hops onto a tabletop with "
+            "scimitar drawn, and the thug cracks his knuckles. "
+            "Initiative is rolled."
         ),
         map_id=map_.id,
         payload=payload,

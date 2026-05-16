@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.22] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Enrich the demo dataset so the v2.3.7–v2.3.21 monster-sheet work is visible end-to-end on a fresh `DEMO_MODE` deploy without any GM setup. Goblin Captain ("Grixxa") is now a fully-authored homebrew monster — four actions (multiattack + scimitar + javelin + Frightful Howl save) + two passive special abilities — placed as a token on the demo map and inserted at the top of the Tavern Brawl initiative order. The on-boot reseed regenerates the demo, so the demo URL picks it up automatically.
+**Description:** Before this commit, the demo's homebrew Goblin Captain had a single Scimitar action and no TokenTemplate / token / encounter slot, so the only way to see the new monster mini-sheet flow was to manually author a monster + place a token + add to init — too many steps for a "open the demo URL and see the feature" experience. This commit expands the homebrew JSON in `seed_homebrew_files` from one action to a six-entry actions list that exercises every roll path the 2.3.18 / 2.3.21 handlers can fire: a descriptive Multiattack (no buttons — proves narrative entries pass through cleanly), a melee attack-roll Scimitar ("+5" / 1d6+3 slashing), a ranged attack-roll Javelin (same to-hit / damage type piercing), a save-based Frightful Howl (DC 12 WIS save, no damage — proves the save-announce path), plus Pack Tactics + Nimble Escape special abilities so the GM sees the special-ability category render too. `seed_token_templates` now creates a TokenTemplate pointer for `goblin-captain` (resolved through `_monster_template_to_sheet` at view time — the homebrew tier overlays the structured stat block onto the minimal template sheet). `seed_tokens` places Grixxa on the right side of the bar at the corresponding map position. `seed_encounter` inserts Grixxa as the first initiative entry (rolled 18 — highest in the order, so when the GM expands the encounter the FIRST row to see is the new monster mini-sheet). Encounter description updated to mention Grixxa.
+
+### Changed
+- `app/demo_seed.py` `seed_homebrew_files` — Goblin Captain expanded from one Scimitar action to four actions (Multiattack + Scimitar + Javelin + Frightful Howl) + two special abilities (Pack Tactics, Nimble Escape). HP 24 → 36, hit dice `7d6` → `8d6+8`, abilities tuned upward (DEX 14 → 16, WIS 10 → 12, CHA 10 → 13), senses + languages populated. `attack_bonus` set explicitly to "+5" on attack entries (no longer relies on the 2.3.11 desc-regex fallback).
+- `app/demo_seed.py` `seed_token_templates` — added `("goblin-captain", "Goblin Captain")` to the specs list. The template carries the standard `_npc_sheet` pointer shape; the structured stat block resolves through the homebrew tier at view time.
+- `app/demo_seed.py` `seed_tokens` — added a Grixxa token at (1250, 550) using the new goblin-captain template. Goblin-green color (#7c9c54) to visually distinguish from the red-coded bandits.
+- `app/demo_seed.py` `seed_encounter` — Grixxa inserted at the top of the initiative_order (init 18, token_idx 7). Encounter description mentions her.
+- Module docstring — token count updated (7 → 8), Goblin Captain call-out added.
+
+### Notes
+- Reset cadence: the `DEMO_RESET_ON_BOOT=true` startup hook reseeds on every container start; the running `demo_scheduler` reseeds every `DEMO_RESET_INTERVAL_MINUTES` (default 60). So the enrichment is visible to any visitor within the next reset window after deploy.
+- What the new demo exercises end-to-end:
+  - **v2.3.8** structured-action editor — Grixxa's actions are stored with `attack_roll`/`attack_bonus`/`damage`/`damage_type`/`save_ability`/`save_dc` first-class fields that the editor produces.
+  - **v2.3.10/11** monster sheet adapter — opening Grixxa's "Open full sheet" link projects the homebrew stat block into `sheet_dnd5e.html` with the structured attacks folded into `sheet.attacks`.
+  - **v2.3.13** PC-only section hiding — the sheet shows abilities/saves/skills/attacks and nothing else.
+  - **v2.3.15/20** drawer with postMessage close — clicking the link opens the drawer; Close inside the iframe dismisses it cleanly.
+  - **v2.3.17** monster mini-sheet in the init tracker — Grixxa expands inline with the full PC-style mini-sheet.
+  - **v2.3.18** click-to-roll — Scimitar / Javelin / Frightful Howl buttons all fire to `/roll` from the mini-sheet's Attacks tab.
+
+---
+
 ## [2.3.21] - 2026-05-16
 
 **Schema version:** 52
