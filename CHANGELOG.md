@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.14] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Retire the 2.3.9 inline monster stat-block + 🎯/🎲/📋 strike buttons in the init tracker now that the 2.3.10–2.3.13 full-sheet view is the canonical path. The init-tracker monster row now collapses to an AC/Speed quick-glance chip plus the existing "📋 Open full sheet ↗" link.
+**Description:** After 2.3.12 wired up the full-sheet link and 2.3.13 tightened the sheet to monster-relevant sections, the 2.3.9 inline ability grid + per-action strike buttons duplicated the full sheet's affordances with a less-polished UI (no adv/dis support, no proper roll log card, "save" was an announcement-only line). Removing them avoids two UIs drifting and reclaims vertical space in the init panel. `buildMonsterInitSheet` collapses to a one-line layout: any AC/Speed chips on the left, the full-sheet link button on the right. The delegated `.monster-strike-btn` click handler (~60 LoC) and its CSS class come out with it.
+
+### Changed
+- `app/templates/tabletop.html` `buildMonsterInitSheet` — now returns a single-row "AC / Spd chips · Open full sheet" layout. Removed the ability-mod grid and per-action button strip.
+
+### Removed
+- `app/templates/tabletop.html` — the GM-only `#initiative-list` delegated click handler that fired `.monster-strike-btn` POSTs to `/api/campaign/{cid}/roll` (kind=attack/damage/save). Same rolls now happen via the full sheet's existing roll-button wiring.
+- `.monster-strike-btn` CSS class.
+
+### Notes
+- The full-sheet link still uses the purple palette so the affordance keeps the same visual identity it had as a button group.
+- The 2.3.8 structured-attack editor + the 2.3.10/11 monster sheet adapter both remain — this commit only strips a duplicate UI surface.
+
+---
+
 ## [2.3.13] - 2026-05-16
 
 **Schema version:** 52
