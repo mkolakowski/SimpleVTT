@@ -1,4 +1,4 @@
-"""Demo-mode seed dataset (v2.3.0; enriched v2.3.22, v2.3.25).
+"""Demo-mode seed dataset (v2.3.0; enriched v2.3.22, v2.3.25, v2.3.31).
 
 A single source of truth for the public-demo dataset: three users
 (GM + two players), one campaign with both players as members, one
@@ -8,9 +8,12 @@ GM — added v2.3.25 so the demo party has a divine healer and the GM
 has a PC mini-sheet to demo alongside the players), nine tokens
 (3 PCs + 6 NPCs for the seeded encounter — incl. a v2.3.22 homebrew
 Goblin Captain whose structured actions exercise the unified monster
-mini-sheet flow), a small homebrew set (one feat + one richly-authored
-monster), a short roll history, and one "Tavern Brawl" encounter
-snapshot.
+mini-sheet flow), a small homebrew set (one feat + four richly-
+authored monsters — v2.3.31 brought the Bandit Captain / Bandit /
+Thug into the homebrew tier alongside the Goblin Captain so all
+NPCs resolve via the same end-to-end editor → projection →
+mini-sheet flow), a short roll history, and one "Tavern Brawl"
+encounter snapshot.
 
 When ``DEMO_MODE`` is enabled, ``app/demo_scheduler.py`` calls
 ``reset_and_reseed`` on boot (optional, default on) and again every
@@ -667,6 +670,207 @@ def seed_homebrew_files(camp: Campaign) -> int:
         scope=scope,
     )
     written += 1
+
+    # v2.3.31: convert the three SRD-resolved NPCs (Bandit Captain /
+    # Bandit / Thug) to homebrew-authored monsters so all four demo
+    # combatants resolve through the homebrew tier (parallel to Grixxa
+    # above). Each one shadows the shipped SRD slug — same name, same
+    # baseline stats, but with explicit ``attack_bonus`` populated (no
+    # desc-regex fallback) and Special Abilities surfaced as
+    # ``category: "special_ability"`` entries on the unified actions
+    # list. ``_monster_template_to_sheet`` resolves homebrew tier
+    # first, so the campaign's TokenTemplate pointers
+    # (``monster_slug: "bandit-captain"`` etc.) now overlay these
+    # homebrew records instead of the shipped SRD files.
+    write_homebrew(
+        {
+            "slug": "bandit-captain",
+            "name": "Bandit Captain",
+            "size": "Medium",
+            "type": "Humanoid",
+            "alignment": "any non-lawful alignment",
+            "armor_class": 15,
+            "armor_desc": "studded leather",
+            "hit_points": 65,
+            "hit_dice": "10d8+20",
+            "speed": {"walk": 30},
+            "strength": 15, "dexterity": 16, "constitution": 14,
+            "intelligence": 14, "wisdom": 11, "charisma": 14,
+            "damage_immunities": "",
+            "condition_immunities": "",
+            "senses": "passive Perception 12",
+            "languages": "any two languages",
+            "challenge_rating": "2",
+            "prof_saving_throws": "Str +4, Dex +5, Wis +2",
+            "prof_skills": "Athletics +4, Deception +4",
+            "actions": [
+                {
+                    "id": "multiattack",
+                    "name": "Multiattack",
+                    "desc": "The bandit captain makes three melee attacks: two with its scimitar and one with its dagger. Or the bandit captain makes two ranged attacks with its daggers.",
+                    "category": "action",
+                },
+                {
+                    "id": "scimitar",
+                    "name": "Scimitar",
+                    "desc": "Melee Weapon Attack: +5 to hit, reach 5 ft., one target. Hit: 6 (1d6 + 3) slashing damage.",
+                    "damage": "1d6+3",
+                    "damage_type": "slashing",
+                    "attack_roll": True,
+                    "attack_bonus": "+5",
+                    "category": "action",
+                },
+                {
+                    "id": "dagger",
+                    "name": "Dagger",
+                    "desc": "Melee or Ranged Weapon Attack: +5 to hit, reach 5 ft. or range 20/60 ft., one target. Hit: 5 (1d4 + 3) piercing damage.",
+                    "damage": "1d4+3",
+                    "damage_type": "piercing",
+                    "attack_roll": True,
+                    "attack_bonus": "+5",
+                    "category": "action",
+                },
+                {
+                    "id": "parry",
+                    "name": "Parry",
+                    "desc": "The bandit captain adds 2 to its AC against one melee attack that would hit it. To do so, the bandit captain must see the attacker and be wielding a melee weapon.",
+                    "category": "reaction",
+                },
+                {
+                    "id": "leadership",
+                    "name": "Leadership (Recharges after a Short or Long Rest)",
+                    "desc": "For 1 minute, the bandit captain can utter a special command or warning whenever a nonhostile creature that it can see within 30 feet of it makes an attack roll or a saving throw. The creature can add a d4 to its roll provided it can hear and understand the bandit captain. A creature can benefit from only one Leadership die at a time. This effect ends if the bandit captain is incapacitated.",
+                    "category": "special_ability",
+                },
+            ],
+            "system": "dnd5e",
+            "scope": scope,
+            "source": "homebrew",
+            "owner": None,
+            "_attribution": "Demo seed homebrew (v2.3.31). Stats from D&D 5e SRD 5.1; authored as homebrew so the demo exercises the homebrew tier end-to-end.",
+        },
+        type="monsters",
+        scope=scope,
+    )
+    written += 1
+
+    write_homebrew(
+        {
+            "slug": "bandit",
+            "name": "Bandit",
+            "size": "Medium",
+            "type": "Humanoid",
+            "alignment": "any non-lawful alignment",
+            "armor_class": 12,
+            "armor_desc": "leather armor",
+            "hit_points": 11,
+            "hit_dice": "2d8+2",
+            "speed": {"walk": 30},
+            "strength": 11, "dexterity": 12, "constitution": 12,
+            "intelligence": 10, "wisdom": 10, "charisma": 10,
+            "damage_immunities": "",
+            "condition_immunities": "",
+            "senses": "passive Perception 10",
+            "languages": "any one language (usually Common)",
+            "challenge_rating": "1/8",
+            "actions": [
+                {
+                    "id": "scimitar",
+                    "name": "Scimitar",
+                    "desc": "Melee Weapon Attack: +3 to hit, reach 5 ft., one target. Hit: 4 (1d6 + 1) slashing damage.",
+                    "damage": "1d6+1",
+                    "damage_type": "slashing",
+                    "attack_roll": True,
+                    "attack_bonus": "+3",
+                    "category": "action",
+                },
+                {
+                    "id": "light-crossbow",
+                    "name": "Light Crossbow",
+                    "desc": "Ranged Weapon Attack: +3 to hit, range 80/320 ft., one target. Hit: 5 (1d8 + 1) piercing damage.",
+                    "damage": "1d8+1",
+                    "damage_type": "piercing",
+                    "attack_roll": True,
+                    "attack_bonus": "+3",
+                    "category": "action",
+                },
+            ],
+            "system": "dnd5e",
+            "scope": scope,
+            "source": "homebrew",
+            "owner": None,
+            "_attribution": "Demo seed homebrew (v2.3.31). Stats from D&D 5e SRD 5.1; authored as homebrew so the demo exercises the homebrew tier end-to-end.",
+        },
+        type="monsters",
+        scope=scope,
+    )
+    written += 1
+
+    write_homebrew(
+        {
+            "slug": "thug",
+            "name": "Thug",
+            "size": "Medium",
+            "type": "Humanoid",
+            "alignment": "any non-good alignment",
+            "armor_class": 11,
+            "armor_desc": "leather armor",
+            "hit_points": 32,
+            "hit_dice": "5d8+10",
+            "speed": {"walk": 30},
+            "strength": 15, "dexterity": 11, "constitution": 14,
+            "intelligence": 10, "wisdom": 10, "charisma": 11,
+            "damage_immunities": "",
+            "condition_immunities": "",
+            "senses": "passive Perception 10",
+            "languages": "any one language (usually Common)",
+            "challenge_rating": "1/2",
+            "prof_skills": "Intimidation +2",
+            "actions": [
+                {
+                    "id": "multiattack",
+                    "name": "Multiattack",
+                    "desc": "The thug makes two melee attacks.",
+                    "category": "action",
+                },
+                {
+                    "id": "mace",
+                    "name": "Mace",
+                    "desc": "Melee Weapon Attack: +4 to hit, reach 5 ft., one target. Hit: 5 (1d6 + 2) bludgeoning damage.",
+                    "damage": "1d6+2",
+                    "damage_type": "bludgeoning",
+                    "attack_roll": True,
+                    "attack_bonus": "+4",
+                    "category": "action",
+                },
+                {
+                    "id": "heavy-crossbow",
+                    "name": "Heavy Crossbow",
+                    "desc": "Ranged Weapon Attack: +2 to hit, range 100/400 ft., one target. Hit: 5 (1d10) piercing damage.",
+                    "damage": "1d10",
+                    "damage_type": "piercing",
+                    "attack_roll": True,
+                    "attack_bonus": "+2",
+                    "category": "action",
+                },
+                {
+                    "id": "pack-tactics",
+                    "name": "Pack Tactics",
+                    "desc": "The thug has advantage on an attack roll against a creature if at least one of the thug's allies is within 5 feet of the creature and the ally isn't incapacitated.",
+                    "category": "special_ability",
+                },
+            ],
+            "system": "dnd5e",
+            "scope": scope,
+            "source": "homebrew",
+            "owner": None,
+            "_attribution": "Demo seed homebrew (v2.3.31). Stats from D&D 5e SRD 5.1; authored as homebrew so the demo exercises the homebrew tier end-to-end.",
+        },
+        type="monsters",
+        scope=scope,
+    )
+    written += 1
+
     return written
 
 

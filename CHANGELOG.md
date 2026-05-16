@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.31] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Demo: bring the remaining three NPC stat blocks (Bandit Captain / Bandit / Thug) into the homebrew tier alongside the Goblin Captain. All four demo combatants now resolve through `local_content.resolve` → homebrew JSON instead of the SRD tier, demonstrating the homebrew authoring path end-to-end and giving each NPC explicit `attack_bonus` fields (no longer relying on the 2.3.11 desc-text regex fallback). User-requested.
+**Description:** Before this commit Grixxa (Goblin Captain) was the only demo NPC that resolved through the homebrew tier — the others resolved through the shipped SRD JSONs in `app/data/local/dnd5e/monsters/`. Functionally identical mini-sheets (same HP/AC/abilities/attacks), but the demo only showcased the homebrew flow for one of four NPCs. Adds three more `write_homebrew(..., type="monsters", ...)` calls in `seed_homebrew_files` for `bandit-captain` / `bandit` / `thug`, each shadowing the shipped slug via the resolve's homebrew-first priority. Stats match the SRD baseline so the rendered values don't change; what changes is the data shape on disk (action `attack_bonus` is now an explicit string like `"+5"` instead of `null` + regex-extracted from desc), and the demo's homebrew JSON file count goes from 2 to 5 (1 feat + 4 monsters). Each NPC also gets special abilities surfaced as `category: "special_ability"` entries on the unified actions list — Pack Tactics for the Thug, Leadership + Parry for the Bandit Captain (the SRD files had these in the Multiattack desc only).
+
+### Added
+- `app/demo_seed.py` `seed_homebrew_files` — three new `write_homebrew` calls for the bandit-captain / bandit / thug slugs. Each ships full structured actions (`attack_roll: true`, explicit `attack_bonus`, `damage`, `damage_type`) and category-tagged special abilities where applicable.
+
+### Notes
+- The `_attribution` field on each new monster credits the SRD baseline ("Stats from D&D 5e SRD 5.1; authored as homebrew so the demo exercises the homebrew tier end-to-end") so the homebrew tier override doesn't accidentally claim the SRD's mechanics as demo-original work.
+- All four demo monster TokenTemplates keep their `monster_slug` pointer shape — what changes is which tier the resolver hits. Stops, swaps, and tweaks remain a simple JSON edit per monster.
+- Module docstring updated: "one richly-authored monster" → "four richly-authored monsters".
+
+---
+
 ## [2.3.30] - 2026-05-16
 
 **Schema version:** 52
