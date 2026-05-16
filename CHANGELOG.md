@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.39] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Fix bare NPC monster sheets in the GM init tracker when the combatant's stored `token_template_id` no longer matches any current template. Adds a name-substring fallback in `buildMonsterInitSheet` that finds the right template by combatant label (e.g. "Vex (Bandit Captain)" → template "Bandit Captain") and heals the combatant in place so the per-row "📋 Sheet" link also routes correctly. User-reported.
+**Description:** Reported symptom: expanding a monster row in the init tracker shows nothing (no AC chips, no ability grid, no per-action buttons), despite the inline view working in earlier sessions. Most likely root cause: stale `localStorage` battle.combatants — the GM had combatants saved from before a demo reseed cycle, and after the reseed the template's id had been reassigned. `allTemplates.find(t => t.id === combatant.token_template_id)` returned undefined → `buildMonsterInitSheet` early-returned `''` → bare row. Fix walks `allTemplates` a second time looking for a template whose name appears as a substring of the combatant's name, which works for the demo's "Vex (Bandit Captain)" / "Grixxa (Goblin Captain)" / "Bandit Alpha" / "Thug" labels (they all derive from a template name) and any encounter where the GM kept the template-name suffix. On a successful fallback the helper writes the correct `token_template_id` back onto the combatant in place and calls `saveBattle()` so the next render skips the search AND the 2.3.33 "📋 Sheet" button URL gets corrected too. If neither lookup works (e.g. a manually-named combatant with no template association), the helper still early-returns and the GM sees the static edit row only — same behavior as before.
+
+### Fixed
+- `app/templates/tabletop.html` `buildMonsterInitSheet` — added a name-substring fallback over `allTemplates` when the by-id lookup misses, with in-place id-healing + `saveBattle()` so the fix persists across re-renders.
+
+### Notes
+- The name-match is case-insensitive `String#indexOf` (not a regex), so it tolerates the common "Boss Name (Template Name)" label pattern without surprises. Multiple template-name matches collapse to the first hit — fine in practice (a "Bandit Captain Bandit" combatant would still resolve to one of them).
+- Does not invalidate the underlying localStorage scheme — the GM can still reset the init tracker with the existing "Remove" button per combatant if a wrong template gets healed onto a combatant after a manual rename. Long-term: the encounter-load endpoint should translate the encounter's `initiative` field to `battle_state` so a freshly-loaded encounter doesn't depend on the GM's localStorage at all. Filed as a follow-up.
+
+---
+
 ## [2.3.38] - 2026-05-16
 
 **Schema version:** 52

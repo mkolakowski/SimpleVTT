@@ -3239,8 +3239,34 @@ let CONC_DATA = {{ conc_by_char | tojson }};
      *  inspection. Returns HTML only; click handlers wire up in the
      *  ``.monster-strike-btn`` document listener below. */
     function buildMonsterInitSheet(combatant) {
-        const tmpl = (combatant && combatant.token_template_id)
+        let tmpl = (combatant && combatant.token_template_id)
             ? allTemplates.find(t => t.id === combatant.token_template_id) : null;
+        // v2.3.39: name-match fallback. Combatants in localStorage can
+        // outlive the templates they were created from — most commonly
+        // across a demo reseed where the server-side template IDs cycle
+        // (or get reassigned by the 2.3.27 sequence reset) but the
+        // GM's battle.combatants in localStorage still carry the old
+        // token_template_id, so the by-id find returns undefined and
+        // the GM sees a bare init row. Walk allTemplates looking for a
+        // template whose name appears in the combatant's name string —
+        // works for the demo's "Vex (Bandit Captain)" → "Bandit
+        // Captain" pattern and any encounter where combatant labels
+        // were derived from the template name.
+        if (!tmpl && combatant && combatant.name) {
+            const lc = String(combatant.name).toLowerCase();
+            tmpl = allTemplates.find(t => {
+                const tn = String(t.name || '').trim().toLowerCase();
+                return tn && lc.indexOf(tn) !== -1;
+            });
+            // Heal the combatant in-place so subsequent renders skip
+            // the fallback search and the 2.3.33 "📋 Sheet" button
+            // (which reads c.token_template_id directly) points at the
+            // right monster sheet URL too.
+            if (tmpl && combatant.token_template_id !== tmpl.id) {
+                combatant.token_template_id = tmpl.id;
+                try { saveBattle(); } catch (_) {}
+            }
+        }
         if (!tmpl) return '';
         const sh = tmpl.sheet || {};
         const ab = sh.abilities || {};
