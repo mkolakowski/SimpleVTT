@@ -2256,6 +2256,18 @@
         if (ev.key === 'Escape' && drawer.style.display === 'flex') closeDrawer();
     });
 
+    // v2.3.20: monster_page.html's Close button postMessages the parent
+    // window with a known type so the drawer can dismiss cleanly. Without
+    // this the in-iframe Close would just navigate the iframe to the
+    // campaign page, which the drawer then displayed (ugly). Same-origin
+    // only — the iframe is served from this app, so reject anything else.
+    window.addEventListener('message', (ev) => {
+        if (ev.origin !== window.location.origin) return;
+        if (ev.data && ev.data.type === 'simplevtt:monster-sheet-close') {
+            if (drawer.style.display === 'flex') closeDrawer();
+        }
+    });
+
     // Intercept clicks on any monster-sheet link. Delegated on document so
     // links added by re-renders (renderBattle re-runs frequently) keep working.
     // Cmd/Ctrl/middle-click falls through to the browser's default new-tab

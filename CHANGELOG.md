@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.20] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Wire the monster sheet's in-iframe Close button to dismiss the 2.3.15 drawer via `postMessage` instead of navigating the iframe to the campaign page. Flagged as a known limitation in the 2.3.15 changelog notes; user authorized the follow-up after the 2.3.19 fix.
+**Description:** `monster_page.html` exposes `window.closeSheet()` which `sheet_dnd5e.html` calls from its Close button (and the breadcrumb up-arrow). Prior to this commit, `closeSheet` just did `window.location.href = '/campaign/{cid}'` — when the sheet was loaded inside the 2.3.15 drawer iframe, that navigated the IFRAME to the campaign page (the drawer stayed open and now displayed the entire campaign tabletop nested inside itself, which was both ugly and broke the WebSocket connection in the iframe). Fix detects iframe context (`window.parent !== window`) and `postMessage`s the parent with a known message type (`simplevtt:monster-sheet-close`); the parent drawer listens for that exact type + same-origin and calls its own `closeDrawer()`. Standalone-tab opens still work — when `closeSheet` is called outside an iframe (or when `postMessage` throws), it falls back to the original navigation behavior.
+
+### Added
+- `app/templates/tabletop.html` drawer JS — new `message` event listener that calls `closeDrawer()` when receiving a `{type: 'simplevtt:monster-sheet-close'}` postMessage from a same-origin frame. Origin check rejects messages from other sources.
+
+### Changed
+- `app/templates/monster_page.html` `window.closeSheet` — detects iframe context first; postMessages the parent with the close type when iframed, falls back to `window.location.href` navigation when standalone (or when postMessage throws).
+
+### Notes
+- Same-origin policy guards the message handler — the iframe always loads from the same SimpleVTT origin, so a strict `ev.origin !== window.location.origin` check is the right gate.
+- The postMessage type is namespaced (`simplevtt:`) so it won't conflict with random other postMessages a browser extension or third-party widget might emit.
+
+---
+
 ## [2.3.19] - 2026-05-16
 
 **Schema version:** 52

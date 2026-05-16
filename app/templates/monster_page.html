@@ -33,8 +33,23 @@
         const CHAR_ID     = {{ char.id }};
         const ME = { id: {{ user.id }} };
         // Monster sheets are GM-only and don't persist edits — the close
-        // hook just sends the GM back to the campaign tabletop.
+        // hook either dismisses the drawer (when this sheet is iframed
+        // inside the 2.3.15 drawer on the tabletop) or navigates back
+        // to the campaign page (when opened as a standalone tab).
+        // v2.3.20: postMessage protocol with the parent drawer; falls
+        // back to navigation when not iframed (or when the parent isn't
+        // listening for the message).
         window.closeSheet = function () {
+            const inIframe = window.parent && window.parent !== window;
+            if (inIframe) {
+                try {
+                    window.parent.postMessage(
+                        { type: 'simplevtt:monster-sheet-close' },
+                        window.location.origin
+                    );
+                    return;
+                } catch (_) { /* fall through to navigation */ }
+            }
             window.location.href = '/campaign/{{ campaign.id }}';
         };
     </script>
