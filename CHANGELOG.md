@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.32] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Docs-only: add a "Demo" section to the README that describes the setting (Tavern Brawl), the three PCs (Pip / Thalindra / Brother Tavik), all six NPCs (Vex / Grixxa / Thug / 3 Bandits), the pre-rolled initiative order, the three sign-in credentials, the reset behavior, and the env-var snippet for enabling demo mode on a self-hosted deploy. User-requested alongside 2.3.31. No code change.
+**Description:** Before this commit the README listed "Features" and went straight to "Architecture" — a reader exploring the project had no way to know what they'd see if they visited a demo URL beyond `docs/plans/demo-mode.md`'s design-doc-level "Demo: The Sundered Vault" reference. New section between Features and Architecture documents the demo end-to-end: sign-in table with the three accounts + shared password, opening-scene paragraph, three tables (PCs / NPCs / pre-rolled initiative), a "what gets wiped on reset" pointer, and an `.env` snippet for operators enabling demo mode on their own deploy. Pulls forward the demo's existing flavor (Vex Vance, Brother Tavik Stonebrow, Grixxa) and the 2.3.31 detail that all six NPCs are homebrew-authored so the demo shows the homebrew tier flow end-to-end. Links to `docs/plans/demo-mode.md` for design depth and `.env.example` for the full var list.
+
+### Added
+- `README.md` new `## Demo` section between `## Features` and `## Architecture`. Sub-sections: Sign in, The setting, Player characters (3-row table), NPCs in the Tavern Brawl (6-row table), Pre-rolled initiative (numbered list), What gets wiped on reset, Enabling demo mode on your own deploy (env snippet).
+
+### Notes
+- The PC + NPC tables are intentionally compact (name / class+level / race / owner | name / stat block / CR / role) rather than rendering full stats — readers who want the numbers can click through on a running demo. The README is the elevator pitch, not the stat block.
+
+---
+
 ## [2.3.31] - 2026-05-16
 
 **Schema version:** 52

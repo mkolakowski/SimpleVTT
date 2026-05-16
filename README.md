@@ -1,6 +1,6 @@
 # SimpleVTT
 
-> Current version: **2.3.31** · Schema: **v52** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
+> Current version: **2.3.32** · Schema: **v52** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
 
 A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 
@@ -13,6 +13,76 @@ A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backe
 - **Character sheets**: free-form generic template, or D&D 5e (stats, skills, AC/HP, attacks, spells, inventory).
 - **Admin portal**: manage users, campaigns, memberships, characters, and battle maps. Admins are defined by the `ADMINS` env var.
 - **Automated backups**: a sidecar container runs `pg_dump` on cron with daily + weekly retention.
+
+## Demo
+
+A `DEMO_MODE=true` deploy ships with a fully-staged sample session that resets every 60 minutes (see [`docs/plans/demo-mode.md`](docs/plans/demo-mode.md) for the full design). The reset cadence and credentials are configurable in `.env`; see the **Demo mode** section of [`.env.example`](.env.example).
+
+### Sign in
+
+Three accounts, all with the password **`demopass`** (also surfaced on the login page when `DEMO_CREDENTIALS_VISIBLE=true`):
+
+| Email | Role |
+|---|---|
+| `demo-gm@example.com` | Game Master (also owns Brother Tavik below) |
+| `demo-alice@example.com` | Player — controls Pip Quickfingers |
+| `demo-bob@example.com` | Player — controls Thalindra Moonwhisper |
+
+### The setting
+
+**Demo: The Sundered Vault**, opening scene — **The Tavern Brawl**. The party have cornered a band of brigands inside a roadside tavern; the brigands turn nasty. The bar is to the east, the door to the west, and the floor is about to get loud.
+
+### Player characters
+
+| Name | Class & level | Race | Owner | Notes |
+|---|---|---|---|---|
+| **Pip Quickfingers** | Rogue 5 (Thief) | Halfling | Alice | DEX-focused melee + thrown daggers; high Stealth / Sleight of Hand expertise |
+| **Thalindra Moonwhisper** | Wizard 5 (Evocation) | Elf | Bob | Fireball / Magic Missile / Misty Step / Counterspell — INT-focused ranged caster |
+| **Brother Tavik Stonebrow** | Cleric 5 (Life Domain) | Hill Dwarf | GM | Heavy-armour healer; Warhammer + Sacred Flame; Bless / Cure Wounds / Spirit Guardians (added v2.3.25 to round out the party with divine healing and give the GM a PC mini-sheet to demo from) |
+
+### NPCs in the Tavern Brawl
+
+All six are authored as homebrew monster JSON in the campaign's homebrew scope (v2.3.31), exercising the homebrew tier → mini-sheet → click-to-roll flow end-to-end. Click a row in the GM initiative tracker to open the unified monster mini-sheet; click **📋 Open full sheet** to open the read-only standalone sheet in the drawer.
+
+| Name | Stat block | CR | Role |
+|---|---|---:|---|
+| **Vex Vance** | Bandit Captain | 2 | Leader — Scimitar / Dagger / Parry reaction / Leadership 1/short rest |
+| **Grixxa** | Goblin Captain (homebrew, v2.3.22) | 1 | Top of the init order — Scimitar / Javelin / Frightful Howl save DC 12 / Pack Tactics / Nimble Escape |
+| **Thug** | Thug | 1/2 | Heavy backup — Multiattack Mace + Heavy Crossbow / Pack Tactics |
+| **Bandit Alpha** | Bandit | 1/8 | Mook — Scimitar / Light Crossbow |
+| **Bandit Beta** | Bandit | 1/8 | Mook — same loadout |
+| **Bandit Gamma** | Bandit | 1/8 | Mook — same loadout |
+
+### Pre-rolled initiative
+
+The encounter ships with a deterministic initiative order so you can hit "Load encounter" and immediately start playing:
+
+1. Grixxa (Goblin Captain) — **init 18**
+2. Vex (Bandit Captain) — init 17
+3. Pip Quickfingers — init 15
+4. Brother Tavik — init 14
+5. Thalindra Moonwhisper — init 13
+6. Thug — init 11
+7. Bandit Alpha — init 9
+8. Bandit Beta — init 7
+9. Bandit Gamma — init 5
+
+### What gets wiped on reset
+
+The hourly reset surgically deletes everything tagged with the three demo emails or the demo campaign name — no other rows are touched. Token positions, HP edits, custom rolls, and any extra characters / homebrew anyone created are reverted to the seed dataset. See `app/demo_seed.py` `wipe()` for the full list and `_reset_sequences()` (v2.3.27) for why the campaign URL stays at `/campaign/1` across cycles.
+
+### Enabling demo mode on your own deploy
+
+In `.env`:
+
+```bash
+DEMO_MODE=true
+DEMO_RESET_INTERVAL_MINUTES=60   # clamped to [5, 1440]
+DEMO_RESET_ON_BOOT=true          # seed on container start
+DEMO_CREDENTIALS_VISIBLE=true    # show creds on /login
+```
+
+Then `docker compose up -d --build`. A non-dismissible banner appears on every page warning visitors that data resets on the configured cadence.
 
 ## Architecture
 
