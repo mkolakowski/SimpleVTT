@@ -16,5 +16,21 @@
     {% if settings.app.allow_local_registration %}
         <p class="muted">No account? <a href="/register">Create one</a>.</p>
     {% endif %}
+
+    {% if DEMO_MODE and DEMO_CREDENTIALS_VISIBLE %}
+    {# v2.3.0: demo-mode credentials box. The seed creates these three
+       accounts with a shared password every reset — players can grab
+       one without registering. #}
+    <div class="demo-creds-box">
+        <h3>🎲 Try the demo without signing up</h3>
+        <p class="muted">All three accounts share the password <code>demopass</code>.</p>
+        <ul>
+            <li><strong>GM:</strong> <code>demo-gm@example.com</code></li>
+            <li><strong>Player (Rogue):</strong> <code>demo-alice@example.com</code></li>
+            <li><strong>Player (Wizard):</strong> <code>demo-bob@example.com</code></li>
+        </ul>
+        <p class="muted">⚠ The dataset resets every {{ DEMO_RESET_INTERVAL_MINUTES }} minutes — anything you change will be wiped.</p>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

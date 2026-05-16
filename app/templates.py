@@ -19,6 +19,9 @@ templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
 templates.env.globals["APP_VERSION"] = APP_VERSION
 templates.env.globals["SCHEMA_VERSION"] = SCHEMA_VERSION
 templates.env.globals["APP_DEFAULT_THEME"] = get_settings().default_theme
+templates.env.globals["DEMO_MODE"] = get_settings().demo_mode
+templates.env.globals["DEMO_RESET_INTERVAL_MINUTES"] = get_settings().demo_reset_interval_minutes
+templates.env.globals["DEMO_CREDENTIALS_VISIBLE"] = get_settings().demo_credentials_visible
 
 
 def _bold_dice_in_breakdown(value: str) -> Markup:

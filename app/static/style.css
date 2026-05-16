@@ -502,3 +502,54 @@ table.skills td, table.skills th { border-bottom: 1px solid var(--border); paddi
     padding-top: 0;
     border-top: none;
 }
+
+/* ── Demo mode (v2.3.0) ─────────────────────────────────────────────────
+   Banner at the top of every page when DEMO_MODE is on. Non-dismissible.
+   Plus a credentials box on the login page. */
+.demo-banner {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: linear-gradient(90deg, #5a3a1a, #4a2a4a);
+    color: #ffe0a8;
+    border-bottom: 2px solid #c8962a;
+    font-size: 13px;
+    font-weight: 500;
+    flex-wrap: wrap;
+}
+.demo-banner strong { color: #ffd28a; }
+.demo-banner-icon { font-size: 16px; }
+.demo-banner-spacer { flex: 1; min-width: 8px; }
+.demo-banner-countdown {
+    font-variant-numeric: tabular-nums;
+    color: #ffd28a;
+    font-weight: 600;
+}
+.demo-creds-box {
+    margin-top: 18px;
+    padding: 12px 14px;
+    background: rgba(167, 139, 250, 0.08);
+    border: 1px solid rgba(167, 139, 250, 0.35);
+    border-radius: 6px;
+}
+.demo-creds-box h3 {
+    margin: 0 0 6px;
+    font-size: 13px;
+    color: var(--accent);
+}
+.demo-creds-box ul {
+    list-style: none;
+    padding: 0;
+    margin: 6px 0;
+}
+.demo-creds-box li {
+    font-size: 13px;
+    padding: 2px 0;
+}
+.demo-creds-box code {
+    background: rgba(0, 0, 0, 0.25);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+}

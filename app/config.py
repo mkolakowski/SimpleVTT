@@ -50,6 +50,17 @@ class Settings(BaseModel):
     )
     default_theme: str = "dark"
 
+    # Demo mode (v2.3.0). See docs/plans/demo-mode.md.
+    # When ``demo_mode`` is true, the lifespan handler boots a background
+    # task that resets a deterministic sample dataset on a fixed interval,
+    # letting a single public URL hand out clean demo instances. NEVER
+    # enable this on a production deploy — it surgically wipes any data
+    # tagged with demo emails/slugs every interval.
+    demo_mode: bool = False
+    demo_reset_interval_minutes: int = 60   # clamped to [5, 1440] at boot
+    demo_reset_on_boot: bool = True
+    demo_credentials_visible: bool = True   # show login creds on /login
+
     # Derived/runtime settings
     database_url: str = ""
 
@@ -78,6 +89,10 @@ def get_settings() -> Settings:
             "CHARACTER_TEMPLATES", ["generic", "dnd5e"]
         ),
         default_theme=os.environ.get("APP_DEFAULT_THEME", "dark"),
+        demo_mode=_env_bool("DEMO_MODE", False),
+        demo_reset_interval_minutes=max(5, min(1440, int(os.environ.get("DEMO_RESET_INTERVAL_MINUTES") or 60))),
+        demo_reset_on_boot=_env_bool("DEMO_RESET_ON_BOOT", True),
+        demo_credentials_visible=_env_bool("DEMO_CREDENTIALS_VISIBLE", True),
     )
 
     db_url = os.environ.get("DATABASE_URL")

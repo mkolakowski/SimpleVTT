@@ -1,0 +1,54 @@
+{# Demo-mode banner (v2.3.0). Rendered on every page when DEMO_MODE
+   is enabled. Non-dismissible by design — it's the only safeguard
+   against an operator accidentally leaving DEMO_MODE on in production.
+   The countdown auto-reloads the page at T+0 so the user sees the
+   fresh dataset immediately. #}
+{% if DEMO_MODE %}
+<div class="demo-banner" role="status" aria-live="polite">
+    <span class="demo-banner-icon" aria-hidden="true">🎲</span>
+    <strong>Demo mode</strong> — this instance resets every {{ DEMO_RESET_INTERVAL_MINUTES }} minutes. Changes will be wiped.
+    <span class="demo-banner-spacer"></span>
+    <span class="demo-banner-countdown">
+        Next reset in <span id="demo-banner-countdown-val">…</span>
+    </span>
+</div>
+<script>
+    (function () {
+        // Server's next-reset timestamp (UTC, ISO 8601). The lifespan
+        // hook stores this on app.state and each page render echoes it
+        // here. Falls back to "interval minutes from now" if absent.
+        const intervalMs = {{ DEMO_RESET_INTERVAL_MINUTES }} * 60 * 1000;
+        const initial = "{{ demo_next_reset or '' }}";
+        let nextReset = initial ? Date.parse(initial) : (Date.now() + intervalMs);
+        if (isNaN(nextReset)) nextReset = Date.now() + intervalMs;
+
+        const el = document.getElementById('demo-banner-countdown-val');
+        if (!el) return;
+
+        function _fmt(ms) {
+            if (ms <= 0) return '0s';
+            const totalS = Math.floor(ms / 1000);
+            const m = Math.floor(totalS / 60);
+            const s = totalS % 60;
+            if (m > 0) return m + 'm ' + s + 's';
+            return s + 's';
+        }
+
+        function tick() {
+            const now = Date.now();
+            const remaining = nextReset - now;
+            if (remaining <= 0) {
+                el.textContent = 'now…';
+                // Reload so we see the fresh dataset
+                setTimeout(() => window.location.reload(), 1500);
+                return;
+            }
+            el.textContent = _fmt(remaining);
+            // Tick once per second when under a minute, otherwise every 10 s
+            const next = remaining < 60000 ? 1000 : 10000;
+            setTimeout(tick, next);
+        }
+        tick();
+    })();
+</script>
+{% endif %}

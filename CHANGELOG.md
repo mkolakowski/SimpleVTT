@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.0] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Phase 1 of Demo Mode — `DEMO_MODE=true` env var enables a public-demo deployment with an hourly auto-reset, a pre-seeded sample campaign (3 users / 1 map / 2 PCs with full D&D 5e sheets / 7 tokens for a tavern-brawl encounter / 8-roll history / 2 homebrew records), an admin on-demand `POST /admin/demo/reset` endpoint, a non-dismissible top banner with countdown to next reset, and a credentials box on the login page.
+**Description:** Implements `docs/plans/demo-mode.md` so a single public URL can hand out clean demo instances without operator intervention. Architectural choices from the plan: (1) in-process asyncio reset loop registered on the FastAPI lifespan, (2) surgical wipe by deterministic emails (`demo-gm@example.com`, `demo-alice@example.com`, `demo-bob@example.com`) + campaign-name sentinel — never a full-DB wipe, so an accidental `DEMO_MODE=true` on a production deploy touches no real data, (3) bundled placeholder assets under `app/static/demo/` so resets never need to clean the upload volume, (4) seed module is one file (`app/demo_seed.py`) with explicit per-section functions for easy extension. Banner is non-dismissible by design — it's the only safeguard against an operator forgetting `DEMO_MODE` is on.
+
+### Added
+- `DEMO_MODE`, `DEMO_RESET_INTERVAL_MINUTES`, `DEMO_RESET_ON_BOOT`, `DEMO_CREDENTIALS_VISIBLE` settings in `app/config.py` (all clamped / defaulted; reset interval clamped to [5, 1440]).
+- `app/demo_seed.py` (~370 LoC) — `wipe(db)` deletes by demo email/campaign-name tags including the homebrew JSON directory; eight `seed_*` helpers (users, campaign, map, characters, token templates, tokens, roll history, encounter) plus `seed_homebrew_files`; `reset_and_reseed(db)` orchestration with per-section counts logged. Idempotent end-to-end (verified by running twice).
+- `app/demo_scheduler.py` — `start_demo_scheduler(app)` registers an asyncio background task that runs `reset_and_reseed` every `DEMO_RESET_INTERVAL_MINUTES`. Errors caught + logged so a single failure doesn't kill the loop. `stop_demo_scheduler(app)` for the shutdown hook.
+- `POST /admin/demo/reset` in `app/routes/admin_routes.py` — admin-only on-demand reset. 503 if `DEMO_MODE=false`. Returns the per-section count dict for scripting.
+- `app/templates/_demo_banner.html` — non-dismissible top banner with a JS countdown that reloads the page when it hits 0:00. Included unconditionally in `base.html`; the `{% if DEMO_MODE %}` inside makes it a no-op when demo mode is off.
+- Login credentials box in `app/templates/login.html` — gated on `DEMO_MODE and DEMO_CREDENTIALS_VISIBLE`. Lists the three demo accounts + shared password.
+- Bundled placeholder assets at `app/static/demo/`: `maps/tavern.png` (1400×900 with grid + bar + tables), `tokens/rogue.png` / `tokens/wizard.png` (256×256 colored circles with letter ID). Generated programmatically with Pillow, CC0. `app/static/demo/README.md` documents the assets and notes how to replace.
+- `DEMO_*` env vars added to `.env.example` with safety warnings.
+- `DEMO_MODE`, `DEMO_RESET_INTERVAL_MINUTES`, `DEMO_CREDENTIALS_VISIBLE` exposed as Jinja globals so templates can render the banner / login box without each route passing them in its context.
+
+### Changed
+- `app/main.py` startup hook is now async, performs the on-boot reset (when `DEMO_RESET_ON_BOOT=true`, default), and spawns the scheduler when `DEMO_MODE` is on. New shutdown hook cancels the scheduler task cleanly.
+
+### Notes
+- Plan deviation: assets at `app/static/demo/` instead of `app/data/demo/` so they're served by the existing static-files mount without adding a new mount. Documented in the `app/static/demo/README.md`.
+- Slight scope deviation from the plan: skipped seeding placeholder audio tracks (CC0 audio is harder to source than CC0 images, and the demo works fine without). Adding two short placeholder OGGs is a follow-up.
+- Safety guards on destructive admin endpoints (the plan's "demo users can't be deleted" behavior) deferred. The hourly reset is the dominant safety mechanism; if a demo visitor manages to delete a user from the admin panel, the next reset restores it within at most `DEMO_RESET_INTERVAL_MINUTES` minutes.
+
+---
+
 ## [2.2.6] - 2026-05-15
 
 **Schema version:** 52

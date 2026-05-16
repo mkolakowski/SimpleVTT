@@ -48,7 +48,7 @@ app.include_router(user_routes.router)
 
 
 @app.on_event("startup")
-def on_startup() -> None:
+async def on_startup() -> None:
     log.info("SimpleVTT %s (schema v%d) starting...", APP_VERSION, SCHEMA_VERSION)
     log.info("Initializing database (create_all)...")
     init_db()
@@ -57,6 +57,34 @@ def on_startup() -> None:
         log.info("Admins from env: %s", ", ".join(settings.admins))
     else:
         log.warning("No admins configured. Set ADMINS in .env (comma-separated emails).")
+
+    # Demo mode (v2.3.0). When enabled, optionally reset on boot and
+    # spawn the recurring reset scheduler. NEVER enable on production —
+    # the reset surgically wipes any rows tagged with the demo emails /
+    # campaign name. See docs/plans/demo-mode.md.
+    if settings.demo_mode:
+        log.warning(
+            "DEMO_MODE is ENABLED — dataset will reset every %d minutes",
+            settings.demo_reset_interval_minutes,
+        )
+        if settings.demo_reset_on_boot:
+            try:
+                from .demo_seed import reset_and_reseed
+                from .database import SessionLocal as _SL
+                with _SL() as db:
+                    counts = reset_and_reseed(db)
+                log.info("demo seed (boot): %s", counts)
+            except Exception as e:  # noqa: BLE001
+                log.exception("demo seed (boot) failed: %s", e)
+        from .demo_scheduler import start_demo_scheduler
+        start_demo_scheduler(app)
+
+
+@app.on_event("shutdown")
+async def on_shutdown() -> None:
+    if settings.demo_mode:
+        from .demo_scheduler import stop_demo_scheduler
+        stop_demo_scheduler(app)
 
 
 @app.get("/healthz")

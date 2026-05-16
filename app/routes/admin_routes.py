@@ -634,6 +634,25 @@ def admin_stubs_clear(user: User = Depends(require_admin)):
     return RedirectResponse("/admin/stubs", status_code=303)
 
 
+@router.post("/demo/reset")
+def admin_demo_reset(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """Admin-only on-demand demo reset (v2.3.0). Force-runs
+    ``reset_and_reseed`` without waiting for the scheduler's next tick.
+    Returns to /admin with the per-section counts on the URL as a hint.
+    Returns 503 if DEMO_MODE is disabled."""
+    from ..config import get_settings
+    s = get_settings()
+    if not s.demo_mode:
+        raise HTTPException(503, "DEMO_MODE is not enabled on this deploy")
+    from ..demo_seed import reset_and_reseed
+    counts = reset_and_reseed(db)
+    log.info("admin %s triggered demo reset: %s", user.email, counts)
+    return {"ok": True, "counts": counts}
+
+
 @router.get("/stubs.json")
 def admin_stubs_json(
     db: Session = Depends(get_db),
