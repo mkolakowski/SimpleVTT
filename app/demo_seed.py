@@ -1,13 +1,16 @@
-"""Demo-mode seed dataset (v2.3.0; enriched v2.3.22).
+"""Demo-mode seed dataset (v2.3.0; enriched v2.3.22, v2.3.25).
 
 A single source of truth for the public-demo dataset: three users
 (GM + two players), one campaign with both players as members, one
-battle map referencing a bundled placeholder image, two D&D 5e
-characters (Rogue 5 + Wizard 5), eight tokens (2 PCs + 6 NPCs for
-the seeded encounter — incl. a v2.3.22 homebrew Goblin Captain whose
-structured actions exercise the unified monster mini-sheet flow), a
-small homebrew set (one feat + one richly-authored monster), a short
-roll history, and one "Tavern Brawl" encounter snapshot.
+battle map referencing a bundled placeholder image, three D&D 5e
+characters (Rogue 5 for Alice, Wizard 5 for Bob, Cleric 5 for the
+GM — added v2.3.25 so the demo party has a divine healer and the GM
+has a PC mini-sheet to demo alongside the players), nine tokens
+(3 PCs + 6 NPCs for the seeded encounter — incl. a v2.3.22 homebrew
+Goblin Captain whose structured actions exercise the unified monster
+mini-sheet flow), a small homebrew set (one feat + one richly-authored
+monster), a short roll history, and one "Tavern Brawl" encounter
+snapshot.
 
 When ``DEMO_MODE`` is enabled, ``app/demo_scheduler.py`` calls
 ``reset_and_reseed`` on boot (optional, default on) and again every
@@ -337,6 +340,70 @@ def _wizard_sheet(name: str) -> dict:
     }
 
 
+def _cleric_sheet(name: str) -> dict:
+    """v2.3.25: minimal D&D 5e Cleric 5 (Life Domain) sheet for the GM's
+    character — fills the obvious gap in the demo party (no divine
+    healer) and gives the GM a PC to play alongside the players when
+    showing off the new mini-sheet flow."""
+    return {
+        "class": "Cleric",
+        "subclass": "Life Domain",
+        "level": 5,
+        "race": "Hill Dwarf",
+        "alignment": "Lawful Good",
+        "background": "Folk Hero",
+        "abilities": {"STR": 14, "DEX": 10, "CON": 14, "INT": 10, "WIS": 16, "CHA": 12},
+        "ac": 18,
+        "speed": 25,
+        "hp": {"current": 43, "max": 43, "temp": 0},  # 8 + 4×6 (avg+CON) + 5 (Dwarven Toughness)
+        "initiative_bonus": 0,
+        "proficiency_bonus": 3,
+        "hit_dice": {"current": 5, "max": 5},
+        "class_hit_die": "d8",
+        "class_spellcasting": "WIS",
+        "saving_throws": {"WIS": True, "CHA": True},
+        "skills": {
+            "Religion": {"ability": "INT", "proficient": True, "expertise": False},
+            "Insight": {"ability": "WIS", "proficient": True, "expertise": False},
+            "Medicine": {"ability": "WIS", "proficient": True, "expertise": False},
+            "Athletics": {"ability": "STR", "proficient": True, "expertise": False},
+            "Animal Handling": {"ability": "WIS", "proficient": True, "expertise": False},
+        },
+        "attacks": [
+            {"name": "Warhammer", "attack_bonus": "+5", "damage": "1d8+2",
+             "damage_type": "bludgeoning", "range": "5 ft", "desc": "Versatile (1d10)"},
+            {"name": "Sacred Flame (cantrip)", "save_dc": 14, "save_ability": "DEX",
+             "damage": "2d8", "damage_type": "radiant", "range": "60 ft",
+             "desc": "Cleric cantrip — target makes a DEX save or takes radiant damage."},
+        ],
+        "spells": [
+            {"name": "Sacred Flame", "level_int": 0, "prepared": True},
+            {"name": "Guidance",     "level_int": 0, "prepared": True},
+            {"name": "Light",        "level_int": 0, "prepared": True},
+            {"name": "Bless",          "level_int": 1, "prepared": True},
+            {"name": "Cure Wounds",    "level_int": 1, "prepared": True},
+            {"name": "Healing Word",   "level_int": 1, "prepared": True},
+            {"name": "Spiritual Weapon", "level_int": 2, "prepared": True},
+            {"name": "Hold Person",      "level_int": 2, "prepared": True},
+            {"name": "Spirit Guardians",  "level_int": 3, "prepared": True},
+            {"name": "Mass Healing Word", "level_int": 3, "prepared": True},
+        ],
+        "spell_slots": {
+            "cleric": {
+                "1": {"total": 4, "used": 0},
+                "2": {"total": 3, "used": 0},
+                "3": {"total": 2, "used": 0},
+            },
+        },
+        "inventory": [
+            "Warhammer", "Shield", "Chain mail", "Holy symbol",
+            "Priest's pack", "Smith's tools", "Healer's kit",
+        ],
+        "feats": [],
+        "resources": [],
+    }
+
+
 def seed_characters(
     db: Session, camp: Campaign, users: dict[str, User]
 ) -> list[Character]:
@@ -356,9 +423,21 @@ def seed_characters(
         sheet=_wizard_sheet("Thalindra Moonwhisper"),
         color="#4ade80",
     )
-    db.add_all([alice_pc, bob_pc])
+    # v2.3.25: GM gets a Cleric so the demo party has a divine healer
+    # and the GM has a PC mini-sheet to demo alongside the player ones.
+    # Owned by ``gm`` so the GM controls them; campaign membership is
+    # implicit via gm_user_id on the campaign.
+    gm_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Brother Tavik Stonebrow",
+        template="dnd5e",
+        sheet=_cleric_sheet("Brother Tavik Stonebrow"),
+        color="#f5b75c",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc])
     db.flush()
-    return [alice_pc, bob_pc]
+    return [alice_pc, bob_pc, gm_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:
@@ -414,7 +493,11 @@ def seed_tokens(
 ) -> list[Token]:
     tokens: list[Token] = []
 
-    # Player tokens — near the door (left side)
+    # Player tokens — near the door (left side). v2.3.25: chars[2] is the
+    # GM's Cleric (Brother Tavik); placed alongside the other PCs so the
+    # demo party is visibly three-strong on the map. No portrait image —
+    # we don't ship a cleric token in app/static/demo/tokens/ so the
+    # color swatch (#f5b75c) carries the visual identity.
     tokens.append(Token(
         map_id=map_.id, character_id=chars[0].id,
         controller_user_id=users["alice"].id,
@@ -428,6 +511,12 @@ def seed_tokens(
         label=chars[1].name, color="#4ade80",
         image_url="/static/demo/tokens/wizard.png",
         x=200, y=600, size=1,
+    ))
+    tokens.append(Token(
+        map_id=map_.id, character_id=chars[2].id,
+        controller_user_id=users["gm"].id,
+        label=chars[2].name, color="#f5b75c",
+        x=200, y=700, size=1,
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
@@ -624,21 +713,22 @@ def seed_encounter(
 ) -> Encounter:
     """One pre-staged 'Tavern Brawl' encounter referencing the seeded
     map + tokens with a deterministic initiative order."""
-    # Initiative order — pre-rolled, eight entries (PCs + 6 NPCs).
-    # v2.3.22: Grixxa (Goblin Captain) inserted between Vex and Pip to
-    # showcase the new monster mini-sheet up front (highest initiative
-    # the GM sees on encounter load → first row to expand). Goblin
-    # captain rolled an 18 (DEX +3, lucky d20=15). Token index 7 →
-    # matches the placement appended in seed_tokens above.
+    # Initiative order — pre-rolled, nine entries (3 PCs + 6 NPCs).
+    # v2.3.22: Grixxa (Goblin Captain) at the top to showcase the new
+    # monster mini-sheet up front.
+    # v2.3.25: Brother Tavik (GM's Cleric) added at init 14, between Pip
+    # and Thalindra, with the NPC token_idx values shifted by +1 to
+    # account for Tavik's token being inserted at index 2 in seed_tokens.
     initiative_order = [
-        {"name": "Grixxa (Goblin Captain)", "init": 18, "hp_max": 36, "hp_current": 36, "color": "#7c9c54", "token_idx": 7},
-        {"name": "Vex (Bandit Captain)", "init": 17, "hp_max": 65, "hp_current": 65, "color": "#c84a4a", "token_idx": 2},
-        {"name": chars[0].name,           "init": 15, "hp_max": 33, "hp_current": 33, "color": "#6cb4ff", "token_idx": 0},
-        {"name": chars[1].name,           "init": 13, "hp_max": 27, "hp_current": 27, "color": "#4ade80", "token_idx": 1},
-        {"name": "Thug",                  "init": 11, "hp_max": 32, "hp_current": 32, "color": "#c84a4a", "token_idx": 6},
-        {"name": "Bandit Alpha",          "init":  9, "hp_max": 11, "hp_current": 11, "color": "#c84a4a", "token_idx": 3},
-        {"name": "Bandit Beta",           "init":  7, "hp_max": 11, "hp_current": 11, "color": "#c84a4a", "token_idx": 4},
-        {"name": "Bandit Gamma",          "init":  5, "hp_max": 11, "hp_current": 11, "color": "#c84a4a", "token_idx": 5},
+        {"name": "Grixxa (Goblin Captain)", "init": 18, "hp_max": 36, "hp_current": 36, "color": "#7c9c54", "token_idx": 8},
+        {"name": "Vex (Bandit Captain)",    "init": 17, "hp_max": 65, "hp_current": 65, "color": "#c84a4a", "token_idx": 3},
+        {"name": chars[0].name,             "init": 15, "hp_max": 33, "hp_current": 33, "color": "#6cb4ff", "token_idx": 0},
+        {"name": chars[2].name,             "init": 14, "hp_max": 43, "hp_current": 43, "color": "#f5b75c", "token_idx": 2},
+        {"name": chars[1].name,             "init": 13, "hp_max": 27, "hp_current": 27, "color": "#4ade80", "token_idx": 1},
+        {"name": "Thug",                    "init": 11, "hp_max": 32, "hp_current": 32, "color": "#c84a4a", "token_idx": 7},
+        {"name": "Bandit Alpha",            "init":  9, "hp_max": 11, "hp_current": 11, "color": "#c84a4a", "token_idx": 4},
+        {"name": "Bandit Beta",             "init":  7, "hp_max": 11, "hp_current": 11, "color": "#c84a4a", "token_idx": 5},
+        {"name": "Bandit Gamma",            "init":  5, "hp_max": 11, "hp_current": 11, "color": "#c84a4a", "token_idx": 6},
     ]
     payload = {
         "tokens": [
@@ -662,8 +752,8 @@ def seed_encounter(
         description=(
             "The bandits have you cornered against the bar. Vex barks "
             "orders, Grixxa the goblin captain hops onto a tabletop with "
-            "scimitar drawn, and the thug cracks his knuckles. "
-            "Initiative is rolled."
+            "scimitar drawn, and the thug cracks his knuckles. Brother "
+            "Tavik unslings his warhammer behind you. Initiative is rolled."
         ),
         map_id=map_.id,
         payload=payload,

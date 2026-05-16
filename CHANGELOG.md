@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.25] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Demo: give the GM a Cleric 5 ("Brother Tavik Stonebrow") so the demo party has a divine healer + the GM has a PC mini-sheet to demo alongside the players. Placed on the map next to Pip and Thalindra, inserted into the Tavern Brawl initiative at init 14 (between Pip and Thalindra).
+**Description:** Direct user request after the 2.3.22 demo enrichment. The previous demo party was Rogue + Wizard with no healing — the GM watching a demo session had no PC to drive the mini-sheet flow from the GM perspective. This commit adds `_cleric_sheet(name)` (Life Domain, Hill Dwarf, Folk Hero — 18 AC chain+shield, 43 HP w/ Dwarven Toughness, WIS spellcasting with healing-focused spell list incl. Cure Wounds / Healing Word / Mass Healing Word / Spirit Guardians + a save-based Sacred Flame cantrip that exercises the 2.3.18 save-roll button path). `seed_characters` returns three characters now (`[alice_pc, bob_pc, gm_pc]`) and the new token is placed at (200, 700) under the GM's controller. `seed_tokens` inserts Tavik's token at index 2 (right after the two PCs), which means every NPC token_idx in the Tavern Brawl initiative_order shifts by +1 — Grixxa 7→8, Vex 2→3, Thug 6→7, Bandits 3/4/5 → 4/5/6. The encounter description gets a Tavik mention.
+
+### Added
+- `app/demo_seed.py` `_cleric_sheet(name)` — minimal D&D 5e Cleric 5 (Life Domain) sheet. Includes a save-based Sacred Flame attack that exercises the 2.3.18 monster/save click path (PCs use it too — DC 14 DEX save renders the same way in the mini-sheet Attacks tab).
+- `app/demo_seed.py` `seed_characters` — third Character row (`gm_pc`) owned by `users["gm"]`. Returned list is now 3-long.
+- `app/demo_seed.py` `seed_tokens` — Tavik token at (200, 700) with `controller_user_id=users["gm"].id`, character_id linking to `gm_pc`. Color `#f5b75c` (warm amber) so the GM character is visually distinct from the blue (rogue) / green (wizard) PC swatches and the red bandits.
+- Tavik entry in the Tavern Brawl `initiative_order` at init 14 between Pip (15) and Thalindra (13).
+
+### Changed
+- `app/demo_seed.py` Tavern Brawl `initiative_order` — every NPC `token_idx` shifted +1 because the Tavik token is inserted at index 2 in `seed_tokens`. Verified by hand: Grixxa 7→8, Vex 2→3, Thug 6→7, Bandit Alpha 3→4, Bandit Beta 4→5, Bandit Gamma 5→6. The two PC entries (Pip, Thalindra) stay at token_idx 0/1.
+- Encounter description gets a Tavik mention ("Brother Tavik unslings his warhammer behind you").
+- Module docstring updated: "two D&D 5e characters" → "three D&D 5e characters", "eight tokens" → "nine tokens".
+
+### Notes
+- No portrait image for Tavik — the demo assets directory ships `rogue.png` and `wizard.png` only. The color swatch (`#f5b75c`) carries the visual identity. A cleric token PNG is a follow-up if the demo gets more polish.
+- The GM's character isn't a "Character" in the membership sense (the GM is the campaign owner, not a member); the existing `gm_user_id` on the Campaign row already grants control. The `owner_user_id=users["gm"].id` on the Character row is what makes the GM the owner.
+
+---
+
 ## [2.3.24] - 2026-05-16
 
 **Schema version:** 52
