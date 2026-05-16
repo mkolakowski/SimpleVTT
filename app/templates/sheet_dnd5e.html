@@ -951,8 +951,20 @@
         {# ── Unified Spells fieldset ──────────────────────────────────── #}
         {# v2.3.13: hidden on the monster sheet (spell-slot mechanics don't
            apply to NPC stat blocks; monster spellcasting is described in
-           the Actions list instead). #}
-        {% if not is_monster_sheet %}
+           the Actions list instead).
+           v2.3.35: also hidden for non-caster PCs (Rogue / Barbarian /
+           Fighter w/o Eldritch Knight etc.) — the empty Spells fieldset
+           was just noise. Caster detection: ``class_spellcasting`` non-
+           empty (single-class casters), OR ``spell_slots`` carries any
+           entries (multiclass with at least one caster — the slot calc
+           rolls up across classes), OR ``spells`` list has entries
+           (defensive: if a player manually added a spell, don't hide
+           it on them). Nested inside the 2.3.13 monster gate so the
+           outer ``{% endif %}`` near the Notes fieldset still balances. #}
+        {% set _is_caster = sheet.get('class_spellcasting')
+            or (sheet.get('spell_slots') and (sheet.get('spell_slots') | length) > 0)
+            or (sheet.get('spells') and (sheet.get('spells') | length) > 0) %}
+        {% if _is_caster %}
         <fieldset id="spells-fieldset">
             <legend>Spells
                 {% if can_edit %}
@@ -1045,6 +1057,7 @@
             </div>
             {% endif %}
         </fieldset>
+        {% endif %}{# v2.3.35 ``{% if _is_caster %}`` — Spells fieldset only renders for caster classes #}
 
         {# ── Spell Browser Overlay ────────────────────────────────────── #}
         <div id="spell-browser-overlay"

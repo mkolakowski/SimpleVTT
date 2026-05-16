@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.35] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Hide the Spells section on non-caster character sheets — Rogue / Barbarian / Fighter (sans Eldritch Knight) / Monk PCs no longer carry an empty Spells fieldset on the full sheet or a vestigial Spells tab on the mini-sheet. Closes [`TODO.md`](TODO.md) → Character Sheet → "Hide Spells from Non-Casters".
+**Description:** `_is_caster` gate added to both `sheet_dnd5e.html` (full sheet) and `_mini_sheet_card.html` (mini-sheet) — caster status is true if any of: (1) `sheet.class_spellcasting` is non-empty (the standard single-class caster signal — Wizard "INT", Cleric "WIS", etc.), (2) `sheet.spell_slots` is a non-empty dict (multiclass rolls up across classes via the spell-slot calculator, so a Fighter 5 / Wizard 3 still surfaces slots even if `class_spellcasting` reads the primary class), or (3) `sheet.spells` list is non-empty (defensive — if a player has manually added a spell entry, the player evidently wants it visible). Full sheet: Spells fieldset (lines 956–1059) wrapped in `{% if _is_caster %}`, nested inside the existing 2.3.13 `{% if not is_monster_sheet %}` block so the broader monster gate stays balanced. Mini-sheet: `_is_caster` is AND-ed with the existing `_spell_vis.any` check that gates both the Spells tab button and the panel body, so non-casters skip rendering even if a spell snuck into the list.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — `_is_caster` Jinja `{% set %}` right before the Spells fieldset, plus an inner `{% if _is_caster %}` ... `{% endif %}` that scopes the gate to just the Spells fieldset (not the broader 2.3.13 monster-hide block which also covers Class Resources / Inventory / etc.).
+- `app/templates/_mini_sheet_card.html` — `_is_caster` `{% set %}` right after the existing `_PREPARED_CASTERS` / `_primary_slug` lines. Used in the Spells tab button + Spells panel conditionals.
+
+### Notes
+- Demo PCs: Pip (Rogue) is non-caster — full sheet Spells fieldset hides, mini-sheet has no Spells tab. Thalindra (Wizard, INT) and Brother Tavik (Cleric, WIS) are unchanged (both have `class_spellcasting` set).
+- The Spell Browser overlay (`#spell-browser-overlay` in the full sheet, used by the "Browse Spells" button) is left in the DOM at `display:none`. It can only be triggered by the in-fieldset button which now doesn't render on non-casters, so it's unreachable as expected. Trimming the overlay markup is a follow-up if DOM weight becomes a concern.
+- Multiclass detection edge case: a hypothetical character with no spell_slots configured yet but `classes` containing a caster class wouldn't be detected. Mitigation: the spell-slot calc in `app/static/sheet.js` populates `spell_slots` automatically on multiclass setup; this commit relies on that to keep the heuristic simple.
+
+---
+
 ## [2.3.34] - 2026-05-16
 
 **Schema version:** 52

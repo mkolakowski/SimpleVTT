@@ -152,6 +152,15 @@
                 {% set spell_slots_map = sh.get('spell_slots') or {} %}
                 {% set _PREPARED_CASTERS = ['cleric','druid','paladin','wizard','artificer'] %}
                 {% set _primary_slug = (sh.get('class') or '') | string | lower | trim | replace(' ', '-') %}
+                {# v2.3.35: ``_is_caster`` gate — single-class casters set
+                   ``class_spellcasting`` (INT/WIS/CHA); multiclass casters
+                   roll up via ``spell_slots``; defensive fallback on a
+                   non-empty ``spells`` list catches manual entries. Non-
+                   casters (Rogue / Barbarian / Fighter w/o EK) skip the
+                   Spells tab + panel even if a stray spell snuck in. #}
+                {% set _is_caster = sh.get('class_spellcasting')
+                    or (spell_slots_map and (spell_slots_map | length) > 0)
+                    or (spells_list and (spells_list | length) > 0) %}
                 {% set _spell_vis = namespace(any=false) %}
                 {% for s in spells_list %}
                 {% set s_lvl = (s.level or 0) | int %}
@@ -164,7 +173,7 @@
                 <div class="mini-tabs" data-char-id="{{ c.id }}">
                     <button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="skills">Skills</button>
                     {% if attacks_list %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="attacks">Attacks</button>{% endif %}
-                    {% if _spell_vis.any %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="spells">Spells</button>{% endif %}
+                    {% if _is_caster and _spell_vis.any %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="spells">Spells</button>{% endif %}
                 </div>
                 <div class="mini-tab-content" data-char-id="{{ c.id }}">
                     {# ── Skills panel ── #}
@@ -234,7 +243,7 @@
                     </div>
                     {% endif %}
                     {# ── Spells panel ── #}
-                    {% if _spell_vis.any %}
+                    {% if _is_caster and _spell_vis.any %}
                     <div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="spells">
                         <div class="mini-spells" data-char-id="{{ c.id }}">
                         {% set _iter_classes = (_mc_sorted if _mc_sorted else (
