@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.6] - 2026-05-15
+
+**Schema version:** 52
+**Commit summary:** Doc-only: add two related homebrew-monster TODOs to `TODO.md` under GM Tools.
+**Description:** No behaviour change. Captures two backlog items raised in conversation, both about making monster combat as click-to-roll as PC combat: (1) expand the homebrew-monster Actions editor to include structured attack fields (`attack_roll`, `attack_bonus`, `damage`, `damage_type`, save fields) so homebrew action entries can be rendered as roll-buttons the way shipped SRD monsters' actions already could; (2) replace the initiative-tracker monster stat-block popover with a reuse of the D&D 5e character sheet shell so checks, saves, and attacks become clickable with the same `/roll` wiring and adv/dis state propagation that PCs already get. The two items are sequenced — (1) is the data prerequisite for (2)'s attack-button wiring against homebrew monsters.
+
+### Changed
+- `TODO.md` — added `### Homebrew Monster Attack Fields → Rollable Attack Buttons` and `### Unified Monster Sheet in Initiative Tracker (reuse character sheet UI)` under the existing GM Tools section, both after `### Homebrew Clone`.
+
+---
+
 ## [2.3.5] - 2026-05-15
 
 **Schema version:** 52
