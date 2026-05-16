@@ -18,6 +18,41 @@
     {% block head %}{% endblock %}
 </head>
 <body>
+    <script>
+    /* v2.3.28: global fetch wrapper that catches expired-session 401
+       responses (``{"detail":"Login required"}``) and bounces the user
+       to the login page with a return-to. Without this, mid-session API
+       calls (rolls, HP edits, attacks, etc.) just print raw JSON in
+       devtools and the page sits unresponsive. The server-side 401 →
+       303 redirect handler in ``app/main.py`` covers HTML page loads;
+       this wrapper covers fetch() callers that send ``Accept:
+       application/json`` (which all of the in-app fetches do).
+
+       Inline + non-deferred so it patches ``window.fetch`` before any
+       page-level script can capture a reference to the original. */
+    (function () {
+        const orig = window.fetch;
+        window.fetch = async function (...args) {
+            const resp = await orig.apply(this, args);
+            if (resp.status === 401) {
+                try {
+                    const body = await resp.clone().json();
+                    if (body && body.detail === 'Login required') {
+                        const next = encodeURIComponent(
+                            window.location.pathname + window.location.search
+                        );
+                        window.location.href = '/login?next=' + next;
+                        // Block the caller's continuation — the page is
+                        // navigating away; returning a Response would let
+                        // the caller treat the 401 as a real error.
+                        return new Promise(() => {});
+                    }
+                } catch (_) { /* not JSON, or already consumed — fall through */ }
+            }
+            return resp;
+        };
+    })();
+    </script>
     {% include "_demo_banner.html" %}
     <header class="topnav">
         <a href="/" class="brand">SimpleVTT</a>

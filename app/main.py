@@ -4,7 +4,9 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exception_handlers import http_exception_handler
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -45,6 +47,31 @@ app.include_router(admin_routes.router)
 app.include_router(homebrew_routes.router)
 app.include_router(audio_routes.router)
 app.include_router(user_routes.router)
+
+
+# v2.3.28: when an expired-session HTML page load hits a route guarded by
+# ``require_user``, FastAPI's default JSON response (``{"detail":"Login
+# required"}``) makes the browser display raw JSON instead of bouncing
+# back to the login form. Detect that specific 401 and respond with a
+# 303 redirect for browser-style requests (``Accept: text/html`` and no
+# ``Accept: application/json``). API / fetch callers — which always
+# send ``Accept: application/json`` — still get the JSON, and the
+# client-side fetch interceptor in ``base.html`` handles them by
+# navigating to ``/login`` from JS. Other HTTPExceptions delegate to
+# Starlette's default handler.
+@app.exception_handler(HTTPException)
+async def _auth_redirect_handler(request: Request, exc: HTTPException):
+    if exc.status_code == 401 and exc.detail == "Login required":
+        accept = (request.headers.get("accept") or "").lower()
+        wants_html = "text/html" in accept and "application/json" not in accept
+        if wants_html:
+            next_path = request.url.path
+            if request.url.query:
+                next_path += "?" + request.url.query
+            return RedirectResponse(
+                f"/login?next={next_path}", status_code=303,
+            )
+    return await http_exception_handler(request, exc)
 
 
 @app.on_event("startup")

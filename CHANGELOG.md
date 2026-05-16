@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.28] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Auto-redirect expired-session users to `/login` instead of showing raw `{"detail":"Login required"}` JSON in the browser. Server-side handler covers HTML page loads; client-side fetch wrapper covers in-app AJAX calls (rolls, HP edits, attacks). Login form round-trips a `?next=` param so the user bounces back to the page they were on after re-auth. User-reported.
+**Description:** When a session expired mid-action (most often: the demo's hourly reset wipes the user's session row), any `require_user`-guarded request would 401 with a JSON body. Browsers happily displayed the raw `{"detail":"Login required"}` for HTML page loads, and in-app fetches would fail silently or pop a JSON-content alert. Three-piece fix: (1) FastAPI exception handler in `app/main.py` catches `HTTPException(401, "Login required")`, sniffs the `Accept` header, and returns a 303 redirect to `/login?next=<original-path>` when the caller wants HTML; JSON callers (with `Accept: application/json`) still get the 401 unchanged so JS can detect it. (2) Global fetch wrapper in `base.html` monkey-patches `window.fetch` to clone the response, look for `{"detail":"Login required"}` on a 401, and `window.location.href = '/login?next=…'` when found (returning a never-resolving promise so the caller doesn't see the error). (3) Login route accepts `next` as both a query param (GET) and a form field (POST), validated through `_safe_next_path` (rejects absolute URLs, protocol-relative URLs, and path-as-scheme smuggling to prevent open redirects), and bounces to that path on success. Hidden `<input name="next">` carries the value through the form.
+
+### Added
+- `app/main.py` `_auth_redirect_handler` — global `@app.exception_handler(HTTPException)` that converts `401 "Login required"` to a `303 RedirectResponse('/login?next=…')` for HTML callers, delegating to `fastapi.exception_handlers.http_exception_handler` for everything else.
+- `app/templates/base.html` inline `<script>` that wraps `window.fetch` before any page-level script runs. Catches `401 + {"detail":"Login required"}` and navigates to `/login?next=…`. Non-deferred + at the top of `<body>` so it patches before any other JS captures the original `fetch`.
+- `app/routes/auth_routes.py` `_safe_next_path(raw)` — validates a return-to path is same-origin (starts with `/` but not `//`, no scheme smuggled in the first segment) before returning it. Falls back to `/`.
+
+### Changed
+- `app/routes/auth_routes.py` `login_page` (GET) — accepts `next: Optional[str]` query, passes the safe-validated value as `next_path` to the template.
+- `app/routes/auth_routes.py` `login_submit` (POST) — accepts `next: str = Form("/")`, redirects to the safe-validated value on success.
+- `app/templates/login.html` — `<form method="post" action="/login">` now carries a hidden `<input name="next" value="{{ next_path or '/' }}">`.
+
+### Notes
+- Open-redirect guard is intentional — without it, `?next=https://evil.example/` could phish a user after a real login. `_safe_next_path` rejects anything that doesn't start with a single `/` and doesn't smuggle a scheme like `/javascript:alert(1)`.
+- Google SSO doesn't yet round-trip `next` — successful Google logins bounce to `/`. Wiring `next` through the OAuth state param is a follow-up.
+- The fetch wrapper specifically targets `body.detail === 'Login required'` so it doesn't intercept other 401s (e.g. login-form bad password, which is a 401 with a different detail and lives on `/login` already).
+
+---
+
 ## [2.3.27] - 2026-05-16
 
 **Schema version:** 52

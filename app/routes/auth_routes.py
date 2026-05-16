@@ -26,8 +26,30 @@ router = APIRouter()
 log = logging.getLogger(__name__)
 
 
+def _safe_next_path(raw: Optional[str]) -> str:
+    """v2.3.28: scrub a ``?next=`` query param so we only bounce the
+    user back to a same-origin path. Rejects absolute URLs (no scheme,
+    no double-slash prefix) and protocol-relative URLs to prevent an
+    open redirect. Falls back to ``/`` on anything suspicious or empty.
+    """
+    if not raw:
+        return "/"
+    candidate = raw.strip()
+    # Reject absolute URLs and protocol-relative URLs.
+    if not candidate.startswith("/") or candidate.startswith("//"):
+        return "/"
+    # Reject anything that smuggles in a scheme via the path.
+    if ":" in candidate.split("/", 2)[1]:
+        return "/"
+    return candidate
+
+
 @router.get("/login", response_class=HTMLResponse)
-def login_page(request: Request, error: Optional[str] = None):
+def login_page(
+    request: Request,
+    error: Optional[str] = None,
+    next: Optional[str] = None,
+):
     settings = get_settings()
     return templates.TemplateResponse(
         "login.html",
@@ -36,6 +58,9 @@ def login_page(request: Request, error: Optional[str] = None):
             "settings": settings,
             "error": error,
             "google_enabled": settings.google_sso.enabled and bool(settings.google_sso.client_id),
+            # v2.3.28: round-trip the safe-validated ``next`` so the form
+            # carries it through to the POST handler.
+            "next_path": _safe_next_path(next),
         },
     )
 
@@ -45,6 +70,7 @@ def login_submit(
     request: Request,
     email: str = Form(...),
     password: str = Form(...),
+    next: str = Form("/"),
     db: Session = Depends(get_db),
 ):
     user = authenticate_local(db, email, password)
@@ -56,6 +82,7 @@ def login_submit(
                 "settings": get_settings(),
                 "error": "Invalid email or password",
                 "google_enabled": get_settings().google_sso.enabled,
+                "next_path": _safe_next_path(next),
             },
             status_code=401,
         )
@@ -65,7 +92,7 @@ def login_submit(
         user.is_admin = True
         db.commit()
     login_user(request, user)
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse(_safe_next_path(next), status_code=303)
 
 
 @router.get("/register", response_class=HTMLResponse)

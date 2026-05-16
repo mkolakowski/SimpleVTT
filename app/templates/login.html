@@ -7,10 +7,15 @@
     <form method="post" action="/login" class="stacked">
         <label>Email <input type="email" name="email" autocomplete="username" required></label>
         <label>Password <input type="password" name="password" autocomplete="current-password" required></label>
+        {# v2.3.28: round-trip the return-to path so the user bounces back
+           to wherever the session-expired auth check sent them from. #}
+        <input type="hidden" name="next" value="{{ next_path or '/' }}">
         <button type="submit">Sign in</button>
     </form>
     {% if google_enabled %}
         <p class="or">— or —</p>
+        {# Google SSO ignores ``next`` for now — bounces to `/` after auth.
+           Wiring next through the OAuth state param is a follow-up. #}
         <a href="/auth/google/login" class="btn-google">Sign in with Google</a>
     {% endif %}
     {% if settings.app.allow_local_registration %}
