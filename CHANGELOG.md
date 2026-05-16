@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.18] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Wire the monster mini-sheet (2.3.17) click handlers so Strike + ability/skill clicks fire correctly. Strike branches by `data-char-id` format — PCs keep using `/attack`, monsters POST the attack/damage/save rolls to `/roll` with expressions built from the new data-attack-* attributes stashed on the button. Ability/skill listener moved to document so it fires regardless of which container the mini-sheet body lives in (Characters drawer, init tracker, or monster pool).
+**Description:** Closes out the user's "make monster init-tracker use the PC mini-sheet" request. 2.3.17 rendered the markup but the strike handler was bound to `#players-drawer` (monsters live in `#monster-mini-sheet-pool`, then move into `.init-card-sheet` on init expand — neither inside the players drawer) and called `/api/campaign/{cid}/attack` which requires a real `Character` row. This commit (1) moves both the strike handler and the ability/skill click handler to `document` so they fire wherever the mini-sheet currently lives, and (2) adds a monster branch on the strike handler that builds the attack expression client-side from data attributes (mirroring the 2.3.9 inline-button approach, but using the mini-sheet's own attack data). The monster path emits up to three separate `/roll` POSTs in sequence — attack-roll, damage, save-announcement — each landing in the campaign roll log as its own entry, so the GM and players see the full chain. Ability/skill clicks on monsters drop the `character_id` from the body (parseInt of "monster-22" → NaN → omitted) and add `skip_roll_state: true` so the GM's own PC's adv/dis pill doesn't bleed into monster checks.
+
+### Added
+- `_mini_sheet_card.html` — `data-attack-bonus` / `data-attack-damage` / `data-attack-damage-type` / `data-attack-save-ability` / `data-attack-save-dc` stamped on every `.mini-strike-btn` so the strike handler can rebuild the attack expression client-side without DOM-walking. Redundant for PCs (they still use the `/attack` endpoint via `attack_index`) but harmless.
+
+### Changed
+- `app/templates/tabletop.html` — strike handler moved from `#players-drawer` to `document`. Added the monster branch that POSTs `1d20+bonus`, the damage expression, and a save-announcement (when present) to `/roll` instead of `/attack`. PC behavior unchanged.
+- `app/templates/tabletop.html` — ability/skill handler (`.mini-roll-btn, .mini-sk-btn`) moved from `#players-drawer` to `document`. Added `skip_roll_state: true` for monster click sources so the GM's own character's adv/dis state doesn't apply to monster checks. `character_id` is omitted when the closest `[data-char-id]` is a monster-string id (parseInt → NaN → falsy).
+
+### Notes
+- Cast Spell (`.mini-cast-btn`) handler still posts to character-specific `/cast_spell`. Monsters typically don't have spell slots in `sheet.spell_slots` so the Cast button wouldn't render for them anyway — but a future homebrew monster with structured spell-slot data would surface that gap. Filed as a follow-up.
+- HP step PATCH and short/long rest POSTs are already suppressed for monsters by the 2.3.17 `_is_owner = ... and not is_monster` gate — the buttons don't render so the handlers can't fire.
+
+---
+
 ## [2.3.17] - 2026-05-16
 
 **Schema version:** 52

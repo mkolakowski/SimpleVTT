@@ -2471,7 +2471,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
            user's. Without this, a GM clicking a skill on a player's
            mini-sheet would have the server fall back to the GM's own
            character — silently dropping the player's adv/dis pill. */
-        document.getElementById('players-drawer').addEventListener('click', async (ev) => {
+        /* v2.3.18: listener moved from #players-drawer to document so it
+         * fires for mini-sheets in the Characters drawer, the init tracker
+         * (after mini-body steal), or the monster pool (when expanded
+         * into the init tracker). The parseInt(charId, 10) on a
+         * "monster-{tid}" data-char-id returns NaN, which `if (!charId)`
+         * skips — the server then attributes the roll to the rolling
+         * user, which is the right behavior for monster ability/skill
+         * checks. PC click attribution is unchanged. */
+        document.addEventListener('click', async (ev) => {
             const btn = ev.target.closest('.mini-roll-btn, .mini-sk-btn');
             if (!btn) return;
             const expr = btn.dataset.expr;
@@ -2485,11 +2493,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // data-char-id, so closest('[data-char-id]') resolves the right
             // character whichever surface the click happens on.
             const charEl = btn.closest('[data-char-id]');
-            const charId = charEl ? parseInt(charEl.dataset.charId, 10) : null;
+            const charIdRaw = charEl ? charEl.dataset.charId : '';
+            const charId = parseInt(charIdRaw, 10);
             btn.disabled = true;
             try {
                 const body = { expression: expr, visibility, note };
-                if (charId) body.character_id = charId;
+                if (Number.isFinite(charId) && charId > 0) body.character_id = charId;
+                if (charIdRaw.startsWith('monster-')) body.skip_roll_state = true;
                 const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2939,25 +2949,89 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (row) window.location.reload();
         });
 
-        /* Mini-sheet strike (weapon attack) buttons — post to /attack */
-        document.getElementById('players-drawer').addEventListener('click', async (ev) => {
+        /* Mini-sheet strike (weapon attack) buttons.
+         *
+         * v2.3.18: listener moved from #players-drawer to document so it
+         * fires whether the mini-sheet body lives in the Characters drawer,
+         * the GM init-tracker (after the mini-body steal), or the monster
+         * pool. Branches on the data-char-id format:
+         *
+         *   PCs       — data-char-id is a number → POST /attack with
+         *               {character_id, attack_index}, server resolves the
+         *               attack from the Character's sheet.attacks list.
+         *   Monsters  — data-char-id is "monster-{tid}" → POST /roll with
+         *               an expression built client-side from the data-attack-*
+         *               fields stamped on the button. Mirrors the 2.3.9
+         *               inline-button approach but using the mini-sheet's
+         *               own attack data; saves announce-only into the log.
+         */
+        document.addEventListener('click', async (ev) => {
             const btn = ev.target.closest('.mini-strike-btn');
             if (!btn) return;
-            const charId = parseInt(btn.dataset.charId, 10);
-            const idx = parseInt(btn.dataset.attackIdx, 10);
+            const rawCharId = btn.dataset.charId || '';
+            const isMonster = rawCharId.startsWith('monster-');
             const atkName = btn.dataset.attackName || 'Attack';
-            if (!charId || isNaN(idx)) return;
             btn.disabled = true;
             try {
-                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ character_id: charId, attack_index: idx }),
-                });
-                if (!resp.ok) {
-                    let body; try { body = await resp.json(); } catch { body = null; }
-                    (window.showToast || function (m) { alert(m); })(
-                        `Strike failed (${atkName}): ` + (body ? JSON.stringify(body) : await resp.text()), 'error');
+                if (isMonster) {
+                    const bonus = (btn.dataset.attackBonus || '').trim();
+                    const damage = (btn.dataset.attackDamage || '').trim();
+                    const damageType = (btn.dataset.attackDamageType || '').trim();
+                    const saveAbility = (btn.dataset.attackSaveAbility || '').trim().toUpperCase();
+                    const saveDc = parseInt(btn.dataset.attackSaveDc || '0', 10) || 0;
+                    const monsterName = btn.closest('.mini-sheet')?.querySelector('.mini-header-name')?.textContent?.trim() || 'Monster';
+                    /* Three POSTs in sequence: attack, damage, and save-
+                     * announcement. Each lands in the campaign roll log as
+                     * its own entry so the GM and players can see the chain.
+                     * Skipped slots (no bonus / no damage / no save) don't
+                     * fire. */
+                    const rolls = [];
+                    if (bonus || (!saveAbility && !damage)) {
+                        const bonusExpr = bonus
+                            ? (bonus.startsWith('+') || bonus.startsWith('-') ? bonus : '+' + bonus)
+                            : '';
+                        rolls.push({
+                            expression: '1d20' + bonusExpr,
+                            note: `${monsterName}: ${atkName} attack`,
+                        });
+                    }
+                    if (damage) {
+                        rolls.push({
+                            expression: damage,
+                            note: `${monsterName}: ${atkName} damage${damageType ? ' (' + damageType + ')' : ''}`,
+                        });
+                    }
+                    if (saveAbility && saveDc) {
+                        rolls.push({
+                            expression: '0',
+                            note: `${monsterName}: ${atkName} — DC ${saveDc} ${saveAbility} save`,
+                        });
+                    }
+                    for (const r of rolls) {
+                        const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ ...r, visibility: 'public', skip_roll_state: true }),
+                        });
+                        if (!resp.ok) {
+                            (window.showToast || alert)(`Strike failed: ${await resp.text()}`, 'error');
+                            break;
+                        }
+                    }
+                } else {
+                    const charId = parseInt(rawCharId, 10);
+                    const idx = parseInt(btn.dataset.attackIdx, 10);
+                    if (!charId || isNaN(idx)) return;
+                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ character_id: charId, attack_index: idx }),
+                    });
+                    if (!resp.ok) {
+                        let body; try { body = await resp.json(); } catch { body = null; }
+                        (window.showToast || function (m) { alert(m); })(
+                            `Strike failed (${atkName}): ` + (body ? JSON.stringify(body) : await resp.text()), 'error');
+                    }
                 }
             } finally {
                 btn.disabled = false;

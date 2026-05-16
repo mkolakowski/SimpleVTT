@@ -211,7 +211,23 @@
                             {% if a_atk_bonus and not a_is_save %}<span class="mini-attack-tag atk">{{ a_atk_bonus }}</span>{% endif %}
                             {% if a.damage %}<span class="mini-attack-tag dmg">{{ a.damage }}</span>{% endif %}
                             {% if a_is_save %}<span class="mini-attack-tag save">DC {{ a_save_dc }} {{ a.save_ability }}</span>{% endif %}
-                            <button type="button" class="mini-strike-btn" data-char-id="{{ c.id }}" data-attack-idx="{{ loop.index0 }}" data-attack-name="{{ a.name }}" title="Strike with {{ a.name }}">🗡 Strike</button>
+                            {# v2.3.18: stash attack fields on the button so
+                               the strike handler can build a /roll expression
+                               for monsters (TokenTemplate-backed mini-sheets
+                               can't use the /attack endpoint which requires
+                               a real Character row). PCs still use /attack
+                               via attack_index — these data attrs are
+                               redundant for them but harmless. #}
+                            <button type="button" class="mini-strike-btn"
+                                    data-char-id="{{ c.id }}"
+                                    data-attack-idx="{{ loop.index0 }}"
+                                    data-attack-name="{{ a.name }}"
+                                    data-attack-bonus="{{ a_atk_bonus }}"
+                                    data-attack-damage="{{ a.damage or '' }}"
+                                    data-attack-damage-type="{{ a.damage_type or '' }}"
+                                    data-attack-save-ability="{{ a.save_ability or '' }}"
+                                    data-attack-save-dc="{{ a_save_dc if a_is_save else '' }}"
+                                    title="Strike with {{ a.name }}">🗡 Strike</button>
                         </div>
                         {% endfor %}
                         </div>
