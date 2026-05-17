@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.1] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Update `app/demo_seed.py` to match the new 1254×1254 `tavern.png` (replaced the original 1400×900 Pillow placeholder) and reposition the three PC tokens for the new room layout: Pip at (350,490), Thalindra at (420,560), Brother Tavik at (420,420). `show_grid=True` asserted explicitly on the seeded Map so a future re-author of this file sees the intent rather than relying on the column default. User-supplied coordinates.
+**Description:** Two coordinated edits, both in `app/demo_seed.py`. (1) `seed_map`: `width_px=1400` → `1254`, `height_px=900` → `1254`, plus `show_grid=True` added to the `Map(...)` constructor (defaults to True from the v2.4.0 column default, but explicit here so the next demo cycle isn't a silent regression if the default ever changes). (2) `seed_tokens` PC rows: chars[0] (Pip Quickfingers) `x=200,y=500` → `x=350,y=490`, chars[1] (Thalindra Moonwhisper) `x=200,y=600` → `x=420,y=560`, chars[2] (Brother Tavik Stonebrow) `x=200,y=700` → `x=420,y=420`. NPC placements (six bandits/thug/goblin captain on the right side of the map) are unchanged — the user only specified PC positions, and the right-side NPCs were already positioned 1050–1250 px in `x`, which sits inside the new map's 1254 px width modulo a small overhang on the two rightmost tokens (Thug at 1200 and Grixxa at 1250 — both extend ~16–66 px past the right edge with 70-px token size). Flagged for follow-up if the user wants those nudged in as well.
+
+### Changed
+- `app/demo_seed.py` `seed_map` — map dimensions `1400×900` → `1254×1254` to match the v2.4.0-followup `tavern.png` replacement (commit `2f549ab` "Update tavern.png"). `show_grid=True` asserted explicitly on the `Map(...)` constructor.
+- `app/demo_seed.py` `seed_tokens` — PC token spawn positions repositioned for the new square room: Pip Quickfingers `(350, 490)`, Thalindra Moonwhisper `(420, 560)`, Brother Tavik Stonebrow `(420, 420)`. User-supplied coordinates.
+
+### Notes
+- The fresh demo cycle runs `reset_and_reseed` on container boot when `DEMO_RESET_ON_BOOT=true` (it is, on the live deploy), so the new positions appear automatically once the container restarts. The hourly scheduler then keeps replanting them on every reset cycle.
+- NPC positions intentionally left untouched. The two rightmost (Thug at `x=1200`, Grixxa at `x=1250`) overflow the 1254-wide map by a small amount; bringing them in is a one-line per-token tweak whenever the user wants to layout-pass the right side of the room.
+- The `show_grid=True` kwarg is technically a no-op against the v2.4.0 column default, but kept for clarity — it's the kind of latent bug that bites two years later when someone changes the default and the seed silently flips to overlay-off.
+
+---
+
 ## [2.4.0] - 2026-05-17
 
 **Schema version:** 53

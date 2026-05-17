@@ -227,13 +227,19 @@ def seed_campaign(db: Session, users: dict[str, User]) -> Campaign:
 
 
 def seed_map(db: Session, camp: Campaign) -> Map:
+    # v2.4.1: dimensions match the new 1254×1254 tavern.png (replaced
+    # the v2.3.0 placeholder). ``show_grid=True`` is the column default,
+    # asserted explicitly here so a future seed-author who sees a map
+    # with a baked-in grid background knows to flip it off rather than
+    # remove the kwarg.
     m = Map(
         campaign_id=camp.id,
         name="The Sundered Tavern",
         image_url="/static/demo/maps/tavern.png",
         grid_size_px=70,
-        width_px=1400,
-        height_px=900,
+        width_px=1254,
+        height_px=1254,
+        show_grid=True,
     )
     db.add(m)
     db.flush()
@@ -501,27 +507,29 @@ def seed_tokens(
     # demo party is visibly three-strong on the map. v2.3.44: all three
     # PCs now carry portrait jpgs from app/static/demo/tokens/ (the
     # color swatch on each combatant becomes the ring around the
-    # portrait rather than the whole token face).
+    # portrait rather than the whole token face). v2.4.1: spawn positions
+    # repositioned for the new 1254×1254 tavern.png — Brother Tavik on
+    # the front line, Pip behind, Thalindra slightly off to the side.
     tokens.append(Token(
         map_id=map_.id, character_id=chars[0].id,
         controller_user_id=users["alice"].id,
         label=chars[0].name, color="#6cb4ff",
         image_url="/static/demo/tokens/rogue.jpg",
-        x=200, y=500, size=1,
+        x=350, y=490, size=1,
     ))
     tokens.append(Token(
         map_id=map_.id, character_id=chars[1].id,
         controller_user_id=users["bob"].id,
         label=chars[1].name, color="#4ade80",
         image_url="/static/demo/tokens/wizard.jpg",
-        x=200, y=600, size=1,
+        x=420, y=560, size=1,
     ))
     tokens.append(Token(
         map_id=map_.id, character_id=chars[2].id,
         controller_user_id=users["gm"].id,
         label=chars[2].name, color="#f5b75c",
         image_url="/static/demo/tokens/cleric.jpg",
-        x=200, y=700, size=1,
+        x=420, y=420, size=1,
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
