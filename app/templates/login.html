@@ -25,17 +25,44 @@
     {% if DEMO_MODE and DEMO_CREDENTIALS_VISIBLE %}
     {# v2.3.0: demo-mode credentials box. The seed creates these three
        accounts with a shared password every reset — players can grab
-       one without registering. #}
+       one without registering.
+       v2.4.4: each row now carries a "Fill" button that auto-populates
+       the email + password fields in the sign-in form above. Saves the
+       copy-paste dance for the most common demo-evaluation flow. #}
     <div class="demo-creds-box">
         <h3>🎲 Try the demo without signing up</h3>
         <p class="muted">All three accounts share the password <code>demopass</code>.</p>
         <ul>
-            <li><strong>GM:</strong> <code>demo-gm@example.com</code></li>
-            <li><strong>Player (Rogue):</strong> <code>demo-alice@example.com</code></li>
-            <li><strong>Player (Wizard):</strong> <code>demo-bob@example.com</code></li>
+            {# 32-px dense-panel exception per CLAUDE.md — the demo-creds box is
+               an information panel where each list item is one row; full-height
+               44-px buttons would visually overpower the row text. #}
+            <li><strong>GM:</strong> <code>demo-gm@example.com</code> <button type="button" class="demo-fill-btn" data-demo-email="demo-gm@example.com" style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button></li>
+            <li><strong>Player (Rogue):</strong> <code>demo-alice@example.com</code> <button type="button" class="demo-fill-btn" data-demo-email="demo-alice@example.com" style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button></li>
+            <li><strong>Player (Wizard):</strong> <code>demo-bob@example.com</code> <button type="button" class="demo-fill-btn" data-demo-email="demo-bob@example.com" style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button></li>
         </ul>
         <p class="muted">⚠ The dataset resets every {{ DEMO_RESET_INTERVAL_MINUTES }} minutes — anything you change will be wiped.</p>
     </div>
+    <script>
+        // v2.4.4: each Fill button writes the row's email into the
+        // form's email field, fills the shared demo password, and
+        // moves focus to the Sign in button — one click from
+        // landing on the page to submitting. The password is
+        // hardcoded ("demopass") to match the seed constant in
+        // app/demo_seed.py:DEMO_PASSWORD.
+        document.querySelectorAll('.demo-fill-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const email = btn.dataset.demoEmail;
+                const form = document.querySelector('form[action="/login"]');
+                if (!form) return;
+                const emailEl = form.querySelector('input[name="email"]');
+                const passEl = form.querySelector('input[name="password"]');
+                if (emailEl) emailEl.value = email;
+                if (passEl) passEl.value = 'demopass';
+                const submit = form.querySelector('button[type="submit"]');
+                if (submit) submit.focus();
+            });
+        });
+    </script>
     {% endif %}
 </div>
 {% endblock %}

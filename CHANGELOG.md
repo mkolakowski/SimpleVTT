@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.4] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Add a one-click **Fill** button next to each demo credential on the login page when `DEMO_MODE=true` and `DEMO_CREDENTIALS_VISIBLE=true`. Clicking writes the row's email into the form's email field, fills the shared `demopass` password, and moves focus to the Sign in button — saves the copy-paste-tab-tab-type-paste dance for the most common demo-evaluation flow. User-requested.
+**Description:** Edit in `app/templates/login.html` only. Three `<button type="button" class="demo-fill-btn" data-demo-email="...">` controls appended to the existing `<li>` rows in the `demo-creds-box`. A small inline `<script>` block under the box wires every `.demo-fill-btn` to a `click` handler that targets `form[action="/login"]` and fills `input[name="email"]` + `input[name="password"]` from the button's `data-demo-email` attribute (password is hardcoded `"demopass"` to mirror `DEMO_PASSWORD` in `app/demo_seed.py`). The buttons carry inline 32-px dense-panel styling (`min-height:32px; padding:4px 12px; font-size:13px`) per the CLAUDE.md exception — the demo-creds box is an information panel where 44-px buttons would visually overpower the row text. Annotated in-template so the exception is documented next to the styling.
+**Description (cont):** No backend / route changes — the form posts as before, the buttons just populate the fields client-side. Doesn't expose anything new: the credentials were already visible-in-cleartext (intentional, for demo discoverability) when both env flags are on. Hidden when either flag is off (production / staging never see them). The script is wrapped in the same `{% if DEMO_MODE and DEMO_CREDENTIALS_VISIBLE %}` block as the credentials display, so non-demo deploys ship no JS for this feature at all.
+
+### Added
+- `app/templates/login.html` — three "Fill" buttons in the demo-creds-box (one per role: GM / Player Rogue / Player Wizard) that one-click populate the sign-in form's email + password fields. Buttons render only when both demo env flags are on.
+- `app/templates/login.html` — small inline `<script>` block that wires `.demo-fill-btn` `click` handlers. Reads `data-demo-email` from the clicked button; fills `name=email` + `name=password`; focuses the submit button so Enter ships the form.
+
+### Notes
+- The shared password is hardcoded into the JS rather than templated from the seed constant. The seed constant lives in `app/demo_seed.py:DEMO_PASSWORD` and currently equals `"demopass"`. If that ever changes, this template needs to follow. Risk is low (the seed has shipped this exact string since v2.3.0) and adding a Jinja round-trip would couple the template to the seed module unnecessarily; the comment in the script flags the dependency.
+- The buttons carry `type="button"` explicitly so they don't accidentally submit the form when clicked (default `<button>` inside a `<form>` is `type=submit`).
+- The focus-the-submit step makes the keyboard flow trivial: click Fill (or Tab + Enter to a Fill button), then Enter to submit. Better than auto-submitting the form (which would surprise the user and make it hard to switch between accounts during a single visit).
+
+---
+
 ## [2.4.3] - 2026-05-17
 
 **Schema version:** 53
