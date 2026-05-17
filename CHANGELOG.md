@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.8] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Init tracker now **self-heals missing portraits** at render time — walks every combatant in `battle.combatants` and fills in `image_url` from the matching live Token row when null. Solves the v2.4.6 follow-up where a demo GM with stale localStorage (combatants captured pre-v2.3.44 portrait wiring, or pre-v2.4.3 encounter load that scrubbed `image_url` off tokens) still saw color swatches in the init tracker after the seed + Load Encounter fixes shipped. No user action needed; the heal mutates the combatant in place and `saveBattle()` persists it. User-reported.
+**Description:** Two coordinated edits in `app/templates/tabletop.html`. (1) New helper `_resolveCombatantImage(c)` near `combatantFromToken` (line ~3233) — returns `c.image_url` when set (fast path), otherwise tries three fallbacks in order: lookup by `c.char_id` → matching token's `image_url`, lookup by `c.token_template_id` → first matching token, lookup by `c.name` → matching token label (covers manual / hand-renamed combatants). Mutates `c.image_url` on success. Returns the resolved url or null. (2) `renderBattle` opens with an opportunistic walk over every combatant calling `_resolveCombatantImage(c)`, tracks via `_healedAny` whether any heal occurred, and at the end of the render calls `saveBattle()` only when something was healed. This keeps the localStorage-write thrash off the hot path while making the heal sticky across renders / page loads / WS pushes.
+**Description (cont):** Why heal-in-place over forcing a "Clear init tracker + From Map" UX: the user expectation is "the init tracker should show entity art", not "you have a stale state — please reset". The render-time heal is invisible and idempotent: a tracker that already has all portraits skips every fallback at constant cost; a fully-stale one heals every combatant on first render and never touches the fallbacks again. The match-by-name fallback handles manual combatants whose name happens to match a token on the map (the demo's "Vex (Bandit Captain)" / "Grixxa (Goblin Captain)" / "Brother Tavik Stonebrow" all derive from token labels verbatim). Combatants whose token has since been deleted or whose name was hand-edited away from the original token label still fall back to the color swatch — the heal is best-effort, not enforced.
+
+### Fixed
+- `app/templates/tabletop.html` `renderBattle` — opportunistic portrait heal at the start of every render: walks `battle.combatants`, calls `_resolveCombatantImage` per combatant, persists any heals via `saveBattle()` at the end. Solves the stale-localStorage staleness left over from pre-v2.3.44 / pre-v2.4.3 demo flows.
+
+### Added
+- `app/templates/tabletop.html` `_resolveCombatantImage(c)` — three-step token lookup (by char_id, token_template_id, then name) returning the matching token's `image_url`. Mutates `c.image_url` on success so subsequent renders skip the resolve work.
+
+### Notes
+- The resolver scans `tokens` (the JS-side live token list, populated from initial-data and kept in sync via WS broadcasts) rather than `allTokens` — same list, same content; `tokens` is the canonical variable name in this file.
+- The heal won't trigger when the token list is empty (e.g. a player viewing a campaign before the GM has staged any tokens). That's the right behavior — there's nothing to heal from.
+- A future polish: the manual-add path (`doManualAdd`) could also call `_resolveCombatantImage` after pushing the new combatant so manually-entered names auto-pick up matching token art. Out of scope here.
+- The `_healedAny` guard avoids touching localStorage on every render — the common steady-state case where every combatant already has `image_url` set incurs zero saves per render.
+
+---
+
 ## [2.4.7] - 2026-05-17
 
 **Schema version:** 53

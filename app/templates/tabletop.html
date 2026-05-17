@@ -3210,6 +3210,45 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         return [cur, max];
     }
 
+    /* v2.4.8: resolve a combatant's portrait at render time so the init
+     * tracker self-heals across upgrades. Stale localStorage from before
+     * the v2.3.44 portrait wiring (or from a Load Encounter that ran the
+     * pre-v2.4.3 broken seed payload) leaves ``image_url=null`` on every
+     * NPC + sometimes the GM-owned PC. Rather than asking the user to
+     * click "Clear init tracker → From Map" we walk the live token /
+     * character lists for a match and write the resolved url back onto
+     * the combatant so the next ``saveBattle()`` persists the heal.
+     * Lookup order:
+     *   1. Combatant already has ``image_url`` — use it (fast path).
+     *   2. ``char_id`` matches a token on the active map — that token's
+     *      ``image_url`` (covers PCs added via Character picker whose
+     *      ``portrait_url`` was null when added).
+     *   3. ``token_template_id`` matches a token — first match's image
+     *      (covers NPCs whose template binding survived but whose
+     *      ``image_url`` was scrubbed by a pre-v2.4.3 encounter load).
+     *   4. ``name`` exact-matches a token's label — that token's image
+     *      (covers manual / hand-renamed combatants).
+     * Returns the resolved url or null. Mutates ``c.image_url`` on
+     * success so re-renders skip the resolve work. */
+    function _resolveCombatantImage(c) {
+        if (c.image_url) return c.image_url;
+        let tok = null;
+        if (c.char_id != null) {
+            tok = tokens.find(t => t.character_id === c.char_id);
+        }
+        if (!tok && c.token_template_id != null) {
+            tok = tokens.find(t => t.token_template_id === c.token_template_id);
+        }
+        if (!tok && c.name) {
+            tok = tokens.find(t => t.label === c.name);
+        }
+        if (tok && tok.image_url) {
+            c.image_url = tok.image_url;
+            return tok.image_url;
+        }
+        return null;
+    }
+
     function combatantFromToken(tok) {
         let dexMod = 0;
         let hpCur = 10, hpMax = 10;
@@ -3635,6 +3674,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             return;
         }
 
+        /* v2.4.8: opportunistic portrait heal — walk every combatant and
+         * fill in ``image_url`` from the live token list when missing.
+         * The mutation persists via the ``saveBattle()`` at the end of
+         * this block so subsequent renders skip the lookup. */
+        let _healedAny = false;
+        for (const c of battle.combatants) {
+            if (!c.image_url && _resolveCombatantImage(c)) _healedAny = true;
+        }
+
         list.innerHTML = battle.combatants.map((c, i) => {
             const isActive = battle.active && i === (battle.turn_index % battle.combatants.length);
             const col = hpColor(c.hp_current, c.hp_max);
@@ -3794,6 +3842,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         /* ⑥ Scroll active row into view */
         const activeRow = list.querySelector('.active-turn');
         if (activeRow) activeRow.scrollIntoView({ block: 'nearest' });
+
+        /* v2.4.8: persist any portrait heals from the top of this function
+         * so the next page load skips the resolve work. Skipped when no
+         * heal happened to avoid the localStorage write thrash. */
+        if (_healedAny) saveBattle();
     }
 
     function sortPreservingTurn() {
