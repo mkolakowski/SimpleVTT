@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.12] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Fix the demo cleric + wizard spell lists so they bucket by their actual level instead of all 10 spells landing under Cantrips. The seeded sheets used the wrong key — `"level_int": N` — while the D&D 5e sheet renderer reads `s.level` (the `_int` suffix was a pre-v2.0.0 convention that doesn't match the canonical schema). `s.level` returned `undefined` on every spell, fell through `s.level || 0`, and the by-level grouper at `sheet_dnd5e.html:2330` put all of them at level 0. Renames the 13 spell entries' key from `level_int` → `level` in `_wizard_sheet` and `_cleric_sheet`. User-reported.
+**Description:** One-key rename in `app/demo_seed.py` — both `_wizard_sheet` (3 cantrips + 2 L1 + 2 L2 + 2 L3) and `_cleric_sheet` (3 cantrips + 3 L1 + 2 L2 + 2 L3) had each spell entry shaped `{"name": ..., "level_int": N, "prepared": True}`. The canonical sheet schema (consumed by `app/templates/sheet_dnd5e.html`'s spell-renderer, `spellRowHtml`, `byLvl` grouping, prepared-spell counting in `_cantripLimitFor` / `_cantripCountFor`, and the spell-picker `.cast` and slot-spend handlers) uses `level` not `level_int`. Single `replace_all` swap fixes both sheets, no other code change needed. Fresh demo reseed (next boot or hourly cycle) emits the corrected spells; Thalindra's character sheet at `/campaign/1/character/2/sheet` will show Cantrips (Fire Bolt / Mage Hand / Prestidigitation) → Level 1 (Magic Missile / Shield) → Level 2 (Misty Step / Scorching Ray) → Level 3 (Fireball / Counterspell), and Brother Tavik's at `/campaign/1/character/3/sheet` will show Cantrips (Sacred Flame / Guidance / Light) → Level 1 (Bless / Cure Wounds / Healing Word) → Level 2 (Spiritual Weapon / Hold Person) → Level 3 (Spirit Guardians / Mass Healing Word).
+**Description (cont):** The `level_int` mis-key has been latent since v2.3.25 (when Brother Tavik was added) and the wizard's spell list has been wrong since v2.3.0 (initial seed). Why nobody noticed until now: cantrips have no slot consumption, so casting "Healing Word" from the cantrips section still produced a valid roll log entry with the right name + description. The bug surfaces visibly in (a) the spell-list grouping (all under "Cantrips" header), (b) the "PREP 0/5 · CANTRIPS 10/4" counter at the top of the spell panel showing 10 cantrips against a limit of 4 (Wizard 5 / Cleric 5 cantrips-known limit), and (c) the per-level slot pills not lining up with spells. All three are fixed by the rename — no template / JS / migration changes required.
+
+### Fixed
+- `app/demo_seed.py` `_wizard_sheet` / `_cleric_sheet` — `level_int` → `level` on all 19 spell entries (9 wizard, 10 cleric). The 5e sheet renderer expects `level`; the prior `level_int` was silently ignored and every spell bucketed as a cantrip.
+
+### Notes
+- The demo's existing seeded characters in the live DB still carry the old `level_int` key on their spell entries. The next demo reset (within 60 min on the hourly scheduler, or immediate on container restart with `DEMO_RESET_ON_BOOT=true`) re-runs `_cleric_sheet` / `_wizard_sheet` and rebuilds the Character rows with the corrected key. No SQL migration needed.
+- Real campaigns aren't affected — the bug was strictly in the demo seed data. Production characters created via the sheet UI or the spell-picker emit `level` directly via the same `_normalize_spell` helper that the picker uses.
+
+---
+
 ## [2.4.11] - 2026-05-17
 
 **Schema version:** 53
