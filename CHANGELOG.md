@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.28] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Extend the v2.4.26 click-debounce window from 350 ms → 500 ms on all six expandable header handlers. iPad Magic Keyboard trackpad clicks on iPadOS go through a different event pipeline than touch (`pointer*` + synthesized `click` via the pointer-events compat layer, not the touch pipeline), so `touch-action: manipulation` doesn't apply — the only thing left to catch a double-fire is the JS timestamp guard. The user's report that touch works after v2.4.27 but trackpad still misbehaves indicates the synthesized duplicate clicks from the trackpad path arrive farther apart than 350 ms; bumping to 500 ms catches them without compromising legitimate rapid-click responsiveness (humans rarely intentionally re-tap the same toggle within 500 ms). User-reported.
+**Description:** Single `sed` rewrite across `app/templates/tabletop.html` (3 sites — character-list mini-header, init-tracker mini-header, `.mini-row-expandable` delegated handler) + `app/templates/sheet_dnd5e.html` (3 sites — `.inv-header`, `.sp-header`, `.atk-header`). Each handler's `_dbnc < 350` becomes `_dbnc < 500`. Per-element `_dbnc` property semantics unchanged. No other code paths touched.
+**Description (cont):** Why 500 ms is safe: the typical human "rapid click" cadence for legitimate sequential toggles is 600-800 ms apart (the implied "wait, what did that do? click again"); intentional double-tap UI gestures on touch surfaces are <200 ms apart. The 500 ms window sits comfortably between those two — it catches stray duplicate clicks from any input pipeline (touch, trackpad, mouse-emulation, pointer-events compat) without making the UI feel sluggish for legitimate retaps.
+
+### Fixed
+- `app/templates/tabletop.html` `.mini-header` (character-list, line ~2620; init-tracker, line ~4187) + `.mini-row-expandable` (line ~3064) — debounce window bumped 350→500 ms.
+- `app/templates/sheet_dnd5e.html` `.inv-header` (line ~2533) + `.sp-header` (line ~3885) + `.atk-header` (line ~4776) — debounce window bumped 350→500 ms.
+
+### Notes
+- Native `<details>` / `<summary>` toggles (the v2.4.27 catch-all rule) don't have a JS handler to debounce — they rely entirely on the CSS `touch-action` + `user-select` rules. If a `<summary>` element exhibits the trackpad double-fire too, the next escalation is wrapping the `<details>` toggle in a JS handler with the same debounce idiom. Hopefully unnecessary; native `<details>` toggle on iPadOS is generally fired by a single `click` event regardless of input source.
+- If 500 ms still isn't enough (i.e. trackpad fires duplicate clicks >500 ms apart), the next move is replacing `click` listeners with `pointerup` handlers + `event.preventDefault()` on the matching `touchstart` / `pointerdown` to get full control over iOS event dispatch. Three-step escalation: CSS (v2.4.24/v2.4.25/v2.4.27) → JS debounce (v2.4.26/v2.4.27/v2.4.28) → custom event-routing.
+
+---
+
 ## [2.4.27] - 2026-05-17
 
 **Schema version:** 53

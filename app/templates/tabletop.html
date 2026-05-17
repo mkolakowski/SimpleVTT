@@ -2617,7 +2617,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // producing "only one expandable at a time" UX even
                 // though the handler logic itself is per-character.
                 const _now = Date.now();
-                if (hdr._dbnc && _now - hdr._dbnc < 350) return;
+                if (hdr._dbnc && _now - hdr._dbnc < 500) return;
                 hdr._dbnc = _now;
                 _toggleCharDetail(hdr.dataset.charId);
             });
@@ -3061,7 +3061,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // v2.4.26: same 350-ms debounce as the init-tracker
                 // mini-header to guard against iPad double-fire.
                 const _now = Date.now();
-                if (expandRow._dbnc && _now - expandRow._dbnc < 350) return;
+                if (expandRow._dbnc && _now - expandRow._dbnc < 500) return;
                 expandRow._dbnc = _now;
                 expandRow.classList.toggle('open');
                 // Lazy-load spell description on first open if the row
@@ -4184,7 +4184,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // debounce guarantees only one toggle per tap regardless
                 // of how iOS dispatches the underlying events.
                 const now = Date.now();
-                if (headerEl._dbnc && now - headerEl._dbnc < 350) return;
+                if (headerEl._dbnc && now - headerEl._dbnc < 500) return;
                 headerEl._dbnc = now;
                 const isOpen = sheetEl.classList.toggle('open');
                 headerEl.querySelector('.mini-header-arrow')?.classList.toggle('open', isOpen);
