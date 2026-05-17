@@ -2785,6 +2785,19 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             break;
                         }
                     }
+                    // v2.5.3: monster cast — mark the matching init-tracker
+                    // combatant's economy slot per the spell's casting_time.
+                    // ``monsterName`` was set earlier in this branch from
+                    // the .mini-header-name lookup; pass it to _findCombatant
+                    // as the by-name fallback. PCs go through the PC branch
+                    // below.
+                    if (typeof window._markCombatantEconomy === 'function'
+                            && typeof window._findCombatant === 'function'
+                            && typeof window._castingTimeToEconomy === 'function') {
+                        const slot = window._castingTimeToEconomy(btn.dataset.spellCastingTime || '');
+                        const combatant = window._findCombatant({ name: monsterName });
+                        if (combatant) window._markCombatantEconomy(combatant, slot);
+                    }
                     return;
                 }
 
@@ -2838,6 +2851,19 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         (window.showToast || function (m) { alert(m); })(
                             'Cast failed: ' + (body ? JSON.stringify(body) : await resp.text()), 'error');
                     }
+                    return;
+                }
+                // v2.5.3: PC cast succeeded — derive the economy slot from
+                // the spell's ``casting_time`` (data-spell-casting-time on
+                // the button) and mark the combatant's slot. Healing Word
+                // → bonus; Counterspell / Shield → reaction; everything
+                // else → action.
+                if (typeof window._markCombatantEconomy === 'function'
+                        && typeof window._findCombatant === 'function'
+                        && typeof window._castingTimeToEconomy === 'function') {
+                    const slot = window._castingTimeToEconomy(btn.dataset.spellCastingTime || '');
+                    const combatant = window._findCombatant({ charId: rawCharId });
+                    if (combatant) window._markCombatantEconomy(combatant, slot);
                 }
             } finally {
                 btn.disabled = false;
@@ -3406,6 +3432,23 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             `Strike failed (${atkName}): ` + (body ? JSON.stringify(body) : await resp.text()), 'error');
                     }
                 }
+                // v2.5.3: action-economy Phase 2 — after a successful strike,
+                // mark the combatant's Action slot. Weapon attacks default to
+                // "action"; the (future) Two-Weapon-Fighting bonus-action
+                // detection lands in Phase 3 via the curated feature table.
+                // Idempotent — re-firing Strike within the same turn keeps
+                // Act amber, doesn't ping pushBattle.
+                if (typeof window._markCombatantEconomy === 'function'
+                        && typeof window._findCombatant === 'function') {
+                    const monsterName = isMonster
+                        ? (btn.closest('.mini-sheet')?.querySelector('.mini-header-name')?.textContent?.trim() || '')
+                        : '';
+                    const combatant = window._findCombatant({
+                        charId: isMonster ? null : rawCharId,
+                        name: isMonster ? monsterName : null,
+                    });
+                    if (combatant) window._markCombatantEconomy(combatant, 'action');
+                }
             } finally {
                 btn.disabled = false;
             }
@@ -3564,6 +3607,63 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             c.economy = { action: false, bonus: false, reaction: false, movement: 0 };
         }
     }
+
+    /* v2.5.3: action-economy Phase 2 helpers — map a spell's
+     * ``casting_time`` string to its economy slot, and mark a combatant's
+     * slot as used + push the updated battle state. */
+    function _castingTimeToEconomy(ct) {
+        const lc = String(ct || '').toLowerCase();
+        if (lc.indexOf('bonus action') !== -1) return 'bonus';
+        if (lc.indexOf('reaction') !== -1) return 'reaction';
+        if (lc.indexOf('action') !== -1) return 'action';
+        // Long casting times (1 minute, 10 minutes, 1 hour) don't consume
+        // an in-combat slot — they're out-of-combat utility. Same for
+        // empty / missing casting_time on legacy data.
+        return 'none';
+    }
+
+    /* Find a combatant in ``battle.combatants`` by char_id (preferred for
+     * PCs) or by name (fallback for monsters whose char_id is null).
+     * Returns the combatant object or null if no match. */
+    function _findCombatant({ charId, name }) {
+        if (charId != null && charId !== '' && !String(charId).startsWith('monster-')) {
+            const cid = parseInt(charId, 10);
+            if (Number.isFinite(cid)) {
+                const hit = battle.combatants.find(c => c.char_id === cid);
+                if (hit) return hit;
+            }
+        }
+        if (name) {
+            const hit = battle.combatants.find(c => c.name === name);
+            if (hit) return hit;
+        }
+        return null;
+    }
+
+    /* Mark a combatant's economy slot as used and push the change to
+     * everyone (localStorage + WS broadcast). ``slot`` is one of
+     * ``action`` / ``bonus`` / ``reaction``; ``none`` is a no-op. The
+     * toggle is idempotent — calling on an already-used slot stays used,
+     * matching the v2.4.31 manual-toggle semantics (clicking Strike twice
+     * doesn't free up your action). */
+    function _markCombatantEconomy(combatant, slot) {
+        if (!combatant || !slot || slot === 'none') return;
+        if (slot !== 'action' && slot !== 'bonus' && slot !== 'reaction') return;
+        _ensureEconomy(combatant);
+        if (combatant.economy[slot]) return;  // already used; no state change
+        combatant.economy[slot] = true;
+        pushBattle();
+        renderBattle();
+    }
+
+    /* v2.5.3: expose the economy helpers globally so the mini-strike-btn
+     * + mini-cast-btn click handlers (which live in the mini-sheet IIFE,
+     * a separate closure from this battle IIFE) can auto-advance the
+     * correct economy slot after a successful roll. Pattern matches the
+     * existing ``window._toggleCharDetail`` export in the mini-sheet IIFE. */
+    window._findCombatant = _findCombatant;
+    window._markCombatantEconomy = _markCombatantEconomy;
+    window._castingTimeToEconomy = _castingTimeToEconomy;
 
     function hpColor(cur, max) {
         const pct = max > 0 ? cur / max : 1;
@@ -4663,6 +4763,17 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         renderBattle();
                     }
                 }
+                // v2.5.3: action-economy Phase 2 — mark Action on the
+                // monster combatant. Every demo monster's actions default
+                // to "1 action" cost (multiattack: a single action that
+                // covers multiple attack rolls; the toggle is idempotent
+                // so a 2-scimitar multiattack still marks Act once).
+                // Phase 3 will add per-action economy customization via a
+                // curated table; until then, monster actions = action.
+                const _row = btn.closest('.init-row, .init-entry');
+                const _idx = parseInt(_row?.dataset.idx ?? '');
+                const _econComb = Number.isFinite(_idx) ? (battle.combatants || [])[_idx] : null;
+                if (_econComb) _markCombatantEconomy(_econComb, 'action');
             } finally {
                 // renderBattle() may have replaced btn; the timeout below
                 // only matters for the unlimited-use case where the same

@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.5.3] - 2026-05-17
+
+**Schema version:** 54
+**Commit summary:** **Phase 2 of the action-economy tracker** — auto-advance the right chip slot when an ability button fires a roll. Clicking 🗡 Strike on a PC's mini-sheet attack flips their Act chip amber; clicking 🪄 Cast on Healing Word flips Bns; clicking 🪄 Cast on Shield / Counterspell flips Rxn; clicking 🎯 Attack / 🎲 Dmg / 📋 Save on a monster's action flips that monster's Act. Spell economy derived from each spell's `casting_time` field (added to all 22 demo spells in this commit). Idempotent — clicking the same Strike twice in one turn keeps Act amber without double-toggling. Phase 1 (v2.4.31) was manual-only; Phase 2 lights up the chips automatically as the GM / player rolls. User-requested follow-up to v2.4.31.
+**Description:** Five coordinated changes. (1) Two new JS helpers in the battle IIFE of `app/templates/tabletop.html`: `_castingTimeToEconomy(ct)` maps a SRD casting-time string ("1 action", "1 bonus action", "1 reaction", "10 minutes") to the matching slot ("action" / "bonus" / "reaction" / "none"); `_markCombatantEconomy(combatant, slot)` flips the slot on the combatant's `economy` object, calls `pushBattle()` to sync via WS, and re-renders. A third helper `_findCombatant({charId, name})` looks up the right combatant by `char_id` (PCs) or by name fallback (monsters). All three exposed via `window._*` so the mini-sheet IIFE's click handlers (`.mini-strike-btn`, `.mini-cast-btn`) can call them across the closure boundary — pattern matches the existing `window._toggleCharDetail` export. (2) `.mini-strike-btn` click handler (line ~3342) — after a successful PC strike or monster strike, looks up the combatant and marks "action". (3) `.mini-cast-btn` click handler (line ~2735) — after a successful PC cast OR monster cast, reads `btn.dataset.spellCastingTime`, converts to slot via `_castingTimeToEconomy`, marks the slot. (4) `.monster-strike-btn` click handler in the battle IIFE — after each roll, marks the row's combatant's "action" slot. (5) `_mini_sheet_card.html` `.mini-cast-btn` gains a `data-spell-casting-time="{{ s.casting_time or '' }}"` attribute so the click handler can read it.
+**Description (cont):** Seed update: every spell in `_wizard_sheet` and `_cleric_sheet` (22 entries total) gains a `casting_time` field with the SRD-canonical value. Healing Word, Spiritual Weapon, Misty Step, Mass Healing Word → "1 bonus action"; Shield, Counterspell → "1 reaction"; everything else → "1 action". Without these values, the auto-advance falls through `_castingTimeToEconomy`'s default branch and lands on "action" (a safe fallback that matches RAW for the spells that AREN'T listed in the special cases), but the explicit values cover the bonus / reaction cases correctly.
+**Description (cont 2):** Phase 2 scope intentionally limits to the GM init-tracker buttons (`.mini-strike-btn`, `.mini-cast-btn`, `.monster-strike-btn`). The full-character-sheet buttons (`.atk-strike`, `.sp-cast` in `sheet_dnd5e.html`) need server-side coordination + WS sync to update the GM's init-tracker chips when a player clicks them from their own browser — that's deferred to **Phase 2b** as a follow-up commit. The mini-sheet path covers the GM's primary surface during play and is the most-visible "does this actually work" demo.
+
+### Added
+- `app/templates/tabletop.html` `_castingTimeToEconomy(ct)` — SRD casting-time string → economy slot mapping. Recognises "bonus action" / "reaction" / "action"; everything else returns "none".
+- `app/templates/tabletop.html` `_findCombatant({charId, name})` — combatant lookup by char_id (PCs) or by name fallback (monsters whose `char_id` is null). Skips "monster-X" pseudo-char-ids since those aren't real character ids.
+- `app/templates/tabletop.html` `_markCombatantEconomy(combatant, slot)` — flips the combatant's economy slot to used + `pushBattle()` + `renderBattle()`. Idempotent (clicking again is a no-op).
+- `app/templates/tabletop.html` window-scope exports — `window._findCombatant`, `window._markCombatantEconomy`, `window._castingTimeToEconomy` so the mini-sheet IIFE's handlers can reach across the closure boundary.
+- `app/templates/_mini_sheet_card.html` `.mini-cast-btn` — `data-spell-casting-time="{{ s.casting_time or '' }}"` attribute. Read by the cast handler to derive the economy slot.
+- `app/demo_seed.py` `_wizard_sheet.spells` + `_cleric_sheet.spells` — `casting_time` field on every spell entry per the Phase 2 demo-update spec in `docs/plans/class-content-status.md`.
+
+### Changed
+- `app/templates/tabletop.html` `.mini-strike-btn` click handler — after a successful strike (PC or monster), marks the matching combatant's Action slot.
+- `app/templates/tabletop.html` `.mini-cast-btn` click handler — after a successful cast (PC or monster), reads `data-spell-casting-time` and marks the matching slot. PCs found by char_id; monsters by name.
+- `app/templates/tabletop.html` `.monster-strike-btn` click handler — after a successful roll (attack/damage/save), marks the row's combatant's Action slot.
+
+### Notes
+- Idempotent on purpose. The GM clicks 🗡 Strike with Pip's Shortsword → Act flips amber. They click Strike again (rolling damage separately in a real combat workflow) → Act stays amber, no extra `pushBattle()` ping. The v2.4.31 manual-toggle semantics still let the GM manually clear Act if they want to re-enable the strike.
+- Monster actions all default to "action" regardless of the action's nature (Multiattack, single weapon, save-DC AoE). Phase 3's curated `dnd5e_feature_economy.js` table will let specific homebrew actions tag themselves as `bonus` or `reaction` via an `economy:` field on the action JSON; until then, the conservative "action" default is correct for every demo monster.
+- The full-sheet `.atk-strike` / `.sp-cast` auto-advance is filed as Phase 2b. That work needs the server-side `/api/.../attack` and `/api/.../cast_spell` endpoints to consult the GM's battle hub state, update the active combatant's economy slot, and broadcast a `battle_update`. Bigger surface area than the mini-sheet path, hence the split.
+- Spell `casting_time` field is also exposed in the v2.4.19 lazy-loaded `mini-spell-detail` panel (the "Cast: 1 bonus action" chip), so a player who hasn't seen the inline-data path still sees the canonical info on row-expand.
+
+---
+
 ## [2.5.2] - 2026-05-17
 
 **Schema version:** 54

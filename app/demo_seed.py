@@ -353,16 +353,21 @@ def _wizard_sheet(name: str) -> dict:
         # row lazy-loads its description through ``/api/content/spells/<slug>``
         # (helper ``_loadSpellContent`` in sheet_dnd5e.html). Same pattern
         # as the v2.4.13 inventory ``_slug`` references.
+        # v2.5.3: ``casting_time`` field per the action-economy Phase 2
+        # plan — the mini-cast-btn renderer passes it through as a
+        # ``data-spell-casting-time`` attribute, and the click handler
+        # derives the economy slot (action / bonus / reaction) from it.
+        # Values match the SRD canonical casting_time strings.
         "spells": [
-            {"name": "Fire Bolt", "level": 0, "prepared": True, "_slug": "fire-bolt"},
-            {"name": "Mage Hand", "level": 0, "prepared": True, "_slug": "mage-hand"},
-            {"name": "Prestidigitation", "level": 0, "prepared": True, "_slug": "prestidigitation"},
-            {"name": "Magic Missile", "level": 1, "prepared": True, "_slug": "magic-missile"},
-            {"name": "Shield", "level": 1, "prepared": True, "_slug": "shield"},
-            {"name": "Misty Step", "level": 2, "prepared": True, "_slug": "misty-step"},
-            {"name": "Scorching Ray", "level": 2, "prepared": True, "_slug": "scorching-ray"},
-            {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball"},
-            {"name": "Counterspell", "level": 3, "prepared": True, "_slug": "counterspell"},
+            {"name": "Fire Bolt", "level": 0, "prepared": True, "_slug": "fire-bolt", "casting_time": "1 action"},
+            {"name": "Mage Hand", "level": 0, "prepared": True, "_slug": "mage-hand", "casting_time": "1 action"},
+            {"name": "Prestidigitation", "level": 0, "prepared": True, "_slug": "prestidigitation", "casting_time": "1 action"},
+            {"name": "Magic Missile", "level": 1, "prepared": True, "_slug": "magic-missile", "casting_time": "1 action"},
+            {"name": "Shield", "level": 1, "prepared": True, "_slug": "shield", "casting_time": "1 reaction"},
+            {"name": "Misty Step", "level": 2, "prepared": True, "_slug": "misty-step", "casting_time": "1 bonus action"},
+            {"name": "Scorching Ray", "level": 2, "prepared": True, "_slug": "scorching-ray", "casting_time": "1 action"},
+            {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball", "casting_time": "1 action"},
+            {"name": "Counterspell", "level": 3, "prepared": True, "_slug": "counterspell", "casting_time": "1 reaction"},
         ],
         "spell_slots": {
             "wizard": {
@@ -446,26 +451,27 @@ def _cleric_sheet(name: str) -> dict:
         # "Subclass" badge.
         # v2.4.19: ``_slug`` references the SRD spell JSON; see the wizard
         # sheet's spell list for the explanation.
+        # v2.5.3: ``casting_time`` per the action-economy Phase 2 plan.
         "spells": [
-            {"name": "Sacred Flame", "level": 0, "prepared": True, "_slug": "sacred-flame"},
-            {"name": "Guidance",     "level": 0, "prepared": True, "_slug": "guidance"},
-            {"name": "Light",        "level": 0, "prepared": True, "_slug": "light"},
-            {"name": "Bless",          "level": 1, "prepared": True, "_slug": "bless",
+            {"name": "Sacred Flame", "level": 0, "prepared": True, "_slug": "sacred-flame", "casting_time": "1 action"},
+            {"name": "Guidance",     "level": 0, "prepared": True, "_slug": "guidance", "casting_time": "1 action"},
+            {"name": "Light",        "level": 0, "prepared": True, "_slug": "light", "casting_time": "1 action"},
+            {"name": "Bless",          "level": 1, "prepared": True, "_slug": "bless", "casting_time": "1 action",
              "_subclass_granted": True, "_granted_by": "Life Domain"},
-            {"name": "Cure Wounds",    "level": 1, "prepared": True, "_slug": "cure-wounds",
+            {"name": "Cure Wounds",    "level": 1, "prepared": True, "_slug": "cure-wounds", "casting_time": "1 action",
              "_subclass_granted": True, "_granted_by": "Life Domain"},
-            {"name": "Healing Word",   "level": 1, "prepared": True, "_slug": "healing-word"},
-            {"name": "Lesser Restoration", "level": 2, "prepared": True, "_slug": "lesser-restoration",
+            {"name": "Healing Word",   "level": 1, "prepared": True, "_slug": "healing-word", "casting_time": "1 bonus action"},
+            {"name": "Lesser Restoration", "level": 2, "prepared": True, "_slug": "lesser-restoration", "casting_time": "1 action",
              "_subclass_granted": True, "_granted_by": "Life Domain"},
-            {"name": "Spiritual Weapon", "level": 2, "prepared": True, "_slug": "spiritual-weapon",
+            {"name": "Spiritual Weapon", "level": 2, "prepared": True, "_slug": "spiritual-weapon", "casting_time": "1 bonus action",
              "_subclass_granted": True, "_granted_by": "Life Domain"},
-            {"name": "Hold Person",      "level": 2, "prepared": True, "_slug": "hold-person"},
-            {"name": "Beacon of Hope",  "level": 3, "prepared": True, "_slug": "beacon-of-hope",
+            {"name": "Hold Person",      "level": 2, "prepared": True, "_slug": "hold-person", "casting_time": "1 action"},
+            {"name": "Beacon of Hope",  "level": 3, "prepared": True, "_slug": "beacon-of-hope", "casting_time": "1 action",
              "_subclass_granted": True, "_granted_by": "Life Domain"},
-            {"name": "Revivify",        "level": 3, "prepared": True, "_slug": "revivify",
+            {"name": "Revivify",        "level": 3, "prepared": True, "_slug": "revivify", "casting_time": "1 action",
              "_subclass_granted": True, "_granted_by": "Life Domain"},
-            {"name": "Spirit Guardians",  "level": 3, "prepared": True, "_slug": "spirit-guardians"},
-            {"name": "Mass Healing Word", "level": 3, "prepared": True, "_slug": "mass-healing-word"},
+            {"name": "Spirit Guardians",  "level": 3, "prepared": True, "_slug": "spirit-guardians", "casting_time": "1 action"},
+            {"name": "Mass Healing Word", "level": 3, "prepared": True, "_slug": "mass-healing-word", "casting_time": "1 bonus action"},
         ],
         "spell_slots": {
             "cleric": {
