@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.5.2] - 2026-05-17
+
+**Schema version:** 54
+**Commit summary:** Add **"Demo updates required"** sub-sections to every Phase 1-5 block + the house-rule block in the action-economy plan (section E of `docs/plans/class-content-status.md`). Each one specifies exactly which seed-data changes are required to make that phase testable end-to-end against the demo deploy — `casting_time` fields per spell for Phase 2, Cunning Action wiring on Pip for Phase 3, Potion of Healing items in PC inventories for the house rule, etc. Concrete enough that whoever picks up each phase can re-create the demo state from the doc. Docs-only; no code change. User-requested.
+**Description:** Each Phase block now ends with a "Demo updates required" bullet list scoped to that phase. (1) Phase 1: none needed — chips already work in v2.4.31. (2) Phase 2: `casting_time` field per spell entry in `_wizard_sheet` + `_cleric_sheet`, with per-spell expected values listed; note about the v2.4.19 lazy-loader as a fallback for spells without inline `casting_time`. (3) Phase 3: Pip's `_rogue_sheet` needs a `features` array entry so the renderer can emit a Cunning Action button; Tavik's existing Channel Divinity counter doesn't need a seed change, just the `_CHANNEL_DIVINITY_OPTIONS.life` entries' `economy:` field; optional Fighter PC for Action Surge / Second Wind testing. (4) Phase 4: no seed change — Phase 4 is pure UI/UX layered on Phase 2's auto-advance; suggested tooltip-string tweak for the v2.5.0 house-rule explainer once gating actually lands. (5) Phase 5: no PC seed change (every demo combatant has `speed` set); a note about the monster `speed: {walk: 30}` shape being a code concern in Phase 5's chip renderer, not a seed issue.
+**Description (cont):** The **house-rule end-to-end test** is gated on two future pieces: action-economy Phase 2 and a new "Use Item" button on consumable inventory rows in `sheet_dnd5e.html`. Both filed in the doc as concrete follow-ups with rough LOC estimates (~30 LOC for the button). The seed-update spec for the house rule includes the exact item shape: `{name: "Potion of Healing", type: "consumable", qty: N, _slug: "potion-of-healing"}` per PC, with per-PC count suggestions (Pip 2, Tavik 3, Thalindra 1) that match each character's archetype. The SRD already ships `app/data/local/dnd5e/items/potion-of-healing.json` so v2.4.13's `_loadItemActions` lazy-loader fills the description on first row-expand.
+
+### Added
+- `docs/plans/class-content-status.md` section E — "Demo updates required" sub-block after each Phase 1-5 test list (5 new bullet lists, total ~90 lines of structured guidance). House-rule block gains the same sub-block specifying the consumable item shape + per-PC counts.
+
+### Notes
+- The per-spell `casting_time` table in the Phase 2 block is the spec for the seed update. When Phase 2 begins, copy that mapping into `_wizard_sheet` / `_cleric_sheet`. The renderer can also fall back to the v2.4.19 lazy-loader path; inline `casting_time` just avoids the round-trip.
+- Phase 3's Pip Cunning Action ask is a small seed-data change but it cracks open a bigger question: where do non-spell PC class features live on the sheet today? Currently most are buried in the SRD `class_features` JSON as descriptive prose. Phase 3 may need a small `sheet.features: [{key, name, level, economy, action_uri}]` array shape, populated by the seed for demo PCs + by the class-feature-picker UI for player-created PCs. That's filed as a Phase-3-internal design choice, not a separate plan item.
+- For the optional "add a Fighter PC to the demo" — current demo party is 3 PCs (Rogue, Wizard, Cleric). Adding a Fighter would push to 4 and complicate the seeded encounter layout. Best deferred until there's a concrete need (Phase 3 testing only requires *one* class that uses bonus / free / reaction features, which Cunning Action on Pip already covers).
+
+---
+
 ## [2.5.1] - 2026-05-17
 
 **Schema version:** 54

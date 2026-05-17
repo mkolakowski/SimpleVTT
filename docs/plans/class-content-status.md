@@ -489,6 +489,14 @@ action).
       WS `battle_update` broadcast from `pushBattle`). Players in the
       same campaign see read-only chip state (they can't toggle).
 
+   **Demo updates required for Phase 1:** None. Chips render for any
+   combatant whose `economy` field is initialized (which `combatantFromToken`
+   handles at construction time + `_ensureEconomy` heals stale localStorage
+   entries). The existing 9-combatant Tavern Brawl from v2.4.3+ exercises
+   every code path: PCs (Pip / Thalindra / Tavik) with full mini-bodies,
+   monsters with `buildMonsterInitSheet`, mixed initiative order. **Already
+   shipped in v2.4.31; no demo seed change needed.**
+
 2. **Phase 2 — Auto-advance from action / strike / cast buttons.** Each
    click on `.mini-strike-btn` / `.monster-strike-btn` / `.atk-strike`
    / `.mini-cast-btn` / `.sp-cast` reads its `data-economy` and marks
@@ -522,6 +530,29 @@ action).
    8. Click **Next turn** until it cycles to Pip → all three chips
       reset to empty. Re-trigger steps 2-6 to confirm the cycle.
 
+   **Demo updates required for Phase 2:**
+   - Add `casting_time` field to every spell entry in `_wizard_sheet`
+     and `_cleric_sheet` in `app/demo_seed.py`. The Phase 2 renderer
+     reads `s.casting_time` directly to emit `data-economy` on the
+     cast button; without it, every spell falls back to "action".
+     Values per SRD: Fire Bolt / Mage Hand / Prestidigitation / Sacred
+     Flame / Guidance / Light = "1 action"; Magic Missile / Shield /
+     Cure Wounds / Healing Word / Bless = "1 action" except Shield
+     ("1 reaction") and Healing Word ("1 bonus action"); Misty Step
+     "1 bonus action"; Spiritual Weapon "1 bonus action"; Scorching
+     Ray / Fireball / Counterspell = "1 action" except Counterspell
+     ("1 reaction"); Hold Person / Lesser Restoration "1 action";
+     Beacon of Hope / Revivify "1 action"; Spirit Guardians "1 action";
+     Mass Healing Word "1 bonus action".
+   - Verify Vex (Bandit Captain) has at least one attack with explicit
+     `attack_roll: True` so the monster-strike branch exercises the
+     auto-advance. (Already true in v2.3.31 — no change needed.)
+   - **Heads-up:** the v2.4.19 lazy-loader (`/api/content/spells/<slug>`)
+     can serve as a fallback for spells without inline `casting_time` —
+     Phase 2 should read the SRD record on first click if `s.casting_time`
+     is missing. Adding the field to the seed is the cleaner / faster
+     path for the demo specifically.
+
 3. **Phase 3 — Class-feature economy table.** Author
    `app/static/dnd5e_feature_economy.js` with the canonical per-feature
    action tag table. Used by the resource option-picker (Channel
@@ -547,6 +578,25 @@ action).
       empty. Click Action Surge (Fighter Lv 2 if a Fighter PC is
       added): no chip changes — Action Surge is `free` (it grants an
       extra action, doesn't consume one).
+
+   **Demo updates required for Phase 3:**
+   - Pip's `_rogue_sheet` in `app/demo_seed.py` needs an entry in a
+     new `features` or `class_abilities` array on the sheet so the
+     sheet renderer + curated feature_economy table can emit a
+     clickable "Cunning Action" button (with a sub-picker for Dash /
+     Disengage / Hide). The feature is unlocked at Rogue Lv 2; Pip
+     is Lv 5, so it applies. Without this, the most visible Phase 3
+     test (Pip clicks Cunning Action → Bns flips) has no UI to click.
+   - Tavik's Channel Divinity counter from v2.4.15 already exists; the
+     CD option-picker (priority item #2) ships it as a clickable.
+     Phase 3 just needs `_CHANNEL_DIVINITY_OPTIONS.life` entries to
+     carry `economy: "action"` per the Channel Divinity 3-phase plan.
+     No new seed data; just the curated JS table needs the `economy:`
+     field added to each option.
+   - Optionally: add a Fighter PC to the demo party (Vex's bandits are
+     fighter-shaped but treated as monsters; a real Fighter Lv 1+ PC
+     would let Phase 3 exercise Action Surge + Second Wind). Out of
+     scope for Phase 3 itself; filed as a separate demo-data follow-up.
 
 4. **Phase 4 — Gating + GM override.** Disable buttons whose economy
    slot is used (50% opacity + cursor:not-allowed). GM can shift+click
@@ -574,6 +624,15 @@ action).
    6. Click Next turn. The chips reset to empty; buttons return to
       full opacity.
 
+   **Demo updates required for Phase 4:** None directly. Phase 4 is
+   pure UI/UX layered on Phase 2's auto-advance — any combatant whose
+   slot gets flipped by Phase 2 also gets buttons dimmed by Phase 4.
+   The demo's existing spell + attack rosters from Phase 2's data
+   updates exercise every code path. Optional: a one-line tooltip
+   string update in the explainer for the v2.5.0 settings
+   `potions_as_bonus_action` toggle, dropping the "currently
+   informational" hedge once Phase 4 actually gates the slot.
+
 5. **Phase 5 — Movement tracker (optional).** Add a `Mov 30/30 ft`
    chip; auto-decrement when the GM drags a token (the existing
    `/api/.../token/.../move` endpoint already broadcasts moves with
@@ -598,6 +657,25 @@ action).
    6. (Optional) Click the Mov chip → manually edit the value, e.g.
       to reflect a Dash bonus action that doubled the budget for
       this turn.
+
+   **Demo updates required for Phase 5:**
+   - Every demo combatant already has a `speed` field. Tavik's
+     `_cleric_sheet` has `speed: 25` (Hill Dwarf); Pip has `speed: 25`
+     (Halfling); Thalindra has `speed: 30` (Elf); the NPC templates
+     ship per the SRD. **No seed change needed for PCs.**
+   - For monsters whose template `sheet.speed` is a structured dict
+     (e.g. Grixxa's `{"walk": 30}` from `seed_homebrew_files`),
+     Phase 5 needs to read `sheet.speed.walk` rather than `sheet.speed`
+     directly. The homebrew speed shape is already a dict for every
+     demo monster; Phase 5's chip-render code should handle both
+     scalar (PC sheets: `speed: 25`) and dict (monster sheets:
+     `speed: {walk: 30}`) shapes. **Code change in Phase 5, not seed
+     data.**
+   - The grid scale is per-map: `map.grid_size_px = 70` on the demo
+     tavern with `grid_type = "square"`. 5 ft / square is the 5e
+     default; Phase 5 should hardcode `5 ft per grid cell` initially
+     and read it from a per-campaign setting only if/when a non-5-ft
+     grid case appears.
 
 **Dependencies:**
 
@@ -658,6 +736,32 @@ clicks. First example landed in v2.5.0: `potions_as_bonus_action`.
    decrements, AND Tavik's Bns chip flips amber. With the checkbox
    off, the same click flips Act chip amber instead. This step is
    filed for the Phase 2 follow-up.
+
+**Demo updates required for the house-rule toggle to be testable
+end-to-end:**
+
+- v2.5.0 ships the column + the settings checkbox. Steps 1-6 above
+  are runnable today.
+- Step 7 (the actual mechanical effect) is gated on **two** future
+  pieces:
+  1. The action-economy Phase 2 work that adds `data-economy` tags
+     + auto-advance to inventory item buttons.
+  2. A **"Use Item" button on consumable inventory rows** in
+     `sheet_dnd5e.html`. The row's existing equip toggle / qty input
+     / × delete cluster doesn't include a "Use" action; v2.4.13's
+     rich-item shape supports `type: "consumable"` but the sheet
+     renders consumables identically to gear today. Adding the Use
+     button is a small follow-up (~30 LOC: a button in the row,
+     a click handler that decrements qty + posts to the HP endpoint
+     + marks the economy slot per `campaign.potions_as_bonus_action`).
+- **Seed updates required to test end-to-end:** add a
+  `{name: "Potion of Healing", type: "consumable", qty: 1, _slug:
+  "potion-of-healing", desc: "..."}` entry to each PC's inventory
+  in `app/demo_seed.py`. The SRD ships
+  `app/data/local/dnd5e/items/potion-of-healing.json` so the v2.4.13
+  `_loadItemActions` lazy-loader fills in the description on first
+  row-expand. Suggested per-PC counts: Pip 2 (rogue stash), Tavik 3
+  (cleric's emergency reserve), Thalindra 1 (wizard backup).
 
 ---
 
