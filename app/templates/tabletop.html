@@ -502,6 +502,14 @@
         border-color: rgba(232,160,64,.4);
         background: rgba(232,160,64,.08);
     }
+    /* v2.6.2: movement chip. Shows ``Mov ${used}/${max} ft`` for the
+       active combatant. Green while within budget, amber within 5 ft
+       of overrun, red once over. Click clears the running total back
+       to zero — useful when the GM gives someone a Dash bonus that
+       refunds the budget. */
+    .econ-chip.mov { color: #80e0a0; }
+    .econ-chip.mov.near { color: #e8a040; border-color: rgba(232,160,64,.4); background: rgba(232,160,64,.08); }
+    .econ-chip.mov.over { color: #ff7070; border-color: rgba(255,112,112,.5); background: rgba(255,112,112,.1); }
     /* v2.4.21: roll-state pill + death-saves tracker share one row. The
        roll pill shrinks to content; the death-saves tracker auto-hides
        its 6-pip row when the character is alive. */
@@ -3144,6 +3152,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // chip's used/available styling updates. ``pushBattle`` then
             // syncs to localStorage + the realtime hub so other clients
             // (and the GM's other browser tabs) see the same state.
+            // v2.6.2: the Movement chip is numeric, not boolean — clicking
+            // it resets the running total to 0 instead of toggling. Useful
+            // when the GM grants Dash / Step of the Wind / Hasted, all of
+            // which expand or refund the budget mid-turn.
             const econChip = ev.target.closest('.econ-chip');
             if (econChip) {
                 ev.stopPropagation();
@@ -3152,7 +3164,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const c = battle.combatants[i];
                 if (!c) return;
                 _ensureEconomy(c);
-                c.economy[slot] = !c.economy[slot];
+                if (slot === 'movement') {
+                    c.economy.movement = 0;
+                } else {
+                    c.economy[slot] = !c.economy[slot];
+                }
                 pushBattle();
                 renderBattle();
                 return;
@@ -3592,9 +3608,38 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         return null;
     }
 
+    /* v2.6.2: Phase 5 movement tracker — normalise the various shapes
+     * a sheet's ``speed`` field can take. PC sheets store a scalar in
+     * feet (``speed: 25`` for halflings/dwarves, ``30`` for humans);
+     * monster sheets prefer a dict so swim / fly / burrow are
+     * addressable (``speed: {"walk": 30, "swim": 30}``); some older
+     * homebrew data is a string like "30 ft." or just "30". Returns
+     * the walking speed in feet, falling back to 30 (the 5e default).
+     * Doesn't try to handle swim / fly modes — Phase 5 only tracks
+     * ground movement; mode switches are a future polish.
+     */
+    function _speedWalkFromSheet(sh) {
+        if (!sh) return 30;
+        const v = sh.speed;
+        if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v;
+        if (v && typeof v === 'object') {
+            const w = parseInt(v.walk, 10);
+            if (Number.isFinite(w) && w > 0) return w;
+        }
+        if (typeof v === 'string') {
+            const m = v.match(/(\d+)/);
+            if (m) {
+                const n = parseInt(m[1], 10);
+                if (Number.isFinite(n) && n > 0) return n;
+            }
+        }
+        return 30;
+    }
+
     function combatantFromToken(tok) {
         let dexMod = 0;
         let hpCur = 10, hpMax = 10;
+        let speedWalk = 30;
         const color = tok.color || '#888';
 
         if (tok.character_id) {
@@ -3603,6 +3648,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const sh = ch.sheet || {};
                 dexMod = _abi((sh.abilities || {}).DEX) + parseInt(sh.initiative_bonus || 0);
                 [hpCur, hpMax] = _hpFromSheet(sh);
+                speedWalk = _speedWalkFromSheet(sh);
             }
         } else if (tok.token_template_id) {
             const tmpl = allTemplates.find(t => t.id === tok.token_template_id);
@@ -3610,6 +3656,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const sh = tmpl.sheet || {};
                 dexMod = _abi((sh.abilities || {}).DEX);
                 [hpCur, hpMax] = _hpFromSheet(sh);
+                speedWalk = _speedWalkFromSheet(sh);
             }
         }
 
@@ -3620,17 +3667,27 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // (no char_id) can look up their stat block + actions for the
             // init-tracker monster sheet and the click-to-roll attack buttons.
             token_template_id: tok.token_template_id || null,
+            // v2.6.2: source token id so the Phase 5 ``token_move`` handler
+            // can join broadcasts to the right combatant (a single character
+            // may have multiple tokens — e.g. a summon — but each row in the
+            // init tracker pairs to exactly one). Persisted on the combatant
+            // so localStorage carries it across renders.
+            source_token_id: tok.id,
             name: tok.label,
             initiative: 0, hp_current: hpCur, hp_max: hpMax,
             color, dex_mod: dexMod,
             image_url: tok.image_url || null,
+            // v2.6.2: normalised walking speed in feet — read from the linked
+            // sheet's ``speed`` field on add. Used as the denominator of the
+            // Mov chip (Mov current/max ft) on the chip strip.
+            speed_walk: speedWalk,
             // v2.4.31: Phase 1 of the action-economy plan (see
             // docs/plans/class-content-status.md section E). Per-combatant
             // per-turn slots for action / bonus action / reaction +
-            // informational movement counter. All ``false`` by default;
-            // the GM (or future auto-advance from action buttons) flips
-            // them to ``true`` when a slot is consumed. Reset at the
-            // start of each combatant's turn in ``nextTurn``.
+            // movement counter (feet used this turn, v2.6.2). All zero/false
+            // by default; the GM (or auto-advance from action buttons) flips
+            // them when a slot is consumed. Reset at the start of each
+            // combatant's turn in ``nextTurn``.
             economy: { action: false, bonus: false, reaction: false, movement: 0 },
         };
     }
@@ -4349,17 +4406,38 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // used / available. Reset at start of each combatant's
                 // turn in ``nextTurn``. Phase 1 = manual only; future
                 // Phase 2 will auto-advance from strike / cast buttons.
-                const econ = c.economy || { action: false, bonus: false, reaction: false };
+                const econ = c.economy || { action: false, bonus: false, reaction: false, movement: 0 };
                 const econChip = (slot, label, used) =>
                     `<button type="button" class="econ-chip${used ? ' used' : ''}"
                         data-idx="${i}" data-slot="${slot}"
                         title="${label}: ${used ? 'used this turn' : 'available'} — click to toggle">
                         ${used ? '●' : '○'} ${label}
                     </button>`;
+                // v2.6.2: Phase 5 movement chip. ``feetUsed`` is the running
+                // total accumulated by the token_move WS handler each time
+                // this combatant's source token shifts position; the cap
+                // comes from the normalised ``speed_walk`` set in
+                // combatantFromToken. Colour escalates from green → amber
+                // (within 5 ft of cap) → red (over the cap) so the GM
+                // sees overrun without needing to read the numbers. Click
+                // clears the running total — useful for Dash, Hasted,
+                // Step of the Wind, or any GM-discretion refund.
+                const speedMax = (typeof c.speed_walk === 'number' && c.speed_walk > 0)
+                    ? c.speed_walk : 30;
+                const feetUsed = Math.round(Number(econ.movement || 0) * 10) / 10;
+                let movClass = 'mov';
+                if (feetUsed > speedMax) movClass += ' over';
+                else if (feetUsed >= speedMax - 5 && feetUsed > 0) movClass += ' near';
+                const movChip = `<button type="button" class="econ-chip ${movClass}"
+                    data-idx="${i}" data-slot="movement"
+                    title="Movement used this turn — click to reset to 0">
+                    ${feetUsed % 1 === 0 ? feetUsed : feetUsed.toFixed(1)}/${speedMax} ft
+                </button>`;
                 const economyChips = `<div class="econ-chips">
                     ${econChip('action', 'Act', !!econ.action)}
                     ${econChip('bonus', 'Bns', !!econ.bonus)}
                     ${econChip('reaction', 'Rxn', !!econ.reaction)}
+                    ${movChip}
                 </div>`;
                 return `<div class="init-entry${isActive ? ' active-turn' : ''}" data-idx="${i}" data-char-id="${slotId}">
                     <div class="mini-header" data-idx="${i}" data-char-id="${slotId}">
@@ -4709,6 +4787,49 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         } else if (msg.type === 'token_update') {
             const t = allTokens.find(t => t.id === msg.data.id);
             if (t) Object.assign(t, msg.data);
+        }
+        // v2.6.2: Phase 5 movement tracker. Server broadcasts each token
+        // move with from/to coords + distance_ft. The chip strip's Mov
+        // column wants the running total per combatant — join the move
+        // to the combatant whose source_token_id matches (preferred:
+        // unambiguous when a character has multiple tokens), else fall
+        // back to char_id / template+name (covers older combatants that
+        // pre-date source_token_id from before this commit). Skip when
+        // battle isn't active so out-of-combat token shuffling doesn't
+        // accidentally burn movement.
+        if (msg.type === 'token_move') {
+            const data = msg.data || {};
+            const dist = Number(data.distance_ft || 0);
+            if (!battle.active || !(dist > 0)) return;
+            const tokenId = data.id;
+            const charId = data.character_id;
+            const templateId = data.token_template_id;
+            let target = null;
+            const combs = battle.combatants || [];
+            // 1. source_token_id wins — added in v2.6.2; unambiguous.
+            if (tokenId != null) {
+                target = combs.find(c => c.source_token_id === tokenId);
+            }
+            // 2. char_id match for PCs.
+            if (!target && charId != null) {
+                target = combs.find(c => c.char_id === charId);
+            }
+            // 3. token_template_id + matching token name for monsters.
+            if (!target && templateId != null) {
+                const tok = allTokens.find(t => t.id === tokenId);
+                const label = tok ? tok.label : null;
+                target = combs.find(c =>
+                    c.token_template_id === templateId
+                    && (!label || c.name === label));
+            }
+            if (!target) return;
+            _ensureEconomy(target);
+            target.economy.movement = Math.round(((Number(target.economy.movement) || 0) + dist) * 10) / 10;
+            // GM owns the battle state; pushBattle to broadcast. Players
+            // get the update via the regular battle_update path.
+            if (IS_GM) pushBattle();
+            renderBattle();
+            return;
         }
     });
 

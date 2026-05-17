@@ -3580,14 +3580,50 @@ async def move_token(
         raise HTTPException(404, "Token not found")
     if not _user_can_move_token(db, user, token, campaign):
         raise HTTPException(403, "You can't move that token")
+
+    # v2.6.2: Phase 5 movement tracker. Capture the prior position
+    # before the mutation so the broadcast can carry both endpoints +
+    # the computed distance in feet. The action-economy chip strip on
+    # the init tracker adds ``distance_ft`` to the combatant's
+    # ``economy.movement`` running total each time the matching token
+    # moves. ``character_id`` is included so the client can join the
+    # broadcast to the right combatant without a second lookup.
+    from_x = float(token.x or 0)
+    from_y = float(token.y or 0)
+    grid_size_px = int(token.map.grid_size_px or 0)
+    # 5e standard: 5 ft per square. Chebyshev distance (max of dx, dy
+    # cells) reflects RAW "diagonal = 5 ft" rule for square grids.
+    # Hex / no-grid fall back to Euclidean so a player who shifts a
+    # token by 100 px on a no-grid map still sees a sensible feet
+    # figure rather than zero or NaN. Grid type is normalised by the
+    # ORM enum; SQUARE / HEX_FLAT / HEX_POINTY / NONE all map here.
+    grid_type = (token.map.grid_type.value if token.map.grid_type else "square").lower()
+    dx = x - from_x
+    dy = y - from_y
+    if grid_size_px > 0:
+        if grid_type == "square":
+            cells = max(abs(dx), abs(dy)) / grid_size_px
+        else:
+            cells = (dx * dx + dy * dy) ** 0.5 / grid_size_px
+        distance_ft = round(cells * 5, 1)
+    else:
+        distance_ft = 0.0
+
     token.x = x
     token.y = y
     db.commit()
     await hub.broadcast(
         campaign_id,
-        {"type": "token_move", "data": {"id": token.id, "x": x, "y": y}},
+        {"type": "token_move", "data": {
+            "id": token.id,
+            "x": x, "y": y,
+            "from_x": from_x, "from_y": from_y,
+            "distance_ft": distance_ft,
+            "character_id": token.character_id,
+            "token_template_id": token.token_template_id,
+        }},
     )
-    return {"ok": True}
+    return {"ok": True, "distance_ft": distance_ft}
 
 
 @router.post("/api/campaign/{campaign_id}/tokens")
