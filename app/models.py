@@ -161,6 +161,14 @@ class Campaign(Base):
     # access regardless. session_started_at is set the moment Start is hit.
     session_active: Mapped[bool] = mapped_column(Boolean, default=False)
     session_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # v2.5.0: house-rule toggle for potions as a bonus action. When True,
+    # the action-economy tracker (planned Phase 2 from
+    # docs/plans/class-content-status.md section E) will tag potion item
+    # usage as a "bonus" slot consumption instead of the RAW "action".
+    # Stores the preference; mechanical integration lands when Phase 2
+    # of the action-economy work ships.
+    potions_as_bonus_action: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false")
     # GM-assigned color for the primary GM in the roll log
     gm_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     # Tint color for the GM Tools tab in the tabletop sidebar

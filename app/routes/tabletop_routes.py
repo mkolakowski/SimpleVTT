@@ -743,6 +743,10 @@ async def campaign_settings_save(
     hp_threshold_2: str = Form(""),
     hp_threshold_3: str = Form(""),
     hp_threshold_4: str = Form(""),
+    # v2.5.0: house-rule toggles. Each one's a bool that defaults False
+    # if the checkbox isn't checked (HTML form idiom: unchecked checkbox
+    # doesn't submit the field). ``Form(False)`` recovers the default.
+    potions_as_bonus_action: bool = Form(False),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -757,6 +761,8 @@ async def campaign_settings_save(
     campaign.gm_tab_color = gm_tab_color.strip()[:20] or None
     fo = font_override.strip()
     campaign.font_override = fo if fo in _VALID_CAMPAIGN_FONTS and fo else None
+    # v2.5.0: house rules
+    campaign.potions_as_bonus_action = potions_as_bonus_action
     # Default-encounter-on-session-start setting. Validate the encounter
     # belongs to this campaign before assigning; empty / invalid clears.
     de_raw = (default_encounter_id or "").strip()

@@ -170,6 +170,24 @@
             </select>
             <span class="muted" style="font-size:12px;">Forces all players to use this font on the tabletop page.</span>
         </label>
+        {# v2.5.0: House Rules fieldset — campaign-level GM toggles for
+           rule variants. Each one stores a preference on the Campaign
+           row; mechanical integration into the dnd5e sheet / init
+           tracker lands per-rule (the potions toggle is currently
+           informational; the action-economy Phase 2 work will consume
+           the preference and tag potion-Use buttons with bonus instead
+           of action). #}
+        <fieldset>
+            <legend>📜 House rules</legend>
+            <p class="muted" style="margin:0 0 8px;">Per-campaign rule variants. Each preference is recorded here; the matching mechanical effect lands as the corresponding feature ships (see <code>docs/plans/class-content-status.md</code>).</p>
+            <label style="flex-direction:row;align-items:center;gap:10px;">
+                <input type="checkbox" name="potions_as_bonus_action"
+                       {% if campaign.potions_as_bonus_action %}checked{% endif %}>
+                <span><strong>Potions are a bonus action</strong>
+                    <span class="muted" style="font-size:12px;display:block;">Drinking a healing potion consumes a bonus action instead of an action. (Variant rule from <em>Xanathar's Guide / Tasha's Cauldron</em>.) Currently informational — when action-economy Phase 2 ships with a "Use Item" button on consumable inventory items, clicking it will auto-mark the bonus slot if this is on, or the action slot if off.</span>
+                </span>
+            </label>
+        </fieldset>
         <fieldset>
             <legend>🎵 Audio on session start</legend>
             <p class="muted" style="margin:0 0 8px;">When you click <strong>Start session</strong>, this playlist begins playing for everyone automatically. Audio is stopped when the session ends.</p>

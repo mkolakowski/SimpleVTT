@@ -483,6 +483,20 @@ def _apply_inline_migrations() -> None:
         if map_cols_v53 and "show_grid" not in map_cols_v53:
             conn.execute(text("ALTER TABLE maps ADD COLUMN show_grid BOOLEAN NOT NULL DEFAULT TRUE"))
 
+    # ---- Schema v54 (2.5.0): campaigns.potions_as_bonus_action ----
+    # Per-campaign house-rule toggle that records the GM's preference for
+    # potion-action timing. Default False (RAW: drinking a potion is an
+    # action). The action-economy tracker's Phase 2 will consult this
+    # column when a "Use Item" button is clicked on a potion-type
+    # inventory item and tag the matching economy slot accordingly.
+    camp_cols_v54 = _column_names("campaigns")
+    with engine.begin() as conn:
+        if camp_cols_v54 and "potions_as_bonus_action" not in camp_cols_v54:
+            conn.execute(text(
+                "ALTER TABLE campaigns ADD COLUMN potions_as_bonus_action "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.5.0] - 2026-05-17
+
+**Schema version:** 54
+**Commit summary:** First **per-campaign house-rule toggle**: `potions_as_bonus_action`. New Boolean column on `campaigns`, surfaced as a checkbox under a new "📜 House rules" fieldset in the GM-only campaign settings page. Currently informational — the preference is stored on the row; mechanical integration (auto-marking the bonus-action slot when a potion is consumed) lands when action-economy Phase 2 ships with a "Use Item" button on consumable inventory items. MINOR version bump for the additive schema column. User-requested. Closes the "lay groundwork for the v2.4.30 action-economy plan" loop.
+**Description:** Four-piece change. (1) `Campaign.potions_as_bonus_action: Mapped[bool]` added in `app/models.py` next to the existing GM-color / font-override fields. Default `False` (RAW: drinking a potion is an action), `server_default="false"` to match the column's `NOT NULL` DDL. (2) Schema v54 migration block in `app/database.py`'s `_apply_inline_migrations()` — single `ALTER TABLE campaigns ADD COLUMN potions_as_bonus_action BOOLEAN NOT NULL DEFAULT FALSE` guarded by the standard `_column_names` idempotency check. SCHEMA_VERSION 53 → 54. (3) Campaign settings page (`app/templates/campaign_settings.html`) gains a new "House rules" fieldset right before the Audio fieldset, with the checkbox + explainer text. The explainer flags the rule's source (Xanathar's / Tasha's variant) and is honest that the toggle is currently informational until the action-economy Phase 2 work lands. (4) `campaign_settings_save` route in `app/routes/tabletop_routes.py` reads the new `potions_as_bonus_action: bool = Form(False)` form field and writes it back to the Campaign row. Standard HTML-checkbox idiom: unchecked → field omitted → `Form(False)` default.
+**Description (cont):** Why ship the toggle now even though it's currently informational: the action-economy plan in `docs/plans/class-content-status.md` calls out Phase 2 as the auto-advance work that consumes the preference. Phase 1 (v2.4.31) is already manual-only; Phase 2 will add a "Use Item" button to consumable inventory items and check this column to decide whether the bonus-action or action slot gets marked. Storing the preference now means Phase 2 doesn't have to introduce both the schema change AND the consumption logic in the same commit — the preference is already there, just unconsumed.
+**Description (cont 2):** MINOR version bump (2.4.x → 2.5.0) per the CLAUDE.md rule: "MINOR — new backward-compatible feature or additive schema change." Both apply. Schema migration is non-destructive (additive column with a safe default), so existing demo / production databases pick up the column transparently on first boot — operators don't need to manually `ALTER` anything. Second schema bump in the 2.x line after v2.4.0 introduced the maps grid-overlay column.
+
+### Added
+- `app/models.py` `Campaign.potions_as_bonus_action` — Boolean column, default False, `server_default="false"`. Per-campaign GM toggle for the "potions are a bonus action" house rule.
+- `app/database.py` Schema v54 migration block — `ALTER TABLE campaigns ADD COLUMN potions_as_bonus_action BOOLEAN NOT NULL DEFAULT FALSE` with `_column_names`-guarded idempotency. SCHEMA_VERSION 53 → 54.
+- `app/templates/campaign_settings.html` — new "📜 House rules" fieldset with the potions checkbox + explainer text + integration-status note.
+- `app/routes/tabletop_routes.py` `campaign_settings_save` — `potions_as_bonus_action: bool = Form(False)` form field + write-back to the campaign row.
+
+### Schema
+- `campaigns.potions_as_bonus_action` (`BOOLEAN NOT NULL DEFAULT FALSE`) added. SCHEMA_VERSION → 54.
+
+### Notes
+- Currently no UI or logic reads `Campaign.potions_as_bonus_action` to change behaviour. Setting it has no observable effect on play until action-economy Phase 2 ships a "Use Item" button on consumables that consults it. The settings explainer is honest about this.
+- House rules form a natural growth path here. Future items could include: "Healing surges" (Tasha's optional rest variant), "Flanking grants advantage" (DMG variant), "Critical hits maximize damage dice", etc. Each would be a Boolean column on `Campaign` + a checkbox in the same fieldset.
+- The form's HTML-checkbox idiom means unchecking the box on save writes `False` to the column (the form omits the field; `Form(False)` returns the default). No risk of partial save: every form submission rewrites every field.
+
+---
+
 ## [2.4.31] - 2026-05-17
 
 **Schema version:** 53
