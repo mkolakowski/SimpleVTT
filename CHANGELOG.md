@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.2] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Re-grid the six NPC token positions in `seed_tokens` for the 1254×1254 tavern map — three NPCs (Thug at `x=1200`, Grixxa at `x=1250`, Bandit Beta at `x=1150`) were clipping off the right edge after the v2.4.1 map resize. New 2-column / 3-row formation snaps every NPC to the 70-px grid and centres them around `x=910–1120`, all comfortably within the 1184-px max for a 1×1 token. Preserves the v2.3.22 spatial layout (Vex up front, Thug back-right, Grixxa bottom-right). User-requested.
+**Description:** Single edit in `app/demo_seed.py` `seed_tokens`'s `npc_placements` tuple: every NPC's `(x, y)` repositioned to a grid-snapped slot inside the new square room. Vex (980, 420), Bandit Alpha (910, 490), Bandit Beta (1050, 490), Bandit Gamma (980, 560), Thug (1120, 420), Grixxa (1120, 560). The Thug/Grixxa right-edge overflow flagged in the v2.4.1 release notes is fixed — `1120 + 70 = 1190 < 1254` with 64 px margin to spare. Vex is still the leftmost (forward-most) NPC matching the encounter narrative ("Vex barks orders"). Three bandits form a triangle in the middle, Grixxa sits in the bottom-right "tabletop" corner. Tactically the PC cluster around `x=350–420` and NPC cluster around `x=910–1120` leaves a ~490-px gap (≈ 7 grid squares) between the parties — far enough that turn-1 movement matters, close enough that ranged attacks (Bandit Light Crossbow, Bandit Captain Dagger thrown, Wizard Fire Bolt) all fire on first contact.
+
+### Changed
+- `app/demo_seed.py` `seed_tokens` `npc_placements` — six NPC positions regridded for the v2.4.1 1254×1254 map. Two-column / three-row formation centred around `x=910–1120`. Fixes the Thug / Grixxa / Bandit Beta right-edge clipping reported after v2.4.1.
+
+### Notes
+- All six NPCs now snap cleanly to the 70-px grid (multiples of 70). PC positions from v2.4.1 (`350,490` / `420,560` / `420,420`) are user-supplied and not all on-grid; left as-is per user request.
+- The encounter snapshot in `seed_encounter` doesn't store `(x, y)` for each combatant beyond what's in the `Token` rows (the `initiative_order` payload uses `token_idx` to point at tokens, not coordinates). So this position change propagates to the "Tavern Brawl" encounter automatically — no further edits needed in `seed_encounter`.
+- If the user wants a more spread-out / asymmetric arrangement (e.g. Grixxa actually standing on a specific drawn-on tabletop in the new map image), call out the desired coordinates and they go in as a single-line tuple swap.
+
+---
+
 ## [2.4.1] - 2026-05-17
 
 **Schema version:** 53

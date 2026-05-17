@@ -538,13 +538,21 @@ def seed_tokens(
     # any GM setup. v2.3.44: every NPC now carries its own portrait jpg
     # — the three bandits use distinct alpha/beta/gamma files so the GM
     # can tell them apart at a glance (same template, different art).
+    # v2.4.2: positions regridded for the 1254×1254 tavern.png (v2.4.1).
+    # Two-column / three-row formation centred around x=910–1120 — all
+    # tokens snapped to the 70-px grid and fit within the map (max x for
+    # a 1×1 token = 1184). Vex up front, Thug back-right corner, Grixxa
+    # bottom-right ("on a tabletop" per the encounter description), three
+    # bandits filling the middle row + flanks. Roughly preserves the
+    # original spatial relationships from the 1400×900 layout but
+    # compressed into the new square room.
     npc_placements = [
-        ("bandit-captain", "Vex (Bandit Captain)",    1100, 400, "#c84a4a", "bandit-captain.jpg"),
-        ("bandit",         "Bandit Alpha",            1050, 500, "#c84a4a", "bandit-alpha.jpg"),
-        ("bandit",         "Bandit Beta",             1150, 500, "#c84a4a", "bandit-beta.jpg"),
-        ("bandit",         "Bandit Gamma",            1100, 600, "#c84a4a", "bandit-gamma.jpg"),
-        ("thug",           "Thug",                    1200, 400, "#c84a4a", "thug.jpg"),
-        ("goblin-captain", "Grixxa (Goblin Captain)", 1250, 550, "#7c9c54", "goblin-captain.jpg"),
+        ("bandit-captain", "Vex (Bandit Captain)",     980, 420, "#c84a4a", "bandit-captain.jpg"),
+        ("bandit",         "Bandit Alpha",             910, 490, "#c84a4a", "bandit-alpha.jpg"),
+        ("bandit",         "Bandit Beta",             1050, 490, "#c84a4a", "bandit-beta.jpg"),
+        ("bandit",         "Bandit Gamma",             980, 560, "#c84a4a", "bandit-gamma.jpg"),
+        ("thug",           "Thug",                    1120, 420, "#c84a4a", "thug.jpg"),
+        ("goblin-captain", "Grixxa (Goblin Captain)", 1120, 560, "#7c9c54", "goblin-captain.jpg"),
     ]
     for slug, label, x, y, color, image in npc_placements:
         tmpl = templates.get(slug)
