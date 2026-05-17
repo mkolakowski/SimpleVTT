@@ -466,6 +466,42 @@
     .mini-row-expandable.open + .mini-row-detail { display: block; }
     .mini-row-detail-bits { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; color: var(--fg); }
     .mini-row-detail-desc { white-space: pre-wrap; }
+    /* v2.4.31: action-economy chip strip in the init-card mini-header.
+       Three small clickable chips (Act / Bns / Rxn) showing whether the
+       combatant has used their action / bonus action / reaction this
+       turn. Filled circle = used (amber), empty = available (green).
+       Click to toggle (Phase 1 manual mode). Dense-panel exception per
+       CLAUDE.md — 26-px chips fit alongside the existing init/HP
+       subline without bumping the row height. */
+    .econ-chips {
+        display: flex;
+        gap: 4px;
+        margin-top: 3px;
+        flex-wrap: wrap;
+    }
+    .econ-chip {
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1;
+        padding: 3px 6px;
+        min-height: 24px;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        background: var(--input-bg);
+        color: #80e0a0;
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+        white-space: nowrap;
+        letter-spacing: 0.3px;
+    }
+    .econ-chip:hover { background: var(--btn-hover); }
+    .econ-chip.used {
+        color: #e8a040;
+        border-color: rgba(232,160,64,.4);
+        background: rgba(232,160,64,.08);
+    }
     /* v2.4.21: roll-state pill + death-saves tracker share one row. The
        roll pill shrinks to content; the death-saves tracker auto-hides
        its 6-pip row when the character is alive. */
@@ -3055,6 +3091,24 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 _setMiniTab(tabBtn.dataset.charId, tabBtn.dataset.tab);
                 return;
             }
+            // v2.4.31: action-economy chip toggle (Phase 1, manual mode).
+            // Click flips ``c.economy[slot]`` and re-renders so the
+            // chip's used/available styling updates. ``pushBattle`` then
+            // syncs to localStorage + the realtime hub so other clients
+            // (and the GM's other browser tabs) see the same state.
+            const econChip = ev.target.closest('.econ-chip');
+            if (econChip) {
+                ev.stopPropagation();
+                const i = parseInt(econChip.dataset.idx, 10);
+                const slot = econChip.dataset.slot;
+                const c = battle.combatants[i];
+                if (!c) return;
+                _ensureEconomy(c);
+                c.economy[slot] = !c.economy[slot];
+                pushBattle();
+                renderBattle();
+                return;
+            }
             // v2.4.23: clickable mini-sheet row (attack / spell / monster
             // action) toggles a sibling ``.mini-row-detail`` panel. Skip
             // when the click came from an inner interactive control —
@@ -3490,7 +3544,25 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             initiative: 0, hp_current: hpCur, hp_max: hpMax,
             color, dex_mod: dexMod,
             image_url: tok.image_url || null,
+            // v2.4.31: Phase 1 of the action-economy plan (see
+            // docs/plans/class-content-status.md section E). Per-combatant
+            // per-turn slots for action / bonus action / reaction +
+            // informational movement counter. All ``false`` by default;
+            // the GM (or future auto-advance from action buttons) flips
+            // them to ``true`` when a slot is consumed. Reset at the
+            // start of each combatant's turn in ``nextTurn``.
+            economy: { action: false, bonus: false, reaction: false, movement: 0 },
         };
+    }
+
+    /* v2.4.31: heal stale combatants in localStorage that pre-date the
+     * action-economy ``economy`` object. Called from ``renderBattle`` before
+     * the per-row HTML loop so every combatant has the field; defensive
+     * against any code path that still constructs combatants without it. */
+    function _ensureEconomy(c) {
+        if (!c.economy || typeof c.economy !== 'object') {
+            c.economy = { action: false, bonus: false, reaction: false, movement: 0 };
+        }
     }
 
     function hpColor(cur, max) {
@@ -4054,10 +4126,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         /* v2.4.8: opportunistic portrait heal — walk every combatant and
          * fill in ``image_url`` from the live token list when missing.
          * The mutation persists via the ``saveBattle()`` at the end of
-         * this block so subsequent renders skip the lookup. */
+         * this block so subsequent renders skip the lookup.
+         * v2.4.31: same pass also ensures each combatant has the
+         * ``economy`` object so the chip strip renders cleanly for
+         * combatants captured in localStorage before this commit. */
         let _healedAny = false;
         for (const c of battle.combatants) {
             if (!c.image_url && _resolveCombatantImage(c)) _healedAny = true;
+            _ensureEconomy(c);
         }
 
         list.innerHTML = battle.combatants.map((c, i) => {
@@ -4131,12 +4207,30 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         data-monster-name="${c.name}"
                         title="Open ${c.name}'s stat block">📋 Sheet</a>`;
                 }
+                // v2.4.31: action-economy chip strip. Per-combatant slots
+                // for Action / Bonus action / Reaction. Click to toggle
+                // used / available. Reset at start of each combatant's
+                // turn in ``nextTurn``. Phase 1 = manual only; future
+                // Phase 2 will auto-advance from strike / cast buttons.
+                const econ = c.economy || { action: false, bonus: false, reaction: false };
+                const econChip = (slot, label, used) =>
+                    `<button type="button" class="econ-chip${used ? ' used' : ''}"
+                        data-idx="${i}" data-slot="${slot}"
+                        title="${label}: ${used ? 'used this turn' : 'available'} — click to toggle">
+                        ${used ? '●' : '○'} ${label}
+                    </button>`;
+                const economyChips = `<div class="econ-chips">
+                    ${econChip('action', 'Act', !!econ.action)}
+                    ${econChip('bonus', 'Bns', !!econ.bonus)}
+                    ${econChip('reaction', 'Rxn', !!econ.reaction)}
+                </div>`;
                 return `<div class="init-entry${isActive ? ' active-turn' : ''}" data-idx="${i}" data-char-id="${slotId}">
                     <div class="mini-header" data-idx="${i}" data-char-id="${slotId}">
                         ${tokenImg}
                         <div class="mini-header-info">
                             <div class="mini-header-name">${c.name}</div>
                             <div class="mini-header-sub">Init <strong>${c.initiative}</strong> &nbsp;·&nbsp; HP <strong style="color:${col};">${c.hp_current}</strong> / ${c.hp_max}</div>
+                            ${economyChips}
                         </div>
                         ${sheetBtn}
                         <span class="mini-header-arrow">▶</span>
@@ -4271,6 +4365,19 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         const next = (battle.turn_index + 1) % battle.combatants.length;
         if (next === 0) battle.round = (battle.round || 1) + 1;
         battle.turn_index = next;
+        // v2.4.31: reset the new active combatant's action-economy slots.
+        // Action + bonus + reaction all refresh at the start of the
+        // combatant's turn (per 5e RAW — reactions reset at the START
+        // of YOUR next turn, which is exactly when ``turn_index`` lands
+        // on them again). Movement also refreshes to zero "feet used".
+        const newCur = battle.combatants[next];
+        if (newCur) {
+            _ensureEconomy(newCur);
+            newCur.economy.action = false;
+            newCur.economy.bonus = false;
+            newCur.economy.reaction = false;
+            newCur.economy.movement = 0;
+        }
         pushBattle(); renderBattle();
     });
 
@@ -4289,6 +4396,17 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     document.getElementById('battle-start-btn')?.addEventListener('click', () => {
         if (!battle.combatants.length) return;
         battle.active = true; battle.turn_index = 0; battle.round = 1;
+        // v2.4.31: clear every combatant's action-economy slots so the
+        // round begins with everyone fresh. Subsequent turn advances
+        // reset only the active combatant's slots; this initial sweep
+        // ensures no leftover state from a previous fight bleeds in.
+        battle.combatants.forEach(c => {
+            _ensureEconomy(c);
+            c.economy.action = false;
+            c.economy.bonus = false;
+            c.economy.reaction = false;
+            c.economy.movement = 0;
+        });
         pushBattle(); renderBattle();
     });
 
@@ -4359,6 +4477,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 initiative: 0, hp_current: parseInt(hp.current || hpMax), hp_max: hpMax,
                 image_url: c.portrait_url || null,
                 color: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#6cb4ff', dex_mod: dexMod,
+                economy: { action: false, bonus: false, reaction: false, movement: 0 },
             });
             pushBattle(); renderBattle(); renderCharPanel();
         }));
@@ -4391,6 +4510,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         battle.combatants.push({
             id: 'manual_' + Date.now(), char_id: null,
             name, initiative: init, hp_current: hp, hp_max: hp, color, dex_mod: 0,
+            economy: { action: false, bonus: false, reaction: false, movement: 0 },
         });
         sortPreservingTurn();
         pushBattle(); renderBattle();

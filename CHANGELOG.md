@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.31] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** **Phase 1 of the action-economy tracker** (per v2.4.30 plan section E). Every init-card row now shows three small `[○ Act][○ Bns][○ Rxn]` chips under the Init/HP subline. GM clicks to toggle used (filled amber) ↔ available (empty green). All three slots reset automatically when the combatant's turn starts (per 5e RAW for reactions: refreshes at start of YOUR next turn). Manual mode only — no auto-advance from action / spell buttons yet (Phase 2 follow-up). User-requested.
+**Description:** Three coordinated edits in `app/templates/tabletop.html`. (1) `combatantFromToken` + the character-add + manual-add paths all initialize `economy: {action: false, bonus: false, reaction: false, movement: 0}` on the combatant object. (2) New helper `_ensureEconomy(c)` defensively heals combatants captured in localStorage before this commit — called by `renderBattle` in the same pre-loop pass as the v2.4.8 portrait heal so every combatant has the field by the time the chip strip renders. (3) `renderBattle` injects an `econChip(slot, label, used)` helper that emits a `<button class="econ-chip">` per slot; three chips wrapped in `.econ-chips` slotted under `.mini-header-info` right after the Init/HP subline. The players-drawer delegated click handler gains a new `.econ-chip` branch that flips the combatant's `economy[slot]` boolean and re-renders.
+**Description (cont):** Turn-cycle resets land in two places: (a) the **Next Turn** button advances `turn_index` and then clears action + bonus + reaction + movement on the *new* active combatant (this is correct for reactions per 5e RAW — they reset at the start of YOUR next turn, which is exactly when `turn_index` lands on you again after a full round). (b) The **Start Initiative** button does an initial sweep over every combatant clearing all slots so a fresh fight begins with everyone at full economy. `prevTurn` intentionally does not reset — the GM uses prev to fix mistakes; the state from the prior turn should stay intact.
+**Description (cont 2):** CSS for `.econ-chips` + `.econ-chip` follows the dense-panel exception in CLAUDE.md (chips are 24-px min-height, sit inside the init-card mini-header alongside the existing 36-px portraits / Init/HP subline). Green color when available, amber when used; subtle filled-circle ● vs empty-circle ○ glyph. `touch-action: manipulation` + `user-select: none` on the chip buttons to avoid the iPad double-fire pattern the v2.4.24-v2.4.29 series fought elsewhere.
+
+### Added
+- `app/templates/tabletop.html` `combatantFromToken` — every combatant created from a token gains `economy: {action, bonus, reaction, movement}`.
+- `app/templates/tabletop.html` character-add (`#battle-add-char-btn` path) + manual-add (`doManualAdd`) — both push combatants with the same `economy` shape.
+- `app/templates/tabletop.html` `_ensureEconomy(c)` — defensive heal for stale localStorage combatants without the `economy` field.
+- `app/templates/tabletop.html` `renderBattle` — chip-strip emit inside the `.mini-header-info` block. `_healedAny` pre-loop also calls `_ensureEconomy` per combatant.
+- `app/templates/tabletop.html` `.econ-chips` + `.econ-chip` CSS — small clickable chips with used (amber) / available (green) variants, `touch-action: manipulation` + `user-select: none` for iPad reliability.
+- `app/templates/tabletop.html` players-drawer click delegation — new `.econ-chip` branch that toggles `c.economy[slot]` + re-renders.
+- `app/templates/tabletop.html` `#battle-next-btn` handler — at end of turn advance, reset action/bonus/reaction/movement on the new active combatant.
+- `app/templates/tabletop.html` `#battle-start-btn` handler — initial sweep clearing every combatant's economy slots so a fresh fight starts clean.
+
+### Notes
+- This is Phase 1 only. Action buttons (Strike, Cast, monster Attack/Dmg/Save) don't yet auto-advance their economy slot — clicking 🗡 Strike doesn't mark Act used. Phase 2 (the auto-advance work) lands as a follow-up; the manual mode is immediately useful for tracking economy by hand.
+- Reaction reset timing is correct per 5e RAW: a combatant's reaction refreshes at the START of their next turn. Since `nextTurn` advances `turn_index` to the next combatant and resets THAT combatant's slots, reactions reset exactly when they should — after a full round of other combatants' turns + the combatant's own end-of-turn.
+- `prevTurn` does not reset economy state. The GM uses prev to fix mistakes; rolling back to a previous turn shouldn't grant a re-do of the action economy.
+- Players see the chips too (the init-tracker renders client-side, the chip strip is in the per-row HTML for every viewer). Players can't toggle the chips on other players' / monsters' combatants because the click handler queries `battle.combatants[i]` from the GM-owned battle state; non-GM clients render the read-only WS-pushed state and clicks update only locally (transient). This matches the existing pattern for other init-tracker controls (HP nudge, ×Remove, etc.) which the player view also hides via `if (IS_GM || hasCharDetail)` upstream. Chip state syncs across viewers via the GM's `pushBattle()` broadcast.
+
+---
+
 ## [2.4.30] - 2026-05-17
 
 **Schema version:** 53
