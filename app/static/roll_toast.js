@@ -267,18 +267,71 @@
 
     /* Legacy tabletop behaviour: the WS handler in tabletop.js dispatches a
        `vtt:ws-message` CustomEvent on every incoming message; we filter to
-       the `roll` type and fire the popup with the visibility checks the
-       tabletop has always done. Sheets don't have a WS connection so this
-       listener is a no-op there — they call window.showRollToast directly. */
+       the roll-bearing types and fire the popup with the visibility checks
+       the tabletop has always done. Sheets don't have a WS connection so
+       this listener is a no-op there — they call window.showRollToast
+       directly off the response body.
+
+       v2.7.3 — `weapon_attack` joins the listener. /attack pre-rolls both
+       the d20-to-hit and the damage dice and broadcasts them in a single
+       payload; we fire two toasts (attack + damage), mirroring the
+       sheet-side direct-call path in `.atk-strike`. Without this, attacks
+       triggered from the mini-sheet's Actions tab or any other surface
+       that posts to /attack (monster strikes, future hotkeys) would land
+       in the roll log without surfacing a toast — the user reported this
+       hitting the GM's Warhammer click on Tavik's mini-sheet. */
     document.addEventListener('vtt:ws-message', (ev) => {
         const msg = ev.detail;
-        if (!msg || msg.type !== 'roll') return;
+        if (!msg) return;
         const r = msg.data;
         if (!r) return;
-        const isGm = !!(window.ME && window.ME.isGm);
-        const myId = _meId();
-        if (r.visibility === 'gm_only' && !isGm) return;
-        if (r.visibility === 'gm_and_roller' && !isGm && r.user_id !== myId) return;
-        showRollToast(r);
+
+        if (msg.type === 'roll') {
+            const isGm = !!(window.ME && window.ME.isGm);
+            const myId = _meId();
+            if (r.visibility === 'gm_only' && !isGm) return;
+            if (r.visibility === 'gm_and_roller' && !isGm && r.user_id !== myId) return;
+            showRollToast(r);
+            return;
+        }
+
+        if (msg.type === 'weapon_attack') {
+            // Attack rolls are always public (the /attack endpoint doesn't
+            // carry a visibility field) so no filter is needed. Skip the
+            // d20 toast for save-DC attacks — those don't pre-roll an
+            // attack die, jumping straight to the damage line, same as
+            // the .atk-strike handler in sheet_dnd5e.html does.
+            const nm = r.attack_name || 'Attack';
+            const me = _meId();
+            if (!r.is_save && r.attack_breakdown) {
+                showRollToast({
+                    expression: '1d20',
+                    total: r.attack_total,
+                    breakdown: r.attack_breakdown,
+                    note: '🎯 ' + nm + ' — attack',
+                    user_id: r.caster_user_id,
+                    user_name: r.caster_user_name,
+                    char_name: r.caster_char_name,
+                });
+            }
+            if (r.damage_breakdown) {
+                // Pull the dice shape out of the breakdown so the toast
+                // animates the right number of dice (e.g. "1d8+2 = 7" →
+                // expression "1d8+2"). Fall back to "1d6" if the
+                // breakdown is some non-standard format.
+                const exprMatch = String(r.damage_breakdown).match(/(\d+d\d+(?:[+-]\d+)?)/);
+                const dmgNote = '🎲 ' + nm + (r.damage_type ? ' — ' + r.damage_type : ' — damage');
+                showRollToast({
+                    expression: exprMatch ? exprMatch[1] : '1d6',
+                    total: r.damage_total,
+                    breakdown: r.damage_breakdown,
+                    note: dmgNote,
+                    user_id: r.caster_user_id,
+                    user_name: r.caster_user_name,
+                    char_name: r.caster_char_name,
+                });
+            }
+            return;
+        }
     });
 })();
