@@ -282,9 +282,35 @@ def _rogue_sheet(name: str) -> dict:
              "damage_type": "piercing", "range": "20/60 ft"},
         ],
         "spells": [],
+        # v2.4.13: rich inventory items (was bare strings). Weapons /
+        # armor / shield carry ``equippable: True`` so the equip toggle
+        # renders on the sheet and the auto-attack engine in
+        # ``sheet_dnd5e.html`` picks them up. ``_slug`` references the
+        # shipped SRD content (under ``app/data/local/dnd5e/items/``)
+        # so expanding a row lazy-loads the full description through
+        # ``/api/content/items/<slug>``. Mundane gear that has no SRD
+        # slug carries an inline ``desc`` so the expanded panel still
+        # shows something useful.
         "inventory": [
-            "Shortsword", "Two daggers", "Thieves' tools", "Burglar's pack",
-            "Studded leather armor", "Hooded lantern",
+            {"name": "Shortsword", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d6", "damage_type": "piercing",
+             "properties": "finesse, light", "_slug": "shortsword"},
+            {"name": "Dagger", "type": "weapon", "qty": 2,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d4", "damage_type": "piercing",
+             "range": "20/60 ft", "properties": "finesse, light, thrown",
+             "_slug": "dagger"},
+            {"name": "Studded leather", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": True,
+             "armor_type": "light", "ac_value": 12,
+             "_slug": "studded-leather"},
+            {"name": "Thieves' tools", "type": "gear", "qty": 1,
+             "desc": "Small files, picks, mirror, pliers, scissors. Lets you make Dexterity (Sleight of Hand) checks to disarm traps or pick locks."},
+            {"name": "Burglar's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, 1,000 ball bearings, 10 ft string, bell, 5 candles, crowbar, hammer, 10 pitons, hooded lantern, 2 flasks of oil, 5 days rations, tinderbox, waterskin, 50 ft hempen rope."},
+            {"name": "Hooded lantern", "type": "gear", "qty": 1,
+             "desc": "Bright light in a 30-ft radius, dim light 30 ft beyond. Burns for 6 hours per flask of oil."},
         ],
         "feats": [],
         "resources": [],
@@ -340,9 +366,28 @@ def _wizard_sheet(name: str) -> dict:
                 "3": {"total": 2, "used": 0},
             },
         },
+        # v2.4.13: rich inventory items (was bare strings). See the
+        # corresponding ``_rogue_sheet`` comment for the schema rationale.
         "inventory": [
-            "Quarterstaff", "Spellbook", "Component pouch", "Scholar's pack",
-            "Robes", "Ink and quill", "Small knife",
+            {"name": "Quarterstaff", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d6", "damage_type": "bludgeoning",
+             "versatile": True, "properties": "versatile (1d8)",
+             "_slug": "quarterstaff"},
+            {"name": "Spellbook", "type": "gear", "qty": 1,
+             "desc": "Contains Thalindra's prepared spells + rituals. Required after a long rest to swap which spells are prepared."},
+            {"name": "Component pouch", "type": "gear", "qty": 1,
+             "desc": "A small leather belt pouch holding all material components needed to cast spells that don't list a specific costly component."},
+            {"name": "Scholar's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, book of lore, bottle of ink, ink pen, 10 sheets of parchment, small bag of sand, small knife."},
+            {"name": "Robes", "type": "gear", "qty": 1,
+             "desc": "Long flowing wizard's robes. Cosmetic — no mechanical effect."},
+            {"name": "Ink and quill", "type": "gear", "qty": 1,
+             "desc": "Bottle of black ink + writing quill. Required for spellbook transcription + ritual notation."},
+            {"name": "Small knife", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": False, "hands": 1,
+             "damage": "1d4", "damage_type": "piercing",
+             "properties": "finesse, light", "_slug": "dagger"},
         ],
         "feats": [],
         "resources": [],
@@ -404,9 +449,32 @@ def _cleric_sheet(name: str) -> dict:
                 "3": {"total": 2, "used": 0},
             },
         },
+        # v2.4.13: rich inventory items (was bare strings). Chain mail
+        # + shield are pre-equipped — the AC calc in
+        # ``computeEffectiveAC`` (sheet_dnd5e.html ~line 4385) reads
+        # ``ac_value=16`` from the chain mail + ``ac_value=2`` from the
+        # shield = 18 total, matching the manually-set ``ac`` field.
         "inventory": [
-            "Warhammer", "Shield", "Chain mail", "Holy symbol",
-            "Priest's pack", "Smith's tools", "Healer's kit",
+            {"name": "Warhammer", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d8", "damage_type": "bludgeoning",
+             "versatile": True, "properties": "versatile (1d10)",
+             "_slug": "warhammer"},
+            {"name": "Shield", "type": "shield", "qty": 1,
+             "equippable": True, "equipped": True,
+             "ac_value": 2, "_slug": "shield"},
+            {"name": "Chain mail", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": True,
+             "armor_type": "heavy", "ac_value": 16,
+             "_slug": "chain-mail"},
+            {"name": "Holy symbol", "type": "gear", "qty": 1,
+             "desc": "Amulet, emblem, or reliquary used as a divine focus — replaces the material component requirement for cleric spells."},
+            {"name": "Priest's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, blanket, 10 candles, tinderbox, alms box, 2 blocks of incense, censer, vestments, 2 days rations, waterskin."},
+            {"name": "Smith's tools", "type": "gear", "qty": 1,
+             "desc": "Hammers, tongs, charcoal, bellows, whetstone. Used to repair weapons + armor with a Strength (Smith's tools) check."},
+            {"name": "Healer's kit", "type": "gear", "qty": 1,
+             "desc": "10 uses. Spend an action + one use to stabilize a creature at 0 HP without a Wisdom (Medicine) check."},
         ],
         "feats": [],
         "resources": [],

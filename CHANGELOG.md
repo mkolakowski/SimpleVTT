@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.13] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Convert the demo PC inventories from bare strings (`"Warhammer"`, `"Chain mail"`, …) to rich item objects with `type` / `equippable` / `equipped` / `_slug` / per-type fields. The legacy-string loader in `sheet_dnd5e.html` (line ~4264) wraps strings into objects with `equippable: false` and `desc: ""`, which silently disables the equip toggle and hides the description panel. With proper objects the sheet shows equip toggles on all weapons + armor + shield, populates the auto-attack list from equipped weapons, computes AC from equipped armor/shield, and the expand chevron fetches full SRD descriptions via `/api/content/items/<slug>` for any item with a `_slug` reference. User-reported: "inventory seems to have lost the ability to equip items, also clicking on items does not show a description."
+**Description:** Three inventories rewritten in `app/demo_seed.py`: Pip's Rogue 5 (Shortsword + 2 Daggers + Studded leather equipped), Thalindra's Wizard 5 (Quarterstaff equipped, Small knife carried), Brother Tavik's Cleric 5 (Warhammer + Shield + Chain mail equipped). Equippable items carry the SRD slug (`shortsword`, `dagger`, `studded-leather`, `quarterstaff`, `warhammer`, `shield`, `chain-mail`) so the expand-row content resolver fetches the canonical description from `app/data/local/dnd5e/items/<slug>.json`. Mundane gear that has no shipped SRD slug (Priest's pack, Burglar's pack, Holy symbol, Spellbook, Component pouch, Scholar's pack, Robes, Ink and quill, Thieves' tools, Smith's tools, Healer's kit, Hooded lantern) carries an inline `desc` so the expand panel still shows useful content. AC math sanity-check: Tavik's Chain mail (`ac_value=16`, heavy → ignores DEX) + Shield (`ac_value=2`) = 18, matching the manually-set `"ac": 18` on the sheet so the cleric's effective AC stays the same after the equip-state takes over from the unequipped base.
+**Description (cont):** No template / JS changes needed — the rich-object schema is the same one the sheet uses for every non-demo inventory, picker-added or hand-edited. The legacy-string loader stays in place for backward compatibility with any older custom campaign that still ships strings; this seed bypass just lets the demo render the equip-toggle, description, and auto-attack affordances the sheet has supported since v2.0.0. Next demo reset (within 60 min on the hourly scheduler, or immediate on container restart with `DEMO_RESET_ON_BOOT=true`) re-emits Character rows with the rich inventory. No SQL migration needed — the inventory is a JSON column.
+
+### Fixed
+- `app/demo_seed.py` `_rogue_sheet` `inventory` — 6 bare strings → 6 rich item objects with `type` / `equippable` / `equipped` / `_slug` for the SRD-mapped ones, inline `desc` for the mundane gear. Two daggers consolidated into one entry with `qty: 2`.
+- `app/demo_seed.py` `_wizard_sheet` `inventory` — 7 bare strings → 7 rich item objects. Quarterstaff equipped (versatile 1d8 ↔ 1d6); Small knife as a carried (not equipped) dagger so Thalindra has a melee fallback when Counterspell takes a reaction.
+- `app/demo_seed.py` `_cleric_sheet` `inventory` — 7 bare strings → 7 rich item objects. Warhammer (versatile 1d8 ↔ 1d10) + Shield (`ac_value=2`) + Chain mail (`armor_type=heavy`, `ac_value=16`) all pre-equipped so the auto-AC / auto-attack engine reflects the cleric's combat-ready stance from the first sheet open.
+
+### Notes
+- The Studded leather entry's `name` is now just "Studded leather" (was "Studded leather armor"). The shipped SRD slug is `studded-leather` and the canonical name is "Studded leather"; the trailing "armor" was redundant string-formatting that wouldn't have mapped cleanly to the slug lookup. Cosmetic-only difference.
+- The "Two daggers" → `Dagger × 2` consolidation also makes the qty input on the sheet do the obvious thing — bumping it to 3 daggers reads as "I picked up another one" rather than the awkward "I now have three units of Two-Daggers".
+- The pre-equipped state for Tavik's armor + shield means `computeEffectiveAC` in `sheet_dnd5e.html` overrides the manual `"ac": 18` field with its computed `16 + 2 = 18`. The displayed value is identical; the breakdown text under the AC pill changes from "base 18" to "Chain mail 16, Shield +2".
+- The Small knife on Thalindra is intentionally `equipped: False` — a wizard with two weapons equipped would auto-populate two attack rows that the player would have to unequip to clean up. Carried-but-not-equipped means it's there in the inventory + lets the player choose to equip during a session if Counterspell ate their action and they need a backup attack.
+
+---
+
 ## [2.4.12] - 2026-05-17
 
 **Schema version:** 53
