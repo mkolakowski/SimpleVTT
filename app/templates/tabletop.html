@@ -624,13 +624,33 @@
 
     /* ── GM Tools / sidebar panel cards ── */
     .gm-panel { margin: 0 0 8px; border: 1px solid rgba(167,139,250,.35); border-radius: 8px; overflow: hidden; box-shadow: 0 3px 14px rgba(0,0,0,.22); }
-    .gm-panel > summary { display: flex; align-items: center; gap: 8px; list-style: none; cursor: pointer; padding: 8px 10px 7px; margin: 0; background: linear-gradient(135deg, rgba(167,139,250,.15), rgba(108,180,255,.10)); border-bottom: 2px solid transparent; user-select: none; transition: background .15s; }
+    /* v2.4.27: ``touch-action: manipulation`` + ``-webkit-user-select: none``
+       on the summary so iPad taps reliably toggle the native <details>
+       open state. Without these iOS Safari was double-firing the click
+       event (open → immediate close) for the same reasons documented
+       on the v2.4.24/v2.4.25 expandable headers. ``user-select: none``
+       was already there; the webkit-prefixed variant adds iOS-specific
+       coverage. */
+    .gm-panel > summary { display: flex; align-items: center; gap: 8px; list-style: none; cursor: pointer; padding: 8px 10px 7px; margin: 0; background: linear-gradient(135deg, rgba(167,139,250,.15), rgba(108,180,255,.10)); border-bottom: 2px solid transparent; user-select: none; -webkit-user-select: none; touch-action: manipulation; transition: background .15s; }
     .gm-panel[open] > summary { border-bottom-color: var(--accent); }
     .gm-panel > summary:hover { background: linear-gradient(135deg, rgba(167,139,250,.26), rgba(108,180,255,.18)); }
     .gm-panel > summary::-webkit-details-marker { display: none; }
     .gm-panel > summary::marker { content: ''; }
     .gm-panel-body { padding: 8px 8px 12px; }
 
+    /* v2.4.27: catch-all touch-handling for every native <summary>
+       inside the Battle / GM Tools drawers. iPad Safari was
+       double-firing taps on summary elements (same root cause as the
+       v2.4.24/v2.4.25/v2.4.26 expandable-header bug) so native
+       <details> toggles opened then immediately closed. ``touch-action:
+       manipulation`` skips the double-tap-to-zoom wait, ``user-select:
+       none`` skips the text-selection state machine, both prefixed for
+       broader iOS coverage. */
+    #players-drawer summary, #gm-tools-drawer summary {
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+    }
     /* Player characters <details> in the Player drawer */
     #player-chars-panel summary::-webkit-details-marker { display: none; }
     #player-chars-panel summary::marker { content: ''; }
@@ -2590,6 +2610,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         document.querySelectorAll('.mini-header[data-char-id]').forEach(hdr => {
             hdr.addEventListener('click', (ev) => {
                 if (ev.target.closest('.char-fav')) return;
+                // v2.4.27: per-element click debounce, same 350-ms guard
+                // as the init-tracker mini-header (v2.4.26). Without it
+                // iPad double-fire causes a tap on character B to also
+                // re-toggle character A (or any recently-open card),
+                // producing "only one expandable at a time" UX even
+                // though the handler logic itself is per-character.
+                const _now = Date.now();
+                if (hdr._dbnc && _now - hdr._dbnc < 350) return;
+                hdr._dbnc = _now;
                 _toggleCharDetail(hdr.dataset.charId);
             });
         });

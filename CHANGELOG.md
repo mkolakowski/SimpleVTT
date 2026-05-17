@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.27] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Two iPad-related follow-ups uncovered after v2.4.26: (1) the **character-list mini-header click handler** at line 2591 didn't get the v2.4.26 debounce (different code path from the init-tracker mini-header at line 4117), so iPad double-fire on a character card tap was producing "only one expandable at a time" behavior across the Characters section. (2) Native `<details>` / `<summary>` toggles in the **GM Tools drawer** sub-menus (Encounters, Token Manager, etc.) and the Battle drawer's `#player-chars-panel` / `#initiative-panel` / `#player-sound-panel` were also double-firing on iPad — clicks opened then immediately closed the panel. CSS-only fix on summary elements + JS debounce on the character-list handler. User-reported.
+**Description:** Two coordinated edits in `app/templates/tabletop.html`. (1) `.mini-header[data-char-id]` click handler in the character-list panel (~line 2591) now wraps its `_toggleCharDetail` call in the same 350-ms timestamp debounce as the v2.4.26 init-tracker mini-header / `.mini-row-expandable` handlers. Per-element `_dbnc` property so debounces don't cross-interfere between cards. (2) New CSS rule `#players-drawer summary, #gm-tools-drawer summary { touch-action: manipulation; -webkit-user-select: none; user-select: none; }` covers every native `<summary>` in both drawers — Encounters / Token Manager / Initiative / Player Characters / Music / Tokens / etc. The `.gm-panel > summary` rule already had `user-select: none`; v2.4.27 adds the `touch-action` + webkit prefix; the catch-all rule above covers the other panels (`#player-chars-panel summary`, `#initiative-panel summary`, etc.) that didn't have any of these.
+**Description (cont):** Why two separate sub-fixes for what's the "same root bug": the iPad double-fire surfaces differently on each tappable element type. (1) For the character-list mini-header, the JS handler path is direct → JS debounce is the right fix. (2) For native `<details>`, the click event is dispatched by the browser onto the `<summary>` element and the toggle is browser-internal — there's no JS handler to debounce. The CSS `touch-action: manipulation` is the only available knob. Both fixes follow the v2.4.24/v2.4.25/v2.4.26 pattern: skip the double-tap-to-zoom wait + skip the text-selection state machine + (where applicable) ignore a duplicate click within 350 ms.
+
+### Fixed
+- `app/templates/tabletop.html` `.mini-header[data-char-id]` click handler (character-list, line ~2591) — added per-element 350-ms `_dbnc` debounce. Multiple character cards now reliably stay expanded simultaneously on iPad.
+- `app/templates/tabletop.html` `#players-drawer summary, #gm-tools-drawer summary` — new CSS rule adding `touch-action: manipulation` + `-webkit-user-select: none` + `user-select: none` so native `<details>` toggles fire once per tap on iPad. Covers every sub-menu in the GM Tools drawer + Player Chars / Initiative / Sound panels in the Battle drawer.
+- `app/templates/tabletop.html` `.gm-panel > summary` — also gains `touch-action: manipulation` + `-webkit-user-select: none` for the specific GM-tools panel-header styling (matches the catch-all rule's intent).
+
+### Notes
+- The character-list mini-header handler used `document.querySelectorAll('.mini-header[data-char-id]')` at page load — at that moment only character-list mini-headers exist in the DOM (init-tracker mini-headers are created later by `renderBattle`). So this handler is correctly scoped to the character-list panel.
+- The catch-all `summary` rule is scoped to `#players-drawer` and `#gm-tools-drawer` rather than global `summary {…}` — leaves the Roll Log's collapsible UI alone (which doesn't currently use `<details>` but might in future) and avoids leaking the rule into the standalone character sheet's `<summary>` elements.
+- If a still-different iPad double-fire surfaces (some other panel header, etc.), the canonical fix is the same triple combo: `touch-action: manipulation` + `user-select: none` (+ webkit prefix) + JS `_dbnc` timestamp debounce. All three guard distinct paths through the iOS event pipeline.
+
+---
+
 ## [2.4.26] - 2026-05-17
 
 **Schema version:** 53
