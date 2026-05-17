@@ -5742,6 +5742,75 @@ async def use_item(
     }
 
 
+# ----------- API: get a character's current action-economy state -----------
+#
+# Phase 4a (v2.7.2) Layer A dimming: the full character sheet polls
+# this endpoint every few seconds to learn which slots are already
+# spent, so action / spell / feature buttons whose slot is used can be
+# rendered with 50% opacity + cursor:not-allowed + a title="" hint
+# before the player even clicks. The 409 over_budget gate on
+# /use_attack, /cast_spell, /use_feature, /use_item still fires on a
+# click — Layer A is purely the pre-emptive visual cue. Polling rather
+# than WS to keep the sheet page free of WS infrastructure for now;
+# 4-second cadence × 3-5 sheets open = trivial load.
+
+@router.get("/api/campaign/{campaign_id}/character/{character_id}/economy")
+def get_character_economy(
+    campaign_id: int,
+    character_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Return the current action-economy state for one character.
+
+    Shape: ``{battle_active, action, bonus, reaction, movement, speed_walk,
+    potions_as_bonus_action}``. When no battle is active or the
+    character isn't in init, the chip booleans are False / 0 and
+    ``battle_active`` is False — the sheet treats that as "nothing is
+    spent; don't dim anything." The ``potions_as_bonus_action`` flag is
+    echoed so the sheet can decide whether to dim 🧪 Use on heal
+    potions independently of the chip state (used only when Bns is
+    already spent).
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == character_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    state = hub.get_battle(campaign_id)
+    base = {
+        "battle_active": False,
+        "action": False, "bonus": False, "reaction": False,
+        "movement": 0.0,
+        "speed_walk": 30,
+        "potions_as_bonus_action": bool(campaign.potions_as_bonus_action),
+    }
+    if not state:
+        return base
+    active = bool(state.get("active"))
+    base["battle_active"] = active
+    if not active:
+        return base
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == character_id:
+            economy = c.get("economy") or {}
+            base["action"] = bool(economy.get("action"))
+            base["bonus"] = bool(economy.get("bonus"))
+            base["reaction"] = bool(economy.get("reaction"))
+            base["movement"] = float(economy.get("movement") or 0)
+            sw = c.get("speed_walk")
+            if isinstance(sw, (int, float)) and sw > 0:
+                base["speed_walk"] = int(sw)
+            return base
+    return base
+
+
 # ----------- Death save state machine (v2.1.0) -----------
 #
 # 5e death saving throws: when a character drops to 0 HP they enter the

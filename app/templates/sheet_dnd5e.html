@@ -2333,6 +2333,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 ${s.damage ? `<span style="font-size:11px;color:#e8a;flex-shrink:0;font-weight:500;">${_esc(s.damage)}</span>` : ''}
                 ${s.save_ability ? `<span style="font-size:11px;color:#8cf;flex-shrink:0;font-weight:500;">${_esc(s.save_ability)} save</span>` : ''}
                 <button type="button" class="sp-cast" data-idx="${idx}"
+                        data-casting-time="${_esc(s.casting_time || '')}"
                         title="Cast ${_esc(s.name)}${s.level > 0 ? ' (uses a Lv ' + s.level + ' slot)' : ''}"
                         style="font-size:11px;color:#a78bfa;font-weight:600;background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.4);border-radius:3px;padding:1px 8px;cursor:pointer;flex-shrink:0;"
                     >🪄 Cast</button>
@@ -7204,5 +7205,182 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
     });
 
     _renderFeats();
+})();
+</script>
+
+<style>
+/* v2.7.2: Phase 4a Layer A — already-spent buttons get a dimmed look
+ * + cursor:not-allowed on the full character sheet. The 409 over_budget
+ * modal still fires on click (clicks are NOT blocked — Layer A is the
+ * visual cue, Layer B the actual gate); this class is the pre-emptive
+ * "you've already used this" tell. Title attribute carries the slot-
+ * specific explanation so desktop hover + iPad long-press both surface
+ * the reason without new infrastructure. */
+.atk-strike.dim-slot,
+.sp-cast.dim-slot,
+.cf-use.dim-slot,
+.inv-use.dim-slot {
+    opacity: 0.45;
+    cursor: not-allowed !important;
+}
+.atk-strike.dim-slot:hover,
+.sp-cast.dim-slot:hover,
+.cf-use.dim-slot:hover,
+.inv-use.dim-slot:hover {
+    opacity: 0.55;
+}
+</style>
+
+<script>
+/* v2.7.2: Phase 4a — Layer A dimming via lightweight poll.
+ *
+ * The full character sheet doesn't have a WebSocket connection, so it
+ * polls /api/campaign/{cid}/character/{cid}/economy every 4 seconds
+ * while the tab is visible. The response tells us which slots are
+ * currently spent for this character; we walk the action / spell /
+ * class-feature / consumable-use buttons and toggle the ``dim-slot``
+ * class + ``title=""`` hint accordingly.
+ *
+ * The 409 over_budget modal (Phase 4 / v2.6.1) is the actual gate;
+ * Layer A just gives the player a heads-up before they click. We do
+ * NOT prevent the click — the click goes through, the server returns
+ * 409 if applicable, the modal opens. That keeps Layer A purely
+ * visual and avoids two sources of truth.
+ *
+ * Poll cadence: 4 s while document.visibilityState === 'visible';
+ * paused when the tab is hidden (Page Visibility API). One initial
+ * fetch on load; re-fetch immediately when the tab becomes visible
+ * again so a player who's been on the GM tab for a turn sees fresh
+ * state when they come back.
+ */
+(function () {
+    if (typeof CAMPAIGN_ID === 'undefined') return;
+    const charIdEl = document.querySelector('[id^="char-id"]') || null;
+    const myCharId = (function () {
+        // Reuse the same Jinja-stamped value the other IIFEs use.
+        try { return Number({{ char.id }}); } catch { return 0; }
+    })();
+    if (!myCharId) return;
+
+    const POLL_MS = 4000;
+    let _state = null;
+    let _timer = null;
+    let _inflight = false;
+
+    function _slotTitle(slot) {
+        if (slot === 'action')   return 'Action already used this turn — your Act slot is spent. Click to override.';
+        if (slot === 'bonus')    return 'Bonus action already used this turn — your Bns slot is spent. Click to override.';
+        if (slot === 'reaction') return 'Reaction already used since your last turn — your Rxn slot is spent. Click to override.';
+        return '';
+    }
+
+    function _castingTimeToSlot(ct) {
+        const lc = String(ct || '').toLowerCase();
+        if (lc.indexOf('bonus action') !== -1) return 'bonus';
+        if (lc.indexOf('reaction') !== -1) return 'reaction';
+        if (lc.indexOf('action') !== -1) return 'action';
+        return 'none';
+    }
+
+    function _toggleBtn(btn, slot, used) {
+        if (!btn) return;
+        const dim = used && slot && slot !== 'none' && slot !== 'free';
+        const had = btn.classList.contains('dim-slot');
+        if (dim && !had) {
+            btn.classList.add('dim-slot');
+            btn.setAttribute('title', _slotTitle(slot));
+            btn.dataset._origTitle = btn.dataset._origTitle ?? (btn.getAttribute('data-orig-title') || '');
+        } else if (!dim && had) {
+            btn.classList.remove('dim-slot');
+            btn.removeAttribute('title');
+        }
+    }
+
+    function _applyDim() {
+        if (!_state) return;
+        // Attacks — every .atk-strike consumes action.
+        document.querySelectorAll('.atk-strike').forEach(btn => {
+            _toggleBtn(btn, 'action', _state.action);
+        });
+        // Spells — each .sp-cast button carries data-casting-time
+        // (stamped by the spell renderer); derive the slot from that.
+        // Cantrips and missing casting_time fall back to "action".
+        document.querySelectorAll('.sp-cast').forEach(btn => {
+            const ct = btn.dataset.castingTime || '';
+            let slot = ct ? _castingTimeToSlot(ct) : 'action';
+            if (slot === 'none') slot = 'action';
+            const used = (slot === 'action') ? _state.action
+                       : (slot === 'bonus') ? _state.bonus
+                       : (slot === 'reaction') ? _state.reaction
+                       : false;
+            _toggleBtn(btn, slot, used);
+        });
+        // Class features — derive slot via the curated table.
+        document.querySelectorAll('.cf-use').forEach(btn => {
+            const fkey = btn.dataset.feature || '';
+            const okey = btn.dataset.option || null;
+            let slot = 'action';
+            if (typeof window.getFeatureEconomy === 'function') {
+                const entry = window.getFeatureEconomy(fkey, okey);
+                if (entry && entry.slot) slot = entry.slot;
+            }
+            const used = (slot === 'action') ? _state.action
+                       : (slot === 'bonus') ? _state.bonus
+                       : (slot === 'reaction') ? _state.reaction
+                       : false;
+            _toggleBtn(btn, slot, used);
+        });
+        // Consumables — only dim 🧪 Use when the house rule is on AND
+        // the item is a heal kind AND bonus is spent. Without the
+        // house rule, item use is ungated; no dim regardless of state.
+        document.querySelectorAll('.inv-use').forEach(btn => {
+            if (!_state.potions_as_bonus_action) {
+                btn.classList.remove('dim-slot');
+                btn.removeAttribute('title');
+                return;
+            }
+            _toggleBtn(btn, 'bonus', _state.bonus);
+        });
+    }
+
+    async function _poll() {
+        if (_inflight) return;
+        _inflight = true;
+        try {
+            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/character/${myCharId}/economy`,
+                { credentials: 'same-origin' });
+            if (!resp.ok) return;
+            const data = await resp.json();
+            // No active battle → clear dim everywhere. Treat all slots
+            // as available so the sheet renders without dimming when
+            // init isn't running.
+            if (!data.battle_active) {
+                _state = {
+                    action: false, bonus: false, reaction: false,
+                    movement: 0, speed_walk: 30,
+                    potions_as_bonus_action: !!data.potions_as_bonus_action,
+                };
+            } else {
+                _state = data;
+            }
+            _applyDim();
+        } catch { /* silently ignore — Layer A is best-effort */ }
+        finally { _inflight = false; }
+    }
+
+    function _start() {
+        if (_timer) return;
+        _poll();
+        _timer = setInterval(_poll, POLL_MS);
+    }
+    function _stop() {
+        if (_timer) { clearInterval(_timer); _timer = null; }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') _start();
+        else _stop();
+    });
+    if (document.visibilityState === 'visible') _start();
 })();
 </script>
