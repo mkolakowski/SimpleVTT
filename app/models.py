@@ -169,6 +169,17 @@ class Campaign(Base):
     # of the action-economy work ships.
     potions_as_bonus_action: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false")
+    # v2.8.0: strict action-economy gating. When True, the over-budget
+    # Layer B modal hides its Confirm button — players can't manually
+    # override a spent slot from the modal. GM clicks still bypass
+    # (rules-authority); GM can shift+click a chip on the init tracker
+    # to manually refund a slot (Action Surge / Haste / etc.). The
+    # /move endpoint additionally broadcasts a feature_used audit
+    # entry on the FIRST drag that pushes a combatant past their
+    # walking speed in a turn, since dragging is the GM's authoritative
+    # input and can't be snapped back.
+    strict_action_economy: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false")
     # GM-assigned color for the primary GM in the roll log
     gm_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     # Tint color for the GM Tools tab in the tabletop sidebar

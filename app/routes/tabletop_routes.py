@@ -889,6 +889,9 @@ async def campaign_settings_save(
     # if the checkbox isn't checked (HTML form idiom: unchecked checkbox
     # doesn't submit the field). ``Form(False)`` recovers the default.
     potions_as_bonus_action: bool = Form(False),
+    # v2.8.0: strict action-economy. When on, players can't override the
+    # Phase 4 over-budget modal — only the GM can clear a spent chip.
+    strict_action_economy: bool = Form(False),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -905,6 +908,8 @@ async def campaign_settings_save(
     campaign.font_override = fo if fo in _VALID_CAMPAIGN_FONTS and fo else None
     # v2.5.0: house rules
     campaign.potions_as_bonus_action = potions_as_bonus_action
+    # v2.8.0: strict action-economy gating
+    campaign.strict_action_economy = strict_action_economy
     # Default-encounter-on-session-start setting. Validate the encounter
     # belongs to this campaign before assigning; empty / invalid clears.
     de_raw = (default_encounter_id or "").strip()
@@ -3623,6 +3628,63 @@ async def move_token(
             "token_template_id": token.token_template_id,
         }},
     )
+
+    # v2.8.0: strict-mode movement audit. When the campaign has
+    # strict_action_economy on AND this drag pushes the combatant past
+    # their walking speed for the FIRST time this turn (transition from
+    # pre <= speed_walk to post > speed_walk), broadcast a feature_used
+    # audit entry to the roll log. We can't snap the token back — the
+    # drag IS the GM's authoritative input — but the audit makes the
+    # violation visible to everyone at the table.
+    if campaign.strict_action_economy and distance_ft > 0:
+        state = hub.get_battle(campaign_id) or {}
+        combatant = None
+        for c in state.get("combatants") or []:
+            if c.get("source_token_id") == token.id:
+                combatant = c
+                break
+            if token.character_id and c.get("char_id") == token.character_id:
+                combatant = c
+                break
+        if combatant:
+            economy = combatant.get("economy") or {}
+            prev_movement = float(economy.get("movement") or 0)
+            speed_walk = float(combatant.get("speed_walk") or 30)
+            post_total = prev_movement + distance_ft
+            if (prev_movement <= speed_walk + 0.001) and (post_total > speed_walk + 0.001):
+                # First-transition fire only. Subsequent drags past the cap
+                # don't re-fire (avoids spam on a multi-drag movement).
+                # If the GM clicks the chip to reset movement to 0 mid-turn
+                # and the player drags past again, the audit fires anew —
+                # which matches the intent (a fresh overrun is a fresh
+                # violation, even after a refund).
+                name = combatant.get("name") or "Combatant"
+                membership = (
+                    db.query(CampaignMembership)
+                    .filter(CampaignMembership.campaign_id == campaign_id,
+                            CampaignMembership.user_id == user.id)
+                    .first()
+                )
+                player_color = (
+                    membership.color if membership and membership.color
+                    else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+                )
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": combatant.get("char_id"),
+                        "character_name": name,
+                        "user_color": player_color,
+                        "feature_name": "⚠ Movement overrun",
+                        "feature_desc": f"{name} moved {round(post_total, 1)}/{int(speed_walk)} ft this turn (strict action economy).",
+                        "source": "movement-overrun",
+                        "remaining": 0,
+                        "max": 0,
+                        "over_budget": True,
+                        "over_budget_slot": "",
+                    },
+                })
+
     return {"ok": True, "distance_ft": distance_ft}
 
 
@@ -5353,10 +5415,14 @@ async def cast_spell(
     # skip the gate entirely (rules-authority bypass per the plan) but
     # still flow through the same ``over_budget`` tag in the broadcast so
     # the Layer C audit badge fires.
+    # v2.8.0: when ``campaign.strict_action_economy`` is on, the
+    # override flag is ignored for non-GM users — the 409 carries
+    # ``strict: true`` so the modal hides its Confirm button.
     slot_for_economy = _casting_time_to_economy(spell.get("casting_time", ""))
     was_used = _is_slot_used(campaign_id, char.id, slot_for_economy)
     user_is_gm = _user_is_gm(user, campaign, db)
-    override = bool(body.get("override"))
+    strict = bool(campaign.strict_action_economy)
+    override = bool(body.get("override")) and not strict
     if was_used and not user_is_gm and not override:
         return JSONResponse(status_code=409, content={
             "error": "over_budget",
@@ -5364,6 +5430,7 @@ async def cast_spell(
             "char_name": char.name,
             "source": "spell",
             "label": spell.get("name", ""),
+            "strict": strict,
         })
 
     # Resolve caster display info (same shape as roll broadcasts)
@@ -5500,9 +5567,11 @@ async def use_feature(
     # v2.6.1: Phase 4 over-budget gate. "free" features (Action Surge,
     # Divine Smite, Reckless Attack) never trigger the gate — they grant
     # rather than consume. See cast_spell for the matching pattern.
+    # v2.8.0: strict-mode suppresses player overrides.
     was_used = _is_slot_used(campaign_id, char.id, slot)
     user_is_gm = _user_is_gm(user, campaign, db)
-    override = bool(body.get("override"))
+    strict = bool(campaign.strict_action_economy)
+    override = bool(body.get("override")) and not strict
     if was_used and not user_is_gm and not override:
         return JSONResponse(status_code=409, content={
             "error": "over_budget",
@@ -5510,6 +5579,7 @@ async def use_feature(
             "char_name": char.name,
             "source": "feature",
             "label": feature_label,
+            "strict": strict,
         })
 
     # Resolve display info for the broadcast — same pattern as cast_spell.
@@ -5621,13 +5691,17 @@ async def use_item(
     if slot:
         was_used = _is_slot_used(campaign_id, char.id, slot)
         user_is_gm = _user_is_gm(user, campaign, db)
-        if was_used and not user_is_gm and not override:
+        # v2.8.0: strict-mode suppresses player overrides.
+        strict = bool(campaign.strict_action_economy)
+        effective_override = override and not strict
+        if was_used and not user_is_gm and not effective_override:
             return JSONResponse(status_code=409, content={
                 "error": "over_budget",
                 "slot": slot,
                 "char_name": char.name,
                 "source": "potion",
                 "label": item_name,
+                "strict": strict,
             })
 
     # Decrement qty (or remove the row when it hits zero).
@@ -7059,9 +7133,11 @@ async def use_attack(
     # v2.6.1: Phase 4 over-budget gate. Every weapon attack consumes the
     # action slot (bonus-action attacks are filed under feature/Class
     # abilities, not /attack). See cast_spell for the matching pattern.
+    # v2.8.0: strict-mode honours the same override-suppression rule.
     was_used = _is_slot_used(campaign_id, char.id, "action")
     user_is_gm = _user_is_gm(user, campaign, db)
-    override = bool(body.get("override"))
+    strict = bool(campaign.strict_action_economy)
+    override = bool(body.get("override")) and not strict
     if was_used and not user_is_gm and not override:
         return JSONResponse(status_code=409, content={
             "error": "over_budget",
@@ -7069,6 +7145,7 @@ async def use_attack(
             "char_name": char.name,
             "source": "attack",
             "label": name,
+            "strict": strict,
         })
     attack_bonus_raw = str(attack.get("attack_bonus") or "").strip()
     damage_expr_raw = (attack.get("damage") or "").strip()

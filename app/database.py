@@ -497,6 +497,21 @@ def _apply_inline_migrations() -> None:
                 "BOOLEAN NOT NULL DEFAULT FALSE"
             ))
 
+    # ---- Schema v55 (2.8.0): campaigns.strict_action_economy ----
+    # Per-campaign toggle that hard-blocks player over-budget rolls
+    # through the Phase 4 modal. When True, the 409 over_budget response
+    # carries strict:true and the Layer B modal hides its Confirm
+    # button — only the GM can clear a spent chip (shift+click on the
+    # init tracker). The move endpoint also broadcasts a feature_used
+    # audit entry on the first drag that pushes a combatant past speed.
+    camp_cols_v55 = _column_names("campaigns")
+    with engine.begin() as conn:
+        if camp_cols_v55 and "strict_action_economy" not in camp_cols_v55:
+            conn.execute(text(
+                "ALTER TABLE campaigns ADD COLUMN strict_action_economy "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

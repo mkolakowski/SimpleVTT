@@ -79,7 +79,7 @@
         if (prev) prev.remove();
     }
 
-    /* showOverBudgetModal({ slot, source, label, characterName, onConfirm })
+    /* showOverBudgetModal({ slot, source, label, characterName, strict, onConfirm })
      *
      *   slot          - "action" / "bonus" / "reaction" (from the 409 body)
      *   source        - "attack" / "spell" / "feature" / "potion" (for
@@ -88,6 +88,10 @@
      *                   (e.g. "Dagger", "Magic Missile", "Cunning Action: Hide")
      *   characterName - the rolling PC's name (so a shared screen makes
      *                   the intent obvious)
+     *   strict        - v2.8.0: when true, the Confirm button is replaced
+     *                   with a "Close" + "Ask the GM to clear your chip"
+     *                   hint. Players can't bypass; only the GM clicking
+     *                   the chip on the init tracker can refund the slot.
      *   onConfirm     - callback invoked when the player clicks Confirm.
      *                   The caller is responsible for re-firing the
      *                   original fetch with override:true.
@@ -99,6 +103,7 @@
     window.showOverBudgetModal = function (opts) {
         const o = opts || {};
         const copy = _modalCopy(o);
+        const isStrict = !!o.strict;
 
         _removeExisting();
         const overlay = document.createElement('div');
@@ -119,14 +124,25 @@
         const _esc = s => String(s ?? '')
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+
+        // In strict mode the Confirm button is replaced with an explanatory
+        // hint line — players can't override a spent chip from the modal.
+        // The hint text overwrites copy.hint so the strict-mode reason is
+        // the bottom-line message regardless of any house-rule copy.
+        const strictHint = isStrict
+            ? "Strict mode: players can't override. Ask the GM to clear your chip on the init tracker (shift+click)."
+            : '';
+        const hintLine = strictHint || copy.hint;
+        const buttonsHtml = isStrict
+            ? `<button type="button" id="obm-cancel" style="padding:8px 14px;min-height:44px;background:var(--s-accent,#ffa54a);border:1px solid var(--s-accent,#ffa54a);color:#1a1f2c;font-weight:700;border-radius:5px;cursor:pointer;">Close</button>`
+            : `<button type="button" id="obm-cancel" style="padding:8px 14px;min-height:44px;background:transparent;border:1px solid var(--s-border,#2c3344);color:var(--s-fg,#e8e8e8);border-radius:5px;cursor:pointer;">${_esc(copy.cancel)}</button>` +
+              `<button type="button" id="obm-confirm" style="padding:8px 14px;min-height:44px;background:var(--s-accent,#ffa54a);border:1px solid var(--s-accent,#ffa54a);color:#1a1f2c;font-weight:700;border-radius:5px;cursor:pointer;">${_esc(copy.confirm)}</button>`;
+
         card.innerHTML = (
             `<div style="font-size:16px;font-weight:700;color:var(--s-accent,#ffa54a);margin-bottom:12px;">⚠ ${_esc(copy.title)}</div>` +
-            `<div style="margin-bottom:${copy.hint ? '8px' : '20px'};">${_esc(copy.body)}</div>` +
-            (copy.hint ? `<div style="font-size:12px;color:var(--s-mute,#888);margin-bottom:20px;font-style:italic;">${_esc(copy.hint)}</div>` : '') +
-            '<div style="display:flex;gap:8px;justify-content:flex-end;">' +
-            `<button type="button" id="obm-cancel" style="padding:8px 14px;min-height:44px;background:transparent;border:1px solid var(--s-border,#2c3344);color:var(--s-fg,#e8e8e8);border-radius:5px;cursor:pointer;">${_esc(copy.cancel)}</button>` +
-            `<button type="button" id="obm-confirm" style="padding:8px 14px;min-height:44px;background:var(--s-accent,#ffa54a);border:1px solid var(--s-accent,#ffa54a);color:#1a1f2c;font-weight:700;border-radius:5px;cursor:pointer;">${_esc(copy.confirm)}</button>` +
-            '</div>'
+            `<div style="margin-bottom:${hintLine ? '8px' : '20px'};">${_esc(copy.body)}</div>` +
+            (hintLine ? `<div style="font-size:12px;color:var(--s-mute,#888);margin-bottom:20px;font-style:italic;">${_esc(hintLine)}</div>` : '') +
+            `<div style="display:flex;gap:8px;justify-content:flex-end;">${buttonsHtml}</div>`
         );
         overlay.appendChild(card);
         document.body.appendChild(overlay);
@@ -134,14 +150,19 @@
         const close = () => overlay.remove();
         card.querySelector('#obm-cancel').addEventListener('click', close);
         overlay.addEventListener('click', (ev) => { if (ev.target === overlay) close(); });
-        card.querySelector('#obm-confirm').addEventListener('click', () => {
-            close();
-            if (typeof o.onConfirm === 'function') {
-                try { o.onConfirm(); } catch (e) { console.error('over-budget onConfirm threw:', e); }
-            }
-        });
-        // Focus the confirm button so keyboard Enter fires it.
-        setTimeout(() => card.querySelector('#obm-confirm')?.focus(), 30);
+        if (!isStrict) {
+            card.querySelector('#obm-confirm').addEventListener('click', () => {
+                close();
+                if (typeof o.onConfirm === 'function') {
+                    try { o.onConfirm(); } catch (e) { console.error('over-budget onConfirm threw:', e); }
+                }
+            });
+            // Focus the confirm button so keyboard Enter fires it.
+            setTimeout(() => card.querySelector('#obm-confirm')?.focus(), 30);
+        } else {
+            // Strict mode — focus the close button so Enter dismisses.
+            setTimeout(() => card.querySelector('#obm-cancel')?.focus(), 30);
+        }
     };
 
     /* Convenience wrapper: takes a Response object from a 409
@@ -165,6 +186,13 @@
                 source: body.source || '',
                 label: body.label || '',
                 characterName: characterName || body.char_name || '',
+                // v2.8.0: when the campaign has strict_action_economy on,
+                // the 409 body carries ``strict: true``. The modal swaps
+                // its Confirm button for a Close-only flow; the refetch
+                // path below never fires because the strict modal has no
+                // onConfirm handler (resolve(null) lands via the modal
+                // removal observer below, same as a Cancel).
+                strict: !!body.strict,
                 onConfirm: async () => {
                     try {
                         const r2 = await refetch();

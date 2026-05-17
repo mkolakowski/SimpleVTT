@@ -184,7 +184,14 @@
                 <input type="checkbox" name="potions_as_bonus_action"
                        {% if campaign.potions_as_bonus_action %}checked{% endif %}>
                 <span><strong>Potions are a bonus action</strong>
-                    <span class="muted" style="font-size:12px;display:block;">Drinking a healing potion consumes a bonus action instead of an action. (Variant rule from <em>Xanathar's Guide / Tasha's Cauldron</em>.) Currently informational — when action-economy Phase 2 ships with a "Use Item" button on consumable inventory items, clicking it will auto-mark the bonus slot if this is on, or the action slot if off.</span>
+                    <span class="muted" style="font-size:12px;display:block;">Drinking a healing potion consumes a bonus action instead of an action. (Variant rule from <em>Xanathar's Guide / Tasha's Cauldron</em>.) When on, the 🧪 Use button on a Potion of Healing inventory row marks the bonus slot instead of the action slot, and the Phase 4 over-budget modal uses potion-flavoured wording.</span>
+                </span>
+            </label>
+            <label style="flex-direction:row;align-items:center;gap:10px;margin-top:10px;">
+                <input type="checkbox" name="strict_action_economy"
+                       {% if campaign.strict_action_economy %}checked{% endif %}>
+                <span><strong>Strict action economy</strong>
+                    <span class="muted" style="font-size:12px;display:block;">When on, players <strong>can't override</strong> the over-budget modal on a spent action / bonus / reaction slot — the modal's Confirm button is hidden and the only way past a spent chip is the GM clicking it on the init tracker to refund the slot (e.g. when Action Surge / Haste grants an extra action). The token-drag isn't blocked (the GM is authoritative on the canvas), but the first drag that pushes a combatant past their walking speed posts an audit entry to the roll log. Off by default — leave off if your table prefers the lighter-touch "click through with an audit badge" behaviour.</span>
                 </span>
             </label>
         </fieldset>
