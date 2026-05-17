@@ -2849,9 +2849,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             try { localStorage.setItem('vtt_minitab_' + charId, tab); } catch {}
         }
 
-        // Restore saved tab state on page load
+        // Restore saved tab state on page load.
+        // v2.4.11: default tab flipped 'skills' → 'attacks' to match the
+        // new Actions / Spells / Skills tab order. Characters without an
+        // Actions tab (no attacks_list) fall through inside _setMiniTab —
+        // ``validTabs[0]`` is used when the requested tab isn't rendered,
+        // so non-fighter PCs land on whatever their first visible tab is
+        // (Spells if caster, otherwise Skills).
         document.querySelectorAll('.mini-tabs[data-char-id]').forEach(el => {
-            _setMiniTab(el.dataset.charId, localStorage.getItem('vtt_minitab_' + el.dataset.charId) || 'skills');
+            _setMiniTab(el.dataset.charId, localStorage.getItem('vtt_minitab_' + el.dataset.charId) || 'attacks');
         });
 
         function _setAbMode(charId, mode) {
@@ -3314,8 +3320,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
      *  the 18 standard 5e skills on any given monster) we fall back to
      *  the bare ability modifier — no proficiency. Proficient entries
      *  are highlighted with a ◆ marker + brighter ``var(--fg)`` colour,
-     *  mirroring the PC mini-sheet's skills grid visual language. */
-    function _monsterSkillsHtml(sh) {
+     *  mirroring the PC mini-sheet's skills grid visual language.
+     *  v2.4.11: skill rows are now ``.mini-sk-btn`` buttons matching the
+     *  PC mini-sheet markup, so the existing document-level click handler
+     *  at line ~2536 picks them up automatically. ``data-expr`` carries
+     *  the d20 roll string and ``data-note`` the combatant + skill name
+     *  for the roll log. ``combatantName`` is required so the note reads
+     *  "Vex (Bandit Captain): Athletics" instead of just "Athletics". */
+    function _monsterSkillsHtml(sh, combatantName) {
         const ab = sh.abilities || {};
         const abi = s => Math.floor(((parseInt(s) || 10) - 10) / 2);
         const fmt = n => (n >= 0 ? '+' : '') + n;
@@ -3363,17 +3375,31 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         });
         html += '</div>';
 
-        // Skills grid — 2-column, all 18. Mirrors buildInitSheet for PCs.
+        // Skills grid — 2-column, all 18. Each skill is a ``.mini-sk-btn``
+        // matching the PC mini-sheet markup so the existing document-level
+        // ``.mini-roll-btn, .mini-sk-btn`` click handler at line ~2536 picks
+        // them up. ``data-expr="1d20{mod}"`` rolls the check; ``data-note``
+        // labels the roll log entry. ``is-prof`` modifier class lights up
+        // the dot + accent border for proficient entries (no monster has
+        // expertise in 5e, so ``is-exp`` isn't emitted).
+        const nameForNote = String(combatantName || 'Monster').replace(/"/g, '&quot;');
         html += '<div style="font-size:9px;font-weight:700;color:var(--fg-mute);text-transform:uppercase;letter-spacing:0.5px;margin:8px 0 4px;">Skills</div>';
-        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px 8px;">';
+        html += '<div class="mini-skills-grid">';
         SKILL_LIST.forEach(([name, sab]) => {
             const isPro = name in profSkills;
             const mod = isPro ? profSkills[name] : abi(parseInt(ab[sab]) || 10);
-            const marker = isPro ? '◆' : '';
-            html += `<div style="display:flex;justify-content:space-between;font-size:10px;padding:1px 0;${isPro ? 'color:var(--fg);' : 'color:var(--fg-mute);'}">
-                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${marker ? marker + ' ' : ''}${name}</span>
-                <span style="flex-shrink:0;font-weight:${isPro ? '600' : '400'};margin-left:4px;">${fmt(mod)}</span>
-            </div>`;
+            const modStr = fmt(mod);
+            const expr = `1d20${modStr}`;
+            const note = `${nameForNote}: ${name}${isPro ? ' (prof)' : ''}`;
+            html += `<button type="button" class="mini-sk-btn${isPro ? ' is-prof' : ''}"
+                data-expr="${expr}"
+                data-note="${note}"
+                title="${isPro ? 'Proficient' : ''}">
+                <span class="mini-sk-dot"></span>
+                <span class="mini-sk-name">${name}</span>
+                <span class="mini-sk-ab">${sab}</span>
+                <span class="mini-sk-mod">${modStr}</span>
+            </button>`;
         });
         html += '</div>';
 
@@ -3560,7 +3586,18 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         let savedTab = 'actions';
         try { savedTab = localStorage.getItem('vtt_minitab_' + slotKey) || 'actions'; } catch (_) {}
         if (savedTab !== 'actions' && savedTab !== 'skills') savedTab = 'actions';
-        const skillsHtml = _monsterSkillsHtml(sh);
+        const skillsHtml = _monsterSkillsHtml(sh, combatant.name);
+        // v2.4.11: inner ``data-char-id="monster-{tid}"`` wrapper inside the
+        // Skills panel. The document-level ``.mini-sk-btn`` click handler at
+        // line ~2536 walks up via ``closest('[data-char-id]')`` to figure
+        // out roll attribution — finding the ``monster-{tid}`` first means
+        // the handler skips ``character_id`` (parseInt → NaN) AND sets
+        // ``skip_roll_state=true`` so a PC's roll-state (adv/dis pill)
+        // isn't accidentally advanced by a monster skill click. The outer
+        // ``.mini-tab-panel`` carries ``data-char-id=combatant.id`` (per-row
+        // unique) so ``_setMiniTab`` toggles the right one when multiple
+        // bandits share a template; the inner wrapper takes precedence for
+        // click resolution because ``closest`` finds nearer ancestors first.
         html += `<div class="mini-tabs" data-char-id="${slotKey}">
             <button class="mini-tab-btn${savedTab === 'actions' ? ' active' : ''}" data-char-id="${slotKey}" data-tab="actions">Actions</button>
             <button class="mini-tab-btn${savedTab === 'skills' ? ' active' : ''}" data-char-id="${slotKey}" data-tab="skills">Skills</button>
@@ -3570,7 +3607,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 ${actionsHtml || '<p class="muted" style="font-size:11px;padding:4px 0;">No structured actions.</p>'}
             </div>
             <div class="mini-tab-panel${savedTab === 'skills' ? ' active' : ''}" data-char-id="${slotKey}" data-panel="skills">
-                ${skillsHtml}
+                <div data-char-id="monster-${tmpl.id}">${skillsHtml}</div>
             </div>
         </div>`;
 

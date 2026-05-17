@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.11] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Two related mini-sheet polish items. (1) The v2.4.10 monster Skills tab now uses **clickable `.mini-sk-btn` buttons** for each of the 18 skills — same markup the PC mini-sheet uses, so the existing document-level click-to-roll handler picks them up automatically. (2) The PC mini-sheet tab order is rearranged from **Skills / Attacks / Spells** to **Actions / Spells / Skills**, with the "Attacks" label renamed to **Actions** since the panel hosts both weapon attacks and miscellaneous strike-style abilities. Default tab on first open flipped from `skills` to `attacks` to match the new visual order. User-requested.
+**Description:** Three coordinated edits across two files. (1) `app/templates/tabletop.html` `_monsterSkillsHtml(sh, combatantName)` — second parameter added; the 18 skill rows are now `<button class="mini-sk-btn">…</button>` with `data-expr="1d20{mod}"` and `data-note="{combatant name}: {skill}{(prof if proficient)}"`, plus the standard `.mini-sk-dot`/`.mini-sk-name`/`.mini-sk-ab`/`.mini-sk-mod` inner spans that already have CSS in this file. `is-prof` modifier class lights up the dot + accent border for proficient skills (no monster has expertise in 5e SRD so `is-exp` isn't emitted). The static `<div>` rows + ◆ marker prefix are gone — `.mini-sk-btn.is-prof` already conveys "proficient" via the accent-bordered button. (2) `buildMonsterInitSheet` call site — wraps the rendered skills HTML in an inner `<div data-char-id="monster-${tmpl.id}">`. The document-level `.mini-sk-btn` click handler walks `closest('[data-char-id]')` to figure out roll attribution; the outer `.mini-tab-panel` carries `data-char-id=combatant.id` (per-row unique for `_setMiniTab` to toggle the right tab when multiple bandits share a template), but the inner wrapper takes precedence because `closest` returns nearer ancestors first. Net effect: monster skill clicks read `data-char-id="monster-{tid}"` → `parseInt → NaN` → no `character_id` on the roll body, AND `charIdRaw.startsWith('monster-')` → `skip_roll_state=true`, so a PC's adv/dis pill isn't accidentally advanced by a monster skill click. (3) `app/templates/_mini_sheet_card.html` `.mini-tabs` block — tab buttons reordered to Actions / Spells / Skills (was Skills / Attacks / Spells), with "Attacks" relabelled "Actions". The `data-tab="attacks"` value stays the same so JS handlers + localStorage keys keep working without coordinated edits. `app/templates/tabletop.html` "Restore saved tab state on page load" loop changed its default fallback from `|| 'skills'` to `|| 'attacks'` to match the new visual order; characters without an attacks tab (non-fighters, no `attacks_list`) fall through inside `_setMiniTab`'s `validTabs[0]` fallback to whatever their first visible tab is.
+**Description (cont):** Why rename "Attacks" → "Actions" but leave the internal `data-tab="attacks"` key alone: the JS handlers (`_setMiniTab`, the click-to-roll dispatcher, localStorage persistence) all key off the `data-tab` value, and v2.3.7-2.3.22 introduced multiple call sites that PUT `vtt_minitab_{charId}: 'attacks'` into localStorage. Changing the key would force a migration shim to translate old `'attacks'` entries to the new key, and would also touch the monster mini-sheet path (which uses its own `actions`/`skills` keys — separate from the PC's `attacks`/`spells`/`skills`). The display-vs-key separation is the cleanest scope.
+
+### Added
+- `app/templates/tabletop.html` `_monsterSkillsHtml(sh, combatantName)` — second parameter to embed the combatant name in `data-note`, so the roll log shows "Vex (Bandit Captain): Athletics" rather than a bare skill name. Required because the same monster TokenTemplate is shared across multiple init combatants (three bandits) and the roll log needs to disambiguate.
+- `app/templates/tabletop.html` `buildMonsterInitSheet` — inner `<div data-char-id="monster-${tmpl.id}">` wrapper inside the Skills `.mini-tab-panel` so the click handler's `closest('[data-char-id]')` walk reads monster context (no `character_id`, `skip_roll_state=true`).
+
+### Changed
+- `app/templates/tabletop.html` `_monsterSkillsHtml` skill rows — static `<div>` with `◆` marker prefix → `<button class="mini-sk-btn">` with `.mini-sk-dot`/`.mini-sk-name`/`.mini-sk-ab`/`.mini-sk-mod` inner spans. Proficient skills get the `is-prof` modifier class (already styled to light up the dot + apply an accent border).
+- `app/templates/_mini_sheet_card.html` `.mini-tabs` — tab button order Actions (was Attacks, renamed) / Spells / Skills (was Skills / Attacks / Spells). Internal `data-tab` keys unchanged.
+- `app/templates/tabletop.html` line ~2862 — default tab fallback `|| 'skills'` → `|| 'attacks'` so fresh-page PC mini-sheets open on the Actions tab matching the new visual order.
+
+### Notes
+- Monster Skills tab keeps the saving-throws row at the top as a static read-out (not clickable). The user explicitly asked to make the skills clickable; making saves clickable too would mean replacing the row with six `.mini-sk-btn`-style buttons and is filed as a follow-up.
+- The PC mini-sheet's localStorage keys persist per-character, so existing demo GMs / players who'd already set their tab to Skills will keep seeing Skills first (the fallback only applies when no key exists). Clearing `vtt_minitab_*` keys would surface the new default.
+- The `data-tab` key freeze means a future v3 cleanup could rename `attacks` → `actions` internally, but that's coordinated work across this template, `tabletop.html` (multiple handlers), and any user JS that reads the localStorage keys directly. Not in scope here.
+
+---
+
 ## [2.4.10] - 2026-05-17
 
 **Schema version:** 53

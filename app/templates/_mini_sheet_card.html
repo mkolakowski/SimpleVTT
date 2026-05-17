@@ -170,10 +170,17 @@
                 {% set _spell_vis.any = true %}
                 {% endif %}
                 {% endfor %}
+                {# v2.4.11: tab order Actions / Spells / Skills (was Skills / Attacks / Spells)
+                   and the visible label "Attacks" renamed to "Actions" — the panel hosts both
+                   weapon attacks and miscellaneous strike-style actions, so "Actions" reads
+                   more accurately. ``data-tab="attacks"`` stays as-is (it's the internal key
+                   the v2.3.7+ JS handlers + the localStorage key already use; renaming the
+                   data-tab would force coordinated edits across mini-sheet scripts + the
+                   monster mini-sheet path for no behavioural gain). #}
                 <div class="mini-tabs" data-char-id="{{ c.id }}">
-                    <button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="skills">Skills</button>
-                    {% if attacks_list %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="attacks">Attacks</button>{% endif %}
+                    {% if attacks_list %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="attacks">Actions</button>{% endif %}
                     {% if _is_caster and _spell_vis.any %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="spells">Spells</button>{% endif %}
+                    <button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="skills">Skills</button>
                 </div>
                 <div class="mini-tab-content" data-char-id="{{ c.id }}">
                     {# ── Skills panel ── #}
