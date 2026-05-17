@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.14] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Make the **entire inventory row header clickable** to expand/collapse the detail panel, not just the chevron. The previous behaviour limited the toggle target to the small ▶ button, which on a 30-px row was a frustrating click area; users naturally tap the item name to "open the row" and expected that to work. Now any click on the header (chevron, name, mod badge, blank space) toggles the panel; clicks on the equip checkbox, quantity input, or delete button keep their own semantics and are explicitly excluded. User-requested.
+**Description:** Two coordinated edits in `app/templates/sheet_dnd5e.html` `rowHtml` + `renderInventory`. (1) The inner flex strip that holds the equip control / chevron / name / qty / delete gains the class `inv-header`, a `data-idx="${idx}"` attribute, `cursor:pointer` styling, and a `title="Click to expand"` tooltip so the affordance is discoverable. (2) The previous `.inv-expand` click handler is removed; a new `.inv-header` click handler does the same toggle work but checks `ev.target.closest('.inv-equip, .inv-qty, .inv-rm')` first and bails when the click originated inside one of those interactive controls. The chevron is intentionally NOT in the skip list — its click bubbles up to the header which does the actual toggling, so the chevron remains the user's expected entry point but stops being the *only* entry point. The visual ▶/▼ swap, the file-based item-resolver lazy-load (`/api/content/items/<slug>`), and the `data-actions-loaded` guard all migrate verbatim to the new handler.
+**Description (cont):** Terminology note for future contributors: the collapsible container is the **item row** (`.inv-row`), the top strip with chevron + name + controls is the **row header** (`.inv-header`, new in this commit), and the expanded section underneath is the **detail panel** (`.inv-detail`). These names are now consistent with the `mini-header` / `mini-body` / `init-card-sheet` vocabulary used elsewhere in the tabletop / mini-sheet code, so cross-referencing one pattern to the other is unambiguous.
+
+### Changed
+- `app/templates/sheet_dnd5e.html` `rowHtml` — the inventory row's inner flex strip gains class `inv-header`, `data-idx="${idx}"`, `cursor:pointer`, and a "Click to expand" tooltip. Markup otherwise unchanged.
+- `app/templates/sheet_dnd5e.html` `renderInventory` — the per-row `.inv-expand` click binding is removed in favour of a `.inv-header` click binding that toggles the detail panel for any click not originating from `.inv-equip` / `.inv-qty` / `.inv-rm`. Lazy-load of `_loadItemActions` on first open + the ▶/▼ chevron swap migrate to the new handler.
+
+### Notes
+- The chevron button itself stays in the DOM (no markup churn there) but no longer has its own click listener. Its sole job is now to render the open/closed glyph; the parent header swallows clicks.
+- Why not just put a click listener on `.inv-row` instead of the inner header strip: the detail panel sits inside `.inv-row`, so clicks anywhere inside the expanded detail (e.g. selecting description text) would also re-fire the toggle and accidentally collapse the row mid-read. Scoping to `.inv-header` keeps the click target tight.
+- The same pattern would benefit the spell rows (`spellRowHtml` near line 2200) and the homebrew-monster Actions rows in the campaign-settings editor. Filed mentally as a follow-up — both have the "chevron is the only click target" smell. Not in scope for this commit.
+
+---
+
 ## [2.4.13] - 2026-05-17
 
 **Schema version:** 53

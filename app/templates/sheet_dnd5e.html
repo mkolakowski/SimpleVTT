@@ -4487,7 +4487,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         return `
         <div class="inv-row" data-idx="${idx}" style="border:1px solid var(--s-border);border-radius:4px;margin-bottom:3px;
                     background:${item.equipped ? 'var(--accent-bg)' : 'var(--s-card)'};">
-            <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;">
+            <div class="inv-header" data-idx="${idx}"
+                 style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;cursor:pointer;"
+                 title="Click to expand">
                 ${equipCtrl}
                 <button type="button" class="inv-expand" data-idx="${idx}"
                     style="background:none;border:none;color:var(--s-mute);font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
@@ -4658,13 +4660,24 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 syncInventory();
                 updateTotalWeight();
             }));
-        container.querySelectorAll('.inv-expand').forEach(btn =>
-            btn.addEventListener('click', () => {
-                const d = container.querySelector(`.inv-detail[data-idx="${btn.dataset.idx}"]`);
+        // v2.4.14: clicking anywhere on the row header toggles the detail
+        // panel, not just the chevron. Skip clicks that originated on the
+        // equip checkbox / qty input / delete button (those have their own
+        // semantics and shouldn't double-fire as an expand). The chevron
+        // is intentionally NOT in the skip list because clicking it should
+        // also toggle — its click bubbles up to the header which does the
+        // actual work, so the v2.4.13 dedicated ``.inv-expand`` handler is
+        // gone and the chevron is just a visual affordance now.
+        container.querySelectorAll('.inv-header').forEach(header =>
+            header.addEventListener('click', (ev) => {
+                if (ev.target.closest('.inv-equip, .inv-qty, .inv-rm')) return;
+                const idx = header.dataset.idx;
+                const d = container.querySelector(`.inv-detail[data-idx="${idx}"]`);
                 if (!d) return;
                 const open = d.style.display === 'none';
                 d.style.display = open ? '' : 'none';
-                btn.textContent = open ? '▼' : '▶';
+                const btn = header.querySelector('.inv-expand');
+                if (btn) btn.textContent = open ? '▼' : '▶';
                 // File-based item resolver (1.9.0). On first open, if the
                 // inventory entry has a ``_slug`` from the item picker, fetch
                 // the content record and render its actions inside the detail.
