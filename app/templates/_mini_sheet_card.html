@@ -225,7 +225,12 @@
                         {% set a_save_dc = (a.save_dc or 0) | int %}
                         {% set a_is_save = a_save_dc > 0 and a.save_ability %}
                         {% set a_atk_bonus = a.attack_bonus or a.bonus or '' %}
-                        <div class="mini-attack-row" title="{{ a.name }}{% if a.range %} · {{ a.range }}{% endif %}">
+                        {# v2.4.23: each row is now a clickable container that
+                           toggles a sibling ``.mini-attack-detail`` panel with
+                           the attack's description / range / damage type.
+                           The ``.mini-strike-btn`` inner click is excluded
+                           via the document-level handler's skip list. #}
+                        <div class="mini-attack-row mini-row-expandable" title="{{ a.name }}{% if a.range %} · {{ a.range }}{% endif %}">
                             <span class="mini-attack-name">{{ a.name }}</span>
                             {% if a_atk_bonus and not a_is_save %}<span class="mini-attack-tag atk">{{ a_atk_bonus }}</span>{% endif %}
                             {% if a.damage %}<span class="mini-attack-tag dmg">{{ a.damage }}</span>{% endif %}
@@ -247,6 +252,15 @@
                                     data-attack-save-ability="{{ a.save_ability or '' }}"
                                     data-attack-save-dc="{{ a_save_dc if a_is_save else '' }}"
                                     title="Strike with {{ a.name }}">🗡 Strike</button>
+                        </div>
+                        <div class="mini-attack-detail mini-row-detail">
+                            {% set _bits = [] %}
+                            {% if a.range %}{% set _ = _bits.append('<span><strong>Range:</strong> ' ~ a.range ~ '</span>') %}{% endif %}
+                            {% if a.damage_type %}{% set _ = _bits.append('<span><strong>Type:</strong> ' ~ a.damage_type ~ '</span>') %}{% endif %}
+                            {% if a.properties %}{% set _ = _bits.append('<span><strong>Properties:</strong> ' ~ a.properties ~ '</span>') %}{% endif %}
+                            {% if _bits %}<div class="mini-row-detail-bits">{{ _bits | join(' · ') | safe }}</div>{% endif %}
+                            {% if a.desc %}<div class="mini-row-detail-desc">{{ a.desc }}</div>{% endif %}
+                            {% if not _bits and not a.desc %}<span class="muted">No additional details.</span>{% endif %}
                         </div>
                         {% endfor %}
                         </div>
@@ -304,7 +318,13 @@
                             {% set s_lvl = (s.level or 0) | int %}
                             {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
                             {% if s_lvl == lvl_i and s_cls == _cc_slug and not (_cc_is_prepared and s_lvl > 0 and not s.prepared) %}
-                            <div class="mini-spell-row" title="{{ s.name }}{% if s.casting_time %} · {{ s.casting_time }}{% endif %}{% if s.range %} · {{ s.range }}{% endif %}">
+                            {# v2.4.23: spell row is now clickable; toggles a
+                               sibling ``.mini-spell-detail`` panel below.
+                               The panel lazy-loads the full SRD description
+                               via ``window._loadSpellContent`` on first open
+                               when a ``_slug`` is set (same mechanism as the
+                               full sheet's v2.4.19 spell-detail load). #}
+                            <div class="mini-spell-row mini-row-expandable" title="{{ s.name }}{% if s.casting_time %} · {{ s.casting_time }}{% endif %}{% if s.range %} · {{ s.range }}{% endif %}">
                                 <span class="mini-spell-name">{{ s.name }}{% if s.concentration %} <span class="mini-spell-tag" title="Concentration">⏱</span>{% endif %}{% if s.ritual %} <span class="mini-spell-tag" title="Ritual">®</span>{% endif %}</span>
                                 {% if _is_multiclass %}<span class="mini-spell-tag cls">{{ _cc_label }}</span>{% endif %}
                                 {% if s.damage %}<span class="mini-spell-tag dmg">{{ s.damage }}</span>{% endif %}
@@ -329,6 +349,16 @@
                                         data-spell-attack-bonus="{{ s.attack_bonus or s.atk_bonus or '' }}"
                                         data-spell-healing="{{ s.healing or '' }}"
                                         title="Cast {{ s.name }}{% if s_lvl > 0 %} (uses Lv {{ s_lvl }} slot for {{ _cc_label or 'this class' }}){% endif %}">🪄 Cast</button>
+                            </div>
+                            <div class="mini-spell-detail mini-row-detail" data-slug="{{ s._slug or '' }}" data-content-loaded="0">
+                                {% set _sbits = [] %}
+                                {% if s.casting_time %}{% set _ = _sbits.append('<span><strong>Cast:</strong> ' ~ s.casting_time ~ '</span>') %}{% endif %}
+                                {% if s.range %}{% set _ = _sbits.append('<span><strong>Range:</strong> ' ~ s.range ~ '</span>') %}{% endif %}
+                                {% if s.duration %}{% set _ = _sbits.append('<span><strong>Duration:</strong> ' ~ s.duration ~ '</span>') %}{% endif %}
+                                {% if s.components %}{% set _ = _sbits.append('<span><strong>Components:</strong> ' ~ s.components ~ '</span>') %}{% endif %}
+                                {% if _sbits %}<div class="mini-row-detail-bits">{{ _sbits | join(' · ') | safe }}</div>{% endif %}
+                                {% if s.desc %}<div class="mini-row-detail-desc">{{ s.desc }}</div>{% endif %}
+                                <div class="mini-spell-content-slot"></div>
                             </div>
                             {% endif %}
                             {% endfor %}

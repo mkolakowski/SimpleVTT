@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.23] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Make every row in the mini-sheet **Attacks / Spells / Actions** tabs (both PC `.mini-attack-row` / `.mini-spell-row` and monster `.m-action-row`) clickable to expand a description / details panel below. Mirrors the v2.4.18 full-sheet pattern but adapted for the mini-sheet's denser layout. Inner control buttons (Strike, Cast, monster Attack/Damage/Save, Recharge) keep their own semantics and are excluded from the toggle. User-requested.
+**Description:** Three coordinated edits across `_mini_sheet_card.html` + `tabletop.html`. (1) PC attack rows in `_mini_sheet_card.html` get a sibling `.mini-attack-detail` div with `range` / `damage_type` / `properties` chips + the attack's `desc` (or "No additional details." for bare attacks). The row gets a `.mini-row-expandable` class + `cursor:pointer`. (2) PC spell rows likewise gain a sibling `.mini-spell-detail` with `casting_time` / `range` / `duration` / `components` chips + inline `desc` + a `.mini-spell-content-slot` placeholder for lazy-loaded SRD descriptions (when the spell has a `_slug`, e.g. demo Tavik's spells post-v2.4.19). (3) Monster action rows in `buildMonsterInitSheet` (tabletop.html ~line 3597) get the same restructure — emitted as `.m-action-row.mini-row-expandable` followed by a sibling `.m-action-detail.mini-row-detail`. The action's mapped projection now passes `desc` and `range` through from the raw `sh.actions[] / sh.attacks[]` so the panel has content to show.
+**Description (cont):** Single CSS rule pair toggles visibility: `.mini-row-detail { display: none; }` by default + `.mini-row-expandable.open + .mini-row-detail { display: block; }` shows the immediately-following detail div when its sibling expandable carries the `.open` class. Single click handler on the `players-drawer` delegation finds the clicked `.mini-row-expandable`, skips if the click originated on `.mini-strike-btn` / `.mini-cast-btn` / `.monster-strike-btn` / `.monster-charge-reset`, then toggles `.open`. For spell rows on first open, the handler also calls `window._loadSpellContent` (new in this commit — a tabletop-scoped duplicate of the v2.4.19 sheet_dnd5e.html helper, targeting `.mini-spell-content-slot` instead of `.sp-content-slot`) to fetch the canonical SRD description from `/api/content/spells/<slug>`. The `data-content-loaded` flag guards re-fetches.
+**Description (cont 2):** Why duplicate `_loadSpellContent` instead of promoting the sheet's version to window scope: the sheet's helper lives inside the dnd5e-sheet IIFE which only runs when the sheet template is loaded. The tabletop has its own page lifecycle and can't depend on the sheet template having been visited first. The tabletop-scope `window._loadSpellContent` is the same logic with the slot-selector adjusted; ~30 lines of duplication, easy to keep in sync if either ever evolves.
+
+### Added
+- `app/templates/_mini_sheet_card.html` — PC attack rows + spell rows each followed by a sibling `.mini-row-detail` div with description content + slot chips. Rows gain the `.mini-row-expandable` class for the click handler.
+- `app/templates/tabletop.html` `buildMonsterInitSheet` — monster action rows emit a sibling `.m-action-detail` with the action's range / damage_type chips + `desc`. The action projection passes `desc` and `range` through from the raw sheet.
+- `app/templates/tabletop.html` `.mini-row-expandable` / `.mini-row-detail` CSS — pair-toggle styling with `.open + .mini-row-detail { display: block; }`. Default detail panel hidden; padding + background match the surrounding row aesthetic.
+- `app/templates/tabletop.html` players-drawer click handler — new branch toggles `.open` on the clicked `.mini-row-expandable`, skipping inner control buttons via a `closest()` exclusion list. Lazy-loads spell description on first open via `window._loadSpellContent` when the detail carries a non-empty `data-slug`.
+- `app/templates/tabletop.html` `window._loadSpellContent` — tabletop-scoped duplicate of the v2.4.19 sheet helper. Same fetch path (`/api/content/spells/<slug>`); same shape transform; targets `.mini-spell-content-slot` (mini-sheet) with a fallback to `.sp-content-slot` (full sheet) so it can also serve the full-sheet path if the sheet's own helper hasn't loaded.
+
+### Notes
+- The click handler's skip list is conservative — only explicit interactive controls are excluded. Hover effects on tags / damage chips will still trigger the expand, which is correct since those are non-interactive read-only displays.
+- Monster `buildMonsterInitSheet` emits inline-styled rows (not class-driven for layout); v2.4.23 keeps the inline `style="..."` block on `.m-action-row` for compatibility with the surrounding `.monster-init-actions` flex container. Refactoring monster rows to use the same CSS classes as PC rows is a follow-up.
+- For PC spell rows the detail's `data-slug` comes from the spell object's `_slug` field; demo Tavik / Thalindra spells gained this in v2.4.19, so their mini-sheet spell rows now lazy-load the same SRD descriptions the full-sheet rows do. Custom spells without a `_slug` show only the inline detail (casting time / range / etc. if present); a future enhancement could fall back to a name-keyed lookup, but slug-keyed is the canonical mechanism.
+
+---
+
 ## [2.4.22] - 2026-05-17
 
 **Schema version:** 53

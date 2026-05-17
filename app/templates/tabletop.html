@@ -426,6 +426,26 @@
                     line-height: 1; border: 1px solid var(--border); background: var(--input-bg); color: var(--fg-mute);
                     cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
     .mini-hp-step:hover { border-color: var(--accent); color: var(--accent); background: var(--btn-hover); }
+    /* v2.4.23: clickable row + sibling detail panel for mini-sheet
+       attack / spell / monster-action rows. Skip-list for child controls
+       lives in the JS handler (.mini-strike-btn / .mini-cast-btn /
+       .monster-strike-btn / .monster-charge-reset). Detail panel hides
+       by default and animates open via the ``.open`` class on the row. */
+    .mini-row-expandable { cursor: pointer; }
+    .mini-row-detail {
+        display: none;
+        padding: 4px 8px 6px;
+        font-size: 11px;
+        color: var(--fg-mute);
+        line-height: 1.5;
+        background: var(--bg);
+        border-radius: 3px;
+        margin-top: -2px;
+        margin-bottom: 4px;
+    }
+    .mini-row-expandable.open + .mini-row-detail { display: block; }
+    .mini-row-detail-bits { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; color: var(--fg); }
+    .mini-row-detail-desc { white-space: pre-wrap; }
     /* v2.4.21: roll-state pill + death-saves tracker share one row. The
        roll pill shrinks to content; the death-saves tracker auto-hides
        its 6-pip row when the character is alive. */
@@ -2925,6 +2945,44 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             });
         }
 
+        /* v2.4.23: globally-exposed lazy-loader for spell descriptions.
+         * Mirrors the v2.4.19 sheet_dnd5e.html ``_loadSpellContent`` but
+         * lives at window-scope so the tabletop's mini-sheet spell rows
+         * can call it via ``window._loadSpellContent`` without depending
+         * on the full sheet template being loaded. Targets the row's
+         * ``.mini-spell-content-slot`` div inside the detail panel. */
+        window._loadSpellContent = async function (slug, detailEl) {
+            if (!slug || !detailEl) return;
+            const slot = detailEl.querySelector('.mini-spell-content-slot') || detailEl.querySelector('.sp-content-slot');
+            if (!slot) return;
+            const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+            const url = '/api/content/spells/' + encodeURIComponent(slug)
+                      + (cid ? '?campaign_id=' + cid : '');
+            try {
+                const r = await fetch(url, { credentials: 'same-origin' });
+                if (!r.ok) return;
+                const data = await r.json();
+                const rec = (data && data.record) || {};
+                const _esc = (s) => String(s == null ? '' : s)
+                    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const bits = [];
+                if (rec.school)        bits.push(`<span><strong>School:</strong> ${_esc(rec.school)}</span>`);
+                if (rec.casting_time)  bits.push(`<span><strong>Cast:</strong> ${_esc(rec.casting_time)}</span>`);
+                if (rec.range)         bits.push(`<span><strong>Range:</strong> ${_esc(rec.range)}</span>`);
+                if (rec.duration)      bits.push(`<span><strong>Duration:</strong> ${_esc(rec.duration)}</span>`);
+                if (rec.components)    bits.push(`<span><strong>Components:</strong> ${_esc(rec.components)}</span>`);
+                if (rec.concentration) bits.push('<span style="color:#e8a;">Concentration</span>');
+                if (rec.ritual)        bits.push('<span style="color:#8ae;">Ritual</span>');
+                const header = bits.length
+                    ? `<div class="mini-row-detail-bits">${bits.join(' · ')}</div>` : '';
+                const desc = rec.desc
+                    ? `<div class="mini-row-detail-desc">${_esc(rec.desc)}</div>` : '';
+                const higher = rec.higher_level
+                    ? `<div class="mini-row-detail-desc" style="margin-top:4px;"><em><strong>At higher levels:</strong> ${_esc(rec.higher_level)}</em></div>` : '';
+                slot.innerHTML = header + desc + higher;
+            } catch (e) { /* silent — leave the slot empty */ }
+        };
+
         document.getElementById('players-drawer').addEventListener('click', (ev) => {
             const sBtn = ev.target.closest('.mini-short-rest-btn');
             if (sBtn) { _miniRest(sBtn, 'short'); return; }
@@ -2942,6 +3000,26 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const tabBtn = ev.target.closest('.mini-tab-btn');
             if (tabBtn) {
                 _setMiniTab(tabBtn.dataset.charId, tabBtn.dataset.tab);
+                return;
+            }
+            // v2.4.23: clickable mini-sheet row (attack / spell / monster
+            // action) toggles a sibling ``.mini-row-detail`` panel. Skip
+            // when the click came from an inner interactive control —
+            // strike / cast / monster strike+recharge buttons all kept
+            // their own semantics.
+            const expandRow = ev.target.closest('.mini-row-expandable');
+            if (expandRow && !ev.target.closest('.mini-strike-btn, .mini-cast-btn, .monster-strike-btn, .monster-charge-reset')) {
+                expandRow.classList.toggle('open');
+                // Lazy-load spell description on first open if the row
+                // carries a ``_slug``. The detail sibling holds the
+                // ``data-slug`` + ``data-content-loaded`` flag.
+                const detail = expandRow.nextElementSibling;
+                if (detail && detail.classList.contains('mini-spell-detail')
+                        && detail.dataset.contentLoaded === '0' && detail.dataset.slug
+                        && typeof window._loadSpellContent === 'function') {
+                    detail.dataset.contentLoaded = '1';
+                    window._loadSpellContent(detail.dataset.slug, detail);
+                }
                 return;
             }
             // Ability Check / Save toggle
@@ -3508,6 +3586,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         // v2.3.40: ``id`` and ``charges_max`` pass through so the strike
         // handler can key per-combatant charge state and the rendered
         // counter / disabled-button logic below can read it.
+        // v2.4.23: ``desc`` passed through so the per-action expand panel
+        // (added below) can show the canonical SRD / homebrew description
+        // text. ``range`` carried so the panel can chip "Range: 20/60 ft"
+        // for thrown weapons.
         const fromActions = Array.isArray(sh.actions)
             ? sh.actions.filter(a => a && (a.attack_roll || a.damage || a.save_ability))
                   .map(a => ({
@@ -3520,6 +3602,8 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                       save_dc: a.save_dc || 0,
                       charges_max: parseInt(a.charges_max) || 0,
                       attack_roll: !!a.attack_roll,
+                      desc: a.desc || '',
+                      range: a.range || '',
                   }))
             : [];
         const fromAttacks = (!fromActions.length && Array.isArray(sh.attacks))
@@ -3534,6 +3618,8 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                       save_dc: parseInt(a.save_dc) || 0,
                       charges_max: parseInt(a.charges_max) || 0,
                       attack_roll: !!(a.attack_bonus || a.atk_bonus || a.bonus) && !(a.save_dc && a.save_ability),
+                      desc: a.desc || '',
+                      range: a.range || '',
                   }))
             : [];
         const actions = fromActions.length ? fromActions : fromAttacks;
@@ -3594,10 +3680,27 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 if (a.save_dc && a.save_ability) {
                     btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="save"${spent ? ' disabled' : ''} title="Announce save — DC ${a.save_dc} ${a.save_ability}">📋 Save</button>`);
                 }
-                actionsHtml += `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:3px 6px;background:var(--input-bg);border-radius:3px;font-size:11px;${spent ? 'opacity:0.55;' : ''}">
+                // v2.4.23: each action row is now a clickable container
+                // that toggles a sibling ``.m-action-detail`` panel below
+                // showing the action's description. Click handler in
+                // players-drawer delegation; skips clicks on
+                // ``.monster-strike-btn`` / ``.monster-charge-reset``.
+                const detailBits = [];
+                if (a.range) detailBits.push(`<span><strong>Range:</strong> ${a.range}</span>`);
+                if (a.damage_type) detailBits.push(`<span><strong>Type:</strong> ${a.damage_type}</span>`);
+                const detailHeader = detailBits.length
+                    ? `<div class="mini-row-detail-bits">${detailBits.join(' · ')}</div>` : '';
+                const detailDesc = a.desc
+                    ? `<div class="mini-row-detail-desc">${a.desc}</div>`
+                    : (!detailBits.length ? '<span class="muted">No description.</span>' : '');
+                actionsHtml += `<div class="m-action-row mini-row-expandable" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:3px 6px;background:var(--input-bg);border-radius:3px;font-size:11px;${spent ? 'opacity:0.55;' : ''}cursor:pointer;">
                     <span style="font-weight:600;flex:1 1 auto;min-width:0;">${a.name}</span>
                     ${tags.join(' ')}
                     ${btns.join('')}
+                </div>
+                <div class="m-action-detail mini-row-detail">
+                    ${detailHeader}
+                    ${detailDesc}
                 </div>`;
             });
             actionsHtml += '</div>';
