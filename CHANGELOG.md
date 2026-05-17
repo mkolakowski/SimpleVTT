@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.7.1] - 2026-05-17
+
+**Schema version:** 54
+**Commit summary:** Hook up the **house-rule-aware modal copy** for the Phase 4 over-budget gate. When the campaign's `potions_as_bonus_action` setting (v2.5.0) is on AND a player tries to drink a second Potion of Healing in the same turn, the Layer B confirm modal now reads "{name}'ve already used your bonus action this turn. Drink the Potion of Healing anyway?" with a small italicised hint line "House rule: potions consume your bonus action." plus a "Drink anyway" confirm button — instead of the generic "Roll the Potion of Healing anyway?" phrasing the v2.7.0 commit shipped with. Closes one of the polish follow-ups filed in v2.6.1's changelog. PATCH — no new public surface, just wording inside an existing modal.
+**Description:** Two coordinated changes in `app/static/economy_messaging.js`. **(1)** The `_economyCopy` lookup table grows its first entry: key `'bonus|potion'` returns a function `(opts) → {title, body, hint, confirm, cancel}` that interpolates `opts.characterName` + `opts.label` from the call site. House-rule callout lives in `hint` (rendered as a small italicised line under the body in the modal) so the rule is visible but doesn't overwhelm the main message. Confirm button label switches from "Confirm — fire anyway" to "Confirm — drink anyway" for the potion source. **(2)** `_modalCopy` reshapes to accept either a function or an object override — the function form lets us interpolate context (you can't bake "Brother Tavik" into a static string at load time). The existing generic fallback path is unchanged; just the override branch grew the function-call handling.
+**Description (cont):** Source-table semantics. Future house rules that override copy for specific (slot, source) pairs slot into the same lookup. Examples for follow-up commits if/when the rules land: `'action|potion'` (a campaign with potions-as-actions explicitly described), `'bonus|grappler-feat'` (a player who manually tagged Bonus-action Shove on their Grappler feat), `'action|two-weapon-fighting'` (the Two-Weapon Fighting Style heuristic that lets off-hand light attacks fire on bonus action). The framework is set up; future per-rule copy entries are one function literal each.
+
+### Changed
+- `app/static/economy_messaging.js` `_economyCopy` — first entry populated: `'bonus|potion'` returns potion-flavoured wording with a "House rule: potions consume your bonus action." hint. Function form so `characterName` and `label` interpolate at call time.
+- `app/static/economy_messaging.js` `_modalCopy` — supports function-form overrides in `_economyCopy` (kept object-form support too).
+
+### Notes
+- **What to test:** as the GM, enable Campaign Settings → Combat → "Potions consume a bonus action". As Pip (`demo-alice@example.com`), open his full sheet, drink Potion of Healing #1 → Bns chip flips. Try to drink Potion #2 → Layer B modal NOW reads "Pip Quickfingers've already used your bonus action this turn. Drink the Potion of Healing anyway?" with the hint "House rule: potions consume your bonus action." underneath. Confirm button reads "Confirm — drink anyway". Click Confirm → second potion consumed, "⚠ Manual override — 2nd bonus action this turn" badge on the roll-log entry.
+- **What to test (RAW, house rule off):** with `potions_as_bonus_action` off, the Use button skips the gate entirely (no slot is consumed); no modal appears regardless of how many potions are drunk per turn. The modal copy table only kicks in when the slot IS gated.
+- The grammar in `${who}'ve already used` is intentionally tolerant — "You've" / "I've" / "Pip Quickfingers've". The latter reads as a possessive contraction the way a chat-message might; preferring grammar-correctness over per-name branching is acceptable for a TTRPG tooling modal.
+- The hint line uses the existing modal's `hint` slot (added in v2.6.1 but unused until now). It's italicised + muted so it reads as the parenthetical it is.
+
+---
+
 ## [2.7.0] - 2026-05-17
 
 **Schema version:** 54

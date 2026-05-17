@@ -30,23 +30,44 @@
         reaction: 'reaction',
     };
 
-    // Per-(slot, source) copy override table. Empty by default — house-
-    // rule-aware copy (e.g. potions_as_bonus_action) lands here as a
-    // follow-up once the "Use Item" button ships. The framework reads
-    // _economyCopy[`${slot}|${source}`] if present, else falls back to
-    // the generic phrasing below.
+    // Per-(slot, source) copy override table. Each entry is a function
+    // ``(opts) → copy`` so the wording can interpolate ``label`` and
+    // ``characterName`` from the call site. Keys are ``${slot}|${source}``;
+    // ``source`` matches the value the server stamps onto the 409 body
+    // (currently one of "attack" / "spell" / "feature" / "potion"). Add
+    // entries here whenever a house rule changes the wording of a slot
+    // for a specific source.
     const _economyCopy = {
-        // 'bonus|potion': { body: "...", hint: "..." },
+        // v2.7.1: when a campaign has potions_as_bonus_action turned on
+        // AND the over-budget click is on a Healing Potion's 🧪 Use
+        // button, the modal calls out the house rule + uses
+        // potion-flavoured verbs ("Drink anyway?" instead of "Roll
+        // anyway?"). Cancel/Confirm labels match — confirming a second
+        // drink in one turn is closer to "commit" than "fire".
+        'bonus|potion': (opts) => {
+            const who = opts.characterName || 'You';
+            const subject = opts.label ? `the ${opts.label}` : 'the potion';
+            return {
+                title: 'Over the action budget',
+                body: `${who}'ve already used your bonus action this turn. Drink ${subject} anyway?`,
+                hint: 'House rule: potions consume your bonus action.',
+                confirm: 'Confirm — drink anyway',
+                cancel: 'Cancel',
+            };
+        },
     };
 
-    function _modalCopy({ slot, source, label, characterName }) {
-        const slotPhrase = SLOT_LABEL[slot] || slot;
-        const override = _economyCopy[`${slot}|${source || ''}`];
+    function _modalCopy(opts) {
+        const slot = opts.slot;
+        const source = opts.source || '';
+        const override = _economyCopy[`${slot}|${source}`];
+        if (typeof override === 'function') return override(opts);
         if (override) return override;
-        const subject = label ? `the ${label}` : 'this';
+        const slotPhrase = SLOT_LABEL[slot] || slot;
+        const subject = opts.label ? `the ${opts.label}` : 'this';
         return {
             title: 'Over the action budget',
-            body: `${characterName || 'You'}'ve already used your ${slotPhrase} this turn. Roll ${subject} anyway?`,
+            body: `${opts.characterName || 'You'}'ve already used your ${slotPhrase} this turn. Roll ${subject} anyway?`,
             hint: '',
             confirm: 'Confirm — fire anyway',
             cancel: 'Cancel',
