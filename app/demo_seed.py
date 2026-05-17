@@ -498,44 +498,47 @@ def seed_tokens(
 
     # Player tokens — near the door (left side). v2.3.25: chars[2] is the
     # GM's Cleric (Brother Tavik); placed alongside the other PCs so the
-    # demo party is visibly three-strong on the map. No portrait image —
-    # we don't ship a cleric token in app/static/demo/tokens/ so the
-    # color swatch (#f5b75c) carries the visual identity.
+    # demo party is visibly three-strong on the map. v2.3.44: all three
+    # PCs now carry portrait jpgs from app/static/demo/tokens/ (the
+    # color swatch on each combatant becomes the ring around the
+    # portrait rather than the whole token face).
     tokens.append(Token(
         map_id=map_.id, character_id=chars[0].id,
         controller_user_id=users["alice"].id,
         label=chars[0].name, color="#6cb4ff",
-        image_url="/static/demo/tokens/rogue.png",
+        image_url="/static/demo/tokens/rogue.jpg",
         x=200, y=500, size=1,
     ))
     tokens.append(Token(
         map_id=map_.id, character_id=chars[1].id,
         controller_user_id=users["bob"].id,
         label=chars[1].name, color="#4ade80",
-        image_url="/static/demo/tokens/wizard.png",
+        image_url="/static/demo/tokens/wizard.jpg",
         x=200, y=600, size=1,
     ))
     tokens.append(Token(
         map_id=map_.id, character_id=chars[2].id,
         controller_user_id=users["gm"].id,
         label=chars[2].name, color="#f5b75c",
+        image_url="/static/demo/tokens/cleric.jpg",
         x=200, y=700, size=1,
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
     # (homebrew, authored through the v2.3.8 structured-action editor) to
     # showcase the unified monster mini-sheet flow on the demo without
-    # any GM setup. Token index 7 — referenced by the encounter
-    # initiative_order below.
+    # any GM setup. v2.3.44: every NPC now carries its own portrait jpg
+    # — the three bandits use distinct alpha/beta/gamma files so the GM
+    # can tell them apart at a glance (same template, different art).
     npc_placements = [
-        ("bandit-captain", "Vex (Bandit Captain)", 1100, 400, "#c84a4a"),
-        ("bandit",         "Bandit Alpha",          1050, 500, "#c84a4a"),
-        ("bandit",         "Bandit Beta",           1150, 500, "#c84a4a"),
-        ("bandit",         "Bandit Gamma",          1100, 600, "#c84a4a"),
-        ("thug",           "Thug",                  1200, 400, "#c84a4a"),
-        ("goblin-captain", "Grixxa (Goblin Captain)", 1250, 550, "#7c9c54"),
+        ("bandit-captain", "Vex (Bandit Captain)",    1100, 400, "#c84a4a", "bandit-captain.jpg"),
+        ("bandit",         "Bandit Alpha",            1050, 500, "#c84a4a", "bandit-alpha.jpg"),
+        ("bandit",         "Bandit Beta",             1150, 500, "#c84a4a", "bandit-beta.jpg"),
+        ("bandit",         "Bandit Gamma",            1100, 600, "#c84a4a", "bandit-gamma.jpg"),
+        ("thug",           "Thug",                    1200, 400, "#c84a4a", "thug.jpg"),
+        ("goblin-captain", "Grixxa (Goblin Captain)", 1250, 550, "#7c9c54", "goblin-captain.jpg"),
     ]
-    for slug, label, x, y, color in npc_placements:
+    for slug, label, x, y, color, image in npc_placements:
         tmpl = templates.get(slug)
         if not tmpl:
             continue
@@ -545,6 +548,7 @@ def seed_tokens(
             token_template_id=tmpl.id,
             label=label,
             color=color,
+            image_url=f"/static/demo/tokens/{image}",
             x=x, y=y, size=1,
         ))
 

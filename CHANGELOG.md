@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.44] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Wire the nine new demo token portraits (`rogue.jpg`, `wizard.jpg`, `cleric.jpg`, `bandit-captain.jpg`, `bandit-alpha.jpg`, `bandit-beta.jpg`, `bandit-gamma.jpg`, `thug.jpg`, `goblin-captain.jpg`) into `seed_tokens` so a fresh demo cycle renders illustrated combatants instead of color-swatch placeholders. Files were dropped into `app/static/demo/tokens/` in the prior `demo-tokens` commit (`7164ab4`); this change updates `app/demo_seed.py` to set `image_url` on every PC and every NPC. User-requested.
+**Description:** Three coordinated edits. (1) `seed_tokens` PC rows: `rogue.png` → `rogue.jpg` and `wizard.png` → `wizard.jpg` (extension changed to match the shipped files), plus a brand-new `image_url="/static/demo/tokens/cleric.jpg"` on Brother Tavik (added v2.3.25 without a portrait). (2) `seed_tokens` NPC loop: the `npc_placements` tuple gained a sixth element — the per-token image filename — so each of the six NPCs gets a distinct portrait. The three identical bandit templates share one template id (still `bandit`) but render with three different illustrations (alpha / beta / gamma) so the GM can tell them apart at a glance in the init tracker. (3) `docs/demo/image-prompts.md` token-path table refreshed: every "needs token wire" row is now "shipped + wired", paths updated to `.jpg`, and the post-generation instructions trimmed to a short "drop the file at the same path" note since the wiring is no longer the missing piece.
+
+### Changed
+- `app/demo_seed.py` `seed_tokens` — PC tokens switch from `rogue.png` / `wizard.png` to `rogue.jpg` / `wizard.jpg`; Brother Tavik (chars[2]) gains `image_url="/static/demo/tokens/cleric.jpg"`.
+- `app/demo_seed.py` `seed_tokens` — `npc_placements` extended from a 5-tuple `(slug, label, x, y, color)` to a 6-tuple with the per-token image filename appended; the loop now sets `image_url=f"/static/demo/tokens/{image}"` on each Token. The three bandit rows reference `bandit-alpha.jpg` / `bandit-beta.jpg` / `bandit-gamma.jpg` so identical-template combatants get distinguishable art.
+- `docs/demo/image-prompts.md` — token-path table refreshed to reflect all nine character portraits being shipped + wired; the post-generation wiring checklist trimmed.
+
+### Notes
+- The demo color swatches (Alice `#6cb4ff`, Bob `#4ade80`, GM `#f5b75c`, bandits `#c84a4a`, Grixxa `#7c9c54`) stay set on each token — they continue to drive the ring-around-the-portrait + the per-combatant initiative chip color, just no longer the whole token face.
+- No new files were added in this commit; the jpgs themselves shipped with `7164ab4` ("demo-tokens"). This is purely the code-side wiring.
+- Once the demo scheduler runs its next reset (`DEMO_RESET_INTERVAL_MINUTES`), the new portraits appear on the public demo URL without operator intervention.
+
+---
+
 ## [2.3.43] - 2026-05-16
 
 **Schema version:** 52

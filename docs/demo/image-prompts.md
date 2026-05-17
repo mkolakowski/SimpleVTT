@@ -1,11 +1,11 @@
 # Demo image-generation prompts
 
 Ready-to-paste prompts for every entity in the SimpleVTT demo dataset
-(`app/demo_seed.py`). Tested against the canonical baseline of the two
-shipped tokens at `app/static/demo/tokens/rogue.png` and `wizard.png` —
-the style is "painterly fantasy character portrait, three-quarter view,
-isolated against a transparent background, suitable for a circular
-virtual-tabletop token."
+(`app/demo_seed.py`). All nine character tokens are now shipped as
+jpgs at `app/static/demo/tokens/` and wired into `seed_tokens` as of
+v2.3.44 — the style is "painterly fantasy character portrait, three-
+quarter view, isolated against a transparent background, suitable for
+a circular virtual-tabletop token."
 
 The character descriptions match the seeded sheets verbatim (race,
 class, alignment, weapons, signature spells), so the rendered token
@@ -17,20 +17,22 @@ Drop the generated PNGs at:
 
 | Token | Path | Status |
 |---|---|---|
-| Pip Quickfingers | `app/static/demo/tokens/rogue.png` | shipped |
-| Thalindra Moonwhisper | `app/static/demo/tokens/wizard.png` | shipped |
-| Brother Tavik Stonebrow | *(not yet wired — would be `cleric.png`)* | needs token wire in `seed_tokens` |
-| Vex Vance | *(not yet wired — would be `bandit-captain.png`)* | needs token wire in `seed_tokens` |
-| Grixxa | *(not yet wired — would be `goblin-captain.png`)* | needs token wire in `seed_tokens` |
-| Bandit (×3) | *(not yet wired — `bandit.png`)* | needs token wire |
-| Thug | *(not yet wired — `thug.png`)* | needs token wire |
+| Pip Quickfingers | `app/static/demo/tokens/rogue.jpg` | shipped + wired |
+| Thalindra Moonwhisper | `app/static/demo/tokens/wizard.jpg` | shipped + wired |
+| Brother Tavik Stonebrow | `app/static/demo/tokens/cleric.jpg` | shipped + wired |
+| Vex (Bandit Captain) | `app/static/demo/tokens/bandit-captain.jpg` | shipped + wired |
+| Grixxa (Goblin Captain) | `app/static/demo/tokens/goblin-captain.jpg` | shipped + wired |
+| Bandit Alpha | `app/static/demo/tokens/bandit-alpha.jpg` | shipped + wired |
+| Bandit Beta | `app/static/demo/tokens/bandit-beta.jpg` | shipped + wired |
+| Bandit Gamma | `app/static/demo/tokens/bandit-gamma.jpg` | shipped + wired |
+| Thug | `app/static/demo/tokens/thug.jpg` | shipped + wired |
 | Tavern battle map | `app/static/demo/maps/tavern.png` | shipped (placeholder) |
 
-The "needs token wire" rows currently fall back to the colored swatch
-in `app/templates/tabletop.html` because `seed_tokens` doesn't set
-`image_url` for those NPCs. After dropping a PNG in place, set
-`image_url="/static/demo/tokens/<file>.png"` on the corresponding
-token in `app/demo_seed.py seed_tokens()`.
+Re-generating a token? Drop the new file at the same path (jpg or
+png both work — the seed sets `image_url` to whatever filename is in
+`seed_tokens`) and a fresh demo cycle will pick it up on next reset.
+To add a brand-new NPC variant, append a new row to `npc_placements`
+in `app/demo_seed.py seed_tokens()` with its image filename.
 
 ---
 
@@ -226,20 +228,25 @@ exterior shots, top-down photo realism`.
   block. Higher CFG (8-10) for tighter character adherence to the
   prompt. Use ControlNet OpenPose if you want the trio of bandits
   to share an identical pose.
-- **Hand-painted alternative**: the current `rogue.png` and
-  `wizard.png` look generated; if you want hand-painted, append
-  "in the style of Tony DiTerlizzi" or "in the style of Jared
-  Blando" (for the map). Adjust to taste.
+- **Hand-painted alternative**: if you want a hand-painted look rather
+  than the current shipped jpgs, append "in the style of Tony
+  DiTerlizzi" or "in the style of Jared Blando" (for the map).
+  Adjust to taste.
 
 ## After generation
 
-1. Background-remove (e.g. https://www.remove.bg, rembg CLI, or
-   manual mask in GIMP) to get a transparent PNG.
+1. (Optional) Background-remove (e.g. https://www.remove.bg, rembg
+   CLI, or manual mask in GIMP) for a transparent PNG — the tabletop
+   renderer crops to a circle either way, so a solid background works
+   fine if it matches the token color swatch.
 2. Crop to a 1:1 square centered on the character's head and
    shoulders.
-3. Downscale to 256×256 (the existing tokens' size).
-4. Save to `app/static/demo/tokens/<file>.png`.
-5. In `app/demo_seed.py seed_tokens()`, add `image_url="/static/
-   demo/tokens/<file>.png"` to the corresponding `Token(...)` row.
+3. Downscale to 256×256 (the shipped tokens' size). jpg or png both
+   work — current shipped tokens are jpg.
+4. Save to `app/static/demo/tokens/<file>.<ext>`, overwriting the
+   existing file if you're replacing a portrait.
+5. Already wiring a new entity (not just replacing)? Edit
+   `app/demo_seed.py seed_tokens()` and set `image_url="/static/
+   demo/tokens/<file>.<ext>"` on the corresponding `Token(...)` row.
 6. Bump version, write a small CHANGELOG entry, redeploy. The
    demo's hourly reseed picks up the new images automatically.
