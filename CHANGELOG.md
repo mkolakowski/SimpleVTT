@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.25] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Follow-up to v2.4.24 — add `user-select: none` (+ webkit prefix) to the four expandable headers that didn't already have it (`.inv-header`, `.sp-header`, `.atk-header`, `.mini-row-expandable`). The v2.4.24 `touch-action: manipulation` fix wasn't sufficient on iPad: tapping a `user-select: text` element routes the tap through iOS's text-selection state machine, which fires extra synthesized events that re-fire the click on the way through. The user's clue — "only works when text is highlighted" — confirmed selection-cycle interference (a tap with pre-selected text follows a different / cleaner event path than a tap without). User-reported.
+**Description:** Five edits across two templates. (1) `sheet_dnd5e.html` `.inv-header` inline style — appended `-webkit-user-select:none;user-select:none;`. (2) Same for `.sp-header` and (3) `.atk-header`. (4) `tabletop.html` `.mini-row-expandable` CSS rule — added both `-webkit-user-select: none` and `user-select: none`. (5) Updated the CSS comment block on `.mini-row-expandable` to document the two-step fix (touch-action + user-select) and explain why they're both needed: `touch-action: manipulation` skips the double-tap-to-zoom wait, but iOS still routes taps on `user-select: text` elements through the text-selection state machine which fires duplicate events. The other working header — `.mini-header` — already had `user-select: none` from its original v2.x styling, which is why it didn't show the bug; the four newer headers I added during v2.4.14 / v2.4.18 / v2.4.23 inherited the default `user-select: auto` (text-selectable) and exhibited the residual double-fire.
+**Description (cont):** The text-selection workaround the user discovered makes diagnostic sense: when text is already selected, the first event in the iPad's tap pipeline is "dismiss selection" (a no-op click), and subsequent ticks of the cycle complete normally — so the row's click handler fires exactly once. When no text is selected at the start, the tap kicks off the selection cycle (which on a single tap is a no-op too, but still allocates / dispatches events that bubble through the row's listener). With `user-select: none` the selection cycle never starts; the tap is processed as a pure click and fires once.
+**Description (cont 2):** Detail panels (`.mini-row-detail`, `.inv-detail`, `.sp-detail`, `.atk-detail`) intentionally do **not** get `user-select: none`. Users still need to highlight + copy spell descriptions, item flavor text, attack mechanics, etc. Only the row headers (which are short labels + chips, not paragraphs of prose) lose selection.
+
+### Fixed
+- `app/templates/sheet_dnd5e.html` `.inv-header` / `.sp-header` / `.atk-header` inline styles — added `-webkit-user-select:none;user-select:none;` alongside the v2.4.24 `touch-action:manipulation;` so iPad taps no longer route through the iOS text-selection state machine.
+- `app/templates/tabletop.html` `.mini-row-expandable` CSS — added `-webkit-user-select: none; user-select: none;` to the rule. The mini-sheet attack / spell / monster-action rows added in v2.4.23 now toggle reliably on iPad.
+
+### Notes
+- The `.mini-header` (init-tracker card expand) was unaffected by the original bug because it's had `user-select: none` since v2.x. v2.4.24 added `touch-action: manipulation` to it defensively; the combined CSS now matches the other expand surfaces.
+- Detail panels still allow text selection — users can highlight + copy descriptions. Only the row HEADER (short labels + chips, not prose) loses selection.
+- Two-step fix because the two CSS properties guard different parts of the iOS touch pipeline: `touch-action: manipulation` removes the double-tap-to-zoom wait; `user-select: none` skips the text-selection sub-machine. Both are needed on a `<div>`-based expand surface to ensure a single tap = a single click event.
+- If a future tappable surface exhibits the same iPad double-fire, applying both rules together is the canonical fix.
+
+---
+
 ## [2.4.24] - 2026-05-17
 
 **Schema version:** 53

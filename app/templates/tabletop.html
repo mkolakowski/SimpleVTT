@@ -434,13 +434,24 @@
        lives in the JS handler (.mini-strike-btn / .mini-cast-btn /
        .monster-strike-btn / .monster-charge-reset). Detail panel hides
        by default and animates open via the ``.open`` class on the row. */
-    /* v2.4.24: ``touch-action: manipulation`` disables the iOS Safari
-       double-tap-to-zoom heuristic on these rows, which on iPad otherwise
-       fires the click event twice in rapid succession and toggles the
-       open/close state back to closed before the user sees the
-       expansion. ``manipulation`` keeps scrolling + panning interactions
-       working, just skips the zoom-tap wait. */
-    .mini-row-expandable { cursor: pointer; touch-action: manipulation; }
+    /* v2.4.24/v2.4.25: ``touch-action: manipulation`` disables the iOS
+       Safari double-tap-to-zoom heuristic on these rows, which on iPad
+       otherwise fires the click event twice in rapid succession and
+       toggles the open/close state back to closed before the user sees
+       the expansion. v2.4.25 adds ``user-select: none`` (+ webkit
+       prefix) because tapping a ``user-select: text`` element on iOS
+       routes through the text-selection state machine, which fires
+       extra synthesized events that defeat ``manipulation`` alone —
+       the user could see the row toggle correctly only when text was
+       already selected (i.e. the selection cycle was already "primed").
+       Selection on the detail panels (.mini-row-detail) stays default
+       so users can still highlight + copy descriptions. */
+    .mini-row-expandable {
+        cursor: pointer;
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+    }
     .mini-row-detail {
         display: none;
         padding: 4px 8px 6px;
