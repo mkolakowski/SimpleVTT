@@ -2525,12 +2525,12 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         // v2.4.19: on first open, if the spell carries a ``_slug``, lazy-load
         // the description from /api/content/spells/<slug> via
         // ``_loadSpellContent``. ``data-content-loaded`` guards re-fetches.
-        container.querySelectorAll('.sp-header').forEach(header =>
-            header.addEventListener('click', (ev) => {
+        container.querySelectorAll('.sp-header').forEach(header => {
+            // v2.4.29: dual-listen click + pointerup, shared ``_dbnc``.
+            const _activate = (ev) => {
                 if (ev.target.closest('.sp-prep, .sp-cast, .sp-rm')) return;
-                // v2.4.26: iPad click-debounce.
                 const _now = Date.now();
-                if (header._dbnc && _now - header._dbnc < 500) return;
+                if (header._dbnc && _now - header._dbnc < 700) return;
                 header._dbnc = _now;
                 const idx = header.dataset.idx;
                 const d = container.querySelector(`.sp-detail[data-idx="${idx}"]`);
@@ -2543,7 +2543,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     d.dataset.contentLoaded = '1';
                     _loadSpellContent(d.dataset.slug, d);
                 }
-            }));
+            };
+            header.addEventListener('click', _activate);
+            header.addEventListener('pointerup', _activate);
+        });
         container.querySelectorAll('.sp-cast').forEach(btn =>
             btn.addEventListener('click', async () => {
                 if (typeof CAMPAIGN_ID === 'undefined') return;
@@ -3877,12 +3880,12 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         // on the strike button or delete button so they keep their own
         // semantics. The chevron is NOT in the skip list because clicking
         // it should also toggle (bubbles up to the header handler).
-        container.querySelectorAll('.atk-header').forEach(header =>
-            header.addEventListener('click', (ev) => {
+        container.querySelectorAll('.atk-header').forEach(header => {
+            // v2.4.29: dual-listen click + pointerup, shared ``_dbnc``.
+            const _activate = (ev) => {
                 if (ev.target.closest('.atk-strike, .atk-rm')) return;
-                // v2.4.26: iPad click-debounce.
                 const _now = Date.now();
-                if (header._dbnc && _now - header._dbnc < 500) return;
+                if (header._dbnc && _now - header._dbnc < 700) return;
                 header._dbnc = _now;
                 const idx = header.dataset.idx;
                 const d = container.querySelector(`.atk-detail[data-idx="${idx}"]`);
@@ -3891,7 +3894,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 d.style.display = open ? '' : 'none';
                 const btn = header.querySelector('.atk-expand');
                 if (btn) btn.textContent = open ? '▼' : '▶';
-            }));
+            };
+            header.addEventListener('click', _activate);
+            header.addEventListener('pointerup', _activate);
+        });
         container.querySelectorAll('.atk-strike').forEach(btn =>
             btn.addEventListener('click', async () => {
                 if (typeof CAMPAIGN_ID === 'undefined') return;
@@ -4765,15 +4771,14 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         // also toggle — its click bubbles up to the header which does the
         // actual work, so the v2.4.13 dedicated ``.inv-expand`` handler is
         // gone and the chevron is just a visual affordance now.
-        container.querySelectorAll('.inv-header').forEach(header =>
-            header.addEventListener('click', (ev) => {
+        container.querySelectorAll('.inv-header').forEach(header => {
+            // v2.4.29: dual-listen click + pointerup with shared 700-ms
+            // ``_dbnc`` so iPad Magic Keyboard trackpad double-fire is
+            // caught regardless of which event arrives first.
+            const _activate = (ev) => {
                 if (ev.target.closest('.inv-equip, .inv-qty, .inv-rm')) return;
-                // v2.4.26: iPad click-debounce — see corresponding comment
-                // in tabletop.html ``mini-header`` handler. 350 ms guard
-                // catches iOS double-fire that survives the v2.4.24/v2.4.25
-                // touch-action + user-select CSS fixes.
                 const _now = Date.now();
-                if (header._dbnc && _now - header._dbnc < 500) return;
+                if (header._dbnc && _now - header._dbnc < 700) return;
                 header._dbnc = _now;
                 const idx = header.dataset.idx;
                 const d = container.querySelector(`.inv-detail[data-idx="${idx}"]`);
@@ -4789,7 +4794,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     d.dataset.actionsLoaded = '1';
                     _loadItemActions(d.dataset.slug, d.querySelector('.inv-actions-slot'));
                 }
-            }));
+            };
+            header.addEventListener('click', _activate);
+            header.addEventListener('pointerup', _activate);
+        });
 
         updateTotalWeight();
         updateACDisplay();

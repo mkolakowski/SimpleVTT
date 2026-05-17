@@ -2608,19 +2608,23 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 
         // Clicking the card header opens/closes the sheet; fav star is excluded.
         document.querySelectorAll('.mini-header[data-char-id]').forEach(hdr => {
-            hdr.addEventListener('click', (ev) => {
+            // v2.4.29: dual-listen on ``pointerup`` AND ``click`` with a shared
+            // ``_dbnc`` debounce. The iPad Magic Keyboard trackpad fires
+            // ``pointerup`` followed by a synthesized ``click`` event for a
+            // single trackpad click; in some edge cases the synthesized click
+            // arrives >500 ms after pointerup and slips past the debounce.
+            // Having ``pointerup`` ALSO set ``_dbnc`` means whichever event
+            // fires first wins, and any subsequent same-tap event is caught.
+            // Window bumped 500→700 ms for trackpad-pipeline timing cushion.
+            const _hdrActivate = (ev) => {
                 if (ev.target.closest('.char-fav')) return;
-                // v2.4.27: per-element click debounce, same 350-ms guard
-                // as the init-tracker mini-header (v2.4.26). Without it
-                // iPad double-fire causes a tap on character B to also
-                // re-toggle character A (or any recently-open card),
-                // producing "only one expandable at a time" UX even
-                // though the handler logic itself is per-character.
                 const _now = Date.now();
-                if (hdr._dbnc && _now - hdr._dbnc < 500) return;
+                if (hdr._dbnc && _now - hdr._dbnc < 700) return;
                 hdr._dbnc = _now;
                 _toggleCharDetail(hdr.dataset.charId);
-            });
+            };
+            hdr.addEventListener('click', _hdrActivate);
+            hdr.addEventListener('pointerup', _hdrActivate);
         });
 
         /* Mini-sheet roll buttons (abilities) and skill buttons — post directly to the roll API.
@@ -3058,10 +3062,12 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // their own semantics.
             const expandRow = ev.target.closest('.mini-row-expandable');
             if (expandRow && !ev.target.closest('.mini-strike-btn, .mini-cast-btn, .monster-strike-btn, .monster-charge-reset')) {
-                // v2.4.26: same 350-ms debounce as the init-tracker
-                // mini-header to guard against iPad double-fire.
+                // v2.4.26/v2.4.28/v2.4.29: 700-ms debounce, ALSO checked by
+                // the parallel pointerup listener below so iPad trackpad
+                // double-fire (pointerup → synthesized click both fire)
+                // is caught regardless of which event arrives first.
                 const _now = Date.now();
-                if (expandRow._dbnc && _now - expandRow._dbnc < 500) return;
+                if (expandRow._dbnc && _now - expandRow._dbnc < 700) return;
                 expandRow._dbnc = _now;
                 expandRow.classList.toggle('open');
                 // Lazy-load spell description on first open if the row
@@ -3213,6 +3219,34 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     (window.showToast || alert)('Revert failed: ' + e.message, 'error');
                 });
                 return;
+            }
+        });
+
+        // v2.4.29: parallel ``pointerup`` listener that ONLY handles the
+        // expand-row toggle. iPad Magic Keyboard trackpad fires a
+        // ``pointerup`` followed by a synthesized ``click`` for a single
+        // physical click; if those two events arrive >500 ms apart, the
+        // click-only debounce in the handler above can miss the second.
+        // Listening to both pointerup AND click with a shared 700-ms
+        // ``_dbnc`` per element catches the duplicate from either path.
+        // Scoped to expand-row only — the other branches (rest, hp-step,
+        // tab switching, wild shape) didn't show double-fire issues and
+        // adding pointerup to those would risk firing them twice for one
+        // legitimate click.
+        document.getElementById('players-drawer').addEventListener('pointerup', (ev) => {
+            const expandRow = ev.target.closest('.mini-row-expandable');
+            if (!expandRow) return;
+            if (ev.target.closest('.mini-strike-btn, .mini-cast-btn, .monster-strike-btn, .monster-charge-reset')) return;
+            const _now = Date.now();
+            if (expandRow._dbnc && _now - expandRow._dbnc < 700) return;
+            expandRow._dbnc = _now;
+            expandRow.classList.toggle('open');
+            const detail = expandRow.nextElementSibling;
+            if (detail && detail.classList.contains('mini-spell-detail')
+                    && detail.dataset.contentLoaded === '0' && detail.dataset.slug
+                    && typeof window._loadSpellContent === 'function') {
+                detail.dataset.contentLoaded = '1';
+                window._loadSpellContent(detail.dataset.slug, detail);
             }
         });
 
@@ -4171,20 +4205,21 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const sheetEl  = entry.querySelector('.init-card-sheet');
             if (!headerEl || !sheetEl) return;
             const charId = entry.dataset.charId || '';
-            headerEl.addEventListener('click', ev => {
+            // v2.4.29: dual ``pointerup`` + ``click`` listener with a shared
+            // ``_dbnc`` debounce so iPad Magic Keyboard trackpad clicks
+            // don't double-fire. See the character-list ``_hdrActivate``
+            // comment for the full reasoning.
+            const _activate = ev => {
                 // v2.3.33: ``a`` added so the new Open-Sheet button (an
                 // anchor link the 2.3.15 drawer interceptor handles)
                 // doesn't ALSO trigger the row expand/collapse.
                 if (ev.target.closest('input, button, a')) return;
-                // v2.4.26: iPad click-debounce. iOS Safari can fire two
-                // click events in rapid succession on the same tap when
-                // the touch hits an ``<img>`` or text-bearing element —
-                // even with ``touch-action: manipulation`` + ``user-select:
-                // none`` from v2.4.24/v2.4.25. A simple timestamp-based
-                // debounce guarantees only one toggle per tap regardless
-                // of how iOS dispatches the underlying events.
+                // v2.4.26/v2.4.28/v2.4.29: per-element timestamp debounce.
+                // 700 ms window catches the iPad trackpad's
+                // pointerup→synthesized-click latency that the prior
+                // 500 ms window missed.
                 const now = Date.now();
-                if (headerEl._dbnc && now - headerEl._dbnc < 500) return;
+                if (headerEl._dbnc && now - headerEl._dbnc < 700) return;
                 headerEl._dbnc = now;
                 const isOpen = sheetEl.classList.toggle('open');
                 headerEl.querySelector('.mini-header-arrow')?.classList.toggle('open', isOpen);
@@ -4198,7 +4233,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     const miniBody = sheetEl.querySelector('.mini-body');
                     if (miniBody) document.querySelector(`#char-detail-${charId} .mini-sheet`)?.appendChild(miniBody);
                 }
-            });
+            };
+            headerEl.addEventListener('click', _activate);
+            headerEl.addEventListener('pointerup', _activate);
         });
 
         /* ⑥ Scroll active row into view */

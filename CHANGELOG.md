@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.29] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Fifth pass on the iPad expandable-header double-fire bug — switch to **dual `pointerup` + `click` listeners** with a shared per-element `_dbnc` debounce (window bumped 500 → 700 ms). The iPad Magic Keyboard trackpad fires both events for a single physical click; if the synthesized `click` arrives >500 ms after the `pointerup`, the prior click-only debounce missed the second event. Listening to both with a shared debounce property catches the duplicate regardless of which event arrives first. User-reported (fifth iteration of the iPad fix).
+**Description:** All six expandable header handlers now use the dual-listener pattern: `.mini-header` (character-list + init-tracker), `.mini-row-expandable` (delegated on `#players-drawer`), `.inv-header` / `.sp-header` / `.atk-header` (full sheet). Each click handler is refactored to a named `_activate(ev)` function attached as both a `click` listener AND a `pointerup` listener on the same element (or on the delegation root for `.mini-row-expandable`). The `_dbnc` property lives on the element itself (not on the event), so whichever event fires first sets the timestamp and the other is debounced. 700-ms window catches up to ~700 ms of inter-event gap, which covers the slowest trackpad pointerup→click latency I've seen reports of.
+**Description (cont):** Why dual-listen instead of switching exclusively to `pointerup`: replacing `click` with `pointerup` risks breaking interactions on older browsers / devices that don't fire `pointerup` reliably (some legacy mobile, older iOS Safari versions). Dual-listen is conservative — every input path that fires *either* event keeps working; only duplicates get debounced. Trade-off is two listener registrations per element instead of one, which is negligible for the handful of expandable surfaces.
+**Description (cont 2):** For the `.mini-row-expandable` case the existing big delegated handler on `#players-drawer` stays — but a parallel `pointerup` listener is added on the same element that handles *only* the expand-row branch (factored to avoid firing other branches like rest / hp-step / wild-shape twice for one legitimate click). Both listeners share the per-element `_dbnc`, so the row toggles exactly once per physical tap regardless of which event the pipeline fires first.
+
+### Fixed
+- `app/templates/tabletop.html` character-list `.mini-header[data-char-id]` — extracted handler body to `_hdrActivate(ev)`, attached as both `click` and `pointerup` listener. Debounce window 500 → 700 ms.
+- `app/templates/tabletop.html` init-tracker `.mini-header` (inside `renderBattle`) — extracted handler body to `_activate(ev)`, dual-attached. Debounce 500 → 700 ms.
+- `app/templates/tabletop.html` `#players-drawer` delegation — added a parallel `pointerup` listener that handles *only* the `.mini-row-expandable` branch (skipping strike / cast / recharge child buttons), sharing the existing `_dbnc` per row. Click-handler's expand-row branch debounce window 500 → 700 ms.
+- `app/templates/sheet_dnd5e.html` `.inv-header` / `.sp-header` / `.atk-header` — same refactor: each handler body extracted to `_activate(ev)`, dual-attached as click + pointerup, debounce 500 → 700 ms.
+
+### Notes
+- The 700-ms window is the second-longest tolerable for user expectations. Beyond ~1 sec the "click again to close" interaction starts feeling sluggish; 700 ms is the upper bound that catches phantom clicks while staying responsive.
+- The `_dbnc` property is per-element. Clicking row A then row B is unaffected — different elements, independent debounces. Only same-element duplicate clicks get suppressed.
+- If the trackpad pipeline fires *three* events somehow (unlikely), all three share the same `_dbnc`; only the first within a 700-ms window registers. Subsequent legitimate user clicks after 700 ms work normally.
+- Future escalation path if this still doesn't fix it: explicit `pointerup` handler with `event.preventDefault()` on a matching `pointerdown` to suppress the synthesized click entirely. That gives full control over iOS event dispatch but loses some focus/blur semantics that depend on click events. Hopefully not needed.
+
+---
+
 ## [2.4.28] - 2026-05-17
 
 **Schema version:** 53
