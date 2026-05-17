@@ -19,6 +19,31 @@
 
     const mapPane = document.getElementById('map-pane');
     const ctx = canvas.getContext('2d');
+
+    // v2.3.45: HiDPI / Retina sharpness. The HTML template sets
+    // ``width="{{ map.width_px }}"`` / ``height="…"`` on the canvas;
+    // those attributes also size the backing store, so on a 2× display
+    // every drawn pixel was being bilinearly upscaled by the browser —
+    // visibly soft on the v2.3.44 token portraits. Capture the logical
+    // map size before resizing, multiply the backing store by DPR, fix
+    // the CSS display size to the logical map size, and ``ctx.scale``
+    // so all draw calls keep using logical (CSS) coordinates. ``MAP_W``
+    // / ``MAP_H`` replace every former ``canvas.width`` / ``canvas.height``
+    // reference below — those would now return the backing-store size.
+    const MAP_W = canvas.width;
+    const MAP_H = canvas.height;
+    const DPR = Math.max(1, window.devicePixelRatio || 1);
+    canvas.width = MAP_W * DPR;
+    canvas.height = MAP_H * DPR;
+    canvas.style.width = MAP_W + 'px';
+    canvas.style.height = MAP_H + 'px';
+    ctx.scale(DPR, DPR);
+    // ``high`` resampling matters for the demo-token portraits which
+    // are sourced ~1000 px wide and rendered at ~70 px on canvas; the
+    // browser default (``low``) makes that 14× downscale look mushy.
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
     const initialData = JSON.parse(document.getElementById('initial-data').textContent);
     let tokens = initialData.tokens || [];
     const characters = initialData.characters || [];
@@ -67,11 +92,11 @@
     function drawSquareGrid() {
         ctx.strokeStyle = 'rgba(255,255,255,0.15)';
         ctx.lineWidth = 1;
-        for (let x = 0; x < canvas.width; x += gridSize) {
-            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+        for (let x = 0; x < MAP_W; x += gridSize) {
+            ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, MAP_H); ctx.stroke();
         }
-        for (let y = 0; y < canvas.height; y += gridSize) {
-            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+        for (let y = 0; y < MAP_H; y += gridSize) {
+            ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(MAP_W, y); ctx.stroke();
         }
     }
 
@@ -80,8 +105,8 @@
         ctx.lineWidth = 1;
         const { w, h } = hexDims();
         const rowH = h * 0.75;
-        const cols = Math.ceil(canvas.width / w) + 1;
-        const rows = Math.ceil(canvas.height / rowH) + 1;
+        const cols = Math.ceil(MAP_W / w) + 1;
+        const rows = Math.ceil(MAP_H / rowH) + 1;
         for (let r = 0; r < rows; r++) {
             const offsetX = (r % 2) * (w / 2);
             for (let c = 0; c < cols; c++) {
@@ -294,7 +319,7 @@
     }
 
     function render() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, MAP_W, MAP_H);
         if (gridType === 'square') drawSquareGrid();
         else if (gridType === 'hex') drawHexGrid();
         tokens.forEach(drawToken);
@@ -337,8 +362,8 @@
         const paneRect = mapPane.getBoundingClientRect();
         if (!paneRect || paneRect.width <= 0 || paneRect.height <= 0) return;
         const margin = gridSize * scale;
-        panX = Math.max(margin - canvas.width  * scale, Math.min(paneRect.width  - margin, panX));
-        panY = Math.max(margin - canvas.height * scale, Math.min(paneRect.height - margin, panY));
+        panX = Math.max(margin - MAP_W * scale, Math.min(paneRect.width  - margin, panX));
+        panY = Math.max(margin - MAP_H * scale, Math.min(paneRect.height - margin, panY));
     }
 
     function applyTransform() {

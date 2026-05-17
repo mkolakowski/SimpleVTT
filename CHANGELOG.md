@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.45] - 2026-05-17
+
+**Schema version:** 52
+**Commit summary:** HiDPI-sharpen the tabletop canvas — multiply the backing-store resolution by `devicePixelRatio` and enable `imageSmoothingQuality = 'high'` so the v2.3.44 demo token portraits render crisp on Retina / 4K displays instead of being bilinearly upscaled 2-3× by the browser. User-reported: tokens looked soft after the v2.3.44 portrait wiring.
+**Description:** The HTML template (`app/templates/tabletop.html`) sets `width="{{ map.width_px }}"` / `height="…"` on `<canvas id="vtt-canvas">`, which sized both the CSS display *and* the backing store identically. On a 2× display the browser had to upscale the rasterized canvas content per-paint, smearing every drawn pixel — invisible on the old letter-on-a-color-circle tokens but obvious on the new ~1000 px source photographic portraits being downscaled to ~70 px on canvas. Fix in `app/static/tabletop.js`: right after `canvas.getContext('2d')`, capture the logical map dimensions into `MAP_W` / `MAP_H` constants (the HTML-attribute values), then multiply `canvas.width` / `canvas.height` by `DPR = window.devicePixelRatio || 1`, pin the CSS display size to the original logical map size via `canvas.style.width / height`, and call `ctx.scale(DPR, DPR)` so all subsequent draw calls keep using logical CSS coordinates. Also set `ctx.imageSmoothingQuality = 'high'` — the default `'low'` made the 1000 px → 70 px source-to-canvas downscale unnecessarily mushy. Every former `canvas.width` / `canvas.height` reference in the file (grid line loops, hex tiling extent, `clearRect`, pan clamping) is replaced with `MAP_W` / `MAP_H` because the canvas-property accessors now return the DPR-multiplied backing-store size, not the logical size the rest of the code assumes.
+**Description (cont):** The fix is one-time at module init; no per-frame DPR computation. Save/restore preserves the initial `ctx.scale(DPR, DPR)` transform across all draw functions (which use `save()`/`restore()` pairs but never `setTransform` / `resetTransform`). Hit testing is unaffected because every event handler uses `canvas.getBoundingClientRect()` which returns the CSS display size — and the CSS display size is now pinned to the original logical map size via `canvas.style.width / height`, so click/drag/zoom math sees the same coordinate space as v2.3.44. Zoom-induced blur (CSS `transform: scale(...)` on the canvas element on top of the higher-DPR rasterization) is improved proportionally but not eliminated — at 5× zoom on a 2× display the token still upscales 5× past its rasterized resolution. Eliminating that residual blur would require moving the zoom transform into the draw loop (`ctx.setTransform(scale*DPR, …)`), which is a larger refactor and stays out of scope here. The 2× DPR fix alone makes the demo's seated portraits visibly crisper on every modern display.
+
+### Changed
+- `app/static/tabletop.js` — module init now captures `MAP_W` / `MAP_H` before resizing the canvas backing-store by `devicePixelRatio`, pins CSS display size, calls `ctx.scale(DPR, DPR)`, and sets `imageSmoothingEnabled = true` / `imageSmoothingQuality = 'high'`.
+- `app/static/tabletop.js` `drawSquareGrid` / `drawHexGrid` / `render` / `clampPan` — every former `canvas.width` / `canvas.height` reference now uses `MAP_W` / `MAP_H` so the grid lines / hex tiling / `clearRect` / pan clamping continue to operate in logical CSS coordinates rather than the new DPR-multiplied backing-store coordinates.
+
+### Notes
+- The fix is non-functional on a `DPR === 1` display (legacy 1080p, pre-Retina) — the multiplications collapse to no-op and the canvas behaves exactly like v2.3.44 did. The `Math.max(1, ...)` clamp guards against weird browsers that report `DPR < 1`.
+- `MAP_W` / `MAP_H` are captured once at init and don't recalculate if the active map changes mid-session (a fresh map load reloads the whole page, so this is fine in practice). If a future change adds in-page map swapping without a reload, the canvas resize logic would need to move into a `resizeCanvas(w, h)` helper.
+- The fix also applies retroactively to GIF / video / fallback-circle tokens, monster sheet thumbnails (the v2.3.0 `sheet_dnd5e.html` canvas — separate code path, still uses default DPR=1, fix-eligible but not changed here since the user's report was specifically about the tabletop), and the grid lines themselves (which now anti-alias at backing-store resolution and look noticeably finer at low zoom levels).
+
+---
+
 ## [2.3.44] - 2026-05-16
 
 **Schema version:** 52
