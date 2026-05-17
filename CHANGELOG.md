@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.17] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Full character sheet Skills fieldset now renders **all 18 D&D 5e skills** instead of only the ones the character has an entry for. Pre-v2.4.17 the fieldset iterated `sheet.skills.items()` directly, so a character whose `skills` dict only contained their proficient skills (e.g. demo Brother Tavik with 5 entries) showed only those 5 — non-proficient skills were invisible. User-reported.
+**Description:** `app/templates/sheet_dnd5e.html` Skills fieldset: introduced a canonical `SKILLS_FULL` list of `(skill_name, default_ability)` tuples at the top of the fieldset, then re-pointed all three skill-iterating loops (card view, edit-view table, hidden-input view-only block) at that list. Each iteration looks up the character's per-skill data via `_user_skills.get(skill, {})` and falls back to the canonical default ability when the entry is missing. Proficient / expertise highlighting + roll math continue to work because they read from the same merged dict.
+
+### Fixed
+- `app/templates/sheet_dnd5e.html` Skills fieldset — card view, edit view, and view-only hidden inputs all iterate the 18-skill canonical list with per-skill data overlaid from `sheet.skills`. Characters whose `sheet.skills` dict was sparsely populated (like demo Brother Tavik's 5 entries) now show every standard 5e skill.
+
+### Notes
+- The non-proficient skills render with a transparent dot + grey border (matching the existing "not proficient" visual). Bonus = ability modifier only (no proficiency added).
+- The `(skill, default_ability)` tuple list duplicates the same list already present in `app/templates/_mini_sheet_card.html:181-188` and `app/templates/tabletop.html` `_monsterSkillsHtml`. Could be promoted to a Jinja global / shared partial in a future refactor — not in scope here.
+- This is a strict additive change: characters with explicit non-proficient `sheet.skills` entries (e.g. a custom "Performance: Strength" assignment) still take precedence over the canonical default ability via `info.get('ability', default_ab)`.
+
+---
+
 ## [2.4.16] - 2026-05-17
 
 **Schema version:** 53

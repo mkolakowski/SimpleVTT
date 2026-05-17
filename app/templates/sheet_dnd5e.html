@@ -670,10 +670,28 @@
                 {% endif %}
             </legend>
 
+            {# v2.4.17: canonical 18-skill list with default ability mapping.
+               Pre-v2.4.17 the Skills fieldset iterated ``sheet.skills.items()``
+               directly, so a character whose ``skills`` dict only listed the
+               proficient skills (e.g. demo Brother Tavik with 5 entries)
+               showed only those 5 — the other 13 were invisible. Now every
+               skill is rendered with the user's per-skill data overlaid on
+               top of the canonical defaults via ``_user_skills.get(name)``. #}
+            {% set SKILLS_FULL = [
+                ('Acrobatics','DEX'), ('Animal Handling','WIS'), ('Arcana','INT'),
+                ('Athletics','STR'), ('Deception','CHA'), ('History','INT'),
+                ('Insight','WIS'), ('Intimidation','CHA'), ('Investigation','INT'),
+                ('Medicine','WIS'), ('Nature','INT'), ('Perception','WIS'),
+                ('Performance','CHA'), ('Persuasion','CHA'), ('Religion','INT'),
+                ('Sleight of Hand','DEX'), ('Stealth','DEX'), ('Survival','WIS')
+            ] %}
+            {% set _user_skills = sheet.get('skills') or {} %}
+
             {# ── Card view (2-column grid) ── #}
             <div id="sk-card-view" style="display:grid;gap:4px;margin-top:8px;">
-                {% for skill, info in (sheet.get('skills') or {}).items() %}
-                {% set ab = info.get('ability','') %}
+                {% for skill, default_ab in SKILLS_FULL %}
+                {% set info = _user_skills.get(skill, {}) %}
+                {% set ab = info.get('ability', default_ab) %}
                 {% set score = sheet.get('abilities',{}).get(ab,10) %}
                 {% set ab_mod = (score - 10) // 2 %}
                 {% set is_prof = info.get('proficient', false) %}
@@ -702,10 +720,11 @@
                 <table class="skills">
                     <thead><tr><th>Skill</th><th>Ability</th><th>Prof.</th><th>Expert.</th></tr></thead>
                     <tbody>
-                    {% for skill, info in (sheet.get('skills') or {}).items() %}
+                    {% for skill, default_ab in SKILLS_FULL %}
+                    {% set info = _user_skills.get(skill, {}) %}
                     <tr>
                         <td>{{ skill }}</td>
-                        <td>{{ info.get('ability','') }}</td>
+                        <td>{{ info.get('ability', default_ab) }}</td>
                         <td><input type="checkbox" name="skills.{{ skill }}.proficient"
                                    data-skill="{{ skill }}" data-type="prof"
                                    {% if info.get('proficient') %}checked{% endif %}></td>
@@ -719,7 +738,8 @@
             </div>
             {% else %}
             {# View-only: hidden checkboxes so readField() works for roll calculations #}
-            {% for skill, info in (sheet.get('skills') or {}).items() %}
+            {% for skill, default_ab in SKILLS_FULL %}
+            {% set info = _user_skills.get(skill, {}) %}
             <input type="checkbox" name="skills.{{ skill }}.proficient" style="display:none;"
                    {% if info.get('proficient') %}checked{% endif %} disabled>
             <input type="checkbox" name="skills.{{ skill }}.expertise" style="display:none;"
