@@ -105,6 +105,65 @@ def _casting_time_to_economy(ct: str) -> str:
     return "none"
 
 
+# v2.6.0 (action-economy Phase 3): Python mirror of
+# app/static/dnd5e_feature_economy.js. The /use_feature endpoint reads
+# this dict to derive the slot from a (feature_key, option_key) pair
+# instead of trusting the client. Keep the two tables in sync — slot
+# values diverge → server discards the client's claim and uses the
+# canonical one, so silent UI-only changes won't grant phantom slots.
+# Only the slot field needs mirroring (labels / descs are display-only
+# and live entirely client-side; the roll-log entry posts the
+# server-side display strings via the request body but the slot is
+# always re-derived here).
+_FEATURE_ECONOMY: dict[str, dict] = {
+    "cunning-action": {
+        "slot": "bonus",
+        "options": {"dash": {}, "disengage": {}, "hide": {}},
+    },
+    "second-wind": {"slot": "bonus"},
+    "action-surge": {"slot": "free"},
+    "channel-divinity": {
+        "slot": "action",
+        "options": {
+            "turn-undead": {},
+            "preserve-life": {},
+            "radiance-of-the-dawn": {},
+            "guided-strike": {},
+        },
+    },
+    "lay-on-hands": {"slot": "action"},
+    "divine-smite": {"slot": "free"},
+    "bardic-inspiration": {"slot": "bonus"},
+    "flurry-of-blows": {"slot": "bonus"},
+    "patient-defense": {"slot": "bonus"},
+    "step-of-the-wind": {"slot": "bonus"},
+    "wild-shape": {"slot": "action"},
+    "rage": {"slot": "bonus"},
+    "reckless-attack": {"slot": "free"},
+    "quickened-spell": {"slot": "bonus"},
+}
+
+
+def _feature_economy_slot(feature_key: str, option_key: str | None) -> str | None:
+    """Resolve (feature, option) to a slot using the curated table.
+
+    Returns "action" / "bonus" / "reaction" / "free", or None when the
+    feature isn't in the table. Option slot can override the parent's;
+    if the option doesn't specify, the parent's slot wins. Unknown
+    options return the parent's slot (the picker treats a no-match as
+    "any of the listed options", same as the JS lookup).
+    """
+    feat = _FEATURE_ECONOMY.get((feature_key or "").lower())
+    if not feat:
+        return None
+    parent_slot = feat.get("slot")
+    if option_key:
+        opt = (feat.get("options") or {}).get(option_key.lower())
+        if opt and opt.get("slot"):
+            return opt["slot"]
+    return parent_slot
+
+
 async def _mark_battle_economy(campaign_id: int, character_id: int, slot: str) -> None:
     """Mark a PC's action-economy slot in the hub battle state.
 
@@ -5308,6 +5367,93 @@ async def cast_spell(
         _casting_time_to_economy(spell.get("casting_time", "")),
     )
     return {"ok": True, "id": cast_id, "slot": updated_slot}
+
+
+# ----------- API: use class feature (Phase 3 action-economy) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_feature")
+async def use_feature(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Announce a class-feature use and mark its action-economy slot.
+
+    Powers the "Class abilities" panel on the full character sheet
+    (sheet_dnd5e.html) and any future mini-sheet equivalents. Body:
+    ``{character_id, feature_key, option_key?, label?, desc?}``.
+
+    The slot is **always** re-derived server-side from
+    ``_feature_economy_slot(feature_key, option_key)`` — client claims
+    are ignored to keep an attacker from minting bonus-action chips
+    they shouldn't have. Returns 404 if the feature isn't in the
+    curated table. ``label`` and ``desc`` are display-only and just
+    get echoed into the ``feature_used`` WS broadcast for the roll
+    log; they default to the feature_key/option_key if missing.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    feature_key = str(body.get("feature_key") or "").strip().lower()
+    option_key_raw = body.get("option_key")
+    option_key = str(option_key_raw).strip().lower() if option_key_raw else None
+    if char_id <= 0 or not feature_key:
+        raise HTTPException(400, "character_id and feature_key are required")
+
+    slot = _feature_economy_slot(feature_key, option_key)
+    if slot is None:
+        raise HTTPException(404, f"Unknown feature: {feature_key}")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    # Resolve display info for the broadcast — same pattern as cast_spell.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    feature_label = (body.get("label") or feature_key.replace("-", " ").title())[:160]
+    if option_key:
+        feature_label = f"{feature_label}: {(option_key or '').replace('-', ' ').title()}"
+    feature_desc = str(body.get("desc") or "")[:400]
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": feature_label,
+            "feature_desc": feature_desc,
+            "source": "class-feature",
+            "remaining": 0,
+            "max": 0,
+        },
+    })
+
+    # slot == "free" means the feature doesn't consume an economy slot
+    # (Action Surge / Divine Smite / Reckless Attack); the helper short-
+    # circuits on anything that isn't action/bonus/reaction.
+    await _mark_battle_economy(campaign_id, char.id, slot)
+
+    return {"ok": True, "slot": slot, "feature_label": feature_label}
 
 
 # ----------- Death save state machine (v2.1.0) -----------

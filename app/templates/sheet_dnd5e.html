@@ -923,6 +923,22 @@
             {% endif %}
         </fieldset>
 
+        {# ── Class abilities fieldset (action-economy Phase 3) ────────── #}
+        {# Renders sheet["class_features"] as expandable rows. Each row's   #}
+        {# button posts to /api/campaign/{id}/use_feature which announces   #}
+        {# the use in the roll log AND flips the action-economy chip via   #}
+        {# the curated table in app/static/dnd5e_feature_economy.js. Slot  #}
+        {# (action / bonus / reaction / free) is derived server-side from  #}
+        {# the feature key + option key, so the client can't grant itself  #}
+        {# a phantom slot.                                                  #}
+        {% if (sheet.get('class_features') or []) %}
+        <fieldset id="class-features-fieldset">
+            <legend>Class abilities</legend>
+            <textarea id="class-features-data" name="class_features" style="display:none;" {% if not can_edit %}readonly{% endif %}>{{ (sheet.get('class_features') or []) | tojson }}</textarea>
+            <div id="class-features-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+        </fieldset>
+        {% endif %}
+
         {# ── Item Browser Overlay (shared by Inventory + Attacks) ─────── #}
         <div id="item-browser-overlay"
              style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(6,8,16,.82);overflow:hidden;">
@@ -1567,6 +1583,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
 <script src="/static/dnd5e_subclass_spells.js?v={{ APP_VERSION }}"></script>
 <script src="/static/dnd5e_class_resources.js?v={{ APP_VERSION }}"></script>
 <script src="/static/dnd5e_innate_defenses.js?v={{ APP_VERSION }}"></script>
+<script src="/static/dnd5e_feature_economy.js?v={{ APP_VERSION }}"></script>
 <script src="/static/open5e_coverage.js?v={{ APP_VERSION }}"></script>
 <script>
 /* Homebrew class-resource merge.
@@ -4037,6 +4054,188 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             if (panel) panel.style.display = 'none';
         });
     }
+})();
+
+/* ── Class abilities panel (action-economy Phase 3) ─────────────────────────
+ *
+ * Renders sheet["class_features"] as expandable rows beneath Attacks.
+ * Each row carries a "Use" button per option (Cunning Action: Dash /
+ * Disengage / Hide). The button POSTs to /api/campaign/{id}/use_feature
+ * which announces the use in the roll log AND flips the action-economy
+ * chip via the curated table in app/static/dnd5e_feature_economy.js.
+ *
+ * Feature key → slot lookup happens server-side, so the client just
+ * passes feature_key + option_key; the response echoes the slot it
+ * marked. Description text shown in the expanded row comes from the
+ * feature/option in window._FEATURE_ECONOMY (falling back to the
+ * sheet's freeform desc) so the canonical SRD wording stays in one
+ * place.
+ */
+(function () {
+    const dataEl = document.getElementById('class-features-data');
+    if (!dataEl || dataEl.dataset.cfBound === '1') return;
+    dataEl.dataset.cfBound = '1';
+
+    const listEl = document.getElementById('class-features-list');
+    if (!listEl) return;
+    const MY_CHAR_ID = {{ char.id }};
+
+    const _esc = s => String(s ?? '')
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+    let features = [];
+    try {
+        const raw = (dataEl.value || '').trim();
+        if (raw.startsWith('[')) features = JSON.parse(raw) || [];
+    } catch { features = []; }
+    if (!features.length) return;
+
+    // Slot → chip color / label. Matches the action-economy chip strip
+    // colors in tabletop.html so the visual cue is consistent.
+    const SLOT_COLOR = {
+        action:   '#ffa54a',
+        bonus:    '#5ec3ff',
+        reaction: '#b97aff',
+        free:     '#7fcf7f',
+    };
+    const SLOT_LABEL = {
+        action: 'Act',
+        bonus:  'Bns',
+        reaction: 'Rxn',
+        free:   'Free',
+    };
+
+    function _featSlot(featKey, optKey) {
+        if (typeof window.getFeatureEconomy !== 'function') return null;
+        return window.getFeatureEconomy(featKey, optKey);
+    }
+
+    function rowHtml(f, idx) {
+        const fkey = String(f.key || '').toLowerCase();
+        const entry = _featSlot(fkey);
+        const slot = entry ? entry.slot : 'action';
+        const slotColor = SLOT_COLOR[slot] || '#888';
+        const slotLabel = SLOT_LABEL[slot] || '?';
+        const optionKeys = Array.isArray(f.options) ? f.options : [];
+        const name = f.name || (entry && entry.label) || fkey || 'Feature';
+        const desc = f.desc || (entry && entry.desc) || '';
+        // Option buttons (each its own clickable). When the feature has
+        // no options we render a single Use button against the parent
+        // feature_key.
+        let optionsHtml = '';
+        if (optionKeys.length) {
+            optionsHtml = optionKeys.map(o => {
+                const okey = String(o).toLowerCase();
+                const opt = _featSlot(fkey, okey);
+                const oLabel = (opt && opt.label) || okey.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                const oDesc = (opt && opt.desc) || '';
+                return `<button type="button" class="cf-use" data-feature="${_esc(fkey)}" data-option="${_esc(okey)}"
+                                data-label="${_esc(oLabel)}" data-desc="${_esc(oDesc)}"
+                                title="${_esc(oDesc)}"
+                                style="font-size:12px;padding:4px 10px;min-height:32px;background:var(--accent-bg2);border:1px solid var(--s-accent);color:var(--s-accent);border-radius:4px;cursor:pointer;">
+                                ${_esc(oLabel)}</button>`;
+            }).join('');
+        } else {
+            optionsHtml = `<button type="button" class="cf-use" data-feature="${_esc(fkey)}"
+                                data-label="${_esc(name)}" data-desc="${_esc(desc)}"
+                                style="font-size:12px;padding:4px 10px;min-height:32px;background:var(--accent-bg2);border:1px solid var(--s-accent);color:var(--s-accent);border-radius:4px;cursor:pointer;">
+                                Use</button>`;
+        }
+        return `
+        <div class="cf-row" style="border:1px solid var(--s-border);border-radius:4px;">
+            <div class="cf-header" data-idx="${idx}"
+                 style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;cursor:pointer;touch-action:manipulation;-webkit-user-select:none;user-select:none;"
+                 title="Click to expand">
+                <button type="button" class="cf-expand" data-idx="${idx}"
+                    style="background:none;border:none;color:var(--s-mute);font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
+                <span style="flex:1;font-size:13px;font-weight:600;">${_esc(name)}</span>
+                <span style="font-size:10px;font-weight:700;padding:2px 6px;border-radius:8px;background:${slotColor}22;color:${slotColor};border:1px solid ${slotColor};">${slotLabel}</span>
+            </div>
+            <div class="cf-body" data-idx="${idx}" style="display:none;padding:6px 10px 8px 28px;font-size:12px;color:var(--s-fg);background:var(--s-input);">
+                ${desc ? `<div style="margin-bottom:6px;color:var(--s-mute);">${_esc(desc)}</div>` : ''}
+                <div style="display:flex;flex-wrap:wrap;gap:6px;">${optionsHtml}</div>
+            </div>
+        </div>`;
+    }
+
+    function render() {
+        listEl.innerHTML = features.map(rowHtml).join('');
+    }
+
+    // Header click: toggle expanded body. Uses the same iPad-safe
+    // pointerup+click dual-listener pattern as the v2.4.29 attack /
+    // spell / inventory header handlers (700ms debounce via a shared
+    // _dbnc property keyed by the body element).
+    function _bindHeaderToggle() {
+        listEl.querySelectorAll('.cf-header').forEach(hdr => {
+            const handler = (ev) => {
+                ev.preventDefault?.();
+                const body = listEl.querySelector(`.cf-body[data-idx="${hdr.dataset.idx}"]`);
+                if (!body) return;
+                const now = Date.now();
+                if (body._dbnc && (now - body._dbnc) < 700) return;
+                body._dbnc = now;
+                const expand = hdr.querySelector('.cf-expand');
+                if (body.style.display === 'none') {
+                    body.style.display = '';
+                    if (expand) expand.textContent = '▼';
+                } else {
+                    body.style.display = 'none';
+                    if (expand) expand.textContent = '▶';
+                }
+            };
+            hdr.addEventListener('pointerup', handler);
+            hdr.addEventListener('click', handler);
+        });
+    }
+
+    // Use-button click → POST /use_feature, surface a roll-toast + the
+    // server will broadcast a feature_used WS message for the roll log.
+    function _bindUseButtons() {
+        listEl.querySelectorAll('.cf-use').forEach(btn => {
+            btn.addEventListener('click', async (ev) => {
+                ev.stopPropagation();
+                if (typeof CAMPAIGN_ID === 'undefined') return;
+                const featureKey = btn.dataset.feature;
+                const optionKey = btn.dataset.option || null;
+                btn.disabled = true;
+                try {
+                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/use_feature`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            character_id: MY_CHAR_ID,
+                            feature_key: featureKey,
+                            option_key: optionKey,
+                            label: btn.dataset.label || '',
+                            desc: btn.dataset.desc || '',
+                        }),
+                    });
+                    if (!resp.ok) {
+                        let body; try { body = await resp.json(); } catch { body = null; }
+                        (window.showToast || function(m){ alert(m); })(
+                            'Feature use failed: ' + (body ? JSON.stringify(body) : await resp.text()), 'error');
+                        return;
+                    }
+                    // Surface a lightweight toast so the rolling player sees
+                    // confirmation without needing the roll log open.
+                    let data; try { data = await resp.json(); } catch { data = null; }
+                    if (data && typeof window.showToast === 'function') {
+                        const lbl = data.feature_label || 'Feature used';
+                        const slotTxt = data.slot && data.slot !== 'free' ? ` (${data.slot})` : '';
+                        window.showToast(`✨ ${lbl}${slotTxt}`, 'info');
+                    }
+                } finally {
+                    btn.disabled = false;
+                }
+            });
+        });
+    }
+
+    render();
+    _bindHeaderToggle();
+    _bindUseButtons();
 })();
 
 /* ── Item Browser (shared overlay for inventory + attacks) ────────────────── */

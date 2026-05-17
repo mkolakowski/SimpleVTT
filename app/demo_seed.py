@@ -314,6 +314,21 @@ def _rogue_sheet(name: str) -> dict:
         ],
         "feats": [],
         "resources": [],
+        # v2.6.0 (action-economy Phase 3): clickable class-feature
+        # entries. The Class abilities section of sheet_dnd5e.html
+        # renders each row as an expandable button; clicking an option
+        # POSTs to /api/campaign/{id}/use_feature which announces the
+        # use in the roll log + flips the action-economy chip via the
+        # curated table in app/static/dnd5e_feature_economy.js.
+        # Pip is Rogue 5 so Cunning Action (unlocked at Lv 2) applies.
+        "class_features": [
+            {
+                "key": "cunning-action",
+                "name": "Cunning Action",
+                "desc": "On each of your turns in combat, you can use a bonus action to take the Dash, Disengage, or Hide action.",
+                "options": ["dash", "disengage", "hide"],
+            },
+        ],
     }
 
 
