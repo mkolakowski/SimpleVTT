@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.22] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Move the **Roll Log / Battle / GM Tools tabs** from above the sidebar into the campaign title row, reclaiming ~36 px of vertical real estate on every PC tabletop view. The buttons now sit on the right edge of the title strip via `margin-left: auto`; the drawer panels themselves stay where they are, only the tabs that select between them moved. User-requested.
+**Description:** Three coordinated edits in `app/templates/tabletop.html`. (1) The `<div class="drawer-tab-bar">` block previously lived inside `.drawer-sidebar` (above `.drawer-panels-wrapper`); v2.4.22 relocates it into `.tt-topbar` after the `<h1 class="tt-topbar-title">`. The drawer system's `document.querySelectorAll('.drawer-tab-btn')` selector is unscoped, so moving the buttons anywhere in the DOM keeps the click handlers and the open/active class toggling wired without any JS change. (2) `.drawer-tab-bar` CSS loses its `border-bottom` and `min-width: 480px` — both existed to make it look like a separator at the top of the sidebar, irrelevant in its new in-title-row location. Adds `margin-left: auto` so the buttons cluster on the right of the topbar's flex row. (3) The narrow-viewport `@media` override at line 718 drops the now-stale `min-width: 0; padding: 5px 6px;` rule on `.drawer-tab-bar` (those overrode the old base rule's `min-width: 480px` + `padding: 6px 8px`; both are gone from the base now).
+**Description (cont):** Behaviour preserved: clicking a tab still toggles the matching `.drawer-panel.open` class, scrolls the roll-log to the bottom on first open of `roll-log-drawer`, persists the open tab to `localStorage` per-campaign via `STORAGE_KEY = 'simplevtt_drawer_' + CAMPAIGN_ID`. The sidebar's left border + `width: 480px` + scrolling all unchanged; only the chrome above the panels moved up. Vertical reclaim is exactly the height of the old tab bar (`padding: 6px 8px` × 2 + button height ≈ 36 px). On narrow viewports where the topbar wraps, the tabs flow onto a second line — same visual result as before, just integrated with the topbar's existing wrap behaviour.
+
+### Changed
+- `app/templates/tabletop.html` `.tt-topbar` — the `<div class="drawer-tab-bar">…</div>` block (with its three / four buttons) is now rendered inside the topbar after the title `<h1>` instead of inside the sidebar.
+- `app/templates/tabletop.html` `.drawer-sidebar` — no longer contains the tab bar; goes straight from sidebar wrapper to `.drawer-panels-wrapper`. Sidebar header chrome eliminated entirely.
+- `app/templates/tabletop.html` `.drawer-tab-bar` CSS — removed `border-bottom` and `min-width: 480px`; added `margin-left: auto`. Bar still flex-row with `gap: 4px` and `flex-wrap: wrap`.
+- `app/templates/tabletop.html` mobile-viewport `@media` block — removed the `.drawer-tab-bar { min-width: 0; padding: 5px 6px; }` override since the base rule no longer sets those.
+
+### Notes
+- No JS changes. `openPanel(targetId)` and the document-load tab restoration both key off `.drawer-tab-btn[data-target]` selectors that work regardless of DOM position.
+- The reclaimed vertical space goes to the drawer panel content area — Roll Log gets ~36 px more visible cards before scrolling; Battle drawer's init tracker shows one extra combatant row at typical heights; GM Tools' upload form gets a slightly less cramped first impression.
+- If a campaign with an unusually-long name + GM badge + system badge crowds the topbar, the tab row wraps to line 2 — same flex-wrap path that already existed for the topbar.
+
+---
+
 ## [2.4.21] - 2026-05-17
 
 **Schema version:** 53

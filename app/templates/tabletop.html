@@ -41,10 +41,15 @@
         width: 480px; height: 100%;
         background: var(--bg-2); border-left: 1px solid var(--border);
     }
+    /* v2.4.22: drawer tabs now live inline with the campaign title in the
+       ``.tt-topbar`` (was a dedicated bar above the sidebar panels). No
+       more bottom border or min-width — those existed to make it look
+       like a sidebar separator, irrelevant in its new location.
+       ``margin-left: auto`` rides on the topbar's flex container so the
+       buttons cluster on the right edge of the title row. */
     .drawer-tab-bar {
         display: flex; flex-direction: row; align-items: center; flex-wrap: wrap;
-        gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--border); flex-shrink: 0;
-        min-width: 480px;
+        gap: 4px; margin-left: auto; flex-shrink: 0;
     }
     .drawer-tab-btn {
         padding: 5px 11px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px;
@@ -715,7 +720,10 @@
             width: 100%; flex: 1; min-width: 0;
             border-left-width: 0; border-top: 1px solid var(--border);
         }
-        .drawer-tab-bar { min-width: 0; padding: 5px 6px; }
+        /* v2.4.22: drawer-tab-bar no longer has min-width or padding to
+           override (moved into ``.tt-topbar`` with auto-margin). The
+           per-button padding override stays — gives a slightly larger
+           tap target on phones. */
         .drawer-tab-btn { padding: 6px 10px; }
         .drawer-panels-wrapper { min-width: 0; }
 
@@ -739,6 +747,21 @@
         <span class="badge system tt-topbar-badge">{{ system.label }}</span>
         {% if is_gm %}<span class="muted tt-topbar-gm">(GM)</span>{% endif %}
     </h1>
+    {# v2.4.22: drawer-tab-bar moved here from inside .drawer-sidebar so the
+       campaign title row + drawer tab row collapse into a single horizontal
+       strip — reclaims ~36 px of vertical real estate. The buttons keep
+       their ``data-target`` attributes + ``.drawer-tab-btn`` class so the
+       drawer system's ``document.querySelectorAll('.drawer-tab-btn')``
+       wires them unchanged. ``margin-left:auto`` pushes them to the right
+       of the title; on narrow viewports the topbar's ``flex-wrap`` falls
+       back to wrapping them onto a second line. #}
+    <div class="drawer-tab-bar">
+        <button class="drawer-tab-btn" data-target="roll-log-drawer">Roll Log</button>
+        <button class="drawer-tab-btn player-tab" data-target="players-drawer">Battle</button>
+        {% if is_gm %}
+        <button class="drawer-tab-btn gm-tools-tab" data-target="gm-tools-drawer">⚙ GM Tools</button>
+        {% endif %}
+    </div>
 </div>
 
 
@@ -789,13 +812,10 @@
     </div>
 
     <div class="drawer-sidebar">
-        <div class="drawer-tab-bar">
-            <button class="drawer-tab-btn" data-target="roll-log-drawer">Roll Log</button>
-            <button class="drawer-tab-btn player-tab" data-target="players-drawer">Battle</button>
-            {% if is_gm %}
-            <button class="drawer-tab-btn gm-tools-tab" data-target="gm-tools-drawer">⚙ GM Tools</button>
-            {% endif %}
-        </div>
+        {# v2.4.22: the ``.drawer-tab-bar`` previously lived here (above the
+           panels wrapper); moved up to the ``.tt-topbar`` to reclaim
+           ~36 px of vertical sidebar space. The panels themselves stay
+           in place — only the tabs that select between them moved. #}
         <div class="drawer-panels-wrapper" id="drawer-panels-wrapper">
 
 <!-- ── Roll log drawer ── -->
