@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.30] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Add **section E. Action-economy tracker** to `docs/plans/class-content-status.md`. Per-combatant per-turn tracking of action / bonus action / reaction / movement, with `data-economy="…"` tags on every ability button so attacks / spells / channels / class features auto-advance the right slot. Identified by the user as a foundational prerequisite for Channel Divinity, Bardic Inspiration, Cunning Action, etc. — every per-feature plan above benefits from being able to ask "what action class is this?". Docs-only; no code change. User-requested.
+**Description:** New section appended to the Cross-cutting infrastructure plans in `docs/plans/class-content-status.md` after the existing (A)-(D) sections. Covers: data model (per-combatant `economy: {action, bonus, reaction, movement}` on `battle.combatants[i]`), ability metadata sources (parse spell `casting_time` for spells; per-attack `properties` for two-weapon-fighting; curated `dnd5e_feature_economy.js` for class features; curated `dnd5e_channel_divinity.js` entries for Channel options), UI surface (3-chip strip in the v2.4.21-streamlined init-card status row, right of Tmp), implementation phases (manual toggle → auto-advance → feature table → gating → movement), and dependencies (sits between B and C in the cross-cutting graph; phase 1+2 are independent shippable units). The priority section is reordered so (E) Phase 1+2 sits at #1 — most leverage of any single piece of infrastructure since every Phase-3 work item under (A) becomes simpler once the economy framework exists.
+**Description (cont):** Why this plan was needed: the prior `class-content-status.md` plan only mentioned action economy in passing (a single ⚪ "Bonus-action utility" note on Rogue's Cunning Action). The user identified it as a recurring blocker — implementing Cunning Action / Second Wind / Healing Word / Channel Divinity all need a per-turn action/bonus/reaction tracker, and each one re-inventing the same per-feature state would be wasteful. Writing the plan first lets the whole roadmap below converge on a shared economy framework.
+
+### Added
+- `docs/plans/class-content-status.md` Cross-cutting section E — Action-economy tracker plan with data model, ability metadata sources, UI surface design, 5-phase implementation roadmap, and dependency notes.
+- `docs/plans/class-content-status.md` "Order of priority" reordered to put (E) Phase 1+2 at #1; (E) Phase 3+4 at #6 (after enough per-feature work to populate the curated table); (E) Phase 5 at #12 (low-priority movement tracker).
+
+### Notes
+- The plan is the **starting point**; concrete commits will iterate on the data shape and UI as Phase 1 lands. The 5-phase split lets each commit be small and standalone.
+- Phase 1 ships immediately useful (manual chip toggle for GMs to track economy during play) without needing the full auto-advance infrastructure. Each subsequent phase tightens automation.
+- The plan deliberately doesn't mandate a specific approach for the GM-override interaction (shift+click? right-click? long-press?). That gets decided when Phase 4 begins; existing tabletop interactions can inform the choice.
+
+---
+
 ## [2.4.29] - 2026-05-17
 
 **Schema version:** 53

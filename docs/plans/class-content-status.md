@@ -354,30 +354,200 @@ advantage / disadvantage at roll time.
 
 **No plan yet.** Tied to (B) — same intercept point.
 
+### E. Action-economy tracker
+
+**Affects:** Every ability button across the GM init tracker, mini-sheet
+attacks / spells / monster-actions, and the full character sheet's
+attacks + spells panels. Specifically: Cunning Action (Rogue Lv 2),
+Second Wind / Action Surge (Fighter), Rage (Barbarian), Bardic
+Inspiration (Bard), Healing Word / Misty Step / Counterspell / Shield /
+Hellish Rebuke / Spiritual Weapon (any caster), Opportunity Attack +
+Uncanny Dodge + Shield reactions, and every Channel Divinity / Ki /
+Sorcery-point option that resolves to an action or bonus action.
+
+**Why foundational:** Most per-feature plans above need to know "is
+this clicking an action, bonus action, or reaction?" so they can both
+consume the right per-turn slot and gate alternatives ("you've already
+used your bonus action; Healing Word is unavailable until next turn").
+Implementing the economy tracker first means (A) resource-picker, (B)
+roll-time intercepts, and (C) buff slot can each read the economy
+state instead of re-inventing per-turn tracking ad-hoc per feature.
+This is the **biggest single source of leverage** for the whole class-
+features roadmap — every Phase-3 work item under A becomes simpler
+once the economy framework exists.
+
+**Data model:**
+
+Per combatant, on `battle.combatants[i].economy`:
+
+```js
+economy: {
+    action: false,    // used this turn; cleared on nextTurn()
+    bonus:  false,    // used this turn; cleared on nextTurn()
+    reaction: false,  // used since the combatant's last start-of-turn;
+                      // clears at the START of their next turn (so it
+                      // persists across other combatants' turns within
+                      // the same round)
+    movement: 0,      // feet used this turn (informational; the GM may
+                      // or may not enforce; for now just an integer
+                      // that scales with token-drag distance)
+}
+```
+
+Persists with the rest of battle state via the existing `saveBattle()`
+localStorage path + the WS broadcast in `pushBattle()`. Resets driven
+by the existing `nextTurn()` / `prevTurn()` / `startInitiative()`
+control flow in `tabletop.html`.
+
+**Ability metadata — where the action-cost tag lives:**
+
+Each ability button carries `data-economy="action"|"bonus"|"reaction"|"free"|"none"`.
+Sources:
+
+- **Weapon attacks** (PC `.mini-strike-btn`, monster `.monster-strike-btn`,
+  full-sheet `.atk-strike`) — default `action`. Off-hand
+  Two-Weapon-Fighting attacks tag as `bonus`. Auto-tag at render time
+  from the attack's `properties` field (presence of `"light"` +
+  off-hand context → bonus).
+- **Spells** (`mini-cast-btn`, `.sp-cast`) — parse `spell.casting_time`
+  at render time. Map "1 action" → `action`, "1 bonus action" → `bonus`,
+  "1 reaction" → `reaction`, anything longer (10 min, 1 hour) → `none`
+  (out-of-combat — doesn't consume an in-combat slot). For SRD spells
+  this field is already populated; for homebrew it's whatever the
+  homebrew editor put there.
+- **Channel Divinity options** — curated per the Channel Divinity 3-phase
+  plan in `dnd5e_channel_divinity.js`. Each option has an
+  `economy: "action"|"bonus"` field. Turn Undead is `action`; Preserve
+  Life is `action`; War Domain's Guided Strike is `reaction`; etc.
+- **Class features** — new curated table `dnd5e_feature_economy.js`
+  mapping `(class_slug, feature_key)` → economy tag for non-spell,
+  non-attack abilities (Cunning Action: bonus, Second Wind: bonus,
+  Action Surge: free, Rage entry: bonus, Lay on Hands single use:
+  action, etc.). Same shape as the existing `dnd5e_class_resources.js`
+  recipe table.
+
+**UI surface:**
+
+Three chips inside the v2.4.21-streamlined init-card status row,
+right-aligned after Tmp:
+
+```
+HP 33/33 · AC 18 · Spd 25 · Tmp 0   [Act ●] [Bns ○] [Rxn ○]
+```
+
+- Filled circle ● = used; empty ○ = available
+- Color: green when available, amber when used
+- Click a chip to manually toggle (GM override — clearing a slot mid-turn
+  if a feature returned a use, marking a slot used for off-screen
+  effects)
+- Tooltip on hover/long-press explaining what consumed the slot ("Used
+  for: Healing Word at 14:32")
+
+When a slot is used, ability buttons tagged with the same economy class
+get a `disabled-style` (50% opacity, cursor:not-allowed, but still
+clickable for GM override). The disabled state signals "you've already
+spent your bonus action" without preventing the click — the GM is
+trusted to know when to override (e.g. Action Surge granted a second
+action).
+
+**Implementation phases:**
+
+1. **Phase 1 — State model + manual toggle UI.** Add the `economy`
+   object to combatants in `combatantFromToken` and the manual-add
+   paths. Render the 3-chip strip in `renderBattle`. Hook click-to-toggle
+   on each chip. Reset on `nextTurn` / `prevTurn` (action+bonus clear
+   immediately; reaction clears when the *same* combatant's turn comes
+   around again — track via a `_reactionResetOnNextTurn` flag). Ship as
+   one commit; UI is immediately useful for manual tracking even without
+   the auto-advance.
+2. **Phase 2 — Auto-advance from action / strike / cast buttons.** Each
+   click on `.mini-strike-btn` / `.monster-strike-btn` / `.atk-strike`
+   / `.mini-cast-btn` / `.sp-cast` reads its `data-economy` and marks
+   the corresponding slot on the combatant's `economy` object. Spell
+   `casting_time` parsing happens at template-render time for the full
+   sheet, at `combatantFromToken` time for the mini-sheet monster
+   actions, at the spell-row render in `_mini_sheet_card.html` for PCs.
+3. **Phase 3 — Class-feature economy table.** Author
+   `app/static/dnd5e_feature_economy.js` with the canonical per-feature
+   action tag table. Used by the resource option-picker (Channel
+   Divinity, Bardic Inspiration, Ki spend, etc.) to mark the right slot
+   when the option is fired. The Channel Divinity 3-phase plan can drop
+   its per-feature action-cost tracking and read from this table.
+4. **Phase 4 — Gating + GM override.** Disable buttons whose economy
+   slot is used (50% opacity + cursor:not-allowed). GM can shift+click
+   or right-click to override. Players see a tooltip explaining why.
+   Players who try to click anyway get a confirm: "You've already used
+   your bonus action this turn. Use it anyway?" — yes path manually
+   advances state, no path closes the modal.
+5. **Phase 5 — Movement tracker (optional).** Add a `Mov 30/30 ft`
+   chip; auto-decrement when the GM drags a token (the existing
+   `/api/.../token/.../move` endpoint already broadcasts moves with
+   from/to coordinates — tie into that to compute distance moved and
+   subtract from the budget).
+
+**Dependencies:**
+
+- Sits between (B) roll-time intercepts and (C) buff slot in the
+  cross-cutting graph. (B) wants to know "what kind of action is this
+  roll" — the economy tag answers it. (C) wants to know "what activated
+  this buff" — same.
+- Phase 1+2 are independent and shippable on their own.
+- Phase 3 depends on the Channel Divinity option-picker existing
+  (cross-cutting A's Phase 1).
+
+**What unblocks after each phase:**
+
+- After Phase 1 (manual): GMs can manually track action economy during
+  play. No mechanical gating, but it's immediately useful.
+- After Phase 2 (auto-advance from buttons): Attacks / spells auto-mark
+  their slot. Players see Healing Word's "bonus" tag illuminate when
+  they cast it. Heuristics for Sneak Attack / Two-Weapon Fighting still
+  need tuning.
+- After Phase 3 (feature table): Cunning Action / Second Wind / Action
+  Surge / Bardic Inspiration / etc. all have correct slot tagging
+  without per-feature code changes — just adding an entry to the
+  table.
+- After Phase 4 (gating): The action economy becomes UI-enforced
+  rather than just visible. Mistakes get flagged before they happen.
+- After Phase 5 (movement): The fifth column closes the "what can my
+  character still do this turn" UX gap.
+
 ---
 
 ## Order of priority (rough)
 
-1. **Channel Divinity option-picker** (Phase 1-3 plan above) — Tavik's
-   most visible missing feature in the demo, blocks Cleric / Paladin
-   completeness.
-2. **Lay on Hands target-picker** — pairs with Channel Divinity work;
+1. **(E) Action-economy tracker — Phase 1+2** — manual chip strip +
+   auto-advance from existing strike / cast buttons. Most leverage of
+   any single piece of infrastructure: every subsequent per-feature
+   item below benefits from being able to ask "what action class is
+   this?". Phase 1 ships standalone; Phase 2 follows immediately.
+2. **Channel Divinity option-picker** (Phase 1-3 plan in 2.4.15 commit) —
+   Tavik's most visible missing feature in the demo. Now reads economy
+   state from (E) so Turn Undead's "action" cost is auto-tracked.
+3. **Lay on Hands target-picker** — pairs with Channel Divinity work;
    same UI shape (resource → option overlay → target → effect).
-3. **Wild Shape transformation UI** — already half-wired
+4. **Wild Shape transformation UI** — already half-wired
    (`_doMiniTransform`); finishing the form-picker dropdown closes
    Druid Lv 2 functionality.
-4. **Bardic Inspiration target-picker** — completes Bard core loop.
-5. **Cross-cutting (A) generalized** — refactor 1-4 onto a single
+5. **Bardic Inspiration target-picker** — completes Bard core loop.
+6. **(E) Action-economy — Phase 3+4** — class-feature table + gating
+   with GM override. By this point items 2-5 have populated enough
+   features that the table needs the curated entries; piggybacks on
+   their work.
+7. **Cross-cutting (A) generalized** — refactor 2-5 onto a single
    `resource → option → target` framework.
-6. **Sneak Attack / Divine Smite per-attack uplift toggle** — pairs of
+8. **Sneak Attack / Divine Smite per-attack uplift toggle** — pairs of
    adjacent damage-uplift features.
-7. **(B) Roll-time intercepts** — big architectural work; unblock Lucky
+9. **(B) Roll-time intercepts** — big architectural work; unblock Lucky
    / Indomitable / Reliable Talent / Portent / Champion Improved
    Critical.
-8. **(C) Buff slot** — even bigger; unblock everything concentration
-   /duration-based.
-9. **(D) Passive trait engine** — likely subsumed by (B) once the
-   intercept exists.
+10. **(C) Buff slot** — even bigger; unblock everything concentration
+    / duration-based.
+11. **(D) Passive trait engine** — likely subsumed by (B) once the
+    intercept exists.
+12. **(E) Action-economy — Phase 5** — movement tracker. Lowest-priority
+    polish; useful for table-mat-style play but optional for digital.
 
-Items above the line are user-visible per-feature wins; below the line
-are infrastructure changes that pay for themselves across many features.
+Items 1-5 are user-visible per-feature wins (or in #1's case, an
+immediately-useful UI primitive that the wins build on); 6+ are
+infrastructure changes that pay for themselves across many features.
