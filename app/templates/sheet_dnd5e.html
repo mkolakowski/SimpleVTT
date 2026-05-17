@@ -4601,6 +4601,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
     const acBreakdown = document.getElementById('ac-breakdown-line');
     const baseAcInp  = document.getElementById('base-ac-input');
     const totalWeightEl = document.getElementById('inv-total-weight');
+    // v2.7.0: char id used by the .inv-use click handler when POSTing
+    // to /use_item. Same Jinja value the attacks + spells IIFEs above
+    // also stamp in.
+    const MY_CHAR_ID = {{ char.id }};
 
     const _esc = s => String(s ?? '')
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -4821,6 +4825,18 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         const rmBtn = isReadonly ? '' :
             `<button type="button" class="inv-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:var(--s-danger);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
 
+        // v2.7.0: 🧪 Use button for consumables. POSTs to /use_item which
+        // decrements qty by 1, rolls heal_dice (for use_kind=heal), applies
+        // HP via the death-save state machine, broadcasts a feature_used
+        // entry to the roll log, and (when the campaign's
+        // potions_as_bonus_action setting is on) marks the bonus economy
+        // slot through the Phase 4 over-budget gate.
+        const isUsable = item.consumable && !!item.use_kind && (item.qty || 0) > 0;
+        const useBtn = (isUsable && !isReadonly && typeof CAMPAIGN_ID !== 'undefined')
+            ? `<button type="button" class="inv-use" data-idx="${idx}" title="Use this ${_esc(item.name || 'item')}"
+                       style="font-size:11px;padding:3px 8px;min-height:32px;background:rgba(126,209,123,0.12);border:1px solid rgba(126,209,123,0.45);color:#7ed17b;border-radius:4px;cursor:pointer;flex-shrink:0;font-weight:600;">🧪 Use</button>`
+            : '';
+
         // Modifier badges shown only when equipped
         const modBits = [];
         if (item.type === 'armor' && item.ac_value) {
@@ -4851,6 +4867,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 <span style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
                       title="${_esc(item.name)}">${_esc(item.name) || '(unnamed)'}</span>
                 ${modBadge}
+                ${useBtn}
                 ${qtyCtrl}
                 ${rmBtn}
             </div>
@@ -5009,6 +5026,73 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 _syncEquippedWeaponAttacks();
                 renderInventory();
             }));
+        // v2.7.0: 🧪 Use — consume one of this item. POSTs to /use_item
+        // which is authoritative for the qty + HP changes; the WS
+        // heal_applied / feature_used broadcasts that fire from there
+        // are what update other clients. We re-fetch the sheet's
+        // canonical inventory state via the response on success so
+        // local state stays in sync without an extra roundtrip.
+        container.querySelectorAll('.inv-use').forEach(btn =>
+            btn.addEventListener('click', async () => {
+                if (typeof CAMPAIGN_ID === 'undefined') return;
+                const idx = parseInt(btn.dataset.idx, 10);
+                if (!Number.isFinite(idx)) return;
+                btn.disabled = true;
+                try {
+                    const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/use_item`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            character_id: MY_CHAR_ID,
+                            inventory_index: idx,
+                            override: !!override,
+                        }),
+                    });
+                    let resp = await doFetch(false);
+                    // Phase 4 over-budget gate. With potions_as_bonus_action
+                    // on, the bonus slot guards the click; modal copy carries
+                    // source="potion" so future house-rule-aware wording
+                    // (filed for the next commit) lands here.
+                    if (resp.status === 409 && typeof window.handleOverBudget === 'function') {
+                        const retried = await window.handleOverBudget(
+                            resp, () => doFetch(true),
+                        );
+                        if (!retried) return;
+                        resp = retried;
+                    }
+                    if (!resp.ok) {
+                        let body; try { body = await resp.json(); } catch { body = null; }
+                        const msg = body && body.error === 'out_of_stock'
+                            ? `Out of ${body.label || 'this item'}.`
+                            : ('Item use failed: ' + (body ? JSON.stringify(body) : await resp.text()));
+                        (window.showToast || function(m){ alert(m); })(msg, 'error');
+                        return;
+                    }
+                    const data = await resp.json().catch(() => null);
+                    // Mirror the server's state change locally so a player
+                    // clicking again immediately on the same item doesn't
+                    // race the WS hp_update / inventory re-sync.
+                    if (data) {
+                        if (typeof data.remaining === 'number' && data.remaining > 0) {
+                            if (inventory[idx]) inventory[idx].qty = data.remaining;
+                        } else {
+                            // Zero remaining → row was removed server-side.
+                            inventory.splice(idx, 1);
+                        }
+                        syncInventory();
+                        renderInventory();
+                        if (typeof window.showToast === 'function') {
+                            if (data.rolled > 0) {
+                                window.showToast(`🧪 Drank — recovered ${data.rolled} HP`, 'info');
+                            } else {
+                                window.showToast('🧪 Item used', 'info');
+                            }
+                        }
+                    }
+                } finally {
+                    btn.disabled = false;
+                }
+            }));
         container.querySelectorAll('.inv-qty').forEach(inp =>
             inp.addEventListener('change', () => {
                 inventory[+inp.dataset.idx].qty = Math.max(1, parseInt(inp.value) || 1);
@@ -5028,7 +5112,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             // ``_dbnc`` so iPad Magic Keyboard trackpad double-fire is
             // caught regardless of which event arrives first.
             const _activate = (ev) => {
-                if (ev.target.closest('.inv-equip, .inv-qty, .inv-rm')) return;
+                if (ev.target.closest('.inv-equip, .inv-qty, .inv-rm, .inv-use')) return;
                 const _now = Date.now();
                 if (header._dbnc && _now - header._dbnc < 700) return;
                 header._dbnc = _now;

@@ -5549,6 +5549,199 @@ async def use_feature(
     return {"ok": True, "slot": slot, "feature_label": feature_label, "over_budget": was_used}
 
 
+# ----------- API: use a consumable inventory item (Phase 4 polish) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_item")
+async def use_item(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Use a consumable inventory item (Potion of Healing today, more
+    later). Body: ``{character_id, inventory_index, override?}``.
+
+    The item dict on the character's sheet must carry ``consumable: True``
+    and a ``use_kind`` ("heal" for the only supported kind right now;
+    future kinds slot into the same dispatch). Heal items roll
+    ``heal_dice`` (default "2d4+2", the SRD Potion of Healing roll) and
+    apply HP through ``_apply_hp_change`` so the death-save state
+    machine fires correctly.
+
+    Phase 4 + house-rule integration: when ``campaign.potions_as_bonus_action``
+    is on AND ``use_kind == "heal"``, the use consumes the bonus economy
+    slot. Player attempts return 409 ``over_budget`` with
+    ``source: "potion"`` (the economy_messaging.js modal copy table reads
+    that source for the house-rule-aware wording). GM clicks skip the
+    gate; the ``over_budget`` flag still rides the broadcast for the
+    Layer C audit badge regardless.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    inv_idx = int(body.get("inventory_index", -1))
+    override = bool(body.get("override"))
+    if char_id <= 0 or inv_idx < 0:
+        raise HTTPException(400, "character_id and inventory_index are required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    inventory = list(sheet.get("inventory") or [])
+    if inv_idx >= len(inventory):
+        raise HTTPException(404, "Inventory item not found")
+    item = dict(inventory[inv_idx] or {})
+    if not item.get("consumable"):
+        raise HTTPException(400, "Not a consumable item")
+    use_kind = (item.get("use_kind") or "").strip().lower()
+    qty = int(item.get("qty") or 0)
+    if qty <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_stock", "label": item.get("name", "item"),
+        })
+
+    item_name = (item.get("name") or "item").strip()
+
+    # House-rule slot derivation. Today this is "heal items eat the bonus
+    # slot when potions_as_bonus_action is on." Future kinds (e.g. scroll
+    # of cure wounds = action) plug in here keyed on use_kind.
+    house_rule_active = bool(campaign.potions_as_bonus_action) and use_kind == "heal"
+    slot = "bonus" if house_rule_active else None
+
+    was_used = False
+    if slot:
+        was_used = _is_slot_used(campaign_id, char.id, slot)
+        user_is_gm = _user_is_gm(user, campaign, db)
+        if was_used and not user_is_gm and not override:
+            return JSONResponse(status_code=409, content={
+                "error": "over_budget",
+                "slot": slot,
+                "char_name": char.name,
+                "source": "potion",
+                "label": item_name,
+            })
+
+    # Decrement qty (or remove the row when it hits zero).
+    new_qty = qty - 1
+    if new_qty <= 0:
+        inventory.pop(inv_idx)
+    else:
+        item["qty"] = new_qty
+        inventory[inv_idx] = item
+    sheet["inventory"] = inventory
+
+    # Apply heal payload if the item is a heal kind.
+    rolled = 0
+    breakdown = ""
+    new_hp_state = None
+    heal_dice = item.get("heal_dice", "2d4+2")
+    if use_kind == "heal":
+        try:
+            r = dice_mod.roll(heal_dice)
+            rolled = r.total
+            breakdown = r.breakdown
+        except Exception:
+            rolled = 0
+            breakdown = ""
+        # We just rebuilt sheet, so write it back to char before HP change
+        # (which reads char.sheet inside _apply_hp_change).
+        char.sheet = sheet
+        hp = sheet.get("hp") or {}
+        hp_cur = int(hp.get("current") or 0)
+        hp_max = int(hp.get("max") or 0)
+        new_cur = min(hp_max, hp_cur + rolled) if hp_max > 0 else (hp_cur + rolled)
+        result = _apply_hp_change(char, new_cur)
+        new_hp_state = result["hp"]
+    else:
+        char.sheet = sheet
+
+    db.commit()
+
+    # Roll log card via feature_used. The text is descriptive enough to
+    # stand on its own without a dedicated item-use card type — same
+    # pattern Phase 3's /use_feature uses.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    if use_kind == "heal" and rolled > 0:
+        feature_label = f"🧪 Drank {item_name}"
+        feature_desc = f"Recovered {rolled} HP ({breakdown})"
+    else:
+        feature_label = f"🧪 Used {item_name}"
+        feature_desc = (item.get("desc") or "").strip()[:400]
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": feature_label,
+            "feature_desc": feature_desc,
+            "source": "item-use",
+            "remaining": new_qty if new_qty > 0 else 0,
+            "max": qty,
+            "over_budget": was_used,
+            "over_budget_slot": slot if (was_used and slot) else "",
+        },
+    })
+
+    # Surface the HP change to other clients so token bars + the open
+    # character sheet's HP block re-render. heal_applied is the same
+    # broadcast the existing /apply_healing endpoint uses, so the
+    # ``_onHealApplied`` client handler renders this without changes.
+    if use_kind == "heal" and new_hp_state is not None:
+        await hub.broadcast(campaign_id, {
+            "type": "heal_applied",
+            "data": {
+                "cast_id": "",
+                "char_id": char.id,
+                "char_name": char.name,
+                "healer_name": user.display_name,
+                "dice": heal_dice,
+                "rolled": rolled,
+                "breakdown": breakdown,
+                "new_hp": new_hp_state,
+                "claimed_count": 1,
+                "max_targets": 1,
+            },
+        })
+
+    # Mark the economy slot last so the resulting economy_update
+    # broadcast lands after the roll-log entry — matches the order in
+    # cast_spell / use_attack / use_feature.
+    if slot:
+        await _mark_battle_economy(campaign_id, char.id, slot)
+
+    return {
+        "ok": True,
+        "rolled": rolled,
+        "breakdown": breakdown,
+        "remaining": new_qty if new_qty > 0 else 0,
+        "over_budget": was_used,
+        "slot": slot or "",
+        "new_hp": new_hp_state,
+    }
+
+
 # ----------- Death save state machine (v2.1.0) -----------
 #
 # 5e death saving throws: when a character drops to 0 HP they enter the

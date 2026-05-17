@@ -311,6 +311,15 @@ def _rogue_sheet(name: str) -> dict:
              "desc": "Backpack, 1,000 ball bearings, 10 ft string, bell, 5 candles, crowbar, hammer, 10 pitons, hooded lantern, 2 flasks of oil, 5 days rations, tinderbox, waterskin, 50 ft hempen rope."},
             {"name": "Hooded lantern", "type": "gear", "qty": 1,
              "desc": "Bright light in a 30-ft radius, dim light 30 ft beyond. Burns for 6 hours per flask of oil."},
+            # v2.7.0: Potions of Healing for the /use_item demo path.
+            # RAW (5e): drinking a potion is an action. With the
+            # ``potions_as_bonus_action`` campaign setting (v2.5.0) on, the
+            # /use_item endpoint instead consumes the bonus economy slot
+            # and the Phase 4 over-budget gate fires on the bonus chip.
+            {"name": "Potion of Healing", "type": "consumable", "qty": 2,
+             "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
+             "_slug": "potion-of-healing",
+             "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
         ],
         "feats": [],
         "resources": [],
@@ -521,6 +530,13 @@ def _cleric_sheet(name: str) -> dict:
              "desc": "Hammers, tongs, charcoal, bellows, whetstone. Used to repair weapons + armor with a Strength (Smith's tools) check."},
             {"name": "Healer's kit", "type": "gear", "qty": 1,
              "desc": "10 uses. Spend an action + one use to stabilize a creature at 0 HP without a Wisdom (Medicine) check."},
+            # v2.7.0: Potion of Healing for the /use_item demo path. See
+            # the corresponding entry on ``_rogue_sheet`` for the action /
+            # bonus-action house-rule semantics.
+            {"name": "Potion of Healing", "type": "consumable", "qty": 1,
+             "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
+             "_slug": "potion-of-healing",
+             "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
         ],
         "feats": [],
         # v2.4.15: seed the Channel Divinity resource so Tavik's class-resources
