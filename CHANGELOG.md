@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.7] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Keep the **Player (Rogue) Fill button on the same line** as its label + email in the demo-creds box on the login page. Pre-v2.4.7 the row wrapped because `demo-alice@example.com` (22 chars) was just a few characters longer than `demo-gm@example.com` (19) / `demo-bob@example.com` (20), pushing the trailing button onto a second line and breaking visual alignment with the other two rows. User-reported.
+**Description:** One styling tweak in `app/templates/login.html` — `style="white-space:nowrap;"` added to each of the three `<li>` rows in the demo-creds-box (`GM`, `Player (Rogue)`, `Player (Wizard)`). The Rogue row was the only one wrapping in practice but adding `nowrap` to all three keeps the styling consistent and guards against future label-length tweaks reopening the same bug. No CSS file change — inline style on each row matches the existing inline-style pattern the Fill buttons already use; pulling these into a class would force re-doing the existing styling decisions and isn't worth the churn for a 3-line panel.
+
+### Fixed
+- `app/templates/login.html` — `white-space:nowrap` on the three demo-creds `<li>` rows so the Fill button stays inline with its label + email regardless of email length.
+
+### Notes
+- The fix relies on the auth-card being wide enough to contain the longest row (`Player (Rogue):` + `demo-alice@example.com` + Fill button ≈ 350 px including padding). It is — the existing auth-card max-width comfortably accommodates this. If the auth-card width is ever reduced below ~380 px, the row will overflow horizontally rather than wrap. Acceptable trade-off vs. the visual inconsistency the wrap caused.
+- The `Fill` buttons retain the 32-px dense-panel exception from v2.4.4 — the comment block above the `<li>` rows already documents that exception; the new v2.4.7 line was appended to the same comment so all the styling rationale lives in one place.
+
+---
+
 ## [2.4.6] - 2026-05-17
 
 **Schema version:** 53

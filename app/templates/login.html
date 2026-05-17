@@ -35,10 +35,15 @@
         <ul>
             {# 32-px dense-panel exception per CLAUDE.md — the demo-creds box is
                an information panel where each list item is one row; full-height
-               44-px buttons would visually overpower the row text. #}
-            <li><strong>GM:</strong> <code>demo-gm@example.com</code> <button type="button" class="demo-fill-btn" data-demo-email="demo-gm@example.com" style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button></li>
-            <li><strong>Player (Rogue):</strong> <code>demo-alice@example.com</code> <button type="button" class="demo-fill-btn" data-demo-email="demo-alice@example.com" style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button></li>
-            <li><strong>Player (Wizard):</strong> <code>demo-bob@example.com</code> <button type="button" class="demo-fill-btn" data-demo-email="demo-bob@example.com" style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button></li>
+               44-px buttons would visually overpower the row text.
+               v2.4.7: ``white-space:nowrap`` on each <li> keeps the Fill button
+               on the same line as its label + email. Pre-v2.4.7 the Player
+               (Rogue) row would wrap because demo-alice@example.com is just
+               a few characters longer than demo-gm / demo-bob, pushing the
+               trailing button onto a second line. #}
+            <li style="white-space:nowrap;"><strong>GM:</strong> <code>demo-gm@example.com</code> <button type="button" class="demo-fill-btn" data-demo-email="demo-gm@example.com" style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button></li>
+            <li style="white-space:nowrap;"><strong>Player (Rogue):</strong> <code>demo-alice@example.com</code> <button type="button" class="demo-fill-btn" data-demo-email="demo-alice@example.com" style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button></li>
+            <li style="white-space:nowrap;"><strong>Player (Wizard):</strong> <code>demo-bob@example.com</code> <button type="button" class="demo-fill-btn" data-demo-email="demo-bob@example.com" style="min-height:32px;padding:4px 12px;font-size:13px;margin-left:6px;">Fill</button></li>
         </ul>
         <p class="muted">⚠ The dataset resets every {{ DEMO_RESET_INTERVAL_MINUTES }} minutes — anything you change will be wiped.</p>
     </div>
