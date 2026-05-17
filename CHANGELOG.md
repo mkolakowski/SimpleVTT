@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.5] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Rename the tabletop drawer tab labelled **Player** → **Battle**. The drawer hosts the initiative tracker as its primary content (with a small character-list section below), so "Battle" is the more accurate name; "Player" was a hold-over from when the panel was a simple player-character roster. User-requested.
+**Description:** One-character-string edit in `app/templates/tabletop.html` line 777: `>Player<` → `>Battle<` on the `<button class="drawer-tab-btn player-tab" data-target="players-drawer">` element. Every internal identifier is left as-is: the `.player-tab` CSS class, the `data-target="players-drawer"` attribute, the `id="players-drawer"` on the matching panel, and the inline-JS event handlers all key off these internal names — renaming them would be a cosmetic refactor of ~dozen files for no behavioural gain, so the public-facing label change is decoupled from the internal naming.
+**Description (cont):** No CSS / JS changes needed — the tab button's `.drawer-tab-btn` styling already centres any label text, so a 6-character word fits the same chip as the previous 6-character word with no layout shift. The CHANGELOG, if it had to enforce one-or-the-other consistency between display name and internal id, would also have hit base.html / settings pages / WS broadcasts that reference "player" in a different sense (player tokens, player characters, player-controlled tokens — all separate concepts). The internal-id-stays-as-is choice keeps "player" the term for "a non-GM user / their stuff" and "Battle" the term for "the in-combat tab", which is the right English-language division.
+
+### Changed
+- `app/templates/tabletop.html` line 777 — drawer tab label `Player` → `Battle`. Internal identifiers (`player-tab` CSS class, `players-drawer` target/id) unchanged.
+
+### Notes
+- The drawer panel under this tab (`#players-drawer`) contains: the initiative tracker (`renderBattle()` etc. — primary, large, drives the GM workflow), and a smaller "Player characters" list below. The init tracker is the dominant content, hence "Battle" reads as the right label.
+- If a future refactor wants to also rename the internal identifiers (`#players-drawer` → `#battle-drawer`, `.player-tab` → `.battle-tab`, etc.), it would touch: this template, `app/static/style.css`, the inline event handlers in `tabletop.html`, and any pinned routes / encounter-load logic that searches by id. Not done here — the display rename was the user-requested change, and broader id renames would mix scope.
+
+---
+
 ## [2.4.4] - 2026-05-17
 
 **Schema version:** 53
