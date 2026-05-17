@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.19] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Lazy-load **spell descriptions** when a spell row is expanded on the dnd5e character sheet — fetches the canonical school / casting time / range / duration / components / concentration / ritual / description / higher-level-cast text from `/api/content/spells/<slug>` and injects it into the row's detail panel. Demo Brother Tavik + Thalindra spells gain `_slug` references so the lookup resolves; the same mechanism works for any spell that carries a `_slug` (typically set by the Browse Spells picker). User-reported: "spells are also missing descriptions."
+**Description:** Three coordinated edits. (1) New helper `_loadSpellContent(slug, detailEl)` in `app/templates/sheet_dnd5e.html`, modeled after `_loadItemActions` for the inventory — fetches `/api/content/spells/<slug>?campaign_id=...` (homebrew tier first, then shipped SRD via `local_content.resolve`), reads `record.school` / `casting_time` / `range` / `duration` / `components` / `concentration` / `ritual` / `desc` / `higher_level`, formats them as a header pill row + body paragraph, injects into the row's `.sp-content-slot` div. Silent failure on 404 (item not in any content tier) leaves the slot empty rather than throwing. (2) `spellRowHtml` template: the `.sp-detail` div gains `data-slug` + `data-content-loaded="0"` attributes and a `<div class="sp-content-slot"></div>` placeholder for the lazy-loaded HTML. (3) v2.4.18 header click handler picks up the lazy-load: on first open (`data-content-loaded === '0'` and `data-slug` non-empty) flip the flag and call `_loadSpellContent`. Same guard idiom as the inventory `_loadItemActions` call.
+**Description (cont):** Seed-side: every spell on `_wizard_sheet` (9) and `_cleric_sheet` (13) gains a `_slug` field. Demo Tavik's Cure Wounds row, for example, now lazy-loads the canonical SRD description on first expand. Wizard Thalindra's Fireball, Counterspell, etc. behave identically. No template / route / migration changes outside this triad of helper + template attr + seed `_slug`. The mechanism extends to non-demo campaigns too — any spell the player adds via the Browse Spells picker that ships with a `_slug` (the picker emits it as part of every chip) gets the same lazy-load behavior for free.
+
+### Added
+- `app/templates/sheet_dnd5e.html` `_loadSpellContent(slug, detailEl)` — lazy-loader hits `/api/content/spells/<slug>` and renders the canonical metadata + description into the row's `.sp-content-slot`. Mirrors `_loadItemActions` for the inventory.
+- `app/templates/sheet_dnd5e.html` `spellRowHtml` — `.sp-detail` gains `data-slug` + `data-content-loaded` attributes; the panel includes a `.sp-content-slot` placeholder div for the lazy-loaded HTML.
+- `app/templates/sheet_dnd5e.html` v2.4.18 spell-header click handler — on first open + non-empty slug, flips `data-content-loaded` to `1` and invokes `_loadSpellContent`. Mirrors the inventory header's lazy-load idiom.
+- `app/demo_seed.py` `_wizard_sheet` + `_cleric_sheet` — every spell entry gains a `_slug` field pointing at the matching `app/data/local/dnd5e/spells/<slug>.json` record. 22 spell entries across the two sheets (9 wizard, 13 cleric).
+
+### Notes
+- Lazy-load fires once per row per session. Closing and re-opening a row doesn't refetch (the `data-content-loaded` flag persists).
+- The `.sp-content-slot` placeholder appears *after* the existing `s.desc` div (line ~2300), so if a spell carries both an inline `desc` (legacy / custom) and a `_slug`, the inline desc renders first and the SRD-fetched metadata appears below. No conflict — they coexist.
+- Same lazy-load works for homebrew spells added via the campaign-scoped homebrew tier (`local_content.resolve` checks homebrew first). A campaign with a custom "Eldritch Sprinkle" spell at `data/homebrew/campaign-1/spells/eldritch-sprinkle.json` would have its description load just like an SRD spell.
+- The `_esc(s._slug || '')` call defends against null / undefined slugs — a spell without `_slug` gets `data-slug=""` and the header handler's `d.dataset.slug` check skips the fetch. Backward-compatible with any custom inventory that doesn't carry slugs.
+
+---
+
 ## [2.4.18] - 2026-05-17
 
 **Schema version:** 53

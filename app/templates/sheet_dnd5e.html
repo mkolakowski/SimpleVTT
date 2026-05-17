@@ -2220,6 +2220,46 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         return false;
     }
 
+    /* v2.4.19: lazy-load a spell's description on first row-open. Mirrors
+     * the inventory's ``_loadItemActions`` pattern — fetches
+     * /api/content/spells/<slug> (homebrew tier first, then shipped SRD)
+     * and injects school / casting time / range / duration / components /
+     * concentration / ritual / desc / higher_level into the row's
+     * ``.sp-content-slot`` div. Called exactly once per row per session
+     * (the ``.sp-detail[data-content-loaded]`` flag guards re-entry). */
+    async function _loadSpellContent(slug, detailEl) {
+        if (!slug || !detailEl) return;
+        const slot = detailEl.querySelector('.sp-content-slot');
+        if (!slot) return;
+        const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+        const url = '/api/content/spells/' + encodeURIComponent(slug)
+                  + (cid ? '?campaign_id=' + cid : '');
+        try {
+            const r = await fetch(url, { credentials: 'same-origin' });
+            if (!r.ok) return;
+            const data = await r.json();
+            const rec = (data && data.record) || {};
+            const bits = [];
+            if (rec.school)        bits.push(`<span><strong>School:</strong> ${_esc(rec.school)}</span>`);
+            if (rec.casting_time)  bits.push(`<span><strong>Cast:</strong> ${_esc(rec.casting_time)}</span>`);
+            if (rec.range)         bits.push(`<span><strong>Range:</strong> ${_esc(rec.range)}</span>`);
+            if (rec.duration)      bits.push(`<span><strong>Duration:</strong> ${_esc(rec.duration)}</span>`);
+            if (rec.components)    bits.push(`<span><strong>Components:</strong> ${_esc(rec.components)}</span>`);
+            if (rec.concentration) bits.push('<span style="color:#e8a;">Concentration</span>');
+            if (rec.ritual)        bits.push('<span style="color:#8ae;">Ritual</span>');
+            const header = bits.length
+                ? `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:5px;font-size:11px;color:var(--s-fg);">${bits.join('')}</div>`
+                : '';
+            const desc = rec.desc
+                ? `<div style="line-height:1.5;color:var(--s-mute);white-space:pre-wrap;">${_esc(rec.desc)}</div>`
+                : '';
+            const higher = rec.higher_level
+                ? `<div style="line-height:1.5;color:var(--s-mute);margin-top:5px;"><em><strong>At higher levels:</strong> ${_esc(rec.higher_level)}</em></div>`
+                : '';
+            slot.innerHTML = header + desc + higher;
+        } catch (e) { /* silent — leave the slot empty */ }
+    }
+
     function spellRowHtml(s, idx, rowPos = 0) {
         const sc = _scData();
         // Cantrips are always available — show a fixed icon; no checkbox needed.
@@ -2280,7 +2320,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     >🪄 Cast</button>
                 ${rmBtn}
             </div>
-            <div class="sp-detail" data-idx="${idx}" style="display:none;padding:6px 10px;border-top:1px dashed var(--s-border);font-size:12px;color:var(--s-mute);">
+            <div class="sp-detail" data-idx="${idx}" data-slug="${_esc(s._slug || '')}" data-content-loaded="0" style="display:none;padding:6px 10px;border-top:1px dashed var(--s-border);font-size:12px;color:var(--s-mute);">
                 <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:${s.desc ? '5px' : '0'};">
                     ${s.duration    ? `<span>Duration: ${_esc(s.duration)}</span>` : ''}
                     ${s.components  ? `<span>Components: ${_esc(s.components)}</span>` : ''}
@@ -2288,6 +2328,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     ${s.ritual       ? '<span style="color:#8ae;">Ritual</span>' : ''}
                 </div>
                 ${s.desc ? `<div style="line-height:1.5;color:var(--s-mute);">${_esc(s.desc)}</div>` : ''}
+                <div class="sp-content-slot"></div>
             </div>
         </div>`;
     }
@@ -2481,6 +2522,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         // controls (prepared checkbox, cast button, delete button) so they
         // keep their own semantics. The chevron is intentionally NOT in
         // the skip list because clicking it should also toggle (bubbles up).
+        // v2.4.19: on first open, if the spell carries a ``_slug``, lazy-load
+        // the description from /api/content/spells/<slug> via
+        // ``_loadSpellContent``. ``data-content-loaded`` guards re-fetches.
         container.querySelectorAll('.sp-header').forEach(header =>
             header.addEventListener('click', (ev) => {
                 if (ev.target.closest('.sp-prep, .sp-cast, .sp-rm')) return;
@@ -2491,6 +2535,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 d.style.display = open ? '' : 'none';
                 const btn = header.querySelector('.sp-expand');
                 if (btn) btn.textContent = open ? '▼' : '▶';
+                if (open && d.dataset.contentLoaded === '0' && d.dataset.slug) {
+                    d.dataset.contentLoaded = '1';
+                    _loadSpellContent(d.dataset.slug, d);
+                }
             }));
         container.querySelectorAll('.sp-cast').forEach(btn =>
             btn.addEventListener('click', async () => {

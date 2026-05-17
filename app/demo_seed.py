@@ -348,16 +348,21 @@ def _wizard_sheet(name: str) -> dict:
             {"name": "Fire Bolt (cantrip)", "attack_bonus": "+6", "damage": "2d10",
              "damage_type": "fire", "range": "120 ft", "desc": "Wizard cantrip"},
         ],
+        # v2.4.19: ``_slug`` references the shipped SRD JSON under
+        # ``app/data/local/dnd5e/spells/<slug>.json`` so expanding a spell
+        # row lazy-loads its description through ``/api/content/spells/<slug>``
+        # (helper ``_loadSpellContent`` in sheet_dnd5e.html). Same pattern
+        # as the v2.4.13 inventory ``_slug`` references.
         "spells": [
-            {"name": "Fire Bolt", "level": 0, "prepared": True},
-            {"name": "Mage Hand", "level": 0, "prepared": True},
-            {"name": "Prestidigitation", "level": 0, "prepared": True},
-            {"name": "Magic Missile", "level": 1, "prepared": True},
-            {"name": "Shield", "level": 1, "prepared": True},
-            {"name": "Misty Step", "level": 2, "prepared": True},
-            {"name": "Scorching Ray", "level": 2, "prepared": True},
-            {"name": "Fireball", "level": 3, "prepared": True},
-            {"name": "Counterspell", "level": 3, "prepared": True},
+            {"name": "Fire Bolt", "level": 0, "prepared": True, "_slug": "fire-bolt"},
+            {"name": "Mage Hand", "level": 0, "prepared": True, "_slug": "mage-hand"},
+            {"name": "Prestidigitation", "level": 0, "prepared": True, "_slug": "prestidigitation"},
+            {"name": "Magic Missile", "level": 1, "prepared": True, "_slug": "magic-missile"},
+            {"name": "Shield", "level": 1, "prepared": True, "_slug": "shield"},
+            {"name": "Misty Step", "level": 2, "prepared": True, "_slug": "misty-step"},
+            {"name": "Scorching Ray", "level": 2, "prepared": True, "_slug": "scorching-ray"},
+            {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball"},
+            {"name": "Counterspell", "level": 3, "prepared": True, "_slug": "counterspell"},
         ],
         "spell_slots": {
             "wizard": {
@@ -439,26 +444,28 @@ def _cleric_sheet(name: str) -> dict:
         # "granted" marker. ``_granted_by`` labels the source feature so the
         # tooltip / detail panel shows "Life Domain" rather than a generic
         # "Subclass" badge.
+        # v2.4.19: ``_slug`` references the SRD spell JSON; see the wizard
+        # sheet's spell list for the explanation.
         "spells": [
-            {"name": "Sacred Flame", "level": 0, "prepared": True},
-            {"name": "Guidance",     "level": 0, "prepared": True},
-            {"name": "Light",        "level": 0, "prepared": True},
-            {"name": "Bless",          "level": 1, "prepared": True,
+            {"name": "Sacred Flame", "level": 0, "prepared": True, "_slug": "sacred-flame"},
+            {"name": "Guidance",     "level": 0, "prepared": True, "_slug": "guidance"},
+            {"name": "Light",        "level": 0, "prepared": True, "_slug": "light"},
+            {"name": "Bless",          "level": 1, "prepared": True, "_slug": "bless",
              "_subclass_granted": True, "_granted_by": "Life Domain"},
-            {"name": "Cure Wounds",    "level": 1, "prepared": True,
+            {"name": "Cure Wounds",    "level": 1, "prepared": True, "_slug": "cure-wounds",
              "_subclass_granted": True, "_granted_by": "Life Domain"},
-            {"name": "Healing Word",   "level": 1, "prepared": True},
-            {"name": "Lesser Restoration", "level": 2, "prepared": True,
+            {"name": "Healing Word",   "level": 1, "prepared": True, "_slug": "healing-word"},
+            {"name": "Lesser Restoration", "level": 2, "prepared": True, "_slug": "lesser-restoration",
              "_subclass_granted": True, "_granted_by": "Life Domain"},
-            {"name": "Spiritual Weapon", "level": 2, "prepared": True,
+            {"name": "Spiritual Weapon", "level": 2, "prepared": True, "_slug": "spiritual-weapon",
              "_subclass_granted": True, "_granted_by": "Life Domain"},
-            {"name": "Hold Person",      "level": 2, "prepared": True},
-            {"name": "Beacon of Hope",  "level": 3, "prepared": True,
+            {"name": "Hold Person",      "level": 2, "prepared": True, "_slug": "hold-person"},
+            {"name": "Beacon of Hope",  "level": 3, "prepared": True, "_slug": "beacon-of-hope",
              "_subclass_granted": True, "_granted_by": "Life Domain"},
-            {"name": "Revivify",        "level": 3, "prepared": True,
+            {"name": "Revivify",        "level": 3, "prepared": True, "_slug": "revivify",
              "_subclass_granted": True, "_granted_by": "Life Domain"},
-            {"name": "Spirit Guardians",  "level": 3, "prepared": True},
-            {"name": "Mass Healing Word", "level": 3, "prepared": True},
+            {"name": "Spirit Guardians",  "level": 3, "prepared": True, "_slug": "spirit-guardians"},
+            {"name": "Mass Healing Word", "level": 3, "prepared": True, "_slug": "mass-healing-word"},
         ],
         "spell_slots": {
             "cleric": {
