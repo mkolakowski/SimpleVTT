@@ -942,41 +942,102 @@ def seed_encounter(
     map_: Map,
     tokens: list[Token],
     chars: list[Character],
-) -> Encounter:
+) -> tuple[Encounter, dict]:
     """One pre-staged 'Tavern Brawl' encounter referencing the seeded
-    map + tokens with a deterministic initiative order."""
+    map + tokens with a deterministic initiative order.
+
+    v2.4.3: rewritten to produce the **canonical** encounter payload
+    shape consumed by ``_perform_encounter_load`` (in
+    ``app/routes/tabletop_routes.py``) instead of the original
+    pre-v0.73.0 shape this seed predated:
+
+    - ``payload.tokens[].template_id`` (was ``token_template_id``) —
+      NPC tokens recreated by Load now get their TokenTemplate
+      binding back, so right-clicking a recreated bandit / thug /
+      goblin captain opens the monster sheet rather than a bare
+      label-only token.
+    - ``payload.tokens[].image_url`` populated from each Token row —
+      Load no longer strips the v2.3.44 portrait wiring.
+    - ``payload.battle_state`` (was the dead-code ``initiative``
+      key) — Load now seeds the in-memory battle hub with the full
+      pre-rolled initiative including ``image_url`` on every
+      combatant, so the GM init tracker auto-populates with
+      portraits the instant the encounter is loaded.
+
+    Returns ``(encounter, battle_state)`` — the second value lets
+    ``reset_and_reseed`` push the same state into the realtime hub
+    so fresh demo visitors see the populated init tracker on first
+    WebSocket connect without anyone having to click "Load
+    encounter" or "From Map" by hand. (Players hydrate from the WS
+    ``battle_update`` push automatically; the GM client ignores
+    that broadcast and instead reads its own localStorage, so the
+    GM still needs a "From Map" / "Load encounter" click on first
+    visit — that's a separate UX gap.)
+    """
     # Initiative order — pre-rolled, nine entries (3 PCs + 6 NPCs).
     # v2.3.22: Grixxa (Goblin Captain) at the top to showcase the new
     # monster mini-sheet up front.
     # v2.3.25: Brother Tavik (GM's Cleric) added at init 14, between Pip
     # and Thalindra, with the NPC token_idx values shifted by +1 to
     # account for Tavik's token being inserted at index 2 in seed_tokens.
-    initiative_order = [
-        {"name": "Grixxa (Goblin Captain)", "init": 18, "hp_max": 36, "hp_current": 36, "color": "#7c9c54", "token_idx": 8},
-        {"name": "Vex (Bandit Captain)",    "init": 17, "hp_max": 65, "hp_current": 65, "color": "#c84a4a", "token_idx": 3},
-        {"name": chars[0].name,             "init": 15, "hp_max": 33, "hp_current": 33, "color": "#6cb4ff", "token_idx": 0},
-        {"name": chars[2].name,             "init": 14, "hp_max": 43, "hp_current": 43, "color": "#f5b75c", "token_idx": 2},
-        {"name": chars[1].name,             "init": 13, "hp_max": 27, "hp_current": 27, "color": "#4ade80", "token_idx": 1},
-        {"name": "Thug",                    "init": 11, "hp_max": 32, "hp_current": 32, "color": "#c84a4a", "token_idx": 7},
-        {"name": "Bandit Alpha",            "init":  9, "hp_max": 11, "hp_current": 11, "color": "#c84a4a", "token_idx": 4},
-        {"name": "Bandit Beta",             "init":  7, "hp_max": 11, "hp_current": 11, "color": "#c84a4a", "token_idx": 5},
-        {"name": "Bandit Gamma",            "init":  5, "hp_max": 11, "hp_current": 11, "color": "#c84a4a", "token_idx": 6},
+    # Specs: (token_idx, initiative_roll, hp_max, dex_mod). The remaining
+    # combatant fields (id / name / color / image_url / char_id /
+    # token_template_id) come from the referenced Token row so the
+    # init tracker matches the live token rendering exactly.
+    init_specs = [
+        # token_idx, init, hp_max, dex_mod
+        (8, 18, 36, 3),   # Grixxa (Goblin Captain)
+        (3, 17, 65, 3),   # Vex (Bandit Captain)
+        (0, 15, 33, 3),   # Pip Quickfingers
+        (2, 14, 43, 0),   # Brother Tavik Stonebrow
+        (1, 13, 27, 2),   # Thalindra Moonwhisper
+        (7, 11, 32, 0),   # Thug
+        (4,  9, 11, 1),   # Bandit Alpha
+        (5,  7, 11, 1),   # Bandit Beta
+        (6,  5, 11, 1),   # Bandit Gamma
     ]
+    combatants = []
+    for token_idx, init_roll, hp_max, dex_mod in init_specs:
+        tok = tokens[token_idx]
+        combatants.append({
+            "id": f"tok_{tok.id}_demo",
+            "char_id": tok.character_id,
+            "token_template_id": tok.token_template_id,
+            "name": tok.label,
+            "initiative": init_roll,
+            "hp_current": hp_max,
+            "hp_max": hp_max,
+            "color": tok.color,
+            "dex_mod": dex_mod,
+            "image_url": tok.image_url,
+        })
+    battle_state = {
+        "combatants": combatants,
+        "turn_index": 0,
+        "round": 1,
+        # ``active=False`` keeps the "Start initiative" button live —
+        # the GM clicks it to begin the round-tracker, matching how
+        # they'd start any other fight. The pre-rolled initiative
+        # values mean no roll-and-enter dance.
+        "active": False,
+    }
     payload = {
         "tokens": [
             {
+                "template_id": t.token_template_id,
                 "character_id": t.character_id,
-                "token_template_id": t.token_template_id,
-                "label_override": t.label,
-                "color_override": t.color,
-                "size": t.size,
-                "x": t.x,
-                "y": t.y,
-                "is_hidden": t.is_hidden,
+                "controller_user_id": t.controller_user_id,
+                "label_override": t.label or "",
+                "color_override": t.color or "",
+                "image_url": t.image_url,
+                "size": int(t.size or 1),
+                "x": float(t.x or 0),
+                "y": float(t.y or 0),
+                "is_hidden": bool(t.is_hidden),
             }
             for t in tokens
         ],
-        "initiative": initiative_order,
+        "battle_state": battle_state,
     }
     enc = Encounter(
         campaign_id=camp.id,
@@ -995,8 +1056,9 @@ def seed_encounter(
     db.add(enc)
     db.flush()
     camp.default_encounter_id = enc.id
+    camp.current_encounter_id = enc.id
     db.flush()
-    return enc
+    return enc, battle_state
 
 
 # ── Orchestration ───────────────────────────────────────────────────
@@ -1059,9 +1121,21 @@ def reset_and_reseed(db: Session) -> dict[str, int]:
     templates = seed_token_templates(db, camp)
     tokens = seed_tokens(db, map_, chars, templates, users)
     rolls = seed_roll_history(db, camp, users)
-    encounter = seed_encounter(db, camp, map_, tokens, chars)
+    encounter, battle_state = seed_encounter(db, camp, map_, tokens, chars)
 
     db.commit()
+
+    # v2.4.3: push the seeded battle state into the realtime hub so the
+    # init tracker is pre-populated for player WebSocket connects (the
+    # WS handshake pushes ``battle_update`` to new clients automatically
+    # via ``hub.connect``). GM clients ignore that broadcast and read
+    # their own localStorage, so a fresh-browser GM still needs to
+    # click "From Map" or "Load encounter" once to populate their local
+    # view — but the encounter payload now carries ``image_url`` on
+    # every token AND a canonical ``battle_state`` so either click
+    # gives them the portraits.
+    from .realtime import hub
+    hub.set_battle(camp.id, battle_state)
 
     # Homebrew JSON writes go to disk outside the SQL transaction —
     # do them AFTER commit so any DB failure rolls back the records.

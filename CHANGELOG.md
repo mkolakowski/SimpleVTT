@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.3] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Fix the demo "Tavern Brawl" encounter payload so loading it preserves token portraits, restores NPC monster-sheet bindings, and auto-populates the GM init tracker with pre-rolled initiative + portraits. Three pre-existing shape mismatches in `seed_encounter` — `token_template_id` (canonical key is `template_id`), missing `image_url` on every token, and a dead-code `initiative` field (canonical key is `battle_state` consumed by the runtime battle hub) — were silently no-op-ing the v2.3.44 portrait wiring whenever the encounter was loaded. User-reported: "character and monster art is not displaying in the init tracker."
+**Description:** `app/demo_seed.py` `seed_encounter` rewritten to emit the canonical payload shape consumed by `_perform_encounter_load` in `app/routes/tabletop_routes.py`: `payload.tokens[]` entries now use the same field names as `_snapshot_encounter_payload` (`template_id`, `character_id`, `controller_user_id`, `label_override`, `color_override`, `image_url`, `size`, `x`, `y`, `is_hidden`), and `payload.battle_state` replaces the unread `payload.initiative` with the full battle-hub shape (`{combatants, turn_index, round, active}`). Each combatant carries `id`, `char_id`, `token_template_id`, `name`, `initiative`, `hp_current`, `hp_max`, `color`, `dex_mod`, `image_url` — sourced from the referenced Token row so the init tracker render matches the live tabletop tokens exactly. The function signature changed from `-> Encounter` to `-> tuple[Encounter, dict]`; the second value is the battle_state which `reset_and_reseed` now pushes into the realtime hub via `hub.set_battle(camp.id, battle_state)` so player WebSocket connects automatically receive the pre-rolled init tracker on first handshake (via the existing `hub.connect` `battle_update` push).
+**Description (cont):** Side fix: `seed_encounter` also now sets `camp.current_encounter_id = enc.id` so the v2.3.31 "current encounter highlight" pin lights up on the demo's Tavern Brawl on first visit. The seeded encounter is the only one shipped, and the demo's narrative is built around it being "the" combat, so pinning it from boot matches user expectation. GM-client init tracker still hydrates from `localStorage` rather than the WS `battle_update` broadcast (the GM is authoritative; players hydrate from broadcasts) — so a fresh-browser demo GM still needs one "From Map" click to populate their local view, but every token they pull in now carries `image_url` and the recently-fixed encounter `template_id` keys mean a "Load encounter" click no longer strips portraits or breaks NPC monster sheets. The session_active flag stays True on the seeded campaign (the seed bypasses session-start to avoid the redundant auto-load), so the hub push from `reset_and_reseed` is the only place the demo's battle state gets seeded; subsequent resets push fresh state every hour.
+
+### Fixed
+- `app/demo_seed.py` `seed_encounter` — `payload.tokens[]` now uses canonical key `template_id` (was `token_template_id`) so `_perform_encounter_load` restores each NPC's TokenTemplate binding and the monster sheet stays clickable after Load.
+- `app/demo_seed.py` `seed_encounter` — `payload.tokens[]` entries now carry `image_url` sourced from each Token row, so Load preserves the v2.3.44 portrait wiring instead of silently dropping it.
+- `app/demo_seed.py` `seed_encounter` — dead-code `payload.initiative` field replaced with canonical `payload.battle_state` ({combatants, turn_index, round, active}). Each combatant carries `image_url`, `char_id`, `token_template_id`, `dex_mod`, full HP, and the pre-rolled initiative.
+
+### Added
+- `app/demo_seed.py` `reset_and_reseed` — `hub.set_battle(camp.id, battle_state)` push after the SQL commit so fresh player WS connects auto-receive the populated init tracker via the existing `hub.connect`'s `battle_update` push.
+- `app/demo_seed.py` `seed_encounter` — `camp.current_encounter_id = enc.id` so the v2.3.31 currently-running encounter pin highlights Tavern Brawl from demo boot.
+
+### Notes
+- The `seed_encounter` return-type change (`Encounter` → `tuple[Encounter, dict]`) is internal — the demo seed's only caller is `reset_and_reseed` in the same file, updated alongside.
+- The fix doesn't affect users whose stale `localStorage` carries pre-v2.3.44 combatants with `image_url=null`. They need to either (a) click "Clear combatants" then "From Map" once, or (b) wait for the next demo reset and reload the browser to pull a fresh state. Documenting in the next demo-page hint.
+- All canonical token-payload fields match `_snapshot_encounter_payload` in `app/routes/tabletop_routes.py` line-for-line — verified by `grep -n "tokens_out.append"`. If the canonical shape changes again, this seed should change in lockstep.
+
+---
+
 ## [2.4.2] - 2026-05-17
 
 **Schema version:** 53
