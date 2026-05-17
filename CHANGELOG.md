@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.15] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Pick **Brother Tavik's Life Domain domain spells** and seed his Channel Divinity resource so both features show up correctly from first sheet-open instead of requiring the player to click "Auto-fill" buttons on the spell-grant panel + resources panel. Three new always-prepared domain spells added (Lesser Restoration, Beacon of Hope, Revivify); the three already in his list that happen to be Life Domain spells (Bless, Cure Wounds, Spiritual Weapon) gain the `_subclass_granted`/`_granted_by` markers so they're tagged correctly. Channel Divinity seeded at 1/1 (Cleric Lv 5 = 1 use, refills on short rest). User-requested.
+**Description:** Two edits in `app/demo_seed.py` `_cleric_sheet`. (1) Spell list: the 6 Life Domain spells unlocked by Cleric Lv 5 (Bless / Cure Wounds at L1, Lesser Restoration / Spiritual Weapon at L2, Beacon of Hope / Revivify at L3 — per the curated `_SUBCLASS_SPELLS.life` table in `app/static/dnd5e_subclass_spells.js`) all carry `_subclass_granted: True, _granted_by: "Life Domain"`. The sheet's prepared-spell limit checker at `sheet_dnd5e.html` ~line 1965/1992 short-circuits on `_subclass_granted` so these 6 spells don't count against Tavik's prep cap of 5 (CHA mod won't matter for cleric; the cap is `WIS mod + cleric level = 3 + 5 = 8`, but the principle holds for any prep-restricted class). (2) Resources list: one new entry mirroring the recipe shape in `dnd5e_class_resources.js` line 67-72 — `{key: "channel-divinity", name: "Channel Divinity", current: 1, max: 1, reset: "short", class_slug: "cleric", subclass_slug: "life", source: "cleric Lv 2"}`. The mini-sheet + full-sheet's class-resources panel will render the counter immediately; the short/long rest endpoints refill it via the existing `reset == "short"` path (no new wiring needed).
+**Description (cont):** The Life Domain spell list now reads in canonical order: cantrips, then per-level the domain spells first (paired side-by-side, marked as granted), then the player's manual picks. Healing Word / Hold Person / Spirit Guardians / Mass Healing Word remain player-chosen so the demo still demonstrates the "you have prepared this on top of your domain spells" workflow — the GM could in theory delete those four to clear the prep cap and re-pick, and the domain spells would persist. The Channel Divinity resource counter is functional from boot (decrement on use, refill on short rest); the actual *Channel Divinity option-picker UI* (Turn Undead vs Preserve Life) is the subject of a follow-up plan, not yet implemented.
+
+### Added
+- `app/demo_seed.py` `_cleric_sheet.spells` — 2 new Lv 2 / Lv 3 always-prepared domain spells (Lesser Restoration, Beacon of Hope) + Revivify, all flagged `_subclass_granted: True, _granted_by: "Life Domain"`. 3 existing spells (Bless, Cure Wounds, Spiritual Weapon) gain the same flags.
+- `app/demo_seed.py` `_cleric_sheet.resources` — Channel Divinity entry, `current: 1, max: 1, reset: "short"`. Mirrors the recipe in `dnd5e_class_resources.js`.
+
+### Notes
+- The `_subclass_granted` flag is the same one the live "Domain Spells" picker writes when the player clicks "+ Add" on a grant row — no schema invention here, just seed parity with the user-facing flow.
+- The Channel Divinity seed entry uses the same `key: "channel-divinity"` string the auto-fill recipe uses, so clicking "Auto-fill Resources" on the sheet is now an idempotent no-op rather than producing a duplicate row.
+- Tavik's `subclass_slug: "life"` is the canonical slug used by the Life Domain entry in `_SUBCLASS_SPELLS`. The domain-spell picker UI keys off this for resolution — pre-populating it on the resource entry means a future refactor that surfaces "which domain granted this resource" has the foreign-key already in place.
+
+---
+
 ## [2.4.14] - 2026-05-17
 
 **Schema version:** 53

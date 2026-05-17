@@ -430,15 +430,33 @@ def _cleric_sheet(name: str) -> dict:
              "damage": "2d8", "damage_type": "radiant", "range": "60 ft",
              "desc": "Cleric cantrip — target makes a DEX save or takes radiant damage."},
         ],
+        # v2.4.15: Life Domain grants 6 domain spells unlocked by Cleric Lv 5
+        # — Bless / Cure Wounds (L1), Lesser Restoration / Spiritual Weapon
+        # (L2), Beacon of Hope / Revivify (L3). All carry
+        # ``_subclass_granted: True`` so the sheet exempts them from the
+        # prepared-spell cap (per ``_subclass_granted ? skip`` checks in
+        # ``sheet_dnd5e.html`` ~line 1965/1992) and renders them with the
+        # "granted" marker. ``_granted_by`` labels the source feature so the
+        # tooltip / detail panel shows "Life Domain" rather than a generic
+        # "Subclass" badge.
         "spells": [
             {"name": "Sacred Flame", "level": 0, "prepared": True},
             {"name": "Guidance",     "level": 0, "prepared": True},
             {"name": "Light",        "level": 0, "prepared": True},
-            {"name": "Bless",          "level": 1, "prepared": True},
-            {"name": "Cure Wounds",    "level": 1, "prepared": True},
+            {"name": "Bless",          "level": 1, "prepared": True,
+             "_subclass_granted": True, "_granted_by": "Life Domain"},
+            {"name": "Cure Wounds",    "level": 1, "prepared": True,
+             "_subclass_granted": True, "_granted_by": "Life Domain"},
             {"name": "Healing Word",   "level": 1, "prepared": True},
-            {"name": "Spiritual Weapon", "level": 2, "prepared": True},
+            {"name": "Lesser Restoration", "level": 2, "prepared": True,
+             "_subclass_granted": True, "_granted_by": "Life Domain"},
+            {"name": "Spiritual Weapon", "level": 2, "prepared": True,
+             "_subclass_granted": True, "_granted_by": "Life Domain"},
             {"name": "Hold Person",      "level": 2, "prepared": True},
+            {"name": "Beacon of Hope",  "level": 3, "prepared": True,
+             "_subclass_granted": True, "_granted_by": "Life Domain"},
+            {"name": "Revivify",        "level": 3, "prepared": True,
+             "_subclass_granted": True, "_granted_by": "Life Domain"},
             {"name": "Spirit Guardians",  "level": 3, "prepared": True},
             {"name": "Mass Healing Word", "level": 3, "prepared": True},
         ],
@@ -477,7 +495,26 @@ def _cleric_sheet(name: str) -> dict:
              "desc": "10 uses. Spend an action + one use to stabilize a creature at 0 HP without a Wisdom (Medicine) check."},
         ],
         "feats": [],
-        "resources": [],
+        # v2.4.15: seed the Channel Divinity resource so Tavik's class-resources
+        # panel shows the counter from first sheet open instead of requiring
+        # the player to click "Auto-fill Resources". Shape mirrors the recipe
+        # in ``app/static/dnd5e_class_resources.js`` line 67-72: cleric Lv 2-5
+        # gets 1 use, Lv 6-17 gets 2, Lv 18+ gets 3, refilling on short rest.
+        # Tavik is Lv 5 → 1/1.
+        "resources": [
+            {
+                "key": "channel-divinity",
+                "name": "Channel Divinity",
+                "current": 1,
+                "max": 1,
+                "reset": "short",
+                "source": "cleric Lv 2",
+                "class_slug": "cleric",
+                "subclass_slug": "life",
+                "desc": "Use a domain-granted effect (Turn Undead, Preserve Life).",
+                "manual": False,
+            },
+        ],
     }
 
 
