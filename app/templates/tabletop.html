@@ -537,7 +537,8 @@
     .init-card-sheet .mini-body,
     .init-card-sheet .mini-footer { display: block; }
     .init-card-edit { display:flex; align-items:center; gap:5px; padding:6px 8px; border-bottom:1px solid var(--border); }
-    .init-swatch { width:24px; height:24px; border-radius:50%; flex-shrink:0; border:1px solid var(--border); }
+    /* v2.4.9: bumped 24px → 36px (50% larger) so PC / NPC portraits read clearly in the init tracker. */
+    .init-swatch { width:36px; height:36px; border-radius:50%; flex-shrink:0; border:1px solid var(--border); }
     .init-name { flex:1; font-size:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
     .init-init { width:38px; font-size:12px; font-weight:700; text-align:center; background: var(--bg); border:1px solid var(--border); border-radius:3px; color: var(--fg); padding:2px; flex-shrink:0; }
     .init-hp-cur { width:36px; font-size:12px; text-align:center; background: var(--bg); border:1px solid var(--border); border-radius:3px; padding:2px; flex-shrink:0; }
@@ -3697,7 +3698,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 : (c.token_template_id ? 'monster-' + c.token_template_id : '');
             const hasCharDetail = !!(slotId && document.getElementById('char-detail-' + slotId));
             const tokenImg = c.image_url
-                ? `<img src="${c.image_url}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;border:1px solid rgba(167,139,250,.4);flex-shrink:0;" alt="">`
+                ? `<img src="${c.image_url}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid rgba(167,139,250,.4);flex-shrink:0;" alt="">`
                 : `<div class="init-swatch" style="background:${c.color || '#888'};flex-shrink:0;margin-top:2px;"></div>`;
 
             if (IS_GM || hasCharDetail) {

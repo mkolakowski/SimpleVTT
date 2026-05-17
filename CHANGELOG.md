@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.9] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Increase the init-tracker portrait / swatch size by 50% — `24×24` → `36×36`. The v2.3.44 token portraits are recognisable but small at 24 px; 36 px makes faces / silhouettes readable at a glance while still fitting inside the row's vertical rhythm (the surrounding text is ~26 px tall with line-height). User-requested.
+**Description:** Two coordinated edits in `app/templates/tabletop.html`. (1) `.init-swatch` CSS rule on line 540 — `width:24px; height:24px;` → `width:36px; height:36px;`. (2) The inline `<img>` style in `renderBattle` (line 3700) — same `24px` → `36px` swap on both `width` and `height`. Both must move together so the row layout stays consistent whether a combatant resolves to a portrait or falls back to a color swatch. The 36-px target leaves enough vertical room inside the row's existing padding without forcing a row-height bump.
+**Description (cont):** No other styling changes — `border-radius:50%`, `object-fit:cover`, `border:1px solid rgba(167,139,250,.4)`, and `flex-shrink:0` all stay. The 50%-larger image draws from the same source jpgs (no upscaling at the source level), so on a 2× display the browser renders 36 CSS-px = 72 device-px against the ~1000-px source, well inside the bilinear-resampling sweet spot — should look noticeably sharper than the 24-px sample. The init-tracker row's other vertical elements (name, init, HP inputs) sit at 12-14 px font-size, so the 36-px portrait reads as the dominant identifier in each row, which matches the user's "I want to see the art" framing.
+
+### Changed
+- `app/templates/tabletop.html` line 540 — `.init-swatch` size `24px × 24px` → `36px × 36px`. Inline annotation references this version.
+- `app/templates/tabletop.html` line 3700 — `<img>` portrait inline style `width:24px;height:24px` → `width:36px;height:36px` so the two render paths stay visually equivalent.
+
+### Notes
+- The change is purely cosmetic — no impact on data layout, init-tracker state shape, or the v2.4.8 self-heal logic.
+- If a future change wants to make this user-configurable (e.g. per-tracker zoom slider), the relevant inputs are these two `36px` constants plus the `.init-swatch` rule. Leaving them inline (rather than promoting to a CSS variable) was deliberate — there's no other consumer.
+
+---
+
 ## [2.4.8] - 2026-05-17
 
 **Schema version:** 53
