@@ -2528,6 +2528,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         container.querySelectorAll('.sp-header').forEach(header =>
             header.addEventListener('click', (ev) => {
                 if (ev.target.closest('.sp-prep, .sp-cast, .sp-rm')) return;
+                // v2.4.26: iPad click-debounce.
+                const _now = Date.now();
+                if (header._dbnc && _now - header._dbnc < 350) return;
+                header._dbnc = _now;
                 const idx = header.dataset.idx;
                 const d = container.querySelector(`.sp-detail[data-idx="${idx}"]`);
                 if (!d) return;
@@ -3876,6 +3880,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         container.querySelectorAll('.atk-header').forEach(header =>
             header.addEventListener('click', (ev) => {
                 if (ev.target.closest('.atk-strike, .atk-rm')) return;
+                // v2.4.26: iPad click-debounce.
+                const _now = Date.now();
+                if (header._dbnc && _now - header._dbnc < 350) return;
+                header._dbnc = _now;
                 const idx = header.dataset.idx;
                 const d = container.querySelector(`.atk-detail[data-idx="${idx}"]`);
                 if (!d) return;
@@ -4760,6 +4768,13 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         container.querySelectorAll('.inv-header').forEach(header =>
             header.addEventListener('click', (ev) => {
                 if (ev.target.closest('.inv-equip, .inv-qty, .inv-rm')) return;
+                // v2.4.26: iPad click-debounce — see corresponding comment
+                // in tabletop.html ``mini-header`` handler. 350 ms guard
+                // catches iOS double-fire that survives the v2.4.24/v2.4.25
+                // touch-action + user-select CSS fixes.
+                const _now = Date.now();
+                if (header._dbnc && _now - header._dbnc < 350) return;
+                header._dbnc = _now;
                 const idx = header.dataset.idx;
                 const d = container.querySelector(`.inv-detail[data-idx="${idx}"]`);
                 if (!d) return;

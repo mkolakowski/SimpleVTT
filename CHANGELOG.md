@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.26] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Belt-and-suspenders third pass on the iPad expandable-header bug. The v2.4.24 `touch-action: manipulation` + v2.4.25 `user-select: none` CSS fixes weren't enough — the user reported portrait taps could open but couldn't collapse, and header-text taps still double-fired. v2.4.26 adds a **JS click-debounce** (350 ms guard window) inside each expandable header's click handler so any duplicate click events iOS dispatches for a single tap collapse into one toggle, plus `pointer-events: none` on the init-tracker portrait IMG so taps on the portrait area pass straight through to the parent `.mini-header` div (eliminating IMG-specific iOS event paths entirely). User-reported third report.
+**Description:** Five edits across two templates. (1) `tabletop.html` init-tracker `.mini-header` click handler (~line 4117) — added a 350-ms timestamp debounce via `headerEl._dbnc`; identical pattern to the rest. (2) `tabletop.html` `renderBattle` portrait IMG markup — appended `draggable="false"`, `pointer-events:none`, `-webkit-touch-callout:none`, `-webkit-user-drag:none` to the inline style. Tapping the portrait area now hits the `.mini-header` div underneath instead of routing through the IMG element, sidestepping the iOS image-handling pipeline (long-press save, drag init) that broke the second tap. (3) `tabletop.html` `.mini-row-expandable` delegated click handler — added the same 350-ms debounce via `expandRow._dbnc`. (4) `sheet_dnd5e.html` `.inv-header` click handler — same debounce. (5) `sheet_dnd5e.html` `.sp-header` + `.atk-header` click handlers — same debounce.
+**Description (cont):** Why JS debounce after the CSS fixes: the v2.4.24/v2.4.25 CSS rules eliminate the *common* paths through iOS's event pipeline that cause double-fire (double-tap-to-zoom wait + text-selection state machine), but iPad Safari still has edge cases where back-to-back `click` events arrive for a single tap — particularly when the tap hits an `<img>` element with default `<img>` event handling (long-press menu detection, drag init), or when the tap-and-release happens near the device's tap-vs-double-tap threshold. The JS debounce is the catch-all: regardless of how many `click` events iOS dispatches, only the first one within 350 ms toggles the state.
+**Description (cont 2):** Why `pointer-events: none` on the portrait IMG specifically: the user reported portrait taps open the card but a second portrait tap fails to collapse it — meaning *zero* click events fire on the second tap (not two). That symptom matches iOS reserving the second tap for an image-handling action (Save / Copy / context menu) rather than firing a click. Setting `pointer-events: none` makes the IMG a pure visual layer with no event target; taps on the portrait area find the `.mini-header` div underneath via hit testing, which has its own click handler that fires normally. `draggable="false"` and `-webkit-user-drag: none` prevent the iPad from initiating a drag-to-share gesture; `-webkit-touch-callout: none` disables the long-press context menu entirely. Together they make the portrait visually present but interactively inert, with all click handling delegated to the parent.
+
+### Fixed
+- `app/templates/tabletop.html` `.mini-header` click handler (init-tracker card-expand) — 350-ms timestamp debounce via per-element `_dbnc` property. Second iPad tap to collapse now fires reliably.
+- `app/templates/tabletop.html` `renderBattle` portrait IMG markup — `pointer-events:none` + `draggable="false"` + `-webkit-touch-callout:none` + `-webkit-user-drag:none`. Taps on the portrait now hit the parent header instead of routing through iOS image-handling.
+- `app/templates/tabletop.html` `.mini-row-expandable` delegated click handler — same 350-ms debounce.
+- `app/templates/sheet_dnd5e.html` `.inv-header` / `.sp-header` / `.atk-header` click handlers — same 350-ms debounce.
+
+### Notes
+- The debounce window is 350 ms — long enough to suppress the double-fire iOS quirks (typically 50-300 ms apart) without being noticeable for legitimate rapid clicks (~500 ms+ between intentional clicks).
+- `_dbnc` is a per-element property on the click target. Two different rows debounce independently — opening row A doesn't suppress a click on row B.
+- For the init-tracker card the debounce sits *after* the skip-list check, so clicks on `<a>` / `<button>` / `<input>` children (sheet link, dice button, etc.) don't update the timestamp and don't get suppressed.
+- If the bug persists after this commit, the next escalation is replacing `click` listeners with `pointerup` handlers + `event.preventDefault()` on the matching `touchstart` — which gives full control over iOS's event dispatch. Hopefully unnecessary.
+
+---
+
 ## [2.4.25] - 2026-05-17
 
 **Schema version:** 53

@@ -3029,6 +3029,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // their own semantics.
             const expandRow = ev.target.closest('.mini-row-expandable');
             if (expandRow && !ev.target.closest('.mini-strike-btn, .mini-cast-btn, .monster-strike-btn, .monster-charge-reset')) {
+                // v2.4.26: same 350-ms debounce as the init-tracker
+                // mini-header to guard against iPad double-fire.
+                const _now = Date.now();
+                if (expandRow._dbnc && _now - expandRow._dbnc < 350) return;
+                expandRow._dbnc = _now;
                 expandRow.classList.toggle('open');
                 // Lazy-load spell description on first open if the row
                 // carries a ``_slug``. The detail sibling holds the
@@ -4005,8 +4010,17 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 ? String(c.char_id)
                 : (c.token_template_id ? 'monster-' + c.token_template_id : '');
             const hasCharDetail = !!(slotId && document.getElementById('char-detail-' + slotId));
+            // v2.4.26: ``pointer-events: none`` + ``draggable="false"``
+            // on the portrait IMG so clicks pass straight through to the
+            // ``.mini-header`` div underneath. Tapping an ``<img>`` on iPad
+            // sometimes ran through iOS image-handling event paths
+            // (long-press save / drag-init dispatch) that broke the
+            // header's click-to-expand logic for the *second* tap (open
+            // worked, close didn't). With pointer-events disabled the
+            // IMG is a pure visual layer and every tap on the portrait
+            // area is processed by the parent's click handler instead.
             const tokenImg = c.image_url
-                ? `<img src="${c.image_url}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid rgba(167,139,250,.4);flex-shrink:0;" alt="">`
+                ? `<img src="${c.image_url}" draggable="false" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid rgba(167,139,250,.4);flex-shrink:0;pointer-events:none;-webkit-touch-callout:none;-webkit-user-drag:none;" alt="">`
                 : `<div class="init-swatch" style="background:${c.color || '#888'};flex-shrink:0;margin-top:2px;"></div>`;
 
             if (IS_GM || hasCharDetail) {
@@ -4133,6 +4147,16 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // anchor link the 2.3.15 drawer interceptor handles)
                 // doesn't ALSO trigger the row expand/collapse.
                 if (ev.target.closest('input, button, a')) return;
+                // v2.4.26: iPad click-debounce. iOS Safari can fire two
+                // click events in rapid succession on the same tap when
+                // the touch hits an ``<img>`` or text-bearing element —
+                // even with ``touch-action: manipulation`` + ``user-select:
+                // none`` from v2.4.24/v2.4.25. A simple timestamp-based
+                // debounce guarantees only one toggle per tap regardless
+                // of how iOS dispatches the underlying events.
+                const now = Date.now();
+                if (headerEl._dbnc && now - headerEl._dbnc < 350) return;
+                headerEl._dbnc = now;
                 const isOpen = sheetEl.classList.toggle('open');
                 headerEl.querySelector('.mini-header-arrow')?.classList.toggle('open', isOpen);
                 if (!charId) return;
