@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.16] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Add `docs/plans/class-content-status.md` — an inventory of every D&D 5e SRD class feature, subclass feature, feat, and race trait shipped under `app/data/local/dnd5e/`, annotated with implementation status (✅ implemented / 🟢 half-implemented / 🟡 data-only / 🟠 planned / ⚪ no plan). Lists 12 classes, 13 subclasses + ~30 additional curated-spell-only subclasses, 2 feats (1 SRD + 1 demo homebrew), and 9 races, plus four cross-cutting infrastructure plans (resource option-picker, roll-time intercepts, buff slot, passive trait engine) that block deeper per-feature work. Docs-only commit, no code change. User-requested.
+**Description:** New file: `docs/plans/class-content-status.md`. Structured as five sections — Classes (one table per class, 12 in total), Subclasses (single cross-class table covering the 13 features-shipped subclasses plus every subclass that has only a curated-spell-grants entry), Feats, Races, and Cross-cutting infrastructure. Each row in a table carries a status badge per the legend at the top. Implementation status was determined by cross-referencing each feature against `app/static/dnd5e_class_resources.js` (resource counters), `app/static/dnd5e_subclass_spells.js` (spell-grant tables), and the existing rest / spell / ASI / skill plumbing — anything that has a working counter is 🟢, anything that has a sheet-rendered description but no mechanics is 🟡, anything not yet considered is ⚪.
+**Description (cont):** Closing section "Order of priority" sketches a rough sequencing where Channel Divinity / Lay on Hands / Wild Shape / Bardic Inspiration are the user-visible wins, and the cross-cutting (A) resource option-picker generalization comes once enough per-feature work has been done to identify the right abstraction. The (B/C/D) infrastructure items (roll-time intercepts, buff slot, passive traits) are flagged as larger architectural changes with no plan yet — the doc is the starting point for those plans, not the plans themselves, per the user's instruction to "only start with a list of all that are included in this project and if we have a plan for them, have implemented them or no current plan."
+
+### Added
+- `docs/plans/class-content-status.md` — inventory + implementation status for every SRD 5.1 class feature, subclass feature, feat, and race trait shipped with SimpleVTT. ~450 lines, no other file changes.
+
+### Notes
+- The doc is the **starting list** as the user requested. Detailed per-feature plans should be added inline as work begins (the Channel Divinity 3-phase plan in 2.4.15's commit message is the prototype shape).
+- Status determinations are best-effort based on a half-hour audit. Some 🟡 items may already have light wiring I didn't notice; flag corrections via PR or follow-up commits to this doc.
+- The Subclasses table conflates "features JSON shipped" with "curated spell-grants table entry" — they're independent data sources (features JSON is the prose / description; curated spell-grants is the +Add picker data). A subclass can be in one, both, or neither — the table column splits these so the gaps are visible.
+
+---
+
 ## [2.4.15] - 2026-05-17
 
 **Schema version:** 53
