@@ -164,6 +164,25 @@ def _feature_economy_slot(feature_key: str, option_key: str | None) -> str | Non
     return parent_slot
 
 
+def _is_slot_used(campaign_id: int, character_id: int, slot: str) -> bool:
+    """Look up the current battle state and return True if ``character_id``'s
+    ``slot`` chip is already burnt. Used by Phase 4 over-budget gating to
+    decide whether a player click needs a Layer B confirm modal. False on
+    "free" / "movement" / "none" / unknown slots, or when no battle is
+    active or the character isn't in init.
+    """
+    if slot not in ("action", "bonus", "reaction"):
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == character_id:
+            economy = c.get("economy") or {}
+            return bool(economy.get(slot))
+    return False
+
+
 async def _mark_battle_economy(campaign_id: int, character_id: int, slot: str) -> None:
     """Mark a PC's action-economy slot in the hub battle state.
 
@@ -5290,6 +5309,27 @@ async def cast_spell(
             "used": slot["used"],
         }
 
+    # v2.6.1: Phase 4 over-budget gate. Compute the economy slot up-front
+    # so we can decide whether this cast needs a Layer B confirm modal
+    # before any state mutation. Players hitting an already-used slot get
+    # 409 ``over_budget`` and the client opens the modal; on Confirm the
+    # client retries with ``override: true`` and we proceed. GM clicks
+    # skip the gate entirely (rules-authority bypass per the plan) but
+    # still flow through the same ``over_budget`` tag in the broadcast so
+    # the Layer C audit badge fires.
+    slot_for_economy = _casting_time_to_economy(spell.get("casting_time", ""))
+    was_used = _is_slot_used(campaign_id, char.id, slot_for_economy)
+    user_is_gm = _user_is_gm(user, campaign, db)
+    override = bool(body.get("override"))
+    if was_used and not user_is_gm and not override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": slot_for_economy,
+            "char_name": char.name,
+            "source": "spell",
+            "label": spell.get("name", ""),
+        })
+
     # Resolve caster display info (same shape as roll broadcasts)
     membership = (
         db.query(CampaignMembership)
@@ -5316,6 +5356,8 @@ async def cast_spell(
         "spell_name": spell.get("name", ""),
         "spell_level": spell_level,
         "slot_level": slot_level,
+        "over_budget": was_used,
+        "over_budget_slot": slot_for_economy if was_used else "",
         "spell_school": spell.get("school", ""),
         "spell_casting_time": spell.get("casting_time", ""),
         "spell_range": spell.get("range", ""),
@@ -5359,14 +5401,12 @@ async def cast_spell(
                 "used": updated_slot["used"],
             },
         })
-    # v2.5.5: full-sheet → init chip sync. Derive the slot from the
-    # spell's casting_time; cantrips with no casting_time fall through
-    # to ``none`` and the helper short-circuits.
-    await _mark_battle_economy(
-        campaign_id, char.id,
-        _casting_time_to_economy(spell.get("casting_time", "")),
-    )
-    return {"ok": True, "id": cast_id, "slot": updated_slot}
+    # v2.5.5: full-sheet → init chip sync. Slot was derived up-front
+    # for the Phase 4 gate; reuse it here so the idempotence in
+    # _mark_battle_economy keeps an over-budget cast from re-flipping
+    # the chip (it's already used — that's why we got here).
+    await _mark_battle_economy(campaign_id, char.id, slot_for_economy)
+    return {"ok": True, "id": cast_id, "slot": updated_slot, "over_budget": was_used}
 
 
 # ----------- API: use class feature (Phase 3 action-economy) -----------
@@ -5416,6 +5456,26 @@ async def use_feature(
     if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
         raise HTTPException(403, "Not your character")
 
+    feature_label = (body.get("label") or feature_key.replace("-", " ").title())[:160]
+    if option_key:
+        feature_label = f"{feature_label}: {(option_key or '').replace('-', ' ').title()}"
+    feature_desc = str(body.get("desc") or "")[:400]
+
+    # v2.6.1: Phase 4 over-budget gate. "free" features (Action Surge,
+    # Divine Smite, Reckless Attack) never trigger the gate — they grant
+    # rather than consume. See cast_spell for the matching pattern.
+    was_used = _is_slot_used(campaign_id, char.id, slot)
+    user_is_gm = _user_is_gm(user, campaign, db)
+    override = bool(body.get("override"))
+    if was_used and not user_is_gm and not override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": slot,
+            "char_name": char.name,
+            "source": "feature",
+            "label": feature_label,
+        })
+
     # Resolve display info for the broadcast — same pattern as cast_spell.
     membership = (
         db.query(CampaignMembership)
@@ -5429,11 +5489,6 @@ async def use_feature(
     )
     caster_color = char.color or player_color
 
-    feature_label = (body.get("label") or feature_key.replace("-", " ").title())[:160]
-    if option_key:
-        feature_label = f"{feature_label}: {(option_key or '').replace('-', ' ').title()}"
-    feature_desc = str(body.get("desc") or "")[:400]
-
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
@@ -5445,6 +5500,8 @@ async def use_feature(
             "source": "class-feature",
             "remaining": 0,
             "max": 0,
+            "over_budget": was_used,
+            "over_budget_slot": slot if was_used else "",
         },
     })
 
@@ -5453,7 +5510,7 @@ async def use_feature(
     # circuits on anything that isn't action/bonus/reaction.
     await _mark_battle_economy(campaign_id, char.id, slot)
 
-    return {"ok": True, "slot": slot, "feature_label": feature_label}
+    return {"ok": True, "slot": slot, "feature_label": feature_label, "over_budget": was_used}
 
 
 # ----------- Death save state machine (v2.1.0) -----------
@@ -6700,6 +6757,21 @@ async def use_attack(
     attack = dict(attacks[attack_index] or {})
 
     name = (attack.get("name") or "Attack").strip()
+
+    # v2.6.1: Phase 4 over-budget gate. Every weapon attack consumes the
+    # action slot (bonus-action attacks are filed under feature/Class
+    # abilities, not /attack). See cast_spell for the matching pattern.
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    override = bool(body.get("override"))
+    if was_used and not user_is_gm and not override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "attack",
+            "label": name,
+        })
     attack_bonus_raw = str(attack.get("attack_bonus") or "").strip()
     damage_expr_raw = (attack.get("damage") or "").strip()
     damage_type = (attack.get("damage_type") or "").strip()
@@ -6791,6 +6863,8 @@ async def use_attack(
         "desc": desc,
         "is_save": is_save,
         "roll_state_applied": attack_roll_state_applied or None,
+        "over_budget": was_used,
+        "over_budget_slot": "action" if was_used else "",
     }
     await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
     # v2.5.5: full-sheet → init chip sync. Weapon attacks always burn the
@@ -6815,6 +6889,7 @@ async def use_attack(
         "save_ability": save_ability if is_save else "",
         "save_dc": save_dc if is_save else 0,
         "roll_state_applied": attack_roll_state_applied or None,
+        "over_budget": was_used,
     }
 
 

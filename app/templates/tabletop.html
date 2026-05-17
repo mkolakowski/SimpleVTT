@@ -2476,6 +2476,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 </script>
 <script src="/static/action_buttons.js?v={{ APP_VERSION }}"></script>
 <script src="/static/roll_toast.js?v={{ APP_VERSION }}"></script>
+<script src="/static/economy_messaging.js?v={{ APP_VERSION }}"></script>
 <script src="/static/beast_picker.js?v={{ APP_VERSION }}"></script>
 <script src="/static/tabletop.js?v={{ APP_VERSION }}"></script>
 <script src="/static/audio.js?v={{ APP_VERSION }}"></script>
@@ -2827,7 +2828,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         _renderMiniSlotPips(slotRow);
                     }
                 }
-                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
+                const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -2835,8 +2836,29 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         spell_index: idx,
                         slot_level: lvl,
                         class_slug: classSlug,
+                        override: !!override,
                     }),
                 });
+                let resp = await doFetch(false);
+                // v2.6.1: Phase 4 over-budget gate. Revert the optimistic
+                // slot-pip decrement on 409 so the UI matches the server
+                // (server returned before touching the slot); on Confirm
+                // the WS spell_slot_update from the second fetch repaints
+                // the pip naturally.
+                let bodyPeek;
+                try { bodyPeek = await resp.clone().json(); } catch { bodyPeek = null; }
+                if (resp.status === 409 && bodyPeek && bodyPeek.error === 'over_budget'
+                        && typeof window.handleOverBudget === 'function') {
+                    if (slotRow) {
+                        slotRow.dataset.used = prevUsed;
+                        _renderMiniSlotPips(slotRow);
+                    }
+                    const retried = await window.handleOverBudget(
+                        resp, () => doFetch(true),
+                    );
+                    if (!retried) return;
+                    resp = retried;
+                }
                 if (!resp.ok) {
                     if (slotRow) {
                         slotRow.dataset.used = prevUsed;
@@ -3421,11 +3443,26 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     const charId = parseInt(rawCharId, 10);
                     const idx = parseInt(btn.dataset.attackIdx, 10);
                     if (!charId || isNaN(idx)) return;
-                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
+                    const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ character_id: charId, attack_index: idx }),
+                        body: JSON.stringify({
+                            character_id: charId,
+                            attack_index: idx,
+                            override: !!override,
+                        }),
                     });
+                    let resp = await doFetch(false);
+                    // v2.6.1: Phase 4 over-budget gate. The server returns
+                    // 409 for player clicks on already-used slots; the GM
+                    // skips the gate so the modal never appears for them.
+                    if (resp.status === 409 && typeof window.handleOverBudget === 'function') {
+                        const retried = await window.handleOverBudget(
+                            resp, () => doFetch(true),
+                        );
+                        if (!retried) return;
+                        resp = retried;
+                    }
                     if (!resp.ok) {
                         let body; try { body = await resp.json(); } catch { body = null; }
                         (window.showToast || function (m) { alert(m); })(

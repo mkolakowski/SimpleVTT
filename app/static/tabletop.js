@@ -1276,6 +1276,7 @@
                     ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
                     ${d.spell_desc ? `<div class="spell-cast-desc">${escapeHTML(d.spell_desc)}</div>` : ''}
                     <div class="spell-cast-actions"></div>
+                    ${_overBudgetBadge(d)}
                     <div class="spell-cast-results"></div>
                 </div>
             </div>`;
@@ -1474,6 +1475,22 @@
     // by the backend when ``POST /resource`` is called with a negative
     // delta. The card has no roll — it's purely an announcement so the
     // rest of the table sees who fired what.
+    /* v2.6.1: Phase 4 Layer C — audit badge HTML for over-budget rolls.
+     * Returned as a small inline element appended to the roll-card body
+     * for weapon_attack / spell_cast / feature_used cards when the
+     * server flags ``over_budget: true``. Visible to every participant
+     * (GM + all players); the GM uses it as the audit trail without
+     * needing a separate WS push.
+     */
+    function _overBudgetBadge(d) {
+        if (!d || !d.over_budget) return '';
+        const slot = d.over_budget_slot || '';
+        const slotPhrase = slot === 'bonus' ? 'bonus action'
+                         : slot === 'reaction' ? 'reaction'
+                         : 'action';
+        return `<div class="over-budget-badge" style="margin-top:6px;padding:4px 8px;border-radius:4px;background:rgba(255,165,74,0.12);border:1px solid rgba(255,165,74,0.4);color:#ffa54a;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;">⚠ Manual override — 2nd ${slotPhrase} this turn</div>`;
+    }
+
     function _appendFeatureUsed(d) {
         const ul = document.getElementById('roll-list');
         if (!ul) return;
@@ -1507,6 +1524,7 @@
                         ${src ? `<span style="font-size:10px;color:var(--muted,#888);">${escapeHTML(src)}</span>` : ''}
                     </div>
                     ${desc}
+                    ${_overBudgetBadge(d)}
                 </div>
             </div>`;
         ul.appendChild(li);
@@ -1571,6 +1589,7 @@
                     ${dmgLineHtml}
                     ${d.desc ? `<div class="spell-cast-desc">${escapeHTML(d.desc)}</div>` : ''}
                     ${saveBtnHtml ? `<div class="spell-cast-actions">${saveBtnHtml}</div>` : ''}
+                    ${_overBudgetBadge(d)}
                     <div class="spell-cast-results"></div>
                 </div>
             </div>`;

@@ -1584,6 +1584,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
 <script src="/static/dnd5e_class_resources.js?v={{ APP_VERSION }}"></script>
 <script src="/static/dnd5e_innate_defenses.js?v={{ APP_VERSION }}"></script>
 <script src="/static/dnd5e_feature_economy.js?v={{ APP_VERSION }}"></script>
+<script src="/static/economy_messaging.js?v={{ APP_VERSION }}"></script>
 <script src="/static/open5e_coverage.js?v={{ APP_VERSION }}"></script>
 <script>
 /* Homebrew class-resource merge.
@@ -2594,7 +2595,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 }
                 btn.disabled = true;
                 try {
-                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
+                    const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -2602,8 +2603,32 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             spell_index: idx,
                             slot_level: lvl,
                             class_slug: spellClass,
+                            override: !!override,
                         }),
                     });
+                    let resp = await doFetch(false);
+                    // v2.6.1: Phase 4 — 409 over_budget means the action/
+                    // bonus/reaction slot for this spell's casting_time is
+                    // already used. Revert the optimistic spell-slot
+                    // decrement (the server hasn't touched the slot
+                    // because we returned before the decrement) and open
+                    // the Layer B confirm modal. On Confirm, retry with
+                    // override:true; the natural spell_slot_update WS
+                    // broadcast from the second fetch repaints the pip.
+                    let body; try { body = await resp.clone().json(); } catch { body = null; }
+                    if (resp.status === 409 && body && body.error === 'over_budget'
+                            && typeof window.handleOverBudget === 'function') {
+                        if (slotRow) {
+                            slotRow.dataset.used = prevUsed;
+                            if (window._ssSyncInputs) window._ssSyncInputs(slotRow);
+                            if (window._ssRenderPips) window._ssRenderPips(slotRow);
+                        }
+                        const retried = await window.handleOverBudget(
+                            resp, () => doFetch(true),
+                        );
+                        if (!retried) return;  // user cancelled
+                        resp = retried;
+                    }
                     if (!resp.ok) {
                         // Revert optimistic update on failure
                         if (slotRow) {
@@ -3921,11 +3946,28 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 const idx = parseInt(btn.dataset.idx, 10);
                 btn.disabled = true;
                 try {
-                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
+                    const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ character_id: MY_CHAR_ID, attack_index: idx }),
+                        body: JSON.stringify({
+                            character_id: MY_CHAR_ID,
+                            attack_index: idx,
+                            override: !!override,
+                        }),
                     });
+                    let resp = await doFetch(false);
+                    // v2.6.1: Phase 4 — server returns 409 over_budget when
+                    // the action slot is already used. Surface the Layer B
+                    // confirm modal; on Confirm the same fetch re-fires
+                    // with override:true and the server tags the broadcast
+                    // for the Layer C audit badge.
+                    if (resp.status === 409 && typeof window.handleOverBudget === 'function') {
+                        const retried = await window.handleOverBudget(
+                            resp, () => doFetch(true),
+                        );
+                        if (!retried) return;  // user cancelled
+                        resp = retried;
+                    }
                     if (!resp.ok) {
                         let body; try { body = await resp.json(); } catch { body = null; }
                         (window.showToast || function(m){ alert(m); })(
@@ -4201,7 +4243,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 const optionKey = btn.dataset.option || null;
                 btn.disabled = true;
                 try {
-                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/use_feature`, {
+                    const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/use_feature`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -4210,8 +4252,19 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             option_key: optionKey,
                             label: btn.dataset.label || '',
                             desc: btn.dataset.desc || '',
+                            override: !!override,
                         }),
                     });
+                    let resp = await doFetch(false);
+                    // v2.6.1: Phase 4 — 409 over_budget opens the Layer B
+                    // modal; on Confirm we retry with override:true.
+                    if (resp.status === 409 && typeof window.handleOverBudget === 'function') {
+                        const retried = await window.handleOverBudget(
+                            resp, () => doFetch(true),
+                        );
+                        if (!retried) return;
+                        resp = retried;
+                    }
                     if (!resp.ok) {
                         let body; try { body = await resp.json(); } catch { body = null; }
                         (window.showToast || function(m){ alert(m); })(
