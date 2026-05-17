@@ -1544,10 +1544,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
      microtasks before the next <script> tag is parsed, and the subclass
      picker's _lookupSubclassData reads window._SUBCLASS_SPELLS at that
      moment. Loading the data file first guarantees it's populated. -->
-<script src="/static/dnd5e_subclass_spells.js"></script>
-<script src="/static/dnd5e_class_resources.js"></script>
-<script src="/static/dnd5e_innate_defenses.js"></script>
-<script src="/static/open5e_coverage.js"></script>
+<script src="/static/dnd5e_subclass_spells.js?v={{ APP_VERSION }}"></script>
+<script src="/static/dnd5e_class_resources.js?v={{ APP_VERSION }}"></script>
+<script src="/static/dnd5e_innate_defenses.js?v={{ APP_VERSION }}"></script>
+<script src="/static/open5e_coverage.js?v={{ APP_VERSION }}"></script>
 <script>
 /* Homebrew class-resource merge.
  *
@@ -1623,10 +1623,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
     } catch (e) { /* swallow — non-fatal */ }
 })();
 </script>
-<script src="/static/action_buttons.js"></script>
-<script src="/static/roll_toast.js"></script>
-<script src="/static/beast_picker.js"></script>
-<script src="/static/sheet.js"></script>
+<script src="/static/action_buttons.js?v={{ APP_VERSION }}"></script>
+<script src="/static/roll_toast.js?v={{ APP_VERSION }}"></script>
+<script src="/static/beast_picker.js?v={{ APP_VERSION }}"></script>
+<script src="/static/sheet.js?v={{ APP_VERSION }}"></script>
 <script>
 // ── Race-actions loader ──────────────────────────────────────────────────────
 // Fetches the character's race record via the file-based content resolver and

@@ -2324,11 +2324,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 <script id="initial-data" type="application/json">
 {{ {"tokens": token_data, "characters": char_data, "templates": tmpl_data} | tojson }}
 </script>
-<script src="/static/action_buttons.js"></script>
-<script src="/static/roll_toast.js"></script>
-<script src="/static/beast_picker.js"></script>
-<script src="/static/tabletop.js"></script>
-<script src="/static/audio.js"></script>
+<script src="/static/action_buttons.js?v={{ APP_VERSION }}"></script>
+<script src="/static/roll_toast.js?v={{ APP_VERSION }}"></script>
+<script src="/static/beast_picker.js?v={{ APP_VERSION }}"></script>
+<script src="/static/tabletop.js?v={{ APP_VERSION }}"></script>
+<script src="/static/audio.js?v={{ APP_VERSION }}"></script>
 <script>
 /* ── Drawer system ── */
 (function () {

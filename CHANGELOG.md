@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.3.43] - 2026-05-16
+
+**Schema version:** 52
+**Commit summary:** Append `?v={{ APP_VERSION }}` to every static JS/CSS reference in the template tree so a release bump automatically invalidates Cloudflare's edge cache (and any other CDN / browser disk cache that keys on full URL). Caught after shipping v2.3.41 — the deployed `features_editor.js` had the new Charges column but Cloudflare was serving the pre-2.3.41 file from edge cache for ~4 hours (`cf-cache-status: HIT`, `max-age=14400`), and a browser hard-refresh wasn't enough to bust it. User-reported.
+**Description:** Every release going forward changes the query string on every static asset URL (`/static/features_editor.js?v=2.3.43` vs `…?v=2.3.42`), which Cloudflare treats as a different cache key — so the first visitor after a deploy gets a fresh fetch, and every subsequent visitor for that release version gets the warm edge cache. No CDN config change needed (the existing `max-age=14400` is fine — it just keys on URL+query now). Touched files: `app/templates/base.html` (3 CSS), `app/templates/sheet_dnd5e.html` (8 JS), `app/templates/sheet_generic.html` (1 JS), `app/templates/tabletop.html` (5 JS), `app/templates/campaign_settings.html` (3 JS). 20 references total. `APP_VERSION` was already a Jinja global via `app/templates.py` so no Python-side wiring was needed.
+
+### Changed
+- `app/templates/base.html` — `/static/style.css`, `/static/style-fantasy-themes.css`, `/static/sheet-fantasy.css` each get `?v={{ APP_VERSION }}`.
+- `app/templates/sheet_dnd5e.html` — eight `<script src="/static/...">` references all version-stamped.
+- `app/templates/sheet_generic.html` — `/static/sheet.js` version-stamped.
+- `app/templates/tabletop.html` — five `<script src="/static/...">` references (`action_buttons`, `roll_toast`, `beast_picker`, `tabletop`, `audio`) all version-stamped.
+- `app/templates/campaign_settings.html` — three `<script src="/static/...">` references (`features_editor`, `spell_picker`, `resources_editor`) all version-stamped.
+
+### Notes
+- htmx (loaded from `unpkg.com`) and Google Fonts (loaded from `fonts.googleapis.com` / `fonts.gstatic.com`) are not version-stamped — those are third-party CDN URLs with their own caching, and pinning to `htmx.org@1.9.12` already provides URL-level invalidation when we bump the htmx pin.
+- The favicon at `/static/favicon.svg` is left unstamped — it's served separately by the browser tab UI, and our brand mark doesn't change per release. Adding `?v=…` to it would force a re-fetch on every release with no user-visible benefit.
+- Static data files fetched via `fetch()` at runtime (e.g. the spell list JSON, the homebrew content endpoints) go through the dynamic `/api/...` and `/local/...` routes and are not cached aggressively by Cloudflare, so they don't need this treatment.
+- This is a non-functional change for v2.3.41 / v2.3.42 users on first load — they'll fetch the fresh files anyway because the URL has changed. The only behavioural difference is "no more days of stale-asset confusion after a deploy."
+
+---
+
 ## [2.3.42] - 2026-05-16
 
 **Schema version:** 52
