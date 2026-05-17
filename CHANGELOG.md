@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.24] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Fix the iPad-only **"opens then immediately closes"** bug on expandable headers (inventory rows, spell rows, attack rows, mini-sheet attack/spell/monster-action rows, init-tracker card mini-header, spell-level group chevron header). iOS Safari's double-tap-to-zoom heuristic was firing the click event twice in rapid succession on a single tap, toggling the open/close state back to closed before the user could see the expansion. Adding `touch-action: manipulation` to each expand surface tells iOS "don't wait for a possible second tap as a zoom gesture" — one tap = one click, expansion sticks. User-reported.
+**Description:** Five surface-level edits across two templates. (1) `sheet_dnd5e.html` `.inv-header` inline style — `touch-action:manipulation;` appended. (2) `sheet_dnd5e.html` `.sp-header` (spell row) inline style — same. (3) `sheet_dnd5e.html` `.atk-header` (attack row) inline style — same. (4) `sheet_dnd5e.html` spell-level group `headingRow.style.cssText` — appended `touch-action:manipulation;` so collapsing/expanding a whole Cantrips / Level 1 / Level 2 group works on the iPad too. (5) `tabletop.html` `.mini-row-expandable` CSS rule + `.mini-header` CSS rule both gain `touch-action: manipulation;` — covers the mini-sheet attack / spell / monster-action rows (v2.4.23) and the init-tracker card-expand mini-header.
+**Description (cont):** `touch-action: manipulation` is the standard fix for the iOS double-tap-to-zoom click-double-fire issue. It allows panning + pinch-zoom interactions (so a long-swipe-scroll on the list still scrolls; pinch on the document still zooms the viewport) but disables the "wait ~300 ms for a possible second tap so we can intercept it as a zoom gesture" wait. The wait is the source of the double-fire: if the user taps slightly above the iOS double-tap-cancellation threshold, iOS fires click TWICE — once at touchend, once at the synthesised mouse-up after the wait expires. With `manipulation`, click fires exactly once per tap. Mouse users on macOS / Windows / desktop Linux are unaffected since they never had the double-fire to begin with.
+
+### Fixed
+- `app/templates/sheet_dnd5e.html` `.inv-header` / `.sp-header` / `.atk-header` inline styles — added `touch-action:manipulation;`. Inventory / spell / attack rows on the full character sheet stay expanded after an iPad tap.
+- `app/templates/sheet_dnd5e.html` spell-level group `headingRow` inline style — same. Tapping the Cantrips / Level N chevron toggle on an iPad no longer collapses the group back to closed.
+- `app/templates/tabletop.html` `.mini-row-expandable` CSS rule — added `touch-action: manipulation;`. Mini-sheet attack / spell / monster-action rows added in v2.4.23 stay expanded on iPad.
+- `app/templates/tabletop.html` `.mini-header` CSS rule — added `touch-action: manipulation;`. Init-tracker card expand (and the character-list mini-sheet card expand, which shares the same class) stay expanded on iPad.
+
+### Notes
+- `touch-action: manipulation` is a CSS-only fix; no JS changes needed. The click handlers themselves were not the bug — they fire correctly given the events they receive; the iOS Safari touch-event pipeline was firing two events when it should have fired one.
+- The map canvas (`.map-pane`) already uses `touch-action: none` — it has its own custom pan/pinch handlers and doesn't want iOS to interpret any touch as a viewport gesture. The expand surfaces use `manipulation` instead of `none` so users can still scroll the page / zoom the viewport with two-finger gestures.
+- Other tappable surfaces (`.drawer-tab-btn`, `.mini-tab-btn`, `.roll-state-btn`, etc.) weren't reported as problematic and are typically `<button>` elements which on iOS generally fire single clicks correctly. If a follow-up bug appears on those, the same `touch-action: manipulation` rule applies.
+
+---
+
 ## [2.4.23] - 2026-05-17
 
 **Schema version:** 53

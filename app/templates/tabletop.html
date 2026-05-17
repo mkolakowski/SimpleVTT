@@ -390,7 +390,10 @@
     .mini-ab-toggle-btn { font-size: 10px; padding: 2px 8px; min-height: 26px; border: none; background: transparent; cursor: pointer; color: var(--fg-mute); line-height: 1; transition: background .12s, color .12s; }
     .mini-ab-toggle-btn.active { background: var(--accent); color: #fff; }
     /* ── Stat-block header (card header — also the open/close toggle) ── */
-    .mini-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 8px 10px 7px; margin: 0; background: linear-gradient(135deg, rgba(167,139,250,.15), rgba(108,180,255,.10)); border-bottom: 2px solid var(--accent); border-radius: 8px 8px 0 0; cursor: pointer; user-select: none; transition: background .15s; }
+    /* v2.4.24: touch-action:manipulation suppresses iOS Safari's double-tap-to-zoom
+       wait on this expand surface so a single iPad tap doesn't fire two clicks
+       in rapid succession (which would open + immediately close the card). */
+    .mini-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 8px 10px 7px; margin: 0; background: linear-gradient(135deg, rgba(167,139,250,.15), rgba(108,180,255,.10)); border-bottom: 2px solid var(--accent); border-radius: 8px 8px 0 0; cursor: pointer; user-select: none; transition: background .15s; touch-action: manipulation; }
     .mini-header:hover { background: linear-gradient(135deg, rgba(167,139,250,.26), rgba(108,180,255,.18)); }
     .mini-header-info { flex: 1; min-width: 0; }
     .mini-header-name { font-size: 13px; font-weight: 700; color: var(--fg); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -431,7 +434,13 @@
        lives in the JS handler (.mini-strike-btn / .mini-cast-btn /
        .monster-strike-btn / .monster-charge-reset). Detail panel hides
        by default and animates open via the ``.open`` class on the row. */
-    .mini-row-expandable { cursor: pointer; }
+    /* v2.4.24: ``touch-action: manipulation`` disables the iOS Safari
+       double-tap-to-zoom heuristic on these rows, which on iPad otherwise
+       fires the click event twice in rapid succession and toggles the
+       open/close state back to closed before the user sees the
+       expansion. ``manipulation`` keeps scrolling + panning interactions
+       working, just skips the zoom-tap wait. */
+    .mini-row-expandable { cursor: pointer; touch-action: manipulation; }
     .mini-row-detail {
         display: none;
         padding: 4px 8px 6px;

@@ -2300,7 +2300,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         return `
         <div class="sp-row" style="border:1px solid var(--s-border);border-radius:4px;margin-bottom:3px;background:${rowPos % 2 === 0 ? 'var(--s-input)' : 'var(--s-card)'};">
             <div class="sp-header" data-idx="${idx}"
-                 style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;cursor:pointer;"
+                 style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;cursor:pointer;touch-action:manipulation;"
                  title="Click to expand">
                 ${prepCtrl}
                 <button type="button" class="sp-expand" data-idx="${idx}"
@@ -2443,7 +2443,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             try { startsCollapsed = localStorage.getItem(COLLAPSE_KEY) === '1'; } catch {}
 
             const headingRow = document.createElement('div');
-            headingRow.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:3px;padding-left:2px;cursor:pointer;user-select:none;flex-wrap:wrap;';
+            headingRow.style.cssText = 'display:flex;align-items:center;gap:12px;margin-bottom:3px;padding-left:2px;cursor:pointer;user-select:none;flex-wrap:wrap;touch-action:manipulation;';
 
             const chevron = document.createElement('span');
             chevron.style.cssText = 'font-size:9px;color:var(--s-mute);flex-shrink:0;transition:transform .15s;'
@@ -3838,7 +3838,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         return `
         <div class="atk-row${isAuto ? ' atk-row-auto' : ''}" style="border:1px solid var(--s-border);border-radius:4px;margin-bottom:3px;${isAuto ? 'background:var(--s-card);' : ''}">
             <div class="atk-header" data-idx="${idx}"
-                 style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;cursor:pointer;"
+                 style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;cursor:pointer;touch-action:manipulation;"
                  title="Click to expand">
                 <button type="button" class="atk-expand" data-idx="${idx}"
                     style="background:none;border:none;color:var(--s-mute);font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
@@ -4577,7 +4577,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         <div class="inv-row" data-idx="${idx}" style="border:1px solid var(--s-border);border-radius:4px;margin-bottom:3px;
                     background:${item.equipped ? 'var(--accent-bg)' : 'var(--s-card)'};">
             <div class="inv-header" data-idx="${idx}"
-                 style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;cursor:pointer;"
+                 style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;cursor:pointer;touch-action:manipulation;"
                  title="Click to expand">
                 ${equipCtrl}
                 <button type="button" class="inv-expand" data-idx="${idx}"
