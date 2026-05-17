@@ -61,6 +61,11 @@
 
     const gridType = canvas.dataset.gridType || 'square';
     const gridSize = parseInt(canvas.dataset.gridSize || '70', 10);
+    // v2.4.0: per-map "show grid overlay" toggle. Defaults to true when
+    // the attribute is missing (e.g. on legacy pages without the new
+    // template field). ``gridType`` still drives snap-to-grid token
+    // placement — turning the overlay off does NOT disable snapping.
+    const showGrid = canvas.dataset.showGrid !== '0';
     const bgLayer = document.getElementById('map-bg-layer');
 
     // ---------- Hex helpers (pointy-top) ----------
@@ -320,8 +325,10 @@
 
     function render() {
         ctx.clearRect(0, 0, MAP_W, MAP_H);
-        if (gridType === 'square') drawSquareGrid();
-        else if (gridType === 'hex') drawHexGrid();
+        if (showGrid) {
+            if (gridType === 'square') drawSquareGrid();
+            else if (gridType === 'hex') drawHexGrid();
+        }
         tokens.forEach(drawToken);
         drawSpawnMarkers();
         _updateGifOverlay();

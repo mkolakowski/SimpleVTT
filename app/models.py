@@ -199,6 +199,13 @@ class Map(Base):
     grid_size_px: Mapped[int] = mapped_column(Integer, default=70)
     grid_offset_x: Mapped[int] = mapped_column(Integer, default=0)
     grid_offset_y: Mapped[int] = mapped_column(Integer, default=0)
+    # v2.4.0: per-map "show grid overlay" toggle. ``grid_type`` keeps
+    # driving token snapping (square / hex / none) so the GM can switch
+    # the overlay off on a map that already has a grid baked into its
+    # background image without losing snap-to-grid token placement.
+    # ``grid_type == NONE`` already disabled both overlay AND snapping;
+    # this flag adds the orthogonal "snap yes, overlay no" combination.
+    show_grid: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     width_px: Mapped[int] = mapped_column(Integer, default=2000)
     height_px: Mapped[int] = mapped_column(Integer, default=1500)
     # Per-character session-prep spawn points. JSON dict keyed by

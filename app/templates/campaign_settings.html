@@ -495,6 +495,18 @@
                     <input class="map-grid-input" type="number" min="20" max="300"
                            value="{{ m.grid_size_px }}" data-map-id="{{ m.id }}"
                            style="width:52px;font-size:12px;padding:2px 4px;text-align:center;">px
+                    {# v2.4.0: per-map show-grid-overlay toggle. Dense-panel exception
+                       — checkbox + label sits under the 44×44 target since the whole
+                       Maps table is row-based (per CLAUDE.md). Toggling off keeps
+                       snap-to-grid but hides the client-drawn overlay (use for
+                       backgrounds that already have a grid baked in). #}
+                    <label style="margin-left:8px;font-size:12px;display:inline-flex;align-items:center;gap:4px;cursor:pointer;"
+                           title="Show grid overlay on top of this map. Token snapping still follows the grid type either way.">
+                        <input class="map-show-grid-input" type="checkbox"
+                               data-map-id="{{ m.id }}"
+                               {% if m.show_grid %}checked{% endif %}
+                               style="margin:0;min-height:0;min-width:0;width:14px;height:14px;">overlay
+                    </label>
                 </td>
                 <td>{% if m.id == campaign.active_map_id %}<strong style="color:#6cb;">Active</strong>{% else %}<span class="muted">Inactive</span>{% endif %}</td>
                 <td style="display:flex;gap:4px;flex-wrap:wrap;">
@@ -543,6 +555,12 @@
                 <label>Width (px) <input type="number" name="width_px" id="map-width-px" value="2000" min="200" max="8000" style="width:90px;"></label>
                 <label>Height (px) <input type="number" name="height_px" id="map-height-px" value="1500" min="200" max="8000" style="width:90px;"></label>
             </div>
+            <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;"
+                   title="Uncheck for maps that already have a grid baked into the image. Token snapping still follows the grid type either way.">
+                <input type="checkbox" name="show_grid" value="1" checked
+                       style="margin:0;width:16px;height:16px;">
+                Show grid overlay
+            </label>
             <span id="map-dim-note" style="font-size:11px;color:var(--fg-mute);display:none;">✓ Dimensions detected from image</span>
             <label>Image (png/jpg/webp/gif/mp4/webm, optional — max 80 MB)
                 <input type="file" id="map-image-input" name="image" accept="image/*,video/mp4,video/webm">
@@ -2841,6 +2859,19 @@ document.querySelectorAll('.map-grid-input').forEach(input => {
         });
         if (!resp.ok) { alert('Failed to save grid size'); input.value = input.dataset.saved; }
         else { input.dataset.saved = String(val); }
+    });
+});
+// v2.4.0: per-map show-grid-overlay checkbox. POSTs on every change;
+// rolls back on failure to keep the UI consistent with the server.
+document.querySelectorAll('.map-show-grid-input').forEach(input => {
+    input.addEventListener('change', async () => {
+        const next = input.checked;
+        const resp = await fetch(`/campaign/${CAMPAIGN_ID}/settings/maps/${input.dataset.mapId}/show_grid`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ show_grid: next }),
+        });
+        if (!resp.ok) { alert('Failed to save grid-overlay setting'); input.checked = !next; }
     });
 });
 

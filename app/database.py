@@ -471,6 +471,18 @@ def _apply_inline_migrations() -> None:
     from ._migrate_v52 import run_v52_migration
     run_v52_migration(engine)
 
+    # ---- Schema v53 (2.4.0): maps.show_grid overlay toggle ----
+    # Per-map boolean controlling whether the tabletop client renders the
+    # grid overlay. Orthogonal to ``grid_type`` — snap-to-grid token
+    # placement still derives from grid_type (square / hex / none) so the
+    # GM can show a map whose grid is baked into the background image
+    # without doubling it up with the client-drawn overlay, while still
+    # getting clean snap behaviour.
+    map_cols_v53 = _column_names("maps")
+    with engine.begin() as conn:
+        if map_cols_v53 and "show_grid" not in map_cols_v53:
+            conn.execute(text("ALTER TABLE maps ADD COLUMN show_grid BOOLEAN NOT NULL DEFAULT TRUE"))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

@@ -9788,6 +9788,12 @@ async def settings_upload_map(
     height_px: int = Form(1500),
     tags: str = Form(""),
     folder: str = Form(""),
+    # v2.4.0: per-map "show grid overlay" toggle. HTML-checkbox idiom —
+    # unchecked boxes don't submit the field at all, so ``Form(False)``
+    # captures "off" while the template ships the box ``checked`` by
+    # default. New uploads default to overlay-on, matching legacy maps
+    # whose v53 migration backfills ``show_grid = TRUE``.
+    show_grid: bool = Form(False),
     image: UploadFile = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
@@ -9833,6 +9839,7 @@ async def settings_upload_map(
         height_px=max(200, min(height_px, 8000)),
         tags=_parse_tags(tags),
         folder=folder.strip()[:120],
+        show_grid=show_grid,
     )
     db.add(m)
     db.commit()
@@ -9888,6 +9895,31 @@ async def settings_map_grid_size(
     m.grid_size_px = val
     db.commit()
     return {"ok": True, "grid_size_px": m.grid_size_px}
+
+
+@router.post("/campaign/{campaign_id}/settings/maps/{map_id}/show_grid")
+async def settings_map_show_grid(
+    campaign_id: int,
+    map_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.4.0: toggle the per-map grid-overlay flag. GM-only. Body:
+    ``{show_grid: bool}``. Token snapping continues to follow
+    ``grid_type`` (square / hex / none) regardless of this flag — the
+    overlay is purely a visual layer for maps whose background image
+    doesn't already include a grid."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    m = db.query(Map).filter(Map.id == map_id, Map.campaign_id == campaign_id).first()
+    if not m:
+        raise HTTPException(404)
+    body = await request.json()
+    m.show_grid = bool(body.get("show_grid", True))
+    db.commit()
+    return {"ok": True, "show_grid": m.show_grid}
 
 
 @router.post("/campaign/{campaign_id}/settings/maps/{map_id}/tags")

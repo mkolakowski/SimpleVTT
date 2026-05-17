@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.0] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Per-map **show grid overlay** toggle in Campaign settings → World → Maps. Lets GMs use maps whose background image already contains a hand-drawn grid (Dyson Logos, Patreon battlemaps, photographed minis-grid mats, etc.) without doubling it up with the client-drawn overlay, while keeping snap-to-grid token placement intact. MINOR bump for the additive schema column. User-requested.
+**Description:** Five-piece change. (1) `Map.show_grid: Mapped[bool]` added in `app/models.py` (default True, `server_default="true"` to match the existing `users.animate_gifs` pattern). (2) Schema v53 migration in `app/database.py`'s `_apply_inline_migrations()` — single `ALTER TABLE maps ADD COLUMN show_grid BOOLEAN NOT NULL DEFAULT TRUE` guarded by the standard `_column_names` idempotency check, so every existing map gets the overlay-on default and pre-v53 installs upgrade in place on first boot. SCHEMA_VERSION bumped 52 → 53 in `app/version.py`. (3) Template wiring in `app/templates/tabletop.html`: the `<canvas id="vtt-canvas">` element gains `data-show-grid="{{ '1' if active_map.show_grid else '0' }}"` so the tabletop client reads the per-map flag without an extra fetch. (4) `app/static/tabletop.js` reads `canvas.dataset.showGrid !== '0'` into a `showGrid` constant alongside the existing `gridType` / `gridSize` reads, and the `render()` loop guards `drawSquareGrid()` / `drawHexGrid()` behind it. Crucially, `snapToGrid()` keeps deriving from `gridType` alone, so a GM can render a hex-grid-baked-into-the-image map with `grid_type=hex, show_grid=false` and token movement still snaps to the correct hex centres. (5) Campaign-settings UI in `app/templates/campaign_settings.html`: a small "overlay" checkbox is added to each map's row (right of the grid-size input), and a "Show grid overlay" checkbox is added to the upload-new-map form (default checked). The row checkbox POSTs to a new `POST /campaign/{cid}/settings/maps/{mid}/show_grid` endpoint that mirrors the existing `/grid_size` handler (GM-only, JSON body `{show_grid: bool}`).
+**Description (cont):** This is the first schema bump since v52 (2.0.0). The migration is non-destructive and the new column has a safe default, so existing demo / production databases pick up the column transparently on first boot — operators don't need to manually `ALTER` anything. The new field is orthogonal to `grid_type`: `grid_type=none` already disabled both overlay and snapping (and continues to), while `grid_type=square|hex` × `show_grid=true|false` now gives four combinations covering all the practical map shipping conventions (client-drawn grid on a blank background, no grid at all, grid baked into the background image with snap-only client behaviour, and rare cases where the GM wants the client overlay on top of a baked-in grid for testing).
+
+### Added
+- `app/models.py` `Map.show_grid` — Boolean column, default True, `server_default="true"`. Per-map "show grid overlay" toggle; orthogonal to `grid_type`.
+- `app/database.py` Schema v53 migration block — `ALTER TABLE maps ADD COLUMN show_grid BOOLEAN NOT NULL DEFAULT TRUE` with the standard `_column_names`-guarded idempotency check. SCHEMA_VERSION bumped to 53.
+- `app/templates/tabletop.html` — `data-show-grid="{{ '1' if active_map.show_grid else '0' }}"` attribute on `<canvas id="vtt-canvas">`. Tabletop client reads it on init; no extra fetch.
+- `app/static/tabletop.js` — `const showGrid = canvas.dataset.showGrid !== '0'` near the existing `gridType` / `gridSize` reads. `render()` now guards the grid-draw calls behind `showGrid`.
+- `app/templates/campaign_settings.html` — per-row "overlay" checkbox in the Maps table (class `map-show-grid-input`, `data-map-id`-keyed); inline JS handler POSTs to the new `/show_grid` endpoint and rolls back the checkbox on failure.
+- `app/templates/campaign_settings.html` — "Show grid overlay" checkbox in the upload-new-map form (default checked).
+- `app/routes/tabletop_routes.py` `settings_map_show_grid` — `POST /campaign/{campaign_id}/settings/maps/{map_id}/show_grid`, GM-only, JSON body `{show_grid: bool}`. Mirrors the existing `settings_map_grid_size` handler.
+- `app/routes/tabletop_routes.py` `settings_upload_map` — accepts `show_grid: bool = Form(False)` (HTML-checkbox idiom: unchecked → field omitted → False; default-shipped-checked → 1 → True) and passes it through to the new `Map(..., show_grid=show_grid)` constructor.
+
+### Schema
+- `maps.show_grid` (`BOOLEAN NOT NULL DEFAULT TRUE`) added. SCHEMA_VERSION → 53.
+
+### Notes
+- `grid_type=none` was already a valid way to disable both the overlay AND snapping for one specific use case (free-form maps without any grid math). The new flag adds the missing fourth quadrant: snap yes, overlay no.
+- The per-row checkbox sits inside the dense Maps table (per the CLAUDE.md 32-px dense-panel exception) — width/height 14px with a tight gap to the "overlay" label. Inline annotation on the element explains the exception. The upload-form checkbox uses the standard 16-px target since that form is in a comfortable layout.
+- The migration is forward-compatible: legacy maps with `show_grid IS NULL` cannot exist (the column is `NOT NULL`), and the `DEFAULT TRUE` backfills every pre-v53 row on the ALTER, so the new template attribute renders `'1'` for every legacy map and tabletop rendering is identical to v2.3.45 until the GM explicitly toggles a map off.
+- The first schema bump in the 2.x line — operators should still back up Postgres before upgrading (defensive habit), but the change is non-destructive (additive column with a safe default).
+
+---
+
 ## [2.3.45] - 2026-05-17
 
 **Schema version:** 52
