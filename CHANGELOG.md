@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.18] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Apply the v2.4.14 inventory-header click pattern to **spell rows + attack rows** on the dnd5e character sheet. Pre-v2.4.18 only the ▶ chevron toggled the detail panel; users naturally tap the spell or weapon name and expected that to work. Now any click on the row header (chevron, name, school tag, damage chip, save chip, blank space) expands the detail; clicks on the prepared checkbox / cast button / strike button / delete keep their own semantics. User-requested.
+**Description:** Two coordinated edits in `app/templates/sheet_dnd5e.html`. (1) `spellRowHtml` — the inner flex strip in each `.sp-row` gains class `sp-header`, `data-idx`, `cursor:pointer`, `title="Click to expand"`. The previous `.sp-expand` click handler is replaced with a `.sp-header` handler that toggles the detail panel for any click not originating from `.sp-prep` / `.sp-cast` / `.sp-rm`. (2) `attackRowHtml` (the rowHtml inside the attacks IIFE) gets the same treatment with class `atk-header` and skip list `.atk-strike` / `.atk-rm`. The chevron in each row remains in the DOM as a visual affordance — its click bubbles up to the header handler so it still toggles, but it's no longer the only click target. Same terminology as the inventory rows: `.sp-row` / `.atk-row` = container, `.sp-header` / `.atk-header` = top strip, `.sp-detail` / `.atk-detail` = expanded section.
+
+### Changed
+- `app/templates/sheet_dnd5e.html` `spellRowHtml` — header strip gains `sp-header` class + `data-idx` + `cursor:pointer` + tooltip. The `.sp-expand` click binding is replaced with `.sp-header` that skips clicks on `.sp-prep` / `.sp-cast` / `.sp-rm`.
+- `app/templates/sheet_dnd5e.html` attack rowHtml (inside the attacks IIFE) — header strip gains `atk-header` class + `data-idx` + `cursor:pointer` + tooltip. The `.atk-expand` click binding is replaced with `.atk-header` that skips clicks on `.atk-strike` / `.atk-rm`.
+
+### Notes
+- Same terminology consolidation as v2.4.14: row → header → detail. Future spell/attack-row work uses these names.
+- The chevron button (`.sp-expand` / `.atk-expand`) stays in the DOM purely as a visual affordance for the open/closed glyph; no longer has its own click listener.
+- Pattern is now consistent across **inventory rows (v2.4.14), spell rows, attack rows** — all use the same header-click semantics. Future "click the row to toggle" candidates: encounter rows, playlist rows, homebrew monster Actions editor.
+
+---
+
 ## [2.4.17] - 2026-05-17
 
 **Schema version:** 53

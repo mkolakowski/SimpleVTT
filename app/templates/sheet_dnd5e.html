@@ -2259,7 +2259,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         const icons = (s.concentration ? ' ⏱' : '') + (s.ritual ? ' ®' : '');
         return `
         <div class="sp-row" style="border:1px solid var(--s-border);border-radius:4px;margin-bottom:3px;background:${rowPos % 2 === 0 ? 'var(--s-input)' : 'var(--s-card)'};">
-            <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;">
+            <div class="sp-header" data-idx="${idx}"
+                 style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;cursor:pointer;"
+                 title="Click to expand">
                 ${prepCtrl}
                 <button type="button" class="sp-expand" data-idx="${idx}"
                     style="background:none;border:none;color:var(--s-mute);font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
@@ -2473,13 +2475,22 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             }));
         container.querySelectorAll('.sp-rm').forEach(btn =>
             btn.addEventListener('click', () => { spells.splice(+btn.dataset.idx, 1); syncSpells(); renderSpells(); }));
-        container.querySelectorAll('.sp-expand').forEach(btn =>
-            btn.addEventListener('click', () => {
-                const d = container.querySelector(`.sp-detail[data-idx="${btn.dataset.idx}"]`);
+        // v2.4.18: clicking anywhere on the spell-row header toggles the
+        // detail panel, not just the chevron. Same pattern as the v2.4.14
+        // inventory header — skip clicks that originated from interactive
+        // controls (prepared checkbox, cast button, delete button) so they
+        // keep their own semantics. The chevron is intentionally NOT in
+        // the skip list because clicking it should also toggle (bubbles up).
+        container.querySelectorAll('.sp-header').forEach(header =>
+            header.addEventListener('click', (ev) => {
+                if (ev.target.closest('.sp-prep, .sp-cast, .sp-rm')) return;
+                const idx = header.dataset.idx;
+                const d = container.querySelector(`.sp-detail[data-idx="${idx}"]`);
                 if (!d) return;
                 const open = d.style.display === 'none';
                 d.style.display = open ? '' : 'none';
-                btn.textContent = open ? '▼' : '▶';
+                const btn = header.querySelector('.sp-expand');
+                if (btn) btn.textContent = open ? '▼' : '▶';
             }));
         container.querySelectorAll('.sp-cast').forEach(btn =>
             btn.addEventListener('click', async () => {
@@ -3778,7 +3789,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
 
         return `
         <div class="atk-row${isAuto ? ' atk-row-auto' : ''}" style="border:1px solid var(--s-border);border-radius:4px;margin-bottom:3px;${isAuto ? 'background:var(--s-card);' : ''}">
-            <div style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;">
+            <div class="atk-header" data-idx="${idx}"
+                 style="display:flex;align-items:center;gap:6px;padding:5px 8px;min-height:30px;cursor:pointer;"
+                 title="Click to expand">
                 <button type="button" class="atk-expand" data-idx="${idx}"
                     style="background:none;border:none;color:var(--s-mute);font-size:10px;cursor:pointer;padding:0;flex-shrink:0;">▶</button>
                 <span style="flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"
@@ -3807,13 +3820,21 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
 
         container.querySelectorAll('.atk-rm').forEach(btn =>
             btn.addEventListener('click', () => { attacks.splice(+btn.dataset.idx, 1); syncAttacks(); renderAttacks(); }));
-        container.querySelectorAll('.atk-expand').forEach(btn =>
-            btn.addEventListener('click', () => {
-                const d = container.querySelector(`.atk-detail[data-idx="${btn.dataset.idx}"]`);
+        // v2.4.18: clicking anywhere on the attack-row header toggles the
+        // detail panel, not just the chevron. Skip clicks that originated
+        // on the strike button or delete button so they keep their own
+        // semantics. The chevron is NOT in the skip list because clicking
+        // it should also toggle (bubbles up to the header handler).
+        container.querySelectorAll('.atk-header').forEach(header =>
+            header.addEventListener('click', (ev) => {
+                if (ev.target.closest('.atk-strike, .atk-rm')) return;
+                const idx = header.dataset.idx;
+                const d = container.querySelector(`.atk-detail[data-idx="${idx}"]`);
                 if (!d) return;
                 const open = d.style.display === 'none';
                 d.style.display = open ? '' : 'none';
-                btn.textContent = open ? '▼' : '▶';
+                const btn = header.querySelector('.atk-expand');
+                if (btn) btn.textContent = open ? '▼' : '▶';
             }));
         container.querySelectorAll('.atk-strike').forEach(btn =>
             btn.addEventListener('click', async () => {
