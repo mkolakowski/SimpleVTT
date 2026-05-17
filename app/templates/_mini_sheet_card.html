@@ -51,12 +51,17 @@
                    mini-sheets — those endpoints expect a real Character
                    row and would 404 for TokenTemplate-backed cards. #}
                 {% set _is_owner = (c.owner_user_id == user.id or is_gm) and not is_monster %}
+                {# v2.4.21: streamlined to one status row (HP stepper +
+                   inline AC / SPD / TMP chips) + one slim rest row (HD
+                   + Short + Long). TMP moved up from the rest row so
+                   the rest row carries only resting controls. See
+                   ``tabletop.html`` for the matching CSS adjustments. #}
                 <div class="mini-statblock mini-stat-row"
                      data-char-id="{{ c.id }}"
                      data-hp-cur="{{ (_hp.get('current') or 0) | int }}"
                      data-hp-max="{{ (_hp.get('max') or 0) | int }}"
                      data-hp-temp="{{ (_hp.get('temp') or 0) | int }}">
-                    {# ── Primary row: HP stepper + AC / Speed chips ── #}
+                    {# ── Status row: HP stepper + AC + SPD + TMP, all inline ── #}
                     <div class="msb-primary">
                         <div class="msb-hp-zone">
                             <span class="msb-label">HP</span>
@@ -72,28 +77,18 @@
                             </div>
                         </div>
                         <div class="msb-stat-chips">
-                            <div class="msb-chip">
-                                <span class="msb-label">AC</span>
-                                <span class="msb-val">{{ sh.get('ac','—') }}</span>
-                            </div>
-                            <div class="msb-chip">
-                                <span class="msb-label">Spd</span>
-                                <span class="msb-val">{{ sh.get('speed','—') }}</span>
+                            <div class="msb-chip"><span class="msb-label">AC</span><span class="msb-val">{{ sh.get('ac','—') }}</span></div>
+                            <div class="msb-chip"><span class="msb-label">Spd</span><span class="msb-val">{{ sh.get('speed','—') }}</span></div>
+                            <div class="msb-chip msb-chip-temp" title="Temporary HP">
+                                <span class="msb-label">Tmp</span>
+                                {% if _is_owner %}<button type="button" class="mini-hp-step mini-hp-minus" data-char-id="{{ c.id }}" data-field="temp">−</button>{% endif %}
+                                <span class="msb-val mini-hp-temp">{{ (_hp.get('temp') or 0) | int }}</span>
+                                {% if _is_owner %}<button type="button" class="mini-hp-step mini-hp-plus" data-char-id="{{ c.id }}" data-field="temp">+</button>{% endif %}
                             </div>
                         </div>
                     </div>
-                    {# ── Footer row: Temp HP + Hit Dice + Rest buttons ── #}
+                    {# ── Rest row: Hit Dice + Short + Long ── #}
                     <div class="msb-rest" data-char-id="{{ c.id }}">
-                        <div class="msb-temp-zone" title="Temporary HP">
-                            <span class="msb-label">Tmp</span>
-                            {% if _is_owner %}
-                            <button type="button" class="mini-hp-step mini-hp-minus" data-char-id="{{ c.id }}" data-field="temp">−</button>
-                            {% endif %}
-                            <span class="msb-val mini-hp-temp">{{ (_hp.get('temp') or 0) | int }}</span>
-                            {% if _is_owner %}
-                            <button type="button" class="mini-hp-step mini-hp-plus" data-char-id="{{ c.id }}" data-field="temp">+</button>
-                            {% endif %}
-                        </div>
                         <span class="msb-hd" title="Hit dice — spend on a short rest">🎲 <span class="mini-rest-hd-cur">{{ _hd_cur_v }}</span>/<span class="mini-rest-hd-max">{{ _hd_max_v }}</span> <em>{{ _hd_die }}</em></span>
                         {% if _is_owner %}
                         <button type="button" class="mini-rest-btn mini-short-rest-btn" data-char-id="{{ c.id }}" data-char-name="{{ c.name }}" title="Short rest: roll d{{ _hd_die }}+CON to recover HP">⚡ Short</button>
@@ -101,11 +96,19 @@
                         {% endif %}
                     </div>
                 </div>
-                {# Roll-state pill (v2.2.0) + Death-saves tracker (v2.1.3). #}
+                {# v2.4.21: Roll-state pill + Death-saves tracker share a single
+                   horizontal row instead of stacking vertically. ``.mini-meta-row``
+                   wraps both in a flex container; CSS in tabletop.html makes the
+                   roll pill shrink-to-content and the death-saves tracker pick
+                   up the remaining space. Death-saves pips auto-hide when
+                   ``data-status="alive"`` (no point showing 6 empty dots when
+                   the character isn't dying). #}
+                <div class="mini-meta-row">
                 {% with char=c, sheet=sh, can_edit=_is_owner %}
                   {% include "_roll_state_pill.html" %}
                   {% include "_death_saves_tracker.html" %}
                 {% endwith %}
+                </div>
                 {# ── Abilities: name · modifier · roll button (raw score row removed) ── #}
                 <div class="mini-ab-header">
                     <span class="mini-section-label" style="margin:0;flex:1;">Abilities</span>

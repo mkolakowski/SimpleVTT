@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.21] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Streamline the middle section of the **init-card mini-sheet** (the HP / AC / SPD / TMP / Hit Dice / rest / roll-mode / death-saves block that sits between the row header and the abilities grid). Pre-v2.4.21 the block took 4 distinct rows: a 2-column HP+chips primary panel, a TMP+HD+rest footer, a separate roll-mode pill, and a separate death-saves tracker — each with its own padding and borders. v2.4.21 collapses to 2-3 rows: one status row (HP stepper inline with AC / SPD / TMP), one rest row (HD + Short + Long), one meta row (roll-mode pill + death-saves badge side by side, with the 6 pips auto-hidden when the character is alive). Header above + abilities and below remain visually unchanged per the user's instruction. User-requested.
+**Description:** Coordinated edits in `app/templates/_mini_sheet_card.html` (markup restructure) + `app/templates/tabletop.html` (matching CSS). (1) `.msb-primary` flattens from a 2-column flex to a single-line horizontal flex with HP stepper on the left and AC / SPD / TMP chips inline on the right (`margin-left: auto` pushes them right). TMP migrated up from the rest row; gets its own `.msb-chip.msb-chip-temp` with the existing `mini-hp-step ±` buttons inline alongside the value. (2) `.msb-rest` now hosts only Hit Dice + Short + Long buttons — slimmer (4→6 px padding) since it's a single line of controls. (3) The mini-sheet now wraps the included `_roll_state_pill.html` + `_death_saves_tracker.html` in a `.mini-meta-row` flex container so they sit side by side; the roll pill stays shrink-to-content and the death-saves tracker fills the rest. Pre-v2.4.21 each occupied its own vertical row with a top border. (4) New CSS rule `.death-saves-tracker[data-status="alive"] .death-saves-pips-row { display: none; }` hides the 6 empty success/failure pips when nobody's dying — the ALIVE green chip on the status badge is enough info. (5) Compact tweaks: `.msb-hp-cur` font 28→20 px, `.mini-hp-step` button 26→22 px, `.init-card-edit` padding 6→4 px, `.mini-statblock` border-radius 8→6 px and margin-bottom 8→6 px.
+**Description (cont):** What's unchanged per the user's "keep the header and everything from abilities down": the `.mini-header` row (portrait + name + Init / HP subline + sheet button + chevron) is untouched; the abilities grid + skills / attacks / spells tabs below the new `.mini-meta-row` are untouched. The `init-card-edit` row at the very top of the expanded card (GM-only Init / HP / max-HP / × inputs, rendered by the init-tracker JS in `tabletop.html`) got the small padding trim but otherwise still shows the same fields — it's a GM editor that drives different state (combatant battle-state HP, separate from character sheet HP) and can't be merged without losing that distinction.
+
+### Changed
+- `app/templates/_mini_sheet_card.html` `.mini-statblock` — restructured to a single status row (HP / AC / SPD / TMP all inline) + a slim rest row (HD / Short / Long). TMP moved up from the rest row into a new `.msb-chip-temp` inside `.msb-primary`.
+- `app/templates/_mini_sheet_card.html` — `_roll_state_pill.html` + `_death_saves_tracker.html` includes now wrapped in a `.mini-meta-row` flex container so they share one row instead of stacking.
+- `app/templates/tabletop.html` `.msb-primary` / `.msb-stat-chips` / `.msb-chip` / `.msb-rest` CSS — flex-direction row everywhere; AC/SPD chips inline; HP-cur font 28→20 px; HP-step buttons 26→22 px; tighter padding.
+- `app/templates/tabletop.html` — new `.mini-meta-row` flex container CSS; auto-hide `.death-saves-pips-row` + `.death-saves-actions` when the tracker's `data-status="alive"`.
+- `app/templates/tabletop.html` `.init-card-edit` — padding 6→4 px, gap 5→4 px to match the slimmer mini-statblock below.
+
+### Notes
+- The auto-hide for `.death-saves-pips-row` is scoped under `.mini-meta-row` so the standalone character-sheet death-saves tracker (`sheet_dnd5e.html`) keeps showing the pip row at all times — useful for GMs to see "this character has 1 success" without waiting for them to drop to 0 HP first.
+- TMP gets its own `.msb-chip-temp` class (tighter gap) so the `−value+` cluster reads as a single unit rather than three separate chips.
+- All retained interactivity: HP/Tmp ± buttons still POST `/api/character/<id>/hp` via `mini-hp-step` handlers; the Short / Long rest endpoints unchanged. Markup classes that JS handlers key off (`.mini-hp-step`, `.mini-rest-btn`, `.mini-hp-temp`, etc.) are preserved verbatim.
+
+---
+
 ## [2.4.20] - 2026-05-17
 
 **Schema version:** 53

@@ -392,30 +392,43 @@
     .mini-header-sub { font-size: 10px; color: var(--accent); margin-top: 2px; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .mini-header-arrow { font-size: 10px; color: var(--accent); flex-shrink: 0; margin-top: 3px; transition: transform .2s; line-height: 1; }
     .mini-header-arrow.open { transform: rotate(90deg); }
-    /* ── Compact stat block ── */
-    .mini-statblock { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; overflow: hidden; background: var(--bg-2); }
-    /* Primary row: HP stepper (left) + AC/Speed chips (right) */
-    .msb-primary { display: flex; align-items: stretch; }
-    .msb-hp-zone { flex: 1; padding: 8px 10px 6px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
-    .msb-hp-stepper { display: flex; align-items: center; gap: 8px; }
-    .msb-hp-cur { font-size: 28px; font-weight: 800; line-height: 1; }
-    .msb-hp-max { font-size: 12px; color: var(--fg-mute); font-weight: 500; }
-    .msb-stat-chips { display: flex; flex-direction: column; flex-shrink: 0; border-left: 1px solid var(--border); }
-    .msb-chip { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4px 12px; min-width: 44px; }
-    .msb-chip + .msb-chip { border-top: 1px solid var(--border); }
-    .msb-label { font-size: 9px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.4px; display: block; text-align: center; }
-    .msb-val { font-size: 14px; font-weight: 700; display: block; line-height: 1.2; }
-    /* Rest/footer row: Temp HP + HD + rest buttons */
-    .msb-rest { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-top: 1px solid var(--border); flex-wrap: wrap; }
-    .msb-temp-zone { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+    /* ── Compact stat block (v2.4.21 streamlined) ── */
+    .mini-statblock { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; overflow: hidden; background: var(--bg-2); }
+    /* Status row: HP stepper + AC + SPD + TMP, all inline on one line.
+       Pre-v2.4.21 this was a 2-column flex with HP on the left and a
+       vertical AC/SPD chip stack on the right; v2.4.21 flattens it to a
+       single row and folds TMP in from the rest row. */
+    .msb-primary { display: flex; align-items: center; gap: 10px; padding: 6px 10px; flex-wrap: wrap; }
+    .msb-hp-zone { display: flex; align-items: center; gap: 5px; }
+    .msb-hp-stepper { display: flex; align-items: center; gap: 6px; }
+    .msb-hp-cur { font-size: 20px; font-weight: 800; line-height: 1; }
+    .msb-hp-max { font-size: 11px; color: var(--fg-mute); font-weight: 500; }
+    /* Inline chip strip (was vertically-stacked, separator-bordered column). */
+    .msb-stat-chips { display: flex; flex-direction: row; align-items: center; gap: 10px; margin-left: auto; flex-wrap: wrap; }
+    .msb-chip { display: flex; flex-direction: row; align-items: baseline; gap: 4px; padding: 0; min-width: 0; }
+    .msb-chip + .msb-chip { border-top: none; }
+    .msb-chip-temp { gap: 3px; }
+    .msb-label { font-size: 9px; color: var(--fg-mute); text-transform: uppercase; letter-spacing: 0.4px; }
+    .msb-val { font-size: 13px; font-weight: 700; line-height: 1; }
+    /* Rest row: just Hit Dice + Short + Long now (TMP moved into status row). */
+    .msb-rest { display: flex; align-items: center; gap: 6px; padding: 4px 10px 6px; border-top: 1px solid var(--border); flex-wrap: wrap; }
     .msb-hd { font-size: 11px; color: var(--fg-mute); flex: 1; min-width: 0; }
     .msb-hd em { font-style: normal; color: var(--fg); font-weight: 600; }
     .msb-rest .mini-rest-btn { font-size: 11px; padding: 2px 8px; min-height: 32px; }
-    /* HP step buttons: compact circles */
-    .mini-hp-step { width: 26px; height: 26px; min-height: 26px; border-radius: 50%; font-size: 15px; font-weight: 700;
+    /* HP step buttons: compact circles. v2.4.21 trimmed 26→22px to match
+       the slimmer status row. */
+    .mini-hp-step { width: 22px; height: 22px; min-height: 22px; border-radius: 50%; font-size: 13px; font-weight: 700;
                     line-height: 1; border: 1px solid var(--border); background: var(--input-bg); color: var(--fg-mute);
                     cursor: pointer; display: inline-flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; }
     .mini-hp-step:hover { border-color: var(--accent); color: var(--accent); background: var(--btn-hover); }
+    /* v2.4.21: roll-state pill + death-saves tracker share one row. The
+       roll pill shrinks to content; the death-saves tracker auto-hides
+       its 6-pip row when the character is alive. */
+    .mini-meta-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+    .mini-meta-row .roll-state-pill { flex: 0 0 auto; }
+    .mini-meta-row .death-saves-tracker { flex: 1 1 auto; margin-top: 0; padding-top: 0; border-top: none; }
+    .mini-meta-row .death-saves-tracker[data-status="alive"] .death-saves-pips-row,
+    .mini-meta-row .death-saves-tracker[data-status="alive"] .death-saves-actions { display: none; }
     /* ── modifier row variant: larger text, no mute colour ── */
     .mac-mod-lg { font-size: 12px; font-weight: 700; color: var(--fg); padding-bottom: 2px; }
     /* ── Section tabs ── */
@@ -536,7 +549,10 @@
     /* mini-body/footer moved from char-detail into an open init-card-sheet stay visible */
     .init-card-sheet .mini-body,
     .init-card-sheet .mini-footer { display: block; }
-    .init-card-edit { display:flex; align-items:center; gap:5px; padding:6px 8px; border-bottom:1px solid var(--border); }
+    /* v2.4.21: trimmed padding 6→4 px, gap 5→4 px so the GM editor strip
+       at the top of an expanded init-card sits flush against the streamlined
+       mini-statblock below. */
+    .init-card-edit { display:flex; align-items:center; gap:4px; padding:4px 8px; border-bottom:1px solid var(--border); }
     /* v2.4.9: bumped 24px → 36px (50% larger) so PC / NPC portraits read clearly in the init tracker. */
     .init-swatch { width:36px; height:36px; border-radius:50%; flex-shrink:0; border:1px solid var(--border); }
     .init-name { flex:1; font-size:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
