@@ -3305,6 +3305,81 @@ let CONC_DATA = {{ conc_by_char | tojson }};
      *  still opens the full PC-style sheet in the drawer for deeper
      *  inspection. Returns HTML only; click handlers wire up in the
      *  ``.monster-strike-btn`` document listener below. */
+
+    /* v2.4.10: Skills + saving-throw block for the monster mini-sheet's
+     *  Skills tab. Parses the SRD-style ``prof_skills`` /
+     *  ``prof_saving_throws`` comma-separated strings ("Athletics +4,
+     *  Deception +4" / "Str +4, Dex +5") to extract per-skill / per-save
+     *  bonuses. For skills NOT listed in prof_skills (the majority of
+     *  the 18 standard 5e skills on any given monster) we fall back to
+     *  the bare ability modifier — no proficiency. Proficient entries
+     *  are highlighted with a ◆ marker + brighter ``var(--fg)`` colour,
+     *  mirroring the PC mini-sheet's skills grid visual language. */
+    function _monsterSkillsHtml(sh) {
+        const ab = sh.abilities || {};
+        const abi = s => Math.floor(((parseInt(s) || 10) - 10) / 2);
+        const fmt = n => (n >= 0 ? '+' : '') + n;
+
+        // Parse ``prof_skills`` — string like "Athletics +4, Deception +4".
+        // Resilient to weird whitespace and apostrophes in skill names
+        // ("Sleight of Hand", "Animal Handling" etc.).
+        const profSkills = {};
+        if (typeof sh.prof_skills === 'string' && sh.prof_skills.trim()) {
+            sh.prof_skills.split(',').forEach(part => {
+                const m = part.match(/^\s*([A-Za-z' ]+?)\s*([+-]\d+)\s*$/);
+                if (m) profSkills[m[1].trim()] = parseInt(m[2]);
+            });
+        }
+        // Parse ``prof_saving_throws`` — "Str +4, Dex +5, Wis +2".
+        const profSaves = {};
+        if (typeof sh.prof_saving_throws === 'string' && sh.prof_saving_throws.trim()) {
+            sh.prof_saving_throws.split(',').forEach(part => {
+                const m = part.match(/^\s*(Str|Dex|Con|Int|Wis|Cha)\s*([+-]\d+)\s*$/i);
+                if (m) profSaves[m[1].toUpperCase()] = parseInt(m[2]);
+            });
+        }
+
+        const STATS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+        const SKILL_LIST = [
+            ['Acrobatics', 'DEX'], ['Animal Handling', 'WIS'], ['Arcana', 'INT'],
+            ['Athletics', 'STR'], ['Deception', 'CHA'], ['History', 'INT'],
+            ['Insight', 'WIS'], ['Intimidation', 'CHA'], ['Investigation', 'INT'],
+            ['Medicine', 'WIS'], ['Nature', 'INT'], ['Perception', 'WIS'],
+            ['Performance', 'CHA'], ['Persuasion', 'CHA'], ['Religion', 'INT'],
+            ['Sleight of Hand', 'DEX'], ['Stealth', 'DEX'], ['Survival', 'WIS'],
+        ];
+
+        let html = '';
+
+        // Saving throws row — all six stats. Proficient ones brighter +
+        // marker. Most monsters list 0-3 proficient saves; the rest fall
+        // back to bare ability mod.
+        html += '<div style="font-size:9px;font-weight:700;color:var(--fg-mute);text-transform:uppercase;letter-spacing:0.5px;margin:4px 0 4px;">Saving Throws</div>';
+        html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">';
+        STATS.forEach(s => {
+            const isPro = s in profSaves;
+            const mod = isPro ? profSaves[s] : abi(parseInt(ab[s]) || 10);
+            html += `<span style="font-size:11px;${isPro ? 'color:var(--fg);font-weight:600;' : 'color:var(--fg-mute);'}">${s} ${fmt(mod)}${isPro ? ' ◆' : ''}</span>`;
+        });
+        html += '</div>';
+
+        // Skills grid — 2-column, all 18. Mirrors buildInitSheet for PCs.
+        html += '<div style="font-size:9px;font-weight:700;color:var(--fg-mute);text-transform:uppercase;letter-spacing:0.5px;margin:8px 0 4px;">Skills</div>';
+        html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:1px 8px;">';
+        SKILL_LIST.forEach(([name, sab]) => {
+            const isPro = name in profSkills;
+            const mod = isPro ? profSkills[name] : abi(parseInt(ab[sab]) || 10);
+            const marker = isPro ? '◆' : '';
+            html += `<div style="display:flex;justify-content:space-between;font-size:10px;padding:1px 0;${isPro ? 'color:var(--fg);' : 'color:var(--fg-mute);'}">
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">${marker ? marker + ' ' : ''}${name}</span>
+                <span style="flex-shrink:0;font-weight:${isPro ? '600' : '400'};margin-left:4px;">${fmt(mod)}</span>
+            </div>`;
+        });
+        html += '</div>';
+
+        return html;
+    }
+
     function buildMonsterInitSheet(combatant) {
         let tmpl = (combatant && combatant.token_template_id)
             ? allTemplates.find(t => t.id === combatant.token_template_id) : null;
@@ -3414,9 +3489,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 combatant.action_charges[a.id] = a.charges_max;
             }
         });
+        // v2.4.10: build the Actions content into its own string so it
+        // can be wrapped in a tab panel below alongside the new Skills
+        // panel. AC/Spd chips + ability grid stay above the tabs (matching
+        // the PC mini-sheet structure where they're always visible).
+        let actionsHtml = '';
         if (actions.length) {
-            html += '<div style="font-size:9px;font-weight:700;color:var(--fg-mute);text-transform:uppercase;letter-spacing:0.5px;margin:8px 0 4px;">Actions</div>';
-            html += '<div class="monster-init-actions" style="display:flex;flex-direction:column;gap:4px;">';
+            actionsHtml += '<div class="monster-init-actions" style="display:flex;flex-direction:column;gap:4px;">';
             actions.forEach((a) => {
                 const charges_cur = (a.charges_max > 0)
                     ? (combatant.action_charges[a.id] ?? a.charges_max) : null;
@@ -3453,14 +3532,47 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 if (a.save_dc && a.save_ability) {
                     btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="save"${spent ? ' disabled' : ''} title="Announce save — DC ${a.save_dc} ${a.save_ability}">📋 Save</button>`);
                 }
-                html += `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:3px 6px;background:var(--input-bg);border-radius:3px;font-size:11px;${spent ? 'opacity:0.55;' : ''}">
+                actionsHtml += `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:3px 6px;background:var(--input-bg);border-radius:3px;font-size:11px;${spent ? 'opacity:0.55;' : ''}">
                     <span style="font-weight:600;flex:1 1 auto;min-width:0;">${a.name}</span>
                     ${tags.join(' ')}
                     ${btns.join('')}
                 </div>`;
             });
-            html += '</div>';
+            actionsHtml += '</div>';
         }
+
+        // v2.4.10: tab bar — Actions (default) / Skills. Wired into the
+        // existing ``_setMiniTab`` handler at line ~2835 via the same
+        // ``.mini-tab-btn`` / ``.mini-tab-panel`` markup the PC mini-sheet
+        // partial uses. ``slotKey`` uses ``combatant.id`` (a unique-per-row
+        // string like ``tok_501_demo``) NOT the token-template id — three
+        // bandits sharing one TokenTemplate would otherwise all carry
+        // ``data-char-id="monster-{tid}"`` and ``_setMiniTab``'s
+        // document.querySelector would only toggle the first one. Per-row
+        // keying means each combatant's tab state persists independently
+        // in localStorage (``vtt_minitab_tok_501_demo`` etc.). The Actions
+        // panel keeps the existing inline content (action rows + click-
+        // to-roll buttons) so the GM workflow is unchanged on default.
+        // The Skills panel is new — saving throws + 18-skill grid built
+        // from ``prof_skills`` / ``prof_saving_throws`` strings with the
+        // PC mini-sheet's highlighting language.
+        const slotKey = combatant.id || ('monster-' + tmpl.id);
+        let savedTab = 'actions';
+        try { savedTab = localStorage.getItem('vtt_minitab_' + slotKey) || 'actions'; } catch (_) {}
+        if (savedTab !== 'actions' && savedTab !== 'skills') savedTab = 'actions';
+        const skillsHtml = _monsterSkillsHtml(sh);
+        html += `<div class="mini-tabs" data-char-id="${slotKey}">
+            <button class="mini-tab-btn${savedTab === 'actions' ? ' active' : ''}" data-char-id="${slotKey}" data-tab="actions">Actions</button>
+            <button class="mini-tab-btn${savedTab === 'skills' ? ' active' : ''}" data-char-id="${slotKey}" data-tab="skills">Skills</button>
+        </div>
+        <div class="mini-tab-content" data-char-id="${slotKey}">
+            <div class="mini-tab-panel${savedTab === 'actions' ? ' active' : ''}" data-char-id="${slotKey}" data-panel="actions">
+                ${actionsHtml || '<p class="muted" style="font-size:11px;padding:4px 0;">No structured actions.</p>'}
+            </div>
+            <div class="mini-tab-panel${savedTab === 'skills' ? ' active' : ''}" data-char-id="${slotKey}" data-panel="skills">
+                ${skillsHtml}
+            </div>
+        </div>`;
 
         html += '</div>';
         return html;
