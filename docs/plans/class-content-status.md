@@ -460,6 +460,35 @@ action).
    around again — track via a `_reactionResetOnNextTurn` flag). Ship as
    one commit; UI is immediately useful for manual tracking even without
    the auto-advance.
+
+   **What to test in the VTT (after shipping Phase 1, currently v2.4.31):**
+   1. Log in as the demo GM (`demo-gm@example.com` / `demopass`) at
+      `/login` (use the v2.4.4 Fill button).
+   2. Navigate to `/campaign/1` (the demo campaign auto-loads).
+   3. Open the **Battle** drawer (the v2.4.5-renamed tab in the topbar).
+      The init tracker is auto-populated from the v2.4.3 fix — 9
+      combatants visible.
+   4. Each combatant row should show three small chips under the
+      Init/HP subline: `○ Act` · `○ Bns` · `○ Rxn` — all empty green
+      circles (available).
+   5. Click any chip → it flips to filled amber (●) and the tooltip
+      changes to "used this turn". Click again → flips back. Repeat
+      across all three chips on one combatant.
+   6. Click **Next turn** (or the Next button if you've started
+      initiative) → advance to the next combatant. The chips on the
+      *new* active combatant reset to empty green; chips on the
+      previous combatant stay where they were.
+   7. Click **Start Initiative** → every combatant's chips reset to
+      empty. Re-test the toggle on combatant 1, advance turns through
+      the full round → chips reset correctly each time `turn_index`
+      lands on a combatant.
+   8. Reload the page → chips state persists for combatants whose
+      slots were "used" (localStorage round-trip via `saveBattle`).
+   9. Open the same campaign in a second browser tab as the GM →
+      toggling a chip in tab A updates tab B within a second (via the
+      WS `battle_update` broadcast from `pushBattle`). Players in the
+      same campaign see read-only chip state (they can't toggle).
+
 2. **Phase 2 — Auto-advance from action / strike / cast buttons.** Each
    click on `.mini-strike-btn` / `.monster-strike-btn` / `.atk-strike`
    / `.mini-cast-btn` / `.sp-cast` reads its `data-economy` and marks
@@ -467,23 +496,108 @@ action).
    `casting_time` parsing happens at template-render time for the full
    sheet, at `combatantFromToken` time for the mini-sheet monster
    actions, at the spell-row render in `_mini_sheet_card.html` for PCs.
+
+   **What to test in the VTT after shipping Phase 2:**
+   1. As the demo GM in `/campaign/1`, open the Battle drawer + start
+      initiative. Verify Pip Quickfingers' (or any PC's) Act/Bns/Rxn
+      chips begin empty.
+   2. Expand Pip's init-card → click 🗡 Strike on the Shortsword
+      attack. Expected: the roll fires in the roll log AND Pip's
+      Act chip flips to filled amber. The Bns and Rxn chips stay
+      empty.
+   3. Click 🗡 Strike on the Dagger (also an action). Expected: roll
+      fires; Act chip stays amber (already used); no Bns/Rxn change.
+      The chip's "tooltip" should say "used this turn" but the click
+      isn't blocked yet (gating is Phase 4).
+   4. Open Thalindra Moonwhisper's init card → click 🪄 Cast on
+      Healing Word (a 1-bonus-action spell). Expected: roll fires AND
+      her Bns chip flips amber. Act stays empty.
+   5. Click 🪄 Cast on Fireball (a 1-action spell). Expected: roll
+      fires AND Act chip flips amber.
+   6. Click 🪄 Cast on Shield (a 1-reaction spell). Expected: roll
+      fires AND Rxn chip flips amber.
+   7. Expand Vex (Bandit Captain) → click 🎯 Attack on Scimitar.
+      Expected: monster action roll fires AND Vex's Act chip flips
+      amber.
+   8. Click **Next turn** until it cycles to Pip → all three chips
+      reset to empty. Re-trigger steps 2-6 to confirm the cycle.
+
 3. **Phase 3 — Class-feature economy table.** Author
    `app/static/dnd5e_feature_economy.js` with the canonical per-feature
    action tag table. Used by the resource option-picker (Channel
    Divinity, Bardic Inspiration, Ki spend, etc.) to mark the right slot
    when the option is fired. The Channel Divinity 3-phase plan can drop
    its per-feature action-cost tracking and read from this table.
+
+   **What to test in the VTT after shipping Phase 3:**
+   1. (Requires Channel Divinity option-picker, prerequisite item #2
+      on the priority list.) As the demo GM with Brother Tavik (Life
+      Domain Cleric Lv 5), open the Battle drawer → expand Tavik's
+      init-card.
+   2. Click the Channel Divinity counter chip → option overlay opens
+      with `Turn Undead` and `Preserve Life`. Click Turn Undead.
+      Expected: CD counter decrements (1/1 → 0/1), the slot-DC roll
+      fires to the log, AND Tavik's Act chip flips amber (Turn Undead
+      is an action per `_CHANNEL_DIVINITY_OPTIONS.life`).
+   3. Click Next turn through one full round so Tavik's slots reset.
+      Click CD chip again → pick Preserve Life. Expected: same flow,
+      Act flips amber (Preserve Life is also an action).
+   4. If/when Pip's Cunning Action lands (Rogue Lv 2 feature, also
+      Phase 3-tagged): click Cunning Action → Bns flips, Act stays
+      empty. Click Action Surge (Fighter Lv 2 if a Fighter PC is
+      added): no chip changes — Action Surge is `free` (it grants an
+      extra action, doesn't consume one).
+
 4. **Phase 4 — Gating + GM override.** Disable buttons whose economy
    slot is used (50% opacity + cursor:not-allowed). GM can shift+click
    or right-click to override. Players see a tooltip explaining why.
    Players who try to click anyway get a confirm: "You've already used
    your bonus action this turn. Use it anyway?" — yes path manually
    advances state, no path closes the modal.
+
+   **What to test in the VTT after shipping Phase 4:**
+   1. As Pip the player (`demo-alice@example.com`), click 🗡 Strike on
+      Shortsword. Act flips amber.
+   2. Try to click 🗡 Strike on the Dagger again. Expected: the button
+      visually dims to ~50% opacity, cursor shows
+      `not-allowed` on hover. Tooltip: "Action already used this
+      turn — your Act slot is spent".
+   3. Click anyway. Expected: a small confirm modal appears: "You've
+      already used your action this turn. Roll the Dagger attack
+      anyway?". Click Cancel → modal closes, roll doesn't fire.
+   4. Repeat step 3, click Confirm. Expected: roll fires; Act chip
+      stays amber (already amber). The roll log records the dagger
+      attack.
+   5. As the GM (`demo-gm@example.com`), perform the same dimmed-button
+      click → no confirm modal; the roll just fires. Phase 4 includes
+      a GM-bypass for the modal.
+   6. Click Next turn. The chips reset to empty; buttons return to
+      full opacity.
+
 5. **Phase 5 — Movement tracker (optional).** Add a `Mov 30/30 ft`
    chip; auto-decrement when the GM drags a token (the existing
    `/api/.../token/.../move` endpoint already broadcasts moves with
    from/to coordinates — tie into that to compute distance moved and
    subtract from the budget).
+
+   **What to test in the VTT after shipping Phase 5:**
+   1. As the demo GM on `/campaign/1`, start initiative on the Tavern
+      Brawl. The active combatant's init-card should show a fourth
+      chip: `Mov 30/30 ft` (Pip's speed) or whatever each combatant's
+      `sheet.speed` is.
+   2. Drag Pip's token on the canvas by 2 grid cells (140 px at 70
+      px/cell = 2 squares = 10 ft). Expected: the chip updates to
+      `Mov 20/30 ft`.
+   3. Drag again by 3 grid cells (15 ft). Expected: chip updates to
+      `Mov 5/30 ft`.
+   4. Drag past the budget — drag another 2 cells (10 ft). Expected:
+      chip shows `Mov 0/30 ft` in red or amber (overrun indicator) —
+      the drag isn't blocked (the GM can always override), just
+      flagged visually.
+   5. Click Next turn → Pip's movement resets to `Mov 30/30 ft`.
+   6. (Optional) Click the Mov chip → manually edit the value, e.g.
+      to reflect a Dash bonus action that doubled the budget for
+      this turn.
 
 **Dependencies:**
 
@@ -511,6 +625,39 @@ action).
   rather than just visible. Mistakes get flagged before they happen.
 - After Phase 5 (movement): The fifth column closes the "what can my
   character still do this turn" UX gap.
+
+**Related: house-rule toggles (shipped piecemeal alongside the
+economy phases).** Per-campaign Boolean preferences on the `Campaign`
+model affect how the economy framework interprets specific button
+clicks. First example landed in v2.5.0: `potions_as_bonus_action`.
+
+**What to test in the VTT for the `potions_as_bonus_action` toggle
+(v2.5.0):**
+
+1. As the demo GM (`demo-gm@example.com`), navigate to
+   `/campaign/1/settings`.
+2. Scroll to the **📜 House rules** fieldset (between the
+   GM-font-override section and the 🎵 Audio fieldset).
+3. The checkbox "Potions are a bonus action" should render unchecked
+   by default (RAW). Below it: explainer text flagging the rule as a
+   Xanathar's / Tasha's variant + a note that the toggle is currently
+   informational until action-economy Phase 2 ships the "Use Item"
+   button on consumable inventory items.
+4. Tick the checkbox → click the form's **Save** button at the bottom
+   of the page. Expected: redirect / re-render with the checkbox now
+   ticked. Reload the page → still ticked (persisted via the v54
+   schema column `campaigns.potions_as_bonus_action`).
+5. Untick + Save → checkbox unticks, persists.
+6. Verify the DB column directly (operator sanity check):
+   `docker exec simplevtt-db psql -U simplevtt -d simplevtt -c
+   "SELECT id, name, potions_as_bonus_action FROM campaigns;"` →
+   shows the toggle value matching the UI.
+7. (After action-economy Phase 2 + the "Use Item" potion button
+   land): with the checkbox on, click the Use button on a Healing
+   Potion item on Tavik's sheet. Expected: HP increases, qty
+   decrements, AND Tavik's Bns chip flips amber. With the checkbox
+   off, the same click flips Act chip amber instead. This step is
+   filed for the Phase 2 follow-up.
 
 ---
 

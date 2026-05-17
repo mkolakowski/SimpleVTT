@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.5.1] - 2026-05-17
+
+**Schema version:** 54
+**Commit summary:** Add concrete **"What to test in the VTT"** procedures to every phase block in the action-economy plan (section E of `docs/plans/class-content-status.md`), plus a parallel test block for the v2.5.0 `potions_as_bonus_action` house-rule toggle. Each procedure is a numbered click-by-click walkthrough a tester can follow against the live demo (demo GM credentials + specific seeded combatants) to verify the phase works end-to-end. Docs-only; no code change. User-requested.
+**Description:** New sub-section "What to test in the VTT" appended to each of the five Phase blocks (Phase 1 chip strip, Phase 2 auto-advance, Phase 3 feature table, Phase 4 gating, Phase 5 movement) + the "Related: house-rule toggles" block at the end of section E. Each test list is structured as a numbered set of steps starting from a known good state (demo GM logged in, on `/campaign/1`), walking through specific UI interactions (click X, expect Y), and ending with reset / cross-tab / persistence checks. The Phase 1 block tests v2.4.31's currently-shipped behaviour and is runnable against the live demo today; subsequent phases describe the steps that will become runnable as each phase lands.
+**Description (cont):** Why concrete steps with specific combatant names + button labels: a tester (the user, an LLM running the test, a colleague) shouldn't have to re-derive what "open the Battle drawer" or "expand Brother Tavik's init-card" means. Demo seed names (Pip Quickfingers, Thalindra Moonwhisper, Brother Tavik Stonebrow, Vex / Grixxa) are stable across resets, so the test steps reference them directly. Pixel measurements (140 px = 2 grid cells at 70 px/cell) are likewise stable against the v2.4.1 1254×1254 map + the default grid size. The house-rule test includes a DB sanity-check command (`docker exec simplevtt-db psql ...`) so the operator can confirm persistence even if the settings page UI is mid-development.
+
+### Added
+- `docs/plans/class-content-status.md` section E — "What to test in the VTT" sub-block after each Phase 1-5 description. 8-step Phase 1 walkthrough (currently runnable); 8-step Phase 2 walkthrough (post-Phase-2); 4-step Phase 3 walkthrough (post-feature-table); 6-step Phase 4 walkthrough (gating + GM override); 6-step Phase 5 walkthrough (movement tracker).
+- `docs/plans/class-content-status.md` section E "Related: house-rule toggles" block — 7-step test procedure for the v2.5.0 `potions_as_bonus_action` toggle covering UI persistence, the DB column directly via `psql`, and the Phase-2-deferred mechanical integration.
+
+### Notes
+- Test steps are written for the demo deploy (`vtt-demo.iptater.net` or equivalent). For non-demo testing, swap `demo-gm@example.com` for whichever GM account exists.
+- The tests are intentionally "happy path" — no edge-case enumeration (what happens if you click a chip while initiative isn't started? what if a combatant has no `sheet.speed`?). Edge cases land in commit-time review for each phase.
+- The Phase 1 test set is runnable against v2.4.31 / v2.5.1 right now. Take that one for a spin — it's a good sanity check that the chips are working end-to-end on the live demo before Phase 2 work begins.
+
+---
+
 ## [2.5.0] - 2026-05-17
 
 **Schema version:** 54
