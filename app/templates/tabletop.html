@@ -4632,6 +4632,29 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             renderBattle();
             return;
         }
+        // v2.5.5: action-economy Phase 2b. Full-character-sheet clicks
+        // (.atk-strike / .sp-cast in sheet_dnd5e.html) live on a separate
+        // page; the server fires this message after cast_spell /
+        // use_attack so every tabletop client — GM included, since GM
+        // ignores ``battle_update`` above — updates the matching chip.
+        // The message is authoritative: a player cast that we already
+        // tracked locally (via the mini-sheet path) is idempotent.
+        if (msg.type === 'economy_update') {
+            const data = msg.data || {};
+            const cid = parseInt(data.character_id, 10);
+            const slot = data.slot;
+            if (!Number.isFinite(cid)) return;
+            if (slot !== 'action' && slot !== 'bonus' && slot !== 'reaction') return;
+            const combatant = (battle.combatants || []).find(c => c.char_id === cid);
+            if (!combatant) return;
+            _ensureEconomy(combatant);
+            const next = !!data.used;
+            if (combatant.economy[slot] === next) return;
+            combatant.economy[slot] = next;
+            saveBattle();
+            renderBattle();
+            return;
+        }
         // v2.3.19: keep ``allTokens`` reactive so the GM's "From Map"
         // button picks up tokens placed after page load (Library /
         // Open5e / Players-tab adds all post-load). Previously

@@ -77,6 +77,70 @@ def _purge_heal_claims() -> None:
         del _heal_claims[k]
 
 
+# v2.5.5 (action-economy Phase 2b): server-side mirrors of the JS
+# helpers in tabletop.html. Full-character-sheet clicks (.atk-strike,
+# .sp-cast) live on a separate page from the tabletop, so the player's
+# browser can't directly mutate the GM's init-tracker chips. Instead
+# cast_spell / use_attack call _mark_battle_economy which updates the
+# in-memory hub state and broadcasts ``economy_update``; both GM and
+# player tabletop clients listen and re-render. Mini-sheet / monster
+# clicks (Phase 2) still go through the JS path because they happen
+# inside the tabletop page where ``battle`` is already in scope.
+
+def _casting_time_to_economy(ct: str) -> str:
+    """Map a spell's ``casting_time`` string to an economy slot.
+
+    Mirrors ``_castingTimeToEconomy`` in tabletop.html. Returns one of
+    ``action`` / ``bonus`` / ``reaction`` / ``none``; the ``none`` branch
+    covers cantrip-free utility spells (10-minute rituals, etc.) and
+    legacy rows with missing casting_time.
+    """
+    lc = (ct or "").lower()
+    if "bonus action" in lc:
+        return "bonus"
+    if "reaction" in lc:
+        return "reaction"
+    if "action" in lc:
+        return "action"
+    return "none"
+
+
+async def _mark_battle_economy(campaign_id: int, character_id: int, slot: str) -> None:
+    """Mark a PC's action-economy slot in the hub battle state.
+
+    No-op when the campaign has no active battle, the character isn't in
+    init, the slot is invalid, or the slot is already used (matches the
+    JS ``_markCombatantEconomy`` idempotence — clicking Strike twice
+    doesn't free up your action). Broadcasts ``economy_update`` so every
+    connected tabletop client (GM included — GM ignores ``battle_update``
+    but listens to this) updates its chip strip.
+    """
+    if slot not in ("action", "bonus", "reaction"):
+        return
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == character_id:
+            target = c
+            break
+    if target is None:
+        return
+    economy = target.get("economy")
+    if not isinstance(economy, dict):
+        economy = {"action": False, "bonus": False, "reaction": False, "movement": 0}
+        target["economy"] = economy
+    if economy.get(slot):
+        return
+    economy[slot] = True
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "economy_update",
+        "data": {"character_id": character_id, "slot": slot, "used": True},
+    })
+
+
 # ----------- helpers -----------
 
 def _user_can_view_campaign(db: Session, user: User, campaign: Campaign) -> bool:
@@ -5236,6 +5300,13 @@ async def cast_spell(
                 "used": updated_slot["used"],
             },
         })
+    # v2.5.5: full-sheet → init chip sync. Derive the slot from the
+    # spell's casting_time; cantrips with no casting_time fall through
+    # to ``none`` and the helper short-circuits.
+    await _mark_battle_economy(
+        campaign_id, char.id,
+        _casting_time_to_economy(spell.get("casting_time", "")),
+    )
     return {"ok": True, "id": cast_id, "slot": updated_slot}
 
 
@@ -6576,6 +6647,11 @@ async def use_attack(
         "roll_state_applied": attack_roll_state_applied or None,
     }
     await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
+    # v2.5.5: full-sheet → init chip sync. Weapon attacks always burn the
+    # action slot; bonus-action attacks (e.g. off-hand light weapon) come
+    # through a separate row whose action.economy override is followed
+    # in Phase 3, not here.
+    await _mark_battle_economy(campaign_id, char.id, "action")
     # Return the attack + damage totals so the sheet's .atk-strike handler can
     # fire the shared roll-toast immediately. The broadcast still drives the
     # tabletop's roll-card path; this echo gives the rolling player a popup
