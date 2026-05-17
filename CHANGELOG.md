@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.5.4] - 2026-05-17
+
+**Schema version:** 54
+**Commit summary:** Expand the **Phase 4 over-budget messaging design** in section E of `docs/plans/class-content-status.md`. The prior one-liner ("Players see a tooltip... players who try to click anyway get a confirm") gets replaced with a three-layer escalation spec: Layer A passive tooltip, Layer B blocking confirm modal, Layer C roll-log audit badge visible to everyone. GM-bypass semantics + house-rule-aware modal copy specified. Test list updated to walk through all three layers + the GM shift+click chip-clear path. Docs-only; no code change yet (Phase 4 itself ships when work begins). User-requested.
+**Description:** Phase 4's bullet block in `docs/plans/class-content-status.md` rewritten to be explicit about which messaging mechanism fires when. **Layer A (tooltip)** — passive `title=""` attribute on dimmed buttons; works on desktop hover and iPad long-press without new infrastructure. **Layer B (confirm modal)** — blocking, player-facing, copy includes the action / spell name plus the rolling character's name so a shared screen makes the intent obvious. Cancel exits cleanly; Confirm fires the roll AND records Layer C. **Layer C (roll-log audit badge)** — every roll triggered via the over-budget path gets a "⚠ Manual override: 2nd action this turn" badge in the roll log entry, visible to every participant. The GM sees the audit trail inline with the roll itself, no separate WS push needed. GM clicks skip Layer B (rules authority bypass) but still produce Layer C. New shift+click chip-clear gesture for the GM to manually free a slot mid-turn (e.g. Action Surge granted a second action). House-rule-aware modal copy: when `campaign.potions_as_bonus_action` is on AND the over-budget click is a Healing Potion's Use button, Layer B's text adapts to mention the house rule. Future per-rule overrides follow the same `_economyCopy[slot, source]` lookup pattern.
+**Description (cont):** Why three layers vs. just a modal: a single confirm dialog feels heavy for what's often a "wait, did I already use my bonus action?" double-check. The tooltip provides the cheap "yes you did" answer for hover-aware users. The modal is the deliberate-commitment gate. The audit badge serves the social pressure side — players who repeatedly slip through Layer B end up with multiple ⚠ entries in the log that the GM can point at without saying "I noticed you doubled up again." It's the lowest-friction "send a message to players" path that respects the GM's authority instead of going around them.
+**Description (cont 2):** The Phase 4 test list grows from 6 steps to 9 to walk through all three layers explicitly + the GM shift+click chip-clear + the house-rule-aware modal copy with the v2.5.0 potions toggle on. None are runnable yet — Phase 4 itself hasn't shipped — but the test list now matches the spec so whoever picks up the work can re-derive both the code and the testing surface from the doc alone.
+
+### Changed
+- `docs/plans/class-content-status.md` section E Phase 4 — bullet block rewritten from a one-liner to a three-layer messaging spec (Layer A tooltip / Layer B confirm modal / Layer C roll-log audit badge), with GM-bypass semantics, shift+click chip-clear, and house-rule-aware modal copy.
+- `docs/plans/class-content-status.md` section E Phase 4 "What to test" list — grown from 6 to 9 steps covering each layer + GM bypass + shift+click + house-rule copy adaptation.
+
+### Notes
+- Phase 4 is **not yet implemented**. The plan now describes what *will* exist; code lands when Phase 4 work begins. Current priority in `docs/plans/class-content-status.md`: Phase 4 sits at #6 in the priority list, after the per-feature wins land for Channel Divinity / Lay on Hands / Wild Shape / Bardic Inspiration.
+- The "send a message to players" goal is met by Layers B + C together — Layer B blocks the click with a visible message (in front of the player's eyes), Layer C audits the override in the shared roll log so other players + the GM see it without needing a separate channel.
+- The shift+click chip-clear pattern is documented but not yet implemented. v2.4.31 currently has plain click = toggle. Phase 4 should layer shift-click as the GM-only override gesture, distinct from a normal click which both GMs and players can do.
+
+---
+
 ## [2.5.3] - 2026-05-17
 
 **Schema version:** 54

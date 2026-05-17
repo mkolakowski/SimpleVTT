@@ -598,31 +598,94 @@ action).
      would let Phase 3 exercise Action Surge + Second Wind). Out of
      scope for Phase 3 itself; filed as a separate demo-data follow-up.
 
-4. **Phase 4 — Gating + GM override.** Disable buttons whose economy
-   slot is used (50% opacity + cursor:not-allowed). GM can shift+click
-   or right-click to override. Players see a tooltip explaining why.
-   Players who try to click anyway get a confirm: "You've already used
-   your bonus action this turn. Use it anyway?" — yes path manually
-   advances state, no path closes the modal.
+4. **Phase 4 — Gating + over-budget messaging.** Disable buttons whose
+   economy slot is used (50% opacity + cursor:not-allowed). The player-
+   facing warning lives in **three layers** of escalating commitment so
+   nothing gets through silently but the GM isn't pinged for every
+   legitimate retry:
+
+   - **Layer A — tooltip on hover.** Passive. Shows on any mouse-over
+     of a dimmed button:
+     > "Action already used this turn — your Act slot is spent. Click
+     > to override."
+     Copy varies per slot ("Bonus action already used", "Reaction
+     already used since your last turn"). Tooltip uses the standard
+     `title=""` attribute so it works on desktop hover + iPad
+     long-press without any new infrastructure.
+   - **Layer B — confirm modal on click.** Active, blocking. When a
+     player clicks a dimmed button, a small modal interrupts:
+     > "You've already used your action this turn. Roll the [attack
+     > name / spell name] anyway?"
+     "Cancel" closes the modal without firing the roll. "Confirm"
+     fires the roll AND records an over-budget marker (see Layer C).
+     The modal copy includes the action name + the player's
+     character name so it's obvious what's about to happen at a
+     shared screen.
+   - **Layer C — roll-log audit entry.** Whenever a player confirms an
+     over-budget action, the roll-log entry that gets posted carries
+     an over-budget badge:
+     > 🗡 **Pip Quickfingers** rolls Dagger → 18 hit
+     > ⚠ *Manual override: 2nd action this turn*
+     The badge is visible to every participant (GM + all players),
+     not just the rolling player. This serves as the audit trail
+     the GM needs without requiring a separate WS push — the GM is
+     already watching the roll log during play, so flagging the
+     entry inline makes the violation obvious without spam.
+
+   **GM bypass:** the GM (and admins) skip Layer B entirely — a dimmed
+   button still fires on click without a modal interrupt, since the GM
+   is the rules authority and doesn't need a confirmation prompt. The
+   Layer C audit entry still fires (so a GM rolling a creature's
+   second action this turn still gets the ⚠ marker). The GM can also
+   shift+click a player's combatant chip to clear the slot mid-turn
+   (e.g. "Action Surge granted Pip a second action — clearing Act so
+   the player can roll their second attack normally").
+
+   **House-rule-aware messaging.** When `campaign.potions_as_bonus_action`
+   (v2.5.0) is on AND the over-budget click is on a Healing Potion's
+   "Use Item" button, the Layer B modal copy adapts:
+     > "You've already used your bonus action this turn (house rule:
+     > potions consume bonus action). Drink the potion anyway?"
+   Same Layer C entry, just different modal copy. Future house rules
+   that affect specific buttons should follow the same per-rule copy
+   override pattern; the framework reads from a small `_economyCopy`
+   lookup keyed on `(slot, source)`.
 
    **What to test in the VTT after shipping Phase 4:**
    1. As Pip the player (`demo-alice@example.com`), click 🗡 Strike on
       Shortsword. Act flips amber.
-   2. Try to click 🗡 Strike on the Dagger again. Expected: the button
-      visually dims to ~50% opacity, cursor shows
-      `not-allowed` on hover. Tooltip: "Action already used this
-      turn — your Act slot is spent".
-   3. Click anyway. Expected: a small confirm modal appears: "You've
-      already used your action this turn. Roll the Dagger attack
-      anyway?". Click Cancel → modal closes, roll doesn't fire.
-   4. Repeat step 3, click Confirm. Expected: roll fires; Act chip
-      stays amber (already amber). The roll log records the dagger
-      attack.
-   5. As the GM (`demo-gm@example.com`), perform the same dimmed-button
-      click → no confirm modal; the roll just fires. Phase 4 includes
-      a GM-bypass for the modal.
-   6. Click Next turn. The chips reset to empty; buttons return to
-      full opacity.
+   2. Hover over the dimmed 🗡 Strike on the Dagger. **Layer A:**
+      tooltip shows "Action already used this turn — your Act slot is
+      spent. Click to override." Cursor is `not-allowed`.
+   3. Click the dimmed Dagger button. **Layer B:** confirm modal:
+      "You've already used your action this turn. Roll the Dagger
+      attack anyway?". Click **Cancel** → modal closes, no roll fires,
+      no log entry.
+   4. Click Dagger again, then **Confirm** on the modal. Expected:
+      roll fires AND the roll log entry includes an over-budget
+      badge: "⚠ Manual override: 2nd action this turn" below the
+      attack roll. **Layer C** confirmed.
+   5. Other players (open `demo-bob@example.com` in a second browser)
+      see the same Layer C audit entry in their roll log — the badge
+      is visible to everyone, not just the rolling player.
+   6. As the GM (`demo-gm@example.com`), click a dimmed button on any
+      combatant → no Layer B modal; roll fires immediately. Layer C
+      audit entry still posts (so the violation is logged even when
+      the GM initiates it).
+   7. As the GM, **shift+click** a player's chip to clear the slot
+      mid-turn — chip flips back to empty green. Then click the
+      dimmed button → it's no longer dimmed (slot was cleared), no
+      modal, no audit badge. Models the "Action Surge granted an
+      extra action" override case.
+   8. Enable the v2.5.0 `potions_as_bonus_action` house rule in
+      campaign settings. As Tavik the player, drink a Potion of
+      Healing once → Bns flips amber. Try to drink a second potion →
+      Layer B modal copy now reads: "You've already used your bonus
+      action this turn (house rule: potions consume bonus action).
+      Drink the potion anyway?". The Layer C badge below the heal
+      roll: "⚠ Manual override: 2nd bonus action this turn (potion)".
+   9. Click Next turn. The chips reset to empty; buttons return to
+      full opacity. Any tooltips clear.
 
    **Demo updates required for Phase 4:** None directly. Phase 4 is
    pure UI/UX layered on Phase 2's auto-advance — any combatant whose
