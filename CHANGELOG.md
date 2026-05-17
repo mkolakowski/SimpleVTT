@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.20] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** Hide the **Sign in with Google** button on the login page when `DEMO_MODE=true`. The demo's intent is "use one of the three shared demo accounts (one click via the v2.4.4 Fill button)"; offering Google SSO encourages signing in with real credentials against an environment that wipes its dataset every hour, which is a poor first impression. Non-demo deploys reusing the same image keep the Google button — `GOOGLE_SSO_ENABLED=true` stays meaningful for them. User-requested.
+**Description:** Single Jinja condition tightening in `app/templates/login.html` line 15: `{% if google_enabled %}` → `{% if google_enabled and not DEMO_MODE %}`. The Google button + the "— or —" separator and the v2.3.28 next-path comment now render only when both env flags align (`GOOGLE_SSO_ENABLED=true` AND `DEMO_MODE=false`). No backend / route changes — `/auth/google/login` still works for any user who hits it directly, this just removes the discoverability path from the demo login page.
+
+### Changed
+- `app/templates/login.html` line 15 — Google SSO button + "— or —" separator gated on `google_enabled and not DEMO_MODE` (was just `google_enabled`).
+
+### Notes
+- The `DEMO_MODE` Jinja global is already exposed via `app/templates.py` line 2 (`templates.env.globals["DEMO_MODE"] = get_settings().demo_mode`) — same path as `DEMO_CREDENTIALS_VISIBLE` used by the v2.4.4 Fill buttons. No new wiring needed.
+- Non-demo deploys (`DEMO_MODE=false` / unset) see the Google button unchanged. The change is strictly subtractive on the demo path.
+- A user who genuinely wants to sign in with their Google account on the demo can still navigate to `/auth/google/login` directly — the route isn't blocked, just hidden from the login page UI. Real auth on a demo instance is a niche operator-level concern; if needed, deploy a non-demo instance.
+
+---
+
 ## [2.4.19] - 2026-05-17
 
 **Schema version:** 53

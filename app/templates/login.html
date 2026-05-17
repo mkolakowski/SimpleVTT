@@ -12,7 +12,13 @@
         <input type="hidden" name="next" value="{{ next_path or '/' }}">
         <button type="submit">Sign in</button>
     </form>
-    {% if google_enabled %}
+    {# v2.4.20: hide the Google SSO button on demo deploys. ``DEMO_MODE``
+       implies "this is the public demo — use one of the shared demo
+       accounts below"; offering Google SSO there encourages signing in
+       with real credentials against an environment that wipes its
+       dataset every hour, which is a poor first impression. Non-demo
+       deploys reusing the same image keep the Google button. #}
+    {% if google_enabled and not DEMO_MODE %}
         <p class="or">— or —</p>
         {# Google SSO ignores ``next`` for now — bounces to `/` after auth.
            Wiring next through the OAuth state param is a follow-up. #}
