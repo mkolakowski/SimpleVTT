@@ -4423,6 +4423,14 @@ async def _perform_encounter_load(
         "tokens_created": len(created_tokens),
         "tokens_deleted": len(deleted_ids),
         "warnings": warnings,
+        # v2.4.6: return the canonical post-load battle state so the GM
+        # client (which is authoritative and ignores the
+        # ``battle_update`` WS broadcast) can hydrate its local
+        # init-tracker view to match what the server just put into the
+        # hub. Without this, the GM keeps a stale localStorage battle
+        # after Load — exactly the bug a v2.3.44-portrait demo user
+        # hit when they'd populated the tracker pre-v2.4.3.
+        "battle_state": battle_state or None,
     }
 
 

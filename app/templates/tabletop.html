@@ -1788,6 +1788,22 @@
                     if (result && result.warnings && result.warnings.length) {
                         alert('Loaded with warnings:\n\n' + result.warnings.join('\n'));
                     }
+                    // v2.4.6: when the load response carries a battle_state,
+                    // hydrate the local init tracker from it. The GM client
+                    // is authoritative and ignores the ``battle_update`` WS
+                    // broadcast (line ~3941), so without this step a GM
+                    // clicking Load would see token + map updates on the
+                    // canvas but their init tracker would stay frozen at
+                    // whatever stale localStorage state it had — which is
+                    // exactly the v2.3.44-portrait staleness bug a demo GM
+                    // hit pre-v2.4.3. Applies only when ``map_switched`` is
+                    // false; the map-switch path triggers a full page
+                    // reload via WS and re-reads localStorage on next boot.
+                    if (result && result.battle_state && !result.map_switched) {
+                        battle = result.battle_state;
+                        saveBattle();
+                        renderBattle();
+                    }
                     // If map didn't switch, broadcasts already updated the
                     // canvas. If it did, the server sent a map_change WS
                     // that triggered a reload — nothing more to do here.

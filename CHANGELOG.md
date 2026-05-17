@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.4.6] - 2026-05-17
+
+**Schema version:** 53
+**Commit summary:** When the GM clicks **Load encounter**, the init tracker now hydrates from the server's freshly-loaded battle state instead of staying frozen at whatever stale localStorage state it had. Closes the gap that left a v2.3.44-portrait demo GM with no NPC art in the init tracker even after v2.4.3 fixed the seed payload — the GM client is authoritative and ignores the `battle_update` WebSocket broadcast, so server-side state changes never propagated into their local view without this explicit hydration step. User-reported follow-up to 2.4.3.
+**Description:** Two coordinated edits. (1) `app/routes/tabletop_routes.py` `_perform_encounter_load` now returns the canonical post-load `battle_state` in its JSON response (the same dict it pushed into the realtime hub via `hub.set_battle`). (2) `app/templates/tabletop.html` `loadEncounter` reads the response's `battle_state` and, when present and `map_switched` is false, assigns it to the local `battle` variable + `saveBattle()` + `renderBattle()`. The `map_switched` guard preserves the existing semantics that a map-switching load reloads the whole page (the server emits a `map_change` WS event the JS catches separately), so this branch only fires on same-map loads where the canvas surgically updates tokens in place. Players are unaffected — they were already hydrating from the `battle_update` broadcast that fires inside `_perform_encounter_load` immediately after `hub.set_battle`; this change is the GM-equivalent path.
+**Description (cont):** Why the GM was being skipped in the first place: pre-v2.4.6, every battle-state update fanned out as a `battle_update` WS broadcast, and the JS hydrates from that only `if (msg.type === 'battle_update' && !IS_GM)`. The reasoning was reasonable — the GM is the source of truth for init-tracker mutations (`pushBattle` PUTs to `/api/campaign/.../battle` and broadcasts to players), and letting them auto-overwrite local state from their own broadcasts would create loops. But the Load Encounter path is a server-side decision (the server's payload becomes the new battle state), so the GM accepting that *specific* state on Load — and only on Load, only same-map, and only from the load route's response — is the right narrow exception. The change doesn't touch the broader WS broadcast filter; future server-driven state pushes that should also override GM local state will need to opt in the same way (via their own return-the-state-in-the-response pattern).
+
+### Fixed
+- `app/templates/tabletop.html` `loadEncounter` — on a successful same-map load, hydrate the local `battle` from `result.battle_state` and re-render. Resolves the v2.4.3 follow-up where a GM with stale localStorage saw no NPC portraits in the init tracker after Load even though the server hub state and broadcasts to players were correct.
+
+### Added
+- `app/routes/tabletop_routes.py` `_perform_encounter_load` — return `battle_state` in the response JSON so the GM client (which is authoritative and ignores `battle_update` broadcasts) can hydrate its local init tracker view to match the server's post-load state.
+
+### Notes
+- The new behavior only fires when `map_switched` is false. Map-switching loads trigger a full page reload via the WS `map_change` event, which re-reads localStorage on boot — so hydrating-from-response would race the reload. Keeping the existing reload semantics avoids that.
+- The hub broadcast still fans the `battle_update` to all connected non-GM clients (players), so the same load operation pushes consistent state to everyone — GMs via the response body, players via WS.
+- Doesn't change the `pushBattle` direction (GM → server). The GM remains the source of truth for in-session edits; Load is the one "server overwrites GM" event because the load operation IS the GM telling the server to do that.
+
+---
+
 ## [2.4.5] - 2026-05-17
 
 **Schema version:** 53
