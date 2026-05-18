@@ -164,6 +164,58 @@ async def test_channel_divinity_preserve_life(gm_client, gm_ws, roster):
     assert resp.json()["slot"] == "action"
 
 
+async def test_divine_sense_announces(gm_client, gm_ws, roster):
+    """v2.15.6: Divine Sense is the Paladin Lv 1 announce-only feature.
+    /use_feature accepts the curated key and broadcasts feature_used
+    with slot=action. Caelan (Lv 5 Oath of Devotion Paladin) is the
+    demo's eligible PC.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": caelan["id"],
+            "feature_key": "divine-sense",
+            "label": "Divine Sense",
+            "desc": "Detect celestial / fiend / undead within 60 ft.",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["slot"] == "action"
+    assert "Divine Sense" in data["feature_label"]
+
+    msg = await gm_ws.wait_for("feature_used")
+    assert msg["data"]["source"] == "class-feature"
+    assert "Divine Sense" in msg["data"]["feature_name"]
+
+
+async def test_cleansing_touch_curated(gm_client, gm_ws, roster):
+    """v2.15.6: Cleansing Touch (Paladin Lv 14) is in the curated
+    table for forward compat — the server accepts the slug even
+    though Caelan is only Lv 5 (RAW eligibility is client-side; the
+    server doesn't enforce class level on /use_feature). When a
+    future Lv 14+ Paladin fixture lands, this test confirms the
+    table entry is wired correctly.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": caelan["id"],
+            "feature_key": "cleansing-touch",
+            "label": "Cleansing Touch",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slot"] == "action"
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Cleansing Touch" in msg["data"]["feature_name"]
+
+
 async def test_action_surge_is_free(gm_client, gm_ws, roster):
     """Action Surge doesn't consume an economy slot (slot='free').
     The chip should NOT flip when this fires."""

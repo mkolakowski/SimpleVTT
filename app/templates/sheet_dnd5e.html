@@ -6556,6 +6556,61 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 return;
             }
 
+            // ── Divine Sense (v2.15.6): announce-only Paladin feature.
+            // Resource counter tracks 1+CHA uses per long rest; clicking
+            // ⚡ Use POSTs /use_feature for the roll-log card + chip flip,
+            // then decrements the counter. No picker, no target — RAW
+            // doesn't model what the player senses (the GM tells them).
+            if (k === 'divine-sense' && _CAMPAIGN_ID && CAN_EDIT) {
+                const arr = _readResources();
+                const row = arr.find(x => x.key === 'divine-sense');
+                if (row) {
+                    const dsCur = parseInt(row.current, 10) || 0;
+                    const dsMax = parseInt(row.max, 10) || 0;
+                    if (dsMax > 0 && dsCur <= 0) {
+                        _toast('Divine Sense: no uses remaining', 'error');
+                        return;
+                    }
+                }
+                (async () => {
+                    // Decrement first so the chip / counter UI updates fast;
+                    // /use_feature handles the announce + slot mark + chip
+                    // flip + over-budget gate.
+                    if (row && (parseInt(row.max, 10) || 0) > 0) {
+                        await postUse(k, -1, false);
+                    }
+                    const doFetch = (override) => fetch(`/api/campaign/${_CAMPAIGN_ID}/use_feature`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            character_id: CHAR_ID,
+                            feature_key: 'divine-sense',
+                            label: 'Divine Sense',
+                            desc: 'Detect celestial / fiend / undead within 60 ft until end of next turn.',
+                            override: !!override,
+                        }),
+                    });
+                    let resp = await doFetch(false);
+                    if (resp.status === 409 && typeof window.handleOverBudget === 'function') {
+                        let peek; try { peek = await resp.clone().json(); } catch { peek = null; }
+                        if (peek && peek.error === 'over_budget') {
+                            const retried = await window.handleOverBudget(
+                                resp, () => doFetch(true),
+                            );
+                            if (!retried) return;
+                            resp = retried;
+                        }
+                    }
+                    if (!resp.ok) {
+                        let body; try { body = await resp.json(); } catch { body = null; }
+                        _toast('Divine Sense failed: ' + (body?.detail || `HTTP ${resp.status}`), 'error');
+                        return;
+                    }
+                    _toast('👁 Divine Sense announced — the GM will tell you what you sense.', 'info');
+                })();
+                return;
+            }
+
             // ── Wild Shape: route to the beast picker instead of just
             // decrementing the counter. The /transform endpoint decrements
             // the wild-shape resource as a side effect on a successful

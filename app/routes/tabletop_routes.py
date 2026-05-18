@@ -142,6 +142,8 @@ _FEATURE_ECONOMY: dict[str, dict] = {
     },
     "lay-on-hands": {"slot": "action"},
     "divine-smite": {"slot": "free"},
+    "divine-sense": {"slot": "action"},  # v2.15.6
+    "cleansing-touch": {"slot": "action"},  # v2.15.6 (Lv 14 Paladin)
     "bardic-inspiration": {"slot": "bonus"},
     "flurry-of-blows": {"slot": "bonus"},
     "patient-defense": {"slot": "bonus"},

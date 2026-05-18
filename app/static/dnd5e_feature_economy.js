@@ -114,6 +114,26 @@ window._FEATURE_ECONOMY = {
         // — the attack itself consumed action; the smite doesn't add a
         // second economy cost.
     },
+    'divine-sense': {
+        slot: 'action',
+        class: 'paladin',
+        unlock_level: 1,
+        label: 'Divine Sense',
+        desc: 'Detect celestial / fiend / undead within 60 ft until end of next turn. 1 + CHA mod uses per long rest.',
+    },
+    'cleansing-touch': {
+        slot: 'action',
+        class: 'paladin',
+        unlock_level: 14,
+        label: 'Cleansing Touch',
+        desc: 'End one spell on yourself or one willing creature you touch. CHA mod uses per long rest.',
+        // v2.15.6: curated entry only — no demo PC has Cleansing Touch
+        // (Lv 14 Paladin feature; Caelan is Lv 5). Server-side accepts
+        // the key so a future Lv 14+ fixture can fire it. The target-
+        // picker UI (RAW: "yourself or one willing creature you touch")
+        // is filed for that future commit; today /use_feature with this
+        // key announces the use generically without a target.
+    },
 
     /* ── Bard ────────────────────────────────────────────────────── */
     'bardic-inspiration': {
