@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.13.2] - 2026-05-17
+
+**Schema version:** 55
+**Commit summary:** **Test harness Phase 5 — multi-user concurrency.** New `tests/harness/test_concurrency.py` with 5 tests that exercise the realtime hub under contention: simultaneous attacks from two clients, burst-of-five concurrent rolls, late-joiner replay semantics (both directions), and multi-tab same-user delivery. Tests use `asyncio.gather` to fire concurrent POSTs and verify every WS recipient receives every expected broadcast with no message loss or hub corruption. Suite grows 42 → 47 tests, ~25 s end-to-end. PATCH bump — additive harness coverage; no production code change.
+**Description:** Five new test cases in `tests/harness/test_concurrency.py`. **(1)** `test_concurrent_attacks_both_broadcasts_arrive`: GM and Alice fire `/attack` POSTs simultaneously via `asyncio.gather`; both WS clients buffer both `weapon_attack` broadcasts with the right `caster_char_name` values. Verifies the hub doesn't drop broadcasts under contention + the broadcast ordering doesn't matter to correctness. **(2)** `test_concurrent_rolls_all_arrive`: five `/roll` POSTs fired via `gather`; all five `roll` broadcasts arrive in the GM's WS buffer with the right note text. Catches "burst" hub drops where a fast sequence might overwhelm the WS send loop. **(3)** `test_late_joiner_does_not_get_replay`: fire a broadcast BEFORE Alice's WS exists, open Alice's WS, wait 500 ms, assert Alice did NOT receive the prior broadcast. Pins the hub's "no replay" contract — only `battle_update` + `presence_update` get sent on connect, never arbitrary previous messages. **(4)** `test_late_joiner_does_get_subsequent_broadcasts`: inverse of #3 — open Alice's WS, then fire a broadcast, assert Alice DOES receive it. Sanity check that the hub isn't accidentally filtering all messages from late joiners. **(5)** `test_multi_tab_same_user_both_receive`: open two WS connections as the same user (Alice). Fire a broadcast that should reach Alice. BOTH connections receive it (presence dedupes by user_id for the bubble list, but the WS broadcast goes to every connected socket regardless).
+**Description (cont):** asyncio.gather caveat. Two coroutines `gather`-ed in a single test still execute on the same event loop with cooperative scheduling. They interleave at every `await`, which is the closest a single-process test can get to "two simultaneous clients". True parallel execution would need separate processes (and would mostly stress the OS scheduler, not the hub's correctness). For testing whether the hub's lock + identity-tracking code handles overlapping connect/disconnect/broadcast paths correctly, the gather pattern is sufficient — it does interleave HTTP request handling on the server side (FastAPI's event loop is shared).
+**Description (cont 2):** What this commit does NOT do. No tests for cross-user state corruption (e.g. Alice writing to a Character that Bob is also updating). That's a database concurrency concern more than a hub concern; the existing SQLAlchemy session per-request isolation handles it. No tests for hub recovery after a midstream disconnect — the existing `_recv_loop` + `dead` list handling in `hub.broadcast` covers the contract, and an explicit test would mostly verify "the OS detected the disconnect" rather than anything we wrote. Filed for follow-up if a real concurrency bug surfaces.
+**Description (cont 3):** Test totals across both harnesses: **47 HTTP+WS tests** (~25 s) + **4 Playwright UI tests** (~3.5 s). Phase 5's "stretch" status from the original plan is now resolved — the multi-user invariants are pinned by the test scaffold. Future concurrency-related fixes will land with regression tests in this file.
+
+### Added
+- `tests/harness/test_concurrency.py` — 5 multi-user / concurrent-broadcast tests using `asyncio.gather`.
+
+### Notes
+- **What to test:** `make test-harness` should now show 47 tests passing in ~25 s. The 5 concurrency tests live alongside the existing endpoint tests; same pytest invocation runs them all.
+- **Why this is a stretch goal becoming reality.** The original plan filed Phase 5 as "deferred until evidence motivates it" because single-user races have been the dominant bug surface. The harness scaffold now exists, the test cost is small (~6 s for 5 tests), and pinning the multi-user invariants is the kind of test that's cheap to write proactively and impossible to write reactively (without a known bug to reproduce). Shipping the tests now means the next concurrency bug that surfaces gets bisected via this scaffold rather than needing a full investigation from scratch.
+- **What stayed deferred.** Cross-process true parallelism (would require a separate Python interpreter or threading); long-running concurrency stress (would need an explicit "soak" test mode); HTTP-layer concurrency without WS (the existing tests cover hub WS broadcasts; HTTP-only concurrency lives at the FastAPI / Starlette layer which has its own well-tested suite upstream).
+- **No new code in production paths.** This commit only adds test code. The fact that all 5 tests pass on first run is the validation that the hub's existing concurrency story is correct; if any had failed, that would have been a bug to fix in `app/realtime.py`.
+- The CI workflow's `harness` job picks up the new tests automatically (it runs `pytest tests/harness/` without filtering). No workflow change required.
+
+---
+
 ## [2.13.1] - 2026-05-17
 
 **Schema version:** 55
