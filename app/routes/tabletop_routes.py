@@ -5816,6 +5816,234 @@ async def use_item(
     }
 
 
+# ----------- API: campaign roster (Lay on Hands target picker, etc.) -----------
+
+@router.get("/api/campaign/{campaign_id}/roster")
+def campaign_roster(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Return the campaign's character roster for the target-picker UI.
+
+    Shape per entry: ``{id, name, color, owner_user_id, hp_current,
+    hp_max, portrait_url}``. Used by the Lay on Hands picker (v2.10.0)
+    and the Bardic Inspiration picker (planned). Visible to anyone
+    who can view the campaign — the GM and every member see the same
+    list. Doesn't expose anything beyond what's already in the
+    character cards on the tabletop page.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    chars = (
+        db.query(Character)
+        .filter(Character.campaign_id == campaign_id)
+        .order_by(Character.name)
+        .all()
+    )
+    out = []
+    for c in chars:
+        hp = (c.sheet or {}).get("hp") or {}
+        out.append({
+            "id": c.id,
+            "name": c.name,
+            "color": c.color,
+            "owner_user_id": c.owner_user_id,
+            "hp_current": int(hp.get("current") or 0),
+            "hp_max": int(hp.get("max") or 0),
+            "portrait_url": c.portrait_url,
+        })
+    return {"characters": out}
+
+
+# ----------- API: Lay on Hands (Paladin, priority #3) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_lay_on_hands")
+async def use_lay_on_hands(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend HP from the paladin's Lay on Hands pool to heal a target.
+
+    Body: ``{character_id, target_character_id, amount}``. The
+    ``lay-on-hands`` resource on the calling character is the source
+    pool (max = 5 × paladin level); ``amount`` HP is subtracted from
+    the pool AND added to the target via ``_apply_hp_change`` so the
+    death-save state machine wakes them from dying if applicable.
+
+    Phase 4 over-budget gate: Lay on Hands is the Paladin's action.
+    Same `was_used` / 409 / strict-mode flow as cast_spell / use_attack /
+    use_feature / use_item. Override (modal Confirm) goes through
+    unless `campaign.strict_action_economy` is on.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_id = int(body.get("target_character_id") or 0)
+    amount = int(body.get("amount") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0 or target_id <= 0 or amount <= 0:
+        raise HTTPException(400, "character_id, target_character_id, and amount > 0 are required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Paladin character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target = db.query(Character).filter(
+        Character.id == target_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not target:
+        raise HTTPException(404, "Target character not found")
+
+    # Pool lookup. RAW: max = 5 × paladin level. We store it as a regular
+    # resource entry on the sheet (`key: 'lay-on-hands'`), and the pool
+    # current ticks down on use.
+    sheet = dict(char.sheet or {})
+    resources = list(sheet.get("resources") or [])
+    pool_row = None
+    pool_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "lay-on-hands":
+            pool_row = dict(r)
+            pool_idx = i
+            break
+    if pool_row is None:
+        raise HTTPException(404, "No Lay on Hands resource on this sheet")
+    pool_cur = int(pool_row.get("current") or 0)
+    pool_max = int(pool_row.get("max") or 0)
+    if amount > pool_cur:
+        return JSONResponse(status_code=409, content={
+            "error": "insufficient_pool",
+            "available": pool_cur,
+            "requested": amount,
+        })
+
+    # v2.10.0: Phase 4 over-budget gate. Lay on Hands consumes an
+    # action; respect strict_action_economy if on.
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "lay-on-hands",
+            "label": "Lay on Hands",
+            "strict": strict,
+        })
+
+    # Apply the heal to the target. Read HP via _apply_hp_change so the
+    # death-save state machine fires if the target was dying. RAW: Lay
+    # on Hands restores up to N HP — it doesn't push above max.
+    target_hp = (target.sheet or {}).get("hp") or {}
+    target_cur = int(target_hp.get("current") or 0)
+    target_max = int(target_hp.get("max") or 0)
+    new_cur = min(target_max, target_cur + amount) if target_max > 0 else (target_cur + amount)
+    actual_healed = new_cur - target_cur
+    result = _apply_hp_change(target, new_cur)
+
+    # Decrement the caster's pool by the AMOUNT the caster spent, not
+    # by `actual_healed` — RAW: "expend a number of hit points up to
+    # your lay on hands maximum". If the target's HP capped, the
+    # paladin still spent what they declared.
+    pool_row["current"] = pool_cur - amount
+    resources[pool_idx] = pool_row
+    sheet["resources"] = resources
+    char.sheet = sheet
+
+    db.commit()
+
+    # Mark the caster's action slot in the realtime hub.
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    # Resolve caster + target display info for the broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    # Roll-log card via feature_used.
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"🙏 Lay on Hands → {target.name}",
+            "feature_desc": (
+                f"Spent {amount} HP from pool ({pool_cur} → {pool_cur - amount} / {pool_max})." +
+                (f" Healed {actual_healed} HP." if actual_healed > 0 else " Target was already at full HP.")
+            ),
+            "source": "lay-on-hands",
+            "remaining": pool_cur - amount,
+            "max": pool_max,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    # HP-bar refresh for the target — same broadcast shape /apply_healing
+    # and /use_item already use, so the existing _onHealApplied handler
+    # picks this up unchanged.
+    if actual_healed > 0:
+        await hub.broadcast(campaign_id, {
+            "type": "heal_applied",
+            "data": {
+                "cast_id": "",
+                "char_id": target.id,
+                "char_name": target.name,
+                "healer_name": user.display_name,
+                "dice": f"{amount} HP",
+                "rolled": actual_healed,
+                "breakdown": f"Lay on Hands ({amount})",
+                "new_hp": result["hp"],
+                "claimed_count": 1,
+                "max_targets": 1,
+            },
+        })
+
+    # Pool-update broadcast so any open resources panel re-pips. Reuses
+    # the existing resource_update message that the v?.x rest endpoint
+    # already broadcasts after refills.
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "lay-on-hands",
+            "current": pool_cur - amount,
+            "max": pool_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "amount_spent": amount,
+        "amount_healed": actual_healed,
+        "pool_remaining": pool_cur - amount,
+        "over_budget": was_used,
+        "new_hp": result["hp"],
+    }
+
+
 # ----------- API: get a character's current action-economy state -----------
 #
 # Phase 4a (v2.7.2) Layer A dimming: the full character sheet polls

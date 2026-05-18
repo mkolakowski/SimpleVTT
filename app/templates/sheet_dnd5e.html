@@ -6135,6 +6135,111 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 return;
             }
 
+            // ── Lay on Hands (v2.10.0 / priority #3): amount + target
+            // picker chain. The resource here is a pool (max = 5 × paladin
+            // level); ``current`` decrements by the amount the player
+            // chooses to spend. The new POST /use_lay_on_hands endpoint
+            // is authoritative — it applies HP via _apply_hp_change to
+            // the target AND decrements the pool atomically. WS broadcasts
+            // (heal_applied + resource_update + feature_used) handle the
+            // UI updates everywhere; we don't optimistically mutate here.
+            if (k === 'lay-on-hands'
+                    && typeof window.showAmountPicker === 'function'
+                    && typeof window.showTargetPicker === 'function'
+                    && _CAMPAIGN_ID) {
+                const arr = _readResources();
+                const row = arr.find(x => x.key === 'lay-on-hands');
+                if (!row) {
+                    postUse(k, -1, true);
+                    return;
+                }
+                const cur = parseInt(row.current, 10) || 0;
+                const mx = parseInt(row.max, 10) || 0;
+                if (cur <= 0) {
+                    _toast('Lay on Hands: pool exhausted', 'error');
+                    return;
+                }
+                window.showAmountPicker({
+                    title: '🙏 Lay on Hands',
+                    subtitle: `${cur} / ${mx} HP remaining in pool — how much to spend?`,
+                    min: 1,
+                    max: cur,
+                    default: Math.min(cur, 5),
+                    onPick: async (amount) => {
+                        if (!amount) return;
+                        // Fetch the roster live so portrait + HP info on the
+                        // target picker is current. Cheap (one GET per Use
+                        // click); roster size is small.
+                        let candidates = [];
+                        try {
+                            const rosterResp = await fetch(`/api/campaign/${_CAMPAIGN_ID}/roster`);
+                            if (rosterResp.ok) {
+                                const data = await rosterResp.json();
+                                candidates = (data.characters || []).map(c => ({
+                                    id: c.id,
+                                    name: c.name + (c.id === CHAR_ID ? ' (self)' : ''),
+                                    color: c.color,
+                                    hp_current: c.hp_current,
+                                    hp_max: c.hp_max,
+                                    portrait_url: c.portrait_url,
+                                }));
+                            }
+                        } catch (e) {
+                            _toast('Could not load roster.', 'error');
+                            return;
+                        }
+                        if (!candidates.length) {
+                            _toast('No targets available.', 'error');
+                            return;
+                        }
+                        window.showTargetPicker({
+                            title: '🙏 Lay on Hands — pick a target',
+                            subtitle: `Spending ${amount} HP from your pool.`,
+                            candidates,
+                            onPick: async (target) => {
+                                if (!target) return;
+                                const doFetch = (override) => fetch(`/api/campaign/${_CAMPAIGN_ID}/use_lay_on_hands`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        character_id: CHAR_ID,
+                                        target_character_id: target.id,
+                                        amount,
+                                        override: !!override,
+                                    }),
+                                });
+                                let resp = await doFetch(false);
+                                // Phase 4 over-budget gate (action slot).
+                                if (resp.status === 409 && typeof window.handleOverBudget === 'function') {
+                                    let bodyPeek; try { bodyPeek = await resp.clone().json(); } catch { bodyPeek = null; }
+                                    if (bodyPeek && bodyPeek.error === 'over_budget') {
+                                        const retried = await window.handleOverBudget(
+                                            resp, () => doFetch(true),
+                                        );
+                                        if (!retried) return;
+                                        resp = retried;
+                                    }
+                                }
+                                if (!resp.ok) {
+                                    let body; try { body = await resp.json(); } catch { body = null; }
+                                    if (body && body.error === 'insufficient_pool') {
+                                        _toast(`Only ${body.available} HP left in your pool.`, 'error');
+                                    } else {
+                                        _toast('Lay on Hands failed: ' + (body ? JSON.stringify(body) : await resp.text()), 'error');
+                                    }
+                                    return;
+                                }
+                                const data = await resp.json().catch(() => null);
+                                if (data) {
+                                    _toast(`🙏 Lay on Hands: +${data.amount_healed} HP to ${target.name.replace(/ \(self\)$/, '')}`, 'info');
+                                }
+                            },
+                        });
+                    },
+                });
+                return;
+            }
+
             // ── Wild Shape: route to the beast picker instead of just
             // decrementing the counter. The /transform endpoint decrements
             // the wild-shape resource as a side effect on a successful
