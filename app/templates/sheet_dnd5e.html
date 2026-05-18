@@ -687,6 +687,25 @@
             ] %}
             {% set _user_skills = sheet.get('skills') or {} %}
 
+            {# v2.15.2: Jack of All Trades (Bard Lv 2 feature) — adds
+               floor(PB/2) to ability checks the PC is NOT proficient
+               in. ``namespace`` is the Jinja idiom for a {% set %}
+               variable that can be mutated inside a loop. The JS
+               click handler in sheet.js mirrors this via
+               _hasJackOfAllTrades() so live-edits to class/level
+               on the form stay in sync without a re-render. #}
+            {% set _bard_lv_ns = namespace(v=0) %}
+            {% if (sheet.get('class') or '').lower() == 'bard' %}
+                {% if _bard_lv_ns.v < (sheet.get('level') or 0) %}{% set _bard_lv_ns.v = sheet.get('level') or 0 %}{% endif %}
+            {% endif %}
+            {% for c in sheet.get('classes') or [] %}
+                {% if (c.get('class') or '').lower() == 'bard' %}
+                    {% if _bard_lv_ns.v < (c.get('level') or 0) %}{% set _bard_lv_ns.v = c.get('level') or 0 %}{% endif %}
+                {% endif %}
+            {% endfor %}
+            {% set has_jack = _bard_lv_ns.v >= 2 %}
+            {% set jack_bonus = (sheet.get('proficiency_bonus', 2) // 2) if has_jack else 0 %}
+
             {# ── Card view (2-column grid) ── #}
             <div id="sk-card-view" style="display:grid;gap:4px;margin-top:8px;">
                 {% for skill, default_ab in SKILLS_FULL %}
@@ -697,11 +716,12 @@
                 {% set is_prof = info.get('proficient', false) %}
                 {% set is_exp  = info.get('expertise', false) %}
                 {% set prof_bonus = sheet.get('proficiency_bonus', 2) %}
-                {% set bonus = (prof_bonus * 2 if is_exp else (prof_bonus if is_prof else 0)) %}
+                {% set bonus = (prof_bonus * 2 if is_exp else (prof_bonus if is_prof else jack_bonus)) %}
+                {% set jack_applies = has_jack and not is_prof and not is_exp and jack_bonus > 0 %}
                 {% set total = ab_mod + bonus %}
                 <button type="button" class="roll-btn sk-roll-card"
                         data-roll-skill="{{ skill }}" data-skill-ability="{{ ab }}" data-skill="{{ skill }}"
-                        title="Roll {{ skill }}"
+                        title="Roll {{ skill }}{% if jack_applies %} (+{{ jack_bonus }} Jack of All Trades){% endif %}"
                         style="display:flex;align-items:center;gap:6px;padding:5px 8px;background:var(--s-card);border:{% if is_exp %}2px solid color-mix(in srgb,#daa520 70%,var(--s-accent)){% elif is_prof %}2px solid var(--s-accent){% else %}1px solid var(--s-border){% endif %};border-radius:6px;cursor:pointer;text-align:left;min-height:34px;">
                     <span class="sk-prof-dot" data-skill="{{ skill }}"
                           style="width:8px;height:8px;border-radius:50%;flex-shrink:0;

@@ -409,18 +409,46 @@
         return n > 0 ? `+${n}` : `${n}`;
     }
 
+    /* v2.15.2: Jack of All Trades — Bard Lv 2 feature. Adds floor(PB/2)
+     * to ability checks the character is NOT proficient in (raw STR/DEX/
+     * etc. check OR a skill where ``skills.X.proficient`` is false). Does
+     * NOT apply to saving throws (different category RAW) or to proficient
+     * skills (PB is already there). Mirror of the Jinja ``has_jack`` block
+     * in sheet_dnd5e.html so live-edits to class/level via the form pick
+     * up the change immediately. ``window._mcRoster()`` reads the
+     * multi-class roster from #classes-data; falls back to the
+     * single-class form fields for sheets without multi-class wiring.
+     */
+    function _hasJackOfAllTrades(form) {
+        const roster = (typeof window._mcRoster === 'function') ? window._mcRoster() : null;
+        if (Array.isArray(roster) && roster.length) {
+            for (const c of roster) {
+                if ((c.class || '').trim().toLowerCase() === 'bard'
+                    && (parseInt(c.level, 10) || 0) >= 2) return true;
+            }
+            return false;
+        }
+        const singleClass = (readField(form, 'class') || '').trim().toLowerCase();
+        const singleLevel = parseInt(readField(form, 'level'), 10) || 0;
+        return singleClass === 'bard' && singleLevel >= 2;
+    }
+
     function wireDnd5eRollButtons(form) {
         form.querySelectorAll('.roll-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
                 let expr = '';
                 let note = '';
                 const prof = Number(readField(form, 'proficiency_bonus') || 2);
+                const jack = _hasJackOfAllTrades(form) ? Math.floor(prof / 2) : 0;
 
                 if (btn.dataset.rollAbility) {
                     const ab = btn.dataset.rollAbility;
                     const mod = abilityModifier(readField(form, `abilities.${ab}`));
-                    expr = `1d20${formatBonus(mod)}`;
-                    note = `${ab} check`;
+                    // Jack applies to raw ability checks too (RAW: "any
+                    // ability check that doesn't already include PB").
+                    const total = mod + jack;
+                    expr = `1d20${formatBonus(total)}`;
+                    note = `${ab} check${jack > 0 ? ' (Jack +' + jack + ')' : ''}`;
                 } else if (btn.dataset.rollSave) {
                     const ab = btn.dataset.rollSave;
                     const mod = abilityModifier(readField(form, `abilities.${ab}`));
@@ -435,10 +463,12 @@
                     const isProf = !!readField(form, `skills.${skill}.proficient`);
                     const isExp  = !!readField(form, `skills.${skill}.expertise`);
                     let bonus = 0;
+                    let jackApplied = 0;
                     if (isExp) bonus = prof * 2;
                     else if (isProf) bonus = prof;
+                    else if (jack > 0) { bonus = jack; jackApplied = jack; }
                     expr = `1d20${formatBonus(mod + bonus)}`;
-                    note = `${skill}${isExp ? ' (expertise)' : isProf ? ' (prof)' : ''}`;
+                    note = `${skill}${isExp ? ' (expertise)' : isProf ? ' (prof)' : (jackApplied > 0 ? ' (Jack +' + jackApplied + ')' : '')}`;
                 }
 
                 if (!expr) return;
