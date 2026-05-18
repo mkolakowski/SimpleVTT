@@ -1026,9 +1026,38 @@ as historical context — your call).
   Use on the counter → `BeastPicker.open` (already exists). Pick a
   beast → POST `/api/.../character/.../transform` which swaps the
   active sheet for the beast's stat block AND decrements the wild-
-  shape counter. The endpoint exists; the BeastPicker UI exists; the
-  glue is missing. Filed for the next per-class commit. Deps: none (all
-  pieces shipped, just need wiring).
+  shape counter.
+  - **Sheet swap:** ✅ shipped (pre-2.0.0 endpoint + BeastPicker JS;
+    harness coverage v2.14.4; action-economy chip integration v2.14.5;
+    over-budget gate v2.14.6).
+  - **Token swap on transform — TODO.** When a druid transforms, the
+    map token should reflect the new form: portrait image, label
+    ("Mira → Dire Wolf"), maybe size (a Lv 5 Moon Druid Wild Shape can
+    pick CR 1 beasts including Dire Wolf which is Large). Today the
+    `/transform` endpoint mutates `sheet["active_form"]` but doesn't
+    touch the character's Token rows. The mini-sheet shows the
+    transformed stats but the canvas token still renders Mira's
+    portrait + colour ring. Sub-pieces:
+    - Server: `/transform` enumerates Token rows where
+      `token.character_id == char.id`, snapshots their current
+      label / image_url / size into `sheet["prior_form"]["tokens"]`,
+      then writes the beast values (label = "{Mira} → {beast}",
+      image_url = the beast's portrait from Open5e if present,
+      else preserve; size from `monster["size"]`). Broadcasts
+      `token_update` per touched token so the canvas re-renders.
+    - Revert: read `sheet["prior_form"]["tokens"]`, restore each
+      token's label / image_url / size, broadcast `token_update`.
+    - Edge case: GM may have spawned multiple tokens of the same
+      character (rare but possible). Apply to all.
+    - Edge case: NPC tokens that share `character_id` (e.g. a clone
+      conjured via Mirror Image). The transform should NOT touch
+      those — RAW Wild Shape is single-target. Gate on token type or
+      `is_summon` flag.
+    - Edge case: token has a custom non-default image (player
+      uploaded portrait). Wild Shape probably should still swap to
+      the beast portrait, but revert restores the custom one. The
+      snapshot pattern handles this.
+    - Filed for a future commit; not blocking any other Phase B work.
 - **Timeless Body (Lv 18)** — Pure descriptive. No mechanic.
 - **Beast Spells (Lv 18)** — S. While Wild Shaped, can cast Druid spells
   (with verbal-only components allowed). Implementation: the

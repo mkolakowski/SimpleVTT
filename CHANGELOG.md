@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.15.8] - 2026-05-18
+
+**Schema version:** 55
+**Commit summary:** **Doc-only — file the Wild Shape token-swap TODO.** Updates `docs/plans/class-content-status.md`'s Druid Wild Shape entry to reflect the current shipped state (sheet swap + chip integration + over-budget gate all complete per v2.14.4-v2.14.6) AND files the not-yet-shipped piece: when a druid Wild Shapes, the map token should swap to the beast's portrait/label/size, with revert restoring the original. Adds a parallel TODO comment in the `/transform` endpoint docstring pointing back at the plan-doc checklist so the next person editing that code sees the deferred piece. PATCH — pure documentation, no code or behavior change.
+**Description:** Two edits. **(1)** `docs/plans/class-content-status.md` Druid section — the Wild Shape entry was outdated ("the glue is missing") because it was written before v2.14.4 shipped the harness coverage + the v2.14.5 chip integration + the v2.14.6 over-budget gate. Updated to mark those pieces ✅ shipped. Adds a "Token swap on transform — TODO" sub-section that enumerates the remaining work: enumerate Token rows by character_id, snapshot label/image_url/size into `sheet["prior_form"]["tokens"]`, write the beast's values, broadcast `token_update` per touched token; revert restores from the snapshot. Lists four edge cases (multiple tokens per character, summons sharing char_id, custom portrait overrides, GM-spawned doubles) so a future implementer doesn't rediscover them. **(2)** `app/routes/tabletop_routes.py` `transform_character` docstring — adds a "TODO (filed in docs/plans/class-content-status.md under Druid Wild Shape): swap the character's Token row(s) to reflect the new form" callout pointing back at the plan doc. The TODO lives in the docstring (not as a comment) so it's surfaced by IDE hovers + `python -c "from ... import transform_character; help(transform_character)"`.
+**Description (cont):** Why a TODO instead of just doing the work. The token-swap implementation has at least four edge-case branches (multiple tokens, summons, custom portraits, NPC clones) that each need a design decision. Doing it now without a triggering use-case (Mira's Lv 5 Wild Shape mostly produces Wolf-sized beasts, which look fine as-is) would be speculative work — the canvas-rendering investment is non-trivial relative to the gameplay payoff for a Lv 5 Moon Druid. Filing the TODO with the full checklist means whoever picks it up (could be the next Phase B commit, could be a future fix-this-when-it-actually-matters pass) has a complete picture without rediscovering the surface area.
+**Description (cont 2):** Why update the existing plan-doc entry instead of just appending a note. The plan-doc entry for Wild Shape was wrong about the current state — it claimed "the glue is missing" when the glue had shipped in v2.14.4-v2.14.6. Leaving the wrong claim in place would mislead future maintainers (myself included) into thinking the integration work was still open. Replacing the stale text + appending the new TODO is more honest about what's done vs filed.
+
+### Changed
+- `docs/plans/class-content-status.md` — Druid Wild Shape entry rewritten: marks sheet-swap + chip-integration + over-budget gate as shipped (v2.14.4-v2.14.6); adds Token swap on transform TODO with sub-piece checklist + 4 edge cases.
+- `app/routes/tabletop_routes.py` `transform_character` docstring — adds a TODO callout pointing at the plan-doc checklist.
+
+### Notes
+- **What to test:** nothing — pure docs. CI runs the harness as usual; suite stays at 70 tests.
+- **No commit guarantees this work lands.** The TODO is a deferred backlog item; it gets prioritised when (a) a future druid demo PC pushes higher-CR Wild Shapes that need visible size scaling, or (b) the Polymorph spell ships in a more interactive form that wants token feedback. Neither is on the current per-feature roadmap.
+- **Next per-feature commit candidates (carried over).** (B.7.1) Cutting Words target picker — show enemies / encounter combatants. (B.8) Remarkable Athlete pattern — needs a Fighter Champion fixture. (B.9) Divine Smite uplift — extend the attack-roll picker to offer "+ Divine Smite (spend L1+ slot)". (B.10) Peerless Skill (Lore Bard Lv 14) — needs a Lv 14+ Bard fixture. (B.11) Roll-time intercept (B) infrastructure — would unlock real-reaction prompts for Cutting Words, Shield, Counterspell, etc. (B.12 — this filing) Wild Shape token swap on transform.
+
+---
+
 ## [2.15.7] - 2026-05-18
 
 **Schema version:** 55

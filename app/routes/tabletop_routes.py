@@ -7505,6 +7505,15 @@ async def transform_character(
 
     Returns 409 if the character is already transformed, or if the beast's
     CR exceeds the cap for this source/level (and ``free_pick`` is false).
+
+    TODO (filed in docs/plans/class-content-status.md under Druid Wild
+    Shape): swap the character's Token row(s) to reflect the new form
+    (label "{name} → {beast}", image_url to beast portrait, size from
+    monster["size"]). Snapshot into ``sheet["prior_form"]["tokens"]``;
+    revert restores. Today the sheet mutates but the canvas token still
+    shows the druid's portrait + colour ring. See the plan doc for the
+    edge-case checklist (multiple tokens, summons sharing char_id,
+    custom portrait overrides).
     """
     body = await request.json()
     slug = str(body.get("slug") or "").strip()
