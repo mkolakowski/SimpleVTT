@@ -350,7 +350,13 @@
         const bc = window._movementBreadcrumb;
         if (!bc || !Array.isArray(bc.path) || bc.path.length < 2) return;
         const path = bc.path;
-        const speedCap = Number(bc.speed_walk) || 30;
+        // v2.8.3: effective cap = walking speed + Dash-granted extras.
+        // Dash adds speed_walk on each use; the chip strip in the init
+        // tracker still shows N/speed_walk (base) since that's the
+        // standard reference, but the breadcrumb colors against the
+        // post-Dash effective cap so a Dashed player sees green up to
+        // their actual budget.
+        const speedCap = (Number(bc.speed_walk) || 30) + (Number(bc.dash_bonus_ft) || 0);
         const half = gridSize / 2;
 
         // First pass: stroke every segment + arrowhead, tracking the
@@ -679,7 +685,10 @@
         for (let i = tokens.length - 1; i >= 0; i--) {
             const t = tokens[i];
             if (pointInToken(x, y, t) && canMove(t)) {
-                dragging = { token: t, offsetX: x - t.x, offsetY: y - t.y };
+                // v2.8.3: remember pre-drag position so the overrun
+                // modal's Cancel can snap the token back without a
+                // server roundtrip.
+                dragging = { token: t, offsetX: x - t.x, offsetY: y - t.y, origX: t.x, origY: t.y };
                 canvas.style.cursor = 'grabbing';
                 return;
             }
@@ -764,16 +773,106 @@
         const [sx, sy] = snapToGrid(dragging.token.x, dragging.token.y);
         dragging.token.x = sx;
         dragging.token.y = sy;
-        const id = dragging.token.id;
-        fetch(`/api/campaign/${CAMPAIGN_ID}/token/${id}/move`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ x: sx, y: sy }),
-        });
+        const tok = dragging.token;
+        const origX = dragging.origX;
+        const origY = dragging.origY;
         dragging = null;
         canvas.style.cursor = 'grab';
         render();
+        _commitTokenMove(tok, origX, origY, sx, sy);
     });
+
+    /* v2.8.3: pre-commit gate for token drags. Computes the distance the
+     * proposed move would add, looks up whether the dragger owns the
+     * active combatant, and — if the move would push them past their
+     * effective walking cap — shows the movement-overrun modal before
+     * POSTing /move. Cancel snaps the token back to (origX, origY);
+     * Move-anyway POSTs as-is; Take Dash marks the action chip + adds
+     * speed_walk to dash_bonus_ft (via the battle-IIFE-exported
+     * window._dashCombatant) before POSTing.
+     *
+     * GM bypass: GMs skip the modal. They're the rules authority, can
+     * teleport tokens, etc. — gating would be friction.
+     *
+     * Non-active / off-turn drags: also skip the modal. The breadcrumb
+     * only tracks active-combatant moves; gating off-turn drags would
+     * be confusing.
+     */
+    function _commitTokenMove(token, origX, origY, sx, sy) {
+        const tokenId = token.id;
+        const postMove = () => {
+            fetch(`/api/campaign/${CAMPAIGN_ID}/token/${tokenId}/move`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ x: sx, y: sy }),
+            });
+        };
+        const snapBack = () => {
+            token.x = origX;
+            token.y = origY;
+            render();
+        };
+
+        // No gate when the dragger is GM, when window helpers aren't
+        // loaded, when the modal helper isn't available, or when init
+        // isn't actively running.
+        const me = (typeof ME !== 'undefined' && ME) || {};
+        if (me.isGm || typeof window._getActiveCombatant !== 'function'
+                || typeof window.showMovementOverrunModal !== 'function') {
+            postMove();
+            return;
+        }
+        const active = window._getActiveCombatant();
+        if (!active) { postMove(); return; }
+
+        // Match this token to the active combatant. Source-token-id is
+        // the unambiguous v2.6.2 path; fall back to char_id when an
+        // older combatant pre-dates that field.
+        const activeMatches = (
+            (active.source_token_id != null && active.source_token_id === tokenId)
+            || (active.char_id != null && active.char_id === token.character_id)
+        );
+        if (!activeMatches) { postMove(); return; }
+
+        // Distance math mirrors the server-side derivation in /move:
+        // Chebyshev for square grids, Euclidean otherwise. 5 ft per
+        // grid cell.
+        const dx = sx - origX;
+        const dy = sy - origY;
+        let distance = 0;
+        if (gridSize > 0) {
+            const cells = (gridType === 'square')
+                ? Math.max(Math.abs(dx), Math.abs(dy)) / gridSize
+                : Math.sqrt(dx * dx + dy * dy) / gridSize;
+            distance = Math.round(cells * 5 * 10) / 10;
+        }
+        if (distance <= 0) { postMove(); return; }
+
+        const econ = active.economy || {};
+        const currentUsed = Number(econ.movement) || 0;
+        const dashBonus = Number(econ.dash_bonus_ft) || 0;
+        const speedWalk = Number(active.speed_walk) || 30;
+        const effectiveCap = speedWalk + dashBonus;
+        const projected = currentUsed + distance;
+        if (projected <= effectiveCap + 0.001) { postMove(); return; }
+
+        // Over the cap — show the modal.
+        window.showMovementOverrunModal({
+            characterName: active.name,
+            currentUsed,
+            distanceFt: distance,
+            speedCap: speedWalk,
+            dashed: dashBonus > 0,
+            onCancel: snapBack,
+            onMove: postMove,
+            onDash: () => {
+                if (typeof window._dashCombatant === 'function') {
+                    window._dashCombatant(active);
+                }
+                postMove();
+            },
+        });
+    }
 
     // Release pan/drag if mouse button is lifted outside the canvas
     document.addEventListener('mouseup', (ev) => {
@@ -852,7 +951,9 @@
                 for (let i = tokens.length - 1; i >= 0; i--) {
                     const tok = tokens[i];
                     if (pointInToken(wx, wy, tok) && canMove(tok)) {
-                        touchDrag = { token: tok, offsetX: wx - tok.x, offsetY: wy - tok.y };
+                        // v2.8.3: remember pre-drag position for snap-back
+                        // when the overrun modal's Cancel fires.
+                        touchDrag = { token: tok, offsetX: wx - tok.x, offsetY: wy - tok.y, origX: tok.x, origY: tok.y };
                         ev.preventDefault();
                         return;
                     }
@@ -940,15 +1041,16 @@
                 const [sx, sy] = snapToGrid(touchDrag.token.x, touchDrag.token.y);
                 touchDrag.token.x = sx;
                 touchDrag.token.y = sy;
-                const id = touchDrag.token.id;
-                fetch(`/api/campaign/${CAMPAIGN_ID}/token/${id}/move`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ x: sx, y: sy }),
-                });
+                const tok = touchDrag.token;
+                const origX = touchDrag.origX;
+                const origY = touchDrag.origY;
                 touchDrag = null;
                 render();
                 tapStart = null;
+                // v2.8.3: route through the shared pre-commit gate so
+                // iPad / touch drags get the same overrun modal flow as
+                // mouse drags. The helper handles snap-back on Cancel.
+                _commitTokenMove(tok, origX, origY, sx, sy);
             }
             if (touchPan && ev.touches.length === 0) {
                 touchPan = null;

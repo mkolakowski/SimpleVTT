@@ -165,6 +165,110 @@
         }
     };
 
+    /* v2.8.3: showMovementOverrunModal({characterName, currentUsed,
+     *   distanceFt, speedCap, dashed, onCancel, onMove, onDash})
+     *
+     * Pre-commit gate on a token drag that would push the active
+     * combatant past their walking speed for the turn. Three buttons:
+     *
+     *   Cancel       — snap the token back; nothing committed.
+     *   Move anyway  — accept the overrun, fire the regular /move POST.
+     *                  The Mov chip + breadcrumb render red for the
+     *                  segment, and v2.8.0 strict mode (if on) also
+     *                  posts the ⚠ Movement overrun audit entry.
+     *   Take Dash    — Disabled when ``dashed`` is true (already Dashed
+     *                  this turn). Otherwise: mark the action slot
+     *                  (Dash IS the action), bump the player's effective
+     *                  cap by +speedCap so the next speedCap feet are
+     *                  green again, and fire /move.
+     *
+     * Cancel-by-overlay-click and Cancel-by-Escape both behave as the
+     * Cancel button. Each onX callback fires once; the modal removes
+     * itself before calling the callback so handlers can show further
+     * modals safely.
+     */
+    window.showMovementOverrunModal = function (opts) {
+        const o = opts || {};
+        const who = o.characterName || 'Your character';
+        const current = Math.round(((o.currentUsed || 0)) * 10) / 10;
+        const dist = Math.round(((o.distanceFt || 0)) * 10) / 10;
+        const cap = Math.round(o.speedCap || 30);
+        const newTotal = Math.round((current + dist) * 10) / 10;
+        const overBy = Math.round((newTotal - cap) * 10) / 10;
+        const dashed = !!o.dashed;
+        const dashBonus = cap;
+
+        _removeExisting();
+        const overlay = document.createElement('div');
+        overlay.id = 'over-budget-modal';
+        overlay.style.cssText = (
+            'position:fixed;inset:0;z-index:10000;' +
+            'background:rgba(6,8,16,.78);' +
+            'display:flex;align-items:center;justify-content:center;padding:18px;'
+        );
+        const card = document.createElement('div');
+        card.style.cssText = (
+            'background:var(--s-card,#1a1f2c);' +
+            'border:1px solid var(--s-border,#2c3344);' +
+            'border-radius:8px;padding:20px;max-width:460px;width:100%;' +
+            'color:var(--s-fg,#e8e8e8);font-size:14px;line-height:1.45;' +
+            'box-shadow:0 20px 60px rgba(0,0,0,0.6);'
+        );
+        const _esc = s => String(s ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+
+        const dashBtnHtml = dashed
+            ? `<button type="button" id="obm-dash" disabled
+                style="padding:8px 14px;min-height:44px;background:rgba(76,217,100,0.18);border:1px solid rgba(76,217,100,0.35);color:#7ed17b;font-weight:700;border-radius:5px;cursor:not-allowed;opacity:.6;"
+                title="Already Dashed this turn">🏃 Already Dashed</button>`
+            : `<button type="button" id="obm-dash"
+                style="padding:8px 14px;min-height:44px;background:rgba(76,217,100,0.18);border:1px solid #4cd964;color:#7ed17b;font-weight:700;border-radius:5px;cursor:pointer;"
+                title="Use your action to Dash (+${_esc(dashBonus)} ft this turn)">🏃 Dash (+${_esc(dashBonus)} ft, uses action)</button>`;
+
+        card.innerHTML = (
+            `<div style="font-size:16px;font-weight:700;color:var(--s-accent,#ffa54a);margin-bottom:12px;">⚠ Over your walking speed</div>` +
+            `<div style="margin-bottom:8px;">${_esc(who)}, this move would put you at <strong>${_esc(newTotal)} ft</strong> this turn — ${_esc(overBy)} ft past your ${_esc(cap)} ft walking speed.</div>` +
+            `<div style="margin-bottom:18px;font-size:12px;color:var(--s-mute,#888);font-style:italic;">${dashed
+                ? "You've already Dashed this turn. Take the overrun or cancel."
+                : "Dash (action) lets you move an extra " + _esc(dashBonus) + " ft this turn."}</div>` +
+            '<div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">' +
+            `<button type="button" id="obm-cancel" style="padding:8px 14px;min-height:44px;background:transparent;border:1px solid var(--s-border,#2c3344);color:var(--s-fg,#e8e8e8);border-radius:5px;cursor:pointer;">Cancel</button>` +
+            `<button type="button" id="obm-move" style="padding:8px 14px;min-height:44px;background:rgba(255,96,96,0.18);border:1px solid #ff7070;color:#ff8080;font-weight:700;border-radius:5px;cursor:pointer;">Move anyway</button>` +
+            dashBtnHtml +
+            '</div>'
+        );
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        const fired = { value: false };
+        const fire = (cb) => {
+            if (fired.value) return;
+            fired.value = true;
+            overlay.remove();
+            if (typeof cb === 'function') {
+                try { cb(); } catch (e) { console.error('movement modal handler threw:', e); }
+            }
+        };
+        card.querySelector('#obm-cancel').addEventListener('click', () => fire(o.onCancel));
+        card.querySelector('#obm-move').addEventListener('click', () => fire(o.onMove));
+        if (!dashed) {
+            card.querySelector('#obm-dash').addEventListener('click', () => fire(o.onDash));
+        }
+        overlay.addEventListener('click', (ev) => { if (ev.target === overlay) fire(o.onCancel); });
+        const escHandler = (ev) => {
+            if (ev.key === 'Escape') {
+                document.removeEventListener('keydown', escHandler);
+                fire(o.onCancel);
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+        // Focus the Cancel button so Enter doesn't accidentally trigger
+        // the overrun-accepting Move button. Mirrors the strict-mode
+        // over-budget modal's defensive focus.
+        setTimeout(() => card.querySelector('#obm-cancel')?.focus(), 30);
+    };
+
     /* Convenience wrapper: takes a Response object from a 409
      * over_budget reply + the fetch callback to re-fire on Confirm.
      * The fetch body is mutated to add { override: true } before the

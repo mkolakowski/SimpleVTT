@@ -3698,10 +3698,16 @@ let CONC_DATA = {{ conc_by_char | tojson }};
      * against any code path that still constructs combatants without it.
      * v2.8.1: also healing ``movement_path`` — the active combatant's
      * waypoint history for the canvas breadcrumb. Empty array means no
-     * line drawn yet this turn. */
+     * line drawn yet this turn.
+     * v2.8.3: heal ``economy.dash_bonus_ft`` so the breadcrumb's effective
+     * cap can include Dash-granted extra movement. Starts at 0 and bumps
+     * by speed_walk on each Dash use this turn. */
     function _ensureEconomy(c) {
         if (!c.economy || typeof c.economy !== 'object') {
-            c.economy = { action: false, bonus: false, reaction: false, movement: 0 };
+            c.economy = { action: false, bonus: false, reaction: false, movement: 0, dash_bonus_ft: 0 };
+        }
+        if (typeof c.economy.dash_bonus_ft !== 'number') {
+            c.economy.dash_bonus_ft = 0;
         }
         if (!Array.isArray(c.movement_path)) {
             c.movement_path = [];
@@ -3712,7 +3718,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
      * window-scoped slot tabletop.js reads in its canvas render loop.
      * Empty path → empty slot → canvas draws nothing. Called from
      * renderBattle and from the token_move WS handler so every state
-     * change keeps the canvas in sync. */
+     * change keeps the canvas in sync.
+     * v2.8.3: also publish ``dash_bonus_ft`` so the breadcrumb's
+     * effective cap can shift up when the player Dashes mid-turn. */
     function _updateMovementBreadcrumb() {
         const idx = battle.turn_index;
         const combs = battle.combatants || [];
@@ -3720,9 +3728,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         if (!active || !Array.isArray(active.movement_path) || !active.movement_path.length) {
             window._movementBreadcrumb = null;
         } else {
+            const econ = active.economy || {};
             window._movementBreadcrumb = {
                 path: active.movement_path,
                 speed_walk: Number(active.speed_walk) || 30,
+                dash_bonus_ft: Number(econ.dash_bonus_ft) || 0,
                 char_id: active.char_id,
             };
         }
@@ -3730,6 +3740,29 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             window._renderCanvas();
         }
     }
+
+    /* v2.8.3: expose helpers tabletop.js uses for the pre-drag
+     * movement-overrun modal. _getActiveCombatant returns the current
+     * turn's combatant (or null if init isn't running); _dashCombatant
+     * marks the action slot AND adds speed_walk to dash_bonus_ft so the
+     * effective movement cap grows by Dash's RAW grant. Both run on
+     * the player's own browser when they trigger a drag, so push +
+     * render happen inside this same closure — pushBattle broadcasts
+     * to other clients via the regular battle_update path. */
+    window._getActiveCombatant = function () {
+        const idx = battle.turn_index;
+        const combs = battle.combatants || [];
+        if (!battle.active || !Number.isFinite(idx)) return null;
+        return combs[idx] || null;
+    };
+    window._dashCombatant = function (combatant) {
+        if (!combatant) return;
+        _ensureEconomy(combatant);
+        combatant.economy.action = true;
+        combatant.economy.dash_bonus_ft = (Number(combatant.economy.dash_bonus_ft) || 0) + (Number(combatant.speed_walk) || 30);
+        pushBattle();
+        renderBattle();
+    };
 
     /* v2.5.3: action-economy Phase 2 helpers — map a spell's
      * ``casting_time`` string to its economy slot, and mark a combatant's
@@ -4628,6 +4661,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             newCur.economy.bonus = false;
             newCur.economy.reaction = false;
             newCur.economy.movement = 0;
+            newCur.economy.dash_bonus_ft = 0;  // v2.8.3
             // v2.8.1: clear the new active combatant's movement breadcrumb
             // so the canvas overlay starts fresh for their turn. The
             // previous combatant's path stops rendering automatically
@@ -4664,6 +4698,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             c.economy.bonus = false;
             c.economy.reaction = false;
             c.economy.movement = 0;
+            c.economy.dash_bonus_ft = 0;  // v2.8.3
             // v2.8.1: wipe everyone's movement breadcrumb when init
             // (re)starts so no stale path renders for the first turn.
             c.movement_path = [];
