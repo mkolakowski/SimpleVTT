@@ -216,6 +216,73 @@ async def test_cleansing_touch_curated(gm_client, gm_ws, roster):
     assert "Cleansing Touch" in msg["data"]["feature_name"]
 
 
+async def test_indomitable_curated(gm_client, gm_ws, roster):
+    """v2.16.2: Indomitable (Fighter Lv 9+) is in the curated table for
+    forward compat — the server accepts the slug even though Pip is a
+    Rogue (no enforcement of class eligibility on /use_feature; client
+    filters via class_features rendering). slot:'free' because the
+    save-reroll doesn't consume an action/bonus/reaction.
+    """
+    pip = roster["Pip Quickfingers"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": pip["id"],
+            "feature_key": "indomitable",
+            "label": "Indomitable",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slot"] == "free"
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Indomitable" in msg["data"]["feature_name"]
+
+
+async def test_stroke_of_luck_curated(gm_client, gm_ws, roster):
+    """v2.16.2: Stroke of Luck (Rogue Lv 20) curated table entry.
+    Future Lv 20 Rogue fixture + (B) roll-time intercept needed for
+    the proper miss-to-hit / fail-to-20 UX; today the slug is
+    accepted and the chat card announces it generically.
+    """
+    pip = roster["Pip Quickfingers"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": pip["id"],
+            "feature_key": "stroke-of-luck",
+            "label": "Stroke of Luck",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slot"] == "free"
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Stroke of Luck" in msg["data"]["feature_name"]
+
+
+async def test_font_of_magic_curated(gm_client, gm_ws, roster):
+    """v2.16.2: Font of Magic (Sorcerer Lv 2) curated table entry.
+    Demo has no Sorcerer; the slug is server-accepted for forward
+    compat. Full SP↔slot conversion picker ships when a Sorcerer
+    fixture lands (Phase A.4+).
+    """
+    pip = roster["Pip Quickfingers"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": pip["id"],
+            "feature_key": "font-of-magic",
+            "label": "Font of Magic",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slot"] == "free"
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Font of Magic" in msg["data"]["feature_name"]
+
+
 async def test_action_surge_is_free(gm_client, gm_ws, roster):
     """Action Surge doesn't consume an economy slot (slot='free').
     The chip should NOT flip when this fires."""

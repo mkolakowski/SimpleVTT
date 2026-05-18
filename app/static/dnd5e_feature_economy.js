@@ -44,6 +44,19 @@ window._FEATURE_ECONOMY = {
             'hide': { label: 'Hide', desc: 'Make a Dexterity (Stealth) check to hide.' },
         },
     },
+    'stroke-of-luck': {
+        slot: 'free',
+        class: 'rogue',
+        unlock_level: 20,
+        label: 'Stroke of Luck',
+        desc: 'Once per short or long rest: turn a missed attack into a hit, OR turn a failed ability check into a 20.',
+        // v2.16.2: curated table entry only. No demo Rogue PC at Lv 20
+        // (Pip is Lv 5). The full UX needs (B) roll-time intercept to
+        // prompt the player AFTER a miss/failure — "want to use Stroke
+        // of Luck?" — and rewrite the d20 result. slot:'free' because
+        // the reroll/upgrade is a once-per-rest resource use, not an
+        // action/bonus/reaction.
+    },
 
     /* ── Fighter ─────────────────────────────────────────────────── */
     'second-wind': {
@@ -65,6 +78,21 @@ window._FEATURE_ECONOMY = {
         // second action which marks Act for the round; the previously-
         // used Act stays burnt). Phase 4's GM shift+click chip-clear is
         // the proper way to model "I just got a second action."
+    },
+    'indomitable': {
+        slot: 'free',
+        class: 'fighter',
+        unlock_level: 9,
+        label: 'Indomitable',
+        desc: 'Reroll a failed saving throw. Must use the new roll. 1/short rest at Lv 9, 2/short rest at Lv 13, 3/short rest at Lv 17.',
+        // v2.16.2: curated table entry only. No demo Fighter PC at Lv
+        // 9+ yet; future Phase A.4 (demo Fighter) would land the
+        // resource counter, the resource ⚡ Use special-case for the
+        // save-reroll prompt (depends on (B) roll-time intercept for
+        // the actual "let me reroll that save I just failed" UX),
+        // and the harness happy-path test. slot:'free' because the
+        // reroll itself doesn't consume an action / bonus / reaction
+        // — it just costs a use of the resource.
     },
 
     /* ── Cleric ──────────────────────────────────────────────────── */
@@ -230,6 +258,24 @@ window._FEATURE_ECONOMY = {
     },
 
     /* ── Sorcerer ────────────────────────────────────────────────── */
+    'font-of-magic': {
+        slot: 'free',
+        class: 'sorcerer',
+        unlock_level: 2,
+        label: 'Font of Magic',
+        desc: 'Convert spell slots to sorcery points (and vice versa) as a bonus action. Costs: SP → slot at 2/3/5/6/7 SP per L1/L2/L3/L4/L5 slot; slot → SP at the slot level (e.g. L3 slot → 3 SP).',
+        // v2.16.2: curated table entry only. No demo Sorcerer PC. The
+        // full feature ships when Phase A.4+ adds a Sorcerer fixture
+        // — that commit lands the sorcery-points resource counter,
+        // the slot-conversion picker (a sibling to Arcane Recovery's
+        // restore-modal but with conversion costs), and a dedicated
+        // /use_font_of_magic endpoint. slot:'free' because the
+        // conversion itself is a bonus action (mechanically) but
+        // the action-economy chip is per-class-feature; the chip
+        // flip would happen via /use_feature's slot resolution.
+        // Future v2 can promote this to slot:'bonus' once a Sorcerer
+        // demo exists to verify the chip-marking.
+    },
     'quickened-spell': {
         slot: 'bonus',
         class: 'sorcerer',

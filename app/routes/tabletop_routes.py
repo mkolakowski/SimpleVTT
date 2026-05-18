@@ -154,6 +154,9 @@ _FEATURE_ECONOMY: dict[str, dict] = {
     "reckless-attack": {"slot": "free"},
     "quickened-spell": {"slot": "bonus"},
     "arcane-recovery": {"slot": "free"},  # v2.16.1 (Wizard Lv 1)
+    "indomitable": {"slot": "free"},      # v2.16.2 (Fighter Lv 9+)
+    "stroke-of-luck": {"slot": "free"},   # v2.16.2 (Rogue Lv 20)
+    "font-of-magic": {"slot": "free"},    # v2.16.2 (Sorcerer Lv 2)
 }
 
 

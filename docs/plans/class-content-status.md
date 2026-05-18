@@ -121,7 +121,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 3 | Martial Archetype | ✅ | Subclass system shipped — see Subclasses table. Champion has features JSON (Improved Critical / Remarkable Athlete pending attack-roll intercept); Battle Master has Superiority Dice counter. |
 | 4 / 6 / 8 / 12 / 14 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 5 / 11 / 20 | Extra Attack | ✅ | RAW supported — click the attack button N times within your action (2 at Lv 5, 3 at Lv 11, 4 at Lv 20); the action-economy chip is per-action so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed for the future. |
-| 9 / 13 / 17 | Indomitable | 🟢 | Resource counter (`key: 'indomitable'`); no save-reroll button |
+| 9 / 13 / 17 | Indomitable | 🟢 | Resource counter (`key: 'indomitable'`); curated `_FEATURE_ECONOMY` entry shipped v2.16.2 (slot:'free' since the reroll doesn't consume an action/bonus/reaction). Full save-reroll UX waits on (B) roll-time intercept + a Fighter Lv 9+ fixture. |
 
 ### Monk
 
@@ -200,7 +200,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 14 | Blindsense | ✅ | Rogue Lv 14: pure-descriptive (sense unseen creatures within 10 ft). RAW: would interact with a fog-of-war / hidden-token engine, but SimpleVTT doesn't model token hiding at that granularity. Re-evaluate if a hidden/seen state ships. |
 | 15 | Slippery Mind | ⚪ | |
 | 18 | Elusive | ⚪ | |
-| 20 | Stroke of Luck | 🟢 | Resource counter |
+| 20 | Stroke of Luck | 🟢 | Resource counter. Curated `_FEATURE_ECONOMY` entry shipped v2.16.2 (slot:'free'). Full miss-to-hit / fail-to-20 UX waits on (B) roll-time intercept + a Lv 20 Rogue fixture. |
 
 ### Sorcerer
 
@@ -208,7 +208,7 @@ The `### Header` names below come from the `features` field of each JSON.
 |---|---|---|---|
 | 1 | Spellcasting | ✅ | |
 | 1 | Sorcerous Origin | ✅ | Subclass system shipped — see Subclasses table. Draconic Bloodline has features JSON; Wild Magic has Tides of Chaos counter. |
-| 2 | Font of Magic | 🟢 | Sorcery Points counter (`key: 'sorcery-points'`); no slot-conversion picker |
+| 2 | Font of Magic | 🟢 | Sorcery Points counter (`key: 'sorcery-points'`); curated `_FEATURE_ECONOMY` entry shipped v2.16.2 (slot:'free'). Full SP↔slot conversion picker waits on a Sorcerer fixture (Phase A.4+). Slot-conversion endpoint would follow the Arcane Recovery (`/use_arcane_recovery`) pattern — atomic mutation of spell_slots + the Sorcery Points counter. |
 | 3 | Metamagic | ⚪ | Per-cast modifier; needs spell-cast intercept |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 20 | Sorcerous Restoration | ⚪ | Auto-refill 4 sorcery points on short rest — could just be a special-case in the rest endpoint |
