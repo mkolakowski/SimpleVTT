@@ -933,11 +933,23 @@
 
 <div class="tabletop-layout">
     <div class="map-pane" id="map-pane">
-        {# v2.9.1: presence indicator — pills for every connected user
-           on this campaign. Populated by the WS ``presence_update``
-           handler. Hidden when empty so the corner stays clean on
-           cold load before the first WS message arrives. #}
-        <div id="presence-bubbles" aria-label="Connected players"></div>
+        {# v2.9.1 / v2.9.2: presence indicator — pills for every
+           connected user on this campaign. Populated by the WS
+           ``presence_update`` handler. Pre-renders the current user's
+           pill server-side (v2.9.2) so the corner is never empty —
+           even before the WS connects + even when the player is alone
+           in the campaign. The WS update replaces this with the live
+           roster as soon as it arrives. Color resolution mirrors
+           ``_user_color_map`` priority: character > membership > GM
+           fallback. #}
+        {% set _me_color = user_color_map.get(user.id) or (campaign.gm_color if is_gm else '#6cb4ff') %}
+        <div id="presence-bubbles" aria-label="Connected players">
+            <span class="presence-pill{% if is_gm %} is-gm{% endif %}"
+                  style="border-left-color:{{ _me_color }};"
+                  title="{{ user.display_name }}{% if is_gm %} — Game Master{% endif %}">
+                <span class="presence-dot"></span>{{ user.display_name }}
+            </span>
+        </div>
         {% if active_map %}
             {# Animated map background — rendered as a native HTML element so GIFs animate
                and videos loop. Sits behind the canvas (z-index:0) which draws only the

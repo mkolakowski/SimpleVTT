@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.9.2] - 2026-05-17
+
+**Schema version:** 55
+**Commit summary:** Presence indicator (v2.9.1) — always show the current user's pill, even when they're alone in the campaign or before the WS connects. The bubble container now ships with a server-rendered pill for the connecting user; the WS `presence_update` replaces it with the live roster the moment it arrives. Closes the "I'm alone and don't see my pill" perception (the WS path always did render it, but for the brief moment between page load and WS connect the corner was empty — and the previous code hid the container entirely on an empty user list, which felt wrong for the solo-GM case). PATCH bump — UX tweak, no protocol change.
+**Description:** Two coordinated changes. **(1)** `app/templates/tabletop.html` `#presence-bubbles` div is no longer empty on first render. The Jinja template stamps a single `.presence-pill` for the current user using the same color resolution priority as `_user_color_map` (character > membership > GM fallback) — so even before the WebSocket connects, the corner shows you your own pill. The WS `presence_update` arrives moments later and the JS handler replaces this with the full live roster (which includes you alongside everyone else who's connected). **(2)** `app/static/tabletop.js` `_renderPresence` no longer hides the container on an empty user list. The empty-list branch was a holdover from v2.9.1's "render nothing if no one's connected" assumption — but the receiving client is always in the list (they're the one who just received the broadcast), so an empty list is either a stale message during reconnect or a defensive edge case. Keeping the SSR pill visible in that case is the safer fallback than wiping the corner.
+**Description (cont):** Why the SSR pill is the right call. The presence feature exists to give players a quick "who's at the table" anchor. A blank corner — even briefly during page load or after a transient WS hiccup — fights that goal. Pre-rendering the current user's pill server-side guarantees the indicator is there from the first paint. The WS update is still authoritative for the roster of other players + for color changes that happen mid-session (a player editing their character color, the GM updating member colors, etc.).
+
+### Changed
+- `app/templates/tabletop.html` — `#presence-bubbles` div pre-renders the current user's pill on first paint, using `user_color_map[user.id]` (falling back to `campaign.gm_color` for the GM, `#6cb4ff` for unset).
+- `app/static/tabletop.js` `_renderPresence` — empty-list branch now returns early without hiding the container, so the SSR pill survives a defensive empty broadcast.
+
+### Notes
+- **What to test (solo):** open the demo `/campaign/1` as `demo-gm@example.com` (the only one connected). Lower-left of the map immediately shows the GM's pill on page load — even before the WebSocket connects. After WS connects, the pill is replaced by the same content (still one pill, no flicker).
+- **What to test (no WS):** disable JS (or block the WS endpoint in DevTools Network) and reload. The pill still renders — it's pure server-side HTML at that point. Useful smoke test: if your network is flaky, you still see at minimum your own presence so you know which account you're on.
+- **What to test (multi-user transition):** open the tab as Alice, watch the SSR pill render her name. The WS connects within a few hundred ms and `presence_update` arrives with `[Alice]`. `_renderPresence` swaps the container content for the same pill. As Bob joins from another tab, the next `presence_update` adds Bob's pill alongside Alice's.
+- This is a "feels-fixed" tweak — the v2.9.1 path already showed the pill once WS was up, but a perceptive user who connects + immediately looks at the corner would see ~50–200 ms of empty space. The SSR pre-render closes that gap.
+
+---
+
 ## [2.9.1] - 2026-05-17
 
 **Schema version:** 55

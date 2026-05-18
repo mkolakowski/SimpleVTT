@@ -1707,11 +1707,13 @@
         const container = document.getElementById('presence-bubbles');
         if (!container) return;
         const users = (data && Array.isArray(data.users)) ? data.users : [];
-        if (!users.length) {
-            container.innerHTML = '';
-            container.style.display = 'none';
-            return;
-        }
+        // v2.9.2: empty roster shouldn't happen (the receiving client
+        // is always in the list since they're connected), but defend
+        // against a stale broadcast by keeping the server-rendered
+        // pill in place rather than wiping it. Same for any case where
+        // ``users`` doesn't include the current user — keep the SSR
+        // fallback visible so the corner is never blank.
+        if (!users.length) return;
         // Stable sort: GMs first (so they always render in the same
         // relative position), then alphabetical display name. The
         // server doesn't guarantee an order so we do it client-side.
