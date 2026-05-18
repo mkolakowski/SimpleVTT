@@ -8029,6 +8029,71 @@ async def use_attack(
             damage_total = None
             damage_breakdown = ""
 
+    # v2.16.0: per-attack uplifts. ``bonus_damage`` (e.g. "3d6" for Sneak
+    # Attack) rolls separately and rides on the broadcast as its own
+    # line. ``bonus_damage_label`` ("Sneak Attack" / "Divine Smite") is
+    # the chat-card attribution. ``spend_spell_slot`` ({class_slug,
+    # level}) atomically decrements a spell slot — used by Divine
+    # Smite to consume a Paladin slot. Slot loss happens before the
+    # roll so the player can't "back out" if they miss; matches the
+    # design call from B.9's plan (RAW would prompt for smite ONLY on
+    # hit, but the (B) roll-time intercept that would enable that is
+    # filed for later).
+    bonus_damage_expr = str(body.get("bonus_damage") or "").strip()
+    bonus_damage_label = str(body.get("bonus_damage_label") or "").strip()[:80]
+    spend_slot = body.get("spend_spell_slot") or None
+    bonus_damage_total = None
+    bonus_damage_breakdown = ""
+    slot_spent_class = ""
+    slot_spent_level = 0
+
+    if isinstance(spend_slot, dict):
+        cslug = str(spend_slot.get("class_slug") or "").strip().lower()
+        try:
+            slot_level = int(spend_slot.get("level") or 0)
+        except (TypeError, ValueError):
+            slot_level = 0
+        if not cslug or slot_level < 1:
+            raise HTTPException(400, "spend_spell_slot requires class_slug + level >= 1")
+        all_slots = dict(sheet.get("spell_slots") or {})
+        per_class = dict(all_slots.get(cslug) or {})
+        slot_key = str(slot_level)
+        slot = dict(per_class.get(slot_key) or {})
+        total = int(slot.get("total") or 0)
+        used = int(slot.get("used") or 0)
+        if total <= 0 or used >= total:
+            return JSONResponse(status_code=409, content={
+                "error": "no_slot",
+                "class_slug": cslug,
+                "level": slot_level,
+                "label": bonus_damage_label or "Slot-fueled uplift",
+            })
+        slot["total"] = total
+        slot["used"] = used + 1
+        per_class[slot_key] = slot
+        all_slots[cslug] = per_class
+        sheet["spell_slots"] = all_slots
+        slot_spent_class = cslug
+        slot_spent_level = slot_level
+
+    if bonus_damage_expr:
+        try:
+            r = dice_mod.roll(bonus_damage_expr)
+            bonus_damage_total = r.total
+            bonus_damage_breakdown = r.breakdown
+        except dice_mod.DiceParseError:
+            bonus_damage_total = None
+            bonus_damage_breakdown = ""
+
+    # Persist the slot decrement (if any). The single commit at the
+    # broadcast site below would be too late — by then the response
+    # could be returning and the sheet state hasn't flushed.
+    if slot_spent_class:
+        from sqlalchemy.orm.attributes import flag_modified
+        char.sheet = sheet
+        flag_modified(char, "sheet")
+        db.commit()
+
     # Resolve caster display info
     membership = (
         db.query(CampaignMembership)
@@ -8059,6 +8124,17 @@ async def use_attack(
         "damage_type": damage_type,
         "damage_total": damage_total,
         "damage_breakdown": damage_breakdown,
+        # v2.16.0: per-attack uplifts. ``bonus_damage_*`` is null when no
+        # uplift was applied; populated when the caller passed a
+        # ``bonus_damage`` expression. Chat card renders this on its own
+        # line below the base damage line so the audience can attribute
+        # the extra dice to Sneak Attack / Divine Smite / etc.
+        "bonus_damage_label": bonus_damage_label or "",
+        "bonus_damage_expr": bonus_damage_expr or "",
+        "bonus_damage_total": bonus_damage_total,
+        "bonus_damage_breakdown": bonus_damage_breakdown,
+        "slot_spent_class": slot_spent_class,
+        "slot_spent_level": slot_spent_level,
         "range": range_str,
         "save_dc": save_dc if is_save else 0,
         "save_ability": save_ability if is_save else "",
@@ -8085,6 +8161,11 @@ async def use_attack(
         "attack_breakdown": attack_breakdown,
         "damage_total": damage_total,
         "damage_breakdown": damage_breakdown,
+        "bonus_damage_label": bonus_damage_label or "",
+        "bonus_damage_total": bonus_damage_total,
+        "bonus_damage_breakdown": bonus_damage_breakdown,
+        "slot_spent_class": slot_spent_class,
+        "slot_spent_level": slot_spent_level,
         "attack_name": name,
         "damage_type": damage_type,
         "is_save": is_save,

@@ -104,3 +104,132 @@ async def test_attack_missing_character_id(gm_client):
         json={"attack_index": 0},
     )
     assert resp.status_code == 400
+
+
+async def test_attack_sneak_attack_uplift(gm_client, gm_ws, roster):
+    """v2.16.0: Pip swings his Shortsword AND declares Sneak Attack (3d6
+    at Lv 5). Response carries bonus_damage_label + bonus_damage_total
+    in the 3-18 range; broadcast surfaces them on a separate line so the
+    chat can render the attribution. No spell slot consumed (Sneak
+    Attack isn't slot-fueled).
+    """
+    pip = roster["Pip Quickfingers"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": pip["id"],
+            "attack_index": 0,
+            "bonus_damage": "3d6",
+            "bonus_damage_label": "Sneak Attack",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["bonus_damage_label"] == "Sneak Attack"
+    assert data["bonus_damage_total"] is not None
+    assert 3 <= data["bonus_damage_total"] <= 18  # 3d6 range
+    assert "3d6" in data["bonus_damage_breakdown"]
+    assert data["slot_spent_class"] == ""
+    assert data["slot_spent_level"] == 0
+
+    msg = await gm_ws.wait_for("weapon_attack")
+    assert msg["data"]["bonus_damage_label"] == "Sneak Attack"
+    assert msg["data"]["bonus_damage_total"] == data["bonus_damage_total"]
+    assert msg["data"]["bonus_damage_expr"] == "3d6"
+
+
+async def test_attack_divine_smite_spends_slot(gm_client, gm_ws, roster):
+    """v2.16.0: Caelan swings his Longsword AND declares Divine Smite
+    (L1 slot → 2d8 radiant). Response: bonus_damage_total in 2-16,
+    slot_spent_class='paladin', slot_spent_level=1. Caelan's paladin
+    L1 slot pool decrements by 1 (was 4, becomes 3).
+
+    Long-rests Caelan first to ensure the slot pool is full + reverts
+    any prior depletion from earlier tests in the session.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    # Refill slots via long rest.
+    refill = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/rest",
+        json={"type": "long"},
+    )
+    assert refill.status_code == 200, refill.text
+    gm_ws.mark()  # discard the long-rest broadcasts
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": caelan["id"],
+            "attack_index": 0,
+            "bonus_damage": "2d8",
+            "bonus_damage_label": "Divine Smite",
+            "spend_spell_slot": {"class_slug": "paladin", "level": 1},
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["bonus_damage_label"] == "Divine Smite"
+    assert 2 <= data["bonus_damage_total"] <= 16  # 2d8 range
+    assert data["slot_spent_class"] == "paladin"
+    assert data["slot_spent_level"] == 1
+
+    msg = await gm_ws.wait_for("weapon_attack")
+    assert msg["data"]["bonus_damage_label"] == "Divine Smite"
+    assert msg["data"]["slot_spent_class"] == "paladin"
+    assert msg["data"]["slot_spent_level"] == 1
+
+
+async def test_attack_divine_smite_no_slot(gm_client, gm_ws, roster):
+    """Deplete all of Caelan's L1 slots, then attempt Divine Smite at L1
+    → 409 with error="no_slot". The base attack does NOT fire (server
+    aborts before rolling damage).
+
+    Drain pattern: deplete via repeated /attack-with-smite calls until
+    the next call returns 409. The previous test consumed 1 slot from
+    a full pool of 4 (Lv 5 Paladin); we don't long-rest at the start so
+    this test runs against whatever the prior test left behind. The drain
+    loop handles the unknown starting count.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    max_attempts = 6  # Paladin Lv 5 has 4 L1 slots + safety margin
+    for _ in range(max_attempts):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": caelan["id"],
+                "attack_index": 0,
+                "bonus_damage": "2d8",
+                "bonus_damage_label": "Divine Smite",
+                "spend_spell_slot": {"class_slug": "paladin", "level": 1},
+                "override": True,
+            },
+        )
+        if resp.status_code == 409:
+            body = resp.json()
+            assert body.get("error") == "no_slot"
+            assert body.get("class_slug") == "paladin"
+            assert body.get("level") == 1
+            return
+        assert resp.status_code == 200, resp.text
+    raise AssertionError(
+        f"Expected 409 no_slot within {max_attempts} attempts but the "
+        "endpoint kept returning 200 — the no-slot guard may have regressed."
+    )
+
+
+async def test_attack_spend_slot_missing_class(gm_client, roster):
+    """spend_spell_slot without class_slug returns 400."""
+    caelan = roster["Sir Caelan Lightbringer"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": caelan["id"],
+            "attack_index": 0,
+            "spend_spell_slot": {"level": 1},  # missing class_slug
+            "override": True,
+        },
+    )
+    assert resp.status_code == 400

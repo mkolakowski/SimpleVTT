@@ -4037,11 +4037,224 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             header.addEventListener('click', _activate);
             header.addEventListener('pointerup', _activate);
         });
+        /* v2.16.0: per-attack uplift picker. Detects class-feature
+         * damage uplifts that can ride on the swing (Rogue's Sneak
+         * Attack, Paladin's Divine Smite) by reading the multiclass
+         * roster + spell-slot inputs. When at least one uplift is
+         * available the Strike click pops a small modal; on Confirm
+         * the selected uplift's bonus_damage / spend_spell_slot ride
+         * on the /attack body. On Cancel the attack doesn't fire.
+         * When no uplifts are available the Strike click fires
+         * directly (zero-cost path for Wizard / Cleric / Druid /
+         * etc.).
+         */
+        function _sneakAttackDie(rogueLevel) {
+            // Rogue Sneak Attack scales 1d6 / 2d6 / 3d6 / ... — one die
+            // every 2 levels, cap 10d6 at Lv 19+. Formula: ceil(Lv/2).
+            const dice = Math.min(10, Math.max(1, Math.ceil(rogueLevel / 2)));
+            return `${dice}d6`;
+        }
+        function _classLevels() {
+            const roster = (typeof window._mcRoster === 'function') ? window._mcRoster() : null;
+            const out = {};
+            if (Array.isArray(roster) && roster.length) {
+                for (const c of roster) {
+                    const slug = (c.class || '').trim().toLowerCase();
+                    const lv = parseInt(c.level, 10) || 0;
+                    if (slug && lv > 0) out[slug] = Math.max(out[slug] || 0, lv);
+                }
+            }
+            // Single-class fallback for sheets without multi-class wiring.
+            if (!Object.keys(out).length) {
+                const form = document.getElementById('sheet-form');
+                const slug = (form?.querySelector('[name="class"]')?.value || '').trim().toLowerCase();
+                const lv = parseInt(form?.querySelector('[name="level"]')?.value, 10) || 0;
+                if (slug) out[slug] = lv;
+            }
+            return out;
+        }
+        function _availableSlots(classSlug) {
+            // Spell slots live in hidden inputs named
+            // spell_slots.<class>.<lvl>.total / .used. Walk them and
+            // build a per-level breakdown.
+            const out = [];
+            for (let level = 1; level <= 9; level++) {
+                const totalEl = document.querySelector(`[name="spell_slots.${classSlug}.${level}.total"]`);
+                const usedEl  = document.querySelector(`[name="spell_slots.${classSlug}.${level}.used"]`);
+                if (!totalEl) continue;
+                const total = parseInt(totalEl.value, 10) || 0;
+                const used = parseInt(usedEl?.value, 10) || 0;
+                if (total > 0) {
+                    out.push({ level, total, used, remaining: Math.max(0, total - used) });
+                }
+            }
+            return out;
+        }
+        function _getAvailableUplifts() {
+            const uplifts = [];
+            const levels = _classLevels();
+
+            // Rogue Sneak Attack (Lv 1+).
+            if ((levels.rogue || 0) >= 1) {
+                const die = _sneakAttackDie(levels.rogue);
+                uplifts.push({
+                    key: 'sneak-attack',
+                    label: `🎯 Sneak Attack +${die}`,
+                    hint: 'Once per turn when you have advantage OR an ally is within 5 ft of the target (and you don\'t have disadvantage).',
+                    kind: 'toggle',
+                    damage: die,
+                    damage_label: 'Sneak Attack',
+                });
+            }
+
+            // Paladin Divine Smite (Lv 2+, needs an available L1+ slot).
+            if ((levels.paladin || 0) >= 2) {
+                const slots = _availableSlots('paladin').filter(s => s.remaining > 0);
+                if (slots.length > 0) {
+                    uplifts.push({
+                        key: 'divine-smite',
+                        label: '✨ Divine Smite',
+                        hint: 'Spend a spell slot (Lv 1+) for +2d8 radiant. +1d8 per slot level above 1st (cap 5d8). +1d8 vs undead/fiends (not yet picker-toggleable; add manually if needed).',
+                        kind: 'slot-pick',
+                        slot_class: 'paladin',
+                        slots: slots.map(s => ({
+                            level: s.level,
+                            // Smite damage: 2d8 at L1 + 1d8 per level above 1st, cap 5d8.
+                            dice: Math.min(5, s.level + 1),
+                            label: `L${s.level} slot (${s.remaining}/${s.total} avail)`,
+                        })),
+                    });
+                }
+            }
+
+            return uplifts;
+        }
+
+        function _showUpliftModal(uplifts) {
+            return new Promise(resolve => {
+                const prev = document.getElementById('uplift-modal');
+                if (prev) prev.remove();
+
+                const overlay = document.createElement('div');
+                overlay.id = 'uplift-modal';
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+                const card = document.createElement('div');
+                card.style.cssText = 'background:var(--s-card,#222);color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:8px;padding:18px;min-width:320px;max-width:480px;box-shadow:0 10px 40px rgba(0,0,0,.6);';
+
+                let html = '<div style="font-size:14px;font-weight:700;margin-bottom:6px;">⚔ Attack uplifts</div>';
+                html += '<div style="font-size:12px;color:var(--s-mute,#aaa);margin-bottom:14px;">Tick any uplifts that apply this swing. v1 supports one per attack — the first checked wins.</div>';
+
+                uplifts.forEach((u, i) => {
+                    html += `<div style="margin-bottom:10px;padding:8px 10px;border:1px solid var(--s-border,#444);border-radius:4px;">`;
+                    html += `<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;font-weight:600;">
+                        <input type="checkbox" data-up-idx="${i}" id="up-cb-${i}" style="margin:0;cursor:pointer;">
+                        <span>${_esc(u.label)}</span>
+                    </label>`;
+                    html += `<div style="font-size:11px;color:var(--s-mute,#aaa);margin-top:4px;line-height:1.4;">${_esc(u.hint)}</div>`;
+                    if (u.kind === 'slot-pick') {
+                        html += `<select id="up-slot-${i}" style="margin-top:6px;font-size:12px;padding:4px;width:100%;background:var(--s-input,#1a1a1a);color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:3px;" disabled>`;
+                        for (const s of u.slots) {
+                            html += `<option value="${s.level}" data-dice="${s.dice}">${_esc(s.label)} → +${s.dice}d8 radiant</option>`;
+                        }
+                        html += `</select>`;
+                    }
+                    html += `</div>`;
+                });
+
+                html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">';
+                html += '<button type="button" id="up-cancel" style="padding:6px 14px;font-size:12px;background:transparent;color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:4px;cursor:pointer;">Cancel</button>';
+                html += '<button type="button" id="up-confirm" style="padding:6px 14px;font-size:12px;background:var(--accent-bg2,#2a3d5c);color:var(--s-accent,#88c);border:1px solid var(--s-accent,#88c);border-radius:4px;font-weight:600;cursor:pointer;">⚔ Strike</button>';
+                html += '</div>';
+
+                card.innerHTML = html;
+                overlay.appendChild(card);
+                document.body.appendChild(overlay);
+
+                // Wire each checkbox to enable/disable its sibling slot
+                // dropdown (Divine Smite case). Toggle-only uplifts have
+                // no dropdown so the listener is a no-op.
+                uplifts.forEach((u, i) => {
+                    if (u.kind === 'slot-pick') {
+                        const cb = document.getElementById(`up-cb-${i}`);
+                        const sel = document.getElementById(`up-slot-${i}`);
+                        cb?.addEventListener('change', () => {
+                            if (sel) sel.disabled = !cb.checked;
+                        });
+                    }
+                });
+
+                const cleanup = () => overlay.remove();
+                document.getElementById('up-cancel').addEventListener('click', () => {
+                    cleanup();
+                    resolve(null);
+                });
+                overlay.addEventListener('click', e => {
+                    if (e.target === overlay) { cleanup(); resolve(null); }
+                });
+                document.getElementById('up-confirm').addEventListener('click', () => {
+                    const selected = [];
+                    uplifts.forEach((u, i) => {
+                        const cb = document.getElementById(`up-cb-${i}`);
+                        if (!cb?.checked) return;
+                        if (u.kind === 'toggle') {
+                            selected.push({
+                                key: u.key,
+                                damage: u.damage,
+                                damage_label: u.damage_label,
+                            });
+                        } else if (u.kind === 'slot-pick') {
+                            const sel = document.getElementById(`up-slot-${i}`);
+                            const slotLevel = parseInt(sel.value, 10);
+                            const opt = sel.options[sel.selectedIndex];
+                            const dice = parseInt(opt.dataset.dice, 10);
+                            selected.push({
+                                key: u.key,
+                                damage: `${dice}d8`,
+                                damage_label: 'Divine Smite',
+                                spend_spell_slot: { class_slug: u.slot_class, level: slotLevel },
+                            });
+                        }
+                    });
+                    cleanup();
+                    resolve(selected);
+                });
+            });
+        }
+
         container.querySelectorAll('.atk-strike').forEach(btn =>
             btn.addEventListener('click', async () => {
                 if (typeof CAMPAIGN_ID === 'undefined') return;
                 const idx = parseInt(btn.dataset.idx, 10);
                 btn.disabled = true;
+
+                // v2.16.0: pop the uplift modal when any class-feature
+                // damage uplift is available. Cancel kills the swing
+                // entirely so the player can re-pick or back out.
+                let upliftBody = {};
+                const uplifts = _getAvailableUplifts();
+                if (uplifts.length > 0) {
+                    const picked = await _showUpliftModal(uplifts);
+                    if (picked === null) {
+                        btn.disabled = false;
+                        return;
+                    }
+                    if (picked.length > 0) {
+                        // v1: only one bonus-damage uplift per swing.
+                        // Stacking Sneak Attack + Divine Smite on the
+                        // same attack (legal RAW for a Rogue/Paladin
+                        // multiclass) is filed for a future commit —
+                        // would need the endpoint to accept a list
+                        // and concatenate damage expressions.
+                        const p = picked[0];
+                        upliftBody.bonus_damage = p.damage;
+                        upliftBody.bonus_damage_label = p.damage_label;
+                        if (p.spend_spell_slot) {
+                            upliftBody.spend_spell_slot = p.spend_spell_slot;
+                        }
+                    }
+                }
+
                 try {
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
                         method: 'POST',
@@ -4050,6 +4263,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             character_id: MY_CHAR_ID,
                             attack_index: idx,
                             override: !!override,
+                            ...upliftBody,
                         }),
                     });
                     let resp = await doFetch(false);
@@ -4105,6 +4319,22 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 total: data.damage_total,
                                 breakdown: data.damage_breakdown,
                                 note: dmgNote,
+                                visibility: 'public',
+                                user_id: me,
+                            });
+                        }
+                        // v2.16.0: bonus-damage toast (Sneak Attack, Divine
+                        // Smite, etc.) when the endpoint rolled additional
+                        // dice. Separate popup so the player can see the
+                        // uplift's contribution distinctly from base damage.
+                        if (data.bonus_damage_total != null && data.bonus_damage_total > 0) {
+                            const bonusNote = '✨ ' + (data.bonus_damage_label || 'Bonus damage');
+                            const bonusExprMatch = (data.bonus_damage_breakdown || '').match(/(\d+d\d+(?:[+-]\d+)?)/);
+                            window.showRollToast({
+                                expression: bonusExprMatch ? bonusExprMatch[1] : '1d6',
+                                total: data.bonus_damage_total,
+                                breakdown: data.bonus_damage_breakdown,
+                                note: bonusNote,
                                 visibility: 'public',
                                 user_id: me,
                             });

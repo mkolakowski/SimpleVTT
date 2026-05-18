@@ -155,7 +155,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 1 | Lay on Hands | ✅ | v2.10.0 — amount + target picker chain (`showAmountPicker` → `showTargetPicker`). Dedicated `/use_lay_on_hands` endpoint is authoritative: applies HP via `_apply_hp_change` to the target AND decrements the pool atomically. Broadcasts `heal_applied` + `resource_update` + `feature_used`. Demo Caelan added v2.14.0 with pool 25 HP (5 × Lv 5). Harness coverage in `test_use_lay_on_hands.py`. |
 | 2 | Fighting Style | 🟡 | |
 | 2 | Spellcasting | ✅ | |
-| 2 | Divine Smite | ⚪ | Should be a per-attack damage-uplift toggle |
+| 2 | Divine Smite | ✅ | v2.16.0 — per-attack uplift modal on Strike click. Player picks a spell slot level (L1-L4 visible from sheet's spell_slots inputs); endpoint atomically decrements the slot + rolls (level+1)d8 radiant capped at 5d8. Caelan (Lv 5 Oath of Devotion Paladin) is the demo test bed. v1 deviations: (a) modal fires BEFORE the d20 result (RAW: declare on hit), (b) +1d8 vs undead/fiends toggle isn't in the modal yet, (c) Rogue/Paladin multiclass can't stack with Sneak Attack on the same swing (endpoint accepts one bonus_damage). |
 | 3 | Divine Health | ✅ | Paladin Lv 3: pure-descriptive (immunity to disease). RAW: would gate the disease condition but SimpleVTT doesn't model that condition today. Re-evaluate if a disease engine ships. |
 | 3 | Sacred Oath | ✅ | Subclass system shipped — see Subclasses table. Oath of Devotion has features JSON + Channel Divinity options end-to-end (Sacred Weapon + Turn the Unholy v2.14.3; Caelan demo PC since v2.14.0). |
 | 3 | Channel Divinity | 🟢 | Same counter + v2.9.0 picker shape as Cleric. **Oath of Devotion ✅ end-to-end** (Sacred Weapon + Turn the Unholy via v2.14.3 — options live under `channel-divinity.options` in the curated table with `class: "paladin", subclass: "devotion"` tags; the sheet picker filters by class+subclass via the v2.14.3 `classEntries` walker). Oath of the Ancients (Nature's Wrath / Turn the Faithless), Oath of Vengeance (Abjure Enemy / Vow of Enmity), Oathbreaker, Conquest, Crown, Redemption, Treachery still need their option entries. |
@@ -189,7 +189,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | Lv | Feature | Status | Notes |
 |---|---|---|---|
 | 1 / 6 | Expertise | ✅ | Same Skills.expertise plumbing as Bard |
-| 1 | Sneak Attack | ⚪ | Per-attack damage uplift; needs a toggle on the attack panel |
+| 1 | Sneak Attack | ✅ | v2.16.0 — per-attack uplift modal on Strike click. Die scales by Rogue level via `_sneakAttackDie(lv)` = `ceil(lv/2)d6` cap 10d6; Pip at Lv 5 gets 3d6. Player asserts eligibility (RAW: advantage OR ally within 5 ft of target — not validated server-side, trust-based). v1 deviations: (a) "once per turn" gating not enforced; (b) can't stack with Divine Smite on a Rogue/Paladin multiclass (endpoint accepts one bonus_damage); (c) the "ally adjacent" detection waits on a positional / token-adjacency check that doesn't exist yet. |
 | 1 | Thieves' Cant | ✅ | Pure-descriptive language feature. No mechanic required RAW — description text on the sheet is sufficient. |
 | 2 | Cunning Action | ✅ | v2.6.0 — class-features panel renders Dash/Disengage/Hide buttons that POST `/use_feature` and auto-mark Bns chip |
 | 3 | Roguish Archetype | ✅ | Subclass system shipped — see Subclasses table. Thief has features JSON (Fast Hands / Use Magic Device still descriptive); Pip is the demo Thief since v2.3.25. |

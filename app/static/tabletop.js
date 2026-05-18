@@ -1832,6 +1832,23 @@
                </div>`
             : '';
 
+        // v2.16.0: bonus damage line (Sneak Attack / Divine Smite / etc.)
+        // Renders below the base damage line. Total + breakdown surfaced
+        // separately so the audience can read the attribution rather than
+        // having to mentally subtract base damage from a fused total.
+        // Label rides on the line label so the chat reads "Sneak Attack +12"
+        // (or "Divine Smite +9 radiant" if a damage type is specified by
+        // the future Smite picker; today the bonus inherits the base attack's
+        // damage type since the picker doesn't differentiate).
+        const bonusLabel = d.bonus_damage_label || 'Bonus';
+        const bonusLineHtml = d.bonus_damage_total != null && d.bonus_damage_total > 0
+            ? `<div class="weapon-atk-line">
+                   <span class="weapon-atk-label">✨ ${escapeHTML(bonusLabel)}</span>
+                   <span class="weapon-atk-total">+${d.bonus_damage_total}</span>
+                   <span class="weapon-atk-breakdown">${formatBreakdown(d.bonus_damage_breakdown || '')}</span>
+               </div>`
+            : '';
+
         const saveBtnHtml = d.is_save
             ? `<button class="spell-cast-btn weapon-atk-save-btn" type="button" title="Prompt all players for a ${escapeHTML(d.save_ability)} save">📋 Prompt ${escapeHTML(d.save_ability)} save (DC ${d.save_dc})</button>`
             : '';
@@ -1851,6 +1868,7 @@
                     ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
                     ${atkLineHtml}
                     ${dmgLineHtml}
+                    ${bonusLineHtml}
                     ${d.desc ? `<div class="spell-cast-desc">${escapeHTML(d.desc)}</div>` : ''}
                     ${saveBtnHtml ? `<div class="spell-cast-actions">${saveBtnHtml}</div>` : ''}
                     ${_overBudgetBadge(d)}
