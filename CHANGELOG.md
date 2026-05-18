@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.15.11] - 2026-05-18
+
+**Schema version:** 55
+**Commit summary:** **Doc-only — refresh `docs/plans/class-content-status.md`** to mark Phase A/B work as shipped. The doc's last update was the v2.9.3 preamble; everything after — 6 demo PCs (v2.14.0-v2.14.2), Channel Divinity Devotion options (v2.14.3), Wild Shape harness + chip + over-budget (v2.14.4-v2.14.6), Magical Secrets (v2.15.0-v2.15.1), Jack of All Trades (v2.15.2), Song of Rest + rest UI routing (v2.15.3-v2.15.5), Divine Sense + Cleansing Touch curated (v2.15.6), Cutting Words + target picker (v2.15.7, v2.15.10) — wasn't reflected in the per-class status tables. Updated rows now carry the correct status symbol AND the specific commit(s) that shipped each piece, so future readers can trace work back to the changelog. PATCH — pure documentation, no code change.
+**Description:** Eleven rows updated across the per-class and subclass tables. **Bard** (5 rows): Bardic Inspiration 🟢→✅ (v2.11.0), Jack of All Trades ⚪→✅ (v2.15.2), Song of Rest 🟢→✅ (v2.15.3-v2.15.5), Font of Inspiration 🟡→✅ (rest endpoint refills), Magical Secrets ⚪→✅ (v2.15.0-v2.15.1). **Cleric**: Channel Divinity stays 🟢 but the note documents the v2.14.3 expansion (Life Domain ✅ + Light's Radiance + War's Guided Strike added; lists the remaining domains that need option entries). **Druid**: Wild Shape 🟢→✅ (v2.14.4-v2.14.6 + token-disguise primitive design filed v2.15.9). **Paladin** (3 rows): Divine Sense 🟢→✅ (v2.15.6), Lay on Hands 🟢→✅ (v2.10.0), Cleansing Touch stays 🟢 but the note documents the v2.15.6 curated-table entry + the deferred UI for a future Lv 14+ Paladin; Channel Divinity stays 🟢 with a note that Oath of Devotion is end-to-end shipped via v2.14.3 (other oaths still need option entries). **Subclasses** (3 rows): College of Lore 🟡→🟢 (Cutting Words + Additional Magical Secrets shipped), Circle of the Moon 🟡→🟢 (Combat Wild Shape + Circle Forms shipped), Oath of Devotion 🟡→🟢 (Sacred Weapon + Turn the Unholy shipped). **Preamble paragraph** rewritten from v2.9.2 → v2.15.10 to enumerate the Phase A + Phase B commits and pin the harness count at 72 tests.
+**Description (cont):** Why annotate Notes columns with specific commit references. The doc's status symbol gives a one-glance read of progress, but doesn't tell the reader WHICH commit shipped the work. Adding "(v2.X.Y — short description)" in the Notes column means a future maintainer landing on a row can: (a) read the changelog entry for that version to see the full implementation rationale, (b) grep the codebase for the commit hash to find the exact diff, (c) cross-reference against the v2.15.9 token-disguise design or v2.10.0 picker pattern when designing follow-ups. The cost is ~50-100 bytes per row; the long-term doc value is high.
+**Description (cont 2):** Refreshed count totals (vs the stale numbers from before this commit):
+
+| Section | Symbol | Before | After |
+|---|---|---:|---:|
+| Classes — features | ✅ Implemented | 21 | **29** |
+| Classes — features | 🟢 Half-implemented | 16 | **11** |
+| Classes — features | 🟡 Data only | 26 | **25** |
+| Classes — features | ⚪ No plan | 60 | **58** |
+| Subclasses (status column) | 🟢 | 6 | **10** |
+| Subclasses (status column) | 🟡 | 16 | **12** |
+
+Net change: +8 class features moved to ✅, +5 subclass entries upgraded. **29/123 class features (≈ 24%)** are now ✅ end-to-end at the row-level granularity. Practical remaining work concentrates in subclass-specific options, per-attack uplifts (Sneak Attack, Divine Smite, Brutal Critical), and reaction features waiting on the (B) roll-time intercept infrastructure.
+**Description (cont 3):** What this commit doesn't change. The "Per-feature implementation plans" section (line 865+) still has detailed paragraphs for each ⚪ entry — those plans remain valid as implementation guides. The infrastructure sections (A-E) and the per-priority "Order of priority" section aren't touched. Schema version unchanged. Test count unchanged (still 72). Demo content unchanged.
+
+### Changed
+- `docs/plans/class-content-status.md` preamble — replaces the "Recent shipped work (through v2.9.2)" snapshot with a v2.15.10 snapshot enumerating Phase A + Phase B commits and the 72-test harness count.
+- `docs/plans/class-content-status.md` Bard table — 5 rows updated (Bardic Inspiration, Jack of All Trades, Song of Rest, Font of Inspiration, Magical Secrets) to ✅ with commit references.
+- `docs/plans/class-content-status.md` Cleric Channel Divinity row — note expanded to reflect v2.14.3's addition of Light + War options.
+- `docs/plans/class-content-status.md` Druid Wild Shape row — 🟢 → ✅ with commit references for v2.14.4-v2.14.6 + pointer to the v2.15.9 token-disguise primitive design.
+- `docs/plans/class-content-status.md` Paladin table — Divine Sense + Lay on Hands → ✅; Channel Divinity + Cleansing Touch stay 🟢 with refreshed notes.
+- `docs/plans/class-content-status.md` Subclasses table — College of Lore, Circle of the Moon, Oath of Devotion all 🟡 → 🟢 with commit references.
+
+### Notes
+- **What this doesn't try to do:** the doc's per-feature implementation-plan section (line 865+) wasn't touched. Those paragraphs are still accurate as design references for the ⚪ entries that haven't shipped. A future commit could prune the now-stale plans for ✅ entries, but that's lower priority than the table refresh.
+- **Why no harness or version-stamp impact.** Doc-only change. No code paths exercised by the test suite, no `<script>` tag carries the plan-doc content, no schema or response shape change. PATCH bump per the CLAUDE.md "every commit ships a bump" rule.
+- **Where to look first for the next per-feature commit.** The most-valuable single commit candidates (each unlocks multiple downstream features): (B.9) Divine Smite uplift on attack rolls (also enables Sneak Attack, Brutal Critical pattern); (B.11) roll-time intercept infrastructure (unlocks ~12 reaction features); (B.12) token-disguise primitive (enables Polymorph, Disguise Self, Alter Self, True Polymorph). Each is a focused medium-sized commit with broad payoff.
+
+---
+
 ## [2.15.10] - 2026-05-18
 
 **Schema version:** 55

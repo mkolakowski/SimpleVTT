@@ -7,17 +7,30 @@ work begins. Add follow-up plans for items in 🟠 / ⚪ status as they
 become priorities; do **not** start a feature without first writing
 its plan section here.
 
-> **Recent shipped work (through v2.9.2):** Action-economy infrastructure
-> (E) is complete — Phases 1-5 + strict-mode gate (v2.8.0) + movement
-> breadcrumb (v2.8.1-2) + Dash modal (v2.8.3). Channel Divinity option-
-> picker (v2.9.0) ships the Life Domain end-to-end via the new shared
-> `showResourceOptionPicker` helper. Presence indicator (v2.9.1-2)
-> shows connected players in the lower-left of the map. **As of
-> v2.9.3** every ⚪ class feature has at least a one-paragraph plan in
-> the "Per-feature implementation plans" section below; status markers
-> in this file's per-class tables stay ⚪ for "no code" and 🟠 for
-> "plan exists" — the new section is the source of truth for which
-> ⚪ entries have moved to 🟠.
+> **Recent shipped work (through v2.15.10):** Phase A demo content
+> (A.1-A.3: Caelan Paladin v2.14.0 / Lyra Bard v2.14.1 / Mira Druid
+> v2.14.2 — demo party now 6 PCs covering Rogue/Wizard/Cleric/Paladin/
+> Bard/Druid). Phase B per-feature work: B.1 Channel Divinity Devotion
+> options for Paladin (v2.14.3, Sacred Weapon + Turn the Unholy);
+> B.2-B.2.2 Wild Shape harness + chip integration + over-budget gate
+> (v2.14.4-v2.14.6); B.3-B.3.1 Magical Secrets toggle + Lyra Lv 6 demo
+> picks (v2.15.0-v2.15.1); B.4 Jack of All Trades (v2.15.2); B.5-B.5.2
+> Song of Rest server bonus + Short/Long Rest UI routing through
+> `/rest` (v2.15.3-v2.15.5); B.6 Divine Sense announce + Cleansing
+> Touch curated (v2.15.6); B.7-B.7.1 Cutting Words endpoint + target
+> picker (v2.15.7, v2.15.10). Doc-only commits: v2.15.8 filed the Wild
+> Shape token-swap TODO; v2.15.9 generalised it into a reusable
+> `Token.disguise` primitive design for Polymorph / Disguise Self /
+> Alter Self / True Polymorph. Action-economy infrastructure (E) is
+> complete through Phase 5 + strict-mode gate (v2.8.0). Test harness
+> grew from the v2.12.0 vertical slice to **72 tests** at v2.15.10
+> covering /attack, /cast_spell, /rest, /roll, /transform, /use_*,
+> concurrency, smoke, plus Playwright UI tests. Status markers in
+> this file's per-class tables update only when a feature is fully
+> shipped (✅) or genuinely progresses (🟢 → 🟢 with note, 🟡 → 🟢,
+> ⚪ → 🟠/🟢/✅). When a feature ships, the row's Notes column
+> documents the specific commit(s) so future readers can trace the
+> work back to the changelog.
 
 ## Status legend
 
@@ -64,14 +77,14 @@ The `### Header` names below come from the `features` field of each JSON.
 | Lv | Feature | Status | Notes |
 |---|---|---|---|
 | 1 | Spellcasting | ✅ | Spells panel renders + casts via `/api/.../roll` |
-| 1 | Bardic Inspiration | 🟢 | Resource counter (`key: 'bardic-inspiration'`); no "give die to ally" target-picker UI |
-| 2 | Jack of All Trades | ⚪ | |
-| 2 | Song of Rest | 🟢 | Resource counter (`key: 'song-of-rest'`); no "apply during short rest" hook |
+| 1 | Bardic Inspiration | ✅ | v2.11.0 — target picker (`showTargetPicker`) excludes self per RAW; `/use_bardic_inspiration` endpoint decrements counter + marks bonus slot + scales die by Bard level (d6/d8/d10/d12). Harness coverage v2.14.1. |
+| 2 | Jack of All Trades | ✅ | v2.15.2 — `_hasJackOfAllTrades(form)` JS helper + Jinja `_bard_lv_ns` mirror in the skill card render. Adds `floor(PB/2)` to non-proficient ability checks (raw ability rolls + non-proficient skill rolls; saves intentionally untouched per RAW). Roll note carries `(Jack +N)` for attribution. |
+| 2 | Song of Rest | ✅ | v2.15.3 — `_song_of_rest_for_campaign` helper picks highest-level Bard in campaign; `/rest` short-rest folds `+1dN` (d6/d8/d10/d12 by Bard level) into the recovery dice expression. UI Short Rest button routed through `/rest` in v2.15.4; Long Rest in v2.15.5. Harness coverage in `tests/harness/test_rest.py`. |
 | 3 | Bard College | 🟡 | Subclass slot only |
 | 3 / 10 | Expertise | ✅ | Skills schema has `expertise: true` flag handled by skill-roll engine |
-| 5 | Font of Inspiration | 🟡 | Description; reset → short rest already implicit via counter |
+| 5 | Font of Inspiration | ✅ | Bardic Inspiration counter resets on short rest from Lv 5 — handled implicitly by the `reset: 'short'` flag on the resource (already wired via `/rest`'s `refilled_resources` walk). Demo Lyra's counter is tagged `reset: "short"` per v2.14.1. |
 | 6 | Countercharm | ⚪ | |
-| 10 / 14 / 18 | Magical Secrets | ⚪ | |
+| 10 / 14 / 18 | Magical Secrets | ✅ | v2.15.0 — "🪄 Any class list" toggle in the Browse Spells modal omits the `spell_list=` filter when an eligible PC is editing (Lore Bard Lv 6+ OR Bard Lv 10+). Added spells carry `_via: "magical-secrets"` so `spellRowHtml()` renders a purple badge. v2.15.1 bumped demo Lyra to Lv 6 + added her 2 picks (Fireball + Counterspell). |
 | 20 | Superior Inspiration | ⚪ | |
 
 ### Cleric
@@ -80,7 +93,7 @@ The `### Header` names below come from the `features` field of each JSON.
 |---|---|---|---|
 | 1 | Spellcasting | ✅ | Demo Tavik (Lv 5) prepares cantrips + L1-L3 spells correctly post-v2.4.12 |
 | 1 | Divine Domain | 🟡 | Subclass slot; domain-spells curated table covers all 12 domains |
-| 2 | Channel Divinity | 🟢 | Resource counter (`key: 'channel-divinity'`) + v2.9.0 option-picker (`showResourceOptionPicker`); Life Domain ✅ end-to-end (Turn Undead + Preserve Life); other domains need their option entries added to `_FEATURE_ECONOMY` |
+| 2 | Channel Divinity | 🟢 | Resource counter (`key: 'channel-divinity'`) + v2.9.0 option-picker (`showResourceOptionPicker`). Life Domain ✅ end-to-end (Turn Undead + Preserve Life); v2.14.3 also added Light's Radiance of the Dawn + War's Guided Strike option entries; Knowledge / Tempest / Trickery / Forge / Grave / Order / Nature / Twilight domains still need their option entries added to `_FEATURE_ECONOMY`. Curated table also serves Paladin Oath of Devotion (Sacred Weapon + Turn the Unholy via subclass-tagged options). |
 | 5 / 8 / 11 / 14 / 17 | Destroy Undead | ⚪ | Tied to Turn Undead option above; would surface as a damage uplift when Turn Undead is implemented |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 10 | Divine Intervention | ⚪ | |
@@ -91,7 +104,7 @@ The `### Header` names below come from the `features` field of each JSON.
 |---|---|---|---|
 | 1 | Druidic | ⚪ | Language only — no mechanic |
 | 1 | Spellcasting | ✅ | |
-| 2 | Wild Shape | 🟢 | Resource counter (`key: 'wild-shape'`); the `/api/.../character/.../transform` route exists (per `_doMiniTransform` JS) and the mini-sheet has a Wild Shape dropdown |
+| 2 | Wild Shape | ✅ | Sheet swap via `/transform` endpoint + `BeastPicker` JS (pre-2.0.0). v2.14.4 added harness coverage (`tests/harness/test_transform.py`). v2.14.5 added action-economy chip integration (`_wild_shape_economy_slot` returns "bonus" for Moon Druid, "action" otherwise; `_mark_battle_economy` called on success). v2.14.6 added the Phase 4 over-budget gate (409 `error: "over_budget"` for non-GMs; BeastPicker's `_confirm` handles the modal-and-retry). Demo Mira (Lv 5 Moon Druid) is the test bed. Token swap on transform is filed as the Token-disguise primitive TODO (v2.15.9) for future implementation. |
 | 2 | Druid Circle | 🟡 | Subclass slot |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 18 | Timeless Body | ⚪ | |
@@ -138,20 +151,20 @@ The `### Header` names below come from the `features` field of each JSON.
 
 | Lv | Feature | Status | Notes |
 |---|---|---|---|
-| 1 | Divine Sense | 🟢 | Resource counter |
-| 1 | Lay on Hands | 🟢 | Resource counter — "HP pool" variant (max ≠ uses, `max = 5 × lvl`); no target-picker |
+| 1 | Divine Sense | ✅ | v2.15.6 — resource ⚡ Use special-case decrements the counter + POSTs `/use_feature` for the roll-log card + chip flip + over-budget gate. Caelan (Lv 5 Oath of Devotion Paladin) is the demo test bed (counter 4/4 = 1 + CHA mod). Curated `_FEATURE_ECONOMY['divine-sense'].slot = "action"`. Harness: `test_divine_sense_announces` in `test_use_feature.py`. |
+| 1 | Lay on Hands | ✅ | v2.10.0 — amount + target picker chain (`showAmountPicker` → `showTargetPicker`). Dedicated `/use_lay_on_hands` endpoint is authoritative: applies HP via `_apply_hp_change` to the target AND decrements the pool atomically. Broadcasts `heal_applied` + `resource_update` + `feature_used`. Demo Caelan added v2.14.0 with pool 25 HP (5 × Lv 5). Harness coverage in `test_use_lay_on_hands.py`. |
 | 2 | Fighting Style | 🟡 | |
 | 2 | Spellcasting | ✅ | |
 | 2 | Divine Smite | ⚪ | Should be a per-attack damage-uplift toggle |
 | 3 | Divine Health | ⚪ | Passive — disease immunity |
 | 3 | Sacred Oath | 🟡 | Subclass slot |
-| 3 | Channel Divinity | 🟢 | Same counter + v2.9.0 picker shape as Cleric; Paladin-side Sacred Weapon / Turn the Unholy options need to land in `_FEATURE_ECONOMY` under a paladin-keyed entry (or a `channel-divinity-paladin` key) — see plan section below |
+| 3 | Channel Divinity | 🟢 | Same counter + v2.9.0 picker shape as Cleric. **Oath of Devotion ✅ end-to-end** (Sacred Weapon + Turn the Unholy via v2.14.3 — options live under `channel-divinity.options` in the curated table with `class: "paladin", subclass: "devotion"` tags; the sheet picker filters by class+subclass via the v2.14.3 `classEntries` walker). Oath of the Ancients (Nature's Wrath / Turn the Faithless), Oath of Vengeance (Abjure Enemy / Vow of Enmity), Oathbreaker, Conquest, Crown, Redemption, Treachery still need their option entries. |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 5 | Extra Attack | 🟡 | |
 | 6 / 18 | Aura of Protection | ⚪ | |
 | 10 / 18 | Aura of Courage | ⚪ | |
 | 11 | Improved Divine Smite | ⚪ | |
-| 14 | Cleansing Touch | 🟢 | Resource counter |
+| 14 | Cleansing Touch | 🟢 | Resource counter. v2.15.6 added the curated `_FEATURE_ECONOMY['cleansing-touch']` entry so `/use_feature` accepts the slug (server-side announce works). No demo PC at Lv 14+ yet (Caelan is Lv 5), so the resource ⚡ Use branch + target picker UI for "end one spell on yourself or one willing creature you touch" is deferred to a future Lv 14+ Paladin fixture. Harness contract pin: `test_cleansing_touch_curated` in `test_use_feature.py`. |
 
 ### Ranger
 
@@ -235,7 +248,7 @@ have features JSON.
 | Class | Subclass | Features JSON | Spell-grants curated | Status | Notes |
 |---|---|---|---|---|---|
 | Barbarian | Path of the Berserker | ✅ | n/a | 🟡 | Frenzy / Mindless Rage / Intimidating Presence / Retaliation — all descriptive |
-| Bard | College of Lore | ✅ | n/a | 🟡 | Cutting Words / Additional Magical Secrets / Peerless Skill descriptive |
+| Bard | College of Lore | ✅ | n/a | 🟢 | **Cutting Words ✅** (v2.15.7 endpoint + v2.15.10 target picker — Lyra at Lv 6 is the test bed). **Additional Magical Secrets ✅** (v2.15.0 spell-browser toggle + v2.15.1 Lyra's 2 picks). Peerless Skill (Lv 14) still descriptive — needs a Lv 14+ Bard fixture. |
 | Cleric | Knowledge Domain | ❌ | ✅ | 🟡 | Spell grants work via picker; no features JSON |
 | Cleric | **Life Domain** | ✅ | ✅ | 🟢 | Domain spells auto-grant (demo Tavik post-v2.4.15); Channel Divinity: Preserve Life is data only |
 | Cleric | Light Domain | ❌ | ✅ | 🟡 | Curated spells; Warding Flare / Radiance of the Dawn descriptive |
@@ -245,13 +258,13 @@ have features JSON.
 | Cleric | War Domain | ❌ | ✅ | 🟢 | War Priest counter exists |
 | Cleric | Forge / Grave / Order / Peace / Twilight | ❌ | ✅ | 🟡 | Spell grants only |
 | Druid | **Circle of the Land** | ✅ | ✅ | 🟢 | Natural Recovery counter exists; Land's Stride / Nature's Ward descriptive |
-| Druid | **Circle of the Moon** | ✅ | n/a | 🟡 | Combat Wild Shape / Circle Forms — relies on Wild Shape infrastructure |
+| Druid | **Circle of the Moon** | ✅ | n/a | 🟢 | **Combat Wild Shape ✅** (v2.14.5 — `_wild_shape_economy_slot` returns "bonus" for Moon Druid subclass, "action" otherwise; `/transform` marks the right chip). **Circle Forms ✅** (CR cap raised to 1 at Lv 2 via `_ws_cr_cap` for Moon; Mira at Lv 5 can pick Dire Wolf CR 1 in the demo). Primal Strike (Lv 6) + Thousand Forms (Lv 14) still descriptive. |
 | Druid | Circle of Spores / Wildfire / Stars | ❌ | ✅ | 🟡 | Spell grants only |
 | Fighter | **Champion** | ✅ | n/a | 🟡 | Improved Critical / Remarkable Athlete — needs attack-roll intercept |
 | Fighter | Battle Master | ❌ | n/a | 🟢 | Superiority Dice counter exists |
 | Fighter | Eldritch Knight | ❌ | n/a | ⚪ | |
 | Monk | **Way of the Open Hand** | ✅ | n/a | 🟡 | Open Hand Technique / Wholeness of Body — needs Ki integration |
-| Paladin | **Oath of Devotion** | ✅ | ✅ | 🟡 | Sacred Weapon / Turn the Unholy descriptive (both Channel options) |
+| Paladin | **Oath of Devotion** | ✅ | ✅ | 🟢 | **Sacred Weapon ✅** + **Turn the Unholy ✅** (v2.14.3 — both Channel Divinity options live under `channel-divinity.options` with `class:"paladin", subclass:"devotion"` tags; Caelan at Lv 5 is the demo test bed). Aura of Devotion (Lv 7) + Purity of Spirit (Lv 15) + Holy Nimbus (Lv 20) still descriptive. |
 | Paladin | Ancients / Vengeance / Conquest / Redemption / Glory / Watchers / Oathbreaker | ❌ | ✅ | 🟡 | Spell grants only |
 | Ranger | **Hunter** | ✅ | n/a | 🟡 | Hunter's Prey / Defensive Tactics / Multiattack descriptive |
 | Rogue | **Thief** | ✅ | n/a | 🟡 | Fast Hands / Use Magic Device descriptive |
