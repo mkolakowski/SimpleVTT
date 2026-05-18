@@ -74,11 +74,19 @@ window._FEATURE_ECONOMY = {
         unlock_level: 2,
         label: 'Channel Divinity',
         desc: 'Channel divine energy to fuel a domain-specific effect.',
+        // v2.9.0: each option carries a ``subclass`` tag so the option-
+        // picker overlay can filter by the cleric's domain. ``any``
+        // means the option is available regardless of subclass (Turn
+        // Undead — every cleric gets it). Subclass slugs match
+        // ``_classSlug`` output for the canonical SRD names ("Life
+        // Domain" → "life-domain", but we tolerate the short form
+        // "life" too in the picker's match — see _csubclassSlug in
+        // sheet_dnd5e.html).
         options: {
-            'turn-undead': { label: 'Turn Undead', desc: 'Each undead within 30 ft makes a Wisdom save or flees for 1 minute.' },
-            'preserve-life': { label: 'Preserve Life (Life)', desc: 'Distribute 5 × cleric level HP among creatures within 30 ft, none raised above half max HP.' },
-            'radiance-of-the-dawn': { label: 'Radiance of the Dawn (Light)', desc: 'Dispel magical darkness, deal 2d10 + cleric level radiant damage on a failed Con save (each enemy within 30 ft).' },
-            'guided-strike': { label: 'Guided Strike (War)', desc: '+10 bonus to one attack roll, declared after seeing the d20.' },
+            'turn-undead': { label: 'Turn Undead', desc: 'Each undead within 30 ft makes a Wisdom save or flees for 1 minute.', subclass: 'any' },
+            'preserve-life': { label: 'Preserve Life', desc: 'Distribute 5 × cleric level HP among creatures within 30 ft, none raised above half max HP.', subclass: 'life' },
+            'radiance-of-the-dawn': { label: 'Radiance of the Dawn', desc: 'Dispel magical darkness, deal 2d10 + cleric level radiant damage on a failed Con save (each enemy within 30 ft).', subclass: 'light' },
+            'guided-strike': { label: 'Guided Strike', desc: '+10 bonus to one attack roll, declared after seeing the d20.', subclass: 'war' },
         },
     },
 
