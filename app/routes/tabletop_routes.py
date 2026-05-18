@@ -6144,6 +6144,40 @@ def _bard_level_from_sheet(sheet: dict) -> int:
     return 0
 
 
+def _song_of_rest_for_campaign(db: Session, campaign_id: int) -> tuple[int, str, int]:
+    """v2.15.3: Song of Rest — Bard Lv 2+ in the party grants every
+    ally an extra die of healing per Hit Die spent during a short
+    rest. Die scales with the highest Bard level in the campaign:
+    Lv 2-8 = d6, Lv 9-12 = d8, Lv 13-16 = d10, Lv 17+ = d12.
+
+    Returns ``(die_size, bard_name, bard_level)`` where ``die_size``
+    is 0 when no eligible Bard is in the campaign. Multi-bard parties
+    use the highest-level Bard's die (RAW: bonus dice don't stack;
+    one bard's performance is enough).
+    """
+    chars = db.query(Character).filter(Character.campaign_id == campaign_id).all()
+    best_lv = 0
+    best_name = ""
+    for c in chars:
+        if not c.sheet:
+            continue
+        lv = _bard_level_from_sheet(c.sheet)
+        if lv > best_lv:
+            best_lv = lv
+            best_name = c.name
+    if best_lv < 2:
+        return 0, "", 0
+    if best_lv >= 17:
+        die = 12
+    elif best_lv >= 13:
+        die = 10
+    elif best_lv >= 9:
+        die = 8
+    else:
+        die = 6
+    return die, best_name, best_lv
+
+
 @router.post("/api/campaign/{campaign_id}/use_bardic_inspiration")
 async def use_bardic_inspiration(
     campaign_id: int,
@@ -6898,8 +6932,19 @@ async def rest_character(
     con_score = int(abilities.get("CON") or 10)
     con_mod = (con_score - 10) // 2
 
+    # v2.15.3: Song of Rest — any Bard ≥ Lv 2 in the campaign grants
+    # this rest an extra 1dN bonus (d6/d8/d10/d12 by Bard level). The
+    # bonus die is folded into the same roll expression so the existing
+    # ``dice_mod.roll`` call handles both terms and the breakdown reads
+    # naturally ("1d8[5]+1d6[3]+2 => 10"). A Bard resting alone also
+    # gets the bonus on their own HD spend (RAW: "you or any friendly
+    # creatures who can hear your performance").
+    sor_die, sor_bard, sor_bard_lv = _song_of_rest_for_campaign(db, campaign_id)
+    sor_part = f"+1d{sor_die}" if sor_die > 0 else ""
+
     sign = "+" if con_mod >= 0 else ""
-    expr = f"1d{die_size}{sign}{con_mod}" if con_mod != 0 else f"1d{die_size}"
+    con_part = f"{sign}{con_mod}" if con_mod != 0 else ""
+    expr = f"1d{die_size}{sor_part}{con_part}"
     try:
         result = dice_mod.roll(expr)
         recovered = max(1, result.total)
@@ -6957,6 +7002,17 @@ async def rest_character(
         "recovered": recovered,
         "breakdown": breakdown,
         "resources": refilled_resources,
+        # v2.15.3: ``song_of_rest`` is non-null when any Bard ≥ Lv 2 is
+        # in the campaign. ``die`` is the d{N} that was rolled, ``bard``
+        # is the highest-level Bard's name (display attribution),
+        # ``bard_level`` is their level. Null when no eligible Bard
+        # exists. The bonus die's individual roll is included in the
+        # ``breakdown`` string ("1d8[5]+1d6[3]+2 => 10") so the client
+        # can extract the exact value or just show the breakdown verbatim.
+        "song_of_rest": (
+            {"die": sor_die, "bard": sor_bard, "bard_level": sor_bard_lv}
+            if sor_die > 0 else None
+        ),
     }
 
 
