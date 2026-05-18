@@ -331,8 +331,112 @@
         }
         tokens.forEach(drawToken);
         drawSpawnMarkers();
+        drawMovementBreadcrumb();
         _updateGifOverlay();
     }
+
+    /* v2.8.1: movement breadcrumb. Drawn on top of tokens so the line
+     * stays visible when a token sits on a waypoint. Reads
+     * window._movementBreadcrumb populated by the battle IIFE in
+     * tabletop.html — that file owns the source of truth for "who is
+     * active" and their movement history; we just draw what it tells
+     * us. Empty / missing breadcrumb is a no-op so the canvas still
+     * renders fine before init starts. Each segment is colored green
+     * (within speed_walk) or red (over the cap); the cumulative
+     * distance is shown at the midpoint of each segment with a small
+     * pill background for legibility against the map. */
+    function drawMovementBreadcrumb() {
+        const bc = window._movementBreadcrumb;
+        if (!bc || !Array.isArray(bc.path) || bc.path.length < 2) return;
+        const path = bc.path;
+        const speedCap = Number(bc.speed_walk) || 30;
+        const half = gridSize / 2;
+
+        // Walk segments, tracking cumulative distance up to each.
+        let cumulative = 0;
+        for (let i = 1; i < path.length; i++) {
+            const a = path[i - 1];
+            const b = path[i];
+            const ax = a.x + half;
+            const ay = a.y + half;
+            const bx = b.x + half;
+            const by = b.y + half;
+            const dist = Number(b.distance_ft) || 0;
+            cumulative += dist;
+            const overCap = cumulative > speedCap + 0.001;
+            const color = overCap ? '#ff6060' : '#4cd964';
+            const glow = overCap ? 'rgba(255,96,96,0.6)' : 'rgba(76,217,100,0.55)';
+
+            // Line — wide stroke with a soft glow for visibility on busy maps.
+            ctx.save();
+            ctx.strokeStyle = glow;
+            ctx.lineWidth = 8;
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(bx, by);
+            ctx.stroke();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(bx, by);
+            ctx.stroke();
+
+            // Arrow head at the segment endpoint.
+            const dx = bx - ax;
+            const dy = by - ay;
+            const len = Math.sqrt(dx * dx + dy * dy);
+            if (len > 0) {
+                const angle = Math.atan2(dy, dx);
+                const ah = Math.min(14, len * 0.45);
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(bx, by);
+                ctx.lineTo(bx - ah * Math.cos(angle - Math.PI / 7),
+                           by - ah * Math.sin(angle - Math.PI / 7));
+                ctx.lineTo(bx - ah * Math.cos(angle + Math.PI / 7),
+                           by - ah * Math.sin(angle + Math.PI / 7));
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Distance label at midpoint with a pill background so it
+            // reads against any map color. The label shows the cumulative
+            // total at this waypoint, not the per-segment delta, so the
+            // player can see "12 ft", "20 ft", "25 ft" walking up to
+            // their cap.
+            const mx = (ax + bx) / 2;
+            const my = (ay + by) / 2;
+            const label = `${Math.round(cumulative * 10) / 10} ft`;
+            ctx.font = 'bold 13px system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const padX = 6, padY = 3;
+            const metrics = ctx.measureText(label);
+            const w = metrics.width + padX * 2;
+            const h = 18;
+            ctx.fillStyle = 'rgba(20,20,28,0.85)';
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            const rx = mx - w / 2, ry = my - h / 2;
+            ctx.roundRect ? ctx.roundRect(rx, ry, w, h, 4) : ctx.rect(rx, ry, w, h);
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = color;
+            ctx.fillText(label, mx, my);
+            ctx.restore();
+        }
+    }
+
+    /* v2.8.1: exposed so the battle IIFE in tabletop.html can trigger a
+     * redraw after it updates window._movementBreadcrumb (e.g. at turn
+     * transitions when the active combatant's path resets, or right
+     * after a token_move arrives and the path grows). Idempotent and
+     * cheap — calling it on every battle state change is fine. */
+    window._renderCanvas = render;
+
     render();
 
     // ---------- Pan & zoom ----------

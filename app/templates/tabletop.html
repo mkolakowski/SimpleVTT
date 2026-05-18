@@ -3695,10 +3695,39 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     /* v2.4.31: heal stale combatants in localStorage that pre-date the
      * action-economy ``economy`` object. Called from ``renderBattle`` before
      * the per-row HTML loop so every combatant has the field; defensive
-     * against any code path that still constructs combatants without it. */
+     * against any code path that still constructs combatants without it.
+     * v2.8.1: also healing ``movement_path`` — the active combatant's
+     * waypoint history for the canvas breadcrumb. Empty array means no
+     * line drawn yet this turn. */
     function _ensureEconomy(c) {
         if (!c.economy || typeof c.economy !== 'object') {
             c.economy = { action: false, bonus: false, reaction: false, movement: 0 };
+        }
+        if (!Array.isArray(c.movement_path)) {
+            c.movement_path = [];
+        }
+    }
+
+    /* v2.8.1: publish the active combatant's movement waypoints to a
+     * window-scoped slot tabletop.js reads in its canvas render loop.
+     * Empty path → empty slot → canvas draws nothing. Called from
+     * renderBattle and from the token_move WS handler so every state
+     * change keeps the canvas in sync. */
+    function _updateMovementBreadcrumb() {
+        const idx = battle.turn_index;
+        const combs = battle.combatants || [];
+        const active = battle.active && Number.isFinite(idx) ? combs[idx] : null;
+        if (!active || !Array.isArray(active.movement_path) || !active.movement_path.length) {
+            window._movementBreadcrumb = null;
+        } else {
+            window._movementBreadcrumb = {
+                path: active.movement_path,
+                speed_walk: Number(active.speed_walk) || 30,
+                char_id: active.char_id,
+            };
+        }
+        if (typeof window._renderCanvas === 'function') {
+            window._renderCanvas();
         }
     }
 
@@ -4555,6 +4584,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
          * so the next page load skips the resolve work. Skipped when no
          * heal happened to avoid the localStorage write thrash. */
         if (_healedAny) saveBattle();
+
+        /* v2.8.1: republish the breadcrumb after every battle render so
+         * the canvas overlay tracks state changes (turn advance, manual
+         * combatant edits, etc.). Cheap — the canvas render itself is
+         * just a few line strokes per active waypoint, so calling it on
+         * every renderBattle is well under a frame budget. */
+        _updateMovementBreadcrumb();
     }
 
     function sortPreservingTurn() {
@@ -4592,6 +4628,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             newCur.economy.bonus = false;
             newCur.economy.reaction = false;
             newCur.economy.movement = 0;
+            // v2.8.1: clear the new active combatant's movement breadcrumb
+            // so the canvas overlay starts fresh for their turn. The
+            // previous combatant's path stops rendering automatically
+            // (renderBattle re-publishes window._movementBreadcrumb from
+            // the NEW active combatant); we don't bother clearing the
+            // previous one's path data — it's invisible and harmless.
+            newCur.movement_path = [];
         }
         pushBattle(); renderBattle();
     });
@@ -4621,6 +4664,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             c.economy.bonus = false;
             c.economy.reaction = false;
             c.economy.movement = 0;
+            // v2.8.1: wipe everyone's movement breadcrumb when init
+            // (re)starts so no stale path renders for the first turn.
+            c.movement_path = [];
         });
         pushBattle(); renderBattle();
     });
@@ -4825,6 +4871,31 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (!target) return;
             _ensureEconomy(target);
             target.economy.movement = Math.round(((Number(target.economy.movement) || 0) + dist) * 10) / 10;
+            // v2.8.1: append a waypoint to the active combatant's
+            // movement breadcrumb so the canvas overlay shows the line.
+            // Only the ACTIVE combatant accumulates a path — off-turn
+            // drags (the GM shuffling a different token during Pip's
+            // turn) skip path tracking entirely. Their economy.movement
+            // still ticks (v2.6.2 behavior), but the visual breadcrumb
+            // is reserved for whoever's turn it actually is. The first
+            // push seeds the starting point from from_x/from_y (the
+            // pre-drag position the server captured) so the line starts
+            // at the token's prior square, not in mid-air.
+            const activeCombatant = battle.combatants[battle.turn_index];
+            if (target === activeCombatant) {
+                if (target.movement_path == null || !Array.isArray(target.movement_path)) {
+                    target.movement_path = [];
+                }
+                if (!target.movement_path.length
+                        && Number.isFinite(data.from_x) && Number.isFinite(data.from_y)) {
+                    target.movement_path.push({
+                        x: data.from_x, y: data.from_y, distance_ft: 0, is_start: true,
+                    });
+                }
+                target.movement_path.push({
+                    x: data.x, y: data.y, distance_ft: dist,
+                });
+            }
             // GM owns the battle state; pushBattle to broadcast. Players
             // get the update via the regular battle_update path.
             if (IS_GM) pushBattle();
