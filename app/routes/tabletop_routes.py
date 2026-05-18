@@ -199,15 +199,22 @@ def _is_slot_used(campaign_id: int, character_id: int, slot: str) -> bool:
     return False
 
 
-async def _mark_battle_economy(campaign_id: int, character_id: int, slot: str) -> None:
-    """Mark a PC's action-economy slot in the hub battle state.
+async def _mark_battle_economy(
+    campaign_id: int, character_id: int, slot: str, *, used: bool = True,
+) -> None:
+    """Mark / unmark a PC's action-economy slot in the hub battle state.
 
     No-op when the campaign has no active battle, the character isn't in
-    init, the slot is invalid, or the slot is already used (matches the
-    JS ``_markCombatantEconomy`` idempotence — clicking Strike twice
-    doesn't free up your action). Broadcasts ``economy_update`` so every
-    connected tabletop client (GM included — GM ignores ``battle_update``
-    but listens to this) updates its chip strip.
+    init, the slot is invalid, or the slot is already at the requested
+    state (matches the JS ``_markCombatantEconomy`` idempotence — clicking
+    Strike twice doesn't free up your action). Broadcasts ``economy_update``
+    so every connected tabletop client (GM included — GM ignores
+    ``battle_update`` but listens to this) updates its chip strip.
+
+    v2.17.2: ``used`` keyword arg lets the helper UNMARK a slot
+    ("refund" the chip). Used by Action Surge to give the fighter
+    their action back after spending the feature. Existing callers
+    that pass only positional args (mark-as-used) work unchanged.
     """
     if slot not in ("action", "bonus", "reaction"):
         return
@@ -225,13 +232,13 @@ async def _mark_battle_economy(campaign_id: int, character_id: int, slot: str) -
     if not isinstance(economy, dict):
         economy = {"action": False, "bonus": False, "reaction": False, "movement": 0}
         target["economy"] = economy
-    if economy.get(slot):
-        return
-    economy[slot] = True
+    if bool(economy.get(slot)) == bool(used):
+        return  # already at the requested state — idempotent
+    economy[slot] = bool(used)
     hub.set_battle(campaign_id, state)
     await hub.broadcast(campaign_id, {
         "type": "economy_update",
-        "data": {"character_id": character_id, "slot": slot, "used": True},
+        "data": {"character_id": character_id, "slot": slot, "used": bool(used)},
     })
 
 
@@ -6978,6 +6985,143 @@ async def use_second_wind(
         "hp": hp_result["hp"],
         "remaining": sw_cur - 1,
         "over_budget": was_used,
+    }
+
+
+# ----------- API: Action Surge (Fighter Lv 2) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_action_surge")
+async def use_action_surge(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend an Action Surge use to take one additional action this turn.
+
+    Body: ``{character_id}``.
+
+    RAW: "Once on your turn, you can take one additional action."
+    Refreshes on a short or long rest. Costs no action / bonus /
+    reaction — it GRANTS an extra action rather than consuming one
+    (curated `_FEATURE_ECONOMY['action-surge'].slot = 'free'` —
+    no over-budget gate).
+
+    Mechanic: the fighter has already burned their Act chip on their
+    normal action this turn. Action Surge undoes that — the helper
+    `_mark_battle_economy(..., used=False)` clears the Act chip in
+    the hub battle state and broadcasts ``economy_update`` so every
+    client's chip strip refreshes. The fighter can now click another
+    weapon / spell / feature on the same turn; that click will burn
+    the Act chip again (auto-mark behavior), giving the "two actions
+    this turn" feel.
+
+    Validates: Fighter Lv 2+; action-surge counter has uses (409
+    out_of_uses when depleted).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    fighter_lv = _fighter_level_from_sheet(sheet)
+    if fighter_lv < 2:
+        raise HTTPException(409, "Action Surge requires Fighter level 2+")
+
+    # Verify action-surge counter has uses.
+    resources = list(sheet.get("resources") or [])
+    as_idx = -1
+    as_row = None
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "action-surge":
+            as_row = dict(r)
+            as_idx = i
+            break
+    if as_row is None:
+        raise HTTPException(404, "No Action Surge resource on this sheet")
+    as_cur = int(as_row.get("current") or 0)
+    as_max = int(as_row.get("max") or 0)
+    if as_cur <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Action Surge",
+        })
+
+    # Decrement counter.
+    as_row["current"] = as_cur - 1
+    resources[as_idx] = as_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Refund the action chip — Action Surge's whole point. v2.17.2's
+    # _mark_battle_economy(..., used=False) handles the unmark + the
+    # economy_update broadcast.
+    await _mark_battle_economy(campaign_id, char.id, "action", used=False)
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "⚡ Action Surge → +1 action this turn",
+            "feature_desc": (
+                "Action chip refunded. Take another weapon attack, "
+                "cast a spell, or fire any other action — your "
+                "normal Act for this turn is back."
+            ),
+            "source": "action-surge",
+            "remaining": as_cur - 1,
+            "max": as_max,
+            "over_budget": False,
+            "over_budget_slot": "",
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "action-surge",
+            "current": as_cur - 1,
+            "max": as_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "remaining": as_cur - 1,
+        "action_chip_refunded": True,
     }
 
 

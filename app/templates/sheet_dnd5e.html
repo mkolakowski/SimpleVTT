@@ -4586,8 +4586,14 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // which rolls 1d10+fighter_level + applies HP via
                     // _apply_hp_change + decrements the counter +
                     // marks the bonus slot.
+                    // v2.17.2: Action Surge routes to /use_action_surge
+                    // which decrements the counter + REFUNDS the action
+                    // chip (clears it in the hub battle state). The
+                    // fighter can then click another weapon/spell on
+                    // the same turn and it auto-marks Act again.
                     const isCuttingWords = featureKey === 'cutting-words';
                     const isSecondWind = featureKey === 'second-wind';
+                    const isActionSurge = featureKey === 'action-surge';
 
                     // Resolve the cutting-words target via the picker
                     // BEFORE building the fetch closure. Awaiting the
@@ -4635,6 +4641,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
 
                     const endpoint = isCuttingWords ? 'use_cutting_words'
                                    : isSecondWind ? 'use_second_wind'
+                                   : isActionSurge ? 'use_action_surge'
                                    : 'use_feature';
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
                         method: 'POST',
@@ -4648,6 +4655,8 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             } : isSecondWind ? {
                                 character_id: MY_CHAR_ID,
                                 override: !!override,
+                            } : isActionSurge ? {
+                                character_id: MY_CHAR_ID,
                             } : {
                                 character_id: MY_CHAR_ID,
                                 feature_key: featureKey,
@@ -4701,6 +4710,8 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             window.showToast(`🎭 Cutting Words: rolled -${data.rolled}${tgt} (reaction)`, 'info');
                         } else if (isSecondWind) {
                             window.showToast(`💨 Second Wind: ${data.expression} = +${data.actual_healed} HP (now ${data.hp.current}/${data.hp.max})`, 'info');
+                        } else if (isActionSurge) {
+                            window.showToast(`⚡ Action Surge: action chip refunded — take another action this turn.`, 'info');
                         } else {
                             const lbl = data.feature_label || 'Feature used';
                             const slotTxt = data.slot && data.slot !== 'free' ? ` (${data.slot})` : '';
