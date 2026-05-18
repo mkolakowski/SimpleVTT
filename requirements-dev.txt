@@ -10,3 +10,11 @@
 pytest==8.3.3
 pytest-asyncio==0.24.0
 pytest-html==4.1.1
+
+# Phase 4 Playwright UI harness (tests/harness_ui/). The browser binary
+# is NOT pip-installed; run `playwright install chromium` once after
+# installing this requirement file. ~250MB on disk for chromium alone;
+# this is intentional and the UI suite is run separately from the
+# HTTP+WS harness (see Makefile: make test-harness-ui).
+playwright==1.47.0
+pytest-playwright==0.5.2

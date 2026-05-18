@@ -1,6 +1,6 @@
 # SimpleVTT
 
-> Current version: **2.12.4** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
+> Current version: **2.13.0** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
 
 A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 
@@ -206,13 +206,25 @@ Override the target stack via env vars (defaults shown):
 
 Phase 1 + 1.5 cover every action-bearing endpoint (`/attack`,
 `/cast_spell`, `/use_feature`, `/use_item`, `/use_lay_on_hands`,
-`/use_bardic_inspiration`, `/move`, `/roll`) + smoke (41 tests,
-~17 s). Phase 2 (v2.12.2) wires this into GitHub Actions on every
+`/use_bardic_inspiration`, `/move`, `/roll`) + smoke (42 tests,
+~20 s). Phase 2 (v2.12.2) wires this into GitHub Actions on every
 PR + push to main/dev via `.github/workflows/test-harness.yml` —
 the workflow boots a clean docker compose stack with `DEMO_MODE=true`,
 waits for `/healthz`, runs pytest, and uploads JUnit XML + HTML
-reports as artifacts. Phase 4 will layer Playwright on top for
-UI-only regressions. See the plan doc for the roadmap.
+reports as artifacts. Phase 4 (v2.13.0) adds a Playwright UI
+harness under `tests/harness_ui/` that drives a real headless
+chromium to catch DOM-level regressions (the canonical case: v2.7.3
+weapon-attack-toast miss). One-time setup:
+
+```bash
+pip install -r requirements-dev.txt
+playwright install chromium       # ~250 MB; one-time
+make test-harness-ui
+```
+
+The UI harness is kept separate from the HTTP+WS one (`make test-
+harness`) because the browser overhead means each test takes
+seconds instead of milliseconds. See the plan doc for the roadmap.
 
 ## Third-party fonts
 

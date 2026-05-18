@@ -2659,22 +2659,6 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
     window._mcRenderSpells = renderSpells;
     renderSpells();
 
-    // Backfill descriptions for granted spells saved before the enrichment
-    // hook landed (and any that managed to slip through). Runs once per page
-    // load, deduplicated by (class, name) via the spell-detail cache.
-    (function _backfillGrantedSpellDescriptions() {
-        const missing = spells.filter(s =>
-            s._subclass_granted
-            && (!s.desc || !s.desc.trim())
-            && (s.name || '').trim()
-            && (s.class || '').trim()
-        );
-        if (!missing.length) return;
-        // Fan out in parallel; _enrichGrantedSpell is internally idempotent
-        // and the save call is debounced so we won't spam the server.
-        missing.forEach(s => { _enrichGrantedSpell(s.name, s.class); });
-    })();
-
     // ── Spell-detail fetch with in-memory cache ─────────────────────────
     // Granted spells start life with just a name (the curated table doesn't
     // store full spell records). After they're added we hit Open5e to fill
@@ -2740,6 +2724,25 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         return changed;
     }
     window._enrichGrantedSpell = _enrichGrantedSpell;
+
+    // Backfill descriptions for granted spells saved before the
+    // enrichment hook landed (and any that slip through). Runs once
+    // per page load, deduplicated by (class, name) via the spell-
+    // detail cache. v2.13.0 — moved AFTER `_enrichGrantedSpell` +
+    // `_spellDetailCache` are declared so the temporal-dead-zone
+    // error caught by the Playwright smoke harness can't fire.
+    (function _backfillGrantedSpellDescriptions() {
+        const missing = spells.filter(s =>
+            s._subclass_granted
+            && (!s.desc || !s.desc.trim())
+            && (s.name || '').trim()
+            && (s.class || '').trim()
+        );
+        if (!missing.length) return;
+        // Fan out in parallel; _enrichGrantedSpell is internally idempotent
+        // and the save call is debounced so we won't spam the server.
+        missing.forEach(s => { _enrichGrantedSpell(s.name, s.class); });
+    })();
 
     // ── Subclass-granted spell helpers ───────────────────────────────────
     // Spells added through this path are tagged with ``_subclass_granted: true``
