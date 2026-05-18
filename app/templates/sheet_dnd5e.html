@@ -1116,10 +1116,18 @@
 
                 {# Class-context selector — which class is "casting" this spell.
                    Drives both the spell_list= filter and the tag added to a
-                   newly-imported spell. #}
+                   newly-imported spell. v2.15.0: Magical Secrets toggle
+                   (Lore Bard Lv 6+, standard Bard Lv 10+) appears here when
+                   the character is eligible — flipping it omits the
+                   spell_list filter so the picker shows every class's spells. #}
                 <div id="sb-class-bar" style="display:flex;gap:5px;flex-wrap:wrap;padding:6px 14px;background:var(--bg);border-bottom:1px solid var(--s-border);flex-shrink:0;align-items:center;">
                     <span style="font-size:10px;font-weight:700;color:var(--s-mute);text-transform:uppercase;letter-spacing:.06em;margin-right:4px;">Class</span>
                     <span id="sb-class-chips" style="display:flex;gap:5px;flex-wrap:wrap;"></span>
+                    <label id="sb-magical-secrets-wrap" style="display:none;align-items:center;gap:5px;margin-left:auto;font-size:11px;color:var(--s-mute);cursor:pointer;"
+                           title="Pick a spell from any class list (Magical Secrets / Additional Magical Secrets). Added spells stay on your Bard sheet and use Bard slots, but you pull them from the wider list.">
+                        <input type="checkbox" id="sb-magical-secrets" style="cursor:pointer;margin:0;">
+                        <span>🪄 Magical Secrets — any class list</span>
+                    </label>
                 </div>
 
                 {# Spell limit status bar #}
@@ -2293,6 +2301,18 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             background:var(--accent-bg2);border:1px solid var(--accent-border,var(--s-accent));
                             color:var(--s-accent);letter-spacing:.04em;">⭐ Granted</span>`
             : '';
+        // v2.15.0: Bard Magical Secrets pick badge. Same shape as the
+        // subclass-granted badge; tagged in the spell entry via
+        // ``_via: "magical-secrets"`` when the browser's MS toggle was
+        // on at add-time. Helps the GM audit which spells were
+        // picked from another class's list vs. the Bard list.
+        const isMagicalSecrets = (s._via || '') === 'magical-secrets';
+        const msBadge = isMagicalSecrets
+            ? `<span title="Picked via Magical Secrets — pulled from another class's spell list. Still uses Bard slots."
+                     style="flex-shrink:0;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;
+                            background:rgba(167,139,250,.18);border:1px solid rgba(167,139,250,.5);
+                            color:#a78bfa;letter-spacing:.04em;">🪄 Magical Secrets</span>`
+            : '';
         // Class tag — only render when the character has more than one class,
         // otherwise it's just visual noise since every spell would carry the
         // same tag.
@@ -2328,6 +2348,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     title="${_esc(s.name)}">${_esc(s.name)}${icons ? `<span style="font-size:11px;color:var(--s-mute);"> ${icons.trim()}</span>` : ''}</span>
                 ${classTag}
                 ${grantedBadge}
+                ${msBadge}
                 ${s.school       ? `<span style="font-size:11px;color:var(--s-accent);flex-shrink:0;">${_esc(s.school)}</span>` : ''}
                 ${s.casting_time ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.casting_time)}</span>` : ''}
                 ${s.range        ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.range)}</span>` : ''}
@@ -3513,6 +3534,33 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         return (arr || []).map(e => ({ slug: _classSlug(e.class), label: e.class })).filter(x => x.slug);
     }
 
+    /* v2.15.0: Magical Secrets eligibility — Lore Bard at Lv 6+ unlocks
+     * Additional Magical Secrets (2 spells from any class list, up to
+     * the highest slot you can cast); standard Bard at Lv 10+ unlocks
+     * Magical Secrets (same shape, repeated at Lv 14/18). Either path
+     * shows the "Any class list" toggle in the spell browser. The
+     * toggle's visibility doesn't actually enforce the 2-pick cap —
+     * that's tracking the user does on the sheet — but the eligibility
+     * gate keeps the checkbox out of the way for everyone else.
+     */
+    function _hasMagicalSecrets() {
+        const arr = (typeof window._mcRoster === 'function') ? window._mcRoster() : _classes();
+        for (const c of arr || []) {
+            if ((c.class || '').trim().toLowerCase() !== 'bard') continue;
+            const lv = parseInt(c.level, 10) || 0;
+            const sub = (c.subclass || '').trim().toLowerCase();
+            if (sub.includes('lore') && lv >= 6) return true;
+            if (lv >= 10) return true;
+        }
+        return false;
+    }
+
+    function _updateMagicalSecretsVisibility() {
+        const wrap = document.getElementById('sb-magical-secrets-wrap');
+        if (!wrap) return;
+        wrap.style.display = _hasMagicalSecrets() ? 'inline-flex' : 'none';
+    }
+
     function _renderClassChips() {
         const wrap = document.getElementById('sb-class-chips');
         if (!wrap) return;
@@ -3719,6 +3767,12 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 // For known casters all spells are always known (prepared=true)
                 // For prepared casters new spells start unprepared so players choose deliberately
                 const startPrepared = !sc || sc.type === 'known';
+                // v2.15.0: when the Magical Secrets toggle is on at add-time,
+                // stamp ``_via: 'magical-secrets'`` so the sheet can show a
+                // badge + the GM can audit which spells are MS picks. The
+                // entry still carries ``class: cls`` because Magical Secrets
+                // spells RAW use Bard slots.
+                const msMode = !!document.getElementById('sb-magical-secrets')?.checked;
                 spells.push({
                     name: s.name, level: s.level, school: s.school,
                     casting_time: s.casting_time, range: s.range,
@@ -3729,6 +3783,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     healing: s.healing || '', aoe_targets: s.aoe_targets || 1,
                     desc: s.desc, _slug: s.slug || '',
                     class: cls,
+                    ...(msMode ? { _via: 'magical-secrets' } : {}),
                 });
                 syncSpells(); renderSpells();
             }
@@ -3752,6 +3807,12 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
     async function _doSearch() {
         const q  = (sbSearchEl?.value || '').trim();
         const cv = sbCurrentClass || _classVal();
+        // v2.15.0: Magical Secrets — when the toggle is on we omit the
+        // spell_list= filter so /api/open5e/spells returns every class's
+        // spells. ``cv`` still drives the "casting class" on the imported
+        // entry (Magical Secrets spells count as Bard spells for slot
+        // purposes RAW; they just bypass the class-list filter on import).
+        const msMode = !!document.getElementById('sb-magical-secrets')?.checked;
         // If nothing to filter on, just show the prompt
         if (!q && sbCurrentLvl === 'all' && !cv) { _showPrompt(); return; }
 
@@ -3761,7 +3822,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
 
         const qs = new URLSearchParams({ limit: '80' });
         if (q)  qs.set('search', q);
-        if (cv) qs.set('spell_list', cv);
+        if (cv && !msMode) qs.set('spell_list', cv);
         if (sbCurrentLvl !== 'all') qs.set('level', sbCurrentLvl);
         const _cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
         if (_cid) qs.set('campaign_id', _cid);
@@ -3793,13 +3854,24 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         overlay.style.display = '';
         sbCurrentLvl = 'all';
         _renderClassChips();
+        _updateMagicalSecretsVisibility();
         _updateLvlButtons();
         _sbUpdateLimitBar();
         _showPrompt();
         sbDetailEl.innerHTML = '<p style="color:var(--s-mute);font-size:13px;">Select a spell to see its details.</p>';
         if (sbSearchEl) sbSearchEl.value = '';
+        // Reset MS toggle on each open so the user re-affirms intent for the
+        // session — accidentally browsing the entire spell catalog is slow
+        // (Open5e returns the union of every class's L0-L9 spells) and
+        // most opens are "just add a Bard spell" anyway.
+        const msCb = document.getElementById('sb-magical-secrets');
+        if (msCb) msCb.checked = false;
         sbCurrentResults = [];
         sbSelectedIdx = -1;
+    });
+    // MS toggle change — re-run search with / without the class filter.
+    document.getElementById('sb-magical-secrets')?.addEventListener('change', () => {
+        _doSearch();
     });
     // Close
     document.getElementById('sb-close-btn')?.addEventListener('click', () => { overlay.style.display = 'none'; });
