@@ -145,6 +145,7 @@ _FEATURE_ECONOMY: dict[str, dict] = {
     "divine-sense": {"slot": "action"},  # v2.15.6
     "cleansing-touch": {"slot": "action"},  # v2.15.6 (Lv 14 Paladin)
     "bardic-inspiration": {"slot": "bonus"},
+    "cutting-words": {"slot": "reaction"},  # v2.15.7 (Lore Bard Lv 3)
     "flurry-of-blows": {"slot": "bonus"},
     "patient-defense": {"slot": "bonus"},
     "step-of-the-wind": {"slot": "bonus"},
@@ -6332,6 +6333,201 @@ async def use_bardic_inspiration(
         "die": die,
         "target_id": target.id,
         "target_name": target.name,
+        "remaining": cur - 1,
+        "over_budget": was_used,
+    }
+
+
+# ----------- API: Cutting Words (Lore Bard Lv 3) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_cutting_words")
+async def use_cutting_words(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend a Bardic Inspiration use as a Lore Bard Lv 3 Cutting Words
+    reaction. The server rolls 1d{BI die} and announces the subtraction
+    amount; the GM applies the reduction to whatever roll just
+    triggered the reaction (no roll-time intercept infrastructure yet
+    — see the plan doc's (B) infrastructure note).
+
+    Body: ``{character_id, target_character_id?, override?}``.
+    ``target_character_id`` is optional: when supplied, the broadcast
+    names the target; when omitted, the announce reads "from a
+    creature's roll" generically. Die scaling matches Bardic
+    Inspiration: d6 (Lv 1-4), d8 (Lv 5-9), d10 (Lv 10-14), d12 (Lv 15+).
+
+    Phase 4 over-budget gate on the reaction slot (RAW: 1 reaction).
+    Mirrors the /use_bardic_inspiration pattern for resource decrement
+    + chip mark + announce.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_id_raw = body.get("target_character_id")
+    target_id = int(target_id_raw) if target_id_raw else 0
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Bard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target = None
+    if target_id > 0:
+        target = db.query(Character).filter(
+            Character.id == target_id, Character.campaign_id == campaign_id,
+        ).first()
+        # target may be None when the triggering creature is an NPC
+        # tracked only in the encounter's tokens (not in Character).
+        # Caller can omit target_character_id in that case.
+
+    sheet = dict(char.sheet or {})
+
+    # Lore Bard Lv 3 eligibility — defense-in-depth check. The client
+    # filters the Cutting Words button visibility by the same predicate.
+    bard_lv = _bard_level_from_sheet(sheet)
+    if bard_lv < 3:
+        raise HTTPException(409, "Cutting Words requires Bard level 3+")
+    is_lore = "lore" in (sheet.get("subclass") or "").strip().lower()
+    if not is_lore:
+        for c in sheet.get("classes") or []:
+            if (c.get("class") or "").strip().lower() == "bard":
+                if "lore" in (c.get("subclass") or "").strip().lower():
+                    is_lore = True
+                    break
+    if not is_lore:
+        raise HTTPException(409, "Cutting Words requires the College of Lore subclass")
+
+    resources = list(sheet.get("resources") or [])
+    res_row = None
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "bardic-inspiration":
+            res_row = dict(r)
+            res_idx = i
+            break
+    if res_row is None:
+        raise HTTPException(404, "No Bardic Inspiration resource on this sheet")
+    cur = int(res_row.get("current") or 0)
+    mx = int(res_row.get("max") or 0)
+    if cur <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Bardic Inspiration (Cutting Words)",
+        })
+
+    # Phase 4 over-budget gate (reaction slot).
+    was_used = _is_slot_used(campaign_id, char.id, "reaction")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "reaction",
+            "char_name": char.name,
+            "source": "cutting-words",
+            "label": "Cutting Words",
+            "strict": strict,
+        })
+
+    # Die size — same table as Bardic Inspiration.
+    if bard_lv >= 15:
+        die_size = 12
+    elif bard_lv >= 10:
+        die_size = 10
+    elif bard_lv >= 5:
+        die_size = 8
+    else:
+        die_size = 6
+
+    # Roll the BI die server-side. RAW: bard rolls immediately and
+    # subtracts the result. Result is broadcast so the GM can apply it.
+    try:
+        result = dice_mod.roll(f"1d{die_size}")
+        rolled = max(1, result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        rolled = 1
+        breakdown = ""
+
+    # Decrement counter.
+    res_row["current"] = cur - 1
+    resources[res_idx] = res_row
+    sheet["resources"] = resources
+    char.sheet = sheet
+    db.commit()
+
+    # Mark the reaction slot.
+    await _mark_battle_economy(campaign_id, char.id, "reaction")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    if target:
+        feature_name = f"🎭 Cutting Words → -{rolled} from {target.name}'s roll"
+        target_phrase = target.name
+    else:
+        feature_name = f"🎭 Cutting Words → -{rolled} from a creature's roll"
+        target_phrase = "a creature"
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": feature_name,
+            "feature_desc": (
+                f"Reaction: rolled 1d{die_size} → {rolled}. "
+                f"GM applies the reduction to {target_phrase}'s "
+                f"triggering attack roll, ability check, or damage roll."
+            ),
+            "source": "cutting-words",
+            "remaining": cur - 1,
+            "max": mx,
+            "over_budget": was_used,
+            "over_budget_slot": "reaction" if was_used else "",
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "bardic-inspiration",
+            "current": cur - 1,
+            "max": mx,
+        },
+    })
+
+    return {
+        "ok": True,
+        "die": f"d{die_size}",
+        "rolled": rolled,
+        "breakdown": breakdown,
+        "target_id": target.id if target else None,
+        "target_name": target.name if target else None,
         "remaining": cur - 1,
         "over_budget": was_used,
     }

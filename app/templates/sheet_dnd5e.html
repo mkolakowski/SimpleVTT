@@ -4340,10 +4340,20 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 const optionKey = btn.dataset.option || null;
                 btn.disabled = true;
                 try {
-                    const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/use_feature`, {
+                    // v2.15.7: Cutting Words routes to its dedicated
+                    // endpoint instead of /use_feature. The endpoint
+                    // rolls the BI die server-side + decrements the
+                    // Bardic Inspiration resource + marks the reaction
+                    // slot + announces with the rolled value.
+                    const isCuttingWords = featureKey === 'cutting-words';
+                    const endpoint = isCuttingWords ? 'use_cutting_words' : 'use_feature';
+                    const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
+                        body: JSON.stringify(isCuttingWords ? {
+                            character_id: MY_CHAR_ID,
+                            override: !!override,
+                        } : {
                             character_id: MY_CHAR_ID,
                             feature_key: featureKey,
                             option_key: optionKey,
@@ -4356,11 +4366,18 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // v2.6.1: Phase 4 — 409 over_budget opens the Layer B
                     // modal; on Confirm we retry with override:true.
                     if (resp.status === 409 && typeof window.handleOverBudget === 'function') {
-                        const retried = await window.handleOverBudget(
-                            resp, () => doFetch(true),
-                        );
-                        if (!retried) return;
-                        resp = retried;
+                        let peek; try { peek = await resp.clone().json(); } catch { peek = null; }
+                        if (peek && peek.error === 'over_budget') {
+                            const retried = await window.handleOverBudget(
+                                resp, () => doFetch(true),
+                            );
+                            if (!retried) return;
+                            resp = retried;
+                        } else if (peek && peek.error === 'out_of_uses') {
+                            (window.showToast || function(m){ alert(m); })(
+                                `${peek.label || 'Feature'}: no uses remaining`, 'error');
+                            return;
+                        }
                     }
                     if (!resp.ok) {
                         let body; try { body = await resp.json(); } catch { body = null; }
@@ -4372,9 +4389,14 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // confirmation without needing the roll log open.
                     let data; try { data = await resp.json(); } catch { data = null; }
                     if (data && typeof window.showToast === 'function') {
-                        const lbl = data.feature_label || 'Feature used';
-                        const slotTxt = data.slot && data.slot !== 'free' ? ` (${data.slot})` : '';
-                        window.showToast(`✨ ${lbl}${slotTxt}`, 'info');
+                        if (isCuttingWords) {
+                            const tgt = data.target_name ? ` from ${data.target_name}` : '';
+                            window.showToast(`🎭 Cutting Words: rolled -${data.rolled}${tgt} (reaction)`, 'info');
+                        } else {
+                            const lbl = data.feature_label || 'Feature used';
+                            const slotTxt = data.slot && data.slot !== 'free' ? ` (${data.slot})` : '';
+                            window.showToast(`✨ ${lbl}${slotTxt}`, 'info');
+                        }
                     }
                 } finally {
                     btn.disabled = false;

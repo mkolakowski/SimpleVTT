@@ -809,6 +809,20 @@ def _bard_sheet(name: str) -> dict:
                 "manual": False,
             },
         ],
+        # v2.15.7: Lore Bard Lv 3 features that aren't resource counters
+        # in their own right — they consume Bardic Inspiration. Cutting
+        # Words rolls a BI die and subtracts the result from an enemy
+        # roll within 60 ft. The Class abilities panel renders the
+        # button; clicking POSTs /use_cutting_words (which decrements
+        # the BI resource, rolls the die, marks the reaction slot,
+        # announces in the roll log).
+        "class_features": [
+            {
+                "key": "cutting-words",
+                "name": "Cutting Words",
+                "desc": "Reaction (Lore Lv 3): spend 1 Bardic Inspiration use to subtract a BI die from an enemy attack roll, ability check, or damage roll within 60 ft.",
+            },
+        ],
     }
 
 

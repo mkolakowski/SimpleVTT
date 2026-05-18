@@ -143,6 +143,20 @@ window._FEATURE_ECONOMY = {
         label: 'Bardic Inspiration',
         desc: 'Pick one creature within 60 ft (other than yourself). They gain a bonus die to add to one ability check, attack roll, or save in the next 10 minutes.',
     },
+    'cutting-words': {
+        slot: 'reaction',
+        class: 'bard',
+        subclass: 'lore',
+        unlock_level: 3,
+        label: 'Cutting Words',
+        desc: 'Reaction (Lore Lv 3): spend 1 Bardic Inspiration use to subtract a Bardic Inspiration die roll from an enemy attack roll, ability check, or damage roll within 60 ft.',
+        // v2.15.7: dedicated /use_cutting_words endpoint rolls the BI
+        // die server-side + decrements BI + marks the reaction slot
+        // + announces. UI-side a class_features button on Lyra's sheet
+        // routes to that endpoint (mirror of /use_bardic_inspiration).
+        // No roll-time intercept yet — GM applies the subtraction
+        // manually to whatever roll just triggered the reaction.
+    },
 
     /* ── Monk ────────────────────────────────────────────────────── */
     'flurry-of-blows': {

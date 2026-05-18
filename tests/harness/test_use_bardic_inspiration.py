@@ -18,10 +18,25 @@ from .conftest import CAMPAIGN_ID
 
 
 async def test_bi_happy_path(gm_client, gm_ws, roster):
-    """Lyra inspires Pip. Asserts die size is d8 (Lv 5 bard),
-    counter decrements, broadcasts fire."""
+    """Lyra inspires Pip. Asserts die size is d8 (Lv 5 bard at the
+    time this test was written; now Lv 6, still in the d8 tier per
+    the table), counter decrements, broadcasts fire.
+
+    Pre-flight long-rest refills Lyra's BI counter so this test is
+    order-independent. Other tests (e.g. test_use_cutting_words.py
+    in v2.15.7) may deplete BI before this one runs in the suite.
+    """
     lyra = roster["Lyra Sunstrider"]
     pip = roster["Pip Quickfingers"]
+    # Long rest Lyra to refill BI to max (RAW: full reset on long
+    # rest, half-max on short rest). The fixture-style refill keeps
+    # the test working regardless of prior-test BI depletion.
+    refill = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
+        json={"type": "long"},
+    )
+    assert refill.status_code == 200, refill.text
+    gm_ws.mark()  # discard the long-rest's broadcasts
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_bardic_inspiration",
         json={
