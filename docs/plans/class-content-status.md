@@ -1030,34 +1030,178 @@ as historical context — your call).
   - **Sheet swap:** ✅ shipped (pre-2.0.0 endpoint + BeastPicker JS;
     harness coverage v2.14.4; action-economy chip integration v2.14.5;
     over-budget gate v2.14.6).
-  - **Token swap on transform — TODO.** When a druid transforms, the
-    map token should reflect the new form: portrait image, label
-    ("Mira → Dire Wolf"), maybe size (a Lv 5 Moon Druid Wild Shape can
-    pick CR 1 beasts including Dire Wolf which is Large). Today the
-    `/transform` endpoint mutates `sheet["active_form"]` but doesn't
-    touch the character's Token rows. The mini-sheet shows the
-    transformed stats but the canvas token still renders Mira's
-    portrait + colour ring. Sub-pieces:
-    - Server: `/transform` enumerates Token rows where
-      `token.character_id == char.id`, snapshots their current
-      label / image_url / size into `sheet["prior_form"]["tokens"]`,
-      then writes the beast values (label = "{Mira} → {beast}",
-      image_url = the beast's portrait from Open5e if present,
-      else preserve; size from `monster["size"]`). Broadcasts
-      `token_update` per touched token so the canvas re-renders.
-    - Revert: read `sheet["prior_form"]["tokens"]`, restore each
-      token's label / image_url / size, broadcast `token_update`.
-    - Edge case: GM may have spawned multiple tokens of the same
-      character (rare but possible). Apply to all.
-    - Edge case: NPC tokens that share `character_id` (e.g. a clone
-      conjured via Mirror Image). The transform should NOT touch
-      those — RAW Wild Shape is single-target. Gate on token type or
-      `is_summon` flag.
-    - Edge case: token has a custom non-default image (player
-      uploaded portrait). Wild Shape probably should still swap to
-      the beast portrait, but revert restores the custom one. The
-      snapshot pattern handles this.
-    - Filed for a future commit; not blocking any other Phase B work.
+  - **Token swap on transform — TODO (design: token-disguise primitive).**
+    When a druid Wild Shapes, the map token should reflect the new
+    form. Today `/transform` mutates `sheet["active_form"]` but doesn't
+    touch the character's Token rows — the mini-sheet shows the beast
+    but the canvas still renders Mira's portrait + colour ring. **Design
+    as a reusable mechanism** so the same primitive powers Wild Shape
+    AND every other appearance-changing ability (Polymorph spell,
+    Disguise Self, Alter Self, True Polymorph, future homebrew). The
+    primitive is per-TOKEN (not per-character) because Polymorph can
+    target an enemy whose token isn't tied to the caster's sheet.
+
+    **Storage shape — new `Token.disguise` JSON column.** Schema bump
+    when this ships. NULL when no disguise active. When set:
+    ```json
+    {
+      "source": "wild-shape" | "polymorph" | "disguise-self" | "alter-self" | "true-polymorph",
+      "caster_character_id": 42,           // who initiated the disguise
+      "caster_user_id": 7,                  // for permission checks on revert
+      "form_name": "Dire Wolf",             // display label for the badge
+      "form_slug": "srd_dire-wolf",         // beast/creature key when applicable (null for Disguise Self illusions)
+      "started_at": "2026-05-18T12:00:00Z",
+      "concentration_caster_id": 7,         // null for non-concentration (Wild Shape, Disguise Self)
+      "prior": {                            // snapshot for revert
+        "label": "Mira Greenleaf",
+        "image_url": "/static/uploads/portraits/mira.png",
+        "size": "M",
+        "color": "#4d9d6d"
+      }
+    }
+    ```
+    Storing on the Token (not on the caster's sheet) lets a
+    Polymorph that targets an NPC bandit store the disguise on that
+    bandit's token, independent of the bandit's Character row (which
+    may not even exist for monster tokens). Stacking policy: a token
+    can carry AT MOST ONE active disguise — the helper rejects with
+    409 if `disguise` is already set (caller passes `force=True` to
+    overwrite, which destroys the original `prior` snapshot — used
+    only by Dispel Magic / GM force-revert flows).
+
+    **Helper API (in `app/routes/tabletop_routes.py`):**
+    ```python
+    async def _apply_token_disguise(
+        db, token, *,
+        source: str,                  # required: "wild-shape" / "polymorph" / ...
+        caster_character_id: int,
+        caster_user_id: int,
+        form_name: str,               # display label
+        form_slug: str | None = None, # Open5e key when applicable
+        new_label: str | None = None, # overrides token.label; default = form_name
+        new_image_url: str | None = None,
+        new_size: str | None = None,  # "T" / "S" / "M" / "L" / "H" / "G"
+        new_color: str | None = None,
+        concentration: bool = False,  # True for Polymorph/True Polymorph
+        force: bool = False,          # overwrite existing disguise
+    ) -> dict:
+        """Snapshot the token's current visual fields into
+        ``token.disguise["prior"]`` + apply the new values + broadcast
+        ``token_update``. Returns the disguise dict.
+        Raises HTTPException(409) if ``token.disguise`` is already
+        set and ``force`` is False.
+        """
+
+    async def _revert_token_disguise(
+        db, token, *,
+        expected_source: str | None = None,  # safety: only revert if source matches
+        actor_user_id: int,                    # for permission check
+        actor_is_gm: bool = False,
+    ) -> dict | None:
+        """Restore token fields from ``token.disguise["prior"]`` and
+        clear ``token.disguise``. Broadcasts ``token_update``.
+        Returns the prior snapshot (or None if no disguise was set).
+        Raises HTTPException(403) if actor_user_id is neither the
+        original caster nor the GM. Raises HTTPException(409) if
+        ``expected_source`` is provided and doesn't match the
+        disguise's actual source (prevents accidental cross-source
+        reverts — e.g. /revert on the druid sheet shouldn't accidentally
+        end an unrelated Polymorph on the same token).
+        """
+    ```
+
+    **Consumers:**
+    - `/transform` (Wild Shape source): finds tokens where
+      `token.character_id == char.id` and `token.disguise is None`,
+      calls `_apply_token_disguise` for each. Image comes from the
+      Open5e creature's `illustration` field when present;
+      otherwise the token keeps its existing image (RAW Wild Shape
+      doesn't enforce a visual swap — the token-image change is a
+      UX nicety, not a rule). Size comes from `monster["size"]`.
+    - `/transform` (Polymorph source) — same flow but `caster_user_id`
+      is the spell caster (not necessarily the token's owner), and
+      `concentration: True`. RAW Polymorph targets one creature;
+      typically that's a target token the caster selected via a
+      future target picker (extends the lay-on-hands picker to
+      include enemy tokens).
+    - `/revert`: calls `_revert_token_disguise` with
+      `expected_source="wild-shape"` (or "polymorph") so the right
+      disguise is ended.
+    - Future Disguise Self endpoint: calls `_apply_token_disguise`
+      with `source="disguise-self"`, `concentration: False`, and
+      only `new_label` / `new_image_url` set (no size change — RAW
+      Disguise Self is illusion-only, target's actual size is
+      unchanged). Reverts via a Use-button click or a 1-hour timer.
+    - Future Alter Self endpoint: similar to Disguise Self but the
+      visual change is real (target genuinely becomes the new
+      form). Concentration: True.
+    - Future True Polymorph: same as Polymorph but
+      `concentration: True` for 1 hour, then becomes permanent if
+      sustained. The "becomes permanent" transition would clear the
+      `concentration_caster_id` field (without reverting the
+      disguise) so the disguise persists past concentration drop.
+
+    **Edge cases:**
+    - GM spawned multiple tokens of the same character (rare).
+      Wild Shape applies to all of them by default; a future
+      enhancement could let the caster pick which token to
+      transform. Polymorph targets one specific token always.
+    - NPC tokens that share `character_id` (e.g. a Mirror Image
+      clone, a summoned beast). Wild Shape should NOT touch those
+      — RAW is single-target. Gate via `token.is_summon` or a new
+      `token.is_clone` flag if Mirror Image ever ships.
+    - Token has a custom player-uploaded portrait. The snapshot
+      pattern captures it, so revert restores correctly. The
+      disguise replaces it for the duration.
+    - Concentration coupling: Polymorph / True Polymorph drop when
+      the caster loses concentration. Implementation: when a
+      character takes damage, the WS broadcast that fires
+      `concentration_check` (if/when that ships) also walks Token
+      rows where `disguise.concentration_caster_id == char.id`
+      and reverts each. Without concentration infrastructure, the
+      caster manually reverts via the existing `/revert` flow.
+    - Mass effects (a future homebrew "Mass Polymorph"): the
+      primitive supports it — just loop over multiple tokens and
+      apply individually. No new API needed.
+    - Death of a Polymorphed creature: per RAW, the target reverts
+      when it drops to 0 HP. Implementation: `_apply_hp_change`
+      checks the disguise field; if HP hits 0 AND source is
+      "polymorph", auto-revert before applying the dying state.
+      Filed as a sub-piece for whoever ships Polymorph.
+
+    **WS broadcast shape (existing `token_update`):**
+    The full token payload already carries every field a client
+    cares about, including the new `disguise` field once it exists.
+    A client renders a small badge on disguised tokens
+    (e.g. 🎭 for polymorph, 🐺 for wild-shape, 👤 for disguise-self)
+    by reading `token.disguise.source`. No new broadcast type
+    needed.
+
+    **Implementation order (when this work is picked up):**
+    1. Schema migration: add `Token.disguise` JSON column. Bump
+       SCHEMA_VERSION. Backfill existing rows with NULL.
+    2. Build `_apply_token_disguise` + `_revert_token_disguise`
+       helpers. Unit-style tests via the harness (no UI yet).
+    3. Wire `/transform` to call the helpers for Wild Shape source.
+       Add Wild Shape size-swap (Mira → Dire Wolf changes size from
+       M → L on the token). Harness assertion: after /transform,
+       the token's label contains the form name AND its `size` reflects
+       the beast.
+    4. Wire `/revert` to revert the disguise alongside the sheet
+       revert. Harness assertion: after /revert, the token's label
+       + size restore.
+    5. Polymorph: add a `/cast_spell` branch that detects
+       `spell_slug == "polymorph"`, opens a target picker, calls
+       `/transform` with `source="polymorph"` and the target's
+       token. Filed for when Polymorph ships as a real interactive
+       spell (currently it's a generic spell-cast announce).
+    6. Disguise Self / Alter Self / True Polymorph: each new
+       spell endpoint reuses the same helper.
+
+    Filed for a future commit. Not blocking any other Phase B work.
+    The design is intentionally bigger than a single Wild Shape
+    feature so subsequent shape-changing abilities can plug in
+    without re-litigating the storage shape.
 - **Timeless Body (Lv 18)** — Pure descriptive. No mechanic.
 - **Beast Spells (Lv 18)** — S. While Wild Shaped, can cast Druid spells
   (with verbal-only components allowed). Implementation: the
