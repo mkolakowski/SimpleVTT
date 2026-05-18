@@ -67,8 +67,8 @@ async def roster(gm_client: httpx.AsyncClient) -> dict[str, dict]:
     assert resp.status_code == 200, f"roster fetch failed: {resp.status_code}"
     data = resp.json()
     by_name = {c["name"]: c for c in data["characters"]}
-    # Smoke-check: the six demo PCs are present (Paladin added
-    # v2.14.0, Bard added v2.14.1, Druid added v2.14.2). If this fails
+    # Smoke-check: the seven demo PCs are present (Paladin v2.14.0,
+    # Bard v2.14.1, Druid v2.14.2, Fighter v2.17.0). If this fails
     # the demo seed has drifted and every downstream test will fail
     # mysteriously — better to fail fast here.
     expected = {
@@ -78,6 +78,7 @@ async def roster(gm_client: httpx.AsyncClient) -> dict[str, dict]:
         "Sir Caelan Lightbringer",
         "Lyra Sunstrider",
         "Mira Greenleaf",
+        "Garrik Ironside",
     }
     missing = expected - set(by_name)
     if missing:

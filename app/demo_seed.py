@@ -955,6 +955,132 @@ def _druid_sheet(name: str) -> dict:
     }
 
 
+def _fighter_sheet(name: str) -> dict:
+    """v2.17.0: demo Fighter Lv 5 (Champion) for the GM. Added in
+    Phase A.4 to unlock per-feature work for Second Wind / Action
+    Surge / Improved Critical (Champion Lv 3) and the deferred
+    Indomitable (Lv 9+) when that feature finally ships with the
+    roll-time intercept. Variant Human + two-handed style + Great
+    Weapon Fighting + Greatsword. Skips a shield so Action Surge's
+    "swing twice with the same weapon" doesn't fight with the
+    sword-and-board ergonomics that Caelan already covers. Color
+    `#8a96a3` (steel grey) — distinct from every existing PC + NPC
+    palette.
+    """
+    return {
+        "class": "Fighter",
+        "subclass": "Champion",
+        "level": 5,
+        "race": "Variant Human",  # +1 STR + 1 CON at character creation
+        "alignment": "Lawful Good",
+        "background": "Soldier",
+        # Rolled stats post-racial: STR 18 / DEX 14 / CON 16 / INT 8 /
+        # WIS 12 / CHA 10. The Lv 4 ASI hasn't been spent yet — leaves
+        # room for a future homebrew "give Garrik Great Weapon Master"
+        # feat without rebalancing the stat block.
+        "abilities": {"STR": 18, "DEX": 14, "CON": 16, "INT": 8, "WIS": 12, "CHA": 10},
+        "ac": 16,  # chain mail 16 (no shield — two-handed Greatsword)
+        "speed": 30,
+        # Lv 1 max d10 (10) + 4× avg d10 (6) + CON +3 × 5 = 13 + 36 = 49.
+        "hp": {"current": 49, "max": 49, "temp": 0},
+        "initiative_bonus": 2,  # DEX 14 mod
+        "proficiency_bonus": 3,
+        "hit_dice": {"current": 5, "max": 5},
+        "class_hit_die": "d10",
+        # Fighter prof saves are STR + CON.
+        "saving_throws": {"STR": True, "CON": True},
+        # Soldier background grants Athletics + Intimidation; Fighter Lv 1
+        # picks two from a curated list (Perception + Survival).
+        "skills": {
+            "Athletics":   {"ability": "STR", "proficient": True, "expertise": False},
+            "Intimidation": {"ability": "CHA", "proficient": True, "expertise": False},
+            "Perception":  {"ability": "WIS", "proficient": True, "expertise": False},
+            "Survival":    {"ability": "WIS", "proficient": True, "expertise": False},
+        },
+        "attacks": [
+            {"name": "Greatsword", "attack_bonus": "+7", "damage": "2d6+4",
+             "damage_type": "slashing", "range": "5 ft",
+             "desc": "Two-handed, heavy. Great Weapon Fighting (Lv 1 style): reroll 1s and 2s on the damage roll once each — keep the new result."},
+            {"name": "Handaxe (thrown)", "attack_bonus": "+7", "damage": "1d6+4",
+             "damage_type": "slashing", "range": "20/60 ft",
+             "desc": "Light, thrown. Can also be wielded melee. Garrik carries two so an Action Surge thrown-attack combo is possible."},
+        ],
+        # Fighter is non-casting RAW (Champion subclass doesn't grant
+        # spells either). No spells / spell_slots fields needed.
+        "inventory": [
+            {"name": "Greatsword", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 2,
+             "damage": "2d6", "damage_type": "slashing",
+             "properties": "heavy, two-handed", "_slug": "greatsword"},
+            {"name": "Handaxe", "type": "weapon", "qty": 2,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d6", "damage_type": "slashing",
+             "range": "20/60 ft", "properties": "light, thrown",
+             "_slug": "handaxe"},
+            {"name": "Chain mail", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": True,
+             "armor_type": "heavy", "ac_value": 16,
+             "_slug": "chain-mail"},
+            {"name": "Explorer's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, bedroll, mess kit, tinderbox, 10 torches, 10 days rations, waterskin, 50 ft hempen rope."},
+            {"name": "Insignia of rank", "type": "gear", "qty": 1,
+             "desc": "Soldier background trinket — old captain's badge. Cosmetic; no mechanic."},
+            {"name": "Potion of Healing", "type": "consumable", "qty": 2,
+             "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
+             "_slug": "potion-of-healing",
+             "desc": "Drink to regain 2d4+2 HP. RAW: action."},
+        ],
+        "feats": [],
+        # v2.17.0: Fighter Lv 5 resources. Both refresh on short rest.
+        # Indomitable (Lv 9+) isn't on the sheet — Garrik is Lv 5.
+        # Champion's Improved Critical (Lv 3: crit on 19-20) is passive;
+        # it doesn't need a counter (would be a flag on the attack roll
+        # when the (B) roll-time intercept ships).
+        "resources": [
+            {
+                "key": "second-wind",
+                "name": "Second Wind",
+                "current": 1, "max": 1, "reset": "short",
+                "source": "fighter Lv 1",
+                "class_slug": "fighter",
+                "desc": "Bonus action: regain 1d10 + fighter level (5) HP. Refreshes on a short or long rest.",
+                "manual": False,
+            },
+            {
+                "key": "action-surge",
+                "name": "Action Surge",
+                "current": 1, "max": 1, "reset": "short",
+                "source": "fighter Lv 2",
+                "class_slug": "fighter",
+                "desc": "Take one additional action on this turn. Free — refreshes on a short or long rest. (Lv 17: 2 uses per rest.)",
+                "manual": False,
+            },
+        ],
+        # v2.17.0: Class abilities buttons. The Cunning Action pattern
+        # (Pip / v2.6.0) is the precedent — clicking POSTs /use_feature
+        # which decrements + announces + chip-flips per the curated
+        # `_FEATURE_ECONOMY` entry. v1 deviations: Second Wind doesn't
+        # auto-roll the heal (GM rolls 1d10+5 and applies HP manually);
+        # Action Surge's "extra action" isn't auto-refunded on the chip
+        # strip (the player needs to shift+click the Act chip to refund
+        # it, OR the GM does it from the init tracker). Both are filed
+        # for a future per-feature commit that wires the actual mechanics
+        # alongside the announce.
+        "class_features": [
+            {
+                "key": "second-wind",
+                "name": "Second Wind",
+                "desc": "Bonus action: heal 1d10 + Fighter level (5) HP. Refreshes on short rest.",
+            },
+            {
+                "key": "action-surge",
+                "name": "Action Surge",
+                "desc": "Take one additional action on this turn. Free slot — refreshes on short rest.",
+            },
+        ],
+    }
+
+
 def seed_characters(
     db: Session, camp: Campaign, users: dict[str, User]
 ) -> list[Character]:
@@ -1026,9 +1152,26 @@ def seed_characters(
         sheet=_druid_sheet("Mira Greenleaf"),
         color="#4d9d6d",
     )
-    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc])
+    # v2.17.0: Phase A.4 — demo Fighter (Garrik Ironside). 7th PC.
+    # Champion Lv 5, two-handed Greatsword build. Unblocks per-feature
+    # work for Second Wind (Lv 1) + Action Surge (Lv 2) + Improved
+    # Critical (Champion Lv 3 — passive crit-on-19-20, ships when the
+    # (B) roll-time intercept lands) + Remarkable Athlete (Champion
+    # Lv 7, deferred). With Garrik the demo party is 7 PCs vs 6 NPCs;
+    # the Tavern Brawl encounter is now player-favored — filed as a
+    # future encounter-rebalance commit if play-testing reveals it's
+    # too easy.
+    fighter_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Garrik Ironside",
+        template="dnd5e",
+        sheet=_fighter_sheet("Garrik Ironside"),
+        color="#8a96a3",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc])
     db.flush()
-    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc]
+    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:
@@ -1145,6 +1288,17 @@ def seed_tokens(
         label=chars[5].name, color="#4d9d6d",
         image_url=None,
         x=350, y=350, size=1,
+    ))
+    # v2.17.0: Phase A.4 — Garrik Ironside token. Fighter goes on the
+    # front line; placed at (560, 420) one cell east of Caelan so the
+    # demo's "two-knight front" reads visually as a wall. No portrait
+    # jpg ships yet; falls back to the colored ring + label.
+    tokens.append(Token(
+        map_id=map_.id, character_id=chars[6].id,
+        controller_user_id=users["gm"].id,
+        label=chars[6].name, color="#8a96a3",
+        image_url=None,
+        x=560, y=420, size=1,
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
@@ -1596,23 +1750,27 @@ def seed_encounter(
     # v2.14.0: Sir Caelan (GM's Paladin) added at init 12.
     # v2.14.1: Lyra Sunstrider (GM's Bard) added at init 16.
     # v2.14.2: Mira Greenleaf (GM's Druid) added at init 8, between
-    # Bandit Alpha (9) and Bandit Beta (7). NPC token indices +1
-    # again to account for Mira at tokens[5].
+    # Bandit Alpha (9) and Bandit Beta (7).
+    # v2.17.0: Garrik Ironside (GM's Fighter, Champion) added at init
+    # 19 — top of the order. NPC token indices +1 again to account
+    # for Garrik at tokens[6] (Vex 6→7, Bandit Alpha 7→8, Bandit
+    # Beta 8→9, Bandit Gamma 9→10, Thug 10→11, Grixxa 11→12).
     # Specs: (token_idx, initiative_roll, hp_max, dex_mod).
     init_specs = [
         # token_idx, init, hp_max, dex_mod
-        (11, 18, 36, 3),   # Grixxa (Goblin Captain)
-        (6,  17, 65, 3),   # Vex (Bandit Captain)
+        (6,  19, 49, 2),   # Garrik Ironside (v2.17.0)
+        (12, 18, 36, 3),   # Grixxa (Goblin Captain)
+        (7,  17, 65, 3),   # Vex (Bandit Captain)
         (4,  16, 33, 2),   # Lyra Sunstrider (v2.14.1)
         (0,  15, 33, 3),   # Pip Quickfingers
         (2,  14, 43, 0),   # Brother Tavik Stonebrow
         (1,  13, 27, 2),   # Thalindra Moonwhisper
         (3,  12, 44, 0),   # Sir Caelan Lightbringer (v2.14.0)
-        (10, 11, 32, 0),   # Thug
-        (7,   9, 11, 1),   # Bandit Alpha
+        (11, 11, 32, 0),   # Thug
+        (8,   9, 11, 1),   # Bandit Alpha
         (5,   8, 36, 3),   # Mira Greenleaf (v2.14.2)
-        (8,   7, 11, 1),   # Bandit Beta
-        (9,   5, 11, 1),   # Bandit Gamma
+        (9,   7, 11, 1),   # Bandit Beta
+        (10,  5, 11, 1),   # Bandit Gamma
     ]
     combatants = []
     for token_idx, init_roll, hp_max, dex_mod in init_specs:
