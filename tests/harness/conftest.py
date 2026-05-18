@@ -99,3 +99,13 @@ async def alice_ws(alice_client: httpx.AsyncClient) -> AsyncIterator[WSCollector
             yield collector
     finally:
         await ws.close()
+
+
+@pytest_asyncio.fixture
+async def bob_ws(bob_client: httpx.AsyncClient) -> AsyncIterator[WSCollector]:
+    ws = await open_ws(bob_client, CAMPAIGN_ID)
+    try:
+        async with WSCollector(ws) as collector:
+            yield collector
+    finally:
+        await ws.close()

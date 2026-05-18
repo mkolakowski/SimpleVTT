@@ -51,29 +51,53 @@ async def test_roll_invalid_visibility(gm_client):
     assert resp.status_code == 400
 
 
-async def test_roll_gm_only_visibility_flag(gm_client, alice_ws):
-    """A GM-only roll carries ``visibility: "gm_only"`` on the broadcast.
+async def test_roll_gm_only_hidden_from_player(gm_client, alice_ws, gm_ws):
+    """v2.12.4: a GM-only roll fired by the GM is NOT broadcast to
+    non-GM clients. The hub's recipient_filter now consults each WS
+    connection's identity and skips non-GM clients for ``gm_only``
+    rolls (and skips non-GM-non-roller clients for ``gm_and_roller``).
 
-    *Note on current behavior:* the server broadcasts the message to
-    every connected client; the existing roll-log + roll-toast clients
-    filter client-side on ``visibility`` to hide GM-only entries from
-    non-GM players. This means a determined player inspecting the WS
-    traffic via devtools could read GM-only roll data — a real privacy
-    leak. Server-side filtering of the broadcast itself is filed as a
-    follow-up commit; this test pins the current contract so the leak
-    doesn't get worse silently.
+    The GM does still receive it; we use that as a control to confirm
+    the message went out at all.
     """
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/roll",
-        json={"expression": "1d20", "note": "Secret roll", "visibility": "gm_only"},
+        json={"expression": "1d20", "note": "Secret v2.12.4 roll", "visibility": "gm_only"},
     )
     assert resp.status_code == 200
 
-    # Alice WILL receive the broadcast under current behavior — assert
-    # the visibility flag is set correctly so the client-side filter
-    # has what it needs.
+    # Control: the GM's own WS should see it.
+    msg = await gm_ws.wait_for("roll")
+    assert msg["data"]["visibility"] == "gm_only"
+    assert msg["data"]["note"] == "Secret v2.12.4 roll"
+
+    # Now assert Alice's WS did NOT receive it.
     await asyncio.sleep(0.3)
     rolls = alice_ws.buffered("roll")
-    secrets = [r for r in rolls if r.get("data", {}).get("note") == "Secret roll"]
-    assert secrets, "Alice should currently receive GM-only roll broadcast (client-side filter)"
-    assert secrets[0]["data"]["visibility"] == "gm_only"
+    secrets = [r for r in rolls if r.get("data", {}).get("note") == "Secret v2.12.4 roll"]
+    assert not secrets, f"Alice should not see GM-only roll, got: {secrets}"
+
+
+async def test_roll_gm_and_roller_hidden_from_non_roller(alice_client, alice_ws, bob_ws, gm_ws):
+    """Roll posted with ``visibility: "gm_and_roller"`` from Alice is
+    seen by Alice (roller) and the GM, NOT by Bob (third party)."""
+    resp = await alice_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll",
+        json={"expression": "1d20", "note": "Secret v2.12.4 g+r roll", "visibility": "gm_and_roller"},
+    )
+    assert resp.status_code == 200
+
+    # Alice (roller) sees it.
+    msg_a = await alice_ws.wait_for("roll")
+    assert msg_a["data"]["visibility"] == "gm_and_roller"
+    assert msg_a["data"]["note"] == "Secret v2.12.4 g+r roll"
+
+    # GM sees it.
+    msg_gm = await gm_ws.wait_for("roll")
+    assert msg_gm["data"]["note"] == "Secret v2.12.4 g+r roll"
+
+    # Bob does NOT.
+    await asyncio.sleep(0.3)
+    rolls = bob_ws.buffered("roll")
+    secrets = [r for r in rolls if r.get("data", {}).get("note") == "Secret v2.12.4 g+r roll"]
+    assert not secrets, f"Bob should not see gm_and_roller roll, got: {secrets}"

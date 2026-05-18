@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.12.4] - 2026-05-17
+
+**Schema version:** 55
+**Commit summary:** **Fix privacy leak in /roll WS broadcasts.** Previously, `/api/campaign/{id}/roll` broadcast every roll to every connected WS client regardless of the `visibility` field; the existing client-side filters in `roll_toast.js` and the roll-log handler kept GM-only / gm_and_roller rolls off non-recipient UI surfaces, but the raw broadcast data (note text, total, breakdown) still reached every browser's WS buffer and was readable via devtools. Fix: the realtime hub's `broadcast()` method now accepts an optional `recipient_filter` callback; the /roll endpoint passes a filter built from `visibility` + the roller's user id so the server only sends to the right clients. Bug was surfaced by the v2.12.1 test harness when `test_roll_gm_only_visibility_flag` first ran — fix lands with two updated harness tests that assert the new behaviour (Alice doesn't see GM-only rolls; Bob doesn't see gm_and_roller rolls from Alice). PATCH bump.
+**Description:** Two coordinated changes. **(1)** `app/realtime.py` `CampaignHub.broadcast()` gains an optional `recipient_filter: Callable[[dict], bool]` keyword arg. Inside the lock, the hub now captures both the recipient list AND a snapshot of each connection's identity dict (already tracked via v2.9.1's `_identities` map). The send loop calls `recipient_filter(identity)` per connection; False → skip. None (default) → send to everyone (backward-compat with all v2.9.x and earlier callers). A buggy filter that raises is caught + logged + the recipient is skipped, so a single bad filter can't crash a broadcast for everyone. **(2)** `app/routes/tabletop_routes.py` `roll_dice` builds the filter from `rec.visibility`: `Visibility.GM_ONLY` → `lambda ident: bool(ident.get("is_gm"))`; `Visibility.GM_AND_ROLLER` → `lambda ident: is_gm or user_id == _roller_id`; `Visibility.PUBLIC` → None (no filter, current behaviour). `_roller_id = user.id` is captured at call time so the closure binds correctly.
+**Description (cont):** Bug-hunt anecdote (worth preserving for the test-harness plan history). The first attempt at landing this fix in `roll_dice` actually edited `respond_roll_request` instead — the file has TWO `hub.broadcast("roll", ...)` calls and I matched the wrong one. The harness ran, the gm_only test still failed, and the debug prints I added weren't appearing in `docker logs`. The trail was: TOP-of-function print → shows in logs. Mid-function print near the filter → doesn't show. That mismatch is what tipped me off that my filter edit landed in a different function. The fix took 5 minutes once that was clear. Worth keeping the harness on the lookout for this kind of "edit looked right; symptom was nonsense" failure mode.
+**Description (cont 2):** Defense-in-depth retained. The existing client-side filters in `roll_toast.js` and the roll-log message dispatch are kept — they're cheap, they handle the edge case where the server-side filter has a bug, and they were already in place. Removing them would tightly couple the server's filtering correctness to the client's safety; keeping them costs ~3 lines of JS per filter and adds no perf cost. Belt + suspenders.
+**Description (cont 3):** What the harness asserted. `test_roll_gm_only_hidden_from_player` posts a gm_only roll from the GM, asserts the GM's own WS receives it (control — confirms the broadcast went out at all), then asserts Alice's WS buffer has NO entry with the test's note text. `test_roll_gm_and_roller_hidden_from_non_roller` posts a gm_and_roller roll from Alice (player), asserts Alice (roller) + GM both see it, asserts Bob (third party) does NOT. Both assertions pass with the fix; both failed without it. The third test (`test_roll_d20`, public visibility) still passes — confirms the no-filter path is unchanged.
+
+### Added
+- `app/realtime.py` `CampaignHub.broadcast(..., recipient_filter=None)` — optional filter callback. None preserves the v2.9.x broadcast-to-everyone behaviour.
+
+### Changed
+- `app/routes/tabletop_routes.py` `roll_dice` — passes `recipient_filter` to `hub.broadcast` based on `Visibility.{GM_ONLY,GM_AND_ROLLER,PUBLIC}`. Server now filters at broadcast time; non-recipient clients no longer receive the message at all (previously: client-side filter only).
+- `tests/harness/test_roll.py` `test_roll_gm_only_hidden_from_player` (renamed from `test_roll_gm_only_visibility_flag`) — now asserts Alice does NOT receive a GM-only roll. Includes a GM control assertion to confirm the broadcast went out.
+- `tests/harness/test_roll.py` `test_roll_gm_and_roller_hidden_from_non_roller` (new) — Alice posts a gm_and_roller roll; Alice + GM see it; Bob does not.
+- `tests/harness/conftest.py` — new `bob_ws` fixture (paired with the existing `bob_client`) so the gm_and_roller test can listen on Bob's WS.
+
+### Notes
+- **What to test:** `make test-harness` should show 42/42 passing in ~17-20 s. The two roll-visibility tests specifically verify the fix.
+- **Privacy fix scope.** Only `/roll` is patched in this commit. Other broadcasts (`weapon_attack`, `spell_cast`, `feature_used`, `heal_applied`, etc.) don't have a visibility field — they're inherently public-by-design. If a future endpoint introduces a private-broadcast variant, it should pass `recipient_filter` to `hub.broadcast` the same way.
+- **Client-side filters retained.** `roll_toast.js`'s visibility check and the roll-log's similar guard are NOT removed by this commit. The server filter is the authoritative gate; the client filter is defense in depth for the rare bug case. No perf cost; ~6 lines of JS kept.
+- **Harness caveat the bug hunt surfaced.** When debugging a "test failed but my edit looked right" case, add a TOP-of-function print before any conditional. If the top print fires but a mid-function print doesn't, the edit landed in a different function with the same broadcast call shape. Two `hub.broadcast("roll", ...)` calls in the file: `roll_dice` (the actual /roll endpoint) and `respond_roll_request` (the /roll_request/{id}/respond endpoint). Future commits patching one should grep for the other to confirm the right scope.
+
+---
+
 ## [2.12.3] - 2026-05-17
 
 **Schema version:** 55

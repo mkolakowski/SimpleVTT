@@ -4951,6 +4951,22 @@ async def roll_dice(
         else (campaign.gm_color if user.id == campaign.gm_user_id else None)
     )
     _user_color = (_char.color if _char and _char.color else _player_color)
+    # v2.12.4: server-side visibility filter. Previously this broadcast
+    # went to every connected WS client regardless of ``visibility``;
+    # ``roll_toast.js`` + the roll-log handler filtered client-side,
+    # which kept the raw data accessible to anyone watching the WS in
+    # devtools. The hub now accepts a recipient_filter callback that
+    # consults each connection's identity (user_id + is_gm) and skips
+    # the send for filtered-out recipients. ``public`` keeps the old
+    # broadcast-to-all (filter is None); ``gm_only`` allows only GMs;
+    # ``gm_and_roller`` allows GMs and the rolling user.
+    _roller_id = user.id
+    if rec.visibility == Visibility.GM_ONLY:
+        _filter = lambda ident: bool(ident.get("is_gm"))
+    elif rec.visibility == Visibility.GM_AND_ROLLER:
+        _filter = lambda ident: bool(ident.get("is_gm")) or ident.get("user_id") == _roller_id
+    else:
+        _filter = None
     await hub.broadcast(
         campaign_id,
         {
@@ -4971,6 +4987,7 @@ async def roll_dice(
                 "roll_state_applied": roll_state_applied or None,
             },
         },
+        recipient_filter=_filter,
     )
     return {"ok": True, "total": rec.total, "breakdown": rec.breakdown,
             "roll_state_applied": roll_state_applied or None}

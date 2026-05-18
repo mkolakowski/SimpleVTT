@@ -16,7 +16,7 @@ import asyncio
 import json
 import logging
 from collections import defaultdict
-from typing import Dict, Optional, Set
+from typing import Callable, Dict, Optional, Set
 
 from fastapi import WebSocket
 
@@ -106,13 +106,47 @@ class CampaignHub:
             self._identities.pop(ws, None)
         await self._broadcast_presence(campaign_id)
 
-    async def broadcast(self, campaign_id: int, message: dict) -> None:
+    async def broadcast(
+        self,
+        campaign_id: int,
+        message: dict,
+        *,
+        recipient_filter: Optional[Callable[[dict], bool]] = None,
+    ) -> None:
+        """Send ``message`` to every connected client on the campaign.
+
+        v2.12.4: ``recipient_filter`` lets the caller restrict which
+        clients receive the message. The filter is called with each
+        connection's identity dict (``{user_id, display_name, color,
+        is_gm}``) — return True to send, False to skip. None (default)
+        means broadcast to everyone (the v2.9.0 behaviour).
+
+        Used by ``/roll`` to keep ``gm_only`` rolls off non-GM clients
+        and ``gm_and_roller`` rolls off everyone except the GM(s) and
+        the rolling user. Server-side filtering is defense-in-depth on
+        top of the existing client-side filter in ``roll_toast.js`` —
+        a determined player watching the WS in devtools would
+        otherwise read the raw data even when the toast was filtered.
+        """
         text = json.dumps(message, default=str)
         # Snapshot to avoid mutation during iteration
         async with self._lock:
             recipients = list(self._channels.get(campaign_id, ()))
+            # Capture identities alongside the WS so the filter has
+            # what it needs without re-locking per send.
+            identities = {ws: self._identities.get(ws, {}) for ws in recipients}
         dead = []
         for ws in recipients:
+            if recipient_filter is not None:
+                ident = identities.get(ws) or {}
+                try:
+                    if not recipient_filter(ident):
+                        continue
+                except Exception as e:  # noqa: BLE001
+                    # A buggy filter shouldn't kill the broadcast for
+                    # everyone — log + skip the problematic recipient.
+                    log.warning("recipient_filter raised: %s", e)
+                    continue
             try:
                 await ws.send_text(text)
             except Exception as e:
