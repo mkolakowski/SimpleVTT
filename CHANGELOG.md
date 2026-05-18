@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.13.1] - 2026-05-17
+
+**Schema version:** 55
+**Commit summary:** **Test harness Phase 4.5 — CI integration for the Playwright suite.** `.github/workflows/test-harness.yml` grows a parallel `harness-ui` job that boots its own docker compose stack, installs Playwright + chromium (with `actions/cache` keyed on `requirements-dev.txt` so cache-hit runs skip the ~250 MB browser download), and runs `pytest tests/harness_ui/` with JUnit XML + HTML reports. Triggers on the same events as the HTTP harness job (push to main/dev + PR). Both jobs run in parallel so total wall-clock for the test stage stays at ~max(http, ui) rather than http+ui. PATCH bump — CI infra, no production code change.
+**Description:** Two coordinated changes. **(1)** `.github/workflows/test-harness.yml` gets a second job named `harness-ui` at the same trigger scope as the existing `harness` job. Steps mirror the HTTP job's shape (checkout → setup-python → install deps → write CI .env → docker compose up → wait for healthz → roster sanity-check → pytest → upload reports → log dump on failure → tear down) with three additions: `actions/cache@v4` for `~/.cache/ms-playwright` keyed on the dev-deps file hash; `playwright install --with-deps chromium` after the cache restore (browser binary + apt system deps for chromium on ubuntu); pytest target is `tests/harness_ui/` instead of `tests/harness/`. Cache-hit runs skip the ~250 MB chromium download (~30-45 s saved); cache-miss runs (first PR after a deps bump) pay the full install cost. **(2)** README's Testing section grows a paragraph on the CI integration for the UI suite.
+**Description (cont):** Parallel-job rationale. The two jobs are independent: each boots its own docker compose stack, runs its own DB, manages its own ports. GitHub Actions schedules them in parallel by default (unless one declares `needs: [harness]`); total wall-clock is `max(harness, harness-ui)` rather than `harness + harness-ui`. Tradeoff: 2× compute resources used. Negligible for the public runners; if a self-hosted runner ever becomes bottlenecked, an easy switch is to add `needs: harness` to serialize.
+**Description (cont 2):** Why not use the official `mcr.microsoft.com/playwright/python` Docker image as the runner base. It would shave ~30 s by skipping the chromium install, but it diverges the CI environment from the dev environment (Python version, glibc version, default shell). The cache-on-ubuntu-latest pattern matches what most projects do; the diff cost is small and the failure modes are easier to debug when CI and dev share `ubuntu-latest`. Filed as a future optimisation if CI runtime becomes a pain point.
+**Description (cont 3):** Reports artifact. UI test reports upload as a separate artifact named `test-harness-ui-reports` (vs. the HTTP suite's `test-harness-reports`). On failure, both jobs dump `docker compose logs app | tail -200` to the workflow output for inline triage. Both jobs retain artifacts for 14 days.
+
+### Added
+- `.github/workflows/test-harness.yml` `harness-ui` job — parallel Playwright pipeline. Caches chromium between runs; installs system deps via `playwright install --with-deps chromium`; uploads JUnit XML + self-contained HTML reports as `test-harness-ui-reports`.
+
+### Changed
+- `README.md` Testing section — paragraph on the Phase 4.5 CI integration covering both jobs, cache behavior, and parallel execution.
+
+### Notes
+- **What to test (CI side, after merging):** open a PR. Both `harness` and `harness-ui` checks appear in the PR status row, running in parallel. First run after merging this commit has a cold Playwright cache (~30-45 s to install chromium); subsequent runs on the same `requirements-dev.txt` hit the cache (~5 s for the install step). Both jobs upload separate artifacts (`test-harness-reports` and `test-harness-ui-reports`); failures dump server logs inline.
+- **Cache key strategy.** The cache key is `playwright-${{ runner.os }}-${{ hashFiles('requirements-dev.txt') }}` — invalidated only when the Playwright version in `requirements-dev.txt` changes. Bumping `playwright==1.47.0` to `1.48.0` (or whatever) triggers a single cache-miss run, then cache-hits resume. Bumping ONLY `pytest==8.3.3` to `8.4.0` also invalidates the cache (the hash covers the whole file). False invalidations are minor — one ~30 s rebuild — so the simple hash is preferred over a more surgical key.
+- **CI compute cost.** Two parallel jobs × ~1-2 min each = ~2-4 min total wall-clock vs. ~1-2 min for the HTTP suite alone. GitHub Actions includes 2,000 min/month free for private repos and unlimited for public; modest.
+- **What's next.** Phase 5 (multi-user concurrency tests) remains stretch. The class-feature plan items #4 (Wild Shape) and #5-completeness (Bardic Inspiration in the demo) are user-visible work that benefits from the harness coverage. Future UI test expansions (over-budget modal flow, breadcrumb canvas, picker overlays) all stack on this scaffold without further CI work.
+
+---
+
 ## [2.13.0] - 2026-05-17
 
 **Schema version:** 55

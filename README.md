@@ -1,6 +1,6 @@
 # SimpleVTT
 
-> Current version: **2.13.0** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
+> Current version: **2.13.1** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
 
 A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 
@@ -224,7 +224,12 @@ make test-harness-ui
 
 The UI harness is kept separate from the HTTP+WS one (`make test-
 harness`) because the browser overhead means each test takes
-seconds instead of milliseconds. See the plan doc for the roadmap.
+seconds instead of milliseconds. Phase 4.5 (v2.13.1) wires this
+into CI as a parallel `harness-ui` job alongside the existing
+`harness` job in `.github/workflows/test-harness.yml` — both run
+on every PR + push to main/dev; the Playwright binaries are cached
+between runs so cache-hit cost is ~5 s extra per run vs. ~30-45 s
+on a cold cache. See the plan doc for the roadmap.
 
 ## Third-party fonts
 
