@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.12.3] - 2026-05-17
+
+**Schema version:** 55
+**Commit summary:** **Test harness Phase 3 — contributor discipline.** `CLAUDE.md` gains a new section establishing that every commit adding an HTTP endpoint or changing a WebSocket broadcast shape MUST also land at least one harness test. Section covers the per-endpoint test contract (one happy path + one error path; action-economy gating bypassed via `override: true`; targets resolved via the `/roster` endpoint), where tests live, and how to handle endpoints that need classes the demo doesn't ship. PATCH bump — docs-only.
+**Description:** Single change: a new "Every new endpoint commit lands a harness test" section inserted between the touch-target rule and the docker-compose-services rule in `CLAUDE.md`. The section documents (1) what the contract requires per endpoint (happy + error + override-aware action-economy + roster-based target lookup), (2) the file naming convention (`tests/harness/test_<endpoint>.py`), (3) the canonical reference test (`test_attack.py`), (4) the fallback for endpoints needing fixture characters not yet in the demo (ship error-path tests only; file happy-path work in the plan doc), and (5) a pointer to the CI workflow that enforces this on every PR.
+**Description (cont):** Why a contract section now. The harness only protects against regressions for endpoints it covers. Without an explicit contributor discipline rule, the next endpoint commit naturally ships without a test, the harness silently stays narrow, and the next regression slips through. Codifying "every endpoint commit = at least one test" in `CLAUDE.md` makes it a checked rule for every contributor (including future agents working from this guide) rather than a polite suggestion.
+
+### Added
+- `CLAUDE.md` — new "Every new endpoint commit lands a harness test" section with per-endpoint contract, file naming, error-path fallback, CI pointer.
+
+### Notes
+- This closes Phase 3 of the test-harness plan. Phase 4 (Playwright for UI-layer regressions) is filed for whenever a UI-only bug motivates it. Phase 5 (multi-user concurrency tests) remains a stretch goal.
+- The rule applies to new endpoint commits going forward. The 8 endpoints currently covered by the harness (4 with happy paths, 4 with error-path-only because the demo lacks Paladin / Bard) stay as-is — backfilling tests onto every existing endpoint is a separate sweep filed in the plan doc.
+- Doc-only and refactor-only commits are exempt from the rule, called out explicitly.
+
+---
+
 ## [2.12.2] - 2026-05-17
 
 **Schema version:** 55

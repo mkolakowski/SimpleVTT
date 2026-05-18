@@ -38,6 +38,44 @@ All interactive elements (buttons, links, inputs, selects) must have a minimum t
 - For absolutely-positioned overlay buttons (like the roll-expression clear button), set `width` and `height` to at least 44 px, or expand the target area with `padding` so the total touch area is 44×44 px.
 - Avoid `padding: 0`, `padding: 1px`, or `padding: 2px` on any clickable element.
 
+## Every new endpoint commit lands a harness test
+
+The click-through harness at `tests/harness/` (see
+`docs/plans/test-harness.md`) is the safety net for endpoint-contract
+regressions. **Every commit that adds an HTTP endpoint or changes a
+WebSocket broadcast shape MUST also land at least one harness test**
+for the new surface. Doc-only / refactor-only commits are exempt.
+
+**The test contract per endpoint:**
+
+- One happy-path test that asserts on (a) HTTP status, (b) the
+  JSON response body shape, and (c) the resulting WS broadcast type
+  + the fields the client actually reads.
+- At least one error-path test (400 missing fields, 404 unknown
+  resource, or 409 contract-specific) — pick what's most likely to
+  regress.
+- If the endpoint touches the action-economy (`_mark_battle_economy`,
+  `_is_slot_used`), the test passes `override: true` to bypass the
+  Phase 4 gate (see Phase 1.5 notes in the plan).
+- If the endpoint takes a `target_character_id`, fetch the roster via
+  `/api/campaign/{cid}/roster` and look up by name — don't hardcode
+  character IDs.
+
+**Where it lives:** one file per endpoint, named
+`tests/harness/test_<endpoint>.py`. Look at
+`tests/harness/test_attack.py` for the canonical shape.
+
+**When the harness can't cover it yet:** if the endpoint needs a
+class that isn't in the demo (Paladin / Bard / Druid / etc.), file
+the happy-path test for Phase 2's fixture-character work in the plan
+doc, and ship the **error-path tests this commit anyway**. Error
+paths exercise the contract surface without needing class-specific
+state. See `tests/harness/test_use_lay_on_hands.py` for the pattern.
+
+**The CI workflow** (`.github/workflows/test-harness.yml`) runs the
+suite on every push to `main`/`dev` and every PR against them. A
+regression fails the workflow before merge, not in production.
+
 ## Third-party APIs must be Docker Compose services
 
 When integrating any external API or data service, add it as a named service in
