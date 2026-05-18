@@ -562,6 +562,131 @@ def _cleric_sheet(name: str) -> dict:
     }
 
 
+def _paladin_sheet(name: str) -> dict:
+    """v2.14.0: demo Paladin Lv 5 (Oath of Devotion) for the GM.
+    Added in the Phase A demo-party expansion alongside Brother Tavik
+    so happy-path harness tests for /use_lay_on_hands (shipped without
+    demo coverage in v2.10.0) can finally fire end-to-end. Also pre-
+    populates Channel Divinity (Devotion options ship in a follow-up
+    commit), Divine Sense, Fighting Style: Defense, and the L1-L2
+    Paladin spell slate.
+    """
+    return {
+        "class": "Paladin",
+        "subclass": "Oath of Devotion",
+        "level": 5,
+        "race": "Human",  # standard +1 to all
+        "alignment": "Lawful Good",
+        "background": "Soldier",
+        "abilities": {"STR": 16, "DEX": 10, "CON": 14, "INT": 10, "WIS": 12, "CHA": 16},
+        "ac": 19,  # chain mail 16 + shield 2 + Fighting Style: Defense +1
+        "speed": 30,
+        "hp": {"current": 44, "max": 44, "temp": 0},  # 10 + 4×(6+CON) Lv 5 paladin
+        "initiative_bonus": 0,
+        "proficiency_bonus": 3,
+        "hit_dice": {"current": 5, "max": 5},
+        "class_hit_die": "d10",
+        "class_spellcasting": "CHA",
+        "saving_throws": {"WIS": True, "CHA": True},
+        "skills": {
+            "Persuasion":  {"ability": "CHA", "proficient": True, "expertise": False},
+            "Religion":    {"ability": "INT", "proficient": True, "expertise": False},
+            "Insight":     {"ability": "WIS", "proficient": True, "expertise": False},
+            "Athletics":   {"ability": "STR", "proficient": True, "expertise": False},
+        },
+        "fighting_style": "defense",  # +1 AC while wearing armor
+        "attacks": [
+            {"name": "Longsword", "attack_bonus": "+6", "damage": "1d8+3",
+             "damage_type": "slashing", "range": "5 ft", "desc": "Versatile (1d10). Sir Caelan's family blade."},
+            {"name": "Javelin", "attack_bonus": "+6", "damage": "1d6+3",
+             "damage_type": "piercing", "range": "30/120 ft", "desc": "Thrown finesse — keep a few in the bandolier."},
+        ],
+        # Paladin spells per Oath of Devotion (always prepared) + a few
+        # core picks. Slugs reference the shipped SRD JSON. Casting
+        # times tagged for the v2.5.3 action-economy auto-advance.
+        "spells": [
+            {"name": "Bless", "level": 1, "prepared": True, "_slug": "bless", "casting_time": "1 action"},
+            {"name": "Cure Wounds", "level": 1, "prepared": True, "_slug": "cure-wounds", "casting_time": "1 action"},
+            {"name": "Shield of Faith", "level": 1, "prepared": True, "_slug": "shield-of-faith", "casting_time": "1 bonus action"},
+            {"name": "Protection from Evil and Good", "level": 1, "prepared": True, "_slug": "protection-from-evil-and-good", "casting_time": "1 action",
+             "_subclass_granted": True, "_granted_by": "Oath of Devotion"},
+            {"name": "Sanctuary", "level": 1, "prepared": True, "_slug": "sanctuary", "casting_time": "1 bonus action",
+             "_subclass_granted": True, "_granted_by": "Oath of Devotion"},
+            {"name": "Aid", "level": 2, "prepared": True, "_slug": "aid", "casting_time": "1 action"},
+            {"name": "Lesser Restoration", "level": 2, "prepared": True, "_slug": "lesser-restoration", "casting_time": "1 action",
+             "_subclass_granted": True, "_granted_by": "Oath of Devotion"},
+            {"name": "Zone of Truth", "level": 2, "prepared": True, "_slug": "zone-of-truth", "casting_time": "1 action",
+             "_subclass_granted": True, "_granted_by": "Oath of Devotion"},
+        ],
+        "spell_slots": {
+            "paladin": {
+                "1": {"total": 4, "used": 0},
+                "2": {"total": 2, "used": 0},
+            },
+        },
+        "inventory": [
+            {"name": "Longsword", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d8", "damage_type": "slashing",
+             "properties": "versatile (1d10)", "_slug": "longsword"},
+            {"name": "Javelin", "type": "weapon", "qty": 4,
+             "equippable": True, "equipped": False, "hands": 1,
+             "damage": "1d6", "damage_type": "piercing",
+             "range": "30/120 ft", "properties": "thrown", "_slug": "javelin"},
+            {"name": "Shield", "type": "shield", "qty": 1,
+             "equippable": True, "equipped": True,
+             "ac_value": 2, "_slug": "shield"},
+            {"name": "Chain mail", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": True,
+             "armor_type": "heavy", "ac_value": 16,
+             "_slug": "chain-mail"},
+            {"name": "Holy symbol (amulet)", "type": "gear", "qty": 1,
+             "desc": "Silver disc bearing the sun-and-anvil of the order. Divine focus — replaces material components for paladin spells."},
+            {"name": "Explorer's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, bedroll, mess kit, tinderbox, 10 torches, 10 days rations, waterskin, 50 ft hempen rope."},
+            {"name": "Potion of Healing", "type": "consumable", "qty": 2,
+             "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
+             "_slug": "potion-of-healing",
+             "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
+        ],
+        "feats": [],
+        # v2.14.0: Lay on Hands pool (5 × Lv = 25 HP), Divine Sense
+        # (1 + CHA mod = 4 / long rest), Channel Divinity (1 / short
+        # rest), Cleansing Touch (CHA mod / long rest — locked at Lv 14
+        # but pre-seeded as 0/0 so the Auto-fill flow stays idempotent).
+        "resources": [
+            {
+                "key": "lay-on-hands",
+                "name": "Lay on Hands",
+                "current": 25, "max": 25, "reset": "long",
+                "source": "paladin Lv 1",
+                "class_slug": "paladin",
+                "desc": "Touch-heal pool. Spend HP from the pool to heal a creature you touch. The 5 × Lv pool refreshes on a long rest.",
+                "manual": False,
+            },
+            {
+                "key": "divine-sense",
+                "name": "Divine Sense",
+                "current": 4, "max": 4, "reset": "long",
+                "source": "paladin Lv 1",
+                "class_slug": "paladin",
+                "desc": "Action — detect celestials / fiends / undead within 60 ft until end of next turn. 1 + CHA mod uses per long rest.",
+                "manual": False,
+            },
+            {
+                "key": "channel-divinity",
+                "name": "Channel Divinity",
+                "current": 1, "max": 1, "reset": "short",
+                "source": "paladin Lv 3",
+                "class_slug": "paladin",
+                "subclass_slug": "devotion",
+                "desc": "Channel a domain effect (Sacred Weapon, Turn the Unholy). One use per short rest.",
+                "manual": False,
+            },
+        ],
+    }
+
+
 def seed_characters(
     db: Session, camp: Campaign, users: dict[str, User]
 ) -> list[Character]:
@@ -593,9 +718,22 @@ def seed_characters(
         sheet=_cleric_sheet("Brother Tavik Stonebrow"),
         color="#f5b75c",
     )
-    db.add_all([alice_pc, bob_pc, gm_pc])
+    # v2.14.0: Phase A.1 — demo Paladin (Sir Caelan Lightbringer).
+    # Adds a 4th PC to unlock harness happy-paths for Lay on Hands
+    # (priority #3 / shipped picker in v2.10.0) and queue Channel
+    # Divinity (Devotion) + Divine Smite tests for Phase B-E. Same
+    # GM-owned ownership pattern as Tavik.
+    paladin_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Sir Caelan Lightbringer",
+        template="dnd5e",
+        sheet=_paladin_sheet("Sir Caelan Lightbringer"),
+        color="#e8c14a",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc])
     db.flush()
-    return [alice_pc, bob_pc, gm_pc]
+    return [alice_pc, bob_pc, gm_pc, paladin_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:
@@ -679,6 +817,17 @@ def seed_tokens(
         label=chars[2].name, color="#f5b75c",
         image_url="/static/demo/tokens/cleric.jpg",
         x=420, y=420, size=1,
+    ))
+    # v2.14.0: Phase A.1 — Sir Caelan token. Placed on the front line
+    # slightly ahead of Tavik so the demo's "front-line martial" role
+    # has visible representation. No portrait jpg ships yet; falls
+    # back to the colored ring + label per the token render.
+    tokens.append(Token(
+        map_id=map_.id, character_id=chars[3].id,
+        controller_user_id=users["gm"].id,
+        label=chars[3].name, color="#e8c14a",
+        image_url=None,
+        x=490, y=420, size=1,
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
@@ -1123,27 +1272,31 @@ def seed_encounter(
     GM still needs a "From Map" / "Load encounter" click on first
     visit — that's a separate UX gap.)
     """
-    # Initiative order — pre-rolled, nine entries (3 PCs + 6 NPCs).
+    # Initiative order — pre-rolled, ten entries (4 PCs + 6 NPCs).
     # v2.3.22: Grixxa (Goblin Captain) at the top to showcase the new
     # monster mini-sheet up front.
     # v2.3.25: Brother Tavik (GM's Cleric) added at init 14, between Pip
     # and Thalindra, with the NPC token_idx values shifted by +1 to
     # account for Tavik's token being inserted at index 2 in seed_tokens.
+    # v2.14.0: Sir Caelan (GM's Paladin) added at init 12, between Tavik
+    # and Thalindra; NPC token_idx values shifted by another +1 to
+    # account for Caelan's token at index 3 in seed_tokens.
     # Specs: (token_idx, initiative_roll, hp_max, dex_mod). The remaining
     # combatant fields (id / name / color / image_url / char_id /
     # token_template_id) come from the referenced Token row so the
     # init tracker matches the live token rendering exactly.
     init_specs = [
         # token_idx, init, hp_max, dex_mod
-        (8, 18, 36, 3),   # Grixxa (Goblin Captain)
-        (3, 17, 65, 3),   # Vex (Bandit Captain)
+        (9, 18, 36, 3),   # Grixxa (Goblin Captain)
+        (4, 17, 65, 3),   # Vex (Bandit Captain)
         (0, 15, 33, 3),   # Pip Quickfingers
         (2, 14, 43, 0),   # Brother Tavik Stonebrow
         (1, 13, 27, 2),   # Thalindra Moonwhisper
-        (7, 11, 32, 0),   # Thug
-        (4,  9, 11, 1),   # Bandit Alpha
-        (5,  7, 11, 1),   # Bandit Beta
-        (6,  5, 11, 1),   # Bandit Gamma
+        (3, 12, 44, 0),   # Sir Caelan Lightbringer (v2.14.0)
+        (8, 11, 32, 0),   # Thug
+        (5,  9, 11, 1),   # Bandit Alpha
+        (6,  7, 11, 1),   # Bandit Beta
+        (7,  5, 11, 1),   # Bandit Gamma
     ]
     combatants = []
     for token_idx, init_roll, hp_max, dex_mod in init_specs:
