@@ -99,6 +99,10 @@ async def test_wild_shape_happy_path(gm_client, gm_ws, mira_in_base_form):
     # Wolf's name might be "Wolf" or "wolf" depending on Open5e's
     # case; just verify a non-empty string came back.
     assert isinstance(af.get("name"), str) and af["name"]
+    # v2.14.5: Mira is Circle of the Moon → bonus-action shift.
+    # The endpoint computes the slot and returns it so tests can
+    # verify the resolution without needing a loaded battle state.
+    assert data["economy_slot"] == "bonus"
 
     tu_msg = await gm_ws.wait_for("transform_update")
     assert tu_msg["data"]["character_id"] == mira["id"]

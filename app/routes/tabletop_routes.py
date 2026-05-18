@@ -7134,6 +7134,27 @@ def _ws_cr_cap(druid_level: int, is_moon: bool) -> float:
     return cap
 
 
+def _wild_shape_economy_slot(sheet: dict, source: str) -> str:
+    """Action-economy slot consumed by /transform.
+
+    Default Druid: Wild Shape = 1 action. Circle of the Moon: bonus
+    action (Lv 2 RAW feature). Polymorph the spell: 1 action regardless
+    of caster class — the polymorph "🦌" button on the resources panel
+    is the only path that calls /transform directly without going
+    through /cast_spell, so /transform must mark the chip for it too.
+    """
+    if source == "polymorph":
+        return "action"
+    for c in sheet.get("classes") or []:
+        if not isinstance(c, dict):
+            continue
+        if (c.get("class") or "").strip().lower() != "druid":
+            continue
+        if "moon" in (c.get("subclass") or "").strip().lower():
+            return "bonus"
+    return "action"
+
+
 def _cr_to_float(cr_raw) -> float:
     """Parse '1/4' / '0' / '2' / '1/2' / '' into a float. Returns 0.0 on
     anything unparseable."""
@@ -7437,7 +7458,20 @@ async def transform_character(
         },
     })
 
-    return {"ok": True, "active_form": sheet["active_form"], "sheet": sheet}
+    # Mark the action-economy slot the transform consumed. Moon Druids
+    # spend a bonus action on Wild Shape (Lv 2 RAW); everyone else an
+    # action. Polymorph (the spell) is always an action, regardless of
+    # caster class. ``_mark_battle_economy`` is a no-op when the
+    # campaign has no active battle or the character isn't in init.
+    slot = _wild_shape_economy_slot(sheet, source)
+    await _mark_battle_economy(campaign_id, char.id, slot)
+
+    return {
+        "ok": True,
+        "active_form": sheet["active_form"],
+        "sheet": sheet,
+        "economy_slot": slot,
+    }
 
 
 @router.post("/api/campaign/{campaign_id}/character/{char_id}/revert")

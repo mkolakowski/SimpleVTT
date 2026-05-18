@@ -154,6 +154,14 @@ window._FEATURE_ECONOMY = {
         unlock_level: 2,
         label: 'Wild Shape',
         desc: 'Transform into a beast you have seen before.',
+        // v2.14.5: Wild Shape is routed through the BeastPicker →
+        // /transform endpoint, not /use_feature. /transform computes
+        // the slot server-side via _wild_shape_economy_slot (Moon
+        // Druid → bonus; default → action) and returns it on the
+        // response as ``economy_slot`` for the chip to flip. So the
+        // 'action' literal on this entry is the fallback for
+        // non-Moon flows and the dead-code path if anything ever
+        // looks up Wild Shape via /use_feature.
     },
 
     /* ── Barbarian ───────────────────────────────────────────────── */
