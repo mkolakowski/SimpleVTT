@@ -1,6 +1,6 @@
 # SimpleVTT
 
-> Current version: **2.14.1** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
+> Current version: **2.14.2** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
 
 A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 
@@ -41,6 +41,7 @@ Three accounts, all with the password **`demopass`** (also surfaced on the login
 | **Brother Tavik Stonebrow** | Cleric 5 (Life Domain) | Hill Dwarf | GM | Heavy-armour healer; Warhammer + Sacred Flame; Bless / Cure Wounds / Spirit Guardians (added v2.3.25 to round out the party with divine healing and give the GM a PC mini-sheet to demo from) |
 | **Sir Caelan Lightbringer** | Paladin 5 (Oath of Devotion) | Human | GM | Front-line martial; Longsword + Javelin; Lay on Hands pool 25 HP, Divine Sense 4/long rest, Channel Divinity 1/short rest, Defense Fighting Style (+1 AC). Added v2.14.0 to unlock the Lay on Hands picker (v2.10.0) end-to-end in the demo. |
 | **Lyra Sunstrider** | Bard 5 (College of Lore) | Half-Elf | GM | Charisma face + support caster; Rapier + Hand Crossbow + Vicious Mockery cantrip; Healing Word / Faerie Fire / Suggestion / Hypnotic Pattern / Dispel Magic. Bardic Inspiration 3/short rest at d8 (CHA mod uses, Font of Inspiration short-rest refresh from Lv 5). Added v2.14.1 to unlock the Bardic Inspiration picker (v2.11.0) end-to-end. |
+| **Mira Greenleaf** | Druid 5 (Circle of the Moon) | Wood Elf | GM | Nature caster + Wild Shape combat-druid; Scimitar + Sling + Produce Flame cantrip; Healing Word / Faerie Fire / Moonbeam / Call Lightning / Conjure Animals. Wild Shape 2/short rest with CR-1 cap and bonus-action transform (Circle of the Moon). Added v2.14.2 to set up Wild Shape transform UI work (priority #4 in the class-content roadmap). |
 
 ### NPCs in the Tavern Brawl
 
@@ -68,8 +69,9 @@ The encounter ships with a deterministic initiative order so you can hit "Load e
 7. Sir Caelan Lightbringer — init 12
 8. Thug — init 11
 9. Bandit Alpha — init 9
-10. Bandit Beta — init 7
-11. Bandit Gamma — init 5
+10. Mira Greenleaf — init 8
+11. Bandit Beta — init 7
+12. Bandit Gamma — init 5
 
 ### What gets wiped on reset
 

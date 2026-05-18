@@ -798,6 +798,118 @@ def _bard_sheet(name: str) -> dict:
     }
 
 
+def _druid_sheet(name: str) -> dict:
+    """v2.14.2: demo Druid Lv 5 (Circle of the Moon) for the GM.
+    Added in Phase A.3 to set up the priority #4 Wild Shape work
+    (transform UI completion). Circle of the Moon is the canonical
+    combat-druid subclass — Wild Shape becomes a bonus action and
+    the CR cap rises to 1 at Lv 2, both relevant for the demo's
+    Tavern Brawl encounter. Spell list mixes utility (Faerie Fire,
+    Pass Without Trace) with combat (Moonbeam, Call Lightning).
+    """
+    return {
+        "class": "Druid",
+        "subclass": "Circle of the Moon",
+        "level": 5,
+        "race": "Wood Elf",  # +2 DEX, +1 WIS
+        "alignment": "Neutral Good",
+        "background": "Outlander",
+        "abilities": {"STR": 10, "DEX": 16, "CON": 14, "INT": 10, "WIS": 17, "CHA": 8},
+        "ac": 15,  # studded leather 12 + DEX +3 (druids can't wear metal armor)
+        "speed": 35,  # Wood Elf base 35 (Fleet of Foot)
+        "hp": {"current": 36, "max": 36, "temp": 0},  # 8 + 4×(avg 5 + CON +2)
+        "initiative_bonus": 0,
+        "proficiency_bonus": 3,
+        "hit_dice": {"current": 5, "max": 5},
+        "class_hit_die": "d8",
+        "class_spellcasting": "WIS",
+        "saving_throws": {"INT": True, "WIS": True},
+        "skills": {
+            "Nature":          {"ability": "INT", "proficient": True, "expertise": False},
+            "Animal Handling": {"ability": "WIS", "proficient": True, "expertise": False},
+            "Perception":      {"ability": "WIS", "proficient": True, "expertise": False},
+            "Survival":        {"ability": "WIS", "proficient": True, "expertise": False},
+        },
+        "attacks": [
+            {"name": "Scimitar", "attack_bonus": "+6", "damage": "1d6+3",
+             "damage_type": "slashing", "range": "5 ft", "desc": "Finesse — Mira's curved druidic blade."},
+            {"name": "Sling", "attack_bonus": "+6", "damage": "1d4+3",
+             "damage_type": "bludgeoning", "range": "30/120 ft", "desc": "Simple ranged option for when Wild Shape isn't on the table."},
+            {"name": "Produce Flame (cantrip)", "attack_bonus": "+6", "damage": "1d8",
+             "damage_type": "fire", "range": "30 ft", "desc": "Hurl flame as a ranged spell attack; scales to 2d8 at Lv 5."},
+        ],
+        # Lv 5 druid prepares WIS mod + level = 3 + 5 = 8 spells.
+        # ``casting_time`` tagged for the v2.5.3 action-economy.
+        "spells": [
+            {"name": "Druidcraft",      "level": 0, "prepared": True, "_slug": "druidcraft", "casting_time": "1 action"},
+            {"name": "Produce Flame",   "level": 0, "prepared": True, "_slug": "produce-flame", "casting_time": "1 action"},
+            {"name": "Shillelagh",      "level": 0, "prepared": True, "_slug": "shillelagh", "casting_time": "1 bonus action"},
+            {"name": "Healing Word",    "level": 1, "prepared": True, "_slug": "healing-word", "casting_time": "1 bonus action"},
+            {"name": "Cure Wounds",     "level": 1, "prepared": True, "_slug": "cure-wounds", "casting_time": "1 action"},
+            {"name": "Faerie Fire",     "level": 1, "prepared": True, "_slug": "faerie-fire", "casting_time": "1 action"},
+            {"name": "Moonbeam",        "level": 2, "prepared": True, "_slug": "moonbeam", "casting_time": "1 action",
+             "_subclass_granted": True, "_granted_by": "Circle of the Moon"},
+            {"name": "Pass Without Trace", "level": 2, "prepared": True, "_slug": "pass-without-trace", "casting_time": "1 action"},
+            {"name": "Heat Metal",      "level": 2, "prepared": True, "_slug": "heat-metal", "casting_time": "1 action"},
+            {"name": "Call Lightning",  "level": 3, "prepared": True, "_slug": "call-lightning", "casting_time": "1 action"},
+            {"name": "Conjure Animals", "level": 3, "prepared": True, "_slug": "conjure-animals", "casting_time": "1 action"},
+        ],
+        "spell_slots": {
+            "druid": {
+                "1": {"total": 4, "used": 0},
+                "2": {"total": 3, "used": 0},
+                "3": {"total": 2, "used": 0},
+            },
+        },
+        "inventory": [
+            {"name": "Scimitar", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d6", "damage_type": "slashing",
+             "properties": "finesse, light", "_slug": "scimitar"},
+            {"name": "Sling", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d4", "damage_type": "bludgeoning",
+             "range": "30/120 ft", "properties": "ammunition", "_slug": "sling"},
+            {"name": "Studded leather", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": True,
+             "armor_type": "light", "ac_value": 12,
+             "_slug": "studded-leather"},
+            {"name": "Wooden shield", "type": "shield", "qty": 1,
+             "equippable": True, "equipped": False,
+             "ac_value": 2, "_slug": "shield",
+             "desc": "Hand-carved oak with carved leaf motif. Mira keeps it slung in case Wild Shape isn't available."},
+            {"name": "Druidic focus (sprig of mistletoe)", "type": "gear", "qty": 1,
+             "desc": "Required spellcasting focus — replaces material components for druid spells."},
+            {"name": "Explorer's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, bedroll, mess kit, tinderbox, 10 torches, 10 days rations, waterskin, 50 ft hempen rope."},
+            {"name": "Herbalism kit", "type": "gear", "qty": 1,
+             "desc": "Pouches, mortar + pestle, dried herbs. Proficient (druid)."},
+            {"name": "Potion of Healing", "type": "consumable", "qty": 1,
+             "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
+             "_slug": "potion-of-healing",
+             "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
+        ],
+        "feats": [],
+        # v2.14.2: Wild Shape uses = 2/short rest at Lv 2 (Lv 18 unlimited).
+        # Circle of the Moon raises the CR cap to 1 and lets the
+        # transform fire as a bonus action — both Phase B work to
+        # surface in the transform UI. Counter exists today so the
+        # mini-sheet renders the chip.
+        "resources": [
+            {
+                "key": "wild-shape",
+                "name": "Wild Shape",
+                "current": 2, "max": 2, "reset": "short",
+                "source": "druid Lv 2 / Circle of the Moon",
+                "class_slug": "druid",
+                "subclass_slug": "moon",
+                "desc": "Transform into a beast you've seen. Circle of the Moon: bonus-action shift, CR cap 1 at Lv 2 (scales with druid level). Two uses per short rest.",
+                "manual": False,
+            },
+        ],
+    }
+
+
 def seed_characters(
     db: Session, camp: Campaign, users: dict[str, User]
 ) -> list[Character]:
@@ -855,9 +967,23 @@ def seed_characters(
         sheet=_bard_sheet("Lyra Sunstrider"),
         color="#d977b8",
     )
-    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc])
+    # v2.14.2: Phase A.3 — demo Druid (Mira Greenleaf). 6th PC.
+    # Sets up Phase B Wild Shape work (priority #4). Circle of the
+    # Moon for combat-relevant Wild Shape (CR 1 cap at Lv 2, bonus-
+    # action shift). After this commit the demo party is "6 PCs vs
+    # 6 NPCs" — the Tavern Brawl encounter may want a 7th NPC for
+    # tension; filed for the next demo-data commit.
+    druid_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Mira Greenleaf",
+        template="dnd5e",
+        sheet=_druid_sheet("Mira Greenleaf"),
+        color="#4d9d6d",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc])
     db.flush()
-    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc]
+    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:
@@ -963,6 +1089,17 @@ def seed_tokens(
         label=chars[4].name, color="#d977b8",
         image_url=None,
         x=350, y=420, size=1,
+    ))
+    # v2.14.2: Phase A.3 — Mira token. Druid stays at the northern
+    # edge of the party — close enough for healing spells, far enough
+    # to drop Moonbeam without catching allies in the AoE. (350, 350)
+    # is one cell above Lyra.
+    tokens.append(Token(
+        map_id=map_.id, character_id=chars[5].id,
+        controller_user_id=users["gm"].id,
+        label=chars[5].name, color="#4d9d6d",
+        image_url=None,
+        x=350, y=350, size=1,
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
@@ -1407,29 +1544,30 @@ def seed_encounter(
     GM still needs a "From Map" / "Load encounter" click on first
     visit — that's a separate UX gap.)
     """
-    # Initiative order — pre-rolled, eleven entries (5 PCs + 6 NPCs).
+    # Initiative order — pre-rolled, twelve entries (6 PCs + 6 NPCs).
     # v2.3.22: Grixxa (Goblin Captain) at the top to showcase the new
     # monster mini-sheet up front.
     # v2.3.25: Brother Tavik (GM's Cleric) added at init 14.
-    # v2.14.0: Sir Caelan (GM's Paladin) added at init 12. NPC token
-    # indices +1 to account for Caelan at tokens[3].
-    # v2.14.1: Lyra Sunstrider (GM's Bard) added at init 16, between
-    # Vex (17) and Pip (15). NPC token indices +1 again to account
-    # for Lyra at tokens[4].
+    # v2.14.0: Sir Caelan (GM's Paladin) added at init 12.
+    # v2.14.1: Lyra Sunstrider (GM's Bard) added at init 16.
+    # v2.14.2: Mira Greenleaf (GM's Druid) added at init 8, between
+    # Bandit Alpha (9) and Bandit Beta (7). NPC token indices +1
+    # again to account for Mira at tokens[5].
     # Specs: (token_idx, initiative_roll, hp_max, dex_mod).
     init_specs = [
         # token_idx, init, hp_max, dex_mod
-        (10, 18, 36, 3),   # Grixxa (Goblin Captain)
-        (5,  17, 65, 3),   # Vex (Bandit Captain)
+        (11, 18, 36, 3),   # Grixxa (Goblin Captain)
+        (6,  17, 65, 3),   # Vex (Bandit Captain)
         (4,  16, 33, 2),   # Lyra Sunstrider (v2.14.1)
         (0,  15, 33, 3),   # Pip Quickfingers
         (2,  14, 43, 0),   # Brother Tavik Stonebrow
         (1,  13, 27, 2),   # Thalindra Moonwhisper
         (3,  12, 44, 0),   # Sir Caelan Lightbringer (v2.14.0)
-        (9,  11, 32, 0),   # Thug
-        (6,   9, 11, 1),   # Bandit Alpha
-        (7,   7, 11, 1),   # Bandit Beta
-        (8,   5, 11, 1),   # Bandit Gamma
+        (10, 11, 32, 0),   # Thug
+        (7,   9, 11, 1),   # Bandit Alpha
+        (5,   8, 36, 3),   # Mira Greenleaf (v2.14.2)
+        (8,   7, 11, 1),   # Bandit Beta
+        (9,   5, 11, 1),   # Bandit Gamma
     ]
     combatants = []
     for token_idx, init_roll, hp_max, dex_mod in init_specs:
