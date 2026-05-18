@@ -6353,11 +6353,15 @@ async def use_cutting_words(
     triggered the reaction (no roll-time intercept infrastructure yet
     — see the plan doc's (B) infrastructure note).
 
-    Body: ``{character_id, target_character_id?, override?}``.
-    ``target_character_id`` is optional: when supplied, the broadcast
-    names the target; when omitted, the announce reads "from a
-    creature's roll" generically. Die scaling matches Bardic
-    Inspiration: d6 (Lv 1-4), d8 (Lv 5-9), d10 (Lv 10-14), d12 (Lv 15+).
+    Body: ``{character_id, target_character_id?, target_name?, override?}``.
+    Target resolution order (v2.15.10+): if ``target_character_id`` is
+    supplied AND resolves to a Character row, use that Character's name
+    in the broadcast. Else if ``target_name`` is supplied (free-form
+    string from the picker for NPC tokens that don't have a Character
+    row — bandits, monsters spawned via token_template), use it
+    verbatim. Else announce reads "from a creature's roll" generically.
+    Die scaling matches Bardic Inspiration: d6 (Lv 1-4), d8 (Lv 5-9),
+    d10 (Lv 10-14), d12 (Lv 15+).
 
     Phase 4 over-budget gate on the reaction slot (RAW: 1 reaction).
     Mirrors the /use_bardic_inspiration pattern for resource decrement
@@ -6367,6 +6371,8 @@ async def use_cutting_words(
     char_id = int(body.get("character_id") or 0)
     target_id_raw = body.get("target_character_id")
     target_id = int(target_id_raw) if target_id_raw else 0
+    target_name_raw = body.get("target_name")
+    target_name_str = str(target_name_raw).strip()[:80] if target_name_raw else ""
     override = bool(body.get("override"))
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
@@ -6484,9 +6490,19 @@ async def use_cutting_words(
     )
     caster_color = char.color or player_color
 
+    # Resolve the display name. Character lookup wins if it returned
+    # a row; otherwise the picker's free-form target_name (an NPC token
+    # like "Bandit Alpha") falls through to the broadcast text.
     if target:
-        feature_name = f"🎭 Cutting Words → -{rolled} from {target.name}'s roll"
-        target_phrase = target.name
+        display_name = target.name
+    elif target_name_str:
+        display_name = target_name_str
+    else:
+        display_name = ""
+
+    if display_name:
+        feature_name = f"🎭 Cutting Words → -{rolled} from {display_name}'s roll"
+        target_phrase = display_name
     else:
         feature_name = f"🎭 Cutting Words → -{rolled} from a creature's roll"
         target_phrase = "a creature"
@@ -6527,7 +6543,7 @@ async def use_cutting_words(
         "rolled": rolled,
         "breakdown": breakdown,
         "target_id": target.id if target else None,
-        "target_name": target.name if target else None,
+        "target_name": display_name or None,
         "remaining": cur - 1,
         "over_budget": was_used,
     }

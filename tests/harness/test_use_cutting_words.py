@@ -89,10 +89,9 @@ async def test_cutting_words_happy_path(gm_client, gm_ws, lyra_full_bi, roster):
 
 
 async def test_cutting_words_no_target(gm_client, gm_ws, lyra_full_bi):
-    """target_character_id is optional. When omitted, response carries
-    target_name=None and the broadcast reads "from a creature's roll"
-    generically. This matches the NPC-not-in-roster case (an enemy
-    bandit on the encounter's token list but not a Character row).
+    """target_character_id and target_name both absent. Response
+    carries target_name=None and the broadcast reads "from a
+    creature's roll" generically.
     """
     lyra = lyra_full_bi
     gm_ws.mark()  # discard the fixture's long-rest broadcasts
@@ -109,6 +108,59 @@ async def test_cutting_words_no_target(gm_client, gm_ws, lyra_full_bi):
 
     msg = await gm_ws.wait_for("feature_used")
     assert "creature's roll" in msg["data"]["feature_name"]
+
+
+async def test_cutting_words_target_name_fallback(gm_client, gm_ws, lyra_full_bi):
+    """v2.15.10: target_name is the free-form fallback for NPC tokens
+    that don't have a Character row (e.g. bandits spawned via the
+    token_template path). When the picker passes target_name without
+    target_character_id, the broadcast names that creature instead of
+    falling through to "a creature's roll" generic text.
+    """
+    lyra = lyra_full_bi
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_cutting_words",
+        json={
+            "character_id": lyra["id"],
+            "target_name": "Bandit Alpha",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["target_id"] is None
+    assert data["target_name"] == "Bandit Alpha"
+
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Bandit Alpha" in msg["data"]["feature_name"]
+    assert "creature's roll" not in msg["data"]["feature_name"]
+
+
+async def test_cutting_words_target_character_id_wins(gm_client, gm_ws, lyra_full_bi, roster):
+    """When BOTH target_character_id and target_name are supplied, the
+    Character row's name wins (defense against the picker passing a
+    stale label that doesn't match the canonical Character.name).
+    """
+    lyra = lyra_full_bi
+    pip = roster["Pip Quickfingers"]
+    gm_ws.mark()
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_cutting_words",
+        json={
+            "character_id": lyra["id"],
+            "target_character_id": pip["id"],
+            "target_name": "Wrong Label",  # would be ignored
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["target_name"] == "Pip Quickfingers"
+
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Pip Quickfingers" in msg["data"]["feature_name"]
+    assert "Wrong Label" not in msg["data"]["feature_name"]
 
 
 async def test_cutting_words_missing_character_id(gm_client):

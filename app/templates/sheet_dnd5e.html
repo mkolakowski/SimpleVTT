@@ -4345,13 +4345,67 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // rolls the BI die server-side + decrements the
                     // Bardic Inspiration resource + marks the reaction
                     // slot + announces with the rolled value.
+                    // v2.15.10: Cutting Words also opens a target picker
+                    // first (every token on the active map, minus the
+                    // caster) so the announce names a specific target
+                    // instead of the generic "a creature's roll". The
+                    // picker's choice flows into either target_character_id
+                    // (when the token has a Character row) or target_name
+                    // (NPC tokens with no Character row).
                     const isCuttingWords = featureKey === 'cutting-words';
+
+                    // Resolve the cutting-words target via the picker
+                    // BEFORE building the fetch closure. Awaiting the
+                    // picker here lets us drop into the same retry-with-
+                    // override flow that other features use.
+                    let cwTargetCharacterId = null;
+                    let cwTargetName = null;
+                    if (isCuttingWords && typeof window.showTargetPicker === 'function') {
+                        let tokens = [];
+                        try {
+                            const tResp = await fetch(`/api/campaign/${CAMPAIGN_ID}/tokens`);
+                            if (tResp.ok) {
+                                const tData = await tResp.json();
+                                tokens = tData.tokens || [];
+                            }
+                        } catch (e) { /* fall through to generic announce */ }
+                        const candidates = tokens
+                            .filter(t => t.character_id !== MY_CHAR_ID)
+                            .map(t => ({
+                                id: t.id,                          // Token.id (NOT Character.id)
+                                name: t.label || 'Unnamed token',
+                                color: t.color,
+                                portrait_url: t.image_url,
+                                _character_id: t.character_id,     // captured below at pick time
+                            }));
+                        if (candidates.length) {
+                            const picked = await new Promise(resolve => {
+                                window.showTargetPicker({
+                                    title: '🎭 Cutting Words — pick a target',
+                                    subtitle: 'Reaction: subtract 1d{N} from this creature\'s next attack roll, ability check, or damage roll.',
+                                    candidates,
+                                    onPick: resolve,
+                                    onCancel: () => resolve(null),
+                                });
+                            });
+                            if (picked === null) {
+                                // Player cancelled the picker — don't fire.
+                                btn.disabled = false;
+                                return;
+                            }
+                            cwTargetCharacterId = picked._character_id || null;
+                            cwTargetName = picked.name;
+                        }
+                    }
+
                     const endpoint = isCuttingWords ? 'use_cutting_words' : 'use_feature';
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(isCuttingWords ? {
                             character_id: MY_CHAR_ID,
+                            target_character_id: cwTargetCharacterId,
+                            target_name: cwTargetName,
                             override: !!override,
                         } : {
                             character_id: MY_CHAR_ID,
