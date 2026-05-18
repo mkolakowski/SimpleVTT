@@ -3688,6 +3688,57 @@ async def move_token(
     return {"ok": True, "distance_ft": distance_ft}
 
 
+@router.get("/api/campaign/{campaign_id}/tokens")
+def list_tokens(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Return the campaign's tokens on its active map. Shipped in
+    v2.12.1 primarily for the test harness's /move tests (which need
+    token IDs + positions to assert on distance_ft), but useful as a
+    general-purpose JSON-friendly token endpoint too.
+
+    Shape per entry: ``{id, label, x, y, size, color, image_url,
+    character_id, token_template_id, controller_user_id, is_hidden}``.
+    Hidden tokens are filtered out for non-GM viewers — same rule the
+    tabletop page already applies at render time.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    # The "active map" lives on the campaign, not as a flag on the map
+    # itself — pattern mirrors how the tabletop page render fetches it.
+    map_row = (
+        db.query(Map).filter(Map.id == campaign.active_map_id).first()
+        if campaign.active_map_id else None
+    )
+    if not map_row:
+        return {"tokens": []}
+    is_gm = _user_is_gm(user, campaign, db)
+    tokens = db.query(Token).filter(Token.map_id == map_row.id).all()
+    out = []
+    for t in tokens:
+        if t.is_hidden and not is_gm:
+            continue
+        out.append({
+            "id": t.id,
+            "label": t.label,
+            "x": float(t.x or 0),
+            "y": float(t.y or 0),
+            "size": t.size,
+            "color": t.color,
+            "image_url": t.image_url,
+            "character_id": t.character_id,
+            "token_template_id": t.token_template_id,
+            "controller_user_id": t.controller_user_id,
+            "is_hidden": bool(t.is_hidden),
+        })
+    return {"tokens": out, "map_id": map_row.id,
+            "grid_size_px": map_row.grid_size_px,
+            "grid_type": map_row.grid_type.value if map_row.grid_type else "square"}
+
+
 @router.post("/api/campaign/{campaign_id}/tokens")
 async def create_token(
     campaign_id: int,
