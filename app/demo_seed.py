@@ -1085,6 +1085,187 @@ def _monk_sheet(name: str) -> dict:
     }
 
 
+def _sorcerer_sheet(name: str) -> dict:
+    """v2.18.1: demo Sorcerer Lv 5 (Draconic Bloodline / Red Dragon)
+    for the GM. Added in Phase A.6 to unlock per-feature work for
+    Font of Magic SP↔slot conversion (curated table entry from
+    v2.16.2 with slot:'free') + Metamagic (Quickened Spell from
+    v2.6.0 + Twinned Spell follow-up) + Draconic Bloodline's
+    Elemental Affinity (Lv 6, deferred). Tiefling for the canonical
+    "CHA + Hellish Resistance + 1/long-rest infernal spells" build.
+    Color `#c4452a` (rust / burnt orange) for fire-themed Red Dragon
+    flavor — distinct from every existing palette.
+    """
+    return {
+        "class": "Sorcerer",
+        "subclass": "Draconic Bloodline",  # Red Dragon ancestor
+        "level": 5,
+        "race": "Tiefling",  # +2 CHA, +1 INT, Hellish Resistance (fire), Infernal Legacy
+        "alignment": "Chaotic Good",
+        "background": "Charlatan",
+        # Rolled stats post-racial: STR 8 / DEX 14 / CON 14 / INT 11 /
+        # WIS 12 / CHA 17. Tiefling +2 CHA (→ 17) + +1 INT (→ 11)
+        # from pre-racial 15 CHA + 10 INT.
+        "abilities": {"STR": 8, "DEX": 14, "CON": 14, "INT": 11, "WIS": 12, "CHA": 17},
+        # Draconic Resilience: AC = 13 + DEX mod when unarmored. So
+        # 13 + 2 = 15. Sorcerer's no-armor default would be 12
+        # (10 + DEX); Draconic Resilience makes Zara surprisingly
+        # tanky without armor.
+        "ac": 15,
+        "speed": 30,
+        # Lv 1 max d6 (6) + 4× avg d6 (4) + CON +2 × 5 = 6 + 16 + 10 = 32,
+        # plus Draconic Resilience +1 HP / sorcerer level = +5. Total 37.
+        "hp": {"current": 37, "max": 37, "temp": 0},
+        "initiative_bonus": 2,  # DEX 14 mod
+        "proficiency_bonus": 3,
+        "hit_dice": {"current": 5, "max": 5},
+        "class_hit_die": "d6",
+        "class_spellcasting": "CHA",
+        # Sorcerer prof saves are CON + CHA.
+        "saving_throws": {"CON": True, "CHA": True},
+        # Charlatan background grants Deception + Sleight of Hand;
+        # Sorcerer Lv 1 picks two from a curated list (Arcana + Persuasion).
+        "skills": {
+            "Arcana":         {"ability": "INT", "proficient": True, "expertise": False},
+            "Persuasion":     {"ability": "CHA", "proficient": True, "expertise": False},
+            "Deception":      {"ability": "CHA", "proficient": True, "expertise": False},
+            "Sleight of Hand": {"ability": "DEX", "proficient": True, "expertise": False},
+        },
+        # Sorcerer Lv 5 known cantrips = 5; known leveled spells = 6.
+        # Draconic Bloodline's Lv 1 feature picks a draconic ancestor
+        # (Red = fire); the curated subclass-spell table in
+        # app/static/dnd5e_subclass_spells.js doesn't grant bonus
+        # spells for Draconic Bloodline RAW (the Bloodline grants
+        # passive features, not spell prep). Sorcerers also know
+        # Tiefling's Infernal Legacy spells separately (Thaumaturgy
+        # cantrip, Hellish Rebuke 1/long, Darkness 1/long).
+        "attacks": [
+            {"name": "Dagger", "attack_bonus": "+5", "damage": "1d4+2",
+             "damage_type": "piercing", "range": "20/60 ft",
+             "desc": "Finesse, light, thrown. DEX-based melee + ranged option."},
+            {"name": "Fire Bolt (cantrip)", "attack_bonus": "+6", "damage": "2d10",
+             "damage_type": "fire", "range": "120 ft",
+             "desc": "Ranged spell attack. Cantrip damage scales: 1d10 at Lv 1, 2d10 at Lv 5. Red Dragon Bloodline doesn't grant Fire Bolt for free RAW; Zara picked it as one of her 5 cantrips."},
+        ],
+        # Lv 5 Sorcerer: 5 cantrips known + 6 leveled spells known.
+        # Tiefling's Thaumaturgy cantrip is racial (free, doesn't count
+        # toward the 5 known). Hellish Rebuke + Darkness are 1/long-
+        # rest racial spells (tracked via resource counters below).
+        "spells": [
+            {"name": "Fire Bolt", "level": 0, "prepared": True, "_slug": "fire-bolt", "casting_time": "1 action"},
+            {"name": "Mage Hand", "level": 0, "prepared": True, "_slug": "mage-hand", "casting_time": "1 action"},
+            {"name": "Minor Illusion", "level": 0, "prepared": True, "_slug": "minor-illusion", "casting_time": "1 action"},
+            {"name": "Prestidigitation", "level": 0, "prepared": True, "_slug": "prestidigitation", "casting_time": "1 action"},
+            {"name": "Shocking Grasp", "level": 0, "prepared": True, "_slug": "shocking-grasp", "casting_time": "1 action"},
+            {"name": "Thaumaturgy", "level": 0, "prepared": True, "_slug": "thaumaturgy",
+             "casting_time": "1 action", "_racial_granted": True, "_granted_by": "Tiefling"},
+            {"name": "Shield", "level": 1, "prepared": True, "_slug": "shield", "casting_time": "1 reaction"},
+            {"name": "Magic Missile", "level": 1, "prepared": True, "_slug": "magic-missile", "casting_time": "1 action"},
+            {"name": "Burning Hands", "level": 1, "prepared": True, "_slug": "burning-hands", "casting_time": "1 action"},
+            {"name": "Mirror Image", "level": 2, "prepared": True, "_slug": "mirror-image", "casting_time": "1 action"},
+            {"name": "Scorching Ray", "level": 2, "prepared": True, "_slug": "scorching-ray", "casting_time": "1 action"},
+            {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball", "casting_time": "1 action"},
+        ],
+        # Lv 5 Sorcerer slots per the Sorcerer table.
+        "spell_slots": {
+            "sorcerer": {
+                "1": {"total": 4, "used": 0},
+                "2": {"total": 3, "used": 0},
+                "3": {"total": 2, "used": 0},
+            },
+        },
+        "inventory": [
+            {"name": "Dagger", "type": "weapon", "qty": 2,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d4", "damage_type": "piercing",
+             "range": "20/60 ft", "properties": "finesse, light, thrown",
+             "_slug": "dagger"},
+            {"name": "Component pouch", "type": "gear", "qty": 1,
+             "desc": "Required spellcasting focus for spells with material components."},
+            {"name": "Dungeoneer's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, crowbar, hammer, 10 pitons, 10 torches, tinderbox, 10 days rations, waterskin, 50 ft hempen rope."},
+            {"name": "Marked deck of cards", "type": "gear", "qty": 1,
+             "desc": "Charlatan background trinket — Zara's old grift kit. Cosmetic."},
+            {"name": "Potion of Healing", "type": "consumable", "qty": 1,
+             "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
+             "_slug": "potion-of-healing",
+             "desc": "Drink to regain 2d4+2 HP. RAW: action."},
+        ],
+        "feats": [],
+        # v2.18.1: Sorcerer Lv 5 resources. sorcery-points (max = sorcerer
+        # level = 5); refreshes on long rest. Tiefling racial spells
+        # Hellish Rebuke + Darkness are 1/long-rest each. Future
+        # commit ships the dedicated /use_font_of_magic endpoint
+        # (atomic SP↔slot conversion picker, mirrors the v2.16.1
+        # /use_arcane_recovery shape).
+        "resources": [
+            {
+                "key": "sorcery-points",
+                "name": "Sorcery Points",
+                "current": 5, "max": 5, "reset": "long",
+                "source": "sorcerer Lv 2 / Font of Magic",
+                "class_slug": "sorcerer",
+                "desc": "Spend to fuel Metamagic + convert to/from spell slots via Font of Magic. Refreshes on long rest. (Lv 20 Sorcerous Restoration refills 4 SP on short rest — not yet at Lv 5.)",
+                "manual": False,
+            },
+            {
+                "key": "hellish-rebuke",
+                "name": "Hellish Rebuke (racial)",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "Tiefling Infernal Legacy",
+                "class_slug": "tiefling",
+                "desc": "Reaction (Tiefling Lv 3+): cast Hellish Rebuke L2 (3d10 fire, DEX save half) when you take damage from a creature within 60 ft you can see. 1/long rest.",
+                "manual": False,
+            },
+            {
+                "key": "darkness-racial",
+                "name": "Darkness (racial)",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "Tiefling Infernal Legacy",
+                "class_slug": "tiefling",
+                "desc": "Action (Tiefling Lv 5+): cast Darkness without expending a spell slot. 1/long rest.",
+                "manual": False,
+            },
+        ],
+        # v2.18.1: clickable class-feature buttons in the Class abilities
+        # panel. font-of-magic is the announce-only entry today
+        # (curated `slot: 'free'` since v2.16.2); the dedicated
+        # /use_font_of_magic endpoint that handles SP↔slot conversion
+        # picker is a future per-feature commit. Quickened Spell is
+        # a metamagic (slot: 'bonus' per the curated table); clicking
+        # it announces "Quickened Spell" + flips the Bns chip — the
+        # player still casts the actual spell separately via the spell
+        # browser. Metamagic picker UI (which metamagic options does
+        # Zara know?) is filed; she's marked as knowing Quickened
+        # Spell + Twinned Spell per Lv 3 choice but only Quickened
+        # appears as a Class abilities button until twinned-spell
+        # lands its own curated entry.
+        "class_features": [
+            {
+                "key": "font-of-magic",
+                "name": "Font of Magic",
+                "desc": "Convert spell slots ↔ sorcery points. Costs: 2/3/5/6/7 SP per L1/L2/L3/L4/L5 slot; slot → SP at the slot level (L3 slot → 3 SP).",
+            },
+            {
+                "key": "quickened-spell",
+                "name": "Quickened Spell (metamagic)",
+                "desc": "Spend 2 sorcery points: change a 1-action spell's casting time to 1 bonus action this turn.",
+            },
+        ],
+        # Sorcerer's Metamagic at Lv 3 picks 2 options. Zara's picks:
+        # Quickened Spell (curated entry in `_FEATURE_ECONOMY`) +
+        # Twinned Spell (not yet curated; future commit). Stored on
+        # the sheet as a hint for the (future) metamagic picker.
+        "_metamagic_options": ["quickened-spell", "twinned-spell"],
+        # Draconic Bloodline subclass picks an ancestor at Lv 1.
+        # Red = fire (matches Tiefling's flame motif + Hellish
+        # Resistance). Elemental Affinity (Lv 6) is deferred until
+        # a level-bump fixture, but the ancestor tag is on the
+        # sheet for future feature gates.
+        "_draconic_ancestor": "red",
+    }
+
+
 def _fighter_sheet(name: str) -> dict:
     """v2.17.0: demo Fighter Lv 5 (Champion) for the GM. Added in
     Phase A.4 to unlock per-feature work for Second Wind / Action
@@ -1314,9 +1495,28 @@ def seed_characters(
         sheet=_monk_sheet("Kael Brightleaf"),
         color="#ff8c42",
     )
-    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc])
+    # v2.18.1: Phase A.6 — demo Sorcerer (Zara Emberfire). 9th PC.
+    # Draconic Bloodline (Red Dragon), Lv 5, Tiefling. CHA 17 with
+    # 6 leveled spells (Magic Missile / Burning Hands / Mirror Image
+    # / Scorching Ray / Fireball / Shield). Sorcery Points 5/5 long-
+    # rest + Tiefling racial Hellish Rebuke + Darkness 1/long each.
+    # Unblocks Phase B work for Font of Magic SP↔slot conversion
+    # picker (curated since v2.16.2 with slot:'free') + Metamagic
+    # picker (Quickened Spell curated since v2.6.0; Twinned Spell
+    # follow-up). Demo party is now 9 PCs vs 6 NPCs — Tavern Brawl
+    # is solidly player-favored; an encounter-rebalance commit
+    # (extra NPCs) is filed but doesn't block.
+    sorcerer_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Zara Emberfire",
+        template="dnd5e",
+        sheet=_sorcerer_sheet("Zara Emberfire"),
+        color="#c4452a",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc])
     db.flush()
-    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc]
+    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:
@@ -1456,6 +1656,18 @@ def seed_tokens(
         label=chars[7].name, color="#ff8c42",
         image_url=None,
         x=490, y=490, size=1,
+    ))
+    # v2.18.1: Phase A.6 — Zara Emberfire token. Sorcerer stays back
+    # with the support casters; placed at (280, 490) one cell west of
+    # Pip so the back-line caster row reads "Mira (350,350), Lyra
+    # (350,420), Thalindra (420,560), Zara (280,490)" — clustered
+    # left + south, well back from the front-line martials.
+    tokens.append(Token(
+        map_id=map_.id, character_id=chars[8].id,
+        controller_user_id=users["gm"].id,
+        label=chars[8].name, color="#c4452a",
+        image_url=None,
+        x=280, y=490, size=1,
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
@@ -1912,26 +2124,31 @@ def seed_encounter(
     # 19 — top of the order at that point.
     # v2.18.0: Kael Brightleaf (GM's Monk, Way of the Open Hand)
     # added at init 20 — top of the order with DEX 18 / +4 init mod
-    # rolled high. NPC token indices +1 again (Vex 7→8, Bandit
-    # Alpha 8→9, Bandit Beta 9→10, Bandit Gamma 10→11, Thug 11→12,
-    # Grixxa 12→13) since Kael lands at tokens[7].
+    # rolled high.
+    # v2.18.1: Zara Emberfire (GM's Sorcerer, Draconic Bloodline)
+    # added at init 10 — middle of the order with DEX 14 / +2 init
+    # mod rolled average. Slots in between Thug (11) and Bandit
+    # Alpha (9). NPC token indices +1 again (Vex 8→9, Bandit Alpha
+    # 9→10, Bandit Beta 10→11, Bandit Gamma 11→12, Thug 12→13,
+    # Grixxa 13→14) since Zara lands at tokens[8].
     # Specs: (token_idx, initiative_roll, hp_max, dex_mod).
     init_specs = [
         # token_idx, init, hp_max, dex_mod
         (7,  20, 38, 4),   # Kael Brightleaf (v2.18.0)
         (6,  19, 49, 2),   # Garrik Ironside (v2.17.0)
-        (13, 18, 36, 3),   # Grixxa (Goblin Captain)
-        (8,  17, 65, 3),   # Vex (Bandit Captain)
+        (14, 18, 36, 3),   # Grixxa (Goblin Captain)
+        (9,  17, 65, 3),   # Vex (Bandit Captain)
         (4,  16, 33, 2),   # Lyra Sunstrider (v2.14.1)
         (0,  15, 33, 3),   # Pip Quickfingers
         (2,  14, 43, 0),   # Brother Tavik Stonebrow
         (1,  13, 27, 2),   # Thalindra Moonwhisper
         (3,  12, 44, 0),   # Sir Caelan Lightbringer (v2.14.0)
-        (12, 11, 32, 0),   # Thug
-        (9,   9, 11, 1),   # Bandit Alpha
+        (13, 11, 32, 0),   # Thug
+        (8,  10, 37, 2),   # Zara Emberfire (v2.18.1)
+        (10,  9, 11, 1),   # Bandit Alpha
         (5,   8, 36, 3),   # Mira Greenleaf (v2.14.2)
-        (10,  7, 11, 1),   # Bandit Beta
-        (11,  5, 11, 1),   # Bandit Gamma
+        (11,  7, 11, 1),   # Bandit Beta
+        (12,  5, 11, 1),   # Bandit Gamma
     ]
     combatants = []
     for token_idx, init_roll, hp_max, dex_mod in init_specs:
