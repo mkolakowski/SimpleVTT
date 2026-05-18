@@ -424,7 +424,24 @@ def _wizard_sheet(name: str) -> dict:
              "properties": "finesse, light", "_slug": "dagger"},
         ],
         "feats": [],
-        "resources": [],
+        # v2.16.1: Arcane Recovery counter (Wizard Lv 1 feature). Once per
+        # day during a short rest, Thalindra can restore spell slots whose
+        # combined level ≤ ceil(wizard_lv/2) — at Lv 5 that's 3 slot
+        # levels (e.g., 3× L1, 1× L1 + 1× L2, 1× L3, etc.; L6+ slots are
+        # not eligible). The resource ⚡ Use button opens a slot-restore
+        # modal; /use_arcane_recovery decrements this counter + restores
+        # the picked slots atomically.
+        "resources": [
+            {
+                "key": "arcane-recovery",
+                "name": "Arcane Recovery",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "wizard Lv 1",
+                "class_slug": "wizard",
+                "desc": "Once per day during a short rest, regain spell slots whose combined level ≤ ⌈wizard_lv/2⌉ (3 levels at Lv 5). L6+ slots aren't eligible.",
+                "manual": False,
+            },
+        ],
     }
 
 

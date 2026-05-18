@@ -6867,6 +6867,171 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             // ⚡ Use POSTs /use_feature for the roll-log card + chip flip,
             // then decrements the counter. No picker, no target — RAW
             // doesn't model what the player senses (the GM tells them).
+            // ── Arcane Recovery (v2.16.1): Wizard Lv 1 — restore spell
+            // slots whose combined level ≤ ⌈wizard_lv/2⌉. The modal shows
+            // every used L1-L5 wizard slot with a + / − stepper; running
+            // total + allowance hint update in real time; Confirm POSTs
+            // /use_arcane_recovery with the picked slot counts.
+            if (k === 'arcane-recovery' && _CAMPAIGN_ID && CAN_EDIT) {
+                const ar = _readResources().find(x => x.key === 'arcane-recovery');
+                if (ar) {
+                    const cur = parseInt(ar.current, 10) || 0;
+                    const mx = parseInt(ar.max, 10) || 0;
+                    if (mx > 0 && cur <= 0) {
+                        _toast('Arcane Recovery: no uses remaining (refills on long rest)', 'error');
+                        return;
+                    }
+                }
+                // Read wizard level + spell slots from the form.
+                let wizardLv = 0;
+                const roster = (typeof window._mcRoster === 'function') ? window._mcRoster() : [];
+                for (const c of roster) {
+                    if ((c.class || '').trim().toLowerCase() === 'wizard') {
+                        wizardLv = Math.max(wizardLv, parseInt(c.level, 10) || 0);
+                    }
+                }
+                if (wizardLv < 1) {
+                    const formLv = parseInt(document.querySelector('[name="level"]')?.value, 10) || 0;
+                    const formCls = (document.querySelector('[name="class"]')?.value || '').trim().toLowerCase();
+                    if (formCls === 'wizard') wizardLv = formLv;
+                }
+                if (wizardLv < 1) {
+                    _toast('Arcane Recovery requires a Wizard level', 'error');
+                    return;
+                }
+                const allowance = Math.ceil(wizardLv / 2);
+
+                // Collect used L1-L5 wizard slots.
+                const usedSlots = [];
+                for (let lvl = 1; lvl <= 5; lvl++) {
+                    const totalEl = document.querySelector(`[name="spell_slots.wizard.${lvl}.total"]`);
+                    const usedEl = document.querySelector(`[name="spell_slots.wizard.${lvl}.used"]`);
+                    if (!totalEl) continue;
+                    const total = parseInt(totalEl.value, 10) || 0;
+                    const used = parseInt(usedEl?.value, 10) || 0;
+                    if (total > 0) {
+                        usedSlots.push({ level: lvl, total, used });
+                    }
+                }
+                if (!usedSlots.length || usedSlots.every(s => s.used === 0)) {
+                    _toast('Arcane Recovery: no used slots to restore', 'info');
+                    return;
+                }
+
+                // Build + show the modal.
+                const prev = document.getElementById('ar-modal');
+                if (prev) prev.remove();
+                const overlay = document.createElement('div');
+                overlay.id = 'ar-modal';
+                overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;';
+                const card = document.createElement('div');
+                card.style.cssText = 'background:var(--s-card,#222);color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:8px;padding:18px;min-width:340px;max-width:480px;box-shadow:0 10px 40px rgba(0,0,0,.6);';
+
+                let html = '<div style="font-size:14px;font-weight:700;margin-bottom:6px;">🔮 Arcane Recovery</div>';
+                html += `<div style="font-size:12px;color:var(--s-mute,#aaa);margin-bottom:14px;line-height:1.4;">Once per day during a short rest, restore spell slots whose combined level ≤ <strong style="color:var(--s-accent,#88c);">${allowance}</strong>. L6+ slots aren't eligible.</div>`;
+
+                for (const s of usedSlots) {
+                    html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:6px 10px;border:1px solid var(--s-border,#444);border-radius:4px;">`;
+                    html += `<span style="font-size:13px;font-weight:600;min-width:30px;">L${s.level}</span>`;
+                    html += `<span style="font-size:11px;color:var(--s-mute,#aaa);flex:1;">${s.used} used / ${s.total} total</span>`;
+                    html += `<button type="button" class="ar-dec" data-lvl="${s.level}" style="width:24px;height:24px;font-size:14px;cursor:pointer;background:transparent;color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:3px;">−</button>`;
+                    html += `<span class="ar-count" data-lvl="${s.level}" style="font-size:13px;font-weight:700;min-width:18px;text-align:center;">0</span>`;
+                    html += `<button type="button" class="ar-inc" data-lvl="${s.level}" data-max="${s.used}" style="width:24px;height:24px;font-size:14px;cursor:pointer;background:transparent;color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:3px;">+</button>`;
+                    html += `</div>`;
+                }
+
+                html += `<div id="ar-summary" style="margin-top:10px;padding:8px;font-size:12px;background:var(--bg-2,#111);border-radius:4px;color:var(--s-mute,#aaa);">Spending: <span id="ar-spent">0</span> / ${allowance} levels</div>`;
+                html += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">';
+                html += '<button type="button" id="ar-cancel" style="padding:6px 14px;font-size:12px;background:transparent;color:var(--s-fg,#eee);border:1px solid var(--s-border,#444);border-radius:4px;cursor:pointer;">Cancel</button>';
+                html += '<button type="button" id="ar-confirm" style="padding:6px 14px;font-size:12px;background:var(--accent-bg2,#2a3d5c);color:var(--s-accent,#88c);border:1px solid var(--s-accent,#88c);border-radius:4px;font-weight:600;cursor:pointer;opacity:.5;" disabled>🔮 Restore</button>';
+                html += '</div>';
+                card.innerHTML = html;
+                overlay.appendChild(card);
+                document.body.appendChild(overlay);
+
+                // State + render.
+                const counts = {};  // level → count
+                usedSlots.forEach(s => { counts[s.level] = 0; });
+
+                function _arUpdate() {
+                    let spent = 0;
+                    for (const lvl in counts) spent += parseInt(lvl, 10) * counts[lvl];
+                    document.getElementById('ar-spent').textContent = spent;
+                    const summary = document.getElementById('ar-summary');
+                    if (spent > allowance) {
+                        summary.style.color = 'var(--s-danger,#e88)';
+                    } else if (spent > 0) {
+                        summary.style.color = 'var(--s-accent,#88c)';
+                    } else {
+                        summary.style.color = 'var(--s-mute,#aaa)';
+                    }
+                    const confirmBtn = document.getElementById('ar-confirm');
+                    const valid = spent > 0 && spent <= allowance;
+                    confirmBtn.disabled = !valid;
+                    confirmBtn.style.opacity = valid ? '1' : '.5';
+                    confirmBtn.style.cursor = valid ? 'pointer' : 'not-allowed';
+                    // Update per-row count displays
+                    document.querySelectorAll('.ar-count').forEach(el => {
+                        el.textContent = counts[parseInt(el.dataset.lvl, 10)] || 0;
+                    });
+                }
+                _arUpdate();
+
+                overlay.querySelectorAll('.ar-inc').forEach(b => {
+                    b.addEventListener('click', () => {
+                        const lvl = parseInt(b.dataset.lvl, 10);
+                        const maxC = parseInt(b.dataset.max, 10);
+                        if (counts[lvl] < maxC) {
+                            counts[lvl]++;
+                            _arUpdate();
+                        }
+                    });
+                });
+                overlay.querySelectorAll('.ar-dec').forEach(b => {
+                    b.addEventListener('click', () => {
+                        const lvl = parseInt(b.dataset.lvl, 10);
+                        if (counts[lvl] > 0) {
+                            counts[lvl]--;
+                            _arUpdate();
+                        }
+                    });
+                });
+
+                const cleanup = () => overlay.remove();
+                document.getElementById('ar-cancel').addEventListener('click', cleanup);
+                overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(); });
+
+                document.getElementById('ar-confirm').addEventListener('click', async () => {
+                    const slots = [];
+                    for (const lvl in counts) {
+                        if (counts[lvl] > 0) {
+                            slots.push({ level: parseInt(lvl, 10), count: counts[lvl] });
+                        }
+                    }
+                    cleanup();
+                    try {
+                        const resp = await fetch(`/api/campaign/${_CAMPAIGN_ID}/use_arcane_recovery`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ character_id: CHAR_ID, slots }),
+                        });
+                        if (!resp.ok) {
+                            let body; try { body = await resp.json(); } catch { body = null; }
+                            _toast('Arcane Recovery failed: ' + (body?.detail || body?.error || `HTTP ${resp.status}`), 'error');
+                            return;
+                        }
+                        const data = await resp.json().catch(() => null);
+                        if (data) {
+                            const summary = data.restored.map(r => `${r.count}× L${r.level}`).join(', ');
+                            _toast(`🔮 Arcane Recovery: ${summary} restored.`, 'info');
+                        }
+                    } catch (e) {
+                        _toast('Arcane Recovery failed: ' + (e?.message || 'network error'), 'error');
+                    }
+                });
+                return;
+            }
+
             if (k === 'divine-sense' && _CAMPAIGN_ID && CAN_EDIT) {
                 const arr = _readResources();
                 const row = arr.find(x => x.key === 'divine-sense');

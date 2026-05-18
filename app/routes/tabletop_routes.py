@@ -153,6 +153,7 @@ _FEATURE_ECONOMY: dict[str, dict] = {
     "rage": {"slot": "bonus"},
     "reckless-attack": {"slot": "free"},
     "quickened-spell": {"slot": "bonus"},
+    "arcane-recovery": {"slot": "free"},  # v2.16.1 (Wizard Lv 1)
 }
 
 
@@ -6546,6 +6547,234 @@ async def use_cutting_words(
         "target_name": display_name or None,
         "remaining": cur - 1,
         "over_budget": was_used,
+    }
+
+
+# ----------- API: Arcane Recovery (Wizard Lv 1) -----------
+
+def _wizard_level_from_sheet(sheet: dict) -> int:
+    """Wizard-level helper (mirrors `_bard_level_from_sheet`)."""
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "wizard":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "wizard":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+@router.post("/api/campaign/{campaign_id}/use_arcane_recovery")
+async def use_arcane_recovery(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Restore spell slots via the Wizard Lv 1 Arcane Recovery feature.
+
+    Body: ``{character_id, slots: [{level: int, count: int}], override?}``.
+
+    RAW: once per day during a short rest, restore spell slots whose
+    combined level ≤ ⌈wizard_lv/2⌉. L6+ slots are not eligible. The
+    ``slots`` array lets the caller spread the allowance across levels
+    (e.g. ``[{level:1, count:2}, {level:2, count:1}]`` for 4 levels of
+    allowance, sum = 1+1+2 = 4).
+
+    Validates:
+    - arcane-recovery resource is on the sheet and has at least 1 use left
+    - Sum of (level × count) ≤ ⌈wizard_lv/2⌉
+    - Each requested level has at least ``count`` slots currently used
+    - No level >= 6 in the request (L6+ slots ineligible per RAW)
+
+    Atomically decrements arcane-recovery + restores the slots + broadcasts
+    spell_slot_update per slot level + resource_update + feature_used.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    slots_req = body.get("slots") or []
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not isinstance(slots_req, list) or not slots_req:
+        raise HTTPException(400, "slots is required (non-empty list)")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Wizard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    wizard_lv = _wizard_level_from_sheet(sheet)
+    if wizard_lv < 1:
+        raise HTTPException(409, "Arcane Recovery requires Wizard level 1+")
+
+    # Sum + validate the request shape. RAW allowance is ceil(wizard_lv/2).
+    allowance = (wizard_lv + 1) // 2  # ceil(wizard_lv/2) via integer arithmetic
+    total_levels = 0
+    parsed_slots = []  # [(level, count), ...]
+    for entry in slots_req:
+        if not isinstance(entry, dict):
+            raise HTTPException(400, "each slot entry must be an object")
+        try:
+            level = int(entry.get("level") or 0)
+            count = int(entry.get("count") or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "slot level and count must be integers")
+        if level < 1 or level > 5:
+            raise HTTPException(409, f"Arcane Recovery does not restore L{level} slots (L1-L5 only)")
+        if count < 1:
+            continue
+        total_levels += level * count
+        parsed_slots.append((level, count))
+
+    if not parsed_slots:
+        raise HTTPException(400, "slots request must restore at least 1 slot")
+    if total_levels > allowance:
+        return JSONResponse(status_code=409, content={
+            "error": "exceeds_allowance",
+            "requested": total_levels,
+            "allowance": allowance,
+        })
+
+    # Verify arcane-recovery counter has uses left.
+    resources = list(sheet.get("resources") or [])
+    ar_idx = -1
+    ar_row = None
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "arcane-recovery":
+            ar_row = dict(r)
+            ar_idx = i
+            break
+    if ar_row is None:
+        raise HTTPException(404, "No Arcane Recovery resource on this sheet")
+    ar_cur = int(ar_row.get("current") or 0)
+    ar_max = int(ar_row.get("max") or 0)
+    if ar_cur <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Arcane Recovery",
+        })
+
+    # Verify each requested level has enough used slots to restore.
+    all_slots = dict(sheet.get("spell_slots") or {})
+    # Wizard slots live under the 'wizard' class slug per the sheet schema.
+    wiz_slots = dict(all_slots.get("wizard") or {})
+    for level, count in parsed_slots:
+        slot_key = str(level)
+        slot = dict(wiz_slots.get(slot_key) or {})
+        used = int(slot.get("used") or 0)
+        if used < count:
+            return JSONResponse(status_code=409, content={
+                "error": "insufficient_used_slots",
+                "level": level,
+                "requested": count,
+                "currently_used": used,
+            })
+
+    # Apply: decrement arcane-recovery counter, restore each slot's used.
+    ar_row["current"] = ar_cur - 1
+    resources[ar_idx] = ar_row
+    sheet["resources"] = resources
+
+    slot_updates = []  # for the WS broadcasts
+    for level, count in parsed_slots:
+        slot_key = str(level)
+        slot = dict(wiz_slots.get(slot_key) or {})
+        total = int(slot.get("total") or 0)
+        used = int(slot.get("used") or 0)
+        new_used = max(0, used - count)
+        slot["used"] = new_used
+        wiz_slots[slot_key] = slot
+        slot_updates.append((level, total, new_used))
+    all_slots["wizard"] = wiz_slots
+    sheet["spell_slots"] = all_slots
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    # Per-slot spell_slot_update so any open sheet / mini-sheet re-pips.
+    for level, total, new_used in slot_updates:
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "spell_slot_update",
+                "data": {
+                    "character_id": char.id,
+                    "class_slug": "wizard",
+                    "level": level,
+                    "total": total,
+                    "used": new_used,
+                },
+            })
+        except Exception:
+            pass
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "arcane-recovery",
+            "current": ar_cur - 1,
+            "max": ar_max,
+        },
+    })
+
+    # Compose a human-readable summary for the chat card.
+    parts = [f"{c}× L{l}" for l, c in parsed_slots]
+    summary = ", ".join(parts)
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"🔮 Arcane Recovery → {summary}",
+            "feature_desc": (
+                f"Restored {total_levels} slot levels (allowance: {allowance}). "
+                f"Arcane Recovery available again after a long rest."
+            ),
+            "source": "arcane-recovery",
+            "remaining": ar_cur - 1,
+            "max": ar_max,
+            "over_budget": False,
+            "over_budget_slot": "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "restored": [{"level": l, "count": c} for l, c in parsed_slots],
+        "total_levels": total_levels,
+        "allowance": allowance,
+        "remaining": ar_cur - 1,
     }
 
 

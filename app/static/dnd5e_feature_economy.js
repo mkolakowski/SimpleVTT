@@ -215,6 +215,20 @@ window._FEATURE_ECONOMY = {
         // Modifies your existing attack action; doesn't consume a new slot.
     },
 
+    /* ── Wizard ──────────────────────────────────────────────────── */
+    'arcane-recovery': {
+        slot: 'free',
+        class: 'wizard',
+        unlock_level: 1,
+        label: 'Arcane Recovery',
+        desc: 'Once per day during a short rest, regain spell slots whose combined level ≤ ⌈wizard_lv/2⌉. L6+ slots are not eligible.',
+        // v2.16.1: out-of-combat feature ("once per day during a short
+        // rest") so slot:'free' — no chip flip, no action-economy cost.
+        // Resource ⚡ Use opens a slot-restore modal; /use_arcane_recovery
+        // validates the allowance + decrements counter + restores slots
+        // atomically.
+    },
+
     /* ── Sorcerer ────────────────────────────────────────────────── */
     'quickened-spell': {
         slot: 'bonus',

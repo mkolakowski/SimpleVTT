@@ -230,7 +230,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | Lv | Feature | Status | Notes |
 |---|---|---|---|
 | 1 | Spellcasting | ✅ | Demo Thalindra (Lv 5) prepares cantrips + L1-L3 spells correctly post-v2.4.12 |
-| 1 | Arcane Recovery | 🟢 | Resource counter (`key: 'arcane-recovery'`); no spell-slot-restore picker |
+| 1 | Arcane Recovery | ✅ | v2.16.1 — counter (1/1 long-rest) added to Thalindra's demo sheet; dedicated `/use_arcane_recovery` endpoint validates allowance (⌈wizard_lv/2⌉, L1-L5 only) + atomically decrements counter + restores selected slots + broadcasts spell_slot_update per slot + resource_update + feature_used. Resource ⚡ Use opens a +/− stepper modal with running spent/allowance display. Harness coverage in `test_use_arcane_recovery.py`. |
 | 2 | Arcane Tradition | ✅ | Subclass system shipped — see Subclasses table. School of Evocation has features JSON; Divination has Portent Dice counter. Thalindra is the demo Evocation Wizard. |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 18 | Spell Mastery | ⚪ | |
