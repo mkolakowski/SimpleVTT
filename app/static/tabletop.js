@@ -1190,6 +1190,8 @@
                 _onHealApplied(msg.data);
             } else if (msg.type === 'feature_used') {
                 _appendFeatureUsed(msg.data);
+            } else if (msg.type === 'presence_update') {
+                _renderPresence(msg.data);
             } else if (msg.type === 'character_death_save') {
                 _onCharacterDeathSave(msg.data);
             } else if (msg.type === 'character_roll_state') {
@@ -1691,6 +1693,50 @@
     // by the backend when ``POST /resource`` is called with a negative
     // delta. The card has no roll — it's purely an announcement so the
     // rest of the table sees who fired what.
+    /* v2.9.1: presence pills. The hub broadcasts ``presence_update``
+     * on every connect/disconnect with the deduped list of connected
+     * users. We render one transparent pill per user in the
+     * #presence-bubbles container anchored at the map pane's lower-
+     * left. The pill's left border carries the user's color (character
+     * color → membership color → gm_color); a small dot indicates
+     * green for player, amber for GM. Display-only — clicks pass
+     * through to the canvas via pointer-events:none on the container
+     * (individual pills re-enable to surface a hover title with the
+     * user_id). */
+    function _renderPresence(data) {
+        const container = document.getElementById('presence-bubbles');
+        if (!container) return;
+        const users = (data && Array.isArray(data.users)) ? data.users : [];
+        if (!users.length) {
+            container.innerHTML = '';
+            container.style.display = 'none';
+            return;
+        }
+        // Stable sort: GMs first (so they always render in the same
+        // relative position), then alphabetical display name. The
+        // server doesn't guarantee an order so we do it client-side.
+        users.sort((a, b) => {
+            if (!!a.is_gm !== !!b.is_gm) return a.is_gm ? -1 : 1;
+            return String(a.display_name || '').localeCompare(String(b.display_name || ''));
+        });
+        const html = users.map(u => {
+            const name = String(u.display_name || 'Player')
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            const color = u.color || (u.is_gm ? '#ffa54a' : '#6cb4ff');
+            const titleBits = [u.display_name || 'Player'];
+            if (u.is_gm) titleBits.push('Game Master');
+            const title = titleBits.join(' — ').replace(/"/g, '&quot;');
+            return (
+                `<span class="presence-pill${u.is_gm ? ' is-gm' : ''}" ` +
+                `style="border-left-color:${color};" title="${title}">` +
+                `<span class="presence-dot"></span>${name}</span>`
+            );
+        }).join('');
+        container.innerHTML = html;
+        container.style.display = '';
+    }
+
     /* v2.6.1: Phase 4 Layer C — audit badge HTML for over-budget rolls.
      * Returned as a small inline element appended to the roll-card body
      * for weapon_attack / spell_cast / feature_used cards when the

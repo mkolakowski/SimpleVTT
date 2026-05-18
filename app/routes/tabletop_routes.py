@@ -9886,12 +9886,42 @@ async def campaign_ws(websocket: WebSocket, campaign_id: int):
     # the socket. Targeted send (not broadcast) — broadcasting would
     # restart audio for every other client too.
     initial_audio_payload: dict | None = None
+    identity: dict | None = None
     try:
         user = db.query(User).filter(User.id == user_id).first()
         campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
         if not user or not campaign or not _user_can_view_campaign(db, user, campaign):
             await websocket.close(code=4403)
             return
+        # v2.9.1: build the presence identity here while the DB session
+        # is open. Color resolves character.color > membership.color >
+        # campaign.gm_color (for the GM); display name is the User's
+        # canonical display_name. GM detection uses the same helper as
+        # the rest of the auth path.
+        membership = (
+            db.query(CampaignMembership)
+            .filter(CampaignMembership.campaign_id == campaign_id,
+                    CampaignMembership.user_id == user.id)
+            .first()
+        )
+        # First character this user owns in this campaign, for color
+        # preference. None for the GM (who often owns multiple).
+        my_char = (
+            db.query(Character)
+            .filter(Character.campaign_id == campaign_id,
+                    Character.owner_user_id == user.id)
+            .first()
+        )
+        is_gm_user = _user_is_gm(user, campaign, db)
+        char_color = my_char.color if my_char and my_char.color else None
+        member_color = membership.color if membership and membership.color else None
+        gm_color = campaign.gm_color if is_gm_user else None
+        identity = {
+            "user_id": user.id,
+            "display_name": user.display_name,
+            "color": char_color or member_color or gm_color,
+            "is_gm": is_gm_user,
+        }
         if campaign.now_playing_track_id:
             track = (
                 db.query(PlaylistTrack)
@@ -9907,7 +9937,7 @@ async def campaign_ws(websocket: WebSocket, campaign_id: int):
     finally:
         db.close()
 
-    await hub.connect(campaign_id, websocket)
+    await hub.connect(campaign_id, websocket, identity=identity)
 
     if initial_audio_payload is not None:
         import json as _json

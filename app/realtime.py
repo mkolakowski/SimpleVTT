@@ -5,6 +5,10 @@ HTTP API (token move, dice roll, chat) is broadcast to that campaign's
 clients.
 
 Clients receive JSON messages of shape: {"type": "...", "data": {...}}.
+
+v2.9.1: the hub also tracks per-connection identity (user_id +
+display_name + color + is_gm) so a ``presence_update`` broadcast can
+render the connected-players bubbles in the lower-left of the map.
 """
 from __future__ import annotations
 
@@ -12,7 +16,7 @@ import asyncio
 import json
 import logging
 from collections import defaultdict
-from typing import Dict, Set
+from typing import Dict, Optional, Set
 
 from fastapi import WebSocket
 
@@ -22,6 +26,13 @@ log = logging.getLogger(__name__)
 class CampaignHub:
     def __init__(self) -> None:
         self._channels: Dict[int, Set[WebSocket]] = defaultdict(set)
+        # v2.9.1: per-connection identity. Keyed on the WebSocket
+        # object so disconnect can look up the user info without a
+        # second arg, and so multiple tabs from the same user each
+        # show their own bubble (we dedupe by user_id at presence-
+        # broadcast time so the lower-left only shows one pill per
+        # human, even if they have three tabs open).
+        self._identities: Dict[WebSocket, dict] = {}
         self._lock = asyncio.Lock()
         self._battle: Dict[int, dict] = {}
 
@@ -31,10 +42,39 @@ class CampaignHub:
     def set_battle(self, campaign_id: int, state: dict) -> None:
         self._battle[campaign_id] = state
 
-    async def connect(self, campaign_id: int, ws: WebSocket) -> None:
+    def get_presence(self, campaign_id: int) -> list[dict]:
+        """Return the deduped list of users currently connected to this
+        campaign's WS hub. Each entry: ``{user_id, display_name, color,
+        is_gm}``. Order isn't guaranteed; the client sorts at render
+        time for stability.
+        """
+        seen: dict[int, dict] = {}
+        for ws in self._channels.get(campaign_id, ()):
+            ident = self._identities.get(ws)
+            if not ident:
+                continue
+            uid = ident.get("user_id")
+            if uid is None or uid in seen:
+                continue
+            seen[uid] = {
+                "user_id": uid,
+                "display_name": ident.get("display_name") or "Player",
+                "color": ident.get("color"),
+                "is_gm": bool(ident.get("is_gm")),
+            }
+        return list(seen.values())
+
+    async def connect(
+        self,
+        campaign_id: int,
+        ws: WebSocket,
+        identity: Optional[dict] = None,
+    ) -> None:
         await ws.accept()
         async with self._lock:
             self._channels[campaign_id].add(ws)
+            if identity is not None:
+                self._identities[ws] = dict(identity)
         # Send current battle state to the newly connected client
         state = self._battle.get(campaign_id)
         if state:
@@ -42,12 +82,29 @@ class CampaignHub:
                 await ws.send_text(json.dumps({"type": "battle_update", "data": state}))
             except Exception:
                 pass
+        # Send the current presence roster to the new client
+        # (private — every existing client already has it).
+        try:
+            await ws.send_text(json.dumps({
+                "type": "presence_update",
+                "data": {"users": self.get_presence(campaign_id)},
+            }, default=str))
+        except Exception:
+            pass
+        # And broadcast the (possibly grown) roster to everyone else so
+        # bubbles light up for the existing players. ``_broadcast_presence``
+        # is a small wrapper around broadcast() that builds the payload
+        # from get_presence; doing it inside the hub keeps the call sites
+        # in tabletop_routes thin.
+        await self._broadcast_presence(campaign_id)
 
     async def disconnect(self, campaign_id: int, ws: WebSocket) -> None:
         async with self._lock:
             self._channels[campaign_id].discard(ws)
             if not self._channels[campaign_id]:
                 del self._channels[campaign_id]
+            self._identities.pop(ws, None)
+        await self._broadcast_presence(campaign_id)
 
     async def broadcast(self, campaign_id: int, message: dict) -> None:
         text = json.dumps(message, default=str)
@@ -65,6 +122,17 @@ class CampaignHub:
             async with self._lock:
                 for ws in dead:
                     self._channels.get(campaign_id, set()).discard(ws)
+                    self._identities.pop(ws, None)
+
+    async def _broadcast_presence(self, campaign_id: int) -> None:
+        """Send the current presence roster to every connected client
+        for this campaign. Called from connect/disconnect; safe to call
+        even when the campaign has zero connections (early-returns
+        inside broadcast since there are no recipients)."""
+        await self.broadcast(campaign_id, {
+            "type": "presence_update",
+            "data": {"users": self.get_presence(campaign_id)},
+        })
 
 
 hub = CampaignHub()
