@@ -1,0 +1,132 @@
+name: Test harness
+
+# Phase 2 of the click-through test harness (see
+# docs/plans/test-harness.md). Boots the docker compose stack with
+# DEMO_MODE=true (so the demo PCs + the Tavern Brawl encounter are
+# pre-seeded — the test fixtures depend on them), waits for /healthz,
+# runs pytest against the running stack, and uploads JUnit XML + HTML
+# reports as artifacts. Fails the workflow on any test failure.
+
+on:
+  push:
+    branches: [ "main", "dev" ]
+  pull_request:
+    branches: [ "main", "dev" ]
+
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install test deps
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      # Compose needs a .env. We write a minimal one for CI:
+      #   - DEMO_MODE=true ships the seed PCs the tests rely on
+      #     (Pip / Thalindra / Tavik, the demo accounts).
+      #   - DEMO_RESET_ON_BOOT=true forces a fresh seed at startup so
+      #     stale state from a prior cached image can't poison the run.
+      #   - APP_SECRET_KEY is deterministic for the CI run; never used
+      #     to sign anything that leaves the runner.
+      - name: Write CI .env
+        run: |
+          cat > .env <<'EOF'
+          APP_PORT=8013
+          APP_SECRET_KEY=ci-deterministic-not-a-real-secret-${{ github.run_id }}
+          APP_BASE_URL=http://localhost:8013
+          APP_ALLOW_LOCAL_REGISTRATION=true
+          ADMINS=demo-gm@example.com
+          CHARACTER_TEMPLATES=generic,dnd5e
+          APP_DEFAULT_THEME=sepia
+          GOOGLE_SSO_ENABLED=false
+          GOOGLE_SSO_CLIENT_ID=
+          GOOGLE_SSO_CLIENT_SECRET=
+          POSTGRES_USER=simplevtt
+          POSTGRES_PASSWORD=ci-test-password
+          POSTGRES_DB=simplevtt
+          BACKUP_CRON=0 3 * * *
+          KEEP_DAILY=7
+          KEEP_WEEKLY=4
+          DEMO_MODE=true
+          DEMO_RESET_INTERVAL_MINUTES=60
+          DEMO_RESET_ON_BOOT=true
+          DEMO_CREDENTIALS_VISIBLE=true
+          EOF
+
+      - name: Build and start stack
+        run: docker compose up -d --build
+
+      # The app's startup runs the inline schema migrations + the demo
+      # seeder (DEMO_RESET_ON_BOOT=true). On a cold runner that's ~10-30 s.
+      # Poll /healthz until it returns 200 or 90 s elapse — the build
+      # itself can be slow on a fresh image, so we're generous here.
+      - name: Wait for /healthz
+        run: |
+          for i in {1..45}; do
+            if curl -fs http://localhost:8013/healthz > /dev/null; then
+              echo "Stack healthy after ~$((i*2))s"
+              curl -s http://localhost:8013/version
+              exit 0
+            fi
+            echo "Waiting for stack... ($i/45)"
+            sleep 2
+          done
+          echo "Stack didn't become healthy in 90s. Dumping logs."
+          docker compose logs app | tail -100
+          exit 1
+
+      # The demo seed runs on app startup; verify the demo PCs landed
+      # in the roster before pytest fires. If this is empty we'd waste
+      # 10 s of test runtime failing every test on the same root cause.
+      - name: Sanity-check demo seed
+        run: |
+          curl -s -c /tmp/cookies.txt -X POST http://localhost:8013/login \
+            -d "email=demo-gm@example.com&password=demopass" \
+            -L > /dev/null
+          ROSTER=$(curl -s -b /tmp/cookies.txt http://localhost:8013/api/campaign/1/roster)
+          echo "Roster: $ROSTER"
+          echo "$ROSTER" | grep -q "Pip Quickfingers" || { echo "Demo seed missing Pip"; exit 1; }
+          echo "$ROSTER" | grep -q "Thalindra Moonwhisper" || { echo "Demo seed missing Thalindra"; exit 1; }
+          echo "$ROSTER" | grep -q "Brother Tavik Stonebrow" || { echo "Demo seed missing Tavik"; exit 1; }
+
+      - name: Run test harness
+        run: |
+          mkdir -p reports
+          pytest tests/harness/ \
+            --junitxml=reports/harness.xml \
+            --html=reports/harness.html \
+            --self-contained-html \
+            -v
+
+      # Upload reports regardless of pass/fail so a green run still
+      # produces a downloadable HTML report; on failure the artifact
+      # is the primary triage surface.
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-harness-reports
+          path: reports/
+          retention-days: 14
+
+      # Capture server logs on failure so the contributor can debug
+      # without re-running the workflow.
+      - name: Dump server logs on failure
+        if: failure()
+        run: docker compose logs app | tail -200
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

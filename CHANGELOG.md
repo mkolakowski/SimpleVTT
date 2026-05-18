@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.12.2] - 2026-05-17
+
+**Schema version:** 55
+**Commit summary:** **Test harness Phase 2 — CI integration.** New `.github/workflows/test-harness.yml` runs the click-through harness on every push to `main`/`dev` and on every PR targeting those branches. The workflow writes a CI-only `.env`, boots docker compose with `DEMO_MODE=true` + `DEMO_RESET_ON_BOOT=true`, polls `/healthz` until the stack is up (up to 90 s), sanity-checks the demo seed lands in the roster, runs `pytest tests/harness/` with JUnit XML + self-contained HTML reports, and uploads `reports/` as an artifact regardless of pass/fail. On failure it dumps the last 200 lines of `simplevtt-app` logs into the workflow output for triage. PATCH bump — CI infra, no production code change.
+**Description:** Three coordinated changes. **(1)** New workflow file `.github/workflows/test-harness.yml`. Steps: checkout → setup Python 3.11 with pip cache → install `requirements.txt` + `requirements-dev.txt` → write a CI-deterministic `.env` (APP_SECRET_KEY is unique per run via `${{ github.run_id }}`; never used to sign anything that leaves the runner) → `docker compose up -d --build` → wait-for-healthz with 90 s budget → roster sanity-check (curl + grep for Pip / Thalindra / Tavik so a missing seed fails fast instead of poisoning every downstream test) → pytest → upload reports → dump server logs on failure → tear down. Triggers on push to main/dev + PR to main/dev. **(2)** README's Testing section grows a mention of the CI workflow and updates the test-count line to "41 tests, ~17 s". **(3)** No source code change in `app/`; this is pure CI plumbing.
+**Description (cont):** Wait-for-healthz timing. The fresh-runner case: docker pull + build + db init + app migrate + demo seed runs in ~30-60 s on GitHub's hosted runners. The 45-iteration × 2-second poll loop gives 90 s of slack; if the stack isn't up by then it's almost certainly a build error, and the workflow dumps `docker compose logs app | tail -100` before failing. Cache-hit runs (image already built; postgres already initialized) typically reach healthy in ~10-15 s.
+**Description (cont 2):** What this catches in CI that local `make test-harness` doesn't. (a) Fresh-stack reproducibility — every CI run boots from an empty database, applies all inline migrations cleanly, re-seeds the demo. Catches "works on my machine" cases where a developer's stale DB has data the migrations didn't account for. (b) Per-PR regression coverage — a PR that breaks an endpoint contract or a WS broadcast shape fails the workflow before merge, not in production. (c) Pinned dependency stack — `pip install -r requirements.txt` runs against the same versions every build, so a "works locally with my pip cache" but "fails on CI" delta surfaces fast. (d) The HTML report uploaded as a workflow artifact gives the PR reviewer a single click to see exactly which assertion fired (no SSH into the runner needed).
+**Description (cont 3):** Scope deliberately kept tight. No matrix builds (one Python version, one OS — Python 3.11 on ubuntu-latest), no parallel sharding, no test-failure flake retry. Phase 2 ships the workflow; flake reduction + matrix expansion fold in if/when evidence motivates them. The plan doc's "smoke vs full sweep" distinction (smoke on PRs, full on main pushes) is also deferred — Phase 1.5's 17-second suite is already small enough to run fully on every event without splitting. If suite runtime grows past ~2 minutes per run, that split becomes worth shipping.
+
+### Added
+- `.github/workflows/test-harness.yml` — full pipeline: env setup → docker compose up → wait for healthz → seed sanity-check → pytest → upload reports → log dump on failure → tear down.
+
+### Changed
+- `README.md` Testing section — adds a paragraph on the CI workflow and updates the test count from "22 tests" to "41 tests".
+
+### Notes
+- **What to test (CI side, after merging):** open a PR against `main` or `dev`. The "Test harness" check should appear in the PR's status row, take ~1-2 min to run the first time (docker pull + build + test), produce an artifact called `test-harness-reports` containing `harness.xml` (JUnit) + `harness.html` (browsable). On a green run the workflow is silent except for the standard check-passed state; on red the failure step output includes the last 200 lines of `simplevtt-app` logs for triage.
+- **What the workflow does NOT do.** No matrix testing across Python versions or OS. No parallel sharding. No flake-retry. No "smoke-on-PR / full-on-main" split (the full suite is small enough). All of those are filed for later if needed.
+- **First CI run timing on a cold cache.** Estimated 90-180 s total: 30-60 s docker build, 5-15 s migration + demo seed, 17 s pytest, plus pip install + artifact upload overhead. Cache-warm subsequent runs should drop to ~45-90 s total.
+- **Secret handling.** `APP_SECRET_KEY` is set deterministically per run via `${{ github.run_id }}`. It's used to sign session cookies during the workflow run only; the cookies don't leave the runner. `POSTGRES_PASSWORD` is hardcoded to `ci-test-password` — fine because the database is a containerized sidecar accessible only within the docker network and torn down with `docker compose down -v` in the final step. Neither value is secret material.
+- **Why DEMO_MODE=true in CI.** The tests rely on the demo PCs (Pip / Thalindra / Tavik) existing with stable names. `DEMO_RESET_ON_BOOT=true` guarantees a fresh seed on every CI run.
+- **What Phase 3 covers next.** Phase 3 = "every new endpoint commit lands a harness test" as a contributor discipline (CLAUDE.md gets a line). Phase 4 = Playwright UI-layer regressions. Phase 5 = multi-user concurrency stretch.
+
+---
+
 ## [2.12.1] - 2026-05-17
 
 **Schema version:** 55

@@ -1,6 +1,6 @@
 # SimpleVTT
 
-> Current version: **2.12.1** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
+> Current version: **2.12.2** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
 
 A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 
@@ -204,11 +204,15 @@ Override the target stack via env vars (defaults shown):
 - `HARNESS_BASE_URL=http://localhost:8013`
 - `HARNESS_WS_TIMEOUT=2.0` (per-test WS receive timeout)
 
-Phase 1 ships smoke tests + `/attack` + `/cast_spell` + `/use_feature`
-coverage (22 tests, ~10 s). Phase 1.5 fills out the rest of the
-endpoint matrix; Phase 2 wires CI on every PR; Phase 4 layers
-Playwright for UI-only regressions. See the plan doc for the
-roadmap.
+Phase 1 + 1.5 cover every action-bearing endpoint (`/attack`,
+`/cast_spell`, `/use_feature`, `/use_item`, `/use_lay_on_hands`,
+`/use_bardic_inspiration`, `/move`, `/roll`) + smoke (41 tests,
+~17 s). Phase 2 (v2.12.2) wires this into GitHub Actions on every
+PR + push to main/dev via `.github/workflows/test-harness.yml` —
+the workflow boots a clean docker compose stack with `DEMO_MODE=true`,
+waits for `/healthz`, runs pytest, and uploads JUnit XML + HTML
+reports as artifacts. Phase 4 will layer Playwright on top for
+UI-only regressions. See the plan doc for the roadmap.
 
 ## Third-party fonts
 
