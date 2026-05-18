@@ -342,9 +342,10 @@
      * active" and their movement history; we just draw what it tells
      * us. Empty / missing breadcrumb is a no-op so the canvas still
      * renders fine before init starts. Each segment is colored green
-     * (within speed_walk) or red (over the cap); the cumulative
-     * distance is shown at the midpoint of each segment with a small
-     * pill background for legibility against the map. */
+     * (within speed_walk) or red (over the cap); v2.8.2 — a single
+     * cumulative-distance label is drawn at the midpoint of the LAST
+     * segment only, instead of one per segment, to reduce visual
+     * clutter on multi-drag turns. */
     function drawMovementBreadcrumb() {
         const bc = window._movementBreadcrumb;
         if (!bc || !Array.isArray(bc.path) || bc.path.length < 2) return;
@@ -352,8 +353,14 @@
         const speedCap = Number(bc.speed_walk) || 30;
         const half = gridSize / 2;
 
-        // Walk segments, tracking cumulative distance up to each.
+        // First pass: stroke every segment + arrowhead, tracking the
+        // cumulative distance so the color tracks each segment's
+        // end-of-segment total. The final cumulative survives into
+        // the label-draw step below.
         let cumulative = 0;
+        let lastSegment = null;
+        let lastColor = '#4cd964';
+        ctx.save();
         for (let i = 1; i < path.length; i++) {
             const a = path[i - 1];
             const b = path[i];
@@ -366,9 +373,10 @@
             const overCap = cumulative > speedCap + 0.001;
             const color = overCap ? '#ff6060' : '#4cd964';
             const glow = overCap ? 'rgba(255,96,96,0.6)' : 'rgba(76,217,100,0.55)';
+            lastSegment = { ax, ay, bx, by };
+            lastColor = color;
 
             // Line — wide stroke with a soft glow for visibility on busy maps.
-            ctx.save();
             ctx.strokeStyle = glow;
             ctx.lineWidth = 8;
             ctx.lineCap = 'round';
@@ -400,31 +408,33 @@
                 ctx.closePath();
                 ctx.fill();
             }
+        }
+        ctx.restore();
 
-            // Distance label at midpoint with a pill background so it
-            // reads against any map color. The label shows the cumulative
-            // total at this waypoint, not the per-segment delta, so the
-            // player can see "12 ft", "20 ft", "25 ft" walking up to
-            // their cap.
-            const mx = (ax + bx) / 2;
-            const my = (ay + by) / 2;
+        // Second pass: one label at the midpoint of the LAST segment
+        // showing the total cumulative distance. Pill background +
+        // colored border to keep it readable on busy maps.
+        if (lastSegment) {
+            const mx = (lastSegment.ax + lastSegment.bx) / 2;
+            const my = (lastSegment.ay + lastSegment.by) / 2;
             const label = `${Math.round(cumulative * 10) / 10} ft`;
+            ctx.save();
             ctx.font = 'bold 13px system-ui, sans-serif';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            const padX = 6, padY = 3;
+            const padX = 6;
             const metrics = ctx.measureText(label);
             const w = metrics.width + padX * 2;
             const h = 18;
             ctx.fillStyle = 'rgba(20,20,28,0.85)';
-            ctx.strokeStyle = color;
+            ctx.strokeStyle = lastColor;
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             const rx = mx - w / 2, ry = my - h / 2;
             ctx.roundRect ? ctx.roundRect(rx, ry, w, h, 4) : ctx.rect(rx, ry, w, h);
             ctx.fill();
             ctx.stroke();
-            ctx.fillStyle = color;
+            ctx.fillStyle = lastColor;
             ctx.fillText(label, mx, my);
             ctx.restore();
         }

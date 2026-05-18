@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.8.2] - 2026-05-17
+
+**Schema version:** 55
+**Commit summary:** Movement breadcrumb overlay (v2.8.1) — show **one** cumulative-distance label instead of one per segment. Each drag still strokes its own colored line + arrowhead, but only the most recent segment gets the pill-styled "X ft" midpoint label. Reduces visual clutter on multi-drag turns. User-requested follow-up. PATCH bump — pure rendering tweak, no state shape change.
+**Description:** One change in `drawMovementBreadcrumb()` in `app/static/tabletop.js`. The single loop that strokes segments + draws per-segment labels was split into two passes. First pass: stroke each segment's glow + crisp line + arrowhead, tracking the running cumulative distance and capturing the geometry of the LAST segment + its color. Second pass: draw a single pill-styled label at the midpoint of the last segment showing the total cumulative distance, colored to match the last segment (green if the player is still within speed_walk, red if the run total has gone over).
+
+### Changed
+- `app/static/tabletop.js` `drawMovementBreadcrumb()` — only the final segment carries a distance label; intermediate segments are line-and-arrow only. Cumulative distance + color still escalates segment-by-segment so the green→red transition still lands on the segment that actually pushes the run total past the cap.
+
+### Notes
+- **What to test:** start initiative on the Tavern Brawl. Grixxa is up first. Drag her by 2 squares → one green arrow, "10 ft" label at its midpoint. Drag again by 4 squares → second green arrow appears (no label on the first arrow anymore), label now reads "30 ft" at the midpoint of the second arrow. Drag once more by 1 square → third arrow (red — over Grixxa's 30 ft cap), label "35 ft" red at the midpoint of the third arrow. Click Next turn → all lines + label vanish.
+- The label's position follows the most recent drag. If a player wants to backtrack visually, the prior arrows are still drawn — just unlabeled. The roll-log audit-entry from v2.8.0 (strict mode) is unchanged; it fires on the transition past cap regardless of label count.
+
+---
+
 ## [2.8.1] - 2026-05-17
 
 **Schema version:** 55
