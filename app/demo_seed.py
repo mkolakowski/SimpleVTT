@@ -955,6 +955,136 @@ def _druid_sheet(name: str) -> dict:
     }
 
 
+def _monk_sheet(name: str) -> dict:
+    """v2.18.0: demo Monk Lv 5 (Way of the Open Hand) for the GM.
+    Added in Phase A.5 to unlock per-feature work for Ki spending
+    (Flurry of Blows / Patient Defense / Step of the Wind — all
+    bonus-action spend-1-Ki options curated in `_FEATURE_ECONOMY`
+    since v2.6.0). Wood Elf for the canonical "DEX + WIS + speed"
+    Monk build. Unarmored Defense (AC 10 + DEX + WIS) and Unarmored
+    Movement (+10 at Lv 5) compose with Wood Elf's Fleet of Foot
+    (base 35) → total speed 45. Color `#ff8c42` (saffron / monastic
+    orange-red) — distinct from every existing PC + NPC palette.
+    """
+    return {
+        "class": "Monk",
+        "subclass": "Way of the Open Hand",
+        "level": 5,
+        "race": "Wood Elf",  # +2 DEX, +1 WIS, Fleet of Foot (speed 35)
+        "alignment": "Lawful Good",
+        "background": "Hermit",
+        # Rolled stats post-racial: STR 12 / DEX 18 / CON 14 / INT 10 /
+        # WIS 15 / CHA 8. Wood Elf +2 DEX (→ 18) + +1 WIS (→ 15) from
+        # pre-racial 16 DEX + 14 WIS rolled. Lv 4 ASI bumps DEX to 18
+        # (or could be a feat like Mobile — held in reserve).
+        "abilities": {"STR": 12, "DEX": 18, "CON": 14, "INT": 10, "WIS": 15, "CHA": 8},
+        # Unarmored Defense: AC = 10 + DEX mod + WIS mod = 10 + 4 + 2 = 16.
+        "ac": 16,
+        # Wood Elf Fleet of Foot (base 35) + Monk Unarmored Movement
+        # (+10 at Lv 5) = 45 ft. Notable demo: Kael can dash 90 ft in
+        # one turn with Step of the Wind.
+        "speed": 45,
+        # Lv 1 max d8 (8) + 4× avg d8 (5) + CON +2 × 5 = 8 + 20 + 10 = 38.
+        "hp": {"current": 38, "max": 38, "temp": 0},
+        "initiative_bonus": 4,  # DEX 18 mod
+        "proficiency_bonus": 3,
+        "hit_dice": {"current": 5, "max": 5},
+        "class_hit_die": "d8",
+        # Monk prof saves are STR + DEX.
+        "saving_throws": {"STR": True, "DEX": True},
+        # Hermit background grants Medicine + Religion; Monk Lv 1 picks
+        # two from a curated list (Acrobatics + Insight). Wood Elf
+        # racial Perception proficiency on top.
+        "skills": {
+            "Acrobatics":  {"ability": "DEX", "proficient": True, "expertise": False},
+            "Insight":     {"ability": "WIS", "proficient": True, "expertise": False},
+            "Medicine":    {"ability": "WIS", "proficient": True, "expertise": False},
+            "Religion":    {"ability": "INT", "proficient": True, "expertise": False},
+            "Perception":  {"ability": "WIS", "proficient": True, "expertise": False},
+        },
+        # Martial Arts (Lv 1): can use DEX instead of STR for monk
+        # weapons + unarmed strikes; unarmed damage scales by level
+        # (Lv 5: 1d6). At Lv 5 Quarterstaff (monk weapon) also deals
+        # 1d8 versatile and Martial Arts lets it use DEX.
+        "attacks": [
+            {"name": "Unarmed Strike", "attack_bonus": "+7", "damage": "1d6+4",
+             "damage_type": "bludgeoning", "range": "5 ft",
+             "desc": "Martial Arts: DEX replaces STR on unarmed strikes; Lv 5 die is 1d6. Counts as a monk weapon so it qualifies for Flurry of Blows + Stunning Strike."},
+            {"name": "Quarterstaff (Martial Arts)", "attack_bonus": "+7", "damage": "1d6+4",
+             "damage_type": "bludgeoning", "range": "5 ft",
+             "desc": "Versatile (1d8 two-handed, 1d6 one-handed). Martial Arts allows DEX in place of STR. Counts as a monk weapon. Two-handed grip if not throwing or pairing with an off-hand."},
+        ],
+        # Monk is non-casting RAW; no spells / spell_slots fields.
+        "inventory": [
+            {"name": "Quarterstaff", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d6", "damage_type": "bludgeoning",
+             "versatile": True, "properties": "versatile (1d8), monk weapon",
+             "_slug": "quarterstaff"},
+            {"name": "10 darts", "type": "weapon", "qty": 10,
+             "equippable": True, "equipped": False, "hands": 1,
+             "damage": "1d4", "damage_type": "piercing",
+             "range": "20/60 ft", "properties": "finesse, thrown, monk weapon",
+             "_slug": "dart"},
+            {"name": "Explorer's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, bedroll, mess kit, tinderbox, 10 torches, 10 days rations, waterskin, 50 ft hempen rope."},
+            {"name": "Herbalism kit", "type": "gear", "qty": 1,
+             "desc": "Hermit background — pouches, mortar + pestle, dried herbs."},
+            {"name": "Scroll case with prayers", "type": "gear", "qty": 1,
+             "desc": "Hermit background trinket — Kael's reflections from years in the wilderness."},
+            {"name": "Potion of Healing", "type": "consumable", "qty": 1,
+             "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
+             "_slug": "potion-of-healing",
+             "desc": "Drink to regain 2d4+2 HP. RAW: action."},
+        ],
+        "feats": [],
+        # v2.18.0: Ki counter (max = monk level). Refreshes on short rest.
+        # Each Ki spend funds a bonus-action Flurry / Patient Defense /
+        # Step of the Wind option (all curated in `_FEATURE_ECONOMY`
+        # since v2.6.0 with slot:'bonus'). Stunning Strike (Lv 5) also
+        # spends 1 Ki but it's a per-attack uplift — pending the v2.16.0
+        # attack-picker pattern extending for Monks.
+        "resources": [
+            {
+                "key": "ki",
+                "name": "Ki",
+                "current": 5, "max": 5, "reset": "short",
+                "source": "monk Lv 2",
+                "class_slug": "monk",
+                "desc": "Spend 1 Ki for Flurry of Blows / Patient Defense / Step of the Wind (bonus action). 5 points at Lv 5; refreshes on short rest.",
+                "manual": False,
+            },
+        ],
+        # v2.18.0: clickable Ki-spend buttons in the Class abilities
+        # panel. Each option is a bonus action (slot:'bonus' per the
+        # curated table); clicking fires /use_feature which announces
+        # + flips the Bns chip. v1 deviation: the Ki counter isn't
+        # auto-decremented on click — the GM (or the player) clicks
+        # the resource pip to spend the Ki separately. A future
+        # per-feature commit will route Ki options through a dedicated
+        # /use_ki endpoint that atomically decrements the Ki counter +
+        # marks the bonus slot + announces, mirroring v2.17.1 Second
+        # Wind.
+        "class_features": [
+            {
+                "key": "flurry-of-blows",
+                "name": "Flurry of Blows",
+                "desc": "Bonus action — spend 1 Ki to make two unarmed strikes (1d6+DEX each at Lv 5).",
+            },
+            {
+                "key": "patient-defense",
+                "name": "Patient Defense",
+                "desc": "Bonus action — spend 1 Ki to take the Dodge action (attacks against you have disadvantage; you have advantage on DEX saves).",
+            },
+            {
+                "key": "step-of-the-wind",
+                "name": "Step of the Wind",
+                "desc": "Bonus action — spend 1 Ki to take the Disengage or Dash action; jump distance doubles for the turn.",
+            },
+        ],
+    }
+
+
 def _fighter_sheet(name: str) -> dict:
     """v2.17.0: demo Fighter Lv 5 (Champion) for the GM. Added in
     Phase A.4 to unlock per-feature work for Second Wind / Action
@@ -1169,9 +1299,24 @@ def seed_characters(
         sheet=_fighter_sheet("Garrik Ironside"),
         color="#8a96a3",
     )
-    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc])
+    # v2.18.0: Phase A.5 — demo Monk (Kael Brightleaf). 8th PC.
+    # Way of the Open Hand, Lv 5, Wood Elf. DEX 18 / WIS 15. Unblocks
+    # per-feature work for Ki-spending (Flurry of Blows / Patient
+    # Defense / Step of the Wind — all curated since v2.6.0 with
+    # slot:'bonus'). Stunning Strike (per-attack uplift, Monk Lv 5)
+    # and Open Hand Technique (on-hit prone/push/no-reactions) are
+    # deferred follow-ups.
+    monk_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Kael Brightleaf",
+        template="dnd5e",
+        sheet=_monk_sheet("Kael Brightleaf"),
+        color="#ff8c42",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc])
     db.flush()
-    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc]
+    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:
@@ -1299,6 +1444,18 @@ def seed_tokens(
         label=chars[6].name, color="#8a96a3",
         image_url=None,
         x=560, y=420, size=1,
+    ))
+    # v2.18.0: Phase A.5 — Kael Brightleaf token. Monk goes in the
+    # thick of melee; placed at (490, 490) one cell south of Caelan
+    # and east of Pip so the line reads as "Tavik + Caelan + Garrik
+    # front, Kael + Pip middle, Lyra + Mira back." No portrait jpg
+    # ships yet.
+    tokens.append(Token(
+        map_id=map_.id, character_id=chars[7].id,
+        controller_user_id=users["gm"].id,
+        label=chars[7].name, color="#ff8c42",
+        image_url=None,
+        x=490, y=490, size=1,
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
@@ -1752,25 +1909,29 @@ def seed_encounter(
     # v2.14.2: Mira Greenleaf (GM's Druid) added at init 8, between
     # Bandit Alpha (9) and Bandit Beta (7).
     # v2.17.0: Garrik Ironside (GM's Fighter, Champion) added at init
-    # 19 — top of the order. NPC token indices +1 again to account
-    # for Garrik at tokens[6] (Vex 6→7, Bandit Alpha 7→8, Bandit
-    # Beta 8→9, Bandit Gamma 9→10, Thug 10→11, Grixxa 11→12).
+    # 19 — top of the order at that point.
+    # v2.18.0: Kael Brightleaf (GM's Monk, Way of the Open Hand)
+    # added at init 20 — top of the order with DEX 18 / +4 init mod
+    # rolled high. NPC token indices +1 again (Vex 7→8, Bandit
+    # Alpha 8→9, Bandit Beta 9→10, Bandit Gamma 10→11, Thug 11→12,
+    # Grixxa 12→13) since Kael lands at tokens[7].
     # Specs: (token_idx, initiative_roll, hp_max, dex_mod).
     init_specs = [
         # token_idx, init, hp_max, dex_mod
+        (7,  20, 38, 4),   # Kael Brightleaf (v2.18.0)
         (6,  19, 49, 2),   # Garrik Ironside (v2.17.0)
-        (12, 18, 36, 3),   # Grixxa (Goblin Captain)
-        (7,  17, 65, 3),   # Vex (Bandit Captain)
+        (13, 18, 36, 3),   # Grixxa (Goblin Captain)
+        (8,  17, 65, 3),   # Vex (Bandit Captain)
         (4,  16, 33, 2),   # Lyra Sunstrider (v2.14.1)
         (0,  15, 33, 3),   # Pip Quickfingers
         (2,  14, 43, 0),   # Brother Tavik Stonebrow
         (1,  13, 27, 2),   # Thalindra Moonwhisper
         (3,  12, 44, 0),   # Sir Caelan Lightbringer (v2.14.0)
-        (11, 11, 32, 0),   # Thug
-        (8,   9, 11, 1),   # Bandit Alpha
+        (12, 11, 32, 0),   # Thug
+        (9,   9, 11, 1),   # Bandit Alpha
         (5,   8, 36, 3),   # Mira Greenleaf (v2.14.2)
-        (9,   7, 11, 1),   # Bandit Beta
-        (10,  5, 11, 1),   # Bandit Gamma
+        (10,  7, 11, 1),   # Bandit Beta
+        (11,  5, 11, 1),   # Bandit Gamma
     ]
     combatants = []
     for token_idx, init_roll, hp_max, dex_mod in init_specs:

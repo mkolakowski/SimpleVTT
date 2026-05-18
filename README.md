@@ -1,6 +1,6 @@
 # SimpleVTT
 
-> Current version: **2.17.2** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
+> Current version: **2.18.0** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
 
 A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 
@@ -43,6 +43,7 @@ Three accounts, all with the password **`demopass`** (also surfaced on the login
 | **Lyra Sunstrider** | Bard 6 (College of Lore) | Half-Elf | GM | Charisma face + support caster; Rapier + Hand Crossbow + Vicious Mockery cantrip; Healing Word / Faerie Fire / Suggestion / Hypnotic Pattern / Dispel Magic. Bardic Inspiration 3/short rest at d8 (CHA mod uses, Font of Inspiration short-rest refresh from Lv 5). Added v2.14.1 to unlock the Bardic Inspiration picker (v2.11.0) end-to-end. **Magical Secrets** (v2.15.1 Lore Bard Lv 6 picks): **Fireball** (8d6 fire, DC 14 DEX save, AoE damage Bards don't normally get) + **Counterspell** (reaction-counter — both marked 🪄 on her sheet). |
 | **Mira Greenleaf** | Druid 5 (Circle of the Moon) | Wood Elf | GM | Nature caster + Wild Shape combat-druid; Scimitar + Sling + Produce Flame cantrip; Healing Word / Faerie Fire / Moonbeam / Call Lightning / Conjure Animals. Wild Shape 2/short rest with CR-1 cap and bonus-action transform (Circle of the Moon). Added v2.14.2 to set up Wild Shape transform UI work (priority #4 in the class-content roadmap). |
 | **Garrik Ironside** | Fighter 5 (Champion) | Variant Human | GM | Two-handed front-line martial; Greatsword (+7 / 2d6+4 slashing) + Handaxe (thrown). STR 18 / CON 16, AC 16 (chain mail, no shield). Great Weapon Fighting style (reroll 1s and 2s on damage). Second Wind 1/short rest, Action Surge 1/short rest, Improved Critical (Champion Lv 3: crit on 19-20, passive — needs roll-time intercept to wire fully). Added v2.17.0 to unlock Phase B work for Second Wind / Action Surge / Brutal Critical-shape uplifts. |
+| **Kael Brightleaf** | Monk 5 (Way of the Open Hand) | Wood Elf | GM | Speed-45 melee disruptor (Wood Elf Fleet of Foot + Monk Unarmored Movement). DEX 18 / WIS 15. AC 16 (Unarmored Defense: 10 + DEX + WIS). Unarmed Strike + Quarterstaff both +7 / 1d6+4 bludgeoning (Martial Arts: DEX replaces STR; Lv 5 die is 1d6). Ki 5/short rest. Class abilities buttons for Flurry of Blows / Patient Defense / Step of the Wind (Open Hand Technique + Stunning Strike are deferred follow-ups). Added v2.18.0 to unlock Phase B work for the Ki spend-picker. |
 
 ### NPCs in the Tavern Brawl
 
@@ -61,19 +62,20 @@ All six are authored as homebrew monster JSON in the campaign's homebrew scope (
 
 The encounter ships with a deterministic initiative order so you can hit "Load encounter" and immediately start playing:
 
-1. Garrik Ironside — **init 19**
-2. Grixxa (Goblin Captain) — init 18
-3. Vex (Bandit Captain) — init 17
-4. Lyra Sunstrider — init 16
-5. Pip Quickfingers — init 15
-6. Brother Tavik — init 14
-7. Thalindra Moonwhisper — init 13
-8. Sir Caelan Lightbringer — init 12
-9. Thug — init 11
-10. Bandit Alpha — init 9
-11. Mira Greenleaf — init 8
-12. Bandit Beta — init 7
-13. Bandit Gamma — init 5
+1. Kael Brightleaf — **init 20**
+2. Garrik Ironside — init 19
+3. Grixxa (Goblin Captain) — init 18
+4. Vex (Bandit Captain) — init 17
+5. Lyra Sunstrider — init 16
+6. Pip Quickfingers — init 15
+7. Brother Tavik — init 14
+8. Thalindra Moonwhisper — init 13
+9. Sir Caelan Lightbringer — init 12
+10. Thug — init 11
+11. Bandit Alpha — init 9
+12. Mira Greenleaf — init 8
+13. Bandit Beta — init 7
+14. Bandit Gamma — init 5
 
 ### What gets wiped on reset
 
