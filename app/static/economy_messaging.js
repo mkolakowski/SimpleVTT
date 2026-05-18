@@ -55,6 +55,45 @@
                 cancel: 'Cancel',
             };
         },
+        // v2.14.6: Wild Shape over-budget. Moon Druid spends a bonus
+        // action (Lv 2 RAW feature); the default Druid spends an action.
+        // The endpoint stamps source:"wild-shape" on the 409 body so
+        // both slot variants can route here. Verb is "shift" — the
+        // table reads as Wild-Shape-flavoured, not generic.
+        'bonus|wild-shape': (opts) => {
+            const who = opts.characterName || 'You';
+            return {
+                title: 'Over the action budget',
+                body: `${who}'ve already used your bonus action this turn. Wild Shape anyway?`,
+                hint: 'Circle of the Moon: Wild Shape consumes your bonus action.',
+                confirm: 'Confirm — shift anyway',
+                cancel: 'Cancel',
+            };
+        },
+        'action|wild-shape': (opts) => {
+            const who = opts.characterName || 'You';
+            return {
+                title: 'Over the action budget',
+                body: `${who}'ve already used your action this turn. Wild Shape anyway?`,
+                hint: '',
+                confirm: 'Confirm — shift anyway',
+                cancel: 'Cancel',
+            };
+        },
+        // Polymorph the spell is always an action regardless of caster
+        // class. The 🦌 Polymorph button on the resources panel goes
+        // through /transform directly without /cast_spell so this is
+        // its over-budget path.
+        'action|polymorph': (opts) => {
+            const who = opts.characterName || 'You';
+            return {
+                title: 'Over the action budget',
+                body: `${who}'ve already used your action this turn. Cast Polymorph anyway?`,
+                hint: '',
+                confirm: 'Confirm — cast anyway',
+                cancel: 'Cancel',
+            };
+        },
     };
 
     function _modalCopy(opts) {

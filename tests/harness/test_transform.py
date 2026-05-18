@@ -217,3 +217,93 @@ async def test_revert_when_not_transformed(gm_client, roster):
         json={},
     )
     assert resp.status_code == 409
+
+
+@_skip_no_open5e
+async def test_transform_over_budget_flag(gm_client, mira_in_base_form):
+    """v2.14.6: /transform's over-budget gate. The 409 branch only
+    fires for non-GMs (GM clicks bypass), and the demo has no
+    player-owned Druid to verify the 409 directly. Instead we use
+    PUT /battle to inject a minimal battle state with Mira's bonus
+    chip pre-marked, then POST /transform as the GM and assert the
+    response's ``over_budget`` flag is True (the same condition that
+    would trigger 409 for a non-GM).
+
+    Pre-this-commit /transform didn't carry ``over_budget`` on its
+    response at all; if this assertion fires it's a regression of
+    the v2.14.6 wiring.
+
+    Cleans up its injected battle state at the end via an empty PUT
+    so subsequent tests start with no hub combatants (the pre-test
+    baseline for every other harness test).
+    """
+    mira = mira_in_base_form
+
+    # Inject minimal battle state with Mira's bonus chip pre-marked.
+    # This is cheaper than POSTing /encounters/{eid}/load (which does
+    # a heavy token shuffle) — we just need ``hub.get_battle`` to
+    # return non-empty combatants so _is_slot_used can see Mira.
+    pre_state = {
+        "combatants": [
+            {
+                "char_id": mira["id"],
+                "name": mira["name"],
+                "init": 8,
+                "economy": {
+                    "action": False, "bonus": True,
+                    "reaction": False, "movement": 0,
+                },
+            }
+        ],
+        "round": 1,
+        "active_index": 0,
+    }
+    resp = await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle", json=pre_state,
+    )
+    assert resp.status_code == 200, resp.text
+
+    try:
+        # POST transform. GM is exempt from the 409 branch but the
+        # response still carries over_budget=True because the gate's
+        # ``was_used`` check fires regardless of caller role.
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{mira['id']}/transform",
+            json={"slug": "wolf", "source": "wild-shape"},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["economy_slot"] == "bonus"
+        assert data["over_budget"] is True, (
+            "Mira's bonus chip was pre-marked; the v2.14.6 over-budget "
+            "gate should have flagged the transform as over_budget on "
+            "the GM-bypassed response."
+        )
+
+        # Revert + transform-with-override to verify the override path
+        # also returns over_budget=True (the gate still tracks usage
+        # even when override bypasses the 409).
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{mira['id']}/revert",
+            json={},
+        )
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{mira['id']}/transform",
+            json={"slug": "wolf", "source": "wild-shape", "override": True},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["over_budget"] is True
+    finally:
+        # Revert Mira to base form for subsequent tests.
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{mira['id']}/revert",
+            json={},
+        )
+        # Clear the injected battle state so other tests start clean.
+        # Empty combatants list = _is_slot_used always returns False
+        # for the rest of the session.
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={"combatants": [], "round": 0, "active_index": 0},
+        )

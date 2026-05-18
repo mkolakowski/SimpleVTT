@@ -575,16 +575,50 @@
         const { opts, selected } = _state;
         $('bp-confirm-btn').disabled = true;
         $('bp-status').textContent = 'Transforming…';
-        try {
-            const resp = await fetch(`/api/campaign/${opts.campaignId}/character/${opts.characterId}/transform`, {
+
+        // v2.14.6: /transform now returns 409 over_budget when the slot
+        // the transform would consume is already burnt (Moon Druid who
+        // already used their bonus; default Druid who already used their
+        // action). Wrap the fetch in a retry-with-override closure so
+        // the over-budget modal can re-fire it on Confirm.
+        const _doFetch = (extraBody) => fetch(
+            `/api/campaign/${opts.campaignId}/character/${opts.characterId}/transform`,
+            {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     slug: selected.slug,
                     source: opts.source,
                     free_pick: $('bp-free-pick').checked,
+                    ...(extraBody || {}),
                 }),
-            });
+            }
+        );
+
+        try {
+            let resp = await _doFetch();
+            // /transform can return 409 for two distinct reasons: the
+            // over-budget gate ({error:"over_budget", slot, ...}) and the
+            // "already transformed" / CR-cap / type guards ({detail:"..."}).
+            // Peek at the body to disambiguate — only the over-budget shape
+            // gets the modal-and-retry treatment; everything else flows
+            // through to the generic error branch below.
+            if (resp.status === 409 && typeof window.handleOverBudget === 'function') {
+                const peek = await resp.clone().json().catch(() => null);
+                if (peek && peek.error === 'over_budget') {
+                    const retried = await window.handleOverBudget(
+                        resp,
+                        () => _doFetch({ override: true }),
+                    );
+                    if (retried === null) {
+                        // User cancelled the modal.
+                        $('bp-status').textContent = '';
+                        $('bp-confirm-btn').disabled = false;
+                        return;
+                    }
+                    resp = retried;
+                }
+            }
             if (!resp.ok) {
                 const err = await resp.json().catch(() => ({ detail: 'Transform failed' }));
                 throw new Error(err.detail || err.error || `HTTP ${resp.status}`);

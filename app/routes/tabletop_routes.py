@@ -7256,6 +7256,7 @@ async def transform_character(
     slug = str(body.get("slug") or "").strip()
     source = str(body.get("source") or "wild-shape").strip().lower()
     free_pick = bool(body.get("free_pick"))
+    override = bool(body.get("override"))
     if not slug:
         raise HTTPException(400, "slug is required")
     if source not in ("wild-shape", "polymorph"):
@@ -7280,6 +7281,26 @@ async def transform_character(
     if sheet.get("active_form"):
         existing = sheet["active_form"]
         raise HTTPException(409, f"Already transformed into {existing.get('name', 'a form')}. Revert first.")
+
+    # v2.14.6: Phase 4 over-budget gate. Compute the slot from the
+    # sheet BEFORE the (expensive) Open5e fetch so a 409 returns
+    # without burning a network round-trip. Mirrors the pattern in
+    # /cast_spell + /use_feature. strict mode (v2.8.0) suppresses
+    # player overrides; GM clicks always bypass.
+    slot = _wild_shape_economy_slot(sheet, source)
+    was_used = _is_slot_used(campaign_id, char.id, slot)
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    can_override = override and not strict
+    if was_used and not user_is_gm and not can_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": slot,
+            "char_name": char.name,
+            "source": source,
+            "label": "Wild Shape" if source == "wild-shape" else "Polymorph",
+            "strict": strict,
+        })
 
     # Fetch beast
     monster = _fetch_open5e_creature(slug)
@@ -7455,15 +7476,16 @@ async def transform_character(
             "source": "Wild Shape" if source == "wild-shape" else "Polymorph",
             "remaining": 0,
             "max": 0,
+            "over_budget": was_used,
+            "over_budget_slot": slot if was_used else "",
         },
     })
 
-    # Mark the action-economy slot the transform consumed. Moon Druids
-    # spend a bonus action on Wild Shape (Lv 2 RAW); everyone else an
-    # action. Polymorph (the spell) is always an action, regardless of
-    # caster class. ``_mark_battle_economy`` is a no-op when the
+    # Mark the action-economy slot the transform consumed. ``slot``
+    # was resolved at the top of the endpoint (Moon Druid → bonus,
+    # everyone else → action; polymorph → always action) before the
+    # over-budget gate. ``_mark_battle_economy`` is a no-op when the
     # campaign has no active battle or the character isn't in init.
-    slot = _wild_shape_economy_slot(sheet, source)
     await _mark_battle_economy(campaign_id, char.id, slot)
 
     return {
@@ -7471,6 +7493,7 @@ async def transform_character(
         "active_form": sheet["active_form"],
         "sheet": sheet,
         "economy_slot": slot,
+        "over_budget": was_used,
     }
 
 
