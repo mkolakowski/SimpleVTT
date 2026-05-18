@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.11.1] - 2026-05-17
+
+**Schema version:** 55
+**Commit summary:** Docs-only: new `docs/plans/test-harness.md` — design for an autonomous HTTP+WS click-through regression harness. Phase 1 ships a pytest-based runner that logs in via session cookie, opens a campaign WS, exercises every clickable endpoint on the demo's PCs + a small set of test-fixture PCs (Paladin / Bard / Druid / Fighter / Monk), and asserts on the resulting HTTP response shape AND the WS broadcast type + payload. Phase 2 adds CI integration; Phase 3 builds out the contract-test discipline (every new endpoint commit also lands its harness test); Phase 4 layers Playwright on top for UI-layer regressions; Phase 5 is multi-user concurrency (stretch). The motivating bug class: backend state + broadcast-shape regressions that were only caught by manual play (v2.7.3 weapon-attack-toast miss, v2.4.12 spell-level field typo, v2.6.1 over-budget gate, etc.). PATCH bump — docs-only.
+**Description:** Single change: new `docs/plans/test-harness.md` (~400 lines). The doc is structured the same way the v2.9.3 per-class-feature plans are — goal section, tech choices (pytest + httpx + websockets — both deps already in requirements.txt), phase breakdown with exit criteria, fixture characters list (5 PCs to author beyond what the demo already covers), action-economy state-management strategies, strict-mode dimension coverage matrix, reporting format (JUnit XML + HTML report), invocation patterns (Makefile + pytest + env vars), open questions / risks, and a clear "what this does NOT do" section that scopes out visual regression / performance / multi-user concurrency from Phase 1.
+**Description (cont):** Why HTTP+WS first (over Playwright). The five recent regressions the doc opens with all live at the backend or WS-protocol layer — endpoint shapes, broadcast types, state transitions. A browser-driver test would have caught them too, but at ~10× the runtime + the infrastructure cost of shipping a Chrome binary in the test image. Phase 1's HTTP+WS layer runs in seconds, fits cleanly in CI on every PR, and the per-button → expected-broadcast mapping doubles as living documentation of the API contract per surface. Playwright is filed as Phase 4 for the cases the HTTP+WS layer can't see (the v2.7.3 toast bug specifically was a UI dispatch miss; HTTP+WS would not have caught it).
+**Description (cont 2):** Fixture strategy. The demo's three PCs (Pip / Thalindra / Tavik) cover roughly half the endpoint surface — attacks, spells, Channel Divinity, /use_item potions, /use_resource decrements. For surfaces the demo doesn't have (Lay on Hands, Bardic Inspiration, Wild Shape, Ki, Action Surge, Second Wind), the harness ships its own test-fixture PCs in a sidecar test campaign (campaign 2). Total fixture LOC ≈ ~600 across 5 PCs. The boundary is clear: demo PC tests cover what the demo coverage promises (intentionally minimal to avoid breakage on demo seed evolution); test-fixture PCs cover everything else end-to-end. The harness owns the test campaign fully — wipes + re-seeds between runs.
+
+### Added
+- `docs/plans/test-harness.md` — full plan for the autonomous click-through test harness. Phase 1 (HTTP+WS smoke), Phase 2 (CI), Phase 3 (contract discipline), Phase 4 (Playwright), Phase 5 (concurrency stretch).
+
+### Notes
+- Why this is a docs-only commit. The harness scaffold + first ~3 endpoints is its own Phase 1 commit (estimated ~1-2 commits total for Phase 1; this commit doesn't include any of the test code). Splitting the plan from the implementation lets the design get a review pass before the ~2300 LOC of test code lands.
+- The plan calls out pytest as a new dev dependency (httpx + websockets are already in `requirements.txt`). The Phase 1 implementation commit will add pytest + pytest-asyncio + pytest-html to `requirements.txt` (or to a new `requirements-dev.txt` so production images stay slim).
+- CI integration (Phase 2) is sketched but intentionally light — the workflow file shape is described, but the actual `.github/workflows/test-harness.yml` doesn't ship until Phase 2's own commit.
+- Estimated Phase 1 timeline: ~1-2 dedicated commits. First commit ships the harness scaffold + vertical slice (`/attack`, `/cast_spell`, `/use_feature` happy paths). Second commit fills out coverage to every shipped endpoint + the over-budget gate matrix.
+- The plan mirrors the format of `docs/plans/class-content-status.md`'s per-feature plans (one-paragraph design, complexity tag, dependencies). Keeps the plan family stylistically consistent.
+
+---
+
 ## [2.11.0] - 2026-05-17
 
 **Schema version:** 55
