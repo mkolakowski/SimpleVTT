@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.9.3] - 2026-05-17
+
+**Schema version:** 55
+**Commit summary:** Docs-only: **plans for every ⚪ class feature**. `docs/plans/class-content-status.md` grows a new ~400-line section "Per-feature implementation plans (⚪ → 🟠)" with one-paragraph plans for every previously-unplanned class feature (Barbarian Reckless Attack through Wizard Signature Spells, plus subclass features, feats, and race traits). Each plan identifies the implementation hook (which cross-cutting infrastructure piece A-E it leans on), a complexity tag (S/M/L), and dependencies. Existing status table markers in the per-class tables refreshed to reflect work shipped through v2.9.2 (Cunning Action ✅, Channel Divinity counter + v2.9.0 picker, etc.). Priority list rebalanced — items 1, 2, 6, 12 marked as shipped; #3 (Lay on Hands), #4 (Wild Shape), #5 (Bardic Inspiration) are the next user-visible wins. PATCH bump — docs-only, no code change.
+**Description:** Three coordinated changes inside `docs/plans/class-content-status.md`. **(1)** A new "Recent shipped work" callout at the top of the file summarises the v2.4.31 → v2.9.2 progress so a reader landing on the doc cold doesn't have to grep the changelog to know what's already done. **(2)** Inline status-marker updates: Rogue Cunning Action moves from ⚪ to ✅ with a v2.6.0 reference; Cleric Channel Divinity's note expands to mention the v2.9.0 picker and Life Domain end-to-end completion; Paladin Channel Divinity row similarly notes the v2.9.0 picker shape with paladin-specific options pending. **(3)** A new top-level section "## Per-feature implementation plans (⚪ → 🟠)" appended below the existing cross-cutting infrastructure block. Inside the section: subsections per class (Barbarian through Wizard) listing every ⚪ feature with a tight implementation plan (RAW summary + implementation hook + complexity tag + dependencies). Plus a "## Subclass-feature plans" section covering the 🟡 descriptive subclass features (Berserker Frenzy, Champion Improved Critical, Battle Master Maneuvers, etc.), a "## Feat plans" section for Grappler + the demo Lucky Strike homebrew, and a "## Race trait plans" section organised by race.
+**Description (cont):** Format choices. Each plan paragraph is intentionally tight — 3-5 sentences per feature, scannable in under a minute. Complexity tags are rough but consistent: **S** ≈ 50-150 LOC + no architectural moves; **M** ≈ 150-400 LOC, may need a new endpoint or curated table; **L** ≈ may need its own dedicated plan doc. Dependencies reference the existing cross-cutting infrastructure pieces (A = resource option-picker, B = roll-time intercept, C = buff slot, D = passive trait engine, E = action-economy — already shipped). The "Cross-class shared" subsection consolidates Extra Attack into one entry rather than duplicating across four classes; same for Unarmored Defense variants (Barbarian / Monk) which share the same `computeEffectiveAC` hook.
+**Description (cont 2):** What deliberately stays unplanned. Three features get flagged "needs its own dedicated plan file when work begins" rather than a tight paragraph: Battle Master Combat Maneuvers (16 options × per-maneuver side effects = too much for one paragraph), Sorcerer Metamagic (per-cast modifiers touching every spell type), Wild Magic Surge (d100 outcome table where each row is its own micro-feature). These get filed as ⚪ → 🟠 with a pointer to write a fuller `docs/plans/<feature>.md` before coding starts. Pure descriptive features (Druidic language, Timeless Body, Thieves' Cant, etc.) are intentionally deferred forever — they have no mechanic to wire and the sheet's description text is the final state.
+**Description (cont 3):** What this commit doesn't do. No status markers in the per-class tables flip from ⚪ to 🟠 in this commit — the convention is now "⚪ = no plan; 🟠 = plan exists; this Per-feature section is the source of truth for which is which." The reader checks here first; the per-class tables stay at ⚪ for "no code" until the feature actually ships. Updating ⚪ → 🟠 markers across ~80 features would be visual noise without changing the doc's information content; the Per-feature section header makes the relationship explicit.
+
+### Added
+- `docs/plans/class-content-status.md` — new "## Per-feature implementation plans (⚪ → 🟠)" section with ~80 individual feature plans organised by class.
+- `docs/plans/class-content-status.md` — new "## Subclass-feature plans" section covering descriptive 🟡 subclass entries.
+- `docs/plans/class-content-status.md` — new "## Feat plans" section (Grappler + Lucky Strike).
+- `docs/plans/class-content-status.md` — new "## Race trait plans" section organised by race.
+- `docs/plans/class-content-status.md` — new "Recent shipped work" callout at the top summarising v2.4.31 → v2.9.2 progress.
+
+### Changed
+- `docs/plans/class-content-status.md` per-class tables — status markers refreshed: Rogue Cunning Action ⚪ → ✅ (v2.6.0); Cleric Channel Divinity row notes v2.9.0 picker; Paladin Channel Divinity row notes v2.9.0 picker shape applies once paladin options are wired.
+- `docs/plans/class-content-status.md` "Order of priority" — items 1, 2, 6, 12 ~~struck through~~ as shipped; remaining items renumbered in narrative order.
+
+### Notes
+- The plan is intentionally lean per feature — each paragraph names the infrastructure piece it depends on and the complexity tier. A contributor picking up a ⚪ feature can read its paragraph in under a minute and decide whether to start coding now or wait for the infra prerequisite to land.
+- Three features (Battle Master Combat Maneuvers, Sorcerer Metamagic, Wild Magic Surge) are explicitly deferred to per-feature plan files when work begins. The one-paragraph format isn't enough scaffold for those — they need full design docs.
+- Pure descriptive features are left unplanned forever. There's no mechanic to wire; the sheet shows the description text and that's the design.
+- Status markers in the per-class tables stay at ⚪ even though plans now exist. The convention going forward: ⚪ = no code; 🟠 = no code AND no plan; ✅ = shipped. The Per-feature section header points the reader at the source of truth.
+- This is the first doc commit in a while that doesn't ship adjacent code. PATCH bump because every commit needs one; the change is real (the doc is the design surface) even though no .py / .js / .html files moved.
+
+---
+
 ## [2.9.2] - 2026-05-17
 
 **Schema version:** 55

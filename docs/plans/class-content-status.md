@@ -7,6 +7,18 @@ work begins. Add follow-up plans for items in 🟠 / ⚪ status as they
 become priorities; do **not** start a feature without first writing
 its plan section here.
 
+> **Recent shipped work (through v2.9.2):** Action-economy infrastructure
+> (E) is complete — Phases 1-5 + strict-mode gate (v2.8.0) + movement
+> breadcrumb (v2.8.1-2) + Dash modal (v2.8.3). Channel Divinity option-
+> picker (v2.9.0) ships the Life Domain end-to-end via the new shared
+> `showResourceOptionPicker` helper. Presence indicator (v2.9.1-2)
+> shows connected players in the lower-left of the map. **As of
+> v2.9.3** every ⚪ class feature has at least a one-paragraph plan in
+> the "Per-feature implementation plans" section below; status markers
+> in this file's per-class tables stay ⚪ for "no code" and 🟠 for
+> "plan exists" — the new section is the source of truth for which
+> ⚪ entries have moved to 🟠.
+
 ## Status legend
 
 | Symbol | Meaning |
@@ -68,7 +80,7 @@ The `### Header` names below come from the `features` field of each JSON.
 |---|---|---|---|
 | 1 | Spellcasting | ✅ | Demo Tavik (Lv 5) prepares cantrips + L1-L3 spells correctly post-v2.4.12 |
 | 1 | Divine Domain | 🟡 | Subclass slot; domain-spells curated table covers all 12 domains |
-| 2 | Channel Divinity | 🟢 | Resource counter (`key: 'channel-divinity'`) shows correctly in mini + full sheet; **see plan section below** for option-picker UI work |
+| 2 | Channel Divinity | 🟢 | Resource counter (`key: 'channel-divinity'`) + v2.9.0 option-picker (`showResourceOptionPicker`); Life Domain ✅ end-to-end (Turn Undead + Preserve Life); other domains need their option entries added to `_FEATURE_ECONOMY` |
 | 5 / 8 / 11 / 14 / 17 | Destroy Undead | ⚪ | Tied to Turn Undead option above; would surface as a damage uplift when Turn Undead is implemented |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 10 | Divine Intervention | ⚪ | |
@@ -133,7 +145,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 2 | Divine Smite | ⚪ | Should be a per-attack damage-uplift toggle |
 | 3 | Divine Health | ⚪ | Passive — disease immunity |
 | 3 | Sacred Oath | 🟡 | Subclass slot |
-| 3 | Channel Divinity | 🟢 | Same counter / picker situation as Cleric — see plan section |
+| 3 | Channel Divinity | 🟢 | Same counter + v2.9.0 picker shape as Cleric; Paladin-side Sacred Weapon / Turn the Unholy options need to land in `_FEATURE_ECONOMY` under a paladin-keyed entry (or a `channel-divinity-paladin` key) — see plan section below |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 5 | Extra Attack | 🟡 | |
 | 6 / 18 | Aura of Protection | ⚪ | |
@@ -166,7 +178,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 1 / 6 | Expertise | ✅ | Same Skills.expertise plumbing as Bard |
 | 1 | Sneak Attack | ⚪ | Per-attack damage uplift; needs a toggle on the attack panel |
 | 1 | Thieves' Cant | ⚪ | Language only |
-| 2 | Cunning Action | ⚪ | Bonus-action utility |
+| 2 | Cunning Action | ✅ | v2.6.0 — class-features panel renders Dash/Disengage/Hide buttons that POST `/use_feature` and auto-mark Bns chip |
 | 3 | Roguish Archetype | 🟡 | Subclass slot |
 | 4 / 8 / 10 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 5 | Uncanny Dodge | ⚪ | |
@@ -830,38 +842,727 @@ end-to-end:**
 
 ## Order of priority (rough)
 
-1. **(E) Action-economy tracker — Phase 1+2** — manual chip strip +
-   auto-advance from existing strike / cast buttons. Most leverage of
-   any single piece of infrastructure: every subsequent per-feature
-   item below benefits from being able to ask "what action class is
-   this?". Phase 1 ships standalone; Phase 2 follows immediately.
-2. **Channel Divinity option-picker** (Phase 1-3 plan in 2.4.15 commit) —
-   Tavik's most visible missing feature in the demo. Now reads economy
-   state from (E) so Turn Undead's "action" cost is auto-tracked.
-3. **Lay on Hands target-picker** — pairs with Channel Divinity work;
-   same UI shape (resource → option overlay → target → effect).
-4. **Wild Shape transformation UI** — already half-wired
-   (`_doMiniTransform`); finishing the form-picker dropdown closes
-   Druid Lv 2 functionality.
-5. **Bardic Inspiration target-picker** — completes Bard core loop.
-6. **(E) Action-economy — Phase 3+4** — class-feature table + gating
-   with GM override. By this point items 2-5 have populated enough
-   features that the table needs the curated entries; piggybacks on
-   their work.
-7. **Cross-cutting (A) generalized** — refactor 2-5 onto a single
-   `resource → option → target` framework.
-8. **Sneak Attack / Divine Smite per-attack uplift toggle** — pairs of
-   adjacent damage-uplift features.
-9. **(B) Roll-time intercepts** — big architectural work; unblock Lucky
-   / Indomitable / Reliable Talent / Portent / Champion Improved
-   Critical.
-10. **(C) Buff slot** — even bigger; unblock everything concentration
-    / duration-based.
-11. **(D) Passive trait engine** — likely subsumed by (B) once the
-    intercept exists.
-12. **(E) Action-economy — Phase 5** — movement tracker. Lowest-priority
-    polish; useful for table-mat-style play but optional for digital.
+Updated for v2.9.3. ~~Strikethrough~~ items are shipped.
 
-Items 1-5 are user-visible per-feature wins (or in #1's case, an
-immediately-useful UI primitive that the wins build on); 6+ are
-infrastructure changes that pay for themselves across many features.
+1. ~~**(E) Action-economy tracker — Phase 1+2** — manual chip strip + auto-advance from existing strike / cast buttons.~~ ✅ shipped v2.4.31 (Phase 1) + v2.5.3 (Phase 2) + v2.5.5 (Phase 2b full-sheet sync).
+2. ~~**Channel Divinity option-picker.**~~ ✅ shipped v2.9.0 with the reusable `showResourceOptionPicker` helper. Life Domain end-to-end; other domains need their `_FEATURE_ECONOMY` option entries (see per-class plans below — short follow-up per domain).
+3. **Lay on Hands target-picker.** Needs a numeric amount picker (HP to spend, max = pool) layered on top of `showResourceOptionPicker`. Plus a target-picker overlay (click a token / pick from init roster). Now mostly a UX assembly job since the resource picker exists. See per-class plan.
+4. **Wild Shape transformation UI.** `_doMiniTransform` is half-wired (beast picker exists for Druids). Finishing the form-picker dropdown closes Druid Lv 2 functionality. See per-class plan.
+5. **Bardic Inspiration target-picker.** Same target-picker primitive as #3 (just no amount picker — pick target → "Bardic Inspiration to X" log entry + give X a d6/d8/d10/d12 die). Completes Bard core loop. See per-class plan.
+6. ~~**(E) Action-economy — Phase 3+4** — class-feature table + gating with GM override.~~ ✅ shipped v2.6.0 (Phase 3 curated table) + v2.6.1 (Phase 4 gating) + v2.7.2 (Phase 4a dimming) + v2.8.0 (strict mode).
+7. **Cross-cutting (A) generalized.** Refactor LoH / Wild Shape / Bardic Inspiration / Ki / Sorcery Points onto a single `resource → option → target → effect` framework. Now post-shipping #3-5 since the abstraction emerges from the concrete cases.
+8. **Sneak Attack / Divine Smite per-attack uplift toggle.** Pair of adjacent damage-uplift features; each is a per-attack toggle that fires extra damage dice on the resulting damage roll. Depends on (B) for the post-attack damage-up intercept. See per-class plans (Rogue Sneak Attack, Paladin Divine Smite).
+9. **(B) Roll-time intercepts.** Big architectural work; unblocks Lucky / Indomitable / Reliable Talent / Portent / Champion Improved Critical. The roll-toast popup (`/static/roll_toast.js`) is the most natural insertion point: pause the toast animation, surface intercept buttons under the dice, fire follow-up rolls / replace value before the toast lands. Filed as a separate plan doc when work begins.
+10. **(C) Buff slot.** Even bigger; unblocks every concentration spell + Bless / Reckless Attack / Guided Strike / etc. Buff entries should carry name + duration + mods + expiration trigger + source. The existing concentration-tracker UI from v2.1.x is the closest precedent. Filed as a separate plan doc when work begins.
+11. **(D) Passive trait engine.** Likely subsumed by (B) once the intercept exists. Each race trait registers a callback on a specific roll type (e.g. "STR save against poison" → advantage) that the intercept evaluates.
+12. ~~**(E) Action-economy — Phase 5** — movement tracker.~~ ✅ shipped v2.6.2 (chip) + v2.8.1-2 (breadcrumb) + v2.8.3 (Dash modal).
+
+Items 3-5 are the next-up user-visible wins. 7-11 are infrastructure
+that pays for itself across many features once shipped.
+
+---
+
+## Per-feature implementation plans (⚪ → 🟠)
+
+This section catalogues every ⚪ class feature with at least a one-
+paragraph plan so the contributor picking it up doesn't have to start
+from scratch. Plans are tight by design — they identify the
+implementation hook (which infrastructure piece A/B/C/D/E the feature
+leans on), an estimated complexity (S = small, ~50-150 LOC; M =
+medium, ~150-400 LOC; L = large, may need its own design doc), and
+dependencies. Once a feature ships, its row in the per-class table
+above flips to ✅ and the plan paragraph here can be deleted (or kept
+as historical context — your call).
+
+### Barbarian
+
+- **Reckless Attack (Lv 2)** — S. Toggle on the attack panel. When on, the
+  next melee STR attack rolls with advantage and incoming attacks until
+  the barbarian's next turn have advantage against them. Implementation:
+  per-attack toggle alongside Sneak Attack uplift (#8 in priority list);
+  the "incoming attacks have advantage" half is a buff slot entry (C).
+  Without (C), ship the outgoing-advantage half first; the incoming
+  passive sticks to a manual note in the conditions list.
+- **Danger Sense (Lv 2)** — S. Passive advantage on DEX saves against
+  effects you can see. Pure (D) passive trait engine territory. Deps:
+  (D). Until (D) lands, players manually click advantage on the DEX save
+  roll-state pill.
+- **Rage damage / resistance / advantage side effects (Lv 1, augments existing 🟢 counter)** —
+  M. The counter works (v?.x). Missing: +2/+3/+4 damage on STR melee
+  attacks (scales with level), resistance to bludgeoning/piercing/slashing,
+  advantage on STR checks + saves. All three pieces want (C) buff slot
+  to attach the modifiers. Deps: (C). When Rage is active, the buff slot
+  feeds modifiers into the attack/damage/check intercepts.
+- **Fast Movement (Lv 5)** — S. +10 ft speed when not wearing heavy
+  armor. Implementation: extend `_speedWalkFromSheet` (or a sibling
+  `_effectiveSpeed`) to add 10 ft when class === Barbarian, level ≥ 5,
+  AND no equipped heavy armor. No deps.
+- **Feral Instinct (Lv 7)** — M. Advantage on initiative + can act on
+  surprise round if raging. Advantage part = (D) passive on init rolls;
+  surprise-act needs a new "surprise" state on the init tracker (which
+  doesn't exist today — surprise is hand-waved by the GM). Deps: (D).
+  Surprise state is its own minor plan; deferred.
+- **Brutal Critical (Lv 9 / 13 / 17)** — M. Extra damage dice on melee
+  crits (1/2/3 extras). Implementation: damage-roll uplift triggered by
+  crit detection — same surface as Divine Smite / Sneak Attack (priority
+  #8). Deps: (B) for crit intercept. Ship after #8.
+- **Relentless Rage (Lv 11)** — M. When dropped to 0 HP while raging,
+  make a DC 10 CON save (escalates by 5 per use this short-rest) to drop
+  to 1 HP instead. Implementation: hook into `_apply_hp_change`'s
+  dying-transition (already exists for the v2.1.x death-save state
+  machine). If the character is raging, prompt the CON save before
+  applying the 0-HP transition; on success, clamp HP at 1. DC tracking
+  needs a per-short-rest counter. Deps: (C) for the rage-is-active
+  check (or a manual conditions check until (C) lands).
+- **Persistent Rage (Lv 15)** — S. Rage no longer ends early from "no
+  attack / no damage taken" — only from incapacitation or being knocked
+  out. Implementation: just a flag on the Rage buff entry. Deps: (C).
+- **Indomitable Might (Lv 18)** — S. Floor on STR checks = STR score.
+  Implementation: clamp the d20 result before adding mods on STR ability
+  checks — needs a roll-time intercept hook. Deps: (B).
+- **Primal Champion (Lv 20)** — S. STR/CON +4 (cap 24). Implementation:
+  a one-line tweak in the level-20 ASI ceiling check + the cap. No
+  intercept needed; the ability scores just go up to 24. No deps.
+- **Unarmored Defense (Barbarian, Lv 1)** — S. AC = 10 + DEX + CON when
+  no armor (shield OK). Implementation: extend `computeEffectiveAC` in
+  `sheet_dnd5e.html` to detect class === Barbarian + no armor and apply
+  the formula. Already a similar branch exists for Mage Armor / etc. No
+  deps.
+- **Extra Attack (Lv 5)** — M. (Shared with every martial class.) The
+  Attack action grants 2 (or more) attack rolls. Implementation: the
+  attack panel could mark each weapon's Strike as "Attack 1/2" with a
+  combined button, or just leave the current per-attack behaviour and
+  add a tooltip "Lv ≥ 5 — you can make a 2nd attack as part of this
+  Attack action". Action-economy stays correct either way because the
+  Attack action is a single Act slot. Deps: none, but UX-wise it ties
+  to action-economy.
+
+### Bard
+
+- **Bardic Inspiration (Lv 1, augments 🟢 counter)** — M, **priority #5**.
+  Click Use on the counter → target picker overlay (list of allies +
+  self exclusion). Pick a target → roll-log entry "✨ Pip Quickfingers
+  gains a Bardic Inspiration d8 from Tavik (10 min duration)". Until
+  (C) buff slot exists, the recipient tracks the die manually — but the
+  log entry is the audit trail. Target picker primitive is also #3 (LoH)
+  and shares between them. Deps: target picker (new shared helper); (C)
+  for proper buff tracking, optional.
+- **Jack of All Trades (Lv 2)** — S. Add half PB (round down) to
+  non-proficient ability checks. Implementation: ability-check roll
+  engine adds `+floor(PB/2)` when proficient flag is off AND class
+  includes Bard ≥ 2. Deps: (B).
+- **Song of Rest (Lv 2, augments 🟢 counter)** — S. During a short rest,
+  each ally that spends a Hit Die regains +1d6 (1d8 at Lv 9, 1d10 at
+  Lv 13, 1d12 at Lv 17) extra HP. Implementation: when the short-rest
+  endpoint processes Hit Die spending, look for any party member with
+  Bard ≥ 2 and add the bonus die per HD spent. Trivial wiring; the
+  bonus dice apply once per rest regardless of how many bards are
+  resting. Deps: short-rest endpoint surface (already exists).
+- **Countercharm (Lv 6)** — M. Action; allies within 30 ft get advantage
+  on saves vs fear/charm until your next turn. Implementation: buff slot
+  entry granting advantage on those specific save types within range.
+  Deps: (C). Action button on sheet decrements Act slot.
+- **Magical Secrets (Lv 10/14/18)** — S. Pick 2 spells from any class
+  list every 4 levels. Implementation: the existing spell picker is
+  class-filtered; just remove the filter for these picks (add a "From
+  any class list" checkbox in the picker UI that bypasses the filter).
+  Per-bard tracking: store the picked spells with a `_via: "magical-
+  secrets"` marker so they're flagged. No deps.
+- **Font of Inspiration (Lv 5)** — already 🟡 with implicit short-rest
+  refill via the resource counter's `reset: "short"`. No code change
+  needed; the description is accurate. Mark ✅ once the Bardic
+  Inspiration target-picker ships (the counter behaves as expected
+  today; only the picker is missing).
+- **Superior Inspiration (Lv 20)** — S. On rolling initiative, regain
+  1 BI use if at 0. Implementation: hook into the init-roll flow
+  (the v?.x roll-init-btn) — for every PC at Bard ≥ 20, if BI counter
+  is at 0, set it to 1 and announce. Trivial. No deps.
+
+### Cleric
+
+- **Channel Divinity — Knowledge / Light / Nature / Tempest / Trickery /
+  War / Forge / Grave / Order / Peace / Twilight (Lv 2)** — S per
+  domain. Each domain has 1-2 options on top of Turn Undead. The v2.9.0
+  picker already filters by subclass; just add the option entries to
+  `_FEATURE_ECONOMY['channel-divinity'].options` with the correct
+  `subclass` tag. SRD options to wire (one entry per option per domain):
+  Knowledge → `knowledge-of-the-ages` (action — proficiency in a skill
+  for 10 min), `read-thoughts` (action). Light → already has
+  `radiance-of-the-dawn` from v2.6.0. Nature → `charm-animals-and-
+  plants` (action). Tempest → `destructive-wrath` (free — maximises
+  lightning/thunder damage on next roll). Trickery → `invoke-
+  duplicity` (action — illusionary duplicate, 1 minute). War → already
+  has `guided-strike` from v2.6.0. Forge → `artisans-blessing` (10 min
+  ritual — out-of-combat, slot: "none"). Grave → `path-to-the-grave`
+  (action — vulnerability for next attack). Order → `order's-demand`
+  (action — Wis save or charm). Peace → `balm-of-peace` (action — heal
+  on allies you pass by). Twilight → `twilight-sanctuary` (action —
+  1-minute aura). Deps: none — purely data entries on the existing
+  curated table.
+- **Destroy Undead (Lv 5+)** — S. Tied to Turn Undead — when undead
+  within a CR threshold fail the Wisdom save, they're destroyed instead
+  of fleeing. Implementation: side effect on the Turn Undead
+  announcement — after the save prompt resolves, low-CR undead that
+  failed get a "destroyed" flag and lose their HP. Deps: Turn Undead's
+  save-prompt flow (currently just the feature_used roll-log entry
+  from v2.9.0 — no actual save mechanic yet). Filed as part of the
+  broader save-prompt-on-feature plan.
+- **Divine Intervention (Lv 10)** — M. Roll d100 — if ≤ cleric level
+  (or any value at Lv 20), divine aid arrives. Implementation: special-
+  purpose 1-per-week resource (so the existing rest system doesn't
+  auto-refill it). New `/divine-intervention` endpoint rolls the d100,
+  announces in the log, and updates the counter. Long-rest doesn't
+  refill it; the GM manually refills on a successful invocation (per
+  RAW the next 7 days are the cooldown). Deps: a new "weekly" reset
+  kind in the resource recipe table (or just `manual` with the GM
+  refilling on a long rest).
+
+### Druid
+
+- **Druidic (Lv 1)** — Pure descriptive language. No mechanic. Skip
+  permanently unless a "private message / secret language" system is
+  ever added (filed as nice-to-have but not on any roadmap).
+- **Wild Shape (Lv 2, augments 🟢 counter)** — M, **priority #4**. Click
+  Use on the counter → `BeastPicker.open` (already exists). Pick a
+  beast → POST `/api/.../character/.../transform` which swaps the
+  active sheet for the beast's stat block AND decrements the wild-
+  shape counter. The endpoint exists; the BeastPicker UI exists; the
+  glue is missing. Filed for the next per-class commit. Deps: none (all
+  pieces shipped, just need wiring).
+- **Timeless Body (Lv 18)** — Pure descriptive. No mechanic.
+- **Beast Spells (Lv 18)** — S. While Wild Shaped, can cast Druid spells
+  (with verbal-only components allowed). Implementation: the
+  transform endpoint currently swaps the spells panel out for beast
+  abilities. For Druid Lv 18, keep the spells panel accessible alongside
+  the beast actions. One-line conditional in the transform handler.
+- **Archdruid (Lv 20)** — S. Wild Shape unlimited + spells without
+  material components. Implementation: set the wild-shape resource max
+  to a large sentinel (999), and for Lv 20 druids, the spell-cast
+  endpoint skips any material-component check (which isn't enforced
+  today anyway — Archdruid is a no-op until that check exists).
+
+### Fighter
+
+- **Fighting Style (Lv 1)** — M. Player picks one of 6 styles. Each is a
+  small modifier. Implementation: dropdown on sheet → stored as
+  `sheet.fighting_style: "archery"|"defense"|"dueling"|"great-weapon"|
+  "protection"|"two-weapon"`. Archery (+2 ranged attack), Defense (+1
+  AC in armor), Dueling (+2 damage on one-handed melee), Great Weapon
+  Fighting (reroll 1s/2s on two-handed melee damage), Protection
+  (reaction — impose disadvantage on attack vs ally), Two-Weapon
+  Fighting (off-hand adds ability mod to damage). Most need (B) for
+  the modifier intercepts; Defense is computed at sheet-render time
+  (extend `computeEffectiveAC`). Deps: (B) for the attack/damage
+  modifiers; (C) optional for Protection's reaction handling.
+- **Second Wind (Lv 1, augments 🟢 counter)** — S. Click → bonus action,
+  heal 1d10 + fighter level HP. Already tagged `bonus` in
+  `_FEATURE_ECONOMY` from v2.6.0. Implementation: dedicated Use button
+  on the resource row that opens a "Heal: 1d10 + N HP" roll-toast,
+  applies via `_apply_hp_change`, decrements counter. Mirrors the
+  v2.7.0 Potion-of-Healing Use button shape closely. Small follow-up.
+- **Action Surge (Lv 2, augments 🟢 counter)** — S. Click → roll-log
+  entry "Tavik Action Surges", decrements counter, and the GM clears
+  the Act chip on the init tracker so the player can roll a second
+  action. Already tagged `free` in `_FEATURE_ECONOMY`. The chip-clear
+  is what the existing Phase 4 plan calls out as a "GM grants extra
+  action" override. Small.
+- **Extra Attack (Lv 5/11/20)** — see Barbarian Extra Attack above
+  (shared). Lv 11 adds a 3rd attack; Lv 20 (Fighter only) adds a 4th.
+- **Indomitable (Lv 9, augments 🟢 counter)** — M. Click → reroll a
+  failed save. Implementation: needs a save-roll intercept that
+  offers the reroll AFTER the save fails. Best as part of (B). Deps:
+  (B). Until (B), the Use button can manually re-fire the same save
+  roll on click + announce "Indomitable: rerolled X save → new total
+  Y" in the log.
+
+### Monk
+
+- **Martial Arts (Lv 1)** — M. (1) Use DEX or STR (whichever is higher)
+  for monk weapons + unarmed strikes. (2) Unarmed strike damage scales:
+  d4 → d6 → d8 → d10 over levels 1/5/11/17. (3) Bonus-action unarmed
+  strike after taking the Attack action. Implementation: (1) is a
+  sheet-render-time decision in the auto-attack generator (which weapons
+  are "monk weapons" — quarterstaff, shortsword, simple melee, etc.).
+  (2) is a level-table lookup in the unarmed-strike damage. (3) is an
+  action-economy hook — after firing the Attack action, suggest a bonus-
+  action unarmed strike on the same panel. Deps: (B) for the damage
+  scaling, action-economy already shipped.
+- **Ki (Lv 2, augments 🟢 counter)** — M. Use button → option picker
+  (same v2.9.0 helper) with: Flurry of Blows (1 ki, bonus), Patient
+  Defense (1 ki, bonus, dodge), Step of the Wind (1 ki, bonus,
+  dash/disengage + jump x2). All three already in `_FEATURE_ECONOMY`
+  from v2.6.0. Implementation: extend the `.res-use` handler in
+  `sheet_dnd5e.html` with a `k === 'ki'` branch mirroring the
+  channel-divinity branch from v2.9.0. Per-option key gates the slot
+  + posts feature_used. Small (~100 LOC).
+- **Unarmored Defense (Monk, Lv 1)** — S. AC = 10 + DEX + WIS when no
+  armor / no shield. Same pattern as Barbarian Unarmored Defense
+  above. Extend `computeEffectiveAC`. No deps.
+- **Unarmored Movement (Lv 2 +)** — S. +10 ft / +15 ft / +20 ft /
+  +25 ft / +30 ft at Lv 2/6/10/14/18 when no armor / no shield.
+  Implementation: speed normaliser extension (same hook as Barbarian
+  Fast Movement above).
+- **Deflect Missiles (Lv 3)** — L. Reaction; reduce ranged damage by
+  1d10 + DEX + monk level; if reduced to 0, can spend 1 ki to throw it
+  back. Needs an incoming-damage intercept (the damage-take side —
+  doesn't exist yet) + a follow-up attack-roll surface for the throw-
+  back. Filed under (B). Deps: (B), and a "damage taken" hook that
+  doesn't exist today (today damage is computed by the GM and applied
+  manually via HP edit — no client-side intercept).
+- **Slow Fall (Lv 4)** — S. Reaction; reduce falling damage by 5 ×
+  monk level. Same shape as Deflect Missiles' damage-intake intercept.
+  Deps: (B), damage-take hook.
+- **Stunning Strike (Lv 5)** — M. After a hit with a melee weapon
+  attack, spend 1 ki; target makes CON save or stunned until end of
+  monk's next turn. Implementation: post-damage hook that prompts a
+  save broadcast + a "stunned" condition on the target. Deps: (B) for
+  the post-attack hook; (C) for the stunned condition tracking.
+- **Ki-Empowered Strikes (Lv 6)** — S. Unarmed strikes count as magical
+  for the purposes of bypassing resistance. Pure damage-type tag —
+  attach `magical: true` to monk unarmed strikes at level 6. Deps: a
+  damage-resistance check exists in the damage application path
+  (currently the GM applies damage manually so this is informational
+  only).
+- **Evasion (Lv 7)** — M. On a DEX save vs an effect that deals half
+  damage on success, take 0 on success and half on failure. Same
+  damage-take intercept as Deflect Missiles. Deps: (B), damage-take
+  hook.
+- **Stillness of Mind (Lv 7)** — S. Action: end one effect on yourself
+  causing charm or fright. Implementation: action button → consult the
+  conditions list, prompt the GM to remove the matching one. Trivial
+  once buff slot (C) tracks conditions structurally.
+- **Purity of Body (Lv 10)** — Pure descriptive (immunity to disease /
+  poison). Deps: (D) passive trait engine for the immunities to
+  auto-apply on saves; until then, descriptive only.
+- **Tongue of the Sun and Moon (Lv 13)** — Pure descriptive.
+- **Diamond Soul (Lv 14)** — Proficiency in all saves; spend 1 ki to
+  reroll a save. Implementation: the proficiency part is a sheet-side
+  flag (set all save proficiencies); the ki-reroll is same as Fighter
+  Indomitable's reroll path. Deps: (B) for the reroll intercept.
+- **Timeless Body (Lv 15)** — Pure descriptive.
+- **Empty Body (Lv 18)** — Action; spend 4 ki for invisibility + damage
+  resistance (1 minute, concentration). Or 8 ki to cast Astral
+  Projection. Implementation: action button decrements ki + adds a
+  buff slot entry. Deps: (C).
+- **Perfect Self (Lv 20)** — S. Regain 4 ki if at 0 on initiative roll.
+  Same shape as Bard Superior Inspiration above. No deps.
+
+### Paladin
+
+- **Lay on Hands (Lv 1, augments 🟢 counter)** — M, **priority #3**.
+  Pool of HP (max = 5 × paladin level). Use button → amount picker
+  (slider or input, max = pool) + target picker (list of allies + self).
+  Pick → apply HP via `_apply_hp_change` to the target; subtract from
+  pool. RAW also lets a single use cure poison or disease (no HP cost
+  for one of those, fixed-cost 5 HP for the other — TBD on exact
+  semantics). Implementation: amount picker is a new helper
+  `showAmountPicker({min: 1, max: pool, onPick})`; target picker is
+  shared with Bardic Inspiration. Deps: target picker primitive (new
+  shared helper); amount picker primitive (new).
+- **Divine Sense (Lv 1, augments 🟢 counter)** — S. Action; know if any
+  celestial / fiend / undead is within 60 ft until end of next turn.
+  Implementation: action button → roll-log entry, decrement counter,
+  no other side effects (the GM tells the player what they sense).
+  Small.
+- **Fighting Style (Lv 2)** — see Fighter Fighting Style above (shared).
+- **Divine Smite (Lv 2)** — M, **priority #8**. After hitting with a
+  melee weapon attack, spend a spell slot to add 2d8 radiant (+1d8 per
+  slot level above 1st, +1d8 vs undead/fiends, max 5d8). Implementation:
+  per-attack toggle alongside Sneak Attack — when on, after a hit the
+  damage panel offers "🌟 Smite with Lv N slot?" which fires the extra
+  dice + decrements the slot. Deps: (B) post-attack hook. Already
+  tagged `free` in `_FEATURE_ECONOMY` (smite doesn't consume action;
+  the attack already did). Pair-ship with Sneak Attack.
+- **Divine Health (Lv 3)** — Pure passive (disease immunity). Deps:
+  (D) passive trait engine; descriptive only until.
+- **Channel Divinity (Lv 3)** — S per Oath. Devotion (Sacred Weapon
+  + Turn the Unholy), Ancients (Nature's Wrath + Turn the Faithless),
+  Vengeance (Abjure Enemy + Vow of Enmity), etc. Same shape as Cleric
+  CD — extend `_FEATURE_ECONOMY` with `channel-divinity-paladin` entry
+  (separate from cleric since options differ entirely) and wire the
+  picker on the resource Use. Deps: none beyond v2.9.0's primitive.
+- **Aura of Protection (Lv 6 + 18)** — M. Allies within 10 ft (30 ft
+  at Lv 18) add the paladin's CHA mod to saves. Implementation: pure
+  passive — every save roll by an ally checks proximity to a paladin
+  and adds the bonus. Needs (D) passive trait engine + proximity
+  detection (the canvas knows token positions; the save-roll context
+  doesn't). Deps: (D); medium architectural lift.
+- **Aura of Courage (Lv 10 + 18)** — M. Allies within 10 ft / 30 ft
+  immune to fear while paladin is conscious. Same shape as Aura of
+  Protection — passive + proximity. Deps: (D).
+- **Improved Divine Smite (Lv 11)** — S. Melee weapon damage adds 1d8
+  radiant. Auto-applied to every melee hit (no slot cost). Damage-roll
+  uplift triggered by hit detection. Deps: (B) post-attack hook
+  (same as Divine Smite proper).
+- **Cleansing Touch (Lv 14, augments 🟢 counter)** — S. Action; end one
+  spell on a willing creature you touch. Implementation: action button
+  → target picker → posts a "Cleansing Touch on X" entry; the GM
+  manually removes the matching condition (until (C) ships structurally).
+
+### Ranger
+
+- **Favored Enemy (Lv 1)** — S. Advantage on Wisdom (Survival) checks
+  to track favored enemies + INT checks to recall info about them.
+  Implementation: ranger picks a creature-type at level-up
+  (`sheet.favored_enemy: "humanoid:orc"` etc.); the skill-roll engine
+  applies advantage when the roll context matches. Deps: (B) skill-
+  roll-context intercept.
+- **Natural Explorer (Lv 1)** — S. Pick a terrain type; double
+  proficiency bonus on INT and WIS checks related to that terrain
+  while in it. Implementation: ranger picks
+  `sheet.natural_explorer: "forest"|"swamp"|...`; environment is a
+  GM-controlled map state. Until (B) and a per-map "terrain" attribute
+  exist, descriptive. Deps: (B) + new map terrain field.
+- **Primeval Awareness (Lv 3)** — S. Action; spend a spell slot to
+  sense favored enemies within 1 mile (6 miles in favored terrain).
+  Implementation: action button + slot consumer + roll-log entry. The
+  GM tells the player what they sense. Trivial.
+- **Land's Stride (Lv 8)** — Pure passive (move through difficult
+  terrain without penalty + advantage on saves vs plant-based
+  hindrance). Deps: (D).
+- **Hide in Plain Sight (Lv 10)** — S. Spend 1 minute camouflaging
+  yourself; +10 to Stealth while motionless. Implementation: action
+  + buff slot entry granting the bonus while the buff is active.
+  Deps: (C).
+- **Vanish (Lv 14)** — S. Hide as a bonus action; can't be tracked
+  except by magical means. Implementation: bonus-action Hide button
+  + descriptive flag. Already tagged via Cunning Action-style entry
+  in `_FEATURE_ECONOMY` if added.
+- **Feral Senses (Lv 18)** — Pure passive (no disadvantage attacking
+  invisible creatures, blindsense 30 ft). Deps: (D).
+- **Foe Slayer (Lv 20)** — S. Once per turn, add Wis mod to attack or
+  damage roll vs a favored enemy. Implementation: per-attack toggle
+  + favored-enemy check. Deps: (B) post-attack hook.
+
+### Rogue
+
+- **Sneak Attack (Lv 1)** — M, **priority #8**. When you hit a creature
+  with a finesse / ranged weapon AND either (a) have advantage or
+  (b) have an ally within 5 ft of the target, add extra damage scaling
+  with level (1d6 at Lv 1, +1d6 per 2 levels, max 10d6 at Lv 19).
+  Implementation: per-attack toggle on the attack panel — the player
+  marks the attack as "sneak attack" before firing, and the resulting
+  damage roll includes the extra dice. Pair-ship with Divine Smite
+  (same surface). Deps: (B) post-attack hook; advantage detection
+  (already in the roll engine via `roll_state`).
+- **Thieves' Cant (Lv 1)** — Pure descriptive language. No mechanic.
+- **Uncanny Dodge (Lv 5)** — M. Reaction; halve damage from one
+  attack you can see. Implementation: damage-take intercept (same as
+  Monk Deflect Missiles). Deps: (B) + damage-take hook.
+- **Evasion (Rogue, Lv 7)** — M. Same as Monk Evasion above (shared
+  pattern).
+- **Reliable Talent (Lv 11)** — S. Treat any d20 < 10 as 10 for
+  proficient skill checks. Implementation: clamp the d20 to ≥10 in
+  the skill-roll engine when proficient + Rogue ≥ 11. Deps: (B)
+  skill-roll intercept.
+- **Blindsense (Lv 14)** — Pure descriptive (sense hidden / invisible
+  within 10 ft). Deps: (D).
+- **Slippery Mind (Lv 15)** — S. Proficiency in Wisdom saves.
+  Implementation: set `saving_throws.WIS = {proficient: true}` at level-
+  up. Trivial.
+- **Elusive (Lv 18)** — S. No attack roll has advantage against you
+  unless you're incapacitated. Implementation: passive disable of
+  advantage on incoming attacks. Deps: (D) + (B) for the attack
+  intercept.
+- **Stroke of Luck (Lv 20, augments 🟢 counter)** — M. Once per short
+  rest: turn a missed attack into a hit OR a failed ability check
+  into a 20. Implementation: roll-time intercept post-result, offer
+  the conversion. Deps: (B).
+
+### Sorcerer
+
+- **Font of Magic — Sorcery Points (Lv 2, augments 🟢 counter)** — M.
+  Use button → option picker with: "Convert N sorcery points to a
+  Lv X spell slot" + "Convert a Lv X spell slot to (X×2) sorcery
+  points". Implementation: option picker (v2.9.0 primitive) opens →
+  pick conversion direction + level → POST a new
+  `/api/.../font-of-magic` endpoint that updates both the SP counter
+  AND the spell-slots row. Conversion rates per RAW: 1 SP ↔ Lv 1 slot,
+  2 SP ↔ Lv 2 slot, 3 SP ↔ Lv 3 slot, 5 SP ↔ Lv 4 slot, 6 SP ↔ Lv 5
+  slot, 7 SP ↔ Lv 6 slot, 8 SP ↔ Lv 7 slot, 9 SP ↔ Lv 8 slot. No
+  deps — both sides are sheet-state mutations.
+- **Metamagic (Lv 3)** — L. Per-cast modifiers (Quickened Spell:
+  action → bonus, Twinned Spell: target 2 creatures, Subtle Spell:
+  no V/S components, Distant Spell: 2× range, Heightened Spell:
+  disadvantage on save, Empowered Spell: reroll damage dice). Each
+  costs SP. Implementation: pre-cast intercept on the .sp-cast button
+  — picker overlay listing the player's known metamagic options with
+  SP costs. Pick metamagic → fire the cast with the modifier applied
+  (e.g. Quickened changes the broadcast's casting_time to "1 bonus
+  action" so the action-economy chip flips bonus instead of action).
+  Deps: pre-cast intercept (new), action-economy already shipped.
+  Medium-large lift since metamagic is complex per-option.
+- **Sorcerous Restoration (Lv 20)** — S. Regain 4 SP on short rest.
+  Implementation: special-case in the short-rest endpoint that adds
+  the bonus refill alongside the regular per-rest-key refill. Trivial.
+
+### Warlock
+
+- **Pact Magic (Lv 1)** — augments 🟡 today. Uses spell-slot UI but
+  slots refresh on **short** rest, not long. Implementation: the
+  short-rest endpoint should refill warlock spell slots to max. Check
+  whether the existing short-rest path refills `spell_slots[warlock]`
+  — if not, special-case it. Small.
+- **Eldritch Invocations (Lv 2)** — M. Picker UI for invocations
+  (descriptive boosts: Agonizing Blast, Devil's Sight, etc.). Some are
+  stat boosts, some are new spells at will, some are once-per-rest.
+  Implementation: a per-warlock `invocations: []` array on the sheet
+  + a picker that lists eligible invocations by level/pact-boon
+  prerequisites. Most invocations are descriptive (set flags the
+  sheet reads); a few (Agonizing Blast → +CHA mod to Eldritch Blast
+  damage) need (B) attack-damage intercepts.
+- **Pact Boon (Lv 3)** — M. Pick: Pact of the Chain (familiar) /
+  Pact of the Blade (summonable pact weapon) / Pact of the Tome
+  (3 free cantrips). Each is its own sub-system. Tome is easiest
+  (just an extra-spells flag). Blade needs an attack-panel addition.
+  Chain is a familiar with its own stat block — major new surface.
+  Deps: vary; ship Tome first.
+- **Mystic Arcanum (Lv 11 / 13 / 15 / 17)** — S. Pick a high-level
+  spell (Lv 6/7/8/9) that can be cast once per long rest WITHOUT a
+  spell slot. Implementation: separate `mystic_arcanum: [{name,
+  level, used: bool}]` array on the sheet. Each entry renders as a
+  spell-cast button + a 1-per-long-rest flag (resets on long rest).
+  No spell slot consumed. Deps: long-rest endpoint extension for the
+  reset.
+- **Eldritch Master (Lv 20)** — S. 1-minute prayer to regain all Pact
+  Magic slots. Implementation: action button + slot reset; the
+  existing short-rest path already restores all slots, so this is
+  effectively a "force short-rest for spell slots" action. Trivial.
+
+### Wizard
+
+- **Arcane Recovery (Lv 1, augments 🟢 counter)** — M. Once per long
+  rest after a short rest, recover spell slots whose combined level
+  ≤ half wizard level (round up). Implementation: Use button → custom
+  picker (lists each spell slot level + a count input, total ≤ budget).
+  Pick → restore the chosen slots. Trivial UX-wise; the picker is
+  custom enough that the existing `showResourceOptionPicker` doesn't
+  fit cleanly. Small-medium. No deps.
+- **Spell Mastery (Lv 18)** — S. Pick a Lv 1 and a Lv 2 spell that
+  can be cast at their lowest level without expending a slot.
+  Implementation: flag specific spells with `_master: true` on the
+  sheet → cast button skips the slot decrement when active. Small.
+- **Signature Spells (Lv 20)** — S. Pick 2 Lv 3 spells that can each
+  be cast once per short rest without a slot. Implementation: same
+  shape as Mystic Arcanum (per-spell rest counter). Small.
+
+### Cross-class shared
+
+- **Extra Attack (Barbarian/Fighter/Paladin/Ranger Lv 5; Fighter Lv 11
+  +20)** — M. (One section since the implementation is shared.) When
+  you take the Attack action, you can make additional attack rolls
+  (1 extra at Lv 5; Fighter gets +1 at Lv 11 and Lv 20). Implementation:
+  the attack panel could render a single "Attack action (×2)" button
+  that fires both rolls back-to-back with a small delay between dice
+  toasts, OR keep the existing per-attack buttons and add a tooltip /
+  badge "You can attack ×2 as part of this Attack action". Action-
+  economy stays correct (the Attack action burns 1 Act slot regardless
+  of how many strikes are inside it; subsequent same-turn Strikes
+  shouldn't re-burn Act). The current behavior re-burns Act on each
+  Strike — this needs to change for Extra Attack to feel right. Deps:
+  action-economy already shipped, but `use_attack` endpoint needs to
+  skip the slot mark when the slot is already used AND the same
+  combatant's first attack this turn was logged within the last 6
+  seconds (rough heuristic). Or: introduce an explicit "attack action
+  in progress" marker that the Extra Attack feature toggles. Medium
+  design — needs its own follow-up plan when work begins.
+
+---
+
+## Subclass-feature plans (⚪ → 🟠)
+
+The subclass table above lists each subclass's overall status (✅ for
+shipped features JSON, 🟡 / 🟢 for partial mechanics). Below: brief
+implementation hooks for the descriptive 🟡 / 🟢 entries that are
+*specific to the subclass*. Spell-grant-only subclasses (Forge / Grave
+/ Order etc.) need no further work beyond the curated spell tables
+already shipped.
+
+- **Path of the Berserker (Frenzy / Mindless Rage / Intimidating
+  Presence / Retaliation)** — M total. Frenzy: extend Rage to grant
+  a bonus-action melee attack at the cost of exhaustion at Rage end.
+  Mindless Rage: passive immunity to charmed/frightened while raging
+  (D). Intimidating Presence: action target picker + Wis-save broadcast
+  (uses CD picker primitive). Retaliation: reaction-on-damage (B +
+  damage-take hook).
+- **College of Lore (Cutting Words / Additional Magical Secrets / Peerless
+  Skill)** — M. Cutting Words: reaction; spend a Bardic Inspiration die
+  to subtract from an enemy's attack/check/save. Needs roll-time
+  intercept (B). Additional Magical Secrets: extend the Magical
+  Secrets picker count. Peerless Skill: spend BI die on own ability
+  check (B intercept).
+- **Channel Divinity options for non-Life domains** — see Cleric CD
+  section above. Each non-Life domain needs its option entries in
+  `_FEATURE_ECONOMY` (~10 LOC per domain) + a demo cleric per domain
+  to exercise it (optional).
+- **Circle of the Moon (Combat Wild Shape / Circle Forms)** — M.
+  Combat Wild Shape: lets you Wild Shape as a bonus action and spend
+  HD-equivalent ki to heal in beast form. Circle Forms: better CR cap
+  + access to specific elemental forms. Implementation: extend the
+  Wild Shape transform UI (priority #4) with the moon-specific
+  bonus-action variant + CR-cap-aware beast picker. Deps: priority
+  #4 Wild Shape transform.
+- **Champion (Improved Critical / Remarkable Athlete / Additional
+  Fighting Style / Superior Critical / Survivor)** — M. Improved
+  Critical: crit on 19-20. Remarkable Athlete: +floor(PB/2) on certain
+  ability checks (extension of Jack of All Trades pattern). Survivor:
+  regen at start of turn if ≤ half HP. Implementation: each is a small
+  roll-time tweak in the appropriate engine. Deps: (B).
+- **Battle Master (Combat Maneuvers / Know Your Enemy / Improved Combat
+  Superiority / Relentless)** — L. Combat Maneuvers are a list of
+  ~16 options each spending a Superiority Die for a tactical effect.
+  Picker-shaped (use v2.9.0 primitive). Each maneuver needs its own
+  side effect (Riposte: reaction-attack after enemy misses; Trip
+  Attack: prone on hit; Disarm: save vs disarm; etc.). Largest single
+  subclass effort. Deps: (B), (C).
+- **Way of the Open Hand (Open Hand Technique / Wholeness of Body /
+  Tranquility / Quivering Palm)** — M. Open Hand Technique: per-Flurry
+  picker (prone / knockback / lose reaction). Wholeness of Body:
+  self-heal action. Tranquility: long-rest aura.
+- **Oath of Devotion (Sacred Weapon / Turn the Unholy)** — S. Both are
+  Channel Divinity options; add them to `_FEATURE_ECONOMY` under a
+  `channel-divinity-paladin` key. Sacred Weapon adds CHA mod to attack
+  rolls + magical-damage tag for 1 min. Turn the Unholy: variant Turn
+  Undead targeting fiends/undead.
+- **Hunter (Hunter's Prey / Defensive Tactics / Multiattack /
+  Superior Hunter's Defense)** — M. Hunter's Prey: pick one of 3
+  damage uplift variants. Defensive Tactics: pick one of 3 passive
+  defense variants. Multiattack: Extra Attack ×2 (extends Extra
+  Attack). Superior Hunter's Defense: reaction-based defense. Deps:
+  (B) + (D).
+- **Thief (Fast Hands / Use Magic Device / Supreme Sneak / Thief's
+  Reflexes)** — M. Fast Hands: bonus-action Cunning Action variants
+  (use object, Sleight of Hand, use thieves' tools). Use Magic Device:
+  ignore class-based item-use restrictions. Supreme Sneak: advantage
+  on Stealth at half speed. Thief's Reflexes: second turn at -10 init.
+  Mostly descriptive + small toggles; Fast Hands extends the existing
+  Cunning Action picker.
+- **Draconic Bloodline (Dragon Ancestor / Draconic Resilience / Dragon
+  Wings)** — M. Dragon Ancestor: pick draconic ancestor (descriptive +
+  damage-type for elemental affinity). Draconic Resilience: +1 HP per
+  sorcerer level + unarmored AC 13+DEX. Dragon Wings: action; sprout
+  wings for fly speed. Wings: action-economy + buff slot for the
+  duration.
+- **Wild Magic (Tides of Chaos / Wild Magic Surge / Bend Luck /
+  Controlled Chaos / Spell Bombardment)** — M. Tides of Chaos:
+  advantage on attack/check/save 1/long rest (counter exists). Wild
+  Magic Surge: d100 chaos roll on cantrip cast. Bend Luck: reaction
+  +/-1d4 on a roll for a sorcery point. Controlled Chaos: re-roll the
+  surge. Bombardment: extra damage die on max rolls.
+- **Aberrant Mind / Divine Soul** — Spell grants only.
+- **The Fiend (Dark One's Blessing / Dark One's Own Luck / Fiendish
+  Resilience / Hurl Through Hell)** — M. Dark One's Blessing: temp HP
+  on kill (passive on damage application). Dark One's Own Luck:
+  reroll one ability check or save per short rest. Fiendish
+  Resilience: pick a damage type for resistance (1/long rest).
+  Hurl Through Hell: action on hit; target takes 10d10 psychic if
+  fails Cha save.
+- **School of Evocation (Evocation Savant / Sculpt Spells / Potent
+  Cantrip / Empowered Evocation / Overchannel)** — M. Sculpt Spells:
+  passive ally-exclusion from your own evocation AoEs (descriptive
+  until target-picker exists for damage spells). Potent Cantrip:
+  half-damage on cantrip saves. Empowered Evocation: +INT mod to one
+  damage roll per evocation. Overchannel: max damage on a Lv 5+
+  evocation, take damage on subsequent uses.
+- **Divination (Portent / Expert Divination / The Third Eye / Greater
+  Portent)** — M. Portent (counter exists, 🟢): pre-rolled d20s at the
+  start of long rest; player replaces an attack/save/check d20 with
+  one of these dice. Implementation: action button per portent die
+  → roll-time intercept that swaps the active d20 result. Deps:
+  (B). Expert Divination: refund slots when casting divination spells.
+  Greater Portent: 3 dice instead of 2.
+
+---
+
+## Feat plans (⚪ → 🟠)
+
+Only one SRD feat ships (Grappler); homebrew feats live alongside.
+Mechanical feat effects are uniformly ⚪ today. Each filed feat needs:
+
+- **Grappler (SRD)** — S. Advantage on attack rolls vs creatures you're
+  grappling + you can use an action to try to pin them. Both pieces
+  need (B) attack-time intercepts. Today the feat description renders
+  on the sheet via the existing feats panel; mechanical wiring is
+  deferred until (B) lands.
+- **Lucky Strike (demo homebrew)** — S. Reroll a missed attack 1/long
+  rest. Same shape as Halfling Lucky / Fighter Indomitable. Needs
+  (B) roll-time intercept.
+
+Future feat additions: drop a JSON in the matching tier and the sheet
+will render the description automatically. Mechanical wiring follows
+the per-feat plan once (B) ships.
+
+---
+
+## Race trait plans (⚪ → 🟠)
+
+Most race traits are passive — they apply automatically when a specific
+roll happens. (D) passive trait engine is the natural fit; until (D)
+lands, players manually flip advantage/disadvantage at roll time.
+
+- **Dragonborn (Breath Weapon)** — M. Action; pick area (line/cone per
+  ancestry); save-DC challenge for half damage. Same shape as a
+  Channel Divinity save-prompt option. Use the v2.9.0 option picker
+  for area selection (line vs cone) + the existing save-prompt
+  infrastructure. Deps: save-prompt-on-feature plan (not yet shipped
+  beyond the feature_used roll-log entry).
+- **Dragonborn (Damage Resistance)** — Pure passive. Deps: (D).
+- **Half-Orc (Relentless Endurance)** — S. Once per long rest, drop to
+  1 HP instead of 0. Same shape as Barbarian Relentless Rage. Hook
+  into `_apply_hp_change`'s dying transition. Deps: per-long-rest
+  counter ✅ (already supported via resource recipe), `_apply_hp_change`
+  hook ✅ (exists). Could ship today as a 1/1 resource + hook.
+- **Half-Orc (Savage Attacks)** — S. On a melee crit, roll one extra
+  damage die. Damage-roll uplift on crit. Deps: (B) crit intercept.
+- **Half-Elf (Fey Ancestry)** — Pure passive (advantage on charm saves,
+  can't be put to sleep magically). Deps: (D).
+- **High Elf (Cantrip + Elf Weapon Training)** — S. Cantrip pick adds
+  one wizard cantrip to the sheet's spell list. Weapon Training:
+  proficiency in longsword / shortsword / shortbow / longbow. Both
+  wire through existing systems (spell picker + proficiency flags).
+  Trivial; no deps.
+- **High Elf (Keen Senses / Trance / Fey Ancestry)** — Mix of passive
+  (Keen Senses: skill proficiency in Perception ✅; Fey Ancestry: see
+  Half-Elf above; Trance: 4-hour sleep equivalent — descriptive).
+- **Hill Dwarf (Dwarven Resilience / Dwarven Combat Training /
+  Stonecunning / Speed Not Reduced by Heavy Armor / Dwarven Toughness)**
+  — Dwarven Toughness ✅ already in Tavik's HP via sheet `hp.max=43`.
+  Dwarven Resilience: advantage vs poison + resistance to poison
+  damage — pure (D). Dwarven Combat Training: proficiencies (battleaxe
+  / handaxe / light hammer / warhammer) — trivial sheet flag. Speed
+  reduction: edit `_speedWalkFromSheet` to skip the heavy-armor
+  speed penalty for dwarves. Stonecunning: +2 × PB on history checks
+  about stonework — (B) skill-context intercept.
+- **Lightfoot Halfling (Lucky / Brave / Halfling Nimbleness /
+  Naturally Stealthy)** — Lucky: reroll natural 1s on attack/check/
+  save. Same shape as Stroke of Luck / Lucky feat — (B) intercept.
+  Brave: advantage vs fear — (D). Nimbleness: move through larger
+  creatures' spaces — descriptive. Naturally Stealthy: hide behind
+  Medium+ creatures — descriptive.
+- **Rock Gnome (Gnome Cunning / Artificer's Lore / Tinker)** — Gnome
+  Cunning: advantage on INT/WIS/CHA saves vs magic — (D). Artificer's
+  Lore: +2 × PB on History checks about magic items — (B) skill-
+  context intercept. Tinker: descriptive 1-hour clockwork creation.
+- **Tiefling (Hellish Resistance / Infernal Legacy)** — Hellish
+  Resistance: fire resistance — (D). Infernal Legacy: Thaumaturgy
+  cantrip + Hellish Rebuke 1/long rest at Lv 3 + Darkness 1/long
+  rest at Lv 5. Each spell tracks against a per-day resource counter.
+  Trivial wiring; per-day counters already exist in the resource
+  recipe system.
+
+---
+
+## What this section does NOT plan
+
+Each plan paragraph is a starting point, not a finished design.
+Several features (Battle Master maneuvers, Metamagic, Wild Magic
+Surge) will need their own dedicated plan files when work begins —
+they're complex enough that a single paragraph isn't enough scaffold.
+Filed for follow-up; do **not** start coding them without writing a
+fuller plan in `docs/plans/<feature>.md` first.
+
+Anything tagged "pure descriptive" or "no mechanic" is intentionally
+deferred forever (or until a system big enough to absorb it lands).
+The character sheet shows the description text via the SRD JSON tier;
+that's the final state for these features unless someone proposes a
+mechanic.
