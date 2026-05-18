@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.12.0] - 2026-05-17
+
+**Schema version:** 55
+**Commit summary:** **Test harness Phase 1 vertical slice.** Ships the autonomous HTTP+WS click-through harness described in `docs/plans/test-harness.md` (v2.11.1) for the first three endpoints (`/attack`, `/cast_spell`, `/use_feature`) plus smoke tests. Pytest + httpx (existing) + websockets (existing) + new dev deps in `requirements-dev.txt`. 22 tests run in ~10 s against a live demo stack at `localhost:8013`, authenticating as the demo accounts, opening WS connections, firing HTTP POSTs at the endpoints, and asserting on both the HTTP response shape AND the resulting WS broadcast type + data. New `make test-harness` target. README grows a Testing section. MINOR bump — new dev-tooling surface, no production code change.
+**Description:** Seven coordinated changes. **(1)** New `requirements-dev.txt` with pytest==8.3.3, pytest-asyncio==0.24.0, pytest-html==4.1.1. httpx + websockets were already in production `requirements.txt`. **(2)** New `pytest.ini` configuring asyncio_mode=auto + function-scoped event loops (session-scoped clients tripped "Future attached to a different loop" errors on pytest-asyncio 0.24 because tests still default to function-scope loops). **(3)** New `tests/harness/helpers.py` with `login_client(email, password)`, `open_ws(client, campaign_id)`, and the `WSCollector` class that runs a background recv loop to buffer WS messages so tests can `await collector.wait_for("weapon_attack")` without races. **(4)** New `tests/harness/conftest.py` with `gm_client` / `alice_client` / `bob_client` httpx fixtures + matching `gm_ws` / `alice_ws` collectors + a `roster` fixture that fetches the campaign's character roster keyed by name (character IDs are autoincrement and vary across resets). **(5)** Three test files: `test_smoke.py` (4 tests — healthz, version, roster, WS connectivity), `test_attack.py` (5 tests — Pip Shortsword, Pip Dagger, Tavik Warhammer, 404 on bad index, 400 on missing fields), `test_cast_spell.py` (5 tests — Magic Missile, Misty Step bonus action, Tavik Healing Word, 404 on bad index, 400 on missing fields), `test_use_feature.py` (8 tests — Cunning Action × 3 options, Channel Divinity × 2 options, Action Surge "free" slot, 404 on unknown feature, 400 on missing fields). 22 tests total. **(6)** New top-level `Makefile` with `make test-harness`, `make test-harness-install`, `make up`, `make down`, `make rebuild`, `make logs`. **(7)** README's "Development" section grows a "Testing" subsection with the invocation pattern + env vars + a pointer to the plan doc.
+**Description (cont):** Why function-scoped fixtures. The session-scoped variant trips pytest-asyncio 0.24's cross-loop errors because tests default to per-function event loops and httpx clients carry connection pools that bind to the loop they were created on. Function-scoped means every test re-logs-in (~50-100 ms each); negligible at the 22-test scale, and any future suite size growth can revisit via per-test `loop_scope="session"` markers if needed. Documented in `pytest.ini` so a contributor changing it knows the tradeoff.
+**Description (cont 2):** Test isolation caveat (Phase 1.5 work). The realtime hub keeps battle state in-memory across requests, so action-economy chip state persists between test runs unless init advances. Tests pass `override: true` on every POST to bypass the Phase 4 over-budget gate, but assertions on the `over_budget` field in the resulting broadcast are intentionally loose (just "field is a bool") rather than strict (would require per-test battle-state reset). Phase 1.5 adds either an `ENV=test` admin endpoint that resets the hub or per-test fixture setup that drives Start Initiative; for now the loose assertion captures the field presence + type without flaking on state carryover.
+**Description (cont 3):** Vertical-slice rationale. Three endpoints + smoke tests = enough to validate that the harness scaffold works end-to-end (login → WS → HTTP fire → assert on broadcast) without sprawling into every endpoint at once. Phase 1.5 (separate commit) fills out the remaining endpoints (`/use_item`, `/use_lay_on_hands`, `/use_bardic_inspiration`, `/move`, `/roll`) using the same fixture shape. Phase 2 (separate commit) adds CI integration via `.github/workflows/test-harness.yml`. Phase 4 (eventually) layers Playwright on top for UI-only regressions.
+
+### Added
+- `requirements-dev.txt` — pytest + pytest-asyncio + pytest-html. Dev-only; not installed in the production image.
+- `pytest.ini` — asyncio_mode=auto + function-scoped fixture loops.
+- `Makefile` — `test-harness`, `test-harness-install`, `up`, `down`, `rebuild`, `logs` targets.
+- `tests/__init__.py` + `tests/harness/__init__.py` — package markers.
+- `tests/harness/helpers.py` — `login_client(email, password)`, `open_ws(client, cid)`, `WSCollector` class with `wait_for(msg_type, timeout)` + `mark()` + `buffered()`.
+- `tests/harness/conftest.py` — `gm_client` / `alice_client` / `bob_client` (httpx) + `gm_ws` / `alice_ws` (WSCollector) + `roster` fixtures.
+- `tests/harness/test_smoke.py` — 4 tests (healthz, version, roster, WS connect).
+- `tests/harness/test_attack.py` — 5 tests covering /attack.
+- `tests/harness/test_cast_spell.py` — 5 tests covering /cast_spell.
+- `tests/harness/test_use_feature.py` — 8 tests covering /use_feature (Cunning Action / Channel Divinity / Action Surge).
+- README "Testing" section.
+
+### Notes
+- **What to test:** ensure `docker compose up -d --build` is running on `localhost:8013` with the demo seeded. Then `pip install -r requirements-dev.txt && make test-harness`. Expected: 22 tests pass in ~10 s. If any fail, the pytest traceback identifies which endpoint regressed.
+- **What this catches that manual play didn't (the motivating bug class):** the v2.7.3 weapon-attack-toast miss would have been caught by `test_attack_tavik_warhammer`'s `assert msg["data"]["damage_breakdown"]` assertion. The v2.4.12 spell-level field typo would have failed every `test_cast_*` test that asserts `spell_level == 1`. The v2.6.1 Channel Divinity slot-derivation broken case would have failed `test_channel_divinity_turn_undead`'s `assert data["slot"] == "action"`.
+- **Test isolation note.** The realtime hub keeps in-memory state across requests. Phase 1 tests pass `override: true` to bypass the Phase 4 gate, but tests don't reset battle state between runs. Phase 1.5 will add per-test battle reset (either via an `ENV=test`-gated admin endpoint or via a fixture that drives Start Initiative). Loose assertions on `over_budget` in the meantime.
+- **Next phases:** Phase 1.5 = remaining endpoints (`/use_item`, `/use_lay_on_hands`, `/use_bardic_inspiration`, `/move`, `/roll`). Phase 2 = GitHub Actions workflow on every PR + main push. Phase 3 = "every new endpoint commit lands a harness test" discipline baked into CLAUDE.md. Phase 4 = Playwright for UI-only regressions. Phase 5 = multi-user concurrency stretch.
+
+---
+
 ## [2.11.1] - 2026-05-17
 
 **Schema version:** 55

@@ -1,0 +1,12 @@
+# Dev-only dependencies — NOT installed in the production image.
+# Test harness: see docs/plans/test-harness.md.
+#
+#   pip install -r requirements-dev.txt
+#   make test-harness
+#
+# Production deps (httpx, websockets) are already in requirements.txt;
+# only the pytest stack is new here.
+
+pytest==8.3.3
+pytest-asyncio==0.24.0
+pytest-html==4.1.1

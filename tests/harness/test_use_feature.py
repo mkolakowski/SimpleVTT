@@ -1,0 +1,164 @@
+"""/api/campaign/{cid}/use_feature — class-feature use endpoint tests.
+
+Coverage in the Phase 1 vertical slice:
+  - Pip's Cunning Action: Dash (bonus slot)
+  - Pip's Cunning Action: Disengage (bonus slot)
+  - Pip's Cunning Action: Hide (bonus slot)
+  - Tavik's Channel Divinity: Turn Undead (action slot — uses
+    /use_feature directly, not the resource counter; the v2.9.0
+    picker chains both endpoints but this test just hits use_feature)
+  - 404 on unknown feature_key
+  - 400 on missing fields
+
+The use_feature endpoint doesn't decrement any counter on its own —
+it only announces the feature use + marks the action-economy slot.
+The CD counter decrement happens via /character/{cid}/resource which
+the picker calls separately; tests for that path are filed for
+Phase 1.5.
+"""
+from .conftest import CAMPAIGN_ID
+
+
+async def test_cunning_action_dash(gm_client, gm_ws, roster):
+    pip = roster["Pip Quickfingers"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": pip["id"],
+            "feature_key": "cunning-action",
+            "option_key": "dash",
+            "label": "Cunning Action",
+            "desc": "Move up to your speed again this turn.",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["slot"] == "bonus"
+    assert "Cunning Action" in data["feature_label"]
+    assert "Dash" in data["feature_label"]
+
+    msg = await gm_ws.wait_for("feature_used")
+    assert msg["data"]["source"] == "class-feature"
+    assert "Cunning Action" in msg["data"]["feature_name"]
+    assert "Dash" in msg["data"]["feature_name"]
+
+
+async def test_cunning_action_disengage(gm_client, gm_ws, roster):
+    pip = roster["Pip Quickfingers"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": pip["id"],
+            "feature_key": "cunning-action",
+            "option_key": "disengage",
+            "label": "Cunning Action",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["slot"] == "bonus"
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Disengage" in msg["data"]["feature_name"]
+
+
+async def test_cunning_action_hide(gm_client, gm_ws, roster):
+    pip = roster["Pip Quickfingers"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": pip["id"],
+            "feature_key": "cunning-action",
+            "option_key": "hide",
+            "label": "Cunning Action",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Hide" in msg["data"]["feature_name"]
+
+
+async def test_channel_divinity_turn_undead(gm_client, gm_ws, roster):
+    """Channel Divinity → Turn Undead is an action (not bonus).
+    Tests that the slot resolution per the curated table is correct."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": tavik["id"],
+            "feature_key": "channel-divinity",
+            "option_key": "turn-undead",
+            "label": "Channel Divinity",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["slot"] == "action"
+
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Channel Divinity" in msg["data"]["feature_name"]
+    assert "Turn Undead" in msg["data"]["feature_name"]
+
+
+async def test_channel_divinity_preserve_life(gm_client, gm_ws, roster):
+    """Preserve Life is Life-Domain-specific. /use_feature itself
+    doesn't filter by subclass — the v2.9.0 picker does — so the
+    server accepts the option regardless. Subclass filtering is the
+    client's responsibility."""
+    tavik = roster["Brother Tavik Stonebrow"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": tavik["id"],
+            "feature_key": "channel-divinity",
+            "option_key": "preserve-life",
+            "label": "Channel Divinity",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["slot"] == "action"
+
+
+async def test_action_surge_is_free(gm_client, gm_ws, roster):
+    """Action Surge doesn't consume an economy slot (slot='free').
+    The chip should NOT flip when this fires."""
+    # No Fighter PC in the demo, so we use Pip just to exercise the
+    # 'free' slot resolution path. Slot validation is by feature_key,
+    # not by character class.
+    pip = roster["Pip Quickfingers"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": pip["id"],
+            "feature_key": "action-surge",
+            "label": "Action Surge",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["slot"] == "free"
+
+
+async def test_unknown_feature_key(gm_client, roster):
+    pip = roster["Pip Quickfingers"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": pip["id"],
+            "feature_key": "nonexistent-feature",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 404
+
+
+async def test_missing_required_fields(gm_client):
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={},
+    )
+    assert resp.status_code == 400

@@ -1,6 +1,6 @@
 # SimpleVTT
 
-> Current version: **2.11.1** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
+> Current version: **2.12.0** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
 
 A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 
@@ -179,6 +179,36 @@ export $(grep -v '^#' .env.example | xargs)
 # DATABASE_URL defaults to sqlite:///./simplevtt.db when not set.
 uvicorn app.main:app --reload --port 8013
 ```
+
+## Testing
+
+The repo ships an HTTP + WebSocket click-through harness under
+`tests/harness/` that exercises every interactive endpoint on the
+character sheet + mini-sheet and asserts on the resulting WS
+broadcasts. See `docs/plans/test-harness.md` for the design.
+
+To run against a live demo stack:
+
+```bash
+# One-time: install dev deps (pytest + plugins + httpx + websockets)
+pip install -r requirements-dev.txt
+
+# Run the harness (requires the demo stack at localhost:8013):
+make test-harness
+# or:
+pytest tests/harness/ -v
+```
+
+Override the target stack via env vars (defaults shown):
+
+- `HARNESS_BASE_URL=http://localhost:8013`
+- `HARNESS_WS_TIMEOUT=2.0` (per-test WS receive timeout)
+
+Phase 1 ships smoke tests + `/attack` + `/cast_spell` + `/use_feature`
+coverage (22 tests, ~10 s). Phase 1.5 fills out the rest of the
+endpoint matrix; Phase 2 wires CI on every PR; Phase 4 layers
+Playwright for UI-only regressions. See the plan doc for the
+roadmap.
 
 ## Third-party fonts
 
