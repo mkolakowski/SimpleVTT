@@ -124,11 +124,20 @@ _FEATURE_ECONOMY: dict[str, dict] = {
     "action-surge": {"slot": "free"},
     "channel-divinity": {
         "slot": "action",
+        # v2.14.3: per-option entries are slot-only; class/subclass
+        # filtering happens client-side in the picker. The mirror just
+        # needs the keys to validate that incoming option_key values
+        # are in the curated table (the JS file is the source of truth
+        # for class/subclass tags + labels + descs).
         "options": {
+            # Cleric options
             "turn-undead": {},
             "preserve-life": {},
             "radiance-of-the-dawn": {},
             "guided-strike": {},
+            # Paladin options (v2.14.3)
+            "sacred-weapon": {},
+            "turn-the-unholy": {},
         },
     },
     "lay-on-hands": {"slot": "action"},

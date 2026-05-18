@@ -103,6 +103,47 @@ async def test_channel_divinity_turn_undead(gm_client, gm_ws, roster):
     assert "Turn Undead" in msg["data"]["feature_name"]
 
 
+async def test_channel_divinity_sacred_weapon(gm_client, gm_ws, roster):
+    """v2.14.3: Paladin Devotion options join the curated table.
+    Sacred Weapon resolves to slot=action (same as the Cleric CD
+    options); /use_feature accepts it without subclass filtering
+    (filter is client-side in the picker)."""
+    caelan = roster["Sir Caelan Lightbringer"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": caelan["id"],
+            "feature_key": "channel-divinity",
+            "option_key": "sacred-weapon",
+            "label": "Channel Divinity",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slot"] == "action"
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Sacred Weapon" in msg["data"]["feature_name"]
+
+
+async def test_channel_divinity_turn_the_unholy(gm_client, gm_ws, roster):
+    """The other Devotion option. Same shape as Sacred Weapon."""
+    caelan = roster["Sir Caelan Lightbringer"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": caelan["id"],
+            "feature_key": "channel-divinity",
+            "option_key": "turn-the-unholy",
+            "label": "Channel Divinity",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["slot"] == "action"
+    msg = await gm_ws.wait_for("feature_used")
+    assert "Turn The Unholy" in msg["data"]["feature_name"] or "Turn the Unholy" in msg["data"]["feature_name"]
+
+
 async def test_channel_divinity_preserve_life(gm_client, gm_ws, roster):
     """Preserve Life is Life-Domain-specific. /use_feature itself
     doesn't filter by subclass — the v2.9.0 picker does — so the

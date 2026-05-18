@@ -70,23 +70,29 @@ window._FEATURE_ECONOMY = {
     /* ── Cleric ──────────────────────────────────────────────────── */
     'channel-divinity': {
         slot: 'action',
-        class: 'cleric',
+        class: 'cleric',  // parent class for the top-level entry; per-option ``class`` tags below allow Paladin CD options to live in the same key
         unlock_level: 2,
         label: 'Channel Divinity',
-        desc: 'Channel divine energy to fuel a domain-specific effect.',
-        // v2.9.0: each option carries a ``subclass`` tag so the option-
-        // picker overlay can filter by the cleric's domain. ``any``
-        // means the option is available regardless of subclass (Turn
-        // Undead — every cleric gets it). Subclass slugs match
-        // ``_classSlug`` output for the canonical SRD names ("Life
-        // Domain" → "life-domain", but we tolerate the short form
-        // "life" too in the picker's match — see _csubclassSlug in
-        // sheet_dnd5e.html).
+        desc: 'Channel divine energy to fuel a class- and subclass-specific effect.',
+        // v2.9.0 added per-option ``subclass`` tags so the picker
+        // could filter by cleric domain. v2.14.3 adds a ``class``
+        // tag too so the same channel-divinity resource key can
+        // hold Paladin options alongside Cleric ones — Caelan
+        // (Oath of Devotion) sees Sacred Weapon + Turn the Unholy;
+        // Tavik (Life Domain) sees Turn Undead + Preserve Life.
+        // The picker in sheet_dnd5e.html filters: keep option if
+        // option.class matches the character's class AND
+        // option.subclass matches their subclass (with "any" as
+        // wildcard on either field).
         options: {
-            'turn-undead': { label: 'Turn Undead', desc: 'Each undead within 30 ft makes a Wisdom save or flees for 1 minute.', subclass: 'any' },
-            'preserve-life': { label: 'Preserve Life', desc: 'Distribute 5 × cleric level HP among creatures within 30 ft, none raised above half max HP.', subclass: 'life' },
-            'radiance-of-the-dawn': { label: 'Radiance of the Dawn', desc: 'Dispel magical darkness, deal 2d10 + cleric level radiant damage on a failed Con save (each enemy within 30 ft).', subclass: 'light' },
-            'guided-strike': { label: 'Guided Strike', desc: '+10 bonus to one attack roll, declared after seeing the d20.', subclass: 'war' },
+            // ── Cleric options ────────────────────────────────
+            'turn-undead': { label: 'Turn Undead', desc: 'Each undead within 30 ft makes a Wisdom save or flees for 1 minute.', class: 'cleric', subclass: 'any' },
+            'preserve-life': { label: 'Preserve Life', desc: 'Distribute 5 × cleric level HP among creatures within 30 ft, none raised above half max HP.', class: 'cleric', subclass: 'life' },
+            'radiance-of-the-dawn': { label: 'Radiance of the Dawn', desc: 'Dispel magical darkness, deal 2d10 + cleric level radiant damage on a failed Con save (each enemy within 30 ft).', class: 'cleric', subclass: 'light' },
+            'guided-strike': { label: 'Guided Strike', desc: '+10 bonus to one attack roll, declared after seeing the d20.', class: 'cleric', subclass: 'war' },
+            // ── Paladin options (v2.14.3) ─────────────────────
+            'sacred-weapon': { label: 'Sacred Weapon', desc: 'Imbue a weapon you hold with positive energy for 1 minute: +CHA mod to attack rolls, deals magical damage, emits 20 ft bright light.', class: 'paladin', subclass: 'devotion' },
+            'turn-the-unholy': { label: 'Turn the Unholy', desc: 'Each fiend or undead within 30 ft that can see/hear you must succeed on a Wisdom save or be turned for 1 minute.', class: 'paladin', subclass: 'devotion' },
         },
     },
 

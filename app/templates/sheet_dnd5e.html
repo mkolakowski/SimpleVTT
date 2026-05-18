@@ -6054,25 +6054,45 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         return;
                     }
                 }
-                // Derive the cleric's subclass slug from the multiclass
-                // roster. Tolerant matching: "Life Domain" / "life" /
-                // "life-domain" all map to "life" for the option filter.
-                let subSlug = '';
+                // v2.14.3: derive ALL class+subclass entries the
+                // character has, then filter options by both. Lets a
+                // Paladin's Channel Divinity (Devotion: Sacred Weapon
+                // + Turn the Unholy) live in the same _FEATURE_ECONOMY
+                // entry as the Cleric's (Life: Preserve Life, Light:
+                // Radiance of the Dawn, etc.). Subclass slug strips
+                // the canonical SRD prefixes ("Oath of Devotion" →
+                // "devotion", "Circle of the Moon" → "moon",
+                // "Life Domain" → "life", etc.) so the curated tags
+                // can stay terse.
+                const classEntries = [];
                 if (typeof window._mcRoster === 'function') {
-                    const roster = window._mcRoster() || [];
-                    for (const cc of roster) {
-                        if ((cc.class || '').trim().toLowerCase() !== 'cleric') continue;
-                        subSlug = (cc.subclass || '').toLowerCase().replace(/\s+domain.*$/, '').trim();
-                        break;
-                    }
+                    (window._mcRoster() || []).forEach(cc => {
+                        const cls = (cc.class || '').trim().toLowerCase();
+                        if (!cls) return;
+                        let sub = (cc.subclass || '').toLowerCase()
+                            .replace(/\s+domain.*$/, '')
+                            .replace(/^oath of\s+(the\s+)?/, '')
+                            .replace(/^circle of\s+(the\s+)?/, '')
+                            .replace(/^college of\s+/, '')
+                            .replace(/^way of\s+(the\s+)?/, '')
+                            .replace(/^school of\s+/, '')
+                            .replace(/^path of\s+(the\s+)?/, '')
+                            .trim();
+                        classEntries.push({ cls, sub });
+                    });
                 }
                 const cdEntry = window._FEATURE_ECONOMY && window._FEATURE_ECONOMY['channel-divinity'];
                 const allOpts = cdEntry ? (cdEntry.options || {}) : {};
                 const filtered = [];
                 Object.keys(allOpts).forEach(optKey => {
                     const opt = allOpts[optKey];
-                    const tag = (opt.subclass || 'any').toLowerCase();
-                    if (tag === 'any' || (subSlug && subSlug.indexOf(tag) !== -1)) {
+                    const optCls = (opt.class || 'any').toLowerCase();
+                    const optSub = (opt.subclass || 'any').toLowerCase();
+                    const matches = classEntries.some(ce =>
+                        (optCls === 'any' || optCls === ce.cls) &&
+                        (optSub === 'any' || optSub === ce.sub || (ce.sub && ce.sub.indexOf(optSub) !== -1))
+                    );
+                    if (matches) {
                         filtered.push({ key: optKey, label: opt.label, desc: opt.desc });
                     }
                 });
