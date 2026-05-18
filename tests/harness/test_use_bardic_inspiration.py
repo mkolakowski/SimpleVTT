@@ -1,16 +1,54 @@
 """/api/campaign/{cid}/use_bardic_inspiration — Bard's BI tests.
 
-Phase 1.5 scope: error paths only. No Bard in the demo party. Happy-
-path tests wait for a demo Bard or fixture characters.
+v2.14.1: demo Bard (Lyra Sunstrider) shipped, happy-path tests now
+run end-to-end.
 
 Tests:
+  - happy path: Lyra inspires Pip; counter decrements, feature_used +
+    resource_update broadcasts fire, die size matches Bard Lv 5 (d8)
   - 400 missing fields
   - 400 self-target (RAW: "other than yourself")
   - 404 unknown target
   - 404 "No Bardic Inspiration resource on this sheet" when called
     against a non-bard PC (Pip)
 """
+import asyncio
+
 from .conftest import CAMPAIGN_ID
+
+
+async def test_bi_happy_path(gm_client, gm_ws, roster):
+    """Lyra inspires Pip. Asserts die size is d8 (Lv 5 bard),
+    counter decrements, broadcasts fire."""
+    lyra = roster["Lyra Sunstrider"]
+    pip = roster["Pip Quickfingers"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_bardic_inspiration",
+        json={
+            "character_id": lyra["id"],
+            "target_character_id": pip["id"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["die"] == "d8"  # Lv 5 bard → d8
+    assert data["target_name"] == "Pip Quickfingers"
+    assert "remaining" in data
+
+    msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    assert "Bardic Inspiration" in msg["data"]["feature_name"]
+    assert msg["data"]["source"] == "bardic-inspiration"
+    # Target name appears in feature_name format "✨ Bardic Inspiration → Pip Quickfingers (d8)"
+    assert "Pip Quickfingers" in msg["data"]["feature_name"]
+    assert "d8" in msg["data"]["feature_name"]
+
+    # resource_update should also fire to repip the counter.
+    await asyncio.sleep(0.3)
+    updates = gm_ws.buffered("resource_update")
+    bi_updates = [u for u in updates if u["data"].get("key") == "bardic-inspiration"]
+    assert bi_updates, "Expected at least one resource_update for bardic-inspiration"
 
 
 async def test_bi_missing_fields(gm_client):

@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.14.1] - 2026-05-18
+
+**Schema version:** 55
+**Commit summary:** **Phase A.2 — demo Bard.** Adds **Lyra Sunstrider**, a Lv 5 College of Lore Half-Elf Bard, GM-owned. Demo party grows 4 → 5 PCs; initiative slot at init 16 between Vex (17) and Pip (15). Unlocks the deferred Bardic Inspiration happy-path harness test (priority #5, picker shipped in v2.11.0 without demo coverage). Sets up the next Phase B work for Bard features (Magical Secrets / Jack of All Trades / Song of Rest / Cutting Words from College of Lore). MINOR — new visible demo content + new PC sheet template fn `_bard_sheet`.
+**Description:** Three coordinated changes mirroring the v2.14.0 Paladin commit. **(1)** New `_bard_sheet(name)` factory in `app/demo_seed.py`. Lyra is a textbook Lv 5 Lore Bard: STR 8 / CHA 17 (Half-Elf +2 CHA + 1 to two others), AC 14 (studded leather + DEX), HP 33, Rapier (+5 1d8+2 finesse) + Hand Crossbow (+5 1d6+2) + Vicious Mockery cantrip (DC 14 WIS save, 1d4 psychic + disadvantage on next attack). Cantrips: Vicious Mockery, Mage Hand, Minor Illusion, Prestidigitation. Lv 1 spells: Healing Word, Cure Wounds, Faerie Fire, Heroism. Lv 2: Suggestion, Invisibility, Hold Person. Lv 3: Hypnotic Pattern, Dispel Magic. Slots 4/3/2 per the bard table. Skills with Expertise: Performance + Persuasion (Lore college's expertise pick at Lv 3). Resources: **bardic-inspiration** 3/3 (CHA mod, short-rest refresh from Lv 5 via Font of Inspiration). Color `#d977b8` (warm magenta — distinct from every other PC + NPC). **(2)** `seed_characters` adds a 5th Character row owned by the GM; `seed_tokens` places Lyra at (350, 420) above Pip; `seed_encounter`'s `init_specs` adds Lyra at init 16 between Vex and Pip with the NPC token indices shifted by +1. **(3)** The harness test `test_use_bardic_inspiration.py` grows a `test_bi_happy_path` test that asserts the die size = d8 (Lv 5 bard), the counter decrements, and the `feature_used` + `resource_update` broadcasts both fire with the right shapes. Suite grows 48 → 49 tests.
+**Description (cont):** Why Half-Elf. Half-Elf is the classic "Charisma bonus race" in SRD 5e — +2 to CHA + 1 to two other stats. Lets Lyra land CHA 17 (16 base + 1 from Half-Elf) without burning point-buy on CHA at character creation. Also lets her have a respectable DEX 14 for AC + skill checks. Alternatives considered: Variant Human (+1 +1 + feat) — would let her start with a feat but loses the racial flavour; Tiefling (+2 CHA + 1 INT) — works but visually clashes with the existing party. Half-Elf is the canonical Bard.
+**Description (cont 2):** Color choice. The existing party uses `#6cb4ff` (Pip), `#4ade80` (Thalindra), `#f5b75c` (Tavik), `#e8c14a` (Caelan, gold-warm). The NPC bandits are `#c84a4a` (red), the Goblin Captain is `#7c9c54` (green). Lyra at `#d977b8` (magenta-pink) is distinct from all of them + reads as "bard" visually (warm, performative). The token render's color ring around the (currently absent) portrait is the only color signal until art ships.
+**Description (cont 3):** Phase A status update. Phase A.1 (Paladin / Caelan, v2.14.0) ✅. Phase A.2 (Bard / Lyra, this commit) ✅. Phase A.3 (Druid) → next, unlocks Wild Shape priority #4. After A.3 the demo has 6 PCs which is the realistic "play tabletop game with this party" size for a published one-shot; further fixture classes (Fighter, Monk, Barbarian) would be Phase A.4-A.6 if/when their features get prioritised, but at 6 PCs the demo encounter probably needs to grow too (currently 5 PCs vs 6 NPCs).
+
+### Added
+- `app/demo_seed.py` `_bard_sheet(name)` — Lv 5 College of Lore Bard sheet template. CHA 17, AC 14, HP 33, 4 cantrips + 9 leveled spells (Healing Word + Faerie Fire + Suggestion + Hypnotic Pattern + Dispel Magic among them), spell slots 4/3/2, Bardic Inspiration counter at 3/3 (CHA mod / short rest), Performance + Persuasion expertise.
+- `app/demo_seed.py` `seed_characters` — 5th Character row "Lyra Sunstrider" owned by the GM.
+- `app/demo_seed.py` `seed_tokens` — Lyra's token at (350, 420) with color `#d977b8`, no portrait jpg.
+- `app/demo_seed.py` `seed_encounter` `init_specs` — Lyra at init 16, NPC token_idx values shifted by +1.
+- `tests/harness/test_use_bardic_inspiration.py` `test_bi_happy_path` — happy-path test now possible since Lyra exists.
+- `tests/harness/conftest.py` — roster sanity-check expects "Lyra Sunstrider".
+- `.github/workflows/test-harness.yml` — both jobs grep for "Lyra Sunstrider".
+- `README.md` — Player characters table + Pre-rolled initiative list updated for Lyra.
+
+### Notes
+- **What to test:** demo at `/campaign/1`. Init tracker shows 11 entries (was 10). Lyra appears at init 16 between Vex and Pip. Her mini-sheet shows Bardic Inspiration 3/3. Open her full character sheet → Class Resources panel renders the BI counter; clicking ⚡ Use opens the v2.11.0 target picker (excludes self per RAW); picking an ally posts a feature_used roll-log entry "✨ Bardic Inspiration → {ally} (d8)" + decrements the counter.
+- **What stays deferred to Phase A.3.** Druid (Sister Mirabel or similar) — unblocks Wild Shape priority #4. After that the demo party balance is "6 PCs vs 6 NPCs" which means the encounter may need a 7th NPC to keep the Tavern Brawl tense; filed for when A.3 lands.
+- **Phase B sequencing.** With Paladin + Bard live, the next per-feature commits are roughly: (B.1) Channel Divinity Devotion options (`_FEATURE_ECONOMY['channel-divinity-paladin']` with Sacred Weapon + Turn the Unholy); (B.2) Divine Sense + Cleansing Touch announce buttons; (B.3) Magical Secrets — extend the spell picker to drop the class filter for the bard's bonus picks; (B.4) Jack of All Trades — half-PB to non-proficient ability checks via the existing skill-roll engine; (B.5) Song of Rest — bonus HP per Hit Die spent during a short rest in the rest endpoint. Each is its own commit, each builds on the demo PCs from Phase A.
+
+---
+
 ## [2.14.0] - 2026-05-17
 
 **Schema version:** 55

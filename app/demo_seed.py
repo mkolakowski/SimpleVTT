@@ -687,6 +687,117 @@ def _paladin_sheet(name: str) -> dict:
     }
 
 
+def _bard_sheet(name: str) -> dict:
+    """v2.14.1: demo Bard Lv 5 (College of Lore) for the GM. Added in
+    Phase A.2 to unlock the deferred /use_bardic_inspiration happy-
+    path harness test (priority #5, picker shipped in v2.11.0 without
+    demo coverage). Cantrips include Vicious Mockery for the demo's
+    "pick a save-DC cantrip" flow; spell list mixes the canonical
+    Lv 5 Bard picks — Healing Word + Faerie Fire + Hypnotic Pattern —
+    so the GM can drive a varied caster from one PC.
+    """
+    return {
+        "class": "Bard",
+        "subclass": "College of Lore",
+        "level": 5,
+        "race": "Half-Elf",  # +2 CHA, +1 to two others
+        "alignment": "Chaotic Good",
+        "background": "Entertainer",
+        "abilities": {"STR": 8, "DEX": 14, "CON": 13, "INT": 12, "WIS": 10, "CHA": 17},
+        "ac": 14,  # studded leather 12 + DEX +2
+        "speed": 30,
+        "hp": {"current": 33, "max": 33, "temp": 0},  # 8 + 4×(avg 5 + CON +1)
+        "initiative_bonus": 0,
+        "proficiency_bonus": 3,
+        "hit_dice": {"current": 5, "max": 5},
+        "class_hit_die": "d8",
+        "class_spellcasting": "CHA",
+        "saving_throws": {"DEX": True, "CHA": True},
+        # Bards get any 3 skills + College of Lore grants 3 more at Lv 3.
+        # Expertise (Lv 3) doubles proficiency on 2 chosen skills.
+        "skills": {
+            "Performance":  {"ability": "CHA", "proficient": True, "expertise": True},
+            "Persuasion":   {"ability": "CHA", "proficient": True, "expertise": True},
+            "Deception":    {"ability": "CHA", "proficient": True, "expertise": False},
+            "Insight":      {"ability": "WIS", "proficient": True, "expertise": False},
+            "Perception":   {"ability": "WIS", "proficient": True, "expertise": False},
+            "Investigation": {"ability": "INT", "proficient": True, "expertise": False},
+        },
+        "attacks": [
+            {"name": "Rapier", "attack_bonus": "+5", "damage": "1d8+2",
+             "damage_type": "piercing", "range": "5 ft", "desc": "Finesse, one-handed."},
+            {"name": "Hand crossbow", "attack_bonus": "+5", "damage": "1d6+2",
+             "damage_type": "piercing", "range": "30/120 ft", "desc": "Light, loading."},
+            {"name": "Vicious Mockery (cantrip)", "save_dc": 14, "save_ability": "WIS",
+             "damage": "1d4", "damage_type": "psychic", "range": "60 ft",
+             "desc": "WIS save or take psychic damage AND disadvantage on next attack roll before end of next turn."},
+        ],
+        # Lv 5 Bard known spells: 4 cantrips, 9 leveled (per Bard table).
+        # ``casting_time`` tagged for the v2.5.3 action-economy.
+        "spells": [
+            {"name": "Vicious Mockery", "level": 0, "prepared": True, "_slug": "vicious-mockery", "casting_time": "1 action"},
+            {"name": "Mage Hand", "level": 0, "prepared": True, "_slug": "mage-hand", "casting_time": "1 action"},
+            {"name": "Minor Illusion", "level": 0, "prepared": True, "_slug": "minor-illusion", "casting_time": "1 action"},
+            {"name": "Prestidigitation", "level": 0, "prepared": True, "_slug": "prestidigitation", "casting_time": "1 action"},
+            {"name": "Healing Word", "level": 1, "prepared": True, "_slug": "healing-word", "casting_time": "1 bonus action"},
+            {"name": "Cure Wounds", "level": 1, "prepared": True, "_slug": "cure-wounds", "casting_time": "1 action"},
+            {"name": "Faerie Fire", "level": 1, "prepared": True, "_slug": "faerie-fire", "casting_time": "1 action"},
+            {"name": "Heroism", "level": 1, "prepared": True, "_slug": "heroism", "casting_time": "1 action"},
+            {"name": "Suggestion", "level": 2, "prepared": True, "_slug": "suggestion", "casting_time": "1 action"},
+            {"name": "Invisibility", "level": 2, "prepared": True, "_slug": "invisibility", "casting_time": "1 action"},
+            {"name": "Hold Person", "level": 2, "prepared": True, "_slug": "hold-person", "casting_time": "1 action"},
+            {"name": "Hypnotic Pattern", "level": 3, "prepared": True, "_slug": "hypnotic-pattern", "casting_time": "1 action"},
+            {"name": "Dispel Magic", "level": 3, "prepared": True, "_slug": "dispel-magic", "casting_time": "1 action"},
+        ],
+        "spell_slots": {
+            "bard": {
+                "1": {"total": 4, "used": 0},
+                "2": {"total": 3, "used": 0},
+                "3": {"total": 2, "used": 0},
+            },
+        },
+        "inventory": [
+            {"name": "Rapier", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d8", "damage_type": "piercing",
+             "properties": "finesse", "_slug": "rapier"},
+            {"name": "Hand crossbow", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d6", "damage_type": "piercing",
+             "range": "30/120 ft", "properties": "light, loading", "_slug": "hand-crossbow"},
+            {"name": "Studded leather", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": True,
+             "armor_type": "light", "ac_value": 12,
+             "_slug": "studded-leather"},
+            {"name": "Lute", "type": "gear", "qty": 1,
+             "desc": "Lyra's instrument — a polished six-string serving as her bardic focus. Lets her cast spells with material components without a separate component pouch."},
+            {"name": "Entertainer's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, bedroll, 2 costumes, 5 candles, 5 days rations, waterskin, disguise kit."},
+            {"name": "Potion of Healing", "type": "consumable", "qty": 1,
+             "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
+             "_slug": "potion-of-healing",
+             "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
+        ],
+        "feats": [],
+        # v2.14.1: Bardic Inspiration uses = CHA mod (3 at CHA 17),
+        # refreshes on short rest from Lv 5 onward via Font of
+        # Inspiration. Song of Rest exists as a passive (no counter
+        # in RAW); will be wired into the short-rest endpoint when
+        # Phase B Bard work ships.
+        "resources": [
+            {
+                "key": "bardic-inspiration",
+                "name": "Bardic Inspiration",
+                "current": 3, "max": 3, "reset": "short",
+                "source": "bard Lv 1 / Lv 5 (Font of Inspiration)",
+                "class_slug": "bard",
+                "desc": "Bonus action — pick an ally within 60 ft; they gain a Bardic Inspiration d8 for 10 minutes (add to one attack, check, or save). Refreshes on short rest from Lv 5.",
+                "manual": False,
+            },
+        ],
+    }
+
+
 def seed_characters(
     db: Session, camp: Campaign, users: dict[str, User]
 ) -> list[Character]:
@@ -731,9 +842,22 @@ def seed_characters(
         sheet=_paladin_sheet("Sir Caelan Lightbringer"),
         color="#e8c14a",
     )
-    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc])
+    # v2.14.1: Phase A.2 — demo Bard (Lyra Sunstrider). 5th PC.
+    # Unlocks the deferred /use_bardic_inspiration happy-path test
+    # (priority #5 / shipped picker in v2.11.0 without demo coverage)
+    # and queues Magical Secrets + Jack of All Trades + Song of Rest
+    # work for Phase B.
+    bard_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Lyra Sunstrider",
+        template="dnd5e",
+        sheet=_bard_sheet("Lyra Sunstrider"),
+        color="#d977b8",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc])
     db.flush()
-    return [alice_pc, bob_pc, gm_pc, paladin_pc]
+    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:
@@ -828,6 +952,17 @@ def seed_tokens(
         label=chars[3].name, color="#e8c14a",
         image_url=None,
         x=490, y=420, size=1,
+    ))
+    # v2.14.1: Phase A.2 — Lyra token. Bards stay back; placed above
+    # Pip at (350, 420) so the party reads visually as "Caelan + Tavik
+    # front line, Pip / Thalindra middle, Lyra slightly off to the
+    # north supporting".
+    tokens.append(Token(
+        map_id=map_.id, character_id=chars[4].id,
+        controller_user_id=users["gm"].id,
+        label=chars[4].name, color="#d977b8",
+        image_url=None,
+        x=350, y=420, size=1,
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
@@ -1272,31 +1407,29 @@ def seed_encounter(
     GM still needs a "From Map" / "Load encounter" click on first
     visit — that's a separate UX gap.)
     """
-    # Initiative order — pre-rolled, ten entries (4 PCs + 6 NPCs).
+    # Initiative order — pre-rolled, eleven entries (5 PCs + 6 NPCs).
     # v2.3.22: Grixxa (Goblin Captain) at the top to showcase the new
     # monster mini-sheet up front.
-    # v2.3.25: Brother Tavik (GM's Cleric) added at init 14, between Pip
-    # and Thalindra, with the NPC token_idx values shifted by +1 to
-    # account for Tavik's token being inserted at index 2 in seed_tokens.
-    # v2.14.0: Sir Caelan (GM's Paladin) added at init 12, between Tavik
-    # and Thalindra; NPC token_idx values shifted by another +1 to
-    # account for Caelan's token at index 3 in seed_tokens.
-    # Specs: (token_idx, initiative_roll, hp_max, dex_mod). The remaining
-    # combatant fields (id / name / color / image_url / char_id /
-    # token_template_id) come from the referenced Token row so the
-    # init tracker matches the live token rendering exactly.
+    # v2.3.25: Brother Tavik (GM's Cleric) added at init 14.
+    # v2.14.0: Sir Caelan (GM's Paladin) added at init 12. NPC token
+    # indices +1 to account for Caelan at tokens[3].
+    # v2.14.1: Lyra Sunstrider (GM's Bard) added at init 16, between
+    # Vex (17) and Pip (15). NPC token indices +1 again to account
+    # for Lyra at tokens[4].
+    # Specs: (token_idx, initiative_roll, hp_max, dex_mod).
     init_specs = [
         # token_idx, init, hp_max, dex_mod
-        (9, 18, 36, 3),   # Grixxa (Goblin Captain)
-        (4, 17, 65, 3),   # Vex (Bandit Captain)
-        (0, 15, 33, 3),   # Pip Quickfingers
-        (2, 14, 43, 0),   # Brother Tavik Stonebrow
-        (1, 13, 27, 2),   # Thalindra Moonwhisper
-        (3, 12, 44, 0),   # Sir Caelan Lightbringer (v2.14.0)
-        (8, 11, 32, 0),   # Thug
-        (5,  9, 11, 1),   # Bandit Alpha
-        (6,  7, 11, 1),   # Bandit Beta
-        (7,  5, 11, 1),   # Bandit Gamma
+        (10, 18, 36, 3),   # Grixxa (Goblin Captain)
+        (5,  17, 65, 3),   # Vex (Bandit Captain)
+        (4,  16, 33, 2),   # Lyra Sunstrider (v2.14.1)
+        (0,  15, 33, 3),   # Pip Quickfingers
+        (2,  14, 43, 0),   # Brother Tavik Stonebrow
+        (1,  13, 27, 2),   # Thalindra Moonwhisper
+        (3,  12, 44, 0),   # Sir Caelan Lightbringer (v2.14.0)
+        (9,  11, 32, 0),   # Thug
+        (6,   9, 11, 1),   # Bandit Alpha
+        (7,   7, 11, 1),   # Bandit Beta
+        (8,   5, 11, 1),   # Bandit Gamma
     ]
     combatants = []
     for token_idx, init_roll, hp_max, dex_mod in init_specs:

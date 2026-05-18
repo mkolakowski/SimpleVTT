@@ -101,6 +101,7 @@ jobs:
           echo "$ROSTER" | grep -q "Thalindra Moonwhisper" || { echo "Demo seed missing Thalindra"; exit 1; }
           echo "$ROSTER" | grep -q "Brother Tavik Stonebrow" || { echo "Demo seed missing Tavik"; exit 1; }
           echo "$ROSTER" | grep -q "Sir Caelan Lightbringer" || { echo "Demo seed missing Caelan"; exit 1; }
+          echo "$ROSTER" | grep -q "Lyra Sunstrider" || { echo "Demo seed missing Lyra"; exit 1; }
 
       - name: Run test harness
         run: |
@@ -226,6 +227,7 @@ jobs:
           echo "$ROSTER" | grep -q "Pip Quickfingers" || { echo "Demo seed missing Pip"; exit 1; }
           echo "$ROSTER" | grep -q "Brother Tavik Stonebrow" || { echo "Demo seed missing Tavik"; exit 1; }
           echo "$ROSTER" | grep -q "Sir Caelan Lightbringer" || { echo "Demo seed missing Caelan"; exit 1; }
+          echo "$ROSTER" | grep -q "Lyra Sunstrider" || { echo "Demo seed missing Lyra"; exit 1; }
 
       - name: Run Playwright harness
         run: |
