@@ -688,28 +688,31 @@ def _paladin_sheet(name: str) -> dict:
 
 
 def _bard_sheet(name: str) -> dict:
-    """v2.14.1: demo Bard Lv 5 (College of Lore) for the GM. Added in
-    Phase A.2 to unlock the deferred /use_bardic_inspiration happy-
-    path harness test (priority #5, picker shipped in v2.11.0 without
-    demo coverage). Cantrips include Vicious Mockery for the demo's
-    "pick a save-DC cantrip" flow; spell list mixes the canonical
-    Lv 5 Bard picks — Healing Word + Faerie Fire + Hypnotic Pattern —
-    so the GM can drive a varied caster from one PC.
+    """v2.15.1: demo Bard Lv 6 (College of Lore) for the GM. Bumped
+    from Lv 5 (v2.14.1) so the v2.15.0 Magical Secrets toggle in the
+    Browse Spells modal is exercisable in the live demo — Lore Bard
+    Lv 6 unlocks Additional Magical Secrets (2 spells from any class
+    list). Lyra's 2 picks are Fireball (Wizard L3) for the AoE damage
+    Lore Bards don't otherwise get, and Counterspell (Wizard L3) for
+    the reaction-counter slot. Both are tagged ``_via:
+    "magical-secrets"`` so the sheet renders the 🪄 purple badge from
+    spellRowHtml(). Cantrips still include Vicious Mockery for the
+    demo's "pick a save-DC cantrip" flow.
     """
     return {
         "class": "Bard",
         "subclass": "College of Lore",
-        "level": 5,
+        "level": 6,
         "race": "Half-Elf",  # +2 CHA, +1 to two others
         "alignment": "Chaotic Good",
         "background": "Entertainer",
         "abilities": {"STR": 8, "DEX": 14, "CON": 13, "INT": 12, "WIS": 10, "CHA": 17},
         "ac": 14,  # studded leather 12 + DEX +2
         "speed": 30,
-        "hp": {"current": 33, "max": 33, "temp": 0},  # 8 + 4×(avg 5 + CON +1)
+        "hp": {"current": 38, "max": 38, "temp": 0},  # 8 + 5×(avg 5 + CON +1)
         "initiative_bonus": 0,
         "proficiency_bonus": 3,
-        "hit_dice": {"current": 5, "max": 5},
+        "hit_dice": {"current": 6, "max": 6},
         "class_hit_die": "d8",
         "class_spellcasting": "CHA",
         "saving_throws": {"DEX": True, "CHA": True},
@@ -732,8 +735,12 @@ def _bard_sheet(name: str) -> dict:
              "damage": "1d4", "damage_type": "psychic", "range": "60 ft",
              "desc": "WIS save or take psychic damage AND disadvantage on next attack roll before end of next turn."},
         ],
-        # Lv 5 Bard known spells: 4 cantrips, 9 leveled (per Bard table).
-        # ``casting_time`` tagged for the v2.5.3 action-economy.
+        # Lv 6 Bard known spells: 4 cantrips, 9 leveled (per Bard table)
+        # + 2 Magical Secrets picks from any class list (Lore Bard Lv 6
+        # Additional Magical Secrets, RAW). ``casting_time`` tagged for
+        # the v2.5.3 action-economy. ``_via: "magical-secrets"`` on the
+        # last two entries drives the 🪄 purple badge in the spell row
+        # (v2.15.0 spellRowHtml) so the GM can audit the cross-class picks.
         "spells": [
             {"name": "Vicious Mockery", "level": 0, "prepared": True, "_slug": "vicious-mockery", "casting_time": "1 action"},
             {"name": "Mage Hand", "level": 0, "prepared": True, "_slug": "mage-hand", "casting_time": "1 action"},
@@ -748,12 +755,19 @@ def _bard_sheet(name: str) -> dict:
             {"name": "Hold Person", "level": 2, "prepared": True, "_slug": "hold-person", "casting_time": "1 action"},
             {"name": "Hypnotic Pattern", "level": 3, "prepared": True, "_slug": "hypnotic-pattern", "casting_time": "1 action"},
             {"name": "Dispel Magic", "level": 3, "prepared": True, "_slug": "dispel-magic", "casting_time": "1 action"},
+            {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball",
+             "casting_time": "1 action", "class": "bard", "_via": "magical-secrets",
+             "damage": "8d6", "save_ability": "DEX",
+             "desc": "20 ft radius sphere, DEX save DC 14 for half. 8d6 fire."},
+            {"name": "Counterspell", "level": 3, "prepared": True, "_slug": "counterspell",
+             "casting_time": "1 reaction", "class": "bard", "_via": "magical-secrets",
+             "desc": "Reaction when a creature within 60 ft casts a spell: their spell fails if its level ≤ 3, otherwise ability check DC 10 + spell level."},
         ],
         "spell_slots": {
             "bard": {
                 "1": {"total": 4, "used": 0},
                 "2": {"total": 3, "used": 0},
-                "3": {"total": 2, "used": 0},
+                "3": {"total": 3, "used": 0},  # Lv 6 Bard gains the third L3 slot
             },
         },
         "inventory": [
