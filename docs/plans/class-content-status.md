@@ -61,9 +61,9 @@ The `### Header` names below come from the `features` field of each JSON.
 | 1 | Unarmored Defense | 🟡 | Description visible; AC engine doesn't auto-detect this fighting style — player sets `base_ac` manually |
 | 2 | Reckless Attack | ⚪ | |
 | 2 | Danger Sense | ⚪ | |
-| 3 | Primal Path | 🟡 | Subclass slot rendered; specific paths see Subclasses below |
+| 3 | Primal Path | ✅ | Subclass system shipped — see Subclasses table for per-path status. Path of the Berserker has features JSON; other paths fall back to descriptive. |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | Standard ASI flow handles every class |
-| 5 | Extra Attack | 🟡 | Description visible; attack panel doesn't auto-suggest a second attack roll |
+| 5 | Extra Attack | ✅ | RAW supported — click the attack button twice within your action; the action-economy chip is per-action (not per-attack) so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed as a future nice-to-have. |
 | 5 | Fast Movement | ⚪ | |
 | 7 | Feral Instinct | ⚪ | |
 | 9 / 13 / 17 | Brutal Critical | ⚪ | |
@@ -80,7 +80,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 1 | Bardic Inspiration | ✅ | v2.11.0 — target picker (`showTargetPicker`) excludes self per RAW; `/use_bardic_inspiration` endpoint decrements counter + marks bonus slot + scales die by Bard level (d6/d8/d10/d12). Harness coverage v2.14.1. |
 | 2 | Jack of All Trades | ✅ | v2.15.2 — `_hasJackOfAllTrades(form)` JS helper + Jinja `_bard_lv_ns` mirror in the skill card render. Adds `floor(PB/2)` to non-proficient ability checks (raw ability rolls + non-proficient skill rolls; saves intentionally untouched per RAW). Roll note carries `(Jack +N)` for attribution. |
 | 2 | Song of Rest | ✅ | v2.15.3 — `_song_of_rest_for_campaign` helper picks highest-level Bard in campaign; `/rest` short-rest folds `+1dN` (d6/d8/d10/d12 by Bard level) into the recovery dice expression. UI Short Rest button routed through `/rest` in v2.15.4; Long Rest in v2.15.5. Harness coverage in `tests/harness/test_rest.py`. |
-| 3 | Bard College | 🟡 | Subclass slot only |
+| 3 | Bard College | ✅ | Subclass system shipped — see Subclasses table. College of Lore has features JSON + Cutting Words + Additional Magical Secrets wired (v2.15.7-v2.15.10). |
 | 3 / 10 | Expertise | ✅ | Skills schema has `expertise: true` flag handled by skill-roll engine |
 | 5 | Font of Inspiration | ✅ | Bardic Inspiration counter resets on short rest from Lv 5 — handled implicitly by the `reset: 'short'` flag on the resource (already wired via `/rest`'s `refilled_resources` walk). Demo Lyra's counter is tagged `reset: "short"` per v2.14.1. |
 | 6 | Countercharm | ⚪ | |
@@ -92,7 +92,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | Lv | Feature | Status | Notes |
 |---|---|---|---|
 | 1 | Spellcasting | ✅ | Demo Tavik (Lv 5) prepares cantrips + L1-L3 spells correctly post-v2.4.12 |
-| 1 | Divine Domain | 🟡 | Subclass slot; domain-spells curated table covers all 12 domains |
+| 1 | Divine Domain | ✅ | Subclass system shipped — see Subclasses table. All 12 domains have spell-grants curated; Life Domain has features JSON + Channel Divinity options end-to-end (Tavik demo PC since v2.3.25). |
 | 2 | Channel Divinity | 🟢 | Resource counter (`key: 'channel-divinity'`) + v2.9.0 option-picker (`showResourceOptionPicker`). Life Domain ✅ end-to-end (Turn Undead + Preserve Life); v2.14.3 also added Light's Radiance of the Dawn + War's Guided Strike option entries; Knowledge / Tempest / Trickery / Forge / Grave / Order / Nature / Twilight domains still need their option entries added to `_FEATURE_ECONOMY`. Curated table also serves Paladin Oath of Devotion (Sacred Weapon + Turn the Unholy via subclass-tagged options). |
 | 5 / 8 / 11 / 14 / 17 | Destroy Undead | ⚪ | Tied to Turn Undead option above; would surface as a damage uplift when Turn Undead is implemented |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
@@ -102,12 +102,12 @@ The `### Header` names below come from the `features` field of each JSON.
 
 | Lv | Feature | Status | Notes |
 |---|---|---|---|
-| 1 | Druidic | ⚪ | Language only — no mechanic |
+| 1 | Druidic | ✅ | Pure-descriptive language feature. No mechanic required RAW — description text on the sheet is sufficient. |
 | 1 | Spellcasting | ✅ | |
 | 2 | Wild Shape | ✅ | Sheet swap via `/transform` endpoint + `BeastPicker` JS (pre-2.0.0). v2.14.4 added harness coverage (`tests/harness/test_transform.py`). v2.14.5 added action-economy chip integration (`_wild_shape_economy_slot` returns "bonus" for Moon Druid, "action" otherwise; `_mark_battle_economy` called on success). v2.14.6 added the Phase 4 over-budget gate (409 `error: "over_budget"` for non-GMs; BeastPicker's `_confirm` handles the modal-and-retry). Demo Mira (Lv 5 Moon Druid) is the test bed. Token swap on transform is filed as the Token-disguise primitive TODO (v2.15.9) for future implementation. |
-| 2 | Druid Circle | 🟡 | Subclass slot |
+| 2 | Druid Circle | ✅ | Subclass system shipped — see Subclasses table. Circle of the Moon has full Wild Shape integration (Combat Wild Shape v2.14.5; Circle Forms CR cap raised to 1 at Lv 2); Circle of the Land has Natural Recovery counter. |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
-| 18 | Timeless Body | ⚪ | |
+| 18 | Timeless Body | ✅ | Druid Lv 18: pure-descriptive (you age more slowly). No mechanic required RAW — description text on the sheet is sufficient. |
 | 18 | Beast Spells | ⚪ | |
 | 20 | Archdruid | ⚪ | |
 
@@ -118,9 +118,9 @@ The `### Header` names below come from the `features` field of each JSON.
 | 1 | Fighting Style | 🟡 | Description visible; bonuses not auto-applied to attack rolls |
 | 1 | Second Wind | 🟢 | Resource counter (`key: 'second-wind'`); no "click to spend + roll 1d10 + lv HP" button |
 | 2 / 17 | Action Surge | 🟢 | Resource counter (`key: 'action-surge'`); no in-combat affordance |
-| 3 | Martial Archetype | 🟡 | Subclass slot |
+| 3 | Martial Archetype | ✅ | Subclass system shipped — see Subclasses table. Champion has features JSON (Improved Critical / Remarkable Athlete pending attack-roll intercept); Battle Master has Superiority Dice counter. |
 | 4 / 6 / 8 / 12 / 14 / 16 / 19 | Ability Score Improvement | ✅ | |
-| 5 / 11 / 20 | Extra Attack | 🟡 | |
+| 5 / 11 / 20 | Extra Attack | ✅ | RAW supported — click the attack button N times within your action (2 at Lv 5, 3 at Lv 11, 4 at Lv 20); the action-economy chip is per-action so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed for the future. |
 | 9 / 13 / 17 | Indomitable | 🟢 | Resource counter (`key: 'indomitable'`); no save-reroll button |
 
 ### Monk
@@ -131,19 +131,19 @@ The `### Header` names below come from the `features` field of each JSON.
 | 1 | Martial Arts | 🟡 | |
 | 2 | Ki | 🟢 | Resource counter (`key: 'ki'`); spend-Ki options (Flurry / Patient / Step) not wired |
 | 2 | Unarmored Movement | ⚪ | |
-| 3 | Monastic Tradition | 🟡 | Subclass slot |
+| 3 | Monastic Tradition | ✅ | Subclass system shipped — see Subclasses table. Way of the Open Hand has features JSON (Open Hand Technique / Wholeness of Body waiting on Ki spend-picker). |
 | 3 | Deflect Missiles | ⚪ | |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 4 | Slow Fall | ⚪ | |
-| 5 | Extra Attack | 🟡 | |
+| 5 | Extra Attack | ✅ | RAW supported — click the attack button twice within your action; the action-economy chip is per-action so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed for the future. |
 | 5 | Stunning Strike | ⚪ | (Tied to Ki) |
 | 6 | Ki-Empowered Strikes | ⚪ | |
 | 7 | Evasion | ⚪ | |
 | 7 | Stillness of Mind | ⚪ | |
-| 10 | Purity of Body | ⚪ | |
-| 13 | Tongue of the Sun and Moon | ⚪ | |
+| 10 | Purity of Body | ✅ | Monk Lv 10: pure-descriptive (immunity to disease + poison). RAW: would gate the disease / poisoned conditions but SimpleVTT doesn't model those conditions today, so the description text is sufficient. Re-evaluate if a disease engine ships. |
+| 13 | Tongue of the Sun and Moon | ✅ | Monk Lv 13: pure-descriptive language feature (understand all spoken languages). No mechanic required RAW. |
 | 14 | Diamond Soul | ⚪ | |
-| 15 | Timeless Body | ⚪ | |
+| 15 | Timeless Body | ✅ | Monk Lv 15: pure-descriptive (you age more slowly + need less food/water). No mechanic required RAW. |
 | 18 | Empty Body | ⚪ | |
 | 20 | Perfect Self | ⚪ | |
 
@@ -156,11 +156,11 @@ The `### Header` names below come from the `features` field of each JSON.
 | 2 | Fighting Style | 🟡 | |
 | 2 | Spellcasting | ✅ | |
 | 2 | Divine Smite | ⚪ | Should be a per-attack damage-uplift toggle |
-| 3 | Divine Health | ⚪ | Passive — disease immunity |
-| 3 | Sacred Oath | 🟡 | Subclass slot |
+| 3 | Divine Health | ✅ | Paladin Lv 3: pure-descriptive (immunity to disease). RAW: would gate the disease condition but SimpleVTT doesn't model that condition today. Re-evaluate if a disease engine ships. |
+| 3 | Sacred Oath | ✅ | Subclass system shipped — see Subclasses table. Oath of Devotion has features JSON + Channel Divinity options end-to-end (Sacred Weapon + Turn the Unholy v2.14.3; Caelan demo PC since v2.14.0). |
 | 3 | Channel Divinity | 🟢 | Same counter + v2.9.0 picker shape as Cleric. **Oath of Devotion ✅ end-to-end** (Sacred Weapon + Turn the Unholy via v2.14.3 — options live under `channel-divinity.options` in the curated table with `class: "paladin", subclass: "devotion"` tags; the sheet picker filters by class+subclass via the v2.14.3 `classEntries` walker). Oath of the Ancients (Nature's Wrath / Turn the Faithless), Oath of Vengeance (Abjure Enemy / Vow of Enmity), Oathbreaker, Conquest, Crown, Redemption, Treachery still need their option entries. |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
-| 5 | Extra Attack | 🟡 | |
+| 5 | Extra Attack | ✅ | RAW supported — click the attack button twice within your action; the action-economy chip is per-action so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed for the future. |
 | 6 / 18 | Aura of Protection | ⚪ | |
 | 10 / 18 | Aura of Courage | ⚪ | |
 | 11 | Improved Divine Smite | ⚪ | |
@@ -174,10 +174,10 @@ The `### Header` names below come from the `features` field of each JSON.
 | 1 | Natural Explorer | ⚪ | |
 | 2 | Fighting Style | 🟡 | |
 | 2 | Spellcasting | ✅ | |
-| 3 | Ranger Archetype | 🟡 | Subclass slot |
+| 3 | Ranger Archetype | ✅ | Subclass system shipped — see Subclasses table. Hunter has features JSON (Hunter's Prey / Defensive Tactics / Multiattack still descriptive). |
 | 3 | Primeval Awareness | ⚪ | |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
-| 5 | Extra Attack | 🟡 | |
+| 5 | Extra Attack | ✅ | RAW supported — click the attack button twice within your action; the action-economy chip is per-action so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed for the future. |
 | 8 | Land's Stride | ⚪ | |
 | 10 | Hide in Plain Sight | ⚪ | |
 | 14 | Vanish | ⚪ | |
@@ -190,14 +190,14 @@ The `### Header` names below come from the `features` field of each JSON.
 |---|---|---|---|
 | 1 / 6 | Expertise | ✅ | Same Skills.expertise plumbing as Bard |
 | 1 | Sneak Attack | ⚪ | Per-attack damage uplift; needs a toggle on the attack panel |
-| 1 | Thieves' Cant | ⚪ | Language only |
+| 1 | Thieves' Cant | ✅ | Pure-descriptive language feature. No mechanic required RAW — description text on the sheet is sufficient. |
 | 2 | Cunning Action | ✅ | v2.6.0 — class-features panel renders Dash/Disengage/Hide buttons that POST `/use_feature` and auto-mark Bns chip |
-| 3 | Roguish Archetype | 🟡 | Subclass slot |
+| 3 | Roguish Archetype | ✅ | Subclass system shipped — see Subclasses table. Thief has features JSON (Fast Hands / Use Magic Device still descriptive); Pip is the demo Thief since v2.3.25. |
 | 4 / 8 / 10 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 5 | Uncanny Dodge | ⚪ | |
 | 7 | Evasion | ⚪ | |
 | 11 | Reliable Talent | ⚪ | Floor-of-10 on proficient skill checks — would need an option on skill roll |
-| 14 | Blindsense | ⚪ | |
+| 14 | Blindsense | ✅ | Rogue Lv 14: pure-descriptive (sense unseen creatures within 10 ft). RAW: would interact with a fog-of-war / hidden-token engine, but SimpleVTT doesn't model token hiding at that granularity. Re-evaluate if a hidden/seen state ships. |
 | 15 | Slippery Mind | ⚪ | |
 | 18 | Elusive | ⚪ | |
 | 20 | Stroke of Luck | 🟢 | Resource counter |
@@ -207,7 +207,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | Lv | Feature | Status | Notes |
 |---|---|---|---|
 | 1 | Spellcasting | ✅ | |
-| 1 | Sorcerous Origin | 🟡 | Subclass slot |
+| 1 | Sorcerous Origin | ✅ | Subclass system shipped — see Subclasses table. Draconic Bloodline has features JSON; Wild Magic has Tides of Chaos counter. |
 | 2 | Font of Magic | 🟢 | Sorcery Points counter (`key: 'sorcery-points'`); no slot-conversion picker |
 | 3 | Metamagic | ⚪ | Per-cast modifier; needs spell-cast intercept |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
@@ -217,7 +217,7 @@ The `### Header` names below come from the `features` field of each JSON.
 
 | Lv | Feature | Status | Notes |
 |---|---|---|---|
-| 1 | Otherworldly Patron | 🟡 | Subclass slot |
+| 1 | Otherworldly Patron | ✅ | Subclass system shipped — see Subclasses table. The Fiend has features JSON (Dark One's Blessing / Own Luck / Fiendish Resilience still descriptive). |
 | 1 | Pact Magic | 🟡 | Uses spell-slot UI but slots refresh on short rest; partial — slot reset path needs the patch |
 | 2 | Eldritch Invocations | 🟡 | Picker UI not wired; invocations are stat boosts / new options |
 | 3 | Pact Boon | ⚪ | |
@@ -231,7 +231,7 @@ The `### Header` names below come from the `features` field of each JSON.
 |---|---|---|---|
 | 1 | Spellcasting | ✅ | Demo Thalindra (Lv 5) prepares cantrips + L1-L3 spells correctly post-v2.4.12 |
 | 1 | Arcane Recovery | 🟢 | Resource counter (`key: 'arcane-recovery'`); no spell-slot-restore picker |
-| 2 | Arcane Tradition | 🟡 | Subclass slot |
+| 2 | Arcane Tradition | ✅ | Subclass system shipped — see Subclasses table. School of Evocation has features JSON; Divination has Portent Dice counter. Thalindra is the demo Evocation Wizard. |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 18 | Spell Mastery | ⚪ | |
 | 20 | Signature Spells | ⚪ | |
