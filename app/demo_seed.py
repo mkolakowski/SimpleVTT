@@ -955,6 +955,136 @@ def _druid_sheet(name: str) -> dict:
     }
 
 
+def _barbarian_sheet(name: str) -> dict:
+    """v2.18.2: demo Barbarian Lv 5 (Path of the Berserker) for the GM.
+    Added in Phase A.7 to unlock per-feature work for Rage (the demo's
+    first feature that depends on the (C) buff slot infrastructure —
+    damage bonus + advantage on STR + resistance to physical damage
+    while raging, all timed effects) + Reckless Attack (advantage on
+    attack rolls flag, attacks vs you have advantage until next turn)
+    + Brutal Critical (extra crit dice — extends the v2.16.0 attack
+    picker with a crit-detection hook). Half-Orc for the canonical
+    +STR + Savage Attacks (crit-die bonus) + Relentless Endurance
+    (1/long-rest 1-HP save) racial. Color `#993333` (dark blood-red).
+    """
+    return {
+        "class": "Barbarian",
+        "subclass": "Path of the Berserker",
+        "level": 5,
+        "race": "Half-Orc",  # +2 STR, +1 CON, Savage Attacks, Relentless Endurance, Darkvision, Menacing
+        "alignment": "Chaotic Neutral",
+        "background": "Outlander",
+        # Pre-racial rolled: 15 STR, 14 CON, 14 DEX, 13 WIS, 8 INT, 8 CHA.
+        # Half-Orc +2 STR (→ 17), +1 CON (→ 15). Lv 4 ASI +1 STR +1 CON
+        # → STR 18, CON 16.
+        "abilities": {"STR": 18, "DEX": 14, "CON": 16, "INT": 8, "WIS": 13, "CHA": 8},
+        # Unarmored Defense: 10 + DEX +2 + CON +3 = 15. Two-handed
+        # Greataxe means no shield, so this is the operating AC.
+        "ac": 15,
+        # Fast Movement (Lv 5): +10 ft speed when not in heavy armor.
+        # Half-Orc base 30 + Fast Movement = 40.
+        "speed": 40,
+        # Lv 1 max d12 (12) + 4× avg d12 (7) + CON +3 × 5 = 12 + 28 + 15 = 55.
+        "hp": {"current": 55, "max": 55, "temp": 0},
+        "initiative_bonus": 2,  # DEX 14 mod
+        "proficiency_bonus": 3,
+        "hit_dice": {"current": 5, "max": 5},
+        "class_hit_die": "d12",
+        # Barbarian prof saves are STR + CON.
+        "saving_throws": {"STR": True, "CON": True},
+        # Outlander background grants Athletics + Survival; Barbarian
+        # Lv 1 picks two from a curated list (Intimidation +
+        # Perception fit Krieger's "wandering hunter" vibe). Half-Orc
+        # racial Intimidation proficiency stacks (but you only get
+        # the proficiency once per skill RAW — the racial grant is
+        # superseded by the class pick, no double-PB).
+        "skills": {
+            "Athletics":    {"ability": "STR", "proficient": True, "expertise": False},
+            "Survival":     {"ability": "WIS", "proficient": True, "expertise": False},
+            "Intimidation": {"ability": "CHA", "proficient": True, "expertise": False},
+            "Perception":   {"ability": "WIS", "proficient": True, "expertise": False},
+        },
+        "attacks": [
+            {"name": "Greataxe", "attack_bonus": "+7", "damage": "1d12+4",
+             "damage_type": "slashing", "range": "5 ft",
+             "desc": "Two-handed, heavy. While raging: +2 damage (Lv 1-8 Rage bonus). Half-Orc Savage Attacks: on a crit, add +1 die of weapon damage."},
+            {"name": "Javelin", "attack_bonus": "+7", "damage": "1d6+4",
+             "damage_type": "piercing", "range": "30/120 ft",
+             "desc": "Thrown. Krieger carries 4 — has both melee and ranged options without dropping the Greataxe (he can stash it for the throw)."},
+        ],
+        # Barbarian is non-casting RAW; no spells / spell_slots fields.
+        "inventory": [
+            {"name": "Greataxe", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 2,
+             "damage": "1d12", "damage_type": "slashing",
+             "properties": "heavy, two-handed", "_slug": "greataxe"},
+            {"name": "Javelin", "type": "weapon", "qty": 4,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d6", "damage_type": "piercing",
+             "range": "30/120 ft", "properties": "thrown",
+             "_slug": "javelin"},
+            {"name": "Explorer's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, bedroll, mess kit, tinderbox, 10 torches, 10 days rations, waterskin, 50 ft hempen rope."},
+            {"name": "Staff trophy", "type": "gear", "qty": 1,
+             "desc": "Outlander background trinket — gnarled staff carved with kill-marks from Krieger's hunts."},
+            {"name": "Potion of Healing", "type": "consumable", "qty": 2,
+             "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
+             "_slug": "potion-of-healing",
+             "desc": "Drink to regain 2d4+2 HP. RAW: action."},
+        ],
+        "feats": [],
+        # v2.18.2: Barbarian Lv 5 resources. Rage counter (3/long-rest
+        # at Lv 3-5; scales to 4/long at Lv 6, 5/long at Lv 12, etc.).
+        # The rage's mechanical effects (damage bonus / advantage on
+        # STR / resistance) are timed — they last 1 minute or until
+        # Krieger ends turn without attacking / taking damage. Modelling
+        # them properly needs the (C) buff slot infrastructure to
+        # auto-expire after 10 rounds and broadcast end-of-rage. Today
+        # the rage class_features button announces the start; the GM
+        # tracks duration manually.
+        "resources": [
+            {
+                "key": "rage",
+                "name": "Rage",
+                "current": 3, "max": 3, "reset": "long",
+                "source": "barbarian Lv 1",
+                "class_slug": "barbarian",
+                "desc": "Bonus action — enter rage: +2 damage on STR melee attacks (Lv 1-8), advantage on STR checks / saves, resistance to bludgeoning / piercing / slashing. Lasts 1 min or until turn ends without attacking / taking damage. 3 uses at Lv 3-5; refreshes on long rest.",
+                "manual": False,
+            },
+        ],
+        # v2.18.2: clickable Class abilities buttons. Rage's curated
+        # entry is slot:'bonus' (since v2.6.0); clicking announces +
+        # flips the Bns chip. Reckless Attack is slot:'free' (since
+        # v2.6.0) — modifier toggle, not chip cost. v1 deviations:
+        # rage announces but doesn't apply the damage bonus / advantage
+        # / resistance (needs (C) buff slot); reckless-attack announces
+        # but doesn't flag the next attack as advantaged or mark
+        # attacks against Krieger as advantaged. Both deviations are
+        # filed for the (C) infrastructure commit.
+        "class_features": [
+            {
+                "key": "rage",
+                "name": "Rage",
+                "desc": "Bonus action — enter rage: damage bonus + advantage on STR + resistance to physical damage. Lasts 1 min.",
+            },
+            {
+                "key": "reckless-attack",
+                "name": "Reckless Attack",
+                "desc": "Free — declare on your first attack: gain advantage on STR melee attacks this turn; attacks against you have advantage until your next turn.",
+            },
+        ],
+        # Frenzy is the Berserker subclass feature (Lv 3): bonus
+        # action while raging, +1 weapon attack on every subsequent
+        # turn, but exhaustion when rage ends. Filed as a future
+        # class_features entry after the rage state machine ships.
+        # Half-Orc Relentless Endurance (1/long-rest, drop to 1 HP
+        # instead of 0) is a passive — descriptive on the sheet
+        # today; would auto-trigger in _apply_hp_change when the
+        # (B) roll-time intercept lands a hook to consult resources.
+    }
+
+
 def _monk_sheet(name: str) -> dict:
     """v2.18.0: demo Monk Lv 5 (Way of the Open Hand) for the GM.
     Added in Phase A.5 to unlock per-feature work for Ki spending
@@ -1514,9 +1644,27 @@ def seed_characters(
         sheet=_sorcerer_sheet("Zara Emberfire"),
         color="#c4452a",
     )
-    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc])
+    # v2.18.2: Phase A.7 — demo Barbarian (Krieger Stonefist). 10th PC.
+    # Path of the Berserker, Lv 5, Half-Orc. STR 18 / CON 16, HP 55
+    # (highest in the party), Greataxe 1d12+4 + Javelin (thrown).
+    # Rage 3/long-rest. Unblocks per-feature work for Rage damage /
+    # advantage / resistance (needs (C) buff slot infrastructure),
+    # Reckless Attack advantage flag (needs (B) roll-time intercept),
+    # Brutal Critical extra crit dice (extends v2.16.0 attack picker
+    # with a crit-detection hook at Barbarian Lv 9+ — Krieger is
+    # Lv 5 so not eligible yet), and Frenzy (Berserker Lv 3 — bonus
+    # action while raging, ships after the rage state machine).
+    barbarian_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Krieger Stonefist",
+        template="dnd5e",
+        sheet=_barbarian_sheet("Krieger Stonefist"),
+        color="#993333",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc])
     db.flush()
-    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc]
+    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:
@@ -1668,6 +1816,18 @@ def seed_tokens(
         label=chars[8].name, color="#c4452a",
         image_url=None,
         x=280, y=490, size=1,
+    ))
+    # v2.18.2: Phase A.7 — Krieger Stonefist token. Barbarian goes on
+    # the front line; placed at (630, 420) one cell east of Garrik
+    # so the front-line wall reads "Lyra(350), Tavik(420), Caelan(490),
+    # Garrik(560), Krieger(630)" — a full row of melee bodies at
+    # y=420. Half-Orc with Speed 40 means he closes ground first.
+    tokens.append(Token(
+        map_id=map_.id, character_id=chars[9].id,
+        controller_user_id=users["gm"].id,
+        label=chars[9].name, color="#993333",
+        image_url=None,
+        x=630, y=420, size=1,
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
@@ -2131,24 +2291,32 @@ def seed_encounter(
     # Alpha (9). NPC token indices +1 again (Vex 8→9, Bandit Alpha
     # 9→10, Bandit Beta 10→11, Bandit Gamma 11→12, Thug 12→13,
     # Grixxa 13→14) since Zara lands at tokens[8].
+    # v2.18.2: Krieger Stonefist (GM's Barbarian, Path of the
+    # Berserker) added at init 6 — slots into the open gap between
+    # Bandit Beta (7) and Bandit Gamma (5). DEX 14 / +2 init mod
+    # rolled low for the half-orc raging frontline tank. NPC token
+    # indices +1 again (Vex 9→10, Bandit Alpha 10→11, Bandit Beta
+    # 11→12, Bandit Gamma 12→13, Thug 13→14, Grixxa 14→15) since
+    # Krieger lands at tokens[9].
     # Specs: (token_idx, initiative_roll, hp_max, dex_mod).
     init_specs = [
         # token_idx, init, hp_max, dex_mod
         (7,  20, 38, 4),   # Kael Brightleaf (v2.18.0)
         (6,  19, 49, 2),   # Garrik Ironside (v2.17.0)
-        (14, 18, 36, 3),   # Grixxa (Goblin Captain)
-        (9,  17, 65, 3),   # Vex (Bandit Captain)
+        (15, 18, 36, 3),   # Grixxa (Goblin Captain)
+        (10, 17, 65, 3),   # Vex (Bandit Captain)
         (4,  16, 33, 2),   # Lyra Sunstrider (v2.14.1)
         (0,  15, 33, 3),   # Pip Quickfingers
         (2,  14, 43, 0),   # Brother Tavik Stonebrow
         (1,  13, 27, 2),   # Thalindra Moonwhisper
         (3,  12, 44, 0),   # Sir Caelan Lightbringer (v2.14.0)
-        (13, 11, 32, 0),   # Thug
+        (14, 11, 32, 0),   # Thug
         (8,  10, 37, 2),   # Zara Emberfire (v2.18.1)
-        (10,  9, 11, 1),   # Bandit Alpha
+        (11,  9, 11, 1),   # Bandit Alpha
         (5,   8, 36, 3),   # Mira Greenleaf (v2.14.2)
-        (11,  7, 11, 1),   # Bandit Beta
-        (12,  5, 11, 1),   # Bandit Gamma
+        (12,  7, 11, 1),   # Bandit Beta
+        (9,   6, 55, 2),   # Krieger Stonefist (v2.18.2)
+        (13,  5, 11, 1),   # Bandit Gamma
     ]
     combatants = []
     for token_idx, init_roll, hp_max, dex_mod in init_specs:

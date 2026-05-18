@@ -1,6 +1,6 @@
 # SimpleVTT
 
-> Current version: **2.18.1** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
+> Current version: **2.18.2** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
 
 A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 
@@ -45,6 +45,7 @@ Three accounts, all with the password **`demopass`** (also surfaced on the login
 | **Garrik Ironside** | Fighter 5 (Champion) | Variant Human | GM | Two-handed front-line martial; Greatsword (+7 / 2d6+4 slashing) + Handaxe (thrown). STR 18 / CON 16, AC 16 (chain mail, no shield). Great Weapon Fighting style (reroll 1s and 2s on damage). Second Wind 1/short rest, Action Surge 1/short rest, Improved Critical (Champion Lv 3: crit on 19-20, passive — needs roll-time intercept to wire fully). Added v2.17.0 to unlock Phase B work for Second Wind / Action Surge / Brutal Critical-shape uplifts. |
 | **Kael Brightleaf** | Monk 5 (Way of the Open Hand) | Wood Elf | GM | Speed-45 melee disruptor (Wood Elf Fleet of Foot + Monk Unarmored Movement). DEX 18 / WIS 15. AC 16 (Unarmored Defense: 10 + DEX + WIS). Unarmed Strike + Quarterstaff both +7 / 1d6+4 bludgeoning (Martial Arts: DEX replaces STR; Lv 5 die is 1d6). Ki 5/short rest. Class abilities buttons for Flurry of Blows / Patient Defense / Step of the Wind (Open Hand Technique + Stunning Strike are deferred follow-ups). Added v2.18.0 to unlock Phase B work for the Ki spend-picker. |
 | **Zara Emberfire** | Sorcerer 5 (Draconic Bloodline) | Tiefling | GM | Red-Dragon-ancestor blaster caster; Dagger + Fire Bolt (2d10 fire, 120 ft, +6 attack); 6 leveled spells including Burning Hands / Scorching Ray / Fireball plus the racial Hellish Rebuke + Darkness 1/long each. CHA 17, AC 15 (Draconic Resilience: 13 + DEX), HP 37 (incl. +5 Draconic Resilience). Sorcery Points 5/long rest. Metamagic options known: Quickened Spell + Twinned Spell (Quickened ships its curated button; Twinned is filed). Added v2.18.1 to unlock Phase B work for Font of Magic SP↔slot conversion. |
+| **Krieger Stonefist** | Barbarian 5 (Path of the Berserker) | Half-Orc | GM | Front-line raging tank; Greataxe (+7 / 1d12+4 slashing) + Javelin (+7 / 1d6+4 piercing, thrown 30/120). STR 18 / CON 16, AC 15 (Unarmored Defense: 10 + DEX + CON), HP 55 (highest in the party), Speed 40 (Fast Movement at Lv 5). Rage 3/long rest, Reckless Attack on demand. Half-Orc Savage Attacks + Relentless Endurance. Frenzy + Brutal Critical are deferred follow-ups (needs (C) buff slot + crit-detection hook). Added v2.18.2 to unlock Phase B work for the rage state machine. |
 
 ### NPCs in the Tavern Brawl
 
@@ -77,7 +78,8 @@ The encounter ships with a deterministic initiative order so you can hit "Load e
 12. Bandit Alpha — init 9
 13. Mira Greenleaf — init 8
 14. Bandit Beta — init 7
-15. Bandit Gamma — init 5
+15. Krieger Stonefist — init 6
+16. Bandit Gamma — init 5
 
 ### What gets wiped on reset
 
