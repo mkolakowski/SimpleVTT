@@ -4582,7 +4582,12 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // picker's choice flows into either target_character_id
                     // (when the token has a Character row) or target_name
                     // (NPC tokens with no Character row).
+                    // v2.17.1: Second Wind routes to /use_second_wind
+                    // which rolls 1d10+fighter_level + applies HP via
+                    // _apply_hp_change + decrements the counter +
+                    // marks the bonus slot.
                     const isCuttingWords = featureKey === 'cutting-words';
+                    const isSecondWind = featureKey === 'second-wind';
 
                     // Resolve the cutting-words target via the picker
                     // BEFORE building the fetch closure. Awaiting the
@@ -4628,23 +4633,30 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         }
                     }
 
-                    const endpoint = isCuttingWords ? 'use_cutting_words' : 'use_feature';
+                    const endpoint = isCuttingWords ? 'use_cutting_words'
+                                   : isSecondWind ? 'use_second_wind'
+                                   : 'use_feature';
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(isCuttingWords ? {
-                            character_id: MY_CHAR_ID,
-                            target_character_id: cwTargetCharacterId,
-                            target_name: cwTargetName,
-                            override: !!override,
-                        } : {
-                            character_id: MY_CHAR_ID,
-                            feature_key: featureKey,
-                            option_key: optionKey,
-                            label: btn.dataset.label || '',
-                            desc: btn.dataset.desc || '',
-                            override: !!override,
-                        }),
+                        body: JSON.stringify(
+                            isCuttingWords ? {
+                                character_id: MY_CHAR_ID,
+                                target_character_id: cwTargetCharacterId,
+                                target_name: cwTargetName,
+                                override: !!override,
+                            } : isSecondWind ? {
+                                character_id: MY_CHAR_ID,
+                                override: !!override,
+                            } : {
+                                character_id: MY_CHAR_ID,
+                                feature_key: featureKey,
+                                option_key: optionKey,
+                                label: btn.dataset.label || '',
+                                desc: btn.dataset.desc || '',
+                                override: !!override,
+                            }
+                        ),
                     });
                     let resp = await doFetch(false);
                     // v2.6.1: Phase 4 — 409 over_budget opens the Layer B
@@ -4672,10 +4684,23 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // Surface a lightweight toast so the rolling player sees
                     // confirmation without needing the roll log open.
                     let data; try { data = await resp.json(); } catch { data = null; }
+                    if (data && isSecondWind && data.hp) {
+                        // v2.17.1: sync the sheet's HP input to the
+                        // server's view so the player sees their HP
+                        // change immediately without a refresh.
+                        const hpInp = document.querySelector('[name="hp.current"]');
+                        if (hpInp) {
+                            hpInp.value = data.hp.current;
+                            hpInp.dispatchEvent(new Event('change', { bubbles: true }));
+                            hpInp.dispatchEvent(new Event('input',  { bubbles: true }));
+                        }
+                    }
                     if (data && typeof window.showToast === 'function') {
                         if (isCuttingWords) {
                             const tgt = data.target_name ? ` from ${data.target_name}` : '';
                             window.showToast(`🎭 Cutting Words: rolled -${data.rolled}${tgt} (reaction)`, 'info');
+                        } else if (isSecondWind) {
+                            window.showToast(`💨 Second Wind: ${data.expression} = +${data.actual_healed} HP (now ${data.hp.current}/${data.hp.max})`, 'info');
                         } else {
                             const lbl = data.feature_label || 'Feature used';
                             const slotTxt = data.slot && data.slot !== 'free' ? ` (${data.slot})` : '';

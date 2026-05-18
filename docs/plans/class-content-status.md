@@ -116,7 +116,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | Lv | Feature | Status | Notes |
 |---|---|---|---|
 | 1 | Fighting Style | 🟡 | Description visible; bonuses not auto-applied to attack rolls |
-| 1 | Second Wind | 🟢 | Resource counter (`key: 'second-wind'`); no "click to spend + roll 1d10 + lv HP" button |
+| 1 | Second Wind | ✅ | v2.17.1 — dedicated `/use_second_wind` endpoint rolls 1d10 + fighter_level + applies HP via `_apply_hp_change` + decrements counter + marks bonus slot + over-budget gate. Garrik (Lv 5 Champion Fighter, v2.17.0) is the demo test bed (1d10+5 → 6-15 HP). cf-use handler routes class_features 'second-wind' to the new endpoint with HP form-input sync. Harness coverage in `test_use_second_wind.py`. |
 | 2 / 17 | Action Surge | 🟢 | Resource counter (`key: 'action-surge'`); no in-combat affordance |
 | 3 | Martial Archetype | ✅ | Subclass system shipped — see Subclasses table. Champion has features JSON (Improved Critical / Remarkable Athlete pending attack-roll intercept); Battle Master has Superiority Dice counter. |
 | 4 / 6 / 8 / 12 / 14 / 16 / 19 | Ability Score Improvement | ✅ | |

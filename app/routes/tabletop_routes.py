@@ -6574,6 +6574,25 @@ def _wizard_level_from_sheet(sheet: dict) -> int:
     return 0
 
 
+def _fighter_level_from_sheet(sheet: dict) -> int:
+    """Fighter-level helper (mirrors `_bard_level_from_sheet`)."""
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "fighter":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "fighter":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
 @router.post("/api/campaign/{campaign_id}/use_arcane_recovery")
 async def use_arcane_recovery(
     campaign_id: int,
@@ -6778,6 +6797,187 @@ async def use_arcane_recovery(
         "total_levels": total_levels,
         "allowance": allowance,
         "remaining": ar_cur - 1,
+    }
+
+
+# ----------- API: Second Wind (Fighter Lv 1) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_second_wind")
+async def use_second_wind(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend a Second Wind use to heal 1d10 + fighter level HP.
+
+    Body: ``{character_id, override?}``.
+
+    RAW: Bonus action. Refreshes on a short or long rest. Heal amount
+    scales linearly with fighter level (Lv 5 → 1d10+5 → 6-15 HP).
+    Over-budget gate on the bonus slot per the Phase 4 (v2.6.1) pattern.
+
+    Atomically decrements the second-wind counter, rolls the heal,
+    applies HP via ``_apply_hp_change`` (so the death-save state
+    machine wakes a dying fighter cleanly), marks the bonus slot,
+    broadcasts feature_used + resource_update + character_death_save
+    when applicable.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    fighter_lv = _fighter_level_from_sheet(sheet)
+    if fighter_lv < 1:
+        raise HTTPException(409, "Second Wind requires Fighter level 1+")
+
+    # Verify second-wind counter has uses left.
+    resources = list(sheet.get("resources") or [])
+    sw_idx = -1
+    sw_row = None
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "second-wind":
+            sw_row = dict(r)
+            sw_idx = i
+            break
+    if sw_row is None:
+        raise HTTPException(404, "No Second Wind resource on this sheet")
+    sw_cur = int(sw_row.get("current") or 0)
+    sw_max = int(sw_row.get("max") or 0)
+    if sw_cur <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Second Wind",
+        })
+
+    # Phase 4 over-budget gate (bonus slot).
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "second-wind",
+            "label": "Second Wind",
+            "strict": strict,
+        })
+
+    # Roll heal: 1d10 + fighter level (no CON mod per RAW).
+    expr = f"1d10+{fighter_lv}"
+    try:
+        result = dice_mod.roll(expr)
+        recovered = max(1, result.total)
+        breakdown = result.breakdown
+    except dice_mod.DiceParseError:
+        recovered = 1
+        breakdown = ""
+
+    # Apply HP via _apply_hp_change so the death-save state machine
+    # picks up a dying fighter waking up cleanly.
+    hp = dict(sheet.get("hp") or {})
+    hp_max = int(hp.get("max") or 0)
+    hp_cur = int(hp.get("current") or 0)
+    new_hp = min(hp_max, hp_cur + recovered) if hp_max > 0 else (hp_cur + recovered)
+
+    # Decrement counter.
+    sw_row["current"] = sw_cur - 1
+    resources[sw_idx] = sw_row
+    sheet["resources"] = resources
+    char.sheet = sheet
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    hp_result = _apply_hp_change(char, new_hp)
+    db.commit()
+
+    # Mark the bonus slot.
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    actual_healed = hp_result["hp"]["current"] - hp_cur
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"💨 Second Wind → +{actual_healed} HP",
+            "feature_desc": (
+                f"Bonus action: rolled {expr} = {recovered}. HP "
+                f"{hp_cur} → {hp_result['hp']['current']} / {hp_max}."
+            ),
+            "source": "second-wind",
+            "remaining": sw_cur - 1,
+            "max": sw_max,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "second-wind",
+            "current": sw_cur - 1,
+            "max": sw_max,
+        },
+    })
+
+    if hp_result.get("status_changed"):
+        await hub.broadcast(campaign_id, {
+            "type": "character_death_save",
+            "data": {
+                "character_id": char.id,
+                "status": hp_result["death_saves"]["status"],
+                "successes": int(hp_result["death_saves"]["successes"]),
+                "failures": int(hp_result["death_saves"]["failures"]),
+                "hp": hp_result["hp"],
+                "source": "second_wind",
+            },
+        })
+
+    return {
+        "ok": True,
+        "expression": expr,
+        "rolled": recovered,
+        "breakdown": breakdown,
+        "actual_healed": actual_healed,
+        "hp": hp_result["hp"],
+        "remaining": sw_cur - 1,
+        "over_budget": was_used,
     }
 
 
