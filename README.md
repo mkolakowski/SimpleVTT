@@ -1,6 +1,6 @@
 # SimpleVTT
 
-> Current version: **2.18.2** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
+> Current version: **2.18.3** · Schema: **v55** · See [CHANGELOG.md](CHANGELOG.md) for release history and the rules for bumping versions (pre-2.0.0 history archived in [CHANGELOG_v1.md](CHANGELOG_v1.md)).
 
 A self-hosted virtual tabletop for online TTRPG sessions. Python (FastAPI) backend with a Jinja2 + HTMX + vanilla JS frontend, PostgreSQL for storage, real-time sync over WebSockets, and Docker Compose deployment that works on both `linux/amd64` and `linux/arm64` (Raspberry Pi, Apple Silicon, etc.).
 
@@ -46,6 +46,7 @@ Three accounts, all with the password **`demopass`** (also surfaced on the login
 | **Kael Brightleaf** | Monk 5 (Way of the Open Hand) | Wood Elf | GM | Speed-45 melee disruptor (Wood Elf Fleet of Foot + Monk Unarmored Movement). DEX 18 / WIS 15. AC 16 (Unarmored Defense: 10 + DEX + WIS). Unarmed Strike + Quarterstaff both +7 / 1d6+4 bludgeoning (Martial Arts: DEX replaces STR; Lv 5 die is 1d6). Ki 5/short rest. Class abilities buttons for Flurry of Blows / Patient Defense / Step of the Wind (Open Hand Technique + Stunning Strike are deferred follow-ups). Added v2.18.0 to unlock Phase B work for the Ki spend-picker. |
 | **Zara Emberfire** | Sorcerer 5 (Draconic Bloodline) | Tiefling | GM | Red-Dragon-ancestor blaster caster; Dagger + Fire Bolt (2d10 fire, 120 ft, +6 attack); 6 leveled spells including Burning Hands / Scorching Ray / Fireball plus the racial Hellish Rebuke + Darkness 1/long each. CHA 17, AC 15 (Draconic Resilience: 13 + DEX), HP 37 (incl. +5 Draconic Resilience). Sorcery Points 5/long rest. Metamagic options known: Quickened Spell + Twinned Spell (Quickened ships its curated button; Twinned is filed). Added v2.18.1 to unlock Phase B work for Font of Magic SP↔slot conversion. |
 | **Krieger Stonefist** | Barbarian 5 (Path of the Berserker) | Half-Orc | GM | Front-line raging tank; Greataxe (+7 / 1d12+4 slashing) + Javelin (+7 / 1d6+4 piercing, thrown 30/120). STR 18 / CON 16, AC 15 (Unarmored Defense: 10 + DEX + CON), HP 55 (highest in the party), Speed 40 (Fast Movement at Lv 5). Rage 3/long rest, Reckless Attack on demand. Half-Orc Savage Attacks + Relentless Endurance. Frenzy + Brutal Critical are deferred follow-ups (needs (C) buff slot + crit-detection hook). Added v2.18.2 to unlock Phase B work for the rage state machine. |
+| **Rowan Quickbow** | Ranger 5 (Hunter) | Variant Human | GM | Back-line archer; Longbow (+9 / 1d8+4 piercing, range 150 ft — Archery Fighting Style baked into +9) + Shortsword (+7 / 1d6+4 piercing). DEX 18 / WIS 15, AC 16 (studded leather + DEX), HP 44. Hunter's Mark (concentration buff, +1d6 on weapon hits), Colossus Slayer (Lv 3 Hunter pick — +1d6 on below-max-HP targets, passive). Favored Enemy: Humanoids (every bandit in the Tavern Brawl). Natural Explorer: Forest. Variant Human bonus feat: Sharpshooter (-5/+10 trade, ignore cover). 4 known Ranger spells across L1-L2 slots (4/2). Added v2.18.3 to unlock Phase B work for the Hunter's Mark concentration buff + Sharpshooter per-attack uplift. |
 
 ### NPCs in the Tavern Brawl
 
@@ -80,6 +81,7 @@ The encounter ships with a deterministic initiative order so you can hit "Load e
 14. Bandit Beta — init 7
 15. Krieger Stonefist — init 6
 16. Bandit Gamma — init 5
+17. Rowan Quickbow — init 4
 
 ### What gets wiped on reset
 

@@ -955,6 +955,169 @@ def _druid_sheet(name: str) -> dict:
     }
 
 
+def _ranger_sheet(name: str) -> dict:
+    """v2.18.3: demo Ranger Lv 5 (Hunter) for the GM. Added in Phase A.8
+    to unlock per-feature work for Hunter's Mark (concentration buff
+    that adds 1d6 damage — needs the (C) buff slot + a concentration
+    slot tracker), Favored Enemy (announce-only at the demo's RAW
+    interpretation: "humanoids (bandits)" matches every NPC in the
+    Tavern Brawl), Natural Explorer (announce-only: "forest"), and
+    Hunter's Prey (Lv 3 Hunter pick: "Colossus Slayer" — +1d8 to a
+    creature already below max HP). Variant Human for the bonus feat
+    (Sharpshooter is the canonical Hunter pick but Hunter / Crossbow
+    Expert / Sharpshooter are all viable; Sharpshooter chosen for the
+    -5/+10 damage trade and the ignore-cover rider). Color `#5d7c4a`
+    (forest green — distinct from Mira's `#4d9d6d` druid green +
+    Bandit's red palette).
+    """
+    return {
+        "class": "Ranger",
+        "subclass": "Hunter",
+        "level": 5,
+        "race": "Variant Human",  # +1 to two abilities + 1 skill + 1 feat at Lv 1
+        "alignment": "Neutral Good",
+        "background": "Outlander",
+        # Variant Human: +1 DEX, +1 WIS from the racial pick. Pre-racial
+        # rolled 15 DEX 14 WIS → 16 DEX, 15 WIS. Lv 4 ASI bumps DEX to 18
+        # (or could feat for Crossbow Expert — held in reserve).
+        "abilities": {"STR": 12, "DEX": 18, "CON": 14, "INT": 10, "WIS": 15, "CHA": 8},
+        # Studded leather 12 + DEX 4 = 16. No shield (two-handed bow build).
+        "ac": 16,
+        "speed": 30,
+        # Lv 1 max d10 (10) + 4× avg d10 (6) + CON +2 × 5 = 10 + 24 + 10 = 44.
+        "hp": {"current": 44, "max": 44, "temp": 0},
+        "initiative_bonus": 4,  # DEX 18 mod
+        "proficiency_bonus": 3,
+        "hit_dice": {"current": 5, "max": 5},
+        "class_hit_die": "d10",
+        "class_spellcasting": "WIS",
+        # Ranger prof saves are STR + DEX.
+        "saving_throws": {"STR": True, "DEX": True},
+        # Outlander background grants Athletics + Survival; Ranger Lv 1
+        # picks three from a curated list (Perception + Stealth + Animal
+        # Handling fit the wilderness scout vibe). Variant Human bonus
+        # skill: Investigation.
+        "skills": {
+            "Athletics":       {"ability": "STR", "proficient": True, "expertise": False},
+            "Survival":        {"ability": "WIS", "proficient": True, "expertise": False},
+            "Perception":      {"ability": "WIS", "proficient": True, "expertise": False},
+            "Stealth":         {"ability": "DEX", "proficient": True, "expertise": False},
+            "Animal Handling": {"ability": "WIS", "proficient": True, "expertise": False},
+            "Investigation":   {"ability": "INT", "proficient": True, "expertise": False},
+        },
+        "fighting_style": "archery",  # +2 to ranged attack rolls
+        "attacks": [
+            {"name": "Longbow", "attack_bonus": "+9", "damage": "1d8+4",
+             "damage_type": "piercing", "range": "150/600 ft",
+             "desc": "Two-handed, heavy. Fighting Style: Archery (+2 to attack already included). Sharpshooter feat: optional -5 attack / +10 damage trade + ignore cover up to total cover."},
+            {"name": "Shortsword", "attack_bonus": "+7", "damage": "1d6+4",
+             "damage_type": "piercing", "range": "5 ft",
+             "desc": "Finesse, light. Off-hand melee — Rowan doesn't want enemies in his face but keeps a shortsword for when they get there anyway."},
+        ],
+        # Hunter Ranger Lv 5: Lv 1-2 spells, 4/2 slots. Spells known is
+        # the Ranger's known-not-prepared list (Lv 5 = 4 known).
+        # Hunter's Mark is the iconic Ranger concentration buff; Cure
+        # Wounds for the half-caster healer role; Goodberry for the
+        # 10-HP-per-cast trail food; Pass Without Trace for the L2
+        # group-stealth aura that exercises the buff-slot infrastructure
+        # in the future.
+        "spells": [
+            {"name": "Hunter's Mark", "level": 1, "prepared": True, "_slug": "hunters-mark",
+             "casting_time": "1 bonus action",
+             "_concentration": True,
+             "desc": "Bonus action — mark a creature. Add 1d6 damage on weapon hits + advantage on Perception/Survival checks to find it. Concentration, up to 1 hour."},
+            {"name": "Cure Wounds", "level": 1, "prepared": True, "_slug": "cure-wounds",
+             "casting_time": "1 action"},
+            {"name": "Goodberry", "level": 1, "prepared": True, "_slug": "goodberry",
+             "casting_time": "1 action"},
+            {"name": "Pass Without Trace", "level": 2, "prepared": True, "_slug": "pass-without-trace",
+             "casting_time": "1 action",
+             "_concentration": True,
+             "desc": "Concentration, up to 1 hour. +10 to Stealth checks + can't be tracked except by magical means for all allies within 30 ft."},
+        ],
+        "spell_slots": {
+            "ranger": {
+                "1": {"total": 4, "used": 0},
+                "2": {"total": 2, "used": 0},
+            },
+        },
+        "inventory": [
+            {"name": "Longbow", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 2,
+             "damage": "1d8", "damage_type": "piercing",
+             "range": "150/600 ft",
+             "properties": "ammunition, heavy, two-handed",
+             "_slug": "longbow"},
+            {"name": "Arrows", "type": "ammunition", "qty": 40,
+             "_slug": "arrow",
+             "desc": "Standard quiver — Rowan tracks consumption manually in v1."},
+            {"name": "Shortsword", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": False, "hands": 1,
+             "damage": "1d6", "damage_type": "piercing",
+             "properties": "finesse, light", "_slug": "shortsword"},
+            {"name": "Studded leather", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": True,
+             "armor_type": "light", "ac_value": 12,
+             "_slug": "studded-leather"},
+            {"name": "Explorer's pack", "type": "gear", "qty": 1,
+             "desc": "Backpack, bedroll, mess kit, tinderbox, 10 torches, 10 days rations, waterskin, 50 ft hempen rope."},
+            {"name": "Hunting trap", "type": "gear", "qty": 1,
+             "desc": "Outlander background — set for 1 action; STR check DC 13 to escape."},
+            {"name": "Bowstring trinket", "type": "gear", "qty": 1,
+             "desc": "Outlander background trinket — Rowan's first bowstring, kept wound around a wood charm."},
+            {"name": "Potion of Healing", "type": "consumable", "qty": 2,
+             "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
+             "_slug": "potion-of-healing",
+             "desc": "Drink to regain 2d4+2 HP. RAW: action."},
+        ],
+        # v2.18.3: Variant Human bonus feat = Sharpshooter. Captured as
+        # a feats entry; mechanical effects (ignore long-range disadvantage,
+        # ignore cover up to total cover, -5/+10 trade option) wait on
+        # the per-attack uplift picker (v2.16.0) extending to support
+        # feat-driven uplifts. Today Sharpshooter is announce-only.
+        "feats": [
+            {"slug": "sharpshooter", "name": "Sharpshooter",
+             "desc": "Ignore long-range disadvantage on ranged weapon attacks. Cover up to total cover doesn't impose disadvantage. Optional: -5 attack roll / +10 damage on a ranged weapon attack with a weapon you're proficient with."},
+        ],
+        # v2.18.3: Ranger Lv 5 resources. Favored Enemy (Lv 1) +
+        # Natural Explorer (Lv 1) are announce-only — they don't have
+        # numeric counters RAW. Hunter's Prey (Lv 3 Hunter pick:
+        # Colossus Slayer) is a passive — +1d8 damage once per turn to
+        # a creature already below max HP — also no counter RAW. The
+        # one numeric Ranger resource at this level is no resource at
+        # all; spell slots cover Hunter's Mark + Pass Without Trace.
+        # Left empty intentionally; class_features carry the
+        # announce-only buttons.
+        "resources": [],
+        # v2.18.3: clickable Class abilities buttons. Each is announce-only
+        # in v1 — Favored Enemy + Natural Explorer fire /use_feature and
+        # log a roll-chat line; Hunter's Mark routes through /cast_spell
+        # via the standard spell button. Colossus Slayer is passive (no
+        # button), captured in the description for the GM. All curated in
+        # `_FEATURE_ECONOMY` since v2.6.0 with slot:'free' (announce-only).
+        "class_features": [
+            {
+                "key": "favored-enemy",
+                "name": "Favored Enemy (Humanoids)",
+                "desc": "Free — advantage on Survival checks to track + Intelligence checks to recall info about humanoids. Pick when entering a combat with the Tavern Brawl — the bandits all qualify.",
+            },
+            {
+                "key": "natural-explorer",
+                "name": "Natural Explorer (Forest)",
+                "desc": "Free — double proficiency on Intelligence + Wisdom checks involving forest terrain; party travels at normal pace while stealthing + can't be lost.",
+            },
+            {
+                "key": "colossus-slayer",
+                "name": "Colossus Slayer (Hunter's Prey)",
+                "desc": "Passive — once per turn, add +1d6 damage to a creature already below its HP maximum. Hunter's Prey pick at Lv 3 (Hunter subclass).",
+            },
+        ],
+        # Hunter Lv 7 features (Defensive Tactics / Multiattack Defense /
+        # Escape the Horde) and Lv 11 Multiattack pick wait on a Lv 7+
+        # Ranger fixture or bump Rowan.
+    }
+
+
 def _barbarian_sheet(name: str) -> dict:
     """v2.18.2: demo Barbarian Lv 5 (Path of the Berserker) for the GM.
     Added in Phase A.7 to unlock per-feature work for Rage (the demo's
@@ -1662,9 +1825,26 @@ def seed_characters(
         sheet=_barbarian_sheet("Krieger Stonefist"),
         color="#993333",
     )
-    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc])
+    # v2.18.3: Phase A.8 — demo Ranger (Rowan Quickbow). 11th PC.
+    # Hunter, Lv 5, Variant Human + Sharpshooter feat. DEX 18 / WIS 15
+    # ranged-focused archer. Longbow +9 / 1d8+4 (Archery Fighting Style)
+    # + Hunter's Mark concentration buff + Colossus Slayer +1d6 on
+    # below-max-HP targets. Unblocks Phase B work for the Hunter's Mark
+    # concentration buff (needs (C) buff slot + concentration tracker),
+    # Favored Enemy + Natural Explorer announce-only flows (already
+    # curated in `_FEATURE_ECONOMY`), and Sharpshooter -5/+10 per-attack
+    # uplift (extends the v2.16.0 attack-picker for feat-driven uplifts).
+    ranger_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Rowan Quickbow",
+        template="dnd5e",
+        sheet=_ranger_sheet("Rowan Quickbow"),
+        color="#5d7c4a",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc])
     db.flush()
-    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc]
+    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:
@@ -1828,6 +2008,20 @@ def seed_tokens(
         label=chars[9].name, color="#993333",
         image_url=None,
         x=630, y=420, size=1,
+    ))
+    # v2.18.3: Phase A.8 — Rowan Quickbow token. Ranger archer stays
+    # at the back of the formation with the casters; placed at
+    # (280, 350) one cell west of Mira so the back row reads
+    # "Rowan(280), Mira(350), Lyra(350), Thalindra(420), Zara(280)"
+    # — archer and druid covering the north flank, casters strung
+    # south. Longbow range 150 ft means Rowan can reach the NPC
+    # cluster from anywhere on this side of the map.
+    tokens.append(Token(
+        map_id=map_.id, character_id=chars[10].id,
+        controller_user_id=users["gm"].id,
+        label=chars[10].name, color="#5d7c4a",
+        image_url=None,
+        x=280, y=350, size=1,
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
@@ -2298,25 +2492,33 @@ def seed_encounter(
     # indices +1 again (Vex 9→10, Bandit Alpha 10→11, Bandit Beta
     # 11→12, Bandit Gamma 12→13, Thug 13→14, Grixxa 14→15) since
     # Krieger lands at tokens[9].
+    # v2.18.3: Rowan Quickbow (GM's Ranger, Hunter) added at init 4
+    # — below Bandit Gamma (5). DEX 18 / +4 init mod rolled 0 (a
+    # poor surprise-round start for the archer; he opens by laying
+    # Hunter's Mark before getting a shot off in round 2). NPC token
+    # indices +1 again (Vex 10→11, Bandit Alpha 11→12, Bandit Beta
+    # 12→13, Bandit Gamma 13→14, Thug 14→15, Grixxa 15→16) since
+    # Rowan lands at tokens[10].
     # Specs: (token_idx, initiative_roll, hp_max, dex_mod).
     init_specs = [
         # token_idx, init, hp_max, dex_mod
         (7,  20, 38, 4),   # Kael Brightleaf (v2.18.0)
         (6,  19, 49, 2),   # Garrik Ironside (v2.17.0)
-        (15, 18, 36, 3),   # Grixxa (Goblin Captain)
-        (10, 17, 65, 3),   # Vex (Bandit Captain)
+        (16, 18, 36, 3),   # Grixxa (Goblin Captain)
+        (11, 17, 65, 3),   # Vex (Bandit Captain)
         (4,  16, 33, 2),   # Lyra Sunstrider (v2.14.1)
         (0,  15, 33, 3),   # Pip Quickfingers
         (2,  14, 43, 0),   # Brother Tavik Stonebrow
         (1,  13, 27, 2),   # Thalindra Moonwhisper
         (3,  12, 44, 0),   # Sir Caelan Lightbringer (v2.14.0)
-        (14, 11, 32, 0),   # Thug
+        (15, 11, 32, 0),   # Thug
         (8,  10, 37, 2),   # Zara Emberfire (v2.18.1)
-        (11,  9, 11, 1),   # Bandit Alpha
+        (12,  9, 11, 1),   # Bandit Alpha
         (5,   8, 36, 3),   # Mira Greenleaf (v2.14.2)
-        (12,  7, 11, 1),   # Bandit Beta
+        (13,  7, 11, 1),   # Bandit Beta
         (9,   6, 55, 2),   # Krieger Stonefist (v2.18.2)
-        (13,  5, 11, 1),   # Bandit Gamma
+        (14,  5, 11, 1),   # Bandit Gamma
+        (10,  4, 44, 4),   # Rowan Quickbow (v2.18.3)
     ]
     combatants = []
     for token_idx, init_roll, hp_max, dex_mod in init_specs:
