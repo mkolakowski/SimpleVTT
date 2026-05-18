@@ -6135,6 +6135,94 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 return;
             }
 
+            // ── Bardic Inspiration (v2.11.0 / priority #5): target
+            // picker only — no amount picker because the die size is
+            // derived server-side from the bard's level (d6 lv 1-4, d8
+            // 5-9, d10 10-14, d12 15+). Excludes self per RAW. On pick
+            // → POST /use_bardic_inspiration which decrements the
+            // counter, marks the bonus slot, broadcasts feature_used +
+            // resource_update.
+            if (k === 'bardic-inspiration'
+                    && typeof window.showTargetPicker === 'function'
+                    && _CAMPAIGN_ID) {
+                const arr = _readResources();
+                const row = arr.find(x => x.key === 'bardic-inspiration');
+                if (!row) { postUse(k, -1, true); return; }
+                const cur = parseInt(row.current, 10) || 0;
+                const mx = parseInt(row.max, 10) || 0;
+                if (cur <= 0) {
+                    _toast('Bardic Inspiration: no uses remaining', 'error');
+                    return;
+                }
+                (async () => {
+                    let candidates = [];
+                    try {
+                        const r = await fetch(`/api/campaign/${_CAMPAIGN_ID}/roster`);
+                        if (r.ok) {
+                            const data = await r.json();
+                            candidates = (data.characters || [])
+                                .filter(c => c.id !== CHAR_ID)
+                                .map(c => ({
+                                    id: c.id,
+                                    name: c.name,
+                                    color: c.color,
+                                    hp_current: c.hp_current,
+                                    hp_max: c.hp_max,
+                                    portrait_url: c.portrait_url,
+                                }));
+                        }
+                    } catch (e) {
+                        _toast('Could not load roster.', 'error');
+                        return;
+                    }
+                    if (!candidates.length) {
+                        _toast('No allies in the party to inspire.', 'error');
+                        return;
+                    }
+                    window.showTargetPicker({
+                        title: '✨ Bardic Inspiration — pick an ally',
+                        subtitle: `${cur} / ${mx} uses remaining. Bonus action.`,
+                        candidates,
+                        onPick: async (target) => {
+                            const doFetch = (override) => fetch(`/api/campaign/${_CAMPAIGN_ID}/use_bardic_inspiration`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    character_id: CHAR_ID,
+                                    target_character_id: target.id,
+                                    override: !!override,
+                                }),
+                            });
+                            let resp = await doFetch(false);
+                            if (resp.status === 409 && typeof window.handleOverBudget === 'function') {
+                                let bodyPeek; try { bodyPeek = await resp.clone().json(); } catch { bodyPeek = null; }
+                                if (bodyPeek && bodyPeek.error === 'over_budget') {
+                                    const retried = await window.handleOverBudget(
+                                        resp, () => doFetch(true),
+                                    );
+                                    if (!retried) return;
+                                    resp = retried;
+                                }
+                            }
+                            if (!resp.ok) {
+                                let body; try { body = await resp.json(); } catch { body = null; }
+                                if (body && body.error === 'out_of_uses') {
+                                    _toast('Bardic Inspiration: no uses remaining', 'error');
+                                } else {
+                                    _toast('Bardic Inspiration failed: ' + (body ? JSON.stringify(body) : await resp.text()), 'error');
+                                }
+                                return;
+                            }
+                            const data = await resp.json().catch(() => null);
+                            if (data) {
+                                _toast(`✨ Bardic Inspiration: ${target.name} gains a ${data.die}`, 'info');
+                            }
+                        },
+                    });
+                })();
+                return;
+            }
+
             // ── Lay on Hands (v2.10.0 / priority #3): amount + target
             // picker chain. The resource here is a pool (max = 5 × paladin
             // level); ``current`` decrements by the amount the player

@@ -6044,6 +6044,186 @@ async def use_lay_on_hands(
     }
 
 
+# ----------- API: Bardic Inspiration (Bard, priority #5) -----------
+
+def _bard_level_from_sheet(sheet: dict) -> int:
+    """Read the bard level out of a sheet (single-class or multiclass).
+    Used by /use_bardic_inspiration to scale the inspiration die.
+    """
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "bard":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "bard":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+@router.post("/api/campaign/{campaign_id}/use_bardic_inspiration")
+async def use_bardic_inspiration(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend a Bardic Inspiration use to grant a target an inspiration die.
+
+    Body: ``{character_id, target_character_id, override?}``. Die size
+    scales with bard level: d6 (1-4), d8 (5-9), d10 (10-14), d12 (15+).
+    The recipient adds the die to one attack roll / ability check /
+    save in the next 10 minutes (tracked manually until buff slot (C)
+    lands). The audit trail is the ``feature_used`` roll-log entry.
+
+    Phase 4 over-budget gate: Bardic Inspiration is a bonus action.
+    Same `was_used` / 409 / strict-mode flow as cast_spell / use_attack /
+    use_feature / use_lay_on_hands.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_id = int(body.get("target_character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0 or target_id <= 0:
+        raise HTTPException(400, "character_id and target_character_id are required")
+    if char_id == target_id:
+        # RAW: "you can use a bonus action on your turn to choose one
+        # creature OTHER THAN YOURSELF". The client-side picker filters
+        # self out; the server enforces it too as defense-in-depth.
+        raise HTTPException(400, "Cannot inspire yourself")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Bard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    target = db.query(Character).filter(
+        Character.id == target_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not target:
+        raise HTTPException(404, "Target character not found")
+
+    sheet = dict(char.sheet or {})
+    resources = list(sheet.get("resources") or [])
+    res_row = None
+    res_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "bardic-inspiration":
+            res_row = dict(r)
+            res_idx = i
+            break
+    if res_row is None:
+        raise HTTPException(404, "No Bardic Inspiration resource on this sheet")
+    cur = int(res_row.get("current") or 0)
+    mx = int(res_row.get("max") or 0)
+    if cur <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Bardic Inspiration",
+        })
+
+    # Phase 4 over-budget gate (bonus slot — RAW: 1 bonus action).
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "bardic-inspiration",
+            "label": "Bardic Inspiration",
+            "strict": strict,
+        })
+
+    # Die scaling per PHB. Lv 1-4 d6, 5-9 d8, 10-14 d10, 15+ d12. The
+    # bard's class level controls the size; a multiclassed Bard/Wizard
+    # uses just the Bard half.
+    bard_lv = _bard_level_from_sheet(sheet)
+    if bard_lv >= 15:
+        die = "d12"
+    elif bard_lv >= 10:
+        die = "d10"
+    elif bard_lv >= 5:
+        die = "d8"
+    else:
+        die = "d6"
+
+    # Decrement counter.
+    res_row["current"] = cur - 1
+    resources[res_idx] = res_row
+    sheet["resources"] = resources
+    char.sheet = sheet
+    db.commit()
+
+    # Mark the bonus slot.
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"✨ Bardic Inspiration → {target.name} ({die})",
+            "feature_desc": (
+                f"{target.name} gains a Bardic Inspiration {die} for 10 minutes. "
+                f"Add it to one attack roll, ability check, or saving throw."
+            ),
+            "source": "bardic-inspiration",
+            "remaining": cur - 1,
+            "max": mx,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "bardic-inspiration",
+            "current": cur - 1,
+            "max": mx,
+        },
+    })
+
+    return {
+        "ok": True,
+        "die": die,
+        "target_id": target.id,
+        "target_name": target.name,
+        "remaining": cur - 1,
+        "over_budget": was_used,
+    }
+
+
 # ----------- API: get a character's current action-economy state -----------
 #
 # Phase 4a (v2.7.2) Layer A dimming: the full character sheet polls
