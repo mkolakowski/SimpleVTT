@@ -5438,45 +5438,92 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         return Math.floor((con - 10) / 2);
     }
 
-    /* ── Short Rest: spend one hit die, roll d{HD}+CON, heal ── */
+    /* ── Short Rest: spend one hit die, roll d{HD}+CON, heal ──
+     * v2.15.4: routes through /api/campaign/{cid}/character/{cid}/rest
+     * (server-side) so the rest picks up the v2.15.3 Song of Rest
+     * bonus + the resource-refill broadcasts + the death-save state
+     * machine. The pre-v2.15.4 path rolled locally with
+     * ``Math.random()`` and posted a separate /roll for the log entry
+     * — that worked for solo HP recovery but missed every Bard-in-
+     * party RAW. The server is now the single source of truth.
+     */
     document.getElementById('short-rest-btn')?.addEventListener('click', async () => {
         const hdCur = parseInt(hdInp?.value, 10) || 0;
         if (hdCur <= 0) { _toast('No hit dice remaining.', 'error'); return; }
+        const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : null;
+        const charId = parseInt(form?.dataset.charId, 10) || null;
+        if (!cid || !charId) {
+            // Standalone (no campaign / no char id) — fall back to a local
+            // roll that touches just the form fields. Same shape as the
+            // pre-v2.15.4 handler but without the campaign-log POST.
+            const dieSize = _hitDieSize();
+            const conMod  = _conMod();
+            const dieRoll = 1 + Math.floor(Math.random() * dieSize);
+            const recover = Math.max(1, dieRoll + conMod);
+            const hpMax = parseInt(form?.querySelector('[name="hp.max"]')?.value, 10) || 0;
+            const hpCur = parseInt(hpInp?.value, 10) || 0;
+            const newHp = hpMax > 0 ? Math.min(hpMax, hpCur + recover) : hpCur + recover;
+            if (hpInp) {
+                hpInp.value = newHp;
+                hpInp.dispatchEvent(new Event('change', { bubbles: true }));
+                hpInp.dispatchEvent(new Event('input',  { bubbles: true }));
+            }
+            if (hdInp) {
+                hdInp.value = hdCur - 1;
+                hdInp.dispatchEvent(new Event('change', { bubbles: true }));
+                hdInp.dispatchEvent(new Event('input',  { bubbles: true }));
+            }
+            _toast(`⚡ Short rest: 1d${dieSize}=${dieRoll} = +${recover} HP`, 'info');
+            return;
+        }
 
-        const dieSize = _hitDieSize();
-        const conMod  = _conMod();
-        const dieRoll = 1 + Math.floor(Math.random() * dieSize);
-        const recover = Math.max(1, dieRoll + conMod);  // RAW: at least 1 HP
+        let resp;
+        try {
+            resp = await fetch(`/api/campaign/${cid}/character/${charId}/rest`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'short' }),
+            });
+        } catch (e) {
+            _toast('Short rest failed: ' + (e?.message || 'network error'), 'error');
+            return;
+        }
+        if (!resp.ok) {
+            const body = await resp.json().catch(() => null);
+            if (body && body.error === 'no_hit_dice') {
+                _toast('No hit dice remaining.', 'error');
+            } else {
+                const detail = body?.detail || `HTTP ${resp.status}`;
+                _toast('Short rest failed: ' + detail, 'error');
+            }
+            return;
+        }
+        const data = await resp.json();
 
-        const hpMax = parseInt(form?.querySelector('[name="hp.max"]')?.value, 10) || 0;
-        const hpCur = parseInt(hpInp?.value, 10) || 0;
-        const newHp = hpMax > 0 ? Math.min(hpMax, hpCur + recover) : hpCur + recover;
-
-        if (hpInp) {
-            hpInp.value = newHp;
+        // Sync local form fields to the server's view so the sheet
+        // shows the new HP / HD without waiting for a save round-trip.
+        if (hpInp && data.hp) {
+            hpInp.value = data.hp.current;
             hpInp.dispatchEvent(new Event('change', { bubbles: true }));
             hpInp.dispatchEvent(new Event('input',  { bubbles: true }));
         }
-        if (hdInp) {
-            hdInp.value = hdCur - 1;
+        if (hdInp && data.hit_dice) {
+            hdInp.value = data.hit_dice.current;
             hdInp.dispatchEvent(new Event('change', { bubbles: true }));
             hdInp.dispatchEvent(new Event('input',  { bubbles: true }));
         }
 
-        const conStr = (conMod >= 0 ? '+' : '') + conMod;
-        const expr = `1d${dieSize}${conStr}`;
-        const note = '⚡ Short rest hit die';
+        // Note string carries the Song of Rest attribution when applicable
+        // so the toast + the campaign-log entry both name the Bard.
+        const sor = data.song_of_rest;
+        const note = '⚡ Short rest hit die'
+            + (sor ? ` + 🪄 Song of Rest (${sor.bard})` : '');
 
-        // Surface the shared rich roll-toast with the dice the player just
-        // spent. The breakdown is synthesized in the same `Nd[..]=total +mod
-        // => grand` shape that roll_toast.js's _parseDieVals walks, so the
-        // single d-shape animates and lands on the rolled value.
-        const breakdown = `1d${dieSize}[${dieRoll}]=${dieRoll}${conStr} => ${recover}`;
         if (typeof window.showRollToast === 'function') {
             window.showRollToast({
-                expression: expr,
-                total: recover,
-                breakdown: breakdown,
+                expression: data.expression || '',
+                total: data.recovered,
+                breakdown: data.breakdown || '',
                 note: note,
                 visibility: 'public',
                 user_id: (window.ME && window.ME.id) || null,
@@ -5484,26 +5531,28 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 char_name: '',
             });
         } else {
-            _toast(`⚡ Short rest: 1d${dieSize}=${dieRoll} ${conStr} = +${recover} HP`, 'info');
+            _toast(`⚡ Short rest: ${data.expression} = +${data.recovered} HP`, 'info');
         }
 
-        // Also broadcast to the campaign roll log so the table sees it.
-        // (The server rolls its own d{N} for the log entry — independent of
-        // the client roll above. Local HP and the popup stay in sync with
-        // each other; only the log entry diverges. Pre-existing behaviour.)
-        if (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) {
-            try {
-                await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        expression: expr,
-                        visibility: 'public',
-                        note: note,
-                    }),
-                });
-            } catch {}
-        }
+        // Mirror the roll into the campaign log so other clients see the rest.
+        // The server's /rest endpoint doesn't fire a roll broadcast (it
+        // emits character_death_save + resource_update only); /roll
+        // re-rolls server-side which produces a slightly different
+        // number from the actual rest result, but the LOG entry's job
+        // is to announce "Pip took a short rest with Lyra's Song of Rest"
+        // — exact-value parity isn't required.
+        try {
+            await fetch(`/api/campaign/${cid}/roll`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    expression: data.expression || `1d${_hitDieSize()}`,
+                    visibility: 'public',
+                    note: note,
+                    character_id: charId,
+                }),
+            });
+        } catch {}
     });
 
     /* ── Long Rest: HP→max, Temp→0, regain half max HD, reset spell slots ── */
