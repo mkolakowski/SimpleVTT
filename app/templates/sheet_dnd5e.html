@@ -5555,53 +5555,117 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         } catch {}
     });
 
-    /* ── Long Rest: HP→max, Temp→0, regain half max HD, reset spell slots ── */
-    document.getElementById('long-rest-btn')?.addEventListener('click', () => {
+    /* ── Long Rest: HP→max, Temp→0, regain half max HD, reset spell slots ──
+     * v2.15.4: routes through /api/campaign/{cid}/character/{cid}/rest
+     * (server-side) for the same reasons as Short Rest — the server
+     * is the single source of truth for HP / HD / spell-slot / resource
+     * state, and going through /rest fires the resource_update +
+     * spell_slot_update + character_death_save broadcasts that wake
+     * up other connected clients. Pre-v2.15.4 path mutated local
+     * form fields and DOM pips and asked the player to remember to
+     * Save; the server-routed path persists in one network call.
+     */
+    document.getElementById('long-rest-btn')?.addEventListener('click', async () => {
         const ok = confirm(
             'Take a long rest?\n\n' +
             '• HP restored to max\n' +
             '• Temp HP cleared\n' +
             '• Recover up to half max hit dice\n' +
-            '• All spell slots restored\n\n' +
-            'Remember to Save the sheet afterward.'
+            '• All spell slots restored\n' +
+            '• Short- and long-rest resources refilled'
         );
         if (!ok) return;
 
-        const hpMax = parseInt(form?.querySelector('[name="hp.max"]')?.value, 10) || 0;
-        const hdMax = parseInt(hdMaxInp?.value, 10) || 0;
-        const hdCur = parseInt(hdInp?.value, 10) || 0;
-        const regain = Math.max(1, Math.floor(hdMax / 2));
+        const cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : null;
+        const charId = parseInt(form?.dataset.charId, 10) || null;
+        if (!cid || !charId) {
+            // Standalone fallback — preserves the legacy local-mutation
+            // path so the standalone character-editor page stays
+            // functional outside a campaign.
+            const hpMax = parseInt(form?.querySelector('[name="hp.max"]')?.value, 10) || 0;
+            const hdMax = parseInt(hdMaxInp?.value, 10) || 0;
+            const hdCur = parseInt(hdInp?.value, 10) || 0;
+            const regain = Math.max(1, Math.floor(hdMax / 2));
+            if (hpInp && hpMax > 0) {
+                hpInp.value = hpMax;
+                hpInp.dispatchEvent(new Event('change', { bubbles: true }));
+                hpInp.dispatchEvent(new Event('input',  { bubbles: true }));
+            }
+            if (tempInp) {
+                tempInp.value = 0;
+                tempInp.dispatchEvent(new Event('change', { bubbles: true }));
+                tempInp.dispatchEvent(new Event('input',  { bubbles: true }));
+            }
+            if (hdInp && hdMax > 0) {
+                hdInp.value = Math.min(hdMax, hdCur + regain);
+                hdInp.dispatchEvent(new Event('change', { bubbles: true }));
+                hdInp.dispatchEvent(new Event('input',  { bubbles: true }));
+            }
+            document.querySelectorAll('.ss-row').forEach(row => {
+                row.dataset.used = 0;
+                if (window._ssSyncInputs) window._ssSyncInputs(row);
+                if (window._ssRenderPips) window._ssRenderPips(row);
+            });
+            if (typeof window._mcRefillResources === 'function') {
+                window._mcRefillResources('long');
+            }
+            _toast('💤 Long rest complete — Save to persist.', 'info');
+            return;
+        }
 
-        if (hpInp && hpMax > 0) {
-            hpInp.value = hpMax;
+        let resp;
+        try {
+            resp = await fetch(`/api/campaign/${cid}/character/${charId}/rest`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'long' }),
+            });
+        } catch (e) {
+            _toast('Long rest failed: ' + (e?.message || 'network error'), 'error');
+            return;
+        }
+        if (!resp.ok) {
+            const body = await resp.json().catch(() => null);
+            const detail = body?.detail || `HTTP ${resp.status}`;
+            _toast('Long rest failed: ' + detail, 'error');
+            return;
+        }
+        const data = await resp.json();
+
+        // Sync form fields from the server's view.
+        if (hpInp && data.hp) {
+            hpInp.value = data.hp.current;
             hpInp.dispatchEvent(new Event('change', { bubbles: true }));
             hpInp.dispatchEvent(new Event('input',  { bubbles: true }));
         }
-        if (tempInp) {
-            tempInp.value = 0;
+        if (tempInp && data.hp) {
+            tempInp.value = data.hp.temp || 0;
             tempInp.dispatchEvent(new Event('change', { bubbles: true }));
             tempInp.dispatchEvent(new Event('input',  { bubbles: true }));
         }
-        if (hdInp && hdMax > 0) {
-            hdInp.value = Math.min(hdMax, hdCur + regain);
+        if (hdInp && data.hit_dice) {
+            hdInp.value = data.hit_dice.current;
             hdInp.dispatchEvent(new Event('change', { bubbles: true }));
             hdInp.dispatchEvent(new Event('input',  { bubbles: true }));
         }
 
-        // Reset every spell-slot row's used pip count to 0
+        // Reset every spell-slot row's used pip count to 0. The server
+        // also broadcasts spell_slot_update messages; this local reset
+        // is the in-page sync since the sheet's WS subscriber may not
+        // listen for spell_slot_update directly.
         document.querySelectorAll('.ss-row').forEach(row => {
             row.dataset.used = 0;
             if (window._ssSyncInputs) window._ssSyncInputs(row);
             if (window._ssRenderPips) window._ssRenderPips(row);
         });
 
-        _toast('💤 Long rest complete — HP, hit dice, and spell slots refreshed. Save to persist.', 'info');
-
-        // Also refill all long-rest + short-rest resources in the Class
-        // Resources panel. Local-only — saved with the next form submit.
+        // Local resource refill — keeps the Class Resources panel
+        // in sync without waiting for the resource_update broadcast.
         if (typeof window._mcRefillResources === 'function') {
             window._mcRefillResources('long');
         }
+
+        _toast('💤 Long rest complete — HP, hit dice, spell slots, and resources refreshed.', 'info');
     });
 
     /* Patch short-rest button: refill 'short' resources locally */

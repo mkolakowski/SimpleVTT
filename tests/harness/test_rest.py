@@ -78,6 +78,33 @@ async def test_short_rest_song_of_rest_happy_path(gm_client, pip_full_hd):
     assert "1d6[" in data["breakdown"], data["breakdown"]
 
 
+async def test_long_rest_happy_path(gm_client, roster):
+    """v2.15.4: Long rest restores HP to max, clears temp HP, refills
+    HD by max(1, hd_max//2), resets every spell slot's ``used`` to 0,
+    and refills short+long resources. Asserts the response shape that
+    the new v2.15.4 sheet handler reads from.
+    """
+    pip = roster["Pip Quickfingers"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/rest",
+        json={"type": "long"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["type"] == "long"
+    # HP at max (Pip is Lv 5 Rogue → 38 max; the exact number is in
+    # the response; just verify current == max).
+    assert data["hp"]["current"] == data["hp"]["max"]
+    assert data["hp"]["temp"] == 0
+    # HD restored at least partway (RAW: max(1, max//2) per long rest).
+    assert data["hit_dice"]["current"] >= 1
+    assert data["hit_dice"]["current"] <= data["hit_dice"]["max"]
+    # Resources list present (may be empty for Pip — Rogue has no
+    # short/long-rest counters in the demo seed).
+    assert "resources" in data
+
+
 async def test_short_rest_invalid_type(gm_client, roster):
     """Type other than 'short' or 'long' returns 400."""
     pip = roster["Pip Quickfingers"]
