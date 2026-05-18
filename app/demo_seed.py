@@ -955,6 +955,215 @@ def _druid_sheet(name: str) -> dict:
     }
 
 
+def _warlock_sheet(name: str) -> dict:
+    """v2.18.4: demo Warlock Lv 5 (The Fiend) for the GM. Added in
+    Phase A.9 to wrap PHB class coverage. Unblocks per-feature work for
+    Pact Magic (Warlock's unique short-rest spell-slot pool — 2/2 slots
+    at Lv 5, both at L3, refresh on short rest — distinct from every
+    other class's long-rest slot table), Dark One's Blessing (Fiend
+    Lv 1: gain CHA mod + Warlock level temp HP when you reduce a
+    creature to 0 HP — passive trigger, needs (B) damage roll-time
+    intercept), Eldritch Invocations (Lv 5: 3 known, picked Agonizing
+    Blast + Hex-warden + Devil's Sight — Agonizing Blast adds CHA mod
+    to Eldritch Blast damage, the curated entry from the cantrip), and
+    Mystic Arcanum (Lv 11 — wait on Lv 11+ Warlock). Bronze Dragonborn
+    for the lightning breath weapon (1d6 racial save-based AoE — second
+    racial resource counter pattern after Tiefling's Hellish Rebuke in
+    v2.18.1). Color `#6a3a8e` (deep purple — fiendish / eldritch
+    palette, distinct from Lyra's `#d977b8` magenta).
+    """
+    return {
+        "class": "Warlock",
+        "subclass": "The Fiend",
+        "level": 5,
+        "race": "Dragonborn",  # +2 STR, +1 CHA, Draconic Ancestry, Breath Weapon, damage resistance
+        "alignment": "Chaotic Neutral",
+        "background": "Charlatan",
+        # Rolled stats post-racial: STR 13 (10+2 racial / dump), DEX 14,
+        # CON 14, INT 10, WIS 12, CHA 17 (16+1 racial). Lv 4 ASI bumps
+        # CHA to 18 — but we hold the ASI at +1 CHA + 1 feat slot for
+        # potential Eldritch Adept (held in reserve).
+        "abilities": {"STR": 13, "DEX": 14, "CON": 14, "INT": 10, "WIS": 12, "CHA": 17},
+        # Studded leather 12 + DEX +2 = 14. No shield.
+        "ac": 14,
+        "speed": 30,
+        # Lv 1 max d8 (8) + 4× avg d8 (5) + CON +2 × 5 = 8 + 20 + 10 = 38.
+        "hp": {"current": 38, "max": 38, "temp": 0},
+        "initiative_bonus": 2,  # DEX 14 mod
+        "proficiency_bonus": 3,
+        "hit_dice": {"current": 5, "max": 5},
+        "class_hit_die": "d8",
+        "class_spellcasting": "CHA",
+        # Warlock prof saves are WIS + CHA.
+        "saving_throws": {"WIS": True, "CHA": True},
+        # Charlatan background grants Deception + Sleight of Hand;
+        # Warlock Lv 1 picks two from a curated list (Arcana +
+        # Intimidation fit the demonic-pact vibe).
+        "skills": {
+            "Arcana":          {"ability": "INT", "proficient": True, "expertise": False},
+            "Intimidation":    {"ability": "CHA", "proficient": True, "expertise": False},
+            "Deception":       {"ability": "CHA", "proficient": True, "expertise": False},
+            "Sleight of Hand": {"ability": "DEX", "proficient": True, "expertise": False},
+        },
+        "attacks": [
+            {"name": "Quarterstaff", "attack_bonus": "+4", "damage": "1d6+1",
+             "damage_type": "bludgeoning", "range": "5 ft",
+             "desc": "Versatile (1d8). Magnus carries one mostly for poking around dark places; he'd rather Eldritch Blast you."},
+            {"name": "Eldritch Blast (cantrip)", "attack_bonus": "+6", "damage": "1d10+3",
+             "damage_type": "force", "range": "120 ft",
+             "desc": "Two beams at Lv 5 (Eldritch Blast scales: Lv 5 = 2 beams). Agonizing Blast invocation adds CHA mod (+3) to each beam's damage. Spell attack, not weapon."},
+        ],
+        # Warlock spells: known list (not prepared). Lv 5 = 6 known
+        # spells + 3 known cantrips. All slots at L3 (Pact Magic table).
+        # Subclass-granted spells (The Fiend's Expanded Spells: Burning
+        # Hands + Command at L1; Blindness/Deafness + Scorching Ray at
+        # L2; Fireball + Stinking Cloud at L3) are always available
+        # alongside the known-list picks — tagged via _subclass_granted.
+        # Hex is the iconic Warlock concentration buff; Eldritch Blast
+        # is the universal damage cantrip; Mage Armor lets Magnus get
+        # AC 13 + DEX without armor (he's wearing studded leather
+        # anyway, so it's situational). Burning Hands + Fireball from
+        # The Fiend's bonus list cover the AoE damage role; Hellish
+        # Rebuke (Warlock spell — distinct from Tiefling's racial in
+        # v2.18.1) covers the reaction-counter slot.
+        "spells": [
+            # Cantrips (3 known)
+            {"name": "Eldritch Blast", "level": 0, "prepared": True, "_slug": "eldritch-blast",
+             "attack_bonus": "+6", "damage": "1d10",
+             "casting_time": "1 action",
+             "desc": "Lv 5 scaling: 2 beams. Agonizing Blast invocation adds CHA +3 to each beam."},
+            {"name": "Prestidigitation", "level": 0, "prepared": True, "_slug": "prestidigitation",
+             "casting_time": "1 action"},
+            {"name": "Mage Hand", "level": 0, "prepared": True, "_slug": "mage-hand",
+             "casting_time": "1 action"},
+            # Warlock known spells (6 known at Lv 5)
+            {"name": "Hex", "level": 1, "prepared": True, "_slug": "hex",
+             "casting_time": "1 bonus action",
+             "_concentration": True,
+             "desc": "Concentration, up to 1 hour. Hex a creature: +1d6 necrotic damage on weapon/spell hits + disadvantage on a chosen ability check. Re-mark as a bonus action on creature death."},
+            {"name": "Hellish Rebuke", "level": 1, "prepared": True, "_slug": "hellish-rebuke",
+             "casting_time": "1 reaction",
+             "desc": "Reaction (when damaged): the attacker takes 2d10 fire damage (DEX save half). Uses a Warlock spell slot (distinct from Tiefling's racial 1/long version)."},
+            {"name": "Burning Hands", "level": 1, "prepared": True, "_slug": "burning-hands",
+             "casting_time": "1 action",
+             "_subclass_granted": True, "_granted_by": "The Fiend (Expanded Spells)",
+             "desc": "15-ft cone, 3d6 fire (DEX save half). Subclass-granted: doesn't count against known."},
+            {"name": "Scorching Ray", "level": 2, "prepared": True, "_slug": "scorching-ray",
+             "casting_time": "1 action",
+             "_subclass_granted": True, "_granted_by": "The Fiend (Expanded Spells)",
+             "desc": "3 rays, each +6 spell attack for 2d6 fire. Subclass-granted."},
+            {"name": "Mirror Image", "level": 2, "prepared": True, "_slug": "mirror-image",
+             "casting_time": "1 action",
+             "desc": "Three illusory duplicates protect you. Lasts 1 minute, no concentration."},
+            {"name": "Counterspell", "level": 3, "prepared": True, "_slug": "counterspell",
+             "casting_time": "1 reaction",
+             "desc": "Reaction (when a creature within 60 ft casts a spell): interrupt the cast. L3 slot auto-succeeds for L3-and-below spells; L4+ needs ability check (DC 10 + spell level)."},
+            {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball",
+             "casting_time": "1 action",
+             "_subclass_granted": True, "_granted_by": "The Fiend (Expanded Spells)",
+             "desc": "20-ft radius, 8d6 fire (DEX save half). Subclass-granted. Pairs with Hex for +1d6 necrotic on the marked target."},
+        ],
+        # Pact Magic: 2 slots, ALL at the highest level Magnus can cast
+        # (Lv 5 = L3). Refreshes on a SHORT rest (this is the unique
+        # Warlock mechanic — Pact Magic is short-rest distinct from
+        # every other caster's long-rest slots). The slot key
+        # "warlock" is intentional — v2.16.0+'s spell-slot tracker
+        # keys off class_slug for routing.
+        "spell_slots": {
+            "warlock": {
+                "3": {"total": 2, "used": 0},
+            },
+        },
+        "inventory": [
+            {"name": "Quarterstaff", "type": "weapon", "qty": 1,
+             "equippable": True, "equipped": True, "hands": 1,
+             "damage": "1d6", "damage_type": "bludgeoning",
+             "versatile": True, "properties": "versatile (1d8)",
+             "_slug": "quarterstaff"},
+            {"name": "Studded leather", "type": "armor", "qty": 1,
+             "equippable": True, "equipped": True,
+             "armor_type": "light", "ac_value": 12,
+             "_slug": "studded-leather"},
+            {"name": "Arcane focus (orb of obsidian)", "type": "gear", "qty": 1,
+             "desc": "Spellcasting focus — black volcanic glass. Channels Magnus's pact-bound magic; replaces material components for Warlock spells."},
+            {"name": "Pact tome (Fiend's grimoire)", "type": "gear", "qty": 1,
+             "desc": "Pact of the Tome would grant this as a Pact Boon; Magnus carries one as a flavor item ahead of taking Pact of the Tome at Lv 3 (or if you'd rather, he picked Pact of the Blade — held in reserve at Lv 3)."},
+            {"name": "Disguise kit", "type": "gear", "qty": 1,
+             "desc": "Charlatan background — 1 hour to assume a new identity."},
+            {"name": "Marked card trinket", "type": "gear", "qty": 1,
+             "desc": "Charlatan background trinket — Magnus's old swindler's tell."},
+            {"name": "Potion of Healing", "type": "consumable", "qty": 2,
+             "consumable": True, "use_kind": "heal", "heal_dice": "2d4+2",
+             "_slug": "potion-of-healing",
+             "desc": "Drink to regain 2d4+2 HP. RAW: action."},
+        ],
+        # v2.18.4: 3 known Eldritch Invocations at Lv 5 (Warlock gets
+        # Lv 2: 2 known; Lv 5: 3 known; Lv 7: 4 known...). Magnus's
+        # picks: Agonizing Blast (cantrip-specific) + Devil's Sight
+        # (see-through-magical-darkness rider; pairs with Darkness
+        # spell for an "always-on advantage" combo) + Mask of Many
+        # Faces (Disguise Self at-will). Captured as feats entries
+        # since invocations don't have a dedicated sheet field today.
+        "feats": [
+            {"slug": "eldritch-invocation-agonizing-blast", "name": "Eldritch Invocation: Agonizing Blast",
+             "desc": "When you cast Eldritch Blast, add your Charisma modifier to the damage of each beam it deals."},
+            {"slug": "eldritch-invocation-devils-sight", "name": "Eldritch Invocation: Devil's Sight",
+             "desc": "You can see normally in darkness, both magical and nonmagical, to a distance of 120 feet."},
+            {"slug": "eldritch-invocation-mask-of-many-faces", "name": "Eldritch Invocation: Mask of Many Faces",
+             "desc": "You can cast Disguise Self at will, without expending a spell slot."},
+        ],
+        # v2.18.4: Warlock Lv 5 resources. Dragonborn Breath Weapon
+        # (1/short-rest 2d6 lightning save-DC 13 — Magnus is a Bronze
+        # Dragonborn). Dark One's Blessing (passive, no counter —
+        # triggered when Magnus reduces an enemy to 0 HP, grants temp
+        # HP = CHA mod + Warlock level). Dark One's Own Luck (Lv 6
+        # Fiend feature — held until level-up, no entry at Lv 5).
+        "resources": [
+            {
+                "key": "breath-weapon",
+                "name": "Breath Weapon (Lightning)",
+                "current": 1, "max": 1, "reset": "short",
+                "source": "dragonborn racial",
+                "class_slug": "dragonborn",
+                "desc": "Action — 5×30-ft line of lightning, 2d6 damage, DEX save DC 13 (8 + PB + CON mod) for half. Bronze Dragonborn ancestry. Refreshes on short rest.",
+                "manual": False,
+            },
+        ],
+        # v2.18.4: clickable Class abilities buttons. The Fiend's Dark
+        # One's Blessing is a passive trigger (no button) — the (B)
+        # roll-time intercept needs to fire when Magnus's damage roll
+        # reduces an enemy to 0 HP, granting temp HP. Today it's
+        # descriptive on the sheet. The Eldritch Invocations are
+        # toggles — Agonizing Blast applies passively to every
+        # Eldritch Blast cast (needs the per-attack uplift picker to
+        # surface its +CHA-to-each-beam rider); Devil's Sight is
+        # informational; Mask of Many Faces is at-will Disguise Self
+        # (no slot cost, no combat impact — flavor for the GM to
+        # narrate). All filed for the Phase B invocation-routing
+        # commit.
+        "class_features": [
+            {
+                "key": "dark-ones-blessing",
+                "name": "Dark One's Blessing",
+                "desc": "Passive — when you reduce a hostile creature to 0 HP, you gain temp HP equal to your CHA mod + Warlock level (3 + 5 = 8). Triggers off damage rolls — needs (B) roll-time intercept to auto-apply.",
+            },
+            {
+                "key": "agonizing-blast",
+                "name": "Agonizing Blast",
+                "desc": "Passive — when you cast Eldritch Blast, add CHA mod (+3) to each beam's damage. Already baked into the Eldritch Blast attack entry's +3 modifier — informational only.",
+            },
+        ],
+        # Pact Boon (Lv 3): Pact of the Tome / Pact of the Blade / Pact
+        # of the Chain. Magnus's pick is descriptive (Tome — held in
+        # the grimoire inventory item) but not mechanically wired
+        # because the Pact Boon features either grant additional
+        # cantrips (Tome) or summon a familiar (Chain) or summon a
+        # pact weapon (Blade) — all need follow-up infra. Filed.
+        # Mystic Arcanum (Lv 11): unlocks one L6 spell castable
+        # 1/long-rest. Wait on Lv 11+ Warlock fixture.
+    }
+
+
 def _ranger_sheet(name: str) -> dict:
     """v2.18.3: demo Ranger Lv 5 (Hunter) for the GM. Added in Phase A.8
     to unlock per-feature work for Hunter's Mark (concentration buff
@@ -1842,9 +2051,31 @@ def seed_characters(
         sheet=_ranger_sheet("Rowan Quickbow"),
         color="#5d7c4a",
     )
-    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc])
+    # v2.18.4: Phase A.9 — demo Warlock (Magnus Hexbinder). 12th PC.
+    # The Fiend, Lv 5, Bronze Dragonborn. CHA 17, Eldritch Blast +6 /
+    # 2d10 force (2 beams at Lv 5; Agonizing Blast adds CHA mod to
+    # each beam). Pact Magic 2/2 L3 slots short-rest refresh — the
+    # unique-to-Warlock spell-slot table. Hex (concentration buff,
+    # +1d6 necrotic on hits). Dark One's Blessing (passive: temp HP
+    # on kill). Bronze Dragonborn breath weapon 1/short. Wraps Phase
+    # A — 12/12 PHB classes now in the demo party. Unlocks Phase B
+    # work for Pact Magic short-rest slot refresh, Hex (mirrors
+    # Hunter's Mark's concentration buff + per-attack rider), Dark
+    # One's Blessing temp-HP-on-kill trigger (needs (B) damage
+    # roll-time intercept with a "did target reach 0 HP" hook),
+    # and Eldritch Invocation toggles (Agonizing Blast's per-beam
+    # uplift is the canonical test case).
+    warlock_pc = Character(
+        campaign_id=camp.id,
+        owner_user_id=users["gm"].id,
+        name="Magnus Hexbinder",
+        template="dnd5e",
+        sheet=_warlock_sheet("Magnus Hexbinder"),
+        color="#6a3a8e",
+    )
+    db.add_all([alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc])
     db.flush()
-    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc]
+    return [alice_pc, bob_pc, gm_pc, paladin_pc, bard_pc, druid_pc, fighter_pc, monk_pc, sorcerer_pc, barbarian_pc, ranger_pc, warlock_pc]
 
 
 def _npc_sheet(slug: str, label: str) -> dict:
@@ -2022,6 +2253,19 @@ def seed_tokens(
         label=chars[10].name, color="#5d7c4a",
         image_url=None,
         x=280, y=350, size=1,
+    ))
+    # v2.18.4: Phase A.9 — Magnus Hexbinder token. Warlock stays back
+    # with the other casters; placed at (210, 490) one cell west of
+    # Zara so the south back-line caster row reads "Magnus(210),
+    # Zara(280), Pip(350)" — Magnus on the far flank where Eldritch
+    # Blast's 120-ft range covers the whole map. Phase A wrap: the
+    # 12th and final PC token, completing PHB class coverage.
+    tokens.append(Token(
+        map_id=map_.id, character_id=chars[11].id,
+        controller_user_id=users["gm"].id,
+        label=chars[11].name, color="#6a3a8e",
+        image_url=None,
+        x=210, y=490, size=1,
     ))
 
     # NPCs — near the bar (right side). v2.3.22: added a Goblin Captain
@@ -2499,26 +2743,34 @@ def seed_encounter(
     # indices +1 again (Vex 10→11, Bandit Alpha 11→12, Bandit Beta
     # 12→13, Bandit Gamma 13→14, Thug 14→15, Grixxa 15→16) since
     # Rowan lands at tokens[10].
+    # v2.18.4: Magnus Hexbinder (GM's Warlock, The Fiend) added at
+    # init 3 — bottom of the order, below Rowan. DEX 14 / +2 init
+    # mod rolled 1; the eldritch caster doesn't move fast. NPC
+    # token indices +1 again (Vex 11→12, Bandit Alpha 12→13, Bandit
+    # Beta 13→14, Bandit Gamma 14→15, Thug 15→16, Grixxa 16→17)
+    # since Magnus lands at tokens[11]. Phase A wraps: 18-entry
+    # init order, 12 PCs + 6 NPCs, all 12 PHB classes represented.
     # Specs: (token_idx, initiative_roll, hp_max, dex_mod).
     init_specs = [
         # token_idx, init, hp_max, dex_mod
         (7,  20, 38, 4),   # Kael Brightleaf (v2.18.0)
         (6,  19, 49, 2),   # Garrik Ironside (v2.17.0)
-        (16, 18, 36, 3),   # Grixxa (Goblin Captain)
-        (11, 17, 65, 3),   # Vex (Bandit Captain)
+        (17, 18, 36, 3),   # Grixxa (Goblin Captain)
+        (12, 17, 65, 3),   # Vex (Bandit Captain)
         (4,  16, 33, 2),   # Lyra Sunstrider (v2.14.1)
         (0,  15, 33, 3),   # Pip Quickfingers
         (2,  14, 43, 0),   # Brother Tavik Stonebrow
         (1,  13, 27, 2),   # Thalindra Moonwhisper
         (3,  12, 44, 0),   # Sir Caelan Lightbringer (v2.14.0)
-        (15, 11, 32, 0),   # Thug
+        (16, 11, 32, 0),   # Thug
         (8,  10, 37, 2),   # Zara Emberfire (v2.18.1)
-        (12,  9, 11, 1),   # Bandit Alpha
+        (13,  9, 11, 1),   # Bandit Alpha
         (5,   8, 36, 3),   # Mira Greenleaf (v2.14.2)
-        (13,  7, 11, 1),   # Bandit Beta
+        (14,  7, 11, 1),   # Bandit Beta
         (9,   6, 55, 2),   # Krieger Stonefist (v2.18.2)
-        (14,  5, 11, 1),   # Bandit Gamma
+        (15,  5, 11, 1),   # Bandit Gamma
         (10,  4, 44, 4),   # Rowan Quickbow (v2.18.3)
+        (11,  3, 38, 2),   # Magnus Hexbinder (v2.18.4)
     ]
     combatants = []
     for token_idx, init_roll, hp_max, dex_mod in init_specs:
