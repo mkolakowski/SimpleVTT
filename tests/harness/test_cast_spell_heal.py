@@ -197,6 +197,43 @@ async def test_undo_heal_reverses_hp(gm_client, tavik_full, roster):
     assert undo_data["hp_after"] == hp_after - applied
 
 
+async def test_heal_auto_applies_with_only_character_id(gm_client, tavik_full, roster):
+    """v2.27.2: when the target PC isn't in the init tracker (no
+    combatant entry yet) but target_character_id is set, auto-heal
+    should still fire via the synthesized-combatant fallback. The PC
+    heal path in ``_apply_heal_to_combatant`` only needs char_id —
+    no init slot required. Repros the Cure Wounds bug where target
+    was set client-side but the heal silently dropped into the legacy
+    heal-claim flow because target_combatant_id wasn't resolved."""
+    tavik = tavik_full
+    pip = roster["Pip Quickfingers"]
+    await _set_pip_hp(gm_client, pip["id"], 10)
+    # Deliberately seed a battle with ONLY Tavik — no Pip combatant.
+    # Mimics the situation where the GM cast Cure Wounds at a PC
+    # whose token wasn't yet pulled into the init tracker.
+    await _seed_battle(gm_client, [
+        {"id": tavik["id"], "name": tavik["name"]},
+    ])
+    HEALING_WORD_INDEX = 5
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": tavik["id"],
+            "spell_index": HEALING_WORD_INDEX,
+            "slot_level": 1,
+            "class_slug": "cleric",
+            # NO target_combatant_id — only character_id + name.
+            "target_character_id": pip["id"],
+            "target_name": pip["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["auto_heal_applied"] > 0, "expected fallback auto-heal via target_character_id"
+    assert data["auto_heal_hp_after"] > 10
+
+
 async def test_heal_caps_at_max_hp(gm_client, tavik_full, roster):
     """When healing would overshoot max HP, the applied amount is
     clamped. auto_heal_applied reflects the actual increase, not the

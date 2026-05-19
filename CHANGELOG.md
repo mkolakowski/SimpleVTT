@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.27.2] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Auto-heal fires even when the target PC isn't currently in the init tracker.** User reported Cure Wounds NOT showing the v2.26.0 auto-heal box on the chat card (the legacy "Apply Healing" button shipped instead), even though Krieger was double-clicked as the target. Root cause: the auto-apply branch in `/cast_spell` gated on `target_combatant_id` only, and called `_lookup_combatant` to find the init-tracker entry. When the targeted PC's token wasn't in init at cast time, `_lookup_combatant` returned None and the cast silently fell through to the legacy heal-claim flow. PC heals don't actually need a combatant — `_apply_heal_to_combatant`'s PC path queries the Character row directly via `char_id`. Fix: when no combatant resolves but `target_character_id` is set, synthesize a minimal combatant dict (`{char_id, id, name}`) so the auto-apply path runs anyway. PATCH — bug fix.
+**Description:** Two edits. **(1)** `app/routes/tabletop_routes.py` `/cast_spell` auto-apply gate widened from `target_combatant_id` only → `target_combatant_id OR target_character_id_in`. **(2)** Inside the branch, after the initial `_lookup_combatant` call, fall back to synthesizing a combatant dict from `target_character_id_in` when the lookup returned None. The PC path of `_apply_heal_to_combatant` reads `combatant.get("char_id")` first and queries the Character row directly — no init slot required. **(3)** `tests/harness/test_cast_spell_heal.py` — new test `test_heal_auto_applies_with_only_character_id` that seeds a battle with ONLY the caster (no target combatant), passes `target_character_id` without `target_combatant_id`, and asserts auto-heal still fires.
+**Description (cont):** Why this scenario happens in the wild. The GM cast Healing Word (auto-applied — Krieger was in init), then cast Cure Wounds seconds later (auto-apply silently failed). The init-tracker state didn't change between casts; the difference is more likely that Krieger's combatant_id was missing from the localStorage mirror at the second cast's timing — possibly a race between the targeting state's localStorage write and the cast's read, OR Krieger's combatant was added to init later (after the first cast) and the localStorage mirror lagged. Either way, the server should not silently degrade when `target_character_id` is sufficient to identify the heal target.
+
+### Fixed
+- `app/routes/tabletop_routes.py` `/cast_spell` — auto-heal fires when only `target_character_id` is set (no init-tracker entry required). Repro: Cure Wounds at a PC whose token isn't in init was silently dropping into the legacy heal-claim flow.
+
+### Added
+- `tests/harness/test_cast_spell_heal.py` `test_heal_auto_applies_with_only_character_id` — covers the synthesized-combatant fallback path.
+
+### Notes
+- **What to test:** hard-refresh. Double-click Krieger (whether or not he's in init), cast Cure Wounds from Tavik. Chat card should now show the `✚ HEALED Krieger Stonefist +N HP (X → Y HP) ↶ Undo` line — same as Healing Word.
+- **Backward compat.** Pure widening; the previous-tighter gate was never exercised by tests that passed both target_combatant_id and target_character_id. All existing tests still pass.
+
+---
+
 ## [2.27.1] - 2026-05-19
 
 **Schema version:** 56

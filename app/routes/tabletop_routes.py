@@ -6278,7 +6278,7 @@ async def cast_spell(
     auto_heal_target_name = ""
     if (
         payload["spell_healing"]
-        and target_combatant_id
+        and (target_combatant_id or target_character_id_in)
     ):
         try:
             _r = dice_mod.roll(payload["spell_healing"])
@@ -6288,6 +6288,21 @@ async def cast_spell(
             heal_rolled = 0
             heal_breakdown = ""
         target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        # v2.27.2: when the target isn't currently in the init tracker
+        # (e.g. the GM hasn't run "From Map" yet, or the targeted PC
+        # was removed) but we have a target_character_id from the
+        # client's double-click, synthesize a minimal combatant dict
+        # so the PC heal path in ``_apply_heal_to_combatant`` still
+        # fires. That path only needs ``char_id`` — it queries the
+        # Character row directly. Without this fallback, casts like
+        # Cure Wounds at a PC whose token isn't in init silently
+        # drop into the legacy heal-claim flow.
+        if not target_combatant and target_character_id_in:
+            target_combatant = {
+                "char_id": int(target_character_id_in),
+                "id": target_combatant_id or "",
+                "name": target_name_resolved or target_name_in or "",
+            }
         if target_combatant and heal_rolled > 0:
             heal_result = await _apply_heal_to_combatant(
                 db, campaign_id, target_combatant, heal_rolled,
