@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.27.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Roll toast: die face shows raw rolled value; bonus rendered as a separate "+N" chip beside the dice.** User asked for the dice animation to show what was *actually rolled on the die* rather than the post-bonus total — and to surface the flat modifier as a side chip (e.g. 1d20+5 rolling a 12 → die shows "12", chip shows "+5"). Previously the single-die toast displayed `r.total` on the die face, which conflated the rolled value with the bonus and made it hard to tell whether a high attack roll came from a hot d20 or a hot bonus. The new layout shows both atoms so the visual matches the dice you'd see on the table. MINOR — additive UI on the existing roll toast; no contract changes.
+**Description:** Three edits. **(1)** `app/static/roll_toast.js` `showRollToast` — append a `.rt-bonus` chip to the `.rt-dice` row immediately after the die SVGs. Hidden (`visibility: hidden`) during the spin so the layout doesn't shift between animation and landing. **(2)** Landing logic: parse die values from the breakdown via the existing `_parseDieVals` helper; set the die face to the **raw** value (`vals[0]` for single die, `vals[i]` for multi-die — multi-die already worked this way, single-die now matches). Compute the modifier as `r.total - dieSum`, where `dieSum` is the sum of kept dice (only the kept die counts under advantage/disadvantage — extracted from the existing `_detectAdvDis` info). Reveal the chip with the formatted "+N"/"-N" text if the bonus is non-zero. **(3)** `app/static/style.css` `.rt-bonus` — pill-shaped chip with the toast's accent palette (`rgba(255, 200, 100, 0.18)` background, accent-yellow text), 32px min-width so single-digit modifiers stay centered, matching `rt-land` cubic-bezier landing animation so the chip pops in at the same beat as the die face.
+**Description (cont):** Why bonus is `total - dieSum` (not parsed out of the expression). The roll toast is downstream of `dice.py`'s breakdown string and doesn't have a clean atomic field for "flat modifier" — the expression itself (`1d20+5+3`) might contain multiple `+N` terms summed at the server. Treating the modifier as the residual after subtracting the kept die sum keeps the chip honest for all expression shapes (including compound modifiers like `1d20+STR+prof` and rolls augmented server-side like a save-DC re-roll). For advantage/disadvantage we ask `_detectAdvDis` which die was kept — only that one counts toward `dieSum`, so the chip stays accurate.
+**Description (cont 2):** Edge cases. Pure dice rolls (no bonus): `bonus === 0` → chip stays hidden. Pure flat rolls (no dice — shouldn't happen but safety guard): `dieSum === 0` → chip stays hidden (`bonus !== 0 && dieSum !== 0` guard). Multi-die rolls retain the existing `.rt-sum` line with `= total` below the dice, so the user sees: dice → chip (if any) → sum. The breakdown line below stays unchanged for power users who want to see the parsed atoms.
+
+### Added
+- `app/static/roll_toast.js` `.rt-bonus` chip — renders "+N" / "-N" beside the dice on landing when there's a non-zero modifier.
+- `app/static/style.css` `.rt-bonus` styling — pill-shaped chip in the toast's accent palette with the same landing animation timing as `.rt-sum` / `.rt-die-landed`.
+
+### Changed
+- `app/static/roll_toast.js` single-die landed state — die face now shows the **raw rolled value** (parsed from the breakdown) instead of `r.total`. Multi-die behavior unchanged (it already showed per-die values).
+
+### Notes
+- **What to test:** open `/campaign/1`. Roll `1d20+5` from any character — toast should show a die displaying the actual 1-20 result, with a `+5` chip to its right. Multi-die: `2d6+3` damage roll → dice show [v1, v2], chip shows `+3`, sum line shows `= total`. Advantage: `1d20a+5` → two dice (kept highlighted green), kept die's value + the `+5` chip both render. Pure dice (`2d6` with no bonus): no chip.
+- **Backward compat.** Pure visual addition on the roll-toast component. No data schema changes; the broadcast payload is unchanged. Older roll records without a `breakdown` field will still show the total on the die face (the `vals[0] != null` guard falls back to `r.total`).
+
+---
+
 ## [2.26.2] - 2026-05-19
 
 **Schema version:** 56

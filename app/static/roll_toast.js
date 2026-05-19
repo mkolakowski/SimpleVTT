@@ -200,6 +200,19 @@
         diceRow.className = 'rt-dice';
         dies.forEach(d => diceRow.appendChild(d.svg));
 
+        /* v2.27.0: bonus chip. Show the raw die value(s) on the die face
+           and render the flat-bonus modifier as a separate "+N" chip
+           beside the dice (e.g. 1d20+5 rolling a 12 → die shows "12",
+           chip shows "+5"). Bonus is derived from total - sum(kept die
+           values) so it works for plain rolls, multi-die rolls, AND
+           advantage/disadvantage (where only the kept die counts). The
+           chip is created up-front but its text is set at landing time
+           — during the spin we don't know the final value yet. */
+        const bonusChip = document.createElement('span');
+        bonusChip.className = 'rt-bonus';
+        bonusChip.style.visibility = 'hidden';
+        diceRow.appendChild(bonusChip);
+
         /* Sum line shown below the dice for multi-die rolls */
         const sumEl = n > 1
             ? Object.assign(document.createElement('div'), { className: 'rt-sum' })
@@ -219,16 +232,35 @@
                 setTimeout(tick, delays[di++]);
             } else {
                 toast.classList.remove('rt-animating');
+                /* v2.27.0: die face always shows the RAW rolled value;
+                   the bonus modifier is rendered as a separate chip
+                   beside the dice. Single-die rolls used to show the
+                   total on the face — that conflated die + modifier. */
+                const vals = _parseDieVals(r.breakdown);
                 if (n === 1) {
-                    /* Single die: show total directly (handles advantage/kh/kl correctly) */
-                    dies[0].t.textContent = r.total;
+                    const rawDie = vals[0] != null ? vals[0] : r.total;
+                    dies[0].t.textContent = rawDie;
                     dies[0].svg.classList.add('rt-die-landed');
                 } else {
                     /* Multi-die: show per-die results parsed from breakdown */
-                    const vals = _parseDieVals(r.breakdown);
                     dies.forEach((d, i) => { d.t.textContent = vals[i] != null ? vals[i] : '?'; });
                     sumEl.textContent = '= ' + r.total;
                     sumEl.classList.add('rt-landed');
+                }
+                /* Compute the bonus modifier and reveal the chip if non-zero.
+                   For advantage/disadvantage only the kept die counts toward
+                   the total — every other die value sums in. */
+                let dieSum;
+                if (advDis && advDis.v1 != null && advDis.v2 != null) {
+                    dieSum = (advDis.keptIdx === 0 ? advDis.v1 : advDis.v2);
+                } else {
+                    dieSum = vals.reduce((s, v) => s + (typeof v === 'number' ? v : 0), 0);
+                }
+                const bonus = (typeof r.total === 'number') ? (r.total - dieSum) : 0;
+                if (bonus !== 0 && dieSum !== 0) {
+                    bonusChip.textContent = (bonus > 0 ? '+' : '') + bonus;
+                    bonusChip.style.visibility = 'visible';
+                    bonusChip.classList.add('rt-landed');
                 }
                 /* v2.2.1: highlight kept vs discarded for advantage/disadvantage
                    pairs. Both dice show their rolled value (handled by the
