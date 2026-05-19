@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.26.1] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Fix-up: suppress the legacy "🩹 Apply Healing" button on the spell-cast chat card when T.4 auto-heal already fired.** User reported that after casting Healing Word on Krieger (target set via double-click), clicking "Apply Healing" produced *"Unknown spell cast — it may have expired. No healing applied."* Root cause: v2.26.0 auto-applied the heal server-side AND dropped the `_heal_claims[cast_id]` entry, but the spell-cast chat card kept rendering the legacy action button (because the broadcast payload still carries `actions[*].healing`). Clicking it POSTed `/apply_healing` → 404 (claim was dropped). Fix is client-only: when `d.auto_heal_applied > 0`, strip the `healing` field from each action before passing to `renderActionButtons` so `action_buttons.js` skips the heal button entirely. The auto-heal line + ↶ Undo button stay; the user has full control via Undo. PATCH — pure UI fix on the chat card.
+**Description:** One edit in `app/static/tabletop.js` `appendSpellCast`. Renamed the original `actions` local to `_baseActions`, then added a defensive map step that replaces the `healing` field on any action with `''` when `d.auto_heal_applied > 0`. Spread operator preserves all other action fields (damage, save_ability, attack_roll, etc.) — only the heal-button branch in `action_buttons.js` line 113 (`if (action.healing && handlers.heal)`) is suppressed. Save / damage / attack buttons keep rendering normally (relevant for spells like Inflict Wounds that combine attack + healing on different actions; future-proof against multi-effect spells).
+
+### Fixed
+- `app/static/tabletop.js` `appendSpellCast` — legacy "🩹 Apply Healing" button is hidden when v2.26.0 auto-applied the heal to the targeted ally. The Undo button on the auto-heal line is the only revert path.
+
+### Notes
+- **What to test:** open `/campaign/1` as the GM. Double-click Krieger to set him as Tavik's target. Damage Krieger to half HP via the GM sheet. Cast Healing Word from Tavik. The chat card should now show only the auto-heal line (`✚ Healed Krieger Stonefist +N HP (X → Y) ↶ Undo`) — no separate "🩹 Apply Healing" button. Click ↶ Undo → HP reverts.
+- **Backward compat.** When `auto_heal_applied == 0` (no target, or target not in init), the legacy button still renders so the chat-card claim flow works for opt-in self-heals.
+
+---
+
 ## [2.26.0] - 2026-05-19
 
 **Schema version:** 56

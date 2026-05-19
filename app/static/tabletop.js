@@ -1775,7 +1775,17 @@
 
         // Action buttons come from `d.actions` (new shape) or are synthesized
         // from the legacy regex-derived fields for backward compatibility.
-        const actions = (d.actions && d.actions.length) ? d.actions : [_synthesizeCastAction(d)];
+        const _baseActions = (d.actions && d.actions.length) ? d.actions : [_synthesizeCastAction(d)];
+        // v2.26.1 fix: when the server already auto-applied the heal to
+        // the targeted ally (Phase T.4), the legacy "🩹 Apply Healing"
+        // button must NOT render — the heal_claim has been dropped, so
+        // clicking it would 404 with "Unknown spell cast — it may have
+        // expired." Strip the ``healing`` field from each action so
+        // action_buttons.js skips the heal button. The chat card already
+        // shows the applied-heal line + ↶ Undo button.
+        const actions = (d.auto_heal_applied > 0)
+            ? _baseActions.map(a => a.healing ? {...a, healing: ''} : a)
+            : _baseActions;
         // Keep `damageExpr` available for downstream code paths that already
         // expect the single-string variable (openDamagePicker call below).
         const _firstDamageAction = actions.find(a => a.damage || (a.damage_scaling && a.damage_scaling.length)) || {};
