@@ -331,6 +331,14 @@ async def _install_buff(
             "replaced_concentration": replaced_concentration_keys,
         },
     })
+    # v2.38.0 Phase T.3e: when a new concentration buff replaces the
+    # caster's previous one, also drop any condition buffs sourced by
+    # this caster + flagged concentration on OTHER combatants. The
+    # caster lost concentration on the previous spell; its paired
+    # effects (Paralyzed via Hold Person, Frightened via Fear, …)
+    # drop in lock-step.
+    if is_concentration and replaced_concentration_keys:
+        await _drop_paired_concentration_buffs(campaign_id, character_id)
     return True
 
 
@@ -544,12 +552,60 @@ async def _maybe_concentration_save(
     }
 
 
+async def _drop_paired_concentration_buffs(
+    campaign_id: int, caster_char_id: int,
+) -> list[dict]:
+    """v2.38.0 Phase T.3e: when a caster's concentration drops (broke
+    on damage, was replaced by a new concentration cast, or was ended
+    manually), scan every combatant in init and remove buffs they
+    granted under that concentration. T.3c/T.3d install Paralyzed /
+    Charmed / Frightened conditions with ``source_char_id: <caster>``
+    + ``concentration: True``; this helper drops them in lock-step
+    with the caster's concentration buff.
+
+    Returns the list of removed buff dicts (each shape preserved,
+    plus ``_dropped_from_combatant_id`` field) so the caller can log.
+    Broadcasts a single ``battle_update`` covering all removals.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return []
+    removed: list[dict] = []
+    dirty = False
+    for c in state.get("combatants") or []:
+        buffs = c.get("buffs") or []
+        kept = []
+        for b in buffs:
+            b = b or {}
+            if (
+                b.get("source_char_id") == caster_char_id
+                and bool(b.get("concentration"))
+            ):
+                rec = dict(b)
+                rec["_dropped_from_combatant_id"] = c.get("id")
+                removed.append(rec)
+                continue
+            kept.append(b)
+        if len(kept) != len(buffs):
+            c["buffs"] = kept
+            dirty = True
+    if dirty:
+        hub.set_battle(campaign_id, state)
+        await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+    return removed
+
+
 async def _remove_buff(
     campaign_id: int, character_id: int, key: str,
 ) -> bool:
     """Remove a single buff by key. Returns True if removed, False if
     nothing matched. Broadcasts ``buff_update`` with the new (possibly
     empty) buff list when a removal happened; no-op silently otherwise.
+
+    v2.38.0 Phase T.3e: if the removed buff was a concentration buff,
+    also scans all combatants for paired condition buffs (Hold
+    Person's Paralyzed, Fear's Frightened, …) sourced by this
+    character and removes them too — RAW concentration cleanup.
     """
     state = hub.get_battle(campaign_id)
     if not state:
@@ -562,6 +618,11 @@ async def _remove_buff(
     if target is None:
         return False
     buffs = target.get("buffs") or []
+    # Capture the buff we're about to remove so we know whether it's
+    # a concentration buff (drives the paired-cleanup decision).
+    removed_buff = next(
+        (b for b in buffs if (b or {}).get("key") == key), None,
+    )
     new_list = [b for b in buffs if (b or {}).get("key") != key]
     if len(new_list) == len(buffs):
         return False
@@ -575,6 +636,8 @@ async def _remove_buff(
             "removed_key": key,
         },
     })
+    if removed_buff and bool(removed_buff.get("concentration")):
+        await _drop_paired_concentration_buffs(campaign_id, character_id)
     return True
 
 
@@ -6191,6 +6254,28 @@ async def respond_roll_request(
                         db, int(tgt_char_id),
                         _get_buffs(campaign_id, int(tgt_char_id)),
                     )
+                    # v2.38.0 Phase T.3e: install caster-side
+                    # concentration so the cleanup helper can drop
+                    # this PC's condition when the caster loses
+                    # concentration. Mirror of the T.3c NPC path.
+                    if bool(cond.get("concentration")):
+                        caster_id = int(ctx.get("caster_char_id") or 0)
+                        if caster_id:
+                            caster_buff = {
+                                "key": f"concentration-{ctx.get('spell_slug') or 'spell'}",
+                                "name": f"Concentrating: {ctx.get('spell_name') or 'Spell'}",
+                                "icon": "🌀",
+                                "source_char_id": caster_id,
+                                "source_char_name": ctx.get("caster_char_name") or "",
+                                "source_spell": ctx.get("spell_name") or "",
+                                "duration_rounds": int(cond.get("duration_rounds", 10)),
+                                "duration_max": int(cond.get("duration_rounds", 10)),
+                                "concentration": True,
+                                "effects": [
+                                    f"Concentrating on {ctx.get('spell_name') or 'spell'}",
+                                ],
+                            }
+                            await _install_buff(campaign_id, caster_id, caster_buff)
         # One-shot — drop the context whether failure or pass so a
         # later test on the same request can't accidentally trigger.
         _save_request_context.pop(roll_req.id, None)
@@ -6909,6 +6994,33 @@ async def cast_spell(
                     auto_save_buff_name = cond["name"]
                     auto_save_buff_icon = cond.get("icon", "💫")
                     auto_save_buff_duration = int(cond.get("duration_rounds", 10))
+                    # v2.38.0 Phase T.3e: when the condition is RAW
+                    # concentration (Hold Person, Fear, Hideous
+                    # Laughter), also install a caster-side
+                    # concentration buff. This makes the cleanup
+                    # pipeline end-to-end: dropping the caster's
+                    # concentration (manually via /end_buff, via a
+                    # failed CON save on damage, or via casting a new
+                    # concentration spell) calls
+                    # ``_drop_paired_concentration_buffs`` which
+                    # removes the condition buff from every target.
+                    # The caster buff is keyed by spell slug so two
+                    # save-or-suck concentration spells can't both
+                    # ride the same key.
+                    if bool(cond.get("concentration")):
+                        caster_buff = {
+                            "key": f"concentration-{spell_slug}",
+                            "name": f"Concentrating: {payload['spell_name']}",
+                            "icon": "🌀",
+                            "source_char_id": char.id,
+                            "source_char_name": char.name,
+                            "source_spell": payload["spell_name"],
+                            "duration_rounds": int(cond.get("duration_rounds", 10)),
+                            "duration_max": int(cond.get("duration_rounds", 10)),
+                            "concentration": True,
+                            "effects": [f"Concentrating on {payload['spell_name']}"],
+                        }
+                        await _install_buff(campaign_id, char.id, caster_buff)
         payload["auto_save_buff_key"] = auto_save_buff_key
         payload["auto_save_buff_name"] = auto_save_buff_name
         payload["auto_save_buff_icon"] = auto_save_buff_icon

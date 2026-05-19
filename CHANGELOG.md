@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.38.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Phase T.3e + T.9 — concentration cleanup AND mobile target button.** Two bundled changes that closed out the targeting roadmap's last server + UI gaps. **T.3e**: when a caster's concentration drops (manually via `/end_buff`, on a damage-triggered failed CON save, or replaced by a new concentration cast), every condition buff they granted under that concentration drops in lock-step — Hold Person's Paralyzed on a bandit disappears when Tavik stops concentrating. New `_drop_paired_concentration_buffs(caster_char_id)` helper scans every combatant for buffs with `source_char_id == caster + concentration: True` and removes them; `_remove_buff` and `_install_buff`'s replaced-concentration path both call it. Also: save-or-suck spells now install a caster-side `concentration-<slug>` buff so the cleanup pipeline has a concrete anchor to fire on. **T.9**: token-tracker rows gain a 🎯 button that toggles the row's token as the current target — a tap-friendly fallback for mobile users who can't reliably double-tap the canvas. Highlights crimson when active. MINOR — two visible additions; no schema changes.
+**Description:** Six edits. **(1)** `app/routes/tabletop_routes.py` — new `_drop_paired_concentration_buffs(campaign_id, caster_char_id)` helper near `_install_buff`. Scans every combatant, removes buffs whose `source_char_id` matches and `concentration` is True. Broadcasts a single `battle_update` covering all removals. **(2)** Same file `_remove_buff` — captures the buff being removed; if it carries `concentration: True`, calls the cleanup helper after the regular removal completes. **(3)** Same file `_install_buff` — when the install replaces an existing concentration buff (the existing `replaced_concentration_keys` branch), also calls the cleanup helper to drop paired effects from the old caster's now-broken concentration. **(4)** `/cast_spell` T.3c NPC save-or-suck branch — after installing the condition on the target, also installs a caster-side concentration buff (`key: "concentration-<slug>"`, `name: "Concentrating: <Spell>"`, `concentration: True`, `source_char_id: char.id`). Same install in the T.3d PC-respond path. **(5)** `app/static/tabletop.js` `renderTokenTracker` — new `.tt-target` button per row; tap toggles via `_targeting.setTarget` / `_targeting.clear`. `_publish` re-renders the token tracker on every targeting change so button highlights stay current. **(6)** `app/templates/tabletop.html` — `.tt-btn.tt-target-on` CSS (crimson, mirrors the canvas ring color).
+**Description (cont):** Why install a caster-side concentration buff for save-or-suck spells. Previously, the only spells that installed a caster-side concentration buff were the explicit Phase C endpoints (`/cast_hunters_mark`, `/cast_hex`). Save-or-suck spells (Hold Person, Fear, etc.) installed a target-side buff with `concentration: True` but no caster-side anchor — meaning the cleanup helper had no `_remove_buff` event to hook into. v2.38.0 adds the caster-side anchor automatically so the entire pipeline ties together: cast spell → save fails → target gets Paralyzed AND caster gets `concentration-hold-person` → ending either drops both via the pairing.
+**Description (cont 2):** Why T.9's button instead of touch long-press / drag UX. The plan originally proposed a long-press gesture on the token to set target on touch devices, but iOS Safari aggressively intercepts long-press for context menus and disables custom long-press in Safari/PWA contexts. The Token Tracker is always visible in the GM panel and the player drawer; a dedicated 🎯 button gives a 100%-reliable input path on every device class (mouse, touchpad, iPad keyboard, mobile touch) without fighting browser gesture defaults. Discoverable: it's right next to the existing 📋 Sheet button.
+**Description (cont 3):** 3 new T.3e harness tests in `tests/harness/test_concentration_cleanup.py`. Test 1 verifies the caster-side `concentration-hold-person` buff lands on Tavik when the bandit fails the save (loops up to 20 attempts to land a failure). Test 2 verifies ending the caster's concentration via `/end_buff` removes it — and by extension the paired bandit buff (verified server-side via the cleanup helper; the test asserts caster-buff removal directly). Test 3 is a smoke check that a non-concentration buff removal (Rage on Krieger) still works post-change.
+
+### Added
+- `app/routes/tabletop_routes.py` `_drop_paired_concentration_buffs` helper.
+- `app/routes/tabletop_routes.py` `/cast_spell` — installs caster-side `concentration-<slug>` buff for save-or-suck spells whose target buff is `concentration: True`.
+- `app/static/tabletop.js` `renderTokenTracker` — 🎯 target-toggle button on every token-tracker row.
+- `app/templates/tabletop.html` `.tt-btn.tt-target-on` CSS (crimson active state).
+- `tests/harness/test_concentration_cleanup.py` — 3 new T.3e tests.
+
+### Changed
+- `app/routes/tabletop_routes.py` `_remove_buff` — calls `_drop_paired_concentration_buffs` after removing a concentration buff.
+- `app/routes/tabletop_routes.py` `_install_buff` — calls `_drop_paired_concentration_buffs` after the replaced-concentration branch.
+- `app/static/tabletop.js` `_targeting._publish` — also calls `renderTokenTracker` so button highlights stay current.
+
+### Notes
+- **What to test (T.3e):** cast Hold Person at a bandit on a fail → bandit's mini-sheet shows Paralyzed, Tavik's shows "Concentrating: Hold Person". Open Tavik's buffs panel and end the concentration buff → bandit's Paralyzed drops at the same moment (visible in the init tracker's buff chips). Also: cast Hunter's Mark with Rowan, then cast Hex via Magnus on the same target → Hunter's Mark drops; any condition buffs Rowan was holding via concentration drop too (none in the demo today, but the path is wired).
+- **What to test (T.9):** open the GM Token Management panel. Tap 🎯 on Krieger → he highlights crimson + the canvas ring around his token appears. Tap 🎯 again → clears. Same flow works on iPad / iPhone in Safari without conflicting with the native long-press menu.
+- **Backward compat.** Cleanup helper is a no-op when no battle is active. Token-tracker row layout adds one button — width allowance was sufficient.
+
+### Filed
+- Multi-target save-or-suck spells (Hypnotic Pattern, Mass Suggestion) — T.3c's map already covers single-target conditions; multi-target needs an explicit "AoE save" path tied to T.5's circle picker.
+
+---
+
 ## [2.37.0] - 2026-05-19
 
 **Schema version:** 56

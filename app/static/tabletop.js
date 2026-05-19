@@ -251,6 +251,11 @@
         _publish() {
             try { render(); } catch (_) {}
             _updateTargetingChip();
+            // v2.38.0 Phase T.9: refresh the token-tracker rows so
+            // their 🎯 buttons reflect the current target state
+            // (active = crimson, idle = neutral). Cheap because
+            // renderTokenTracker is idempotent.
+            try { renderTokenTracker(); } catch (_) {}
             // v2.22.0 Phase T.1: mirror the current targets into
             // localStorage so the full character sheet (which runs in
             // a separate page/iframe with its own ``window`` object)
@@ -3082,10 +3087,20 @@
                        data-${t.character_id ? 'character' : 'monster'}-name="${escapeHTML(t.label || '')}"
                        title="Open ${t.character_id ? 'character' : 'monster'} sheet">📋</a>`
                 : '';
+            // v2.38.0 Phase T.9: 🎯 Target button — tap to set this
+            // token as the current target. The same effect a desktop
+            // user gets from double-clicking the token on the canvas,
+            // but available from the (tap-friendly) Token Tracker
+            // panel on mobile. Highlights when the token is already
+            // the active target so the GM can see at a glance who's
+            // marked.
+            const isTargeted = _targeting && _targeting.isTargeted(t.id);
+            const targetBtnHtml = `<button class="tt-btn tt-target${isTargeted ? ' tt-target-on' : ''}" title="${isTargeted ? 'Clear target' : 'Set as target'}" data-token-id="${t.id}">🎯</button>`;
             row.innerHTML = `
                 ${avatarHtml}
                 <span class="tt-name" contenteditable="true" spellcheck="false">${escapeHTML(t.label)}</span>
                 <button class="tt-btn tt-vis" title="${t.is_hidden ? 'Show token' : 'Hide token'}">${t.is_hidden ? '🚫' : '👁'}</button>
+                ${targetBtnHtml}
                 ${sheetBtnHtml}
                 <label class="tt-btn tt-art-label" title="Upload art">
                     🖼<input class="tt-art-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
@@ -3095,6 +3110,18 @@
                     ${memberOpts}
                 </select>
                 <button class="tt-btn tt-del" title="Delete token">🗑</button>`;
+            // v2.38.0 Phase T.9: wire the target button — tap toggles.
+            const targetBtn = row.querySelector('.tt-target');
+            if (targetBtn) {
+                targetBtn.addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    if (_targeting.isTargeted(t.id)) {
+                        _targeting.clear();
+                    } else {
+                        _targeting.setTarget(t.id);
+                    }
+                });
+            }
             list.appendChild(row);
 
             const nameEl = row.querySelector('.tt-name');

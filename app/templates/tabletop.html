@@ -816,6 +816,15 @@
     /* v2.25.0: 📋 Sheet button in the token tracker rows. Matches the
        palette of the existing .tt-btn / .tt-vis buttons. */
     .tt-btn.tt-sheet { text-decoration: none; }
+    /* v2.38.0 Phase T.9: target-tracker active state. Bright crimson
+       palette matches the crimson token ring drawn on the active
+       target so the two UI cues read as the same thing. */
+    .tt-btn.tt-target-on {
+        background: #b3263a;
+        border-color: #d04060;
+        color: #ffffff;
+    }
+    .tt-btn.tt-target-on:hover { background: #c12d44; }
     /* v2.3.34 (originally v2.3.9): GM-only click-to-roll buttons inside
        the init-tracker monster card. Sized to the dense-panel 32px floor
        (per CLAUDE.md) so the Attack / Dmg / Save trio stays one-line on

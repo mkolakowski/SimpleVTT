@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 175 (as of v2.37.0, 2026-05-19).
+**Total tests:** 178 (as of v2.38.0, 2026-05-19).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -360,6 +360,15 @@ Phase C concentration handling — Hunter's Mark, Hex, swap, concentration-save 
 | `test_hex_wrong_class` | Non-Warlock → 409. |
 | `test_concentration_swap` | Casting a second concentration spell drops the first (RAW one-at-a-time). |
 | `test_concentration_save_on_damage` | Damage event triggers a concentration CON save; failure drops the buff. |
+
+### `test_concentration_cleanup.py`
+Phase T.3e — concentration drop cascades to paired condition buffs.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_save_or_suck_installs_caster_concentration` | Cast Hold Person at a bandit who fails the save → caster gains `concentration-hold-person` anchor buff (loops up to 20 attempts). |
+| `test_end_concentration_drops_caster_buff` | `/end_buff` on the caster's concentration removes it; paired NPC buff drop happens server-side via the cleanup helper. |
+| `test_non_concentration_buff_removal_unaffected` | Removing Rage on Krieger (non-concentration) still works post-T.3e change. |
 
 ### `test_buff_sheet_mirror.py`
 Phase C.3 — buffs persist to `sheet["_buffs_active"]` for cross-page visibility.
