@@ -622,6 +622,58 @@
     .mini-meta-row .death-saves-tracker { flex: 1 1 auto; margin-top: 0; padding-top: 0; border-top: none; }
     .mini-meta-row .death-saves-tracker[data-status="alive"] .death-saves-pips-row,
     .mini-meta-row .death-saves-tracker[data-status="alive"] .death-saves-actions { display: none; }
+    /* v2.21.0 Phase T.0: targeting chip — floats at the bottom-center
+       of the map pane while at least one token is target-selected. The
+       crimson palette intentionally matches the in-canvas target ring
+       so a glance ties chip → token. The × end button keeps the 44 px
+       touch-target floor since it's a sheet-context UI (not the dense
+       init-tracker row). */
+    .targeting-chip {
+        position: absolute;
+        bottom: 16px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 50;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        max-width: calc(100% - 32px);
+        padding: 8px 8px 8px 14px;
+        background: rgba(220, 38, 38, 0.92);
+        color: #fff;
+        border: 1px solid rgba(255, 200, 200, 0.45);
+        border-radius: 22px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+        font-size: 13px;
+        font-weight: 600;
+        line-height: 1.2;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+    }
+    .targeting-chip .t-icon { font-size: 16px; }
+    .targeting-chip .t-label { opacity: 0.85; font-weight: 500; }
+    .targeting-chip .t-name {
+        max-width: 280px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .targeting-chip .t-clear {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 6px 10px;
+        background: rgba(0, 0, 0, 0.25);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+    }
+    .targeting-chip .t-clear:hover {
+        background: rgba(0, 0, 0, 0.45);
+        border-color: rgba(255, 255, 255, 0.5);
+    }
     /* ── modifier row variant: larger text, no mute colour ── */
     .mac-mod-lg { font-size: 12px; font-weight: 700; color: var(--fg); padding-bottom: 2px; }
     /* ── Section tabs ── */

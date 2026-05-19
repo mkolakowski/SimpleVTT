@@ -182,6 +182,121 @@
         });
     }
 
+    // v2.21.0 Phase T.0: targeting state. Players double-click tokens on
+    // the board to designate them as the target of their next attack /
+    // spell / heal / check. Shift+double-click adds to a multi-target
+    // selection (Magic Missile-style). Right-click (or touch long-press)
+    // opens the target's character sheet — the gesture migrated off
+    // double-click to make room. Escape clears.
+    //
+    // State lives client-side only. ``window._targetingState`` is the
+    // public surface that the sheet's .atk-strike / .sp-cast / .cf-use
+    // handlers will read in T.1 to attach target_combatant_id /
+    // target_character_id / target_name to the POST body. T.2-T.4 then
+    // teach the endpoints to compute hit / damage / heal application.
+    const _targeting = {
+        tokenIds: new Set(),  // canonical = token.id (numeric)
+
+        setTarget(tokenId) {
+            this.tokenIds.clear();
+            this.tokenIds.add(tokenId);
+            this._publish();
+        },
+        addTarget(tokenId) {  // Shift+dblclick — multi-target accumulation
+            this.tokenIds.add(tokenId);
+            this._publish();
+        },
+        toggleTarget(tokenId) {
+            if (this.tokenIds.has(tokenId)) this.tokenIds.delete(tokenId);
+            else this.tokenIds.add(tokenId);
+            this._publish();
+        },
+        clear() {
+            if (!this.tokenIds.size) return;
+            this.tokenIds.clear();
+            this._publish();
+        },
+        isTargeted(tokenId) { return this.tokenIds.has(tokenId); },
+
+        // Resolve current target tokens to richer descriptors for the
+        // sheet handlers. Each descriptor carries every selector the
+        // server-side ``_resolve_target_combatant`` helper accepts so
+        // the handler can pick whichever is set.
+        getTargets() {
+            const out = [];
+            const battle = (window.battle && window.battle.combatants) || [];
+            for (const tid of this.tokenIds) {
+                const tok = tokens.find(t => t.id === tid);
+                if (!tok) continue;
+                let combatant = null;
+                for (const c of battle) {
+                    if (c.source_token_id != null && c.source_token_id === tid) { combatant = c; break; }
+                    if (tok.character_id && c.char_id === tok.character_id) { combatant = c; break; }
+                    if (tok.token_template_id
+                            && c.token_template_id === tok.token_template_id
+                            && c.name === tok.label) { combatant = c; break; }
+                }
+                out.push({
+                    token_id: tid,
+                    character_id: tok.character_id || null,
+                    token_template_id: tok.token_template_id || null,
+                    combatant_id: combatant ? combatant.id : null,
+                    name: tok.label || (combatant && combatant.name) || 'Token',
+                    color: tok.color || null,
+                });
+            }
+            return out;
+        },
+
+        _publish() {
+            try { render(); } catch (_) {}
+            _updateTargetingChip();
+            try { document.dispatchEvent(new CustomEvent('vtt:targeting-change', { detail: this.getTargets() })); } catch (_) {}
+        },
+    };
+    window._targetingState = _targeting;
+
+    // Floating chip rendered in #map-pane. Auto-removes when no
+    // targets are selected; auto-rebuilds when at least one is.
+    function _updateTargetingChip() {
+        let el = document.getElementById('targeting-chip');
+        const targets = _targeting.getTargets();
+        if (!targets.length) {
+            if (el) el.remove();
+            return;
+        }
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'targeting-chip';
+            el.className = 'targeting-chip';
+            (mapPane || document.body).appendChild(el);
+        }
+        const names = targets
+            .map(t => (t.name || '').replace(/[<&>]/g, s => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[s])))
+            .join(', ');
+        el.innerHTML = `<span class="t-icon">🎯</span>
+            <span class="t-label">Targeting</span>
+            <span class="t-name" title="${names}">${names}</span>
+            <button type="button" class="t-clear" title="Clear (Esc)">×</button>`;
+        el.querySelector('.t-clear').addEventListener('click', () => _targeting.clear());
+    }
+
+    // One-time onboarding hint the first time targeting fires so
+    // long-time demo users learn the new gestures.
+    function _maybeShowTargetingHint() {
+        try {
+            if (localStorage.getItem('vtt:targeting-hint-shown')) return;
+            localStorage.setItem('vtt:targeting-hint-shown', '1');
+        } catch (_) { return; }
+        if (typeof window.showToast === 'function') {
+            window.showToast(
+                '🎯 Target set. Right-click (or long-press on touch) opens the character sheet.',
+                'info',
+                6000,
+            );
+        }
+    }
+
     function _drawRing(cx, cy, r, color, style) {
         ctx.save();
         ctx.strokeStyle = color || '#000';
@@ -332,6 +447,25 @@
         tokens.forEach(drawToken);
         drawSpawnMarkers();
         drawMovementBreadcrumb();
+        // v2.21.0 Phase T.0: targeting rings drawn on top of tokens so
+        // the crimson outer ring stays visible even when a portrait
+        // jpg fills the token face. Skip hidden tokens for non-GM.
+        tokens.forEach(t => {
+            if (!_targeting.isTargeted(t.id)) return;
+            if (t.is_hidden && !ME.isGm) return;
+            const cx = t.x + gridSize / 2;
+            const cy = t.y + gridSize / 2;
+            const r = (gridSize * t.size) / 2 - 4;
+            ctx.save();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#dc2626';
+            ctx.shadowColor = '#dc2626';
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+        });
         _updateGifOverlay();
     }
 
@@ -597,7 +731,23 @@
         applyTransform();
     }, { passive: false });
 
-    canvas.addEventListener('contextmenu', (ev) => ev.preventDefault());
+    // v2.21.0 Phase T.0: right-click opens the character sheet. Was
+    // a bare preventDefault — double-click used to open the sheet, but
+    // T.0 took that gesture for targeting. Falls through to default
+    // preventDefault when the right-click misses every token so we
+    // don't pop the browser's native context menu on the map.
+    canvas.addEventListener('contextmenu', (ev) => {
+        ev.preventDefault();
+        const [x, y] = clientToCanvas(ev);
+        for (let i = tokens.length - 1; i >= 0; i--) {
+            const t = tokens[i];
+            if (pointInToken(x, y, t) && t.character_id) {
+                if (t.is_hidden && !ME.isGm) continue;
+                openSheet(t.character_id);
+                return;
+            }
+        }
+    });
 
     // ---------- Drag handling ----------
     let dragging = null;     // { token, offsetX, offsetY }
@@ -882,15 +1032,36 @@
         }
     });
 
+    // v2.21.0 Phase T.0: double-click now targets instead of opening
+    // the sheet (right-click took over the sheet gesture). Shift held
+    // = additive multi-target (Magic Missile, Eldritch Blast picking
+    // 2 beams at Lv 5+, etc.). Hidden tokens skipped for non-GM.
     canvas.addEventListener('dblclick', (ev) => {
         const [x, y] = clientToCanvas(ev);
         for (let i = tokens.length - 1; i >= 0; i--) {
             const t = tokens[i];
-            if (pointInToken(x, y, t) && t.character_id) {
-                openSheet(t.character_id);
-                return;
-            }
+            if (!pointInToken(x, y, t)) continue;
+            if (t.is_hidden && !ME.isGm) continue;
+            if (ev.shiftKey) _targeting.addTarget(t.id);
+            else _targeting.setTarget(t.id);
+            _maybeShowTargetingHint();
+            return;
         }
+    });
+
+    // v2.21.0 Phase T.0: Escape clears the target list. Bound on
+    // document so the chip × isn't the only way out. ``keydown``
+    // captures during typing inside inputs (e.g. roll-expr field) but
+    // pickers / inputs swallow Escape before it bubbles, so the chip
+    // clear here only fires when no editor is focused.
+    document.addEventListener('keydown', (ev) => {
+        if (ev.key !== 'Escape') return;
+        if (!_targeting.tokenIds.size) return;
+        const a = document.activeElement;
+        if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable)) {
+            return;  // let inputs see their own Escape
+        }
+        _targeting.clear();
     });
 
     // ---------- Touch controls (iPad / tablet) ----------
@@ -921,6 +1092,29 @@
             if (ev.touches.length === 1) {
                 const t = ev.touches[0];
                 tapStart = { time: Date.now(), x: t.clientX, y: t.clientY };
+                // v2.21.0 Phase T.0: long-press → openSheet. The old
+                // double-tap = openSheet gesture moved to "double-tap
+                // targets"; long-press fills in as the touch equivalent
+                // of right-click. Cancelled if the finger moves (pan
+                // / drag) or lifts before 600 ms.
+                tapStart._longPressTimer = setTimeout(() => {
+                    if (!tapStart) return;
+                    const moved = Math.hypot(
+                        (window._lastTouchX ?? tapStart.x) - tapStart.x,
+                        (window._lastTouchY ?? tapStart.y) - tapStart.y,
+                    );
+                    if (moved >= 12) return;  // they moved — not a long-press
+                    const [wx, wy] = clientToCanvasXY(tapStart.x, tapStart.y);
+                    for (let i = tokens.length - 1; i >= 0; i--) {
+                        const tok = tokens[i];
+                        if (!pointInToken(wx, wy, tok)) continue;
+                        if (!tok.character_id) continue;
+                        if (tok.is_hidden && !ME.isGm) continue;
+                        openSheet(tok.character_id);
+                        tapStart._longPressFired = true;
+                        break;
+                    }
+                }, 600);
 
                 // Spawn click-to-set: a tap while armed consumes the touch.
                 if (spawnArmingCharId != null && spawnContext && spawnContext.encounterId) {
@@ -987,6 +1181,17 @@
         }, { passive: false });
 
         mapPane.addEventListener('touchmove', (ev) => {
+            // v2.21.0 Phase T.0: any meaningful movement aborts the
+            // pending long-press (the touch is panning / dragging, not
+            // holding). Threshold matches the tap-detection moved<12.
+            if (tapStart && tapStart._longPressTimer && ev.touches.length === 1) {
+                const t = ev.touches[0];
+                const moved = Math.hypot(t.clientX - tapStart.x, t.clientY - tapStart.y);
+                if (moved >= 12) {
+                    clearTimeout(tapStart._longPressTimer);
+                    tapStart._longPressTimer = null;
+                }
+            }
             if (touchPinch && ev.touches.length >= 2) {
                 const [t1, t2] = ev.touches;
                 const newDist = touchDist(t1, t2);
@@ -1069,23 +1274,33 @@
             }
             // Tap / double-tap detection: only fires when the lift moved
             // very little since touchstart (i.e., not a pan or drag).
+            // v2.21.0 Phase T.0: double-tap now targets (was openSheet).
+            // Long-press (~600 ms, no significant movement) opens the
+            // sheet — the sheet gesture migrated off double-tap to make
+            // room for targeting. ``longPressFired`` short-circuits the
+            // subsequent tap-end logic so the long-press doesn't ALSO
+            // count as a tap.
             if (tapStart && ev.changedTouches.length === 1 && ev.touches.length === 0) {
                 const ct = ev.changedTouches[0];
                 const moved = Math.hypot(ct.clientX - tapStart.x, ct.clientY - tapStart.y);
                 const dt = Date.now() - tapStart.time;
-                if (moved < 12 && dt < 350) {
+                if (tapStart._longPressFired) {
+                    // Long-press already opened the sheet — eat this tap.
+                    tapStart = null;
+                } else if (moved < 12 && dt < 350) {
                     const now = Date.now();
                     const dx = ct.clientX - lastTap.x;
                     const dy = ct.clientY - lastTap.y;
                     if (now - lastTap.time < 400 && Math.hypot(dx, dy) < 30) {
-                        // Double-tap → mirror dblclick behaviour.
+                        // Double-tap → target.
                         const [wx, wy] = clientToCanvasXY(ct.clientX, ct.clientY);
                         for (let i = tokens.length - 1; i >= 0; i--) {
                             const tok = tokens[i];
-                            if (pointInToken(wx, wy, tok) && tok.character_id) {
-                                openSheet(tok.character_id);
-                                break;
-                            }
+                            if (!pointInToken(wx, wy, tok)) continue;
+                            if (tok.is_hidden && !ME.isGm) continue;
+                            _targeting.setTarget(tok.id);
+                            _maybeShowTargetingHint();
+                            break;
                         }
                         lastTap = { time: 0, x: 0, y: 0 };
                     } else {
