@@ -515,9 +515,30 @@ async def _maybe_concentration_save(
 
     passed = total >= dc
     dropped_key = None
+    paired_pre_drop: list[dict] = []
     if not passed:
         dropped_key = buff.get("key")
         if dropped_key:
+            # v2.39.0: capture the paired buffs about to drop BEFORE
+            # ``_remove_buff`` triggers the cleanup helper. We need
+            # the list of (combatant_name, buff_name) tuples to
+            # build the GM-only roll-log entry below — the helper
+            # mutates state, so reading after the call would return
+            # an empty list.
+            state_snapshot = hub.get_battle(campaign_id)
+            if state_snapshot:
+                for c in state_snapshot.get("combatants") or []:
+                    for b in c.get("buffs") or []:
+                        b = b or {}
+                        if (
+                            b.get("source_char_id") == char.id
+                            and bool(b.get("concentration"))
+                            and b.get("key") != dropped_key
+                        ):
+                            paired_pre_drop.append({
+                                "combatant_name": c.get("name") or "Unknown",
+                                "buff_name": b.get("name") or b.get("key") or "Effect",
+                            })
             await _remove_buff(campaign_id, char.id, dropped_key)
             # v2.19.2 Phase C.3: sync the sheet mirror so the Active
             # Effects panel updates when concentration breaks mid-fight.
@@ -542,6 +563,44 @@ async def _maybe_concentration_save(
             "dropped_key": dropped_key,
         },
     })
+
+    # v2.39.0: GM-only narrative roll-log entry summarising the
+    # concentration loss + the paired effects that dropped. Players
+    # see their own buff vanish via the buff_update broadcast and
+    # the concentration_save toast; the GM gets an extra log entry
+    # naming exactly what was let go (Hold Person on Bandit Alpha,
+    # etc.) so cleanup is auditable from one place.
+    if not passed:
+        buff_name = buff.get("name") or buff.get("key") or "concentration"
+        if paired_pre_drop:
+            paired_summary = " · ".join(
+                f"{p['buff_name']} → {p['combatant_name']}"
+                for p in paired_pre_drop
+            )
+            paired_note = f" — dropped: {paired_summary}"
+        else:
+            paired_note = ""
+        gm_log_breakdown = (
+            f"1d20[{raw}]{'+' if bonus >= 0 else ''}{bonus} = {total} vs DC {dc} — ✗ Failed"
+            if bonus != 0 else
+            f"1d20[{raw}] = {total} vs DC {dc} — ✗ Failed"
+        )
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": "1d20",
+                "total": total,
+                "breakdown": gm_log_breakdown,
+                "note": (
+                    f"💔 {char.name} lost concentration on {buff_name}"
+                    f"{paired_note}"
+                ),
+                "visibility": Visibility.GM_ONLY.value,
+                "user_id": None,
+                "user_name": "GM log",
+                "char_name": char.name,
+            },
+        })
 
     return {
         "rolled": raw,

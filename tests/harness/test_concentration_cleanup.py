@@ -162,6 +162,88 @@ async def test_end_concentration_drops_caster_buff(gm_client, tavik_rested):
     assert "concentration-hold-person" not in await _tavik_buff_keys(gm_client, tavik["id"])
 
 
+async def test_concentration_break_emits_gm_only_log(gm_client, gm_ws, alice_ws, roster):
+    """v2.39.0: when a player loses concentration via a failed save,
+    the server emits a GM-only ``roll`` event narrating the loss +
+    the paired buffs that dropped. Players see their own buff vanish
+    but don't get the audit log.
+
+    Setup: install Hunter's Mark on Rowan (concentration), then
+    damage Rowan with massive (≥ 21 HP) damage so DC ≥ 10 + a high
+    chance of failure. The new GM-only roll log should appear in
+    gm_ws but be filtered out of alice_ws by the visibility gate.
+    """
+    rowan = roster["Rowan Quickbow"]
+    pip = roster["Pip Quickfingers"]
+    # Reset everything to a known state.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/rest",
+        json={"type": "long"},
+    )
+    await _seed_battle(gm_client, [
+        {"id": f"tok_test_{rowan['id']}", "char_id": rowan["id"],
+         "name": rowan["name"], "initiative": 10, "hp_current": 44, "hp_max": 44,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": f"tok_test_{pip['id']}", "char_id": pip["id"],
+         "name": pip["name"], "initiative": 8, "hp_current": 30, "hp_max": 30,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+    ])
+    # Install Hunter's Mark on Pip (target) — Rowan is the caster.
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_hunters_mark",
+        json={
+            "character_id": rowan["id"],
+            "target_character_id": pip["id"],
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+    gm_ws.mark()
+    alice_ws.mark()
+    # Damage Rowan heavily so failure is likely. Loop up to 10 times.
+    saw_log = False
+    for _ in range(10):
+        # Reset Rowan's HP between iterations and reinstall the mark
+        # if it dropped.
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/sheet-fields",
+            json={"hp": {"current": 44}},
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_hunters_mark",
+            json={
+                "character_id": rowan["id"],
+                "target_character_id": pip["id"],
+                "override": True,
+            },
+        )
+        gm_ws.mark()
+        alice_ws.mark()
+        # 30 damage → DC = max(10, 15) = 15. Rowan's CON mod is low,
+        # so failure is very likely.
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/sheet-fields",
+            json={
+                "hp": {"current": 14},
+                "hp_change_reason": "damage",
+                "damage_amount": 30,
+            },
+        )
+        cs = await gm_ws.wait_for("concentration_save")
+        if cs["data"]["passed"]:
+            continue  # passed → no log; retry
+        # On fail, the new GM-only roll log entry fires.
+        log = await gm_ws.wait_for("roll", timeout=2.0)
+        assert log["data"]["visibility"] == "gm_only"
+        assert "lost concentration" in log["data"]["note"].lower()
+        assert rowan["name"] in log["data"]["note"]
+        saw_log = True
+        break
+    assert saw_log, "no concentration failure in 10 attempts — flaky env?"
+
+
 async def test_non_concentration_buff_removal_unaffected(gm_client, roster):
     """Removing a non-concentration buff (Rage) does NOT trigger the
     paired-cleanup branch — smoke check that v2.38.0's modified

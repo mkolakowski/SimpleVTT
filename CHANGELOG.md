@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.39.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **GM-only roll-log entry when a player loses concentration on a damage save.** Closes a v2.38.0 T.3e gap: the cleanup helper drops paired condition buffs server-side, but the GM had no roll-log entry summarizing what just happened. Now when `_maybe_concentration_save` rolls a failed save, the server captures the list of paired buffs about to drop (combatant name + buff name pairs) and emits a `roll`-type WS event with `visibility: "gm_only"` carrying a narrative note like "💔 Rowan lost concentration on Hunter's Mark — dropped: Marked → Bandit Alpha · Marked → Bandit Beta". Players don't see this entry (filtered by visibility); the GM gets a single auditable summary in their log. MINOR — additive WS event on the existing `_maybe_concentration_save` path.
+**Description:** One edit. **(1)** `app/routes/tabletop_routes.py` `_maybe_concentration_save` — before calling `_remove_buff` (which triggers the cleanup helper that mutates the state we want to read), snapshots the hub state and collects `(combatant_name, buff_name)` tuples for every paired buff that's about to drop. After the existing `concentration_save` broadcast fires, emits a second `roll`-type broadcast with `visibility: "gm_only"`, `note` carrying the player's name + spell name + paired-drop list, `expression: "1d20"`, `total` + `breakdown` reflecting the failed save. The standard `appendRoll` client handler renders it as a roll-log card; the existing T.3 visibility filter in roll_toast.js / tabletop.js drops it for non-GMs. **(2)** New harness test `test_concentration_break_emits_gm_only_log` — installs Hunter's Mark on Rowan, damages her with 30 HP (DC 15 save), loops up to 10 attempts to land a failure, and asserts the `roll` event carrying `visibility: "gm_only"` and "lost concentration" in the note.
+**Description (cont):** Why a `roll`-type event (not a new event type). The roll-log client already renders `roll` events into the log + respects `gm_only` visibility. Adding a new event type would require a new client handler. Reusing `roll` with the failed-save dice info as `expression`/`total`/`breakdown` and the narrative in `note` gives a useful rendering for free: the GM sees the d20 result that broke concentration alongside the consequence summary.
+
+### Added
+- `app/routes/tabletop_routes.py` `_maybe_concentration_save` — GM-only `roll` broadcast on failed concentration save, narrating the dropped buff + paired effects.
+- `tests/harness/test_concentration_cleanup.py` `test_concentration_break_emits_gm_only_log` — verifies the broadcast fires with the right visibility + content.
+
+### Notes
+- **What to test:** open `/campaign/1` as the GM. Cast Hunter's Mark from Rowan on a bandit. Then damage Rowan via her sheet (HP edit with `hp_change_reason: damage`, e.g. drop her from 44 → 14 HP = 30 damage = DC 15 CON save). If Rowan fails the save, the GM's roll log gains an entry "💔 Rowan Quickbow lost concentration on Hunter's Mark — dropped: Marked → Bandit Alpha". A player joined as Alice does NOT see this entry in their log.
+- **Backward compat.** The `concentration_save` event still fires for everyone (existing behavior). The new GM-only entry is additive.
+
+### Filed
+- Same narrative log for the other concentration-drop paths (manual `/end_buff`, replaced by new cast). Today only the damage-save fail path emits the GM log — by design, since voluntary drops are GM-initiated and don't need a private audit entry. Reconsider if play-testing shows it's useful.
+
+---
+
 ## [2.38.0] - 2026-05-19
 
 **Schema version:** 56
