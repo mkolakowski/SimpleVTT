@@ -9263,6 +9263,21 @@ async def apply_healing(
 
     claim = _heal_claims.get(cast_id)
     if not claim or claim["campaign_id"] != campaign_id:
+        # v2.26.2 fix: when v2.26.0 Phase T.4 auto-applied the heal to
+        # the targeted ally, the claim was popped server-side but a
+        # cached chat card might still render the legacy "🩹 Apply
+        # Healing" button. Detect this by checking the damage-log for
+        # a matching is_heal entry, and return a friendly 200 instead
+        # of the alarming "expired" 404.
+        _purge_attack_damage_log()
+        log_entry = _attack_damage_log.get(cast_id)
+        if log_entry and log_entry.get("is_heal") and log_entry.get("campaign_id") == campaign_id:
+            return {
+                "ok": True,
+                "already_auto_applied": True,
+                "applied": int(log_entry.get("applied") or 0),
+                "message": "Heal was already auto-applied to the targeted ally — use ↶ Undo to revert.",
+            }
         raise HTTPException(404, "Unknown spell cast — it may have expired")
 
     claimed: set = claim["claimed"]

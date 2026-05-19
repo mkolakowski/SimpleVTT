@@ -1888,6 +1888,12 @@
                 btn.disabled = false;
                 return;
             }
+            if (body.already_auto_applied) {
+                showToast(body.message || `🩹 Heal was already auto-applied to the target.`, 'info');
+                // Hide the now-stale heal button so the user doesn't keep clicking.
+                btn.style.display = 'none';
+                return;
+            }
             showToast(`🩹 +${body.rolled} HP applied to your character!`, 'info');
             // UI update arrives via the heal_applied broadcast — no need to patch DOM here
         } catch (e) {

@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.26.2] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Server-side fallback: `/apply_healing` returns a friendly 200 instead of 404 when the claim was already auto-applied by T.4.** User reported still seeing *"Unknown spell cast — it may have expired"* after v2.26.1 — almost certainly a cached chat-card rendered before the v2.26.1 client fix shipped. The v2.26.1 fix only hides the legacy "🩹 Apply Healing" button on *new* casts; chat cards rendered before the page reload still carry the stale button. This commit fixes the issue at the server: when `_heal_claims[cast_id]` is missing AND `_attack_damage_log[cast_id]["is_heal"]` exists, the endpoint returns `{"ok": true, "already_auto_applied": true, "applied": N, "message": "..."}` instead of raising 404. The client toast turns into a calm "Heal was already auto-applied to the targeted ally — use ↶ Undo to revert" and the stale button hides itself. PATCH — defensive server bandaid; the v2.26.1 client fix is still the primary path for fresh casts.
+**Description:** Two edits. **(1)** `app/routes/tabletop_routes.py` `/apply_healing` — when the claim lookup misses, check `_attack_damage_log[cast_id]` for an `is_heal: True` entry scoped to the same campaign. If found, return `{ok, already_auto_applied, applied, message}` (HTTP 200) instead of HTTPException 404. The `applied` field surfaces the magnitude already healed so the toast can echo it if desired. **(2)** `app/static/tabletop.js` `_applyHealing` — when the response carries `already_auto_applied: true`, show the friendly message and `btn.style.display = 'none'` so the now-stale button hides itself.
+
+### Fixed
+- `app/routes/tabletop_routes.py` `/apply_healing` — graceful fallback for cast IDs where v2.26.0 auto-applied the heal and popped the claim. Returns 200 with `already_auto_applied: true` instead of 404.
+- `app/static/tabletop.js` `_applyHealing` — handles `already_auto_applied` response: toast says "already auto-applied — use ↶ Undo" and hides the stale button.
+
+### Notes
+- **What to test:** without hard-refreshing, retry the Tavik → Krieger heal. Click the stale "🩹 Apply Healing" button on the previous cast card. Toast should now read *"Heal was already auto-applied to the targeted ally — use ↶ Undo to revert"* and the button should disappear. On a fresh cast (after the v2.26.1 fix has loaded), the button doesn't render at all.
+- **Backward compat.** The legacy heal-claim flow (casts without a target) is unchanged. Only the auto-applied case takes the new branch.
+
+---
+
 ## [2.26.1] - 2026-05-19
 
 **Schema version:** 56
