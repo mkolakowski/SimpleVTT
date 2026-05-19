@@ -1731,6 +1731,30 @@
         return `<span class="target-tag" title="Targeted: ${escapeHTML(name)}">→ ${escapeHTML(name)}</span>`;
     }
 
+    // v2.26.0 Phase T.4: auto-heal line for spell_cast cards. Renders
+    // "✚ Healed NAME for N HP (HP_BEFORE → HP_AFTER)" when /cast_spell
+    // auto-applied a heal to the targeted combatant. Includes an
+    // ↶ Undo button (reuses /undo_attack_damage which detects heal
+    // entries via the is_heal flag and reverses by damaging the same
+    // amount). Empty when no auto-heal happened.
+    function _autoHealLineHtml(d) {
+        if (!d || !d.auto_heal_applied || d.auto_heal_applied <= 0) return '';
+        const tgt = d.auto_heal_target_name || d.target_name || '';
+        const before = d.auto_heal_hp_before;
+        const after = d.auto_heal_hp_after;
+        const revived = d.auto_heal_revived
+            ? ' <span class="weapon-atk-resist">💚 revived</span>'
+            : '';
+        const hpDelta = (before != null && after != null)
+            ? ` (${before} → ${after} HP)` : '';
+        return `<div class="weapon-atk-line">
+            <span class="weapon-atk-label">✚ Healed</span>
+            <span class="weapon-atk-total">${escapeHTML(tgt)} +${d.auto_heal_applied} HP</span>
+            <span class="weapon-atk-applied">${hpDelta}${revived}</span>
+            <button type="button" class="weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this heal">↶ Undo</button>
+        </div>`;
+    }
+
     function appendSpellCast(d) {
         const ul = document.getElementById('roll-list');
         if (!ul) return;
@@ -1778,6 +1802,7 @@
                     <div class="spell-cast-name">🪄 ${escapeHTML(d.spell_name || 'Spell')} ${_targetTagHtml(d)}</div>
                     ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
                     ${d.spell_desc ? `<div class="spell-cast-desc">${escapeHTML(d.spell_desc)}</div>` : ''}
+                    ${_autoHealLineHtml(d)}
                     <div class="spell-cast-actions"></div>
                     ${_overBudgetBadge(d)}
                     <div class="spell-cast-results"></div>
@@ -1799,6 +1824,38 @@
                 // need them — the spell-cast card itself only uses save/damage/heal.
             },
         }));
+
+        // v2.26.0 Phase T.4: wire the auto-heal undo button if the
+        // server applied a heal to the targeted combatant. Same
+        // endpoint as attack-damage undo (server detects the heal
+        // entry's is_heal flag and reverses by damaging the same
+        // amount).
+        const healUndoBtn = li.querySelector('.weapon-atk-undo');
+        if (healUndoBtn) {
+            healUndoBtn.addEventListener('click', async () => {
+                healUndoBtn.disabled = true;
+                try {
+                    const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/undo_attack_damage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ attack_id: d.id }),
+                    });
+                    if (!r.ok) {
+                        let body; try { body = await r.json(); } catch { body = null; }
+                        (window.showToast || function(m){ alert(m); })(
+                            `Undo failed: ${body ? JSON.stringify(body) : r.status}`, 'error');
+                        healUndoBtn.disabled = false;
+                        return;
+                    }
+                    const data = await r.json().catch(() => ({}));
+                    healUndoBtn.textContent = `↶ Reverted ${data.reverted || ''}`;
+                    healUndoBtn.classList.add('undone');
+                } catch (e) {
+                    console.warn('undo_attack_damage failed:', e);
+                    healUndoBtn.disabled = false;
+                }
+            });
+        }
 
         // Stash the cast metadata on the element so the roll listener can
         // correlate save responses back to this card (matches by note prefix).

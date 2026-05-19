@@ -37,7 +37,7 @@
       "damage_scaling": [],
       "attack_roll": false,
       "save_ability": "",
-      "healing": "",
+      "healing": "1d8",
       "aoe_targets": 1,
       "reroll_trigger": "",
       "transform_picker": "",

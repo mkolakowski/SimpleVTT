@@ -715,6 +715,105 @@ async def _apply_damage_to_combatant(
     }
 
 
+async def _apply_heal_to_combatant(
+    db: Session,
+    campaign_id: int,
+    combatant: dict,
+    heal_amount: int,
+    *,
+    cast_id: str | None = None,
+) -> dict:
+    """v2.26.0 Phase T.4: apply healing to a target combatant. Mirror
+    of ``_apply_damage_to_combatant`` but additive. PC heals route
+    through ``_apply_hp_change`` so the death-save state machine
+    revives a dying target cleanly (heal > 0 → status flips from
+    ``dying`` / ``stable`` / ``dead`` back to ``alive``). NPC heals
+    mutate the hub combatant's ``hp_current`` directly. Heals cap at
+    the target's max HP — RAW.
+
+    The applied amount is logged in ``_attack_damage_log[cast_id]``
+    with ``is_heal: True`` so the chat-card Undo button can reverse
+    the heal (i.e. damage the target by the same amount). Broadcasts
+    ``character_hp_update`` (PC) or ``battle_update`` (NPC).
+    """
+    _purge_attack_damage_log()
+    char_id = combatant.get("char_id")
+    if char_id:
+        char = db.query(Character).filter(Character.id == char_id).first()
+        if not char:
+            return {"applied": 0, "hp_before": 0, "hp_after": 0,
+                    "revived": False}
+        sheet = char.sheet or {}
+        hp = dict(sheet.get("hp") or {})
+        hp_cur = int(hp.get("current") or 0)
+        hp_max = int(hp.get("max") or 0)
+        ds_before = (sheet.get("death_saves") or {}).get("status", "alive")
+        new_hp = (
+            min(hp_max, hp_cur + heal_amount) if hp_max > 0
+            else (hp_cur + heal_amount)
+        )
+        actual = new_hp - hp_cur
+        result = _apply_hp_change(char, new_hp)
+        db.commit()
+        ds_after = result["death_saves"]["status"]
+        revived = ds_before != "alive" and ds_after == "alive"
+        await hub.broadcast(campaign_id, {
+            "type": "character_hp_update",
+            "data": {
+                "character_id": char.id,
+                "hp": result["hp"],
+                "delta": +actual,
+                "source": "heal",
+            },
+        })
+        if cast_id:
+            _attack_damage_log[cast_id] = {
+                "ts": _time.time(),
+                "campaign_id": campaign_id,
+                "target_char_id": char.id,
+                "applied": actual,
+                "is_heal": True,
+            }
+        return {
+            "applied": actual,
+            "hp_before": hp_cur,
+            "hp_after": result["hp"]["current"],
+            "revived": revived,
+        }
+    # NPC path.
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return {"applied": 0, "hp_before": 0, "hp_after": 0, "revived": False}
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant.get("id"):
+            target = c
+            break
+    if target is None:
+        return {"applied": 0, "hp_before": 0, "hp_after": 0, "revived": False}
+    hp_cur = int(target.get("hp_current") or 0)
+    hp_max = int(target.get("hp_max") or 0)
+    new_hp = min(hp_max, hp_cur + heal_amount) if hp_max > 0 else (hp_cur + heal_amount)
+    actual = new_hp - hp_cur
+    target["hp_current"] = new_hp
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+    if cast_id:
+        _attack_damage_log[cast_id] = {
+            "ts": _time.time(),
+            "campaign_id": campaign_id,
+            "target_combatant_id": target.get("id"),
+            "applied": actual,
+            "is_heal": True,
+        }
+    return {
+        "applied": actual,
+        "hp_before": hp_cur,
+        "hp_after": new_hp,
+        "revived": False,
+    }
+
+
 def _mirror_buffs_to_sheet(
     db: Session, character_id: int, buffs: list[dict],
 ) -> None:
@@ -5971,6 +6070,19 @@ async def cast_spell(
     if spell_index >= len(spells):
         raise HTTPException(404, "Spell not found")
     spell = dict(spells[spell_index] or {})
+    # v2.26.0 Phase T.4: enrich the sheet's bare spell entry with the
+    # canonical SRD record (resolved by ``_slug``). Demo seeds carry
+    # ``{name, level, _slug, casting_time}`` only; the auto-heal /
+    # auto-damage paths need the full ``actions[]`` array and
+    # ``healing`` / ``damage`` fields from the SRD JSON. Sheet-side
+    # overrides (homebrew, partial customization) take precedence.
+    spell_slug = (spell.get("_slug") or "").strip().lower()
+    if spell_slug:
+        _hit = local_content.resolve(spell_slug, type="spells", campaign_id=campaign_id)
+        if _hit:
+            srd_rec, _ = _hit
+            for k, v in srd_rec.items():
+                spell.setdefault(k, v)
     spell_level = int(spell.get("level") or 0)
 
     # Allow upcasting via an optional slot_level override; default to spell.level
@@ -6102,7 +6214,14 @@ async def cast_spell(
         "spell_ritual": bool(spell.get("ritual")),
         "spell_damage": spell.get("damage", ""),
         "spell_save_ability": spell.get("save_ability", ""),
-        "spell_healing": spell.get("healing", ""),
+        # v2.26.0 Phase T.4: heal dice may live at the top of the spell
+        # record (legacy demo-seed shape) OR on ``actions[*].healing``
+        # (canonical action_schema shape for SRD content). Take the
+        # first non-empty source so the auto-heal path fires for both.
+        "spell_healing": spell.get("healing") or next(
+            (a.get("healing") for a in (spell.get("actions") or []) if a.get("healing")),
+            "",
+        ),
         "spell_aoe_targets": max(1, int(spell.get("aoe_targets") or 1)),
         "spell_attack_roll": bool(spell.get("attack_roll")),
         "spell_desc": spell.get("desc", "") or spell.get("description", ""),
@@ -6134,6 +6253,57 @@ async def cast_spell(
             "expires": _time.time() + 8 * 3600,
         }
 
+    # v2.26.0 Phase T.4: auto-apply healing to the targeted combatant.
+    # When (a) the spell carries a healing dice expression AND (b) the
+    # caster passed a target_combatant_id (set by double-clicking a
+    # token), roll the heal server-side + apply HP via
+    # ``_apply_heal_to_combatant`` + capture the result for the chat
+    # card. The legacy ``_heal_claims`` flow above stays in place for
+    # casts WITHOUT a target (the chat-card "Heal me" button still
+    # works for opt-in self-claims by allies). When auto-applied here
+    # the heal_claim entry is dropped so the chat card doesn't show
+    # both the per-target line AND the "claim a heal" button.
+    auto_heal_applied = 0
+    auto_heal_hp_before = None
+    auto_heal_hp_after = None
+    auto_heal_revived = False
+    auto_heal_target_name = ""
+    if (
+        payload["spell_healing"]
+        and target_combatant_id
+    ):
+        try:
+            _r = dice_mod.roll(payload["spell_healing"])
+            heal_rolled = max(0, int(_r.total))
+            heal_breakdown = _r.breakdown
+        except dice_mod.DiceParseError:
+            heal_rolled = 0
+            heal_breakdown = ""
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant and heal_rolled > 0:
+            heal_result = await _apply_heal_to_combatant(
+                db, campaign_id, target_combatant, heal_rolled,
+                cast_id=cast_id,
+            )
+            auto_heal_applied = heal_result["applied"]
+            auto_heal_hp_before = heal_result["hp_before"]
+            auto_heal_hp_after = heal_result["hp_after"]
+            auto_heal_revived = heal_result["revived"]
+            auto_heal_target_name = target_combatant.get("name", "")
+            # Drop the heal-claim — heal was already applied to the
+            # single target. (For AoE heals like Mass Healing Word, T.5
+            # will pass multiple target_combatant_ids and we'll loop;
+            # the claim path stays for the existing opt-in flow.)
+            _heal_claims.pop(cast_id, None)
+            # Add structured heal-applied fields to the broadcast.
+            payload["auto_heal_rolled"] = heal_rolled
+            payload["auto_heal_breakdown"] = heal_breakdown
+            payload["auto_heal_applied"] = auto_heal_applied
+            payload["auto_heal_target_name"] = auto_heal_target_name
+            payload["auto_heal_hp_before"] = auto_heal_hp_before
+            payload["auto_heal_hp_after"] = auto_heal_hp_after
+            payload["auto_heal_revived"] = auto_heal_revived
+
     await hub.broadcast(campaign_id, {"type": "spell_cast", "data": payload})
     if updated_slot is not None:
         await hub.broadcast(campaign_id, {
@@ -6161,6 +6331,11 @@ async def cast_spell(
         "target_combatant_id": target_combatant_id or "",
         "target_character_id": target_character_id_in,
         "target_name": target_name_resolved or target_name_in or "",
+        # v2.26.0 Phase T.4: echo auto-heal results for the local toast.
+        "auto_heal_applied": auto_heal_applied,
+        "auto_heal_target_name": auto_heal_target_name,
+        "auto_heal_hp_after": auto_heal_hp_after,
+        "auto_heal_revived": auto_heal_revived,
     }
 
 
@@ -10595,6 +10770,10 @@ async def undo_attack_damage(
 
     target_char_id = entry.get("target_char_id")
     target_combatant_id = entry.get("target_combatant_id")
+    # v2.26.0 Phase T.4: heal entries undo in reverse (damage the
+    # target by the same amount). Damage entries undo by healing.
+    is_heal_entry = bool(entry.get("is_heal"))
+    delta_sign = -1 if is_heal_entry else +1  # +1 = restore HP (undo damage); -1 = remove HP (undo heal)
 
     if target_char_id:
         char = db.query(Character).filter(Character.id == target_char_id).first()
@@ -10603,7 +10782,10 @@ async def undo_attack_damage(
         sheet = char.sheet or {}
         hp_cur = int((sheet.get("hp") or {}).get("current") or 0)
         hp_max = int((sheet.get("hp") or {}).get("max") or 0)
-        new_hp = min(hp_max, hp_cur + applied) if hp_max > 0 else (hp_cur + applied)
+        if delta_sign > 0:
+            new_hp = min(hp_max, hp_cur + applied) if hp_max > 0 else (hp_cur + applied)
+        else:
+            new_hp = max(0, hp_cur - applied)
         result = _apply_hp_change(char, new_hp)
         db.commit()
         await hub.broadcast(campaign_id, {
@@ -10611,12 +10793,13 @@ async def undo_attack_damage(
             "data": {
                 "character_id": char.id,
                 "hp": result["hp"],
-                "delta": +applied,
-                "source": "undo_attack",
+                "delta": delta_sign * applied,
+                "source": "undo_heal" if is_heal_entry else "undo_attack",
             },
         })
         _attack_damage_log.pop(attack_id, None)
-        return {"ok": True, "reverted": applied, "hp_after": result["hp"]["current"]}
+        return {"ok": True, "reverted": applied, "hp_after": result["hp"]["current"],
+                "was_heal": is_heal_entry}
 
     if target_combatant_id:
         state = hub.get_battle(campaign_id)
@@ -10631,12 +10814,16 @@ async def undo_attack_damage(
             raise HTTPException(404, "Target combatant no longer in init")
         hp_cur = int(target.get("hp_current") or 0)
         hp_max = int(target.get("hp_max") or 0)
-        new_hp = min(hp_max, hp_cur + applied) if hp_max > 0 else (hp_cur + applied)
+        if delta_sign > 0:
+            new_hp = min(hp_max, hp_cur + applied) if hp_max > 0 else (hp_cur + applied)
+        else:
+            new_hp = max(0, hp_cur - applied)
         target["hp_current"] = new_hp
         hub.set_battle(campaign_id, state)
         await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
         _attack_damage_log.pop(attack_id, None)
-        return {"ok": True, "reverted": applied, "hp_after": new_hp}
+        return {"ok": True, "reverted": applied, "hp_after": new_hp,
+                "was_heal": is_heal_entry}
 
     raise HTTPException(404, "Damage log entry has no target reference")
 
