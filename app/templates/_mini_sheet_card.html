@@ -180,9 +180,13 @@
                    the v2.3.7+ JS handlers + the localStorage key already use; renaming the
                    data-tab would force coordinated edits across mini-sheet scripts + the
                    monster mini-sheet path for no behavioural gain). #}
+                {# v2.25.0: class_features list for the Features tab. Empty
+                   sheets skip the tab entirely. #}
+                {% set _features_list = sh.get('class_features') or [] %}
                 <div class="mini-tabs" data-char-id="{{ c.id }}">
                     {% if attacks_list %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="attacks">Actions</button>{% endif %}
                     {% if _is_caster and _spell_vis.any %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="spells">Spells</button>{% endif %}
+                    {% if _features_list %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="features">Features</button>{% endif %}
                     <button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="skills">Skills</button>
                 </div>
                 <div class="mini-tab-content" data-char-id="{{ c.id }}">
@@ -367,6 +371,36 @@
                             {% endif %}
                         {% endfor %}
                         </div>{# /.mini-spells #}
+                    </div>
+                    {% endif %}
+                    {# ── Features panel (v2.25.0) ──
+                       Renders sheet["class_features"] entries — Rage,
+                       Reckless Attack, Second Wind, Action Surge,
+                       Lay on Hands, Bardic Inspiration, etc. Each row
+                       has a 🪄 Use button. The mini-sheet's delegated
+                       click handler routes the key to the appropriate
+                       endpoint (mirrors the full-sheet .cf-use logic):
+                       Rage → /use_rage, Second Wind → /use_second_wind,
+                       Action Surge → /use_action_surge, Cutting Words →
+                       /use_cutting_words; anything else → /use_feature. #}
+                    {% if _features_list %}
+                    <div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="features">
+                        <div class="mini-features">
+                        {% for f in _features_list %}
+                        <div class="mini-feature-row mini-row-expandable" title="{{ f.name or f.key }}">
+                            <span class="mini-feature-name">{{ f.name or f.key }}</span>
+                            <button type="button" class="mini-cf-btn"
+                                    data-char-id="{{ c.id }}"
+                                    data-feature-key="{{ f.key or '' }}"
+                                    data-feature-label="{{ f.name or '' }}"
+                                    data-feature-desc="{{ f.desc or '' }}"
+                                    title="Use {{ f.name or f.key }}">🪄 Use</button>
+                        </div>
+                        <div class="mini-feature-detail mini-row-detail">
+                            {% if f.desc %}<div class="mini-row-detail-desc">{{ f.desc }}</div>{% else %}<span class="muted">No description.</span>{% endif %}
+                        </div>
+                        {% endfor %}
+                        </div>
                     </div>
                     {% endif %}
                 </div>{# /.mini-tab-content #}

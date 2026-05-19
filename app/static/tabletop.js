@@ -2824,10 +2824,24 @@
             const avatarHtml = portraitUrl
                 ? `<img class="tt-portrait" src="${escapeHTML(portraitUrl)}" alt="">`
                 : `<span class="tt-swatch" style="background:${escapeHTML(t.color || '#cc3333')}"></span>`;
+            // v2.25.0: 📋 Sheet button — opens the character sheet
+            // (PC) or monster sheet (NPC) via the existing
+            // ``a.character-sheet-link`` / ``a.monster-sheet-link``
+            // interceptor in tabletop.html. Skipped for tokens with
+            // neither character_id nor token_template_id (rare blank
+            // tokens the GM created from the Add Token modal).
+            const sheetBtnHtml = (t.character_id || t.token_template_id)
+                ? `<a class="tt-btn tt-sheet ${t.character_id ? 'character-sheet-link' : 'monster-sheet-link'}"
+                       href="/campaign/${CAMPAIGN_ID}/${t.character_id ? 'character/' + t.character_id : 'monster-template/' + t.token_template_id}/sheet"
+                       target="_blank" rel="noopener"
+                       data-${t.character_id ? 'character' : 'monster'}-name="${escapeHTML(t.label || '')}"
+                       title="Open ${t.character_id ? 'character' : 'monster'} sheet">📋</a>`
+                : '';
             row.innerHTML = `
                 ${avatarHtml}
                 <span class="tt-name" contenteditable="true" spellcheck="false">${escapeHTML(t.label)}</span>
                 <button class="tt-btn tt-vis" title="${t.is_hidden ? 'Show token' : 'Hide token'}">${t.is_hidden ? '🚫' : '👁'}</button>
+                ${sheetBtnHtml}
                 <label class="tt-btn tt-art-label" title="Upload art">
                     🖼<input class="tt-art-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none">
                 </label>

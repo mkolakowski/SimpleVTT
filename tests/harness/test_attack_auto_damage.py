@@ -99,12 +99,39 @@ async def _seed_battle(gm_client, combatants):
     )
 
 
+async def _set_auto_apply(gm_client, on: bool) -> None:
+    """Explicit toggle helper so tests don't depend on the previous
+    suite leaving the setting in a known state."""
+    form = {
+        "name": "Demo Campaign",
+        "description": "demo",
+        "game_system": "dnd5e",
+        "gm_tab_color": "",
+        "font_override": "",
+        "default_encounter_id": "",
+        "hp_threshold_1": "",
+        "hp_threshold_2": "",
+        "hp_threshold_3": "",
+        "hp_threshold_4": "",
+        "auto_play_playlist_id": "",
+        "auto_play_mode": "order",
+        "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(f"/campaign/{CAMPAIGN_ID}/settings", data=form,
+                        follow_redirects=False)
+
+
 async def test_attack_hit_determination_without_auto_apply(gm_client, krieger_full, roster):
     """auto_apply_damage off: hit/target_ac in response but no HP
     changes."""
     krieger = krieger_full
     pip = roster["Pip Quickfingers"]
     pip_cid = f"tok_{pip['id']}"
+    # Defensive: ensure the toggle is OFF for this test even if the
+    # previous test in another file left it on.
+    await _set_auto_apply(gm_client, False)
     await _seed_battle(gm_client, [
         _mkc(f"tok_{krieger['id']}", krieger['id'], name="Krieger"),
         _mkc(pip_cid, pip['id'], hp_cur=30, hp_max=30, name=pip['name']),
