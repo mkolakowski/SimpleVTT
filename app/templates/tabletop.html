@@ -3906,7 +3906,46 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     const allTemplates  = initData.templates  || [];
 
     let battle = { combatants: [], turn_index: 0, round: 1, active: false };
-    try { const s = localStorage.getItem(BATTLE_KEY); if (s) battle = JSON.parse(s); } catch {}
+    try {
+        const s = localStorage.getItem(BATTLE_KEY);
+        if (s) {
+            const parsed = JSON.parse(s);
+            if (parsed && Array.isArray(parsed.combatants)) battle = parsed;
+        }
+    } catch {}
+    // v2.25.1: defensive cleanup. After a demo reset the server's
+    // tokens get new IDs but the user's localStorage battle state
+    // still has combatants referencing the old token / template IDs.
+    // The dup check in "From Map" sees these stale char_id matches
+    // and skips the new tokens, leaving the init tracker showing
+    // zombie entries (or nothing if the entry was minimal). Filter
+    // out any combatant whose name is empty AND has no char_id /
+    // token_template_id matching a current token / template — those
+    // are unrecoverable orphans. Keep valid ones as-is.
+    if (battle && Array.isArray(battle.combatants)) {
+        const _validCharIds = new Set((allTokens || [])
+            .map(t => t.character_id).filter(Boolean));
+        const _validTmplIds = new Set((allTokens || [])
+            .map(t => t.token_template_id).filter(Boolean));
+        const _cleaned = battle.combatants.filter(c => {
+            if (!c || !c.name) return false;  // empty entry — drop
+            if (c.char_id && _validCharIds.has(c.char_id)) return true;
+            if (c.token_template_id && _validTmplIds.has(c.token_template_id)) return true;
+            // Manual entries (no char_id, no template) with a name —
+            // keep them; the GM created them deliberately.
+            if (!c.char_id && !c.token_template_id) return true;
+            return false;
+        });
+        if (_cleaned.length !== battle.combatants.length) {
+            console.info(
+                `[battle] cleaned ${battle.combatants.length - _cleaned.length} orphan combatant(s) ` +
+                `from stale localStorage. Refresh init via "From Map" if needed.`,
+            );
+            battle.combatants = _cleaned;
+            // Reset turn_index if it now points past the end.
+            if (battle.turn_index >= _cleaned.length) battle.turn_index = 0;
+        }
+    }
 
     function saveBattle() {
         try { localStorage.setItem(BATTLE_KEY, JSON.stringify(battle)); } catch {}

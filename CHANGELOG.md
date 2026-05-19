@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.25.1] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Fix-up: auto-clean stale init-tracker localStorage after demo resets.** User reported From Map showing "All N already in init" toast but no init entries visible — root cause was the user's localStorage holding combatant entries from a prior session whose `char_id` still matched current tokens (Pip is always char_id=1 after every demo reset) so the dup check skipped them, but the entries themselves were stale and rendered as empty rows OR had token_template_ids that no longer existed. Adds a defensive cleanup at hydrate time: any combatant with an empty name OR a `token_template_id` that doesn't match any current template gets filtered out before render. Manual GM-created entries (no char_id, no token_template_id, but a name) survive. Console log when entries are dropped so the user knows it happened. Also hardens the localStorage parse to guard against malformed JSON. PATCH — pure defensive fix.
+**Description:** Two edits in `app/templates/tabletop.html`. **(1)** localStorage parse — extra `Array.isArray(parsed.combatants)` guard prevents assigning a malformed entry to `battle` (was: any non-throwing JSON.parse result was accepted as the battle state). **(2)** New cleanup pass after hydrate: iterates `battle.combatants`, keeps only entries that (a) have a name AND (b) either have a `char_id` matching a current token OR a `token_template_id` matching a current template OR are manual entries (no char/template ref). Logs `[battle] cleaned N orphan combatant(s)` to the browser console when entries are dropped. Resets `turn_index` to 0 if it points past the cleaned list.
+
+### Fixed
+- `app/templates/tabletop.html` — init tracker no longer shows "From Map → all already in init" toast against zombie combatant entries from a prior demo reset.
+- `app/templates/tabletop.html` — localStorage parse guard against malformed shapes.
+
+### Notes
+- **What to test:** open `/campaign/1`, hit From Map. If init looked broken before the upgrade, the new cleanup pass should drop the zombie entries; the From Map button should then add the live tokens fresh. The console will log `[battle] cleaned N orphan combatant(s)` if any orphans were found.
+- **Backward compat.** Pure defensive cleanup; legitimate combatants survive.
+
+---
+
 ## [2.25.0] - 2026-05-19
 
 **Schema version:** 56
