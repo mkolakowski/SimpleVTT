@@ -277,6 +277,14 @@ async def _install_buff(
     semantics — re-casting Rage extends the duration cleanly).
     Broadcasts ``buff_update`` with the full new buff list for the
     target combatant.
+
+    v2.19.1: when ``buff["concentration"]`` is truthy, the caster can
+    only sustain ONE concentration buff at a time RAW — installing a
+    new concentration buff drops any existing concentration buff on
+    the same combatant first (Hunter's Mark replaces Hex, etc.). This
+    matches the RAW "you lose concentration on the previous spell"
+    rule. The dropped buff's removal is included in the same
+    ``buff_update`` broadcast (single message, one render pass).
     """
     if not isinstance(buff, dict) or not buff.get("key"):
         return False
@@ -295,8 +303,23 @@ async def _install_buff(
         buffs = []
         target["buffs"] = buffs
     key = str(buff["key"])
-    # Replace existing entry with same key (refresh) or append new one.
-    new_list = [b for b in buffs if (b or {}).get("key") != key]
+    is_concentration = bool(buff.get("concentration"))
+    # Build new list: drop the same-key entry (refresh), AND if this is
+    # a concentration buff drop any OTHER concentration buff on the
+    # combatant (RAW "you can only concentrate on one thing"). The
+    # dropped concentration buff(s) ride out on the broadcast so the
+    # client renders the swap atomically.
+    new_list = []
+    replaced_concentration_keys = []
+    for b in buffs:
+        b = b or {}
+        b_key = b.get("key")
+        if b_key == key:
+            continue  # refresh — drop the old, append the new below
+        if is_concentration and b.get("concentration"):
+            replaced_concentration_keys.append(b_key)
+            continue
+        new_list.append(b)
     new_list.append(dict(buff))
     target["buffs"] = new_list
     hub.set_battle(campaign_id, state)
@@ -305,9 +328,103 @@ async def _install_buff(
         "data": {
             "character_id": character_id,
             "buffs": new_list,
+            "replaced_concentration": replaced_concentration_keys,
         },
     })
     return True
+
+
+def _concentration_buff_for(
+    campaign_id: int, character_id: int,
+) -> dict | None:
+    """Return the (single) concentration buff active on the combatant,
+    or None. There can be at most one per combatant — ``_install_buff``
+    enforces the invariant. Used by the concentration-save hook to
+    decide whether a damage event needs to trigger a save.
+    """
+    for b in _get_buffs(campaign_id, character_id):
+        if (b or {}).get("concentration"):
+            return b
+    return None
+
+
+async def _maybe_concentration_save(
+    campaign_id: int, char: Character, damage_amount: int,
+) -> dict | None:
+    """If the character is concentrating on a buff and just took
+    ``damage_amount`` damage, roll a CON save (DC = max(10, damage //
+    2)) and act on the result. Returns ``None`` if no concentration
+    buff is active or no damage was taken; otherwise returns
+    ``{rolled, total, dc, passed, dropped_key}`` and broadcasts a
+    ``concentration_save`` event. On fail, the concentration buff is
+    removed via ``_remove_buff`` (which fires its own ``buff_update``).
+
+    v2.19.1: auto-roll keeps the player UX consistent with the rest of
+    the demo's "click → roll → result" loop. Players who prefer to
+    hand-roll their concentration save can reinstall the buff after a
+    miss; the GM can also rebroadcast via /use_rage / /cast_hunters_mark
+    / /cast_hex.
+    """
+    if damage_amount <= 0:
+        return None
+    buff = _concentration_buff_for(campaign_id, char.id)
+    if buff is None:
+        return None
+
+    # DC = max(10, damage // 2). Floor division per RAW.
+    dc = max(10, damage_amount // 2)
+    sheet = dict(char.sheet or {})
+    abilities = dict(sheet.get("abilities") or {})
+    con_score = int(abilities.get("CON") or 10)
+    con_mod = (con_score - 10) // 2
+    # CON save proficiency? RAW: Barbarian + Fighter + Sorcerer have
+    # CON save proficiency; nothing else on the demo's PC roster. War
+    # Caster / Resilient (CON) feats also grant it, but neither is in
+    # the demo today — defer feat-driven proficiency to a future commit.
+    saves = dict(sheet.get("saving_throws") or {})
+    pb = int(sheet.get("proficiency_bonus") or 0)
+    prof_bonus = pb if saves.get("CON") else 0
+    bonus = con_mod + prof_bonus
+
+    try:
+        result = dice_mod.roll(f"1d20+{bonus}" if bonus >= 0 else f"1d20{bonus}")
+        total = result.total
+        raw = total - bonus  # the d20 face value
+    except dice_mod.DiceParseError:
+        raw = 10
+        total = 10 + bonus
+
+    passed = total >= dc
+    dropped_key = None
+    if not passed:
+        dropped_key = buff.get("key")
+        if dropped_key:
+            await _remove_buff(campaign_id, char.id, dropped_key)
+
+    await hub.broadcast(campaign_id, {
+        "type": "concentration_save",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "buff_key": buff.get("key"),
+            "buff_name": buff.get("name"),
+            "damage_amount": damage_amount,
+            "dc": dc,
+            "rolled": raw,
+            "bonus": bonus,
+            "total": total,
+            "passed": passed,
+            "dropped_key": dropped_key,
+        },
+    })
+
+    return {
+        "rolled": raw,
+        "total": total,
+        "dc": dc,
+        "passed": passed,
+        "dropped_key": dropped_key,
+    }
 
 
 async def _remove_buff(
@@ -7511,6 +7628,502 @@ async def end_buff(
     return {"ok": True, "removed_key": key}
 
 
+# ----------- API: Hunter's Mark (Ranger L1) — Phase C.2 -----------
+#
+# v2.19.1 Phase C.2: first concentration buff. Hunter's Mark is the
+# canonical "concentration on a marked target" spell — bonus action to
+# cast, +1d6 weapon damage on hits against the marked creature,
+# advantage on Survival/Perception checks to find it. Concentration
+# breaks on damage (rolled via _maybe_concentration_save). The (B)
+# Phase B roll-time intercept will read this buff's effects to add the
+# +1d6 to attacks against the marked target.
+
+async def _resolve_target_combatant(
+    campaign_id: int,
+    *,
+    target_character_id: int | None,
+    target_name: str | None,
+) -> tuple[str | None, str | None]:
+    """Resolve a picked target into ``(combatant_id, display_name)``.
+
+    Returns the (stable) combatant.id string + a display name suitable
+    for chat messages. Returns ``(None, target_name)`` when the target
+    isn't currently in init — the buff stamps a name-only target that
+    the (B) intercept matches loosely.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None, target_name
+    for c in state.get("combatants") or []:
+        if target_character_id and c.get("char_id") == target_character_id:
+            return c.get("id"), c.get("name") or target_name
+        if target_name and c.get("name") == target_name:
+            return c.get("id"), c.get("name")
+    return None, target_name
+
+
+@router.post("/api/campaign/{campaign_id}/cast_hunters_mark")
+async def cast_hunters_mark(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Cast Hunter's Mark on a target — install the concentration buff
+    + decrement a Ranger spell slot + mark the bonus chip.
+
+    Body: ``{character_id, target_character_id?, target_name?, slot_level?, override?}``.
+
+    RAW: Bonus action. Concentration, up to 1 hour. Mark a creature:
+    +1d6 weapon damage on hits against it, advantage on Wisdom
+    (Perception / Survival) checks to find it. Re-mark a new creature
+    as a bonus action when the previous target drops to 0 HP.
+    Upcastable: L3 = up to 8 hours; L4+ = up to 24 hours.
+
+    Validates Ranger class (409), Hunter's Mark on the spell list (409),
+    Phase 4 over-budget on bonus slot, L1+ Ranger slot available (409
+    no_slot). Atomically decrements the Ranger slot + installs the
+    Hunter's Mark concentration buff (drops any existing concentration
+    buff on the caster — RAW one-at-a-time rule) + marks the bonus chip.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_character_id = body.get("target_character_id")
+    target_character_id = int(target_character_id) if target_character_id else None
+    target_name = (body.get("target_name") or "").strip() or None
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw else 1
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_character_id and not target_name:
+        raise HTTPException(400, "target_character_id or target_name is required")
+    if slot_level < 1:
+        slot_level = 1
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != "ranger":
+        # Multi-class lookup
+        has_ranger = any(
+            (entry.get("class") or "").strip().lower() == "ranger"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_ranger:
+            raise HTTPException(409, "Hunter's Mark requires Ranger level 1+")
+
+    # Verify Hunter's Mark is on the known spell list (defensive — the
+    # client UI shouldn't surface it otherwise).
+    spells = list(sheet.get("spells") or [])
+    has_hm = any(
+        (s.get("_slug") == "hunters-mark") or
+        (str(s.get("name", "")).lower() == "hunter's mark")
+        for s in spells
+    )
+    if not has_hm:
+        raise HTTPException(409, "Hunter's Mark is not on this character's spell list")
+
+    # Decrement a Ranger slot.
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get("ranger") or {})
+    slot_key = str(slot_level)
+    slot = dict(per_class.get(slot_key) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": "ranger",
+            "spell_name": "Hunter's Mark",
+        })
+
+    # Phase 4 over-budget gate (bonus slot).
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "hunters-mark",
+            "label": "Hunter's Mark",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[slot_key] = slot
+    all_slots["ranger"] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Resolve the target.
+    target_combatant_id, resolved_name = await _resolve_target_combatant(
+        campaign_id,
+        target_character_id=target_character_id,
+        target_name=target_name,
+    )
+    display_target = resolved_name or "the target"
+
+    # Duration scales with slot level: L1-L2 = 1 hour (600 rounds), L3-L4
+    # = 8 hours (4800 rounds), L5+ = 24 hours (14400 rounds). For demo
+    # purposes we cap displayed duration at 100 rounds so the chip text
+    # stays compact; the buff persists until removed or concentration
+    # breaks regardless.
+    if slot_level >= 5:
+        duration_rounds = 100  # display cap
+        duration_label = "24h"
+    elif slot_level >= 3:
+        duration_rounds = 100
+        duration_label = "8h"
+    else:
+        duration_rounds = 100  # display cap; RAW 1 hour = 600 rounds
+        duration_label = "1h"
+
+    # Install the concentration buff. Replaces any existing
+    # concentration buff on the caster (RAW).
+    buff = {
+        "key": "hunters-mark",
+        "name": "Hunter's Mark",
+        "icon": "🎯",
+        "source_caster_id": None,  # filled by client from broadcast
+        "target_combatant_id": target_combatant_id,
+        "target_character_id": target_character_id,
+        "target_name": resolved_name or target_name,
+        "duration_rounds": duration_rounds,
+        "duration_max": duration_rounds,
+        "duration_label": duration_label,
+        "concentration": True,
+        "effects": {
+            "weapon_hit_bonus_dice": "1d6",
+            "weapon_hit_bonus_target_combatant_id": target_combatant_id,
+            "advantage_on": ["perception_to_find_target", "survival_to_find_target"],
+        },
+        "desc": (
+            f"Concentration ({duration_label}). +1d6 weapon damage on hits "
+            f"against {display_target}. Advantage on Perception / Survival "
+            f"checks to find it."
+        ),
+    }
+    await _install_buff(campaign_id, char.id, buff)
+
+    # Mark the bonus slot.
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"🎯 Hunter's Mark → {display_target}",
+            "feature_desc": (
+                f"Bonus action. Concentration ({duration_label}). +1d6 weapon "
+                f"damage on hits against {display_target}. L{slot_level} slot."
+            ),
+            "source": "hunters-mark",
+            "target_character_id": target_character_id,
+            "target_name": resolved_name or target_name,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": "ranger",
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "target_combatant_id": target_combatant_id,
+        "target_character_id": target_character_id,
+        "target_name": resolved_name or target_name,
+        "duration_rounds": duration_rounds,
+        "duration_label": duration_label,
+    }
+
+
+# ----------- API: Hex (Warlock L1) — Phase C.2 -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_hex")
+async def cast_hex(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Cast Hex on a target — install the concentration buff + decrement
+    a Warlock spell slot + mark the bonus chip.
+
+    Body: ``{character_id, target_character_id?, target_name?,
+    slot_level?, ability?, override?}``.
+
+    RAW: Bonus action. Concentration, up to 1 hour. Hex a creature:
+    +1d6 necrotic damage on weapon / spell hits against it,
+    disadvantage on ability checks made with the chosen ability.
+    Re-hex a new creature as a bonus action when the previous target
+    drops to 0 HP. Upcasts: L3 = up to 8 hours; L5+ = up to 24 hours.
+
+    ``ability`` (one of STR/DEX/CON/INT/WIS/CHA, defaults to STR) is
+    the ability the marked target has disadvantage on.
+
+    Validates Warlock class (409), Hex on the spell list (409), Phase 4
+    over-budget on bonus slot, Warlock slot available at slot_level
+    (default = highest castable = L3 for Lv 5 Warlock). Concentration
+    swap rule via ``_install_buff``.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_character_id = body.get("target_character_id")
+    target_character_id = int(target_character_id) if target_character_id else None
+    target_name = (body.get("target_name") or "").strip() or None
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw else 1
+    ability = (body.get("ability") or "STR").upper()
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_character_id and not target_name:
+        raise HTTPException(400, "target_character_id or target_name is required")
+    if ability not in ("STR", "DEX", "CON", "INT", "WIS", "CHA"):
+        ability = "STR"
+    if slot_level < 1:
+        slot_level = 1
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != "warlock":
+        has_warlock = any(
+            (entry.get("class") or "").strip().lower() == "warlock"
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_warlock:
+            raise HTTPException(409, "Hex requires Warlock level 1+")
+
+    # Verify Hex is on the spell list.
+    spells = list(sheet.get("spells") or [])
+    has_hex = any(
+        (s.get("_slug") == "hex") or
+        (str(s.get("name", "")).lower() == "hex")
+        for s in spells
+    )
+    if not has_hex:
+        raise HTTPException(409, "Hex is not on this character's spell list")
+
+    # Find a usable Warlock slot. For Warlock Lv 5 the table only has
+    # L3 slots; if the caller asked for L1 we upgrade to whatever's
+    # actually available (Pact Magic).
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get("warlock") or {})
+    # Pick the lowest available slot at or above slot_level.
+    chosen_level = None
+    for k in sorted(per_class.keys(), key=lambda x: int(x)):
+        try:
+            lv = int(k)
+        except ValueError:
+            continue
+        if lv < slot_level:
+            continue
+        s = per_class.get(k) or {}
+        if int(s.get("used") or 0) < int(s.get("total") or 0):
+            chosen_level = lv
+            break
+    if chosen_level is None:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": "warlock",
+            "spell_name": "Hex",
+        })
+    slot = dict(per_class.get(str(chosen_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    slot_level = chosen_level  # update for downstream
+
+    # Phase 4 over-budget gate (bonus slot).
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "hex",
+            "label": "Hex",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots["warlock"] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Resolve target.
+    target_combatant_id, resolved_name = await _resolve_target_combatant(
+        campaign_id,
+        target_character_id=target_character_id,
+        target_name=target_name,
+    )
+    display_target = resolved_name or "the target"
+
+    # Duration scales with slot level.
+    if slot_level >= 5:
+        duration_rounds = 100
+        duration_label = "24h"
+    elif slot_level >= 3:
+        duration_rounds = 100
+        duration_label = "8h"
+    else:
+        duration_rounds = 100
+        duration_label = "1h"
+
+    buff = {
+        "key": "hex",
+        "name": "Hex",
+        "icon": "🕷️",
+        "source_caster_id": None,
+        "target_combatant_id": target_combatant_id,
+        "target_character_id": target_character_id,
+        "target_name": resolved_name or target_name,
+        "duration_rounds": duration_rounds,
+        "duration_max": duration_rounds,
+        "duration_label": duration_label,
+        "concentration": True,
+        "effects": {
+            "weapon_hit_bonus_dice": "1d6",
+            "weapon_hit_bonus_damage_type": "necrotic",
+            "weapon_hit_bonus_target_combatant_id": target_combatant_id,
+            "disadvantage_on_ability_check": ability,
+        },
+        "desc": (
+            f"Concentration ({duration_label}). +1d6 necrotic on weapon/spell "
+            f"hits against {display_target}. Disadvantage on {ability} checks."
+        ),
+    }
+    await _install_buff(campaign_id, char.id, buff)
+
+    # Mark the bonus slot.
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"🕷️ Hex ({ability}) → {display_target}",
+            "feature_desc": (
+                f"Bonus action. Concentration ({duration_label}). +1d6 necrotic "
+                f"on hits against {display_target}. Disadvantage on {ability} "
+                f"checks. L{slot_level} slot."
+            ),
+            "source": "hex",
+            "target_character_id": target_character_id,
+            "target_name": resolved_name or target_name,
+            "ability": ability,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": "warlock",
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "target_combatant_id": target_combatant_id,
+        "target_character_id": target_character_id,
+        "target_name": resolved_name or target_name,
+        "ability": ability,
+        "duration_rounds": duration_rounds,
+        "duration_label": duration_label,
+    }
+
+
 # ----------- API: get a character's current action-economy state -----------
 #
 # Phase 4a (v2.7.2) Layer A dimming: the full character sheet polls
@@ -11439,6 +12052,13 @@ async def patch_sheet_fields(
         )
 
     db.commit()
+
+    # v2.19.1 Phase C.2: if this was damage AND the character is
+    # concentrating on a buff, roll a CON save (DC = max(10, damage//2))
+    # and drop the buff on fail. Auto-rolled server-side; broadcasts
+    # ``concentration_save`` so every client sees the result.
+    if hp_result and is_damage and damage_amount > 0:
+        await _maybe_concentration_save(campaign_id, char, damage_amount)
 
     if hp_result and hp_result["status_changed"]:
         await hub.broadcast(campaign_id, {
