@@ -283,6 +283,103 @@ async def test_save_spell_no_auto_damage_when_toggle_off(gm_client, tavik_rested
     await _set_auto_apply(gm_client, on=True)
 
 
+async def test_save_or_suck_installs_buff_on_fail(gm_client, tavik_rested):
+    """v2.32.0 T.3c: Hold Person on a bandit (Wis +0) → at low save
+    bonus the bandit fails the WIS save ~65% of the time. We cast in
+    a small loop and verify that when ``auto_save_passed`` is False
+    the buff fields populate (key=paralyzed, name=Paralyzed) AND the
+    bandit's combatant.buffs in the battle state carries the entry."""
+    tavik = tavik_rested
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next((t for t in templates if "bandit" in t["name"].lower()), templates[0])
+    saw_buff = False
+    saw_save = False
+    for attempt in range(20):
+        # Long-rest Tavik so each iteration has a fresh spell slot.
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/rest",
+            json={"type": "long"},
+        )
+        await _seed_battle(gm_client, [
+            {"id": f"tok_test_{tavik['id']}", "char_id": tavik["id"],
+             "name": tavik["name"], "initiative": 10, "hp_current": 30, "hp_max": 30,
+             "buffs": [],
+             "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+            {"id": "tok_test_bandit_buff", "char_id": None,
+             "token_template_id": bandit_tmpl["id"],
+             "name": bandit_tmpl["name"], "initiative": 7, "hp_current": 11, "hp_max": 11,
+             "buffs": [],
+             "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        ])
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": tavik["id"],
+                "spell_index": HOLD_PERSON_INDEX,
+                "slot_level": 2,
+                "class_slug": "cleric",
+                "target_combatant_id": "tok_test_bandit_buff",
+                "target_name": bandit_tmpl["name"],
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        if data["auto_save_passed"] is False:
+            saw_buff = True
+            assert data["auto_save_buff_key"] == "paralyzed"
+            assert data["auto_save_buff_name"] == "Paralyzed"
+            assert data["auto_save_buff_duration"] == 10
+            break
+        else:
+            saw_save = True
+            # When the save succeeds, no buff is installed.
+            assert data["auto_save_buff_key"] == ""
+    # Cap protection: at least one branch fired in 20 attempts.
+    assert saw_buff or saw_save
+
+
+async def test_save_or_suck_skips_unknown_spell(gm_client, tavik_rested):
+    """Sacred Flame has no entry in _SPELL_CONDITION_MAP (it's a
+    damage spell, not save-or-suck). Even when the bandit fails, no
+    buff is installed."""
+    tavik = tavik_rested
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next((t for t in templates if "bandit" in t["name"].lower()), templates[0])
+    await _seed_battle(gm_client, [
+        {"id": f"tok_test_{tavik['id']}", "char_id": tavik["id"],
+         "name": tavik["name"], "initiative": 10, "hp_current": 30, "hp_max": 30,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": "tok_test_bandit_sf", "char_id": None,
+         "token_template_id": bandit_tmpl["id"],
+         "name": bandit_tmpl["name"], "initiative": 7, "hp_current": 11, "hp_max": 11,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+    ])
+    SACRED_FLAME_INDEX = 0
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": tavik["id"],
+            "spell_index": SACRED_FLAME_INDEX,
+            "slot_level": 0,
+            "class_slug": "cleric",
+            "target_combatant_id": "tok_test_bandit_sf",
+            "target_name": bandit_tmpl["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    # Sacred Flame has damage → save-for-half block fires; T.3c block
+    # is skipped (damage_expr truthy).
+    assert data["auto_save_buff_key"] == ""
+    assert data["auto_save_buff_name"] == ""
+
+
 async def test_non_save_spell_no_auto_save(gm_client, tavik_rested, roster):
     """Healing Word (no save_ability) → auto-save not invoked."""
     tavik = tavik_rested

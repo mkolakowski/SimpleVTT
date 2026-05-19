@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.32.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Phase T.3c — save-or-suck spells install conditions on NPCs.** Extends v2.30.0/v2.31.0 — when an NPC fails a save vs a save-or-suck spell (no damage roll on the action), the server installs the matching condition buff on the target combatant. Hold Person → Paralyzed, Charm Person → Charmed, Fear → Frightened, Hideous Laughter → Incapacitated. Spell→condition mapping lives in a new module-level dict (`_SPELL_CONDITION_MAP`) keyed by the spell's SRD slug; expanding the supported set is a one-entry edit. The buff includes a duration, concentration flag, and a list of mechanical effects the mini-sheet can surface. MINOR — new visible UI line + new buff installer helper + 4 new fields on the cast broadcast/response.
+**Description:** Four edits. **(1)** `app/routes/tabletop_routes.py` — new `_SPELL_CONDITION_MAP` dict with 5 entries (Hold Person, Hold Monster, Charm Person, Fear, Hideous Laughter). Each entry has `key`, `name`, `icon`, `duration_rounds`, `concentration`, `effects`. **(2)** New `_install_buff_on_combatant_id(campaign_id, combatant_id, buff)` helper — NPC-friendly sibling of the existing `_install_buff` (which keys on PC `char_id`). Mutates the target combatant's `buffs` list in hub state and broadcasts `battle_update`. Refresh semantics: same `key` replaces the existing entry. **(3)** `/cast_spell` — new save-or-suck branch immediately after the save-for-half damage block. Fires when `damage_expr` is empty AND `auto_save_target_kind == "npc"` AND `auto_save_passed is False`. Looks up `spell_slug` in `_SPELL_CONDITION_MAP`; builds a buff dict from the entry; calls the new install helper; surfaces `auto_save_buff_*` fields on the payload + response. **(4)** `app/static/tabletop.js` `_autoSaveLineHtml` — appends a third line "🥶 Paralyzed Bandit · 10 rounds" under the save verdict + damage line when the buff was installed.
+**Description (cont):** Why NPC-only for v1. PC save-or-suck (e.g., a hostile NPC casting Hold Person on a PC) needs to wait for the PC's roll-request response to know whether they passed. That's a roll-response correlation hook we don't have yet — a future commit can wire `/roll_request/{id}/respond` to apply the consequence on fail. For today, the GM applies the buff manually via the existing mini-sheet `/cast_hunters_mark` / `/end_buff` flows after seeing the player's save roll come back. NPC saves are server-rolled inline so we know the result immediately and the install fires.
+**Description (cont 2):** Why a dict not a content-side schema flag. The action_schema's `applies_condition` field could carry this metadata per-spell, but populating it across the SRD requires touching ~50 JSON files. The module-level dict keeps the v1 footprint tiny (5 spells, 50 lines) and lets us iterate the schema separately. Future content authors can either expand the dict OR ship a richer action.applies_condition flag — both paths work; the runtime check is just `_SPELL_CONDITION_MAP.get(slug)`.
+**Description (cont 3):** Concentration cleanup is filed. RAW: if the caster loses concentration (took damage and failed a CON save, or cast a new concentration spell), the Paralyzed buff on the target should drop too. Today the buff sticks until its duration expires or the GM clicks "end buff" on the target's mini-sheet. The Phase C concentration tracker exists for caster-side; wiring it to also clean up paired NPC condition buffs needs a "source_concentration_char_id" backlink. Filed.
+
+### Added
+- `app/routes/tabletop_routes.py` `_SPELL_CONDITION_MAP` — Hold Person, Hold Monster, Charm Person, Fear, Hideous Laughter.
+- `app/routes/tabletop_routes.py` `_install_buff_on_combatant_id` — NPC-friendly buff installer keyed by combatant id (not char_id); broadcasts `battle_update`.
+- `app/routes/tabletop_routes.py` `/cast_spell` — save-or-suck branch firing when NPC fails a save with no damage; installs condition buff.
+- `app/static/tabletop.js` `_autoSaveLineHtml` — third line surfacing the installed buff name + duration + icon.
+- `tests/harness/test_cast_spell_save.py` — 2 new tests (`test_save_or_suck_installs_buff_on_fail`, `test_save_or_suck_skips_unknown_spell`).
+
+### Notes
+- **What to test:** open `/campaign/1` as the GM. Double-click a bandit on the map. Cast Hold Person from Tavik. On a failed Wis save → chat card shows "📋 WIS save Bandit: 8 vs DC 14 — ❌ failed" + "🥶 Paralyzed Bandit · 10 rounds". The bandit's init-tracker row gains a Paralyzed buff chip (Phase C UI). Right-click the bandit → mini-sheet → Conditions tab lists the Paralyzed buff with its effects.
+- **Backward compat.** Save-for-half spells (Fireball etc.) still hit the v2.31.0 damage block; only damage-less save spells trigger the new branch. Unknown save-or-suck slugs (any spell not in the dict) skip the install gracefully.
+- **Filed.** T.3d — PC save-or-suck (apply on the PC's roll-request response). T.3e — concentration cleanup (caster drops concentration → buff drops on target).
+
+---
+
 ## [2.31.0] - 2026-05-19
 
 **Schema version:** 56

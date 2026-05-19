@@ -1857,11 +1857,19 @@
                     <button type="button" class="weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this damage">↶ Undo</button>
                 </div>`
                 : '';
+            // v2.32.0 Phase T.3c: save-or-suck buff installed.
+            const buffLine = d.auto_save_buff_name
+                ? `<div class="weapon-atk-line">
+                    <span class="weapon-atk-label">${escapeHTML(d.auto_save_buff_icon || '💫')} ${escapeHTML(d.auto_save_buff_name)}</span>
+                    <span class="weapon-atk-total">${tgt}</span>
+                    <span class="weapon-atk-applied">${d.auto_save_buff_duration ? `${d.auto_save_buff_duration} rounds` : ''}</span>
+                </div>`
+                : '';
             return `<div class="weapon-atk-line">
                 <span class="weapon-atk-label">📋 ${ab} save</span>
                 <span class="weapon-atk-total">${tgt}: ${escapeHTML(String(d.auto_save_rolled))}</span>
                 <span class="weapon-atk-applied">vs DC ${dc} — ${verdict}</span>
-            </div>${dmgLine}`;
+            </div>${dmgLine}${buffLine}`;
         }
         return '';
     }

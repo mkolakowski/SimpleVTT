@@ -334,6 +334,116 @@ async def _install_buff(
     return True
 
 
+# v2.32.0 Phase T.3c: save-or-suck condition mapping. Keyed by the
+# spell's ``_slug`` (resolved from the SRD JSON or demo seed). Each
+# entry describes the condition installed on the target when their
+# save fails — name + key (matches D&D 5e condition vocabulary) +
+# duration + concentration flag + a list of mechanical effects the
+# mini-sheet can surface. Save-or-suck spells without a damage roll
+# look up this map after the save resolves; failing the save
+# installs the buff on the target via _install_buff_on_combatant_id.
+# Expand this dict to support more spells; the empty case skips the
+# install gracefully.
+_SPELL_CONDITION_MAP = {
+    "hold-person": {
+        "key": "paralyzed",
+        "name": "Paralyzed",
+        "icon": "🥶",
+        "duration_rounds": 10,  # 1 minute (10 rounds at 6s/round)
+        "concentration": True,
+        "effects": [
+            "incapacitated",
+            "auto-fail STR / DEX saves",
+            "attacks vs target have advantage",
+            "melee within 5 ft auto-crits",
+        ],
+    },
+    "hold-monster": {
+        "key": "paralyzed",
+        "name": "Paralyzed",
+        "icon": "🥶",
+        "duration_rounds": 10,
+        "concentration": True,
+        "effects": [
+            "incapacitated",
+            "auto-fail STR / DEX saves",
+            "attacks vs target have advantage",
+            "melee within 5 ft auto-crits",
+        ],
+    },
+    "charm-person": {
+        "key": "charmed",
+        "name": "Charmed",
+        "icon": "💗",
+        "duration_rounds": 600,  # 1 hour
+        "concentration": False,
+        "effects": [
+            "regards caster as friendly",
+            "advantage on social interactions with caster",
+        ],
+    },
+    "fear": {
+        "key": "frightened",
+        "name": "Frightened",
+        "icon": "😱",
+        "duration_rounds": 10,
+        "concentration": True,
+        "effects": [
+            "disadvantage on ability checks / attacks while caster in sight",
+            "can't willingly move closer to caster",
+            "drops what it's holding",
+        ],
+    },
+    "hideous-laughter": {
+        "key": "incapacitated",
+        "name": "Incapacitated (Laughing)",
+        "icon": "🤣",
+        "duration_rounds": 10,
+        "concentration": True,
+        "effects": [
+            "prone",
+            "incapacitated — no actions or reactions",
+            "saves again at end of each turn",
+        ],
+    },
+}
+
+
+async def _install_buff_on_combatant_id(
+    campaign_id: int, combatant_id: str, buff: dict,
+) -> bool:
+    """v2.32.0 Phase T.3c — NPC-friendly buff installer. Mutates the
+    target combatant's ``buffs`` list in the hub state and broadcasts
+    ``battle_update`` (NPCs don't have a Character row, so the
+    ``buff_update`` broadcast that ``_install_buff`` uses for PCs
+    isn't routable here). Refresh semantics: re-casting the same
+    condition replaces the existing entry on the same combatant.
+    """
+    if not isinstance(buff, dict) or not buff.get("key"):
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant_id:
+            target = c
+            break
+    if target is None:
+        return False
+    buffs = target.get("buffs")
+    if not isinstance(buffs, list):
+        buffs = []
+        target["buffs"] = buffs
+    key = str(buff["key"])
+    new_list = [b for b in buffs if (b or {}).get("key") != key]
+    new_list.append(dict(buff))
+    target["buffs"] = new_list
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+    return True
+
+
 def _concentration_buff_for(
     campaign_id: int, character_id: int,
 ) -> dict | None:
@@ -6515,6 +6625,52 @@ async def cast_spell(
         payload["auto_save_damage_breakdown"] = auto_save_damage_breakdown
         payload["auto_save_damage_type"] = auto_save_damage_type
 
+        # v2.32.0 Phase T.3c: save-or-suck condition install. When the
+        # spell has NO damage roll but DOES have a save_ability AND
+        # the target failed the save, look up the spell's slug in
+        # ``_SPELL_CONDITION_MAP`` and install the matching condition
+        # buff on the target combatant. Hold Person → Paralyzed,
+        # Charm Person → Charmed, Fear → Frightened, etc. NPC-only
+        # for v1; PC save-or-suck is filed (the PC's owner rolls the
+        # save in their UI — we'd need a roll-response hook to know
+        # whether they passed and install accordingly).
+        auto_save_buff_key = ""
+        auto_save_buff_name = ""
+        auto_save_buff_icon = ""
+        auto_save_buff_duration = 0
+        if (
+            not damage_expr
+            and auto_save_target_kind == "npc"
+            and auto_save_passed is False
+            and target_combatant
+        ):
+            cond = _SPELL_CONDITION_MAP.get(spell_slug)
+            if cond:
+                buff = {
+                    "key": cond["key"],
+                    "name": cond["name"],
+                    "icon": cond.get("icon", "💫"),
+                    "source_char_id": char.id,
+                    "source_char_name": char.name,
+                    "source_spell": payload["spell_name"],
+                    "duration_rounds": int(cond.get("duration_rounds", 10)),
+                    "duration_max": int(cond.get("duration_rounds", 10)),
+                    "concentration": bool(cond.get("concentration")),
+                    "effects": list(cond.get("effects", [])),
+                }
+                installed = await _install_buff_on_combatant_id(
+                    campaign_id, target_combatant.get("id"), buff,
+                )
+                if installed:
+                    auto_save_buff_key = cond["key"]
+                    auto_save_buff_name = cond["name"]
+                    auto_save_buff_icon = cond.get("icon", "💫")
+                    auto_save_buff_duration = int(cond.get("duration_rounds", 10))
+        payload["auto_save_buff_key"] = auto_save_buff_key
+        payload["auto_save_buff_name"] = auto_save_buff_name
+        payload["auto_save_buff_icon"] = auto_save_buff_icon
+        payload["auto_save_buff_duration"] = auto_save_buff_duration
+
         payload["auto_save_ability"] = save_ability
         payload["auto_save_dc"] = auto_save_dc
         payload["auto_save_target_name"] = auto_save_target_name
@@ -6569,6 +6725,11 @@ async def cast_spell(
         "auto_save_damage_rolled": payload.get("auto_save_damage_rolled", 0) if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} else 0,
         "auto_save_damage_applied": payload.get("auto_save_damage_applied", 0) if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} else 0,
         "auto_save_damage_type": payload.get("auto_save_damage_type", "") if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} else "",
+        # v2.32.0 Phase T.3c: echo save-or-suck condition install.
+        "auto_save_buff_key": payload.get("auto_save_buff_key", ""),
+        "auto_save_buff_name": payload.get("auto_save_buff_name", ""),
+        "auto_save_buff_icon": payload.get("auto_save_buff_icon", ""),
+        "auto_save_buff_duration": payload.get("auto_save_buff_duration", 0),
     }
 
 
