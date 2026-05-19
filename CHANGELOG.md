@@ -10,6 +10,17 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.34.2] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Drop HP transition from Second Wind feature-card description.** v2.34.1 stripped HP from the title; user pointed out the description still showed "Bonus action: rolled 1d10+5 = 12. HP 49 → 49 / 49." — duplicative with the HP bar update AND particularly noisy when the character is already at max (49 → 49 zero-change). Description now just narrates the dice roll: "Bonus action: rolled 1d10+5 = 12." HP transitions live in the HP bar, not in the log description. PATCH — single-line server tweak.
+**Description:** One edit in `app/routes/tabletop_routes.py` `/use_second_wind` — `feature_desc` collapsed from two-clause to "Bonus action: rolled {expr} = {recovered}." Dropped the "HP X → Y / max" trailing clause.
+
+### Changed
+- `app/routes/tabletop_routes.py` `/use_second_wind` — `feature_desc` no longer includes the HP-before / HP-after / HP-max suffix.
+
+---
+
 ## [2.34.1] - 2026-05-19
 
 **Schema version:** 56

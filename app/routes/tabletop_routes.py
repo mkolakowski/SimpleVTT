@@ -8475,10 +8475,7 @@ async def use_second_wind(
             "character_name": char.name,
             "user_color": caster_color,
             "feature_name": "💨 Second Wind",
-            "feature_desc": (
-                f"Bonus action: rolled {expr} = {recovered}. HP "
-                f"{hp_cur} → {hp_result['hp']['current']} / {hp_max}."
-            ),
+            "feature_desc": f"Bonus action: rolled {expr} = {recovered}.",
             "source": "second-wind",
             "remaining": sw_cur - 1,
             "max": sw_max,
