@@ -661,6 +661,23 @@ def _read_target_ac(
     return 10
 
 
+def _pick_damage_tier(scaling: list | None, level: int) -> dict | None:
+    """v2.36.0 Phase T.4c: pick the highest-level entry from an
+    ``action.damage_scaling`` list whose ``level`` is ≤ the caster's
+    character level. Server-side mirror of the JS ``_pickDamageTier``
+    in ``action_buttons.js`` so cantrip damage scales correctly when
+    /cast_spell auto-rolls the attack (e.g. Fire Bolt 1d10 at L1-4
+    → 2d10 at L5-10 → 3d10 at L11-16 → 4d10 at L17). Returns the
+    matching tier dict (or None if no tier qualifies)."""
+    if not scaling or not isinstance(scaling, list):
+        return None
+    eligible = [t for t in scaling if isinstance(t, dict) and int(t.get("level") or 1) <= level]
+    if not eligible:
+        return None
+    eligible.sort(key=lambda t: int(t.get("level") or 0), reverse=True)
+    return eligible[0]
+
+
 def _double_dice_for_crit(expr: str) -> str:
     """v2.24.0 Phase T.2: RAW crit doubles weapon damage DICE (not the
     flat modifier). ``1d12+4`` becomes ``2d12+4``; ``2d6+3`` becomes
@@ -6518,14 +6535,26 @@ async def cast_spell(
             else:
                 auto_attack_hit = auto_attack_total >= auto_attack_target_ac
             # Resolve damage dice from the action.
+            _dmg_scaling = None
             for a in (spell.get("actions") or []):
                 if a.get("damage"):
                     auto_attack_damage_type = a.get("damage_type") or ""
                     _dmg_base = a.get("damage") or ""
+                    _dmg_scaling = a.get("damage_scaling") or None
                     break
             else:
                 _dmg_base = spell.get("damage") or ""
                 auto_attack_damage_type = spell.get("damage_type") or auto_attack_damage_type
+            # v2.36.0 Phase T.4c: cantrip scaling — pick the highest
+            # tier whose level ≤ caster's total character level. The
+            # tier's damage expression overrides the base for damage
+            # cantrips (Fire Bolt 1d10 → 2d10 at L5, etc.).
+            _caster_level_for_scaling = int(
+                (char.sheet or {}).get("level") or 1
+            )
+            _tier = _pick_damage_tier(_dmg_scaling, _caster_level_for_scaling)
+            if _tier and _tier.get("damage"):
+                _dmg_base = _tier["damage"]
             if (
                 _dmg_base
                 and auto_attack_hit
@@ -6701,14 +6730,24 @@ async def cast_spell(
         # follow-up.
         damage_expr = ""
         damage_type = ""
+        _save_dmg_scaling = None
         for a in (spell.get("actions") or []):
             if a.get("damage"):
                 damage_expr = a.get("damage") or ""
                 damage_type = a.get("damage_type") or ""
+                _save_dmg_scaling = a.get("damage_scaling") or None
                 break
         if not damage_expr:
             damage_expr = spell.get("damage") or ""
             damage_type = spell.get("damage_type") or damage_type
+        # v2.36.0 Phase T.4c: cantrip scaling applies to save-cantrip
+        # damage too (Sacred Flame 1d8 → 2d8 at L5, Poison Spray 1d12
+        # → 2d12, Vicious Mockery 1d4 → 2d4). Same tier picker as the
+        # attack-roll block.
+        _save_caster_level = int((char.sheet or {}).get("level") or 1)
+        _save_tier = _pick_damage_tier(_save_dmg_scaling, _save_caster_level)
+        if _save_tier and _save_tier.get("damage"):
+            damage_expr = _save_tier["damage"]
         auto_save_damage_rolled = 0
         auto_save_damage_applied = 0
         auto_save_damage_breakdown = ""

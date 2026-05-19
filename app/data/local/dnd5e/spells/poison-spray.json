@@ -34,7 +34,20 @@
       "active_toggle": false,
       "damage": "1d12",
       "damage_type": "poison",
-      "damage_scaling": [],
+      "damage_scaling": [
+        {
+          "level": 5,
+          "damage": "2d12"
+        },
+        {
+          "level": 11,
+          "damage": "3d12"
+        },
+        {
+          "level": 17,
+          "damage": "4d12"
+        }
+      ],
       "attack_roll": false,
       "save_ability": "con",
       "healing": "",

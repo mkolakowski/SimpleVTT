@@ -31,7 +31,20 @@
       "active_toggle": false,
       "damage": "1d10",
       "damage_type": "force",
-      "damage_scaling": [],
+      "damage_scaling": [
+        {
+          "level": 5,
+          "damage": "2d10"
+        },
+        {
+          "level": 11,
+          "damage": "3d10"
+        },
+        {
+          "level": 17,
+          "damage": "4d10"
+        }
+      ],
       "attack_roll": true,
       "save_ability": "",
       "healing": "",

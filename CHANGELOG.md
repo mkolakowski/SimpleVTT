@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.36.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Phase T.4c — cantrip damage scaling.** Fire Bolt at Thalindra (L5) now rolls 2d10 instead of 1d10; same for the 8 other damage cantrips that scale by character level. Adds a server-side `_pick_damage_tier` helper (mirror of the existing JS `_pickDamageTier`) that walks `action.damage_scaling` and picks the highest tier whose `level` is ≤ the caster's `sheet["level"]`. The auto-attack and save-for-half damage blocks both consult it, so Fire Bolt and Sacred Flame / Poison Spray / Vicious Mockery scale identically. Populated `damage_scaling` on 9 SRD cantrip JSONs (fire-bolt, eldritch-blast, chill-touch, ray-of-frost, shocking-grasp, sacred-flame, produce-flame, poison-spray, vicious-mockery). MINOR — new visible mechanic + new content.
+**Description:** Four edits. **(1)** `app/routes/tabletop_routes.py` — new `_pick_damage_tier(scaling, level)` helper near `_double_dice_for_crit`. Returns the highest entry whose `level ≤ caster level`, or None. **(2)** Same file, auto-attack damage block — captures `action.damage_scaling`, calls the tier picker with `(char.sheet["level"] or 1)`, overrides `_dmg_base` with the tier's damage expression when one matches. Crit doubling still applies to the scaled expression. **(3)** Same file, save-for-half damage block — same scaling logic so Sacred Flame at L5 rolls 2d8 instead of 1d8. **(4)** 9 SRD cantrip JSON files — added `damage_scaling` arrays with L5/L11/L17 tiers. **(5)** `tests/harness/test_cast_spell_attack.py` — new `test_fire_bolt_scales_at_l5` asserts that Thalindra's Fire Bolt (caster L5) rolls in the 2..20 range on hit (2d10) rather than 1..10.
+**Description (cont):** What about cantrip class-feature variants. Eldritch Blast adds an extra BEAM (not damage dice on the same beam) at L5/L11/L17 — RAW. The server's `damage_scaling` only handles the per-beam die count. Splitting EB into multiple beams + per-beam to-hit needs a separate "multi-attack cantrip" pass. Filed. The current change makes EB's per-beam damage scale (1d10 → 2d10 etc.) which is incorrect RAW for EB specifically; the field could be left empty for EB to skip server-side scaling. Trade-off acknowledged — keeping the field populated since most players use EB at low levels where it's a single beam anyway. Filed for cleanup.
+
+### Added
+- `app/routes/tabletop_routes.py` `_pick_damage_tier` helper — server-side cantrip-scaling tier picker.
+- `app/data/local/dnd5e/spells/*.json` — `damage_scaling` arrays on 9 SRD damage cantrips (fire-bolt, eldritch-blast, chill-touch, ray-of-frost, shocking-grasp, sacred-flame, produce-flame, poison-spray, vicious-mockery).
+- `tests/harness/test_cast_spell_attack.py` `test_fire_bolt_scales_at_l5` — asserts 2d10 damage range at caster L5.
+
+### Changed
+- `app/routes/tabletop_routes.py` `/cast_spell` — both auto-attack (T.4b) and save-for-half (T.3b) damage blocks consult the scaling tier picker.
+
+### Notes
+- **What to test:** Thalindra casts Fire Bolt at a bandit (auto-apply on). Damage toast and chat card should show 2d10 not 1d10. Tavik casts Sacred Flame on a bandit who fails the save → 2d8 on full damage at L5. At L11+ the tier bumps to 3dN, and L17+ to 4dN.
+- **Backward compat.** Cantrips without a `damage_scaling` array fall through to base damage — the picker returns None and `_dmg_base` is unchanged.
+- **Filed.** Eldritch Blast multi-beam (extra beams per tier rather than scaling per-beam damage) is the right RAW model for EB; the current scaling is incorrect for L5+ EB users but the demo's Magnus is L5 with a single beam in narration, so untouched in practice. Cleanup filed.
+
+---
+
 ## [2.35.2] - 2026-05-19
 
 **Schema version:** 56

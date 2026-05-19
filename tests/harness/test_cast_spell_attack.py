@@ -176,6 +176,58 @@ async def test_spell_attack_no_target_skips_block(gm_client, thalindra_rested):
     assert data["auto_attack_target_ac"] == 0
 
 
+async def test_fire_bolt_scales_at_l5(gm_client, thalindra_rested):
+    """v2.36.0 Phase T.4c: cantrip scaling. Thalindra is L5 in the
+    demo seed; Fire Bolt's base is 1d10 but should scale to 2d10 at
+    character L5. The auto_attack_damage_rolled when hit should fall
+    in the 2..20 range (2d10) — never below 2."""
+    thal = thalindra_rested
+    await _set_auto_apply(gm_client, on=True)
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next((t for t in templates if "bandit" in t["name"].lower()), templates[0])
+    # Loop a few times so we get at least one hit + capture the
+    # damage range. We can't deterministically force a hit, but
+    # Thalindra's L5 spell attack vs bandit AC 12 hits often.
+    saw_hit_with_damage = False
+    for _ in range(15):
+        await _seed_battle(gm_client, [
+            {"id": f"tok_test_{thal['id']}", "char_id": thal["id"],
+             "name": thal["name"], "initiative": 10, "hp_current": 30, "hp_max": 30,
+             "buffs": [],
+             "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+            {"id": "tok_test_bandit_scale", "char_id": None,
+             "token_template_id": bandit_tmpl["id"],
+             "name": bandit_tmpl["name"], "initiative": 7, "hp_current": 50, "hp_max": 50,
+             "buffs": [],
+             "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        ])
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": thal["id"],
+                "spell_index": FIRE_BOLT_INDEX,
+                "slot_level": 0,
+                "class_slug": "wizard",
+                "target_combatant_id": "tok_test_bandit_scale",
+                "target_name": bandit_tmpl["name"],
+                "override": True,
+            },
+        )
+        data = resp.json()
+        if data["auto_attack_hit"] and data["auto_attack_damage_rolled"] > 0:
+            # 2d10 range is 2..20 (ignoring crit which doubles to 4..40).
+            min_dmg = 4 if data["auto_attack_crit"] else 2
+            max_dmg = 40 if data["auto_attack_crit"] else 20
+            assert min_dmg <= data["auto_attack_damage_rolled"] <= max_dmg, (
+                f"L5 Fire Bolt rolled {data['auto_attack_damage_rolled']} — "
+                f"expected {min_dmg}..{max_dmg} (2d10 scaling)"
+            )
+            saw_hit_with_damage = True
+            break
+    assert saw_hit_with_damage, "no hit in 15 attempts — flaky environment?"
+
+
 async def test_non_attack_spell_skips_attack_block(gm_client, roster):
     """Healing Word (no attack_roll) → auto_attack fields stay default."""
     tavik = roster["Brother Tavik Stonebrow"]

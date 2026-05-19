@@ -31,7 +31,20 @@
       "active_toggle": false,
       "damage": "1d4",
       "damage_type": "psychic",
-      "damage_scaling": [],
+      "damage_scaling": [
+        {
+          "level": 5,
+          "damage": "2d4"
+        },
+        {
+          "level": 11,
+          "damage": "3d4"
+        },
+        {
+          "level": 17,
+          "damage": "4d4"
+        }
+      ],
       "attack_roll": false,
       "save_ability": "wis",
       "healing": "",
