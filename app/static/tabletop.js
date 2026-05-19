@@ -780,19 +780,43 @@
         a.remove();
         return true;
     }
+    // v2.21.2: debounce flag to prevent double-fire when both
+    // ``contextmenu`` and ``pointerdown`` fire for the same gesture
+    // (iPad Pro Magic Keyboard trackpad dispatches both).
+    let _lastSheetOpenAt = 0;
     function _handleRightClick(ev) {
         ev.preventDefault();
+        if (Date.now() - _lastSheetOpenAt < 300) return;
         const [x, y] = clientToCanvas(ev);
         for (let i = tokens.length - 1; i >= 0; i--) {
             const t = tokens[i];
             if (!pointInToken(x, y, t)) continue;
-            if (_openSheetForToken(t)) return;
+            if (_openSheetForToken(t)) {
+                _lastSheetOpenAt = Date.now();
+                return;
+            }
         }
     }
     canvas.addEventListener('contextmenu', _handleRightClick);
     // Defense-in-depth: also listen on mapPane in case overlays sit
     // between the cursor and the canvas at right-click time.
     mapPane.addEventListener('contextmenu', _handleRightClick);
+
+    // v2.21.2: iPad Pro Magic Keyboard trackpad — two-finger tap or
+    // Control+click fires ``pointerdown`` with ``button === 2`` and
+    // ``pointerType === 'mouse'``, but iOS Safari sometimes suppresses
+    // the subsequent ``contextmenu`` event (intercepted by the system
+    // text-selection long-press menu). Adding a ``pointerdown`` path
+    // covers the trackpad gesture independently. The ``button !== 2``
+    // and ``pointerType === 'touch'`` filters keep this from
+    // intercepting normal clicks / drag-starts / touchscreen taps.
+    function _handleRightClickPointer(ev) {
+        if (ev.button !== 2) return;            // only right button
+        if (ev.pointerType === 'touch') return; // touchscreen tap, not trackpad
+        _handleRightClick(ev);
+    }
+    canvas.addEventListener('pointerdown', _handleRightClickPointer);
+    mapPane.addEventListener('pointerdown', _handleRightClickPointer);
 
     // ---------- Drag handling ----------
     let dragging = null;     // { token, offsetX, offsetY }

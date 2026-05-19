@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.21.2] - 2026-05-18
+
+**Schema version:** 55
+**Commit summary:** **iPad Pro Magic Keyboard trackpad — right-click opens the character sheet.** The trackpad's two-finger-tap (or Control+click) on iPad Pro fires `pointerdown` with `button === 2` and `pointerType === 'mouse'`, but iOS Safari sometimes intercepts the subsequent `contextmenu` event (the system text-selection long-press menu wins). Adds a parallel `pointerdown` listener that filters to `button === 2` + non-touch pointer types so trackpad right-clicks open the sheet even when `contextmenu` doesn't fire. A 300 ms debounce flag prevents double-opening the sheet when both events fire for the same gesture (which happens on most desktop browsers + non-Safari iPad cases). PATCH — additive gesture coverage; no contract changes.
+**Description:** One edit in `app/static/tabletop.js`. The existing `_handleRightClick` function gained a `_lastSheetOpenAt` timestamp + a 300 ms early-return guard. New `_handleRightClickPointer(ev)` wraps `_handleRightClick` with two filters: `ev.button !== 2` (so primary-button clicks don't open sheets) and `ev.pointerType === 'touch'` (so touchscreen taps don't fire this path — they go through the v2.21.0 touch double-tap path). The wrapper attaches to both `canvas` and `mapPane`, matching the contextmenu listener's defense-in-depth pattern. On standard desktop, both `pointerdown` (button:2) and `contextmenu` fire — the second is debounced. On iPad Pro Magic Keyboard trackpad, `pointerdown` fires reliably while `contextmenu` may be eaten by iOS — the new path catches it. On touchscreen, both filters skip — no regression to the existing touch double-tap = target gesture.
+
+### Fixed
+- `app/static/tabletop.js` — iPad Pro Magic Keyboard trackpad right-click now opens the character sheet via a `pointerdown` listener that fires even when iOS Safari suppresses the `contextmenu` event.
+- `app/static/tabletop.js` — 300 ms debounce flag prevents the sheet from opening twice when both `pointerdown` and `contextmenu` fire for the same gesture.
+
+### Notes
+- **What to test:** iPad Pro with Magic Keyboard: two-finger tap on a PC token (or NPC token) → character / monster sheet opens. Control+click on the trackpad does the same. Normal trackpad clicks (primary button) still drag/pan as expected — the new handler skips them via `button !== 2`. Desktop Chrome / Firefox / Safari unchanged (the existing `contextmenu` handler still fires; the `pointerdown` path is debounced out). Touch-only iPads (no trackpad) unchanged — the `pointerType === 'touch'` filter skips touchscreen taps so the v2.21.0 double-tap = target gesture is preserved.
+- **Why a 300 ms debounce.** Desktop browsers fire BOTH `pointerdown` (button:2) AND `contextmenu` for a right-click — without the debounce, the sheet would open twice (one synthetic anchor click per event). 300 ms is conservative; the two events fire within ~1 ms in practice, so any value above ~20 ms would work.
+- **Backward compat.** Pure additive. No new endpoints; no schema migration. Existing right-click behavior on desktop is unchanged.
+
+---
+
 ## [2.21.1] - 2026-05-18
 
 **Schema version:** 55
