@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.34.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Phase T.4b — spell attack rolls (Fire Bolt etc.) resolve hit / AC / damage automatically.** User reported Fire Bolt wasn't rolling against the target's AC. Root cause: `/cast_spell` had no hit-determination block for spells with `attack_roll: true` on their action. Weapon attacks (T.2) and save spells (T.3) had auto-resolve; spell attack rolls fell through to the legacy "click 🎯 Attack" button which rolled a raw 1d20 without comparing to AC. This commit adds the missing block — every spell with `attack_roll: true` (19 in the SRD: Fire Bolt, Eldritch Blast, Inflict Wounds, Guiding Bolt, Ray of Frost, Scorching Ray, Chill Touch, Shocking Grasp, Vampiric Touch, Acid Arrow, Produce Flame, Arcane Hand, Arcane Sword, Flame Blade, and 5 others) now rolls 1d20+spell-attack-mod vs target AC, applies crit doubling on nat-20, rolls + applies damage on hit (gated by `Campaign.auto_apply_damage`). MINOR — new visible UI surface + new fields on the `/cast_spell` response. No schema changes.
+**Description:** Four edits. **(1)** `app/routes/tabletop_routes.py` `/cast_spell` — new ~80-line auto-attack block between auto-heal and auto-save. Mirrors T.2's weapon-attack flow: looks up `attack_roll` on action (or top-level), computes `spell_atk_bonus = caster.proficiency + caster.spellcasting_mod`, rolls `1d20+bonus`, parses the natural die face for nat-20/nat-1 detection, compares to `_read_target_ac(combatant)`. On hit (or crit), rolls damage with `_double_dice_for_crit` for nat-20, calls existing `_apply_damage_to_combatant` so damage flows through resistance / death-save state machine / damage log (same Undo as weapon attacks). Skips save spells (mutually exclusive in RAW). Echoes 10 `auto_attack_*` fields on the cast broadcast + response. **(2)** `app/static/tabletop.js` — new `_autoAttackLineHtml(d)` helper renders "🎯 Spell attack Bandit: 18 vs AC 12 — ✅ HIT" + damage applied line with ↶ Undo (same `.weapon-atk-undo` class as the T.4 heal undo + T.3b save-damage undo). Injected in `appendSpellCast` between the auto-save line and the action buttons. **(3)** `app/static/roll_toast.js` `spell_cast` branch — fires the attack-roll dice toast immediately + the damage dice toast 1600 ms later, mirroring the weapon_attack pattern from v2.33.1. **(4)** `tests/harness/test_cast_spell_attack.py` — 4 new tests covering Fire Bolt vs NPC (hit/damage roll), toggle-off (rolls but no apply), no-target (skips block), and non-attack spell (Healing Word — block skipped).
+**Description (cont):** Why a separate auto-attack block (not folded into auto-save / auto-heal). RAW separates these three resolution modes — a spell either has `attack_roll: true` (Fire Bolt), a `save_ability` (Fireball, Hold Person), or neither (Magic Missile auto-hits, Healing Word affects ally). The three blocks are mutually exclusive at runtime via gates. Keeping them separate makes each block readable and testable in isolation — the alternative was a 200-line resolution monolith with nested branches.
+**Description (cont 2):** Damage scaling for cantrips (Fire Bolt: 1d10 → 2d10 at L5, 3d10 at L11, 4d10 at L17) is filed. The action schema carries `damage_scaling: list[ActionScalingTier]` already; the resolver in this commit reads only the base `action.damage`. A follow-up reads the caster's level and picks the highest matching tier. For now Fire Bolt at any character level rolls 1d10 — accurate for L1-4 and a known undercount above.
+
+### Added
+- `app/routes/tabletop_routes.py` `/cast_spell` — auto-attack-roll block for spells with `attack_roll: true`.
+- `app/static/tabletop.js` `_autoAttackLineHtml` — chat-card line with verdict + damage + Undo.
+- `app/static/roll_toast.js` `spell_cast` — attack + damage dice toasts (1600 ms stagger).
+- `tests/harness/test_cast_spell_attack.py` — 4 new tests for the Fire Bolt class of spells.
+
+### Fixed
+- Fire Bolt / Eldritch Blast / Inflict Wounds / Guiding Bolt / Ray of Frost / Scorching Ray / Chill Touch / Shocking Grasp / Vampiric Touch / Acid Arrow / Produce Flame / Arcane Hand / Arcane Sword / Flame Blade now roll against the target's AC instead of just rolling a raw d20.
+
+### Notes
+- **What to test:** open `/campaign/1`. Settings → Auto-apply damage ON. Double-click a bandit on the map. Cast Fire Bolt from Thalindra. Toast sequence: 🎯 Fire Bolt → Bandit · vs AC 12 · ✅ HIT (or ❌ MISS / 💥 CRIT) → 1600 ms → 🎲 Fire Bolt → Bandit — fire · −7 HP. Chat card shows the same verdict line + damage applied line with ↶ Undo. Crit doubles the damage dice per RAW.
+- **Backward compat.** Pure additive — toggle off skips the damage apply step but still rolls the attack + damage so the chat card shows what would have happened. Non-attack spells (Healing Word, Hold Person, Misty Step) fall through the block unchanged. The existing manual "🎯 Attack" button on the chat card stays (for spells the GM wants to roll manually), but for targeted attack spells the auto-resolution typically supersedes clicking it.
+- **Filed.** Cantrip damage scaling (1d10 → 2d10 → 3d10 → 4d10 as caster level rises) — needs to read `action.damage_scaling` and pick the matching tier. Filed.
+
+---
+
 ## [2.33.1] - 2026-05-19
 
 **Schema version:** 56

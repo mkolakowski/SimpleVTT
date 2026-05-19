@@ -1820,6 +1820,38 @@
         </div>`;
     }
 
+    // v2.34.0 Phase T.4b: auto-attack-roll line for spell_cast cards
+    // (Fire Bolt / Eldritch Blast / Inflict Wounds / Guiding Bolt /
+    // Scorching Ray / Chill Touch / Ray of Frost / Vampiric Touch /
+    // etc.). Renders the hit determination + optional damage applied,
+    // mirroring the weapon-attack chat card from T.2.
+    function _autoAttackLineHtml(d) {
+        if (!d || d.auto_attack_hit == null) return '';
+        const tgt = escapeHTML(d.auto_attack_target_name || d.target_name || '');
+        const verdict = d.auto_attack_crit
+            ? '<span class="weapon-atk-crit">💥 CRIT</span>'
+            : (d.auto_attack_hit
+                ? '<span class="weapon-atk-hit">✅ HIT</span>'
+                : '<span class="weapon-atk-miss">❌ MISS</span>');
+        const ac = d.auto_attack_target_ac ? ` vs AC ${d.auto_attack_target_ac}` : '';
+        const dmgApplied = d.auto_attack_damage_applied || 0;
+        const dmgType = d.auto_attack_damage_type
+            ? ` ${escapeHTML(d.auto_attack_damage_type)}` : '';
+        const dmgLine = dmgApplied > 0
+            ? `<div class="weapon-atk-line">
+                <span class="weapon-atk-label">🎲 Applied</span>
+                <span class="weapon-atk-total">${tgt} −${dmgApplied}${dmgType}</span>
+                <span class="weapon-atk-applied">${d.auto_attack_crit ? '(crit)' : ''}</span>
+                <button type="button" class="weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this damage">↶ Undo</button>
+            </div>`
+            : '';
+        return `<div class="weapon-atk-line">
+            <span class="weapon-atk-label">🎯 Spell attack</span>
+            <span class="weapon-atk-total">${tgt}: ${escapeHTML(String(d.auto_attack_total || 0))}</span>
+            <span class="weapon-atk-applied">${ac} — ${verdict}</span>
+        </div>${dmgLine}`;
+    }
+
     // v2.30.0 Phase T.3: auto-save line for spell_cast cards. Three
     // states:
     //   - PC target prompted   → "📋 Prompted NAME for ABL save (DC N)"
@@ -1933,6 +1965,7 @@
                     ${d.spell_desc ? `<div class="spell-cast-desc">${escapeHTML(d.spell_desc)}</div>` : ''}
                     ${_autoHealLineHtml(d)}
                     ${_autoSaveLineHtml(d)}
+                    ${_autoAttackLineHtml(d)}
                     <div class="spell-cast-actions"></div>
                     ${_overBudgetBadge(d)}
                     <div class="spell-cast-results"></div>

@@ -408,6 +408,54 @@
             // broadcast (below) fires the toast for that path. This
             // branch only fires when the server pre-rolled + applied
             // the heal, so the broadcast carries auto_heal_breakdown.
+            // v2.34.0 Phase T.4b: dice toasts for the auto-rolled
+            // spell ATTACK roll + damage. Mirrors the weapon_attack
+            // sequencing: attack d20 first, damage 1600 ms later. Pre-
+            // T.4b broadcasts without ``auto_attack_*`` fields skip
+            // this branch (auto_attack_hit is null).
+            if (r.auto_attack_hit != null && r.auto_attack_breakdown) {
+                const nm = r.spell_name || 'Spell';
+                const tgt = r.auto_attack_target_name || r.target_name || '';
+                let verdict = '';
+                if (r.auto_attack_crit) verdict = ' · 💥 CRIT';
+                else if (r.auto_attack_hit) verdict = ' · ✅ HIT';
+                else verdict = ' · ❌ MISS';
+                const acBit = r.auto_attack_target_ac
+                    ? ` vs AC ${r.auto_attack_target_ac}` : '';
+                const tgtBit = tgt ? ` → ${tgt}` : '';
+                showRollToast({
+                    expression: '1d20',
+                    total: r.auto_attack_total,
+                    breakdown: r.auto_attack_breakdown,
+                    note: `🎯 ${nm}${tgtBit}${acBit}${verdict}`,
+                    user_id: r.caster_user_id,
+                    user_name: r.caster_user_name,
+                    char_name: r.caster_char_name,
+                });
+                // Damage toast follows after the d20 settles.
+                if (r.auto_attack_damage_breakdown) {
+                    const dmgApplied = r.auto_attack_damage_applied || 0;
+                    const dmgType = r.auto_attack_damage_type
+                        ? ' — ' + r.auto_attack_damage_type : '';
+                    let suffix = '';
+                    if (dmgApplied > 0) {
+                        suffix = ` · −${dmgApplied} HP`;
+                    } else if (!r.auto_attack_hit) {
+                        suffix = ' · no damage (miss)';
+                    }
+                    const exprMatch = String(r.auto_attack_damage_breakdown)
+                        .match(/(\d+d\d+(?:[+-]\d+)?)/);
+                    setTimeout(() => showRollToast({
+                        expression: exprMatch ? exprMatch[1] : '1d6',
+                        total: r.auto_attack_damage_rolled,
+                        breakdown: r.auto_attack_damage_breakdown,
+                        note: `🎲 ${nm}${tgtBit}${dmgType}${suffix}`,
+                        user_id: r.caster_user_id,
+                        user_name: r.caster_user_name,
+                        char_name: r.caster_char_name,
+                    }), 1600);
+                }
+            }
             if (r.auto_heal_applied && r.auto_heal_breakdown) {
                 const exprMatch = String(r.auto_heal_breakdown).match(/(\d+d\d+(?:[+-]\d+)?)/);
                 const tgt = r.auto_heal_target_name || r.target_name || '';

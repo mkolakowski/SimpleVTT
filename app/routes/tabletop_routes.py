@@ -6437,6 +6437,128 @@ async def cast_spell(
             payload["auto_heal_hp_after"] = auto_heal_hp_after
             payload["auto_heal_revived"] = auto_heal_revived
 
+    # v2.34.0 Phase T.4b: auto-resolve spell ATTACK rolls (Fire Bolt,
+    # Eldritch Blast, Inflict Wounds, Guiding Bolt, Ray of Frost,
+    # Scorching Ray, Chill Touch, Vampiric Touch, etc. — every spell
+    # with ``attack_roll: true`` on the action). Mirrors T.2's
+    # weapon-attack hit determination: spell attack bonus = caster
+    # proficiency + spellcasting mod; rolls 1d20+bonus vs target AC;
+    # natural 20 = crit (doubles dice), natural 1 = miss. On hit (or
+    # crit), rolls damage and applies it via the existing
+    # ``_apply_damage_to_combatant`` helper (same campaign.auto_apply
+    # _damage gate as weapon attacks + save-for-half). Save spells
+    # are skipped here — they use the T.3 save-resolution block
+    # below. The cast broadcast carries ``auto_attack_*`` fields so
+    # the chat card + toast can show the verdict + damage.
+    spell_attack_flag = bool(spell.get("attack_roll")) or any(
+        bool(a.get("attack_roll")) for a in (spell.get("actions") or [])
+    )
+    auto_attack_hit = None
+    auto_attack_crit = False
+    auto_attack_total = 0
+    auto_attack_breakdown = ""
+    auto_attack_target_ac = 0
+    auto_attack_target_name = ""
+    auto_attack_damage_rolled = 0
+    auto_attack_damage_applied = 0
+    auto_attack_damage_type = ""
+    auto_attack_damage_breakdown = ""
+    # Save-ability detection has to happen up front so we can gate the
+    # attack block — a spell with both flags wouldn't be RAW, but the
+    # gate prevents accidental double-rolling.
+    _spell_save_ability_check = bool(
+        spell.get("save_ability") or any(
+            a.get("save_ability") for a in (spell.get("actions") or [])
+        )
+    )
+    if (
+        spell_attack_flag
+        and not _spell_save_ability_check
+        and (target_combatant_id or target_character_id_in)
+    ):
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if not target_combatant and target_character_id_in:
+            target_combatant = {
+                "char_id": int(target_character_id_in),
+                "id": target_combatant_id or "",
+                "name": target_name_resolved or target_name_in or "",
+            }
+        if target_combatant:
+            auto_attack_target_name = target_combatant.get("name", "") or target_name_resolved or ""
+            # Caster's spell attack bonus.
+            caster_sheet_atk = char.sheet or {}
+            caster_prof_atk = int(caster_sheet_atk.get("proficiency_bonus") or 2)
+            caster_spc_atk = (caster_sheet_atk.get("spellcasting_ability") or "").strip().upper()[:3]
+            if caster_spc_atk not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+                caster_spc_atk = "WIS"
+            caster_ab_atk = int(
+                (caster_sheet_atk.get("abilities") or {}).get(caster_spc_atk, 10)
+            )
+            spell_atk_bonus = caster_prof_atk + ((caster_ab_atk - 10) // 2)
+            atk_expr = f"1d20{spell_atk_bonus:+d}"
+            try:
+                _ar = dice_mod.roll(atk_expr)
+                auto_attack_total = int(_ar.total)
+                auto_attack_breakdown = _ar.breakdown
+            except dice_mod.DiceParseError:
+                pass
+            # Pull the raw d20 face from the breakdown for nat-20 / nat-1
+            # detection. dice.py emits ``1d20[N]+B`` so we grab the
+            # bracketed value.
+            _nat_match = _re.search(r"\[(\d+)\]", auto_attack_breakdown)
+            nat = int(_nat_match.group(1)) if _nat_match else (
+                auto_attack_total - spell_atk_bonus
+            )
+            auto_attack_target_ac = _read_target_ac(db, campaign_id, target_combatant)
+            if nat == 20:
+                auto_attack_hit = True
+                auto_attack_crit = True
+            elif nat == 1:
+                auto_attack_hit = False
+            else:
+                auto_attack_hit = auto_attack_total >= auto_attack_target_ac
+            # Resolve damage dice from the action.
+            for a in (spell.get("actions") or []):
+                if a.get("damage"):
+                    auto_attack_damage_type = a.get("damage_type") or ""
+                    _dmg_base = a.get("damage") or ""
+                    break
+            else:
+                _dmg_base = spell.get("damage") or ""
+                auto_attack_damage_type = spell.get("damage_type") or auto_attack_damage_type
+            if (
+                _dmg_base
+                and auto_attack_hit
+                and bool(campaign.auto_apply_damage)
+            ):
+                # Crit doubles the damage dice (not the flat mod) per
+                # T.2's ``_double_dice_for_crit`` helper.
+                roll_expr = _double_dice_for_crit(_dmg_base) if auto_attack_crit else _dmg_base
+                try:
+                    _dr = dice_mod.roll(roll_expr)
+                    auto_attack_damage_rolled = max(0, int(_dr.total))
+                    auto_attack_damage_breakdown = _dr.breakdown
+                except dice_mod.DiceParseError:
+                    auto_attack_damage_rolled = 0
+                if auto_attack_damage_rolled > 0:
+                    dmg_result = await _apply_damage_to_combatant(
+                        db, campaign_id, target_combatant,
+                        auto_attack_damage_rolled,
+                        damage_type=auto_attack_damage_type,
+                        attack_id=cast_id,
+                    )
+                    auto_attack_damage_applied = int(dmg_result.get("applied") or 0)
+        payload["auto_attack_hit"] = auto_attack_hit
+        payload["auto_attack_crit"] = auto_attack_crit
+        payload["auto_attack_total"] = auto_attack_total
+        payload["auto_attack_breakdown"] = auto_attack_breakdown
+        payload["auto_attack_target_ac"] = auto_attack_target_ac
+        payload["auto_attack_target_name"] = auto_attack_target_name
+        payload["auto_attack_damage_rolled"] = auto_attack_damage_rolled
+        payload["auto_attack_damage_applied"] = auto_attack_damage_applied
+        payload["auto_attack_damage_type"] = auto_attack_damage_type
+        payload["auto_attack_damage_breakdown"] = auto_attack_damage_breakdown
+
     # v2.30.0 Phase T.3: save-spell auto-resolution.
     # When the spell carries a ``save_ability`` (top-level OR on an
     # action — same SRD-enrichment fallback the heal path uses) AND
@@ -6730,6 +6852,17 @@ async def cast_spell(
         "auto_save_buff_name": payload.get("auto_save_buff_name", ""),
         "auto_save_buff_icon": payload.get("auto_save_buff_icon", ""),
         "auto_save_buff_duration": payload.get("auto_save_buff_duration", 0),
+        # v2.34.0 Phase T.4b: echo auto spell-attack-roll resolution.
+        "auto_attack_hit": payload.get("auto_attack_hit"),
+        "auto_attack_crit": payload.get("auto_attack_crit", False),
+        "auto_attack_total": payload.get("auto_attack_total", 0),
+        "auto_attack_breakdown": payload.get("auto_attack_breakdown", ""),
+        "auto_attack_target_ac": payload.get("auto_attack_target_ac", 0),
+        "auto_attack_target_name": payload.get("auto_attack_target_name", ""),
+        "auto_attack_damage_rolled": payload.get("auto_attack_damage_rolled", 0),
+        "auto_attack_damage_applied": payload.get("auto_attack_damage_applied", 0),
+        "auto_attack_damage_type": payload.get("auto_attack_damage_type", ""),
+        "auto_attack_damage_breakdown": payload.get("auto_attack_damage_breakdown", ""),
     }
 
 
