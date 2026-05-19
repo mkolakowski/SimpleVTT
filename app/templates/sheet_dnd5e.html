@@ -4540,6 +4540,16 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         // toast note when set, mirroring the chat-card
                         // ``→ NAME`` tag.
                         const tgtSuffix = data.target_name ? ' → ' + data.target_name : '';
+                        // v2.33.0: hit/miss verdict + AC + HP delta on the
+                        // sheet-side toasts (mirrors the WS toast handler
+                        // in roll_toast.js so the rolling player sees the
+                        // same richer detail everyone else does).
+                        let verdict = '';
+                        if (data.is_crit) verdict = ' · 💥 CRIT';
+                        else if (data.hit === true) verdict = ' · ✅ HIT';
+                        else if (data.hit === false) verdict = ' · ❌ MISS';
+                        const acBit = (data.target_ac != null && data.hit != null)
+                            ? ` vs AC ${data.target_ac}` : '';
                         if (data.is_save) {
                             // Save-DC attacks don't have an attack-roll d20;
                             // jump straight to the damage roll if present.
@@ -4548,18 +4558,27 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 expression: '1d20',
                                 total: data.attack_total,
                                 breakdown: data.attack_breakdown,
-                                note: '🎯 ' + nm + tgtSuffix + ' — attack',
+                                note: `🎯 ${nm}${tgtSuffix}${acBit}${verdict}`,
                                 visibility: 'public',
                                 user_id: me,
                             });
                         }
                         if (data.damage_breakdown) {
-                            const dmgNote = '🎲 ' + nm + tgtSuffix + (data.damage_type ? ' — ' + data.damage_type : ' — damage');
-                            // Try to extract the dice expression from the
-                            // breakdown so the popup animates the right number
-                            // of dice. Fallback to "1d6" if parsing fails.
+                            let suffix = '';
+                            if (data.damage_applied > 0 && data.target_hp_after != null) {
+                                suffix = ` · −${data.damage_applied} HP · ${data.target_hp_before ?? '?'} → ${data.target_hp_after} HP`;
+                                if (data.target_resistance_applied) suffix += ' (resist)';
+                                if (data.target_dead) suffix += ' · ☠ dead';
+                                else if (data.target_dying) suffix += ' · 🩸 dying';
+                            } else if (data.hit === false) {
+                                suffix = ' · would-be damage';
+                            }
+                            const dmgNote = `🎲 ${nm}${tgtSuffix}${data.damage_type ? ' — ' + data.damage_type : ''}${suffix}`;
                             const exprMatch = data.damage_breakdown.match(/(\d+d\d+(?:[+-]\d+)?)/);
-                            window.showRollToast({
+                            // v2.33.0: delay the damage toast 600 ms so
+                            // it lands after the attack-roll toast (same
+                            // sequencing as the WS-broadcast path).
+                            const fire = () => window.showRollToast({
                                 expression: exprMatch ? exprMatch[1] : '1d6',
                                 total: data.damage_total,
                                 breakdown: data.damage_breakdown,
@@ -4567,6 +4586,11 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 visibility: 'public',
                                 user_id: me,
                             });
+                            if (!data.is_save && data.attack_breakdown) {
+                                setTimeout(fire, 600);
+                            } else {
+                                fire();
+                            }
                         }
                         // v2.16.0: bonus-damage toast (Sneak Attack, Divine
                         // Smite, etc.) when the endpoint rolled additional
@@ -4575,14 +4599,17 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         if (data.bonus_damage_total != null && data.bonus_damage_total > 0) {
                             const bonusNote = '✨ ' + (data.bonus_damage_label || 'Bonus damage');
                             const bonusExprMatch = (data.bonus_damage_breakdown || '').match(/(\d+d\d+(?:[+-]\d+)?)/);
-                            window.showRollToast({
+                            // v2.33.0: stagger bonus damage at t=1200ms
+                            // so the user reads attack → damage → bonus
+                            // sequentially (each ~600 ms apart).
+                            setTimeout(() => window.showRollToast({
                                 expression: bonusExprMatch ? bonusExprMatch[1] : '1d6',
                                 total: data.bonus_damage_total,
                                 breakdown: data.bonus_damage_breakdown,
                                 note: bonusNote,
                                 visibility: 'public',
                                 user_id: me,
-                            });
+                            }), 1200);
                         }
                     }
                 } finally {

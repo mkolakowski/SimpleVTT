@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.33.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Roll toasts now narrate hit/miss + HP delta and stagger the damage popup after the attack-roll popup.** Previously the attack and damage toasts fired simultaneously and the attack toast just showed the d20 result — you had to wait for the chat card or HP bar to know if the hit landed. Now: the attack toast surfaces "🎯 Warhammer → Bandit · vs AC 12 · ✅ HIT" (or ❌ MISS or 💥 CRIT) inline; the damage toast pops 600 ms later with "🎲 Warhammer → Bandit — slashing · −7 HP · 11 → 4 HP"; bonus-damage toasts (Sneak Attack / Divine Smite) stagger 1200 ms after the attack. Heal toasts get the same treatment: "✚ Healing Word → Krieger · +4 HP · 50 → 54 HP · 💚 revived". MINOR — visible UX improvement on existing toast surface, no schema or contract changes.
+**Description:** Two edits. **(1)** `app/static/roll_toast.js` — `weapon_attack` branch builds a richer note string from the T.2 broadcast fields (`hit`, `is_crit`, `target_ac`, `target_name`, `damage_applied`, `target_hp_before`, `target_hp_after`, `target_resistance_applied`, `target_dying`, `target_dead`). The damage-toast call is wrapped in `setTimeout(fire, 600)` so the attack toast lands first (skipped for save-DC attacks since they have no attack-roll toast). The `spell_cast` heal branch also gains a richer note: HP delta + revived tag. **(2)** `app/templates/sheet_dnd5e.html` `.atk-strike` direct-toast block mirrors the same logic — the rolling player sees the same enriched detail as everyone else. Bonus-damage toast (Sneak Attack / Divine Smite) staggered at `setTimeout(..., 1200)` so the player reads attack → damage → bonus sequentially.
+**Description (cont):** Why 600 ms / 1200 ms. The dice-spin animation runs ~1.5 s total before the result settles, but the verdict text on the toast label is visible immediately. 600 ms is long enough that the attack toast registers as a distinct event without making the user wait — and the damage toast can begin its own dice spin while the attack one is still settling. The toasts stack vertically (existing layout) so both stay on-screen.
+**Description (cont 2):** Edge cases. Save-DC attacks (no attack-roll d20) fire the damage toast immediately, no delay — there's no prior toast to wait for. Misses with `damage_applied == 0` show "would-be damage" as the suffix so the user knows the dice still rolled but didn't apply. Resistance / dying / dead surface as suffix tags so a single glance summarizes the round-defining outcomes. Pre-T.2 weapon-attack broadcasts without the hit/AC fields fall through gracefully — the verdict bit becomes empty and the toast looks identical to v2.32.0.
+
+### Changed
+- `app/static/roll_toast.js` `weapon_attack` handler — attack toast includes "→ TARGET vs AC N · VERDICT" verdict; damage toast delayed 600 ms; damage note includes HP delta + resistance/dying/dead tags.
+- `app/static/roll_toast.js` `spell_cast` heal handler — heal toast includes +N HP / HP-delta / revived tag.
+- `app/templates/sheet_dnd5e.html` `.atk-strike` direct toast block — same verdict + delay + delta format as the WS path; bonus damage staggered at 1200 ms.
+
+### Notes
+- **What to test:** open `/campaign/1`. Settings → Auto-apply damage ON. Double-click a bandit on the map. Strike with Krieger's Greataxe. Toast sequence: 🎯 Greataxe → Bandit · vs AC 12 · ✅ HIT (or ❌ MISS / 💥 CRIT) → 600 ms → 🎲 Greataxe → Bandit — slashing · −13 HP · 11 → 0 HP · ☠ dead. Try with auto-apply OFF: same toasts but no HP delta suffix. Cast Healing Word at Krieger (at half HP): ✚ Healing Word → Krieger · +4 HP · 27 → 31 HP.
+- **Backward compat.** The note string is the only thing that changed; older clients that don't surface a `note` line just show the dice + breakdown. Sheet-side direct toasts and WS toasts now match — the same verdict shows whether the player attacked from the sheet (direct toast) or someone else attacked them (WS toast).
+
+---
+
 ## [2.32.0] - 2026-05-19
 
 **Schema version:** 56

@@ -334,26 +334,54 @@
             // attack die, jumping straight to the damage line, same as
             // the .atk-strike handler in sheet_dnd5e.html does.
             const nm = r.attack_name || 'Attack';
-            const me = _meId();
+            const tgt = r.target_name || '';
+            // v2.33.0: richer attack toast. Includes "→ TARGET",
+            // "vs AC N", and a HIT/MISS/CRIT verdict — pulled from
+            // the T.2 hit-determination payload. Falls back gracefully
+            // when no target was set (attack without target = no
+            // verdict, just the dice toast like pre-T.2).
             if (!r.is_save && r.attack_breakdown) {
+                let verdict = '';
+                if (r.is_crit) verdict = ' · 💥 CRIT';
+                else if (r.hit === true) verdict = ' · ✅ HIT';
+                else if (r.hit === false) verdict = ' · ❌ MISS';
+                const acBit = (r.target_ac != null && r.hit != null)
+                    ? ` vs AC ${r.target_ac}` : '';
+                const tgtBit = tgt ? ` → ${tgt}` : '';
                 showRollToast({
                     expression: '1d20',
                     total: r.attack_total,
                     breakdown: r.attack_breakdown,
-                    note: '🎯 ' + nm + ' — attack',
+                    note: `🎯 ${nm}${tgtBit}${acBit}${verdict}`,
                     user_id: r.caster_user_id,
                     user_name: r.caster_user_name,
                     char_name: r.caster_char_name,
                 });
             }
+            // v2.33.0: delay the damage toast by 600 ms so the attack
+            // toast lands first and the user reads them sequentially
+            // (the dice animation lasts ~1.5 s but the verdict line is
+            // visible immediately). The delay is skipped on save-DC
+            // attacks (no attack-roll toast to wait for).
             if (r.damage_breakdown) {
-                // Pull the dice shape out of the breakdown so the toast
-                // animates the right number of dice (e.g. "1d8+2 = 7" →
-                // expression "1d8+2"). Fall back to "1d6" if the
-                // breakdown is some non-standard format.
                 const exprMatch = String(r.damage_breakdown).match(/(\d+d\d+(?:[+-]\d+)?)/);
-                const dmgNote = '🎲 ' + nm + (r.damage_type ? ' — ' + r.damage_type : ' — damage');
-                showRollToast({
+                const typeBit = r.damage_type ? ` ${r.damage_type}` : '';
+                const tgtBit = tgt ? ` → ${tgt}` : '';
+                // Build a richer note describing what the damage roll
+                // means in context. When auto_apply is on and the hit
+                // landed we surface HP_BEFORE → HP_AFTER so the user
+                // sees the consequence in one glance.
+                let suffix = '';
+                if (r.damage_applied > 0 && r.target_hp_after != null) {
+                    suffix = ` · −${r.damage_applied} HP · ${r.target_hp_before ?? '?'} → ${r.target_hp_after} HP`;
+                    if (r.target_resistance_applied) suffix += ' (resist)';
+                    if (r.target_dead) suffix += ' · ☠ dead';
+                    else if (r.target_dying) suffix += ' · 🩸 dying';
+                } else if (r.hit === false) {
+                    suffix = ' · would-be damage';
+                }
+                const dmgNote = `🎲 ${nm}${tgtBit}${typeBit ? ' — ' + typeBit.trim() : ''}${suffix}`;
+                const fire = () => showRollToast({
                     expression: exprMatch ? exprMatch[1] : '1d6',
                     total: r.damage_total,
                     breakdown: r.damage_breakdown,
@@ -362,6 +390,11 @@
                     user_name: r.caster_user_name,
                     char_name: r.caster_char_name,
                 });
+                if (!r.is_save && r.attack_breakdown) {
+                    setTimeout(fire, 600);
+                } else {
+                    fire();
+                }
             }
             return;
         }
@@ -377,11 +410,20 @@
             if (r.auto_heal_applied && r.auto_heal_breakdown) {
                 const exprMatch = String(r.auto_heal_breakdown).match(/(\d+d\d+(?:[+-]\d+)?)/);
                 const tgt = r.auto_heal_target_name || r.target_name || '';
+                // v2.33.0: include HP delta + revived tag so the toast
+                // explains exactly what happened. "✚ Healing Word →
+                // Krieger · +4 HP · 50 → 54 HP" or, if a dying ally
+                // came back, "… · 💚 revived".
+                let suffix = ` · +${r.auto_heal_applied} HP`;
+                if (r.auto_heal_hp_before != null && r.auto_heal_hp_after != null) {
+                    suffix += ` · ${r.auto_heal_hp_before} → ${r.auto_heal_hp_after} HP`;
+                }
+                if (r.auto_heal_revived) suffix += ' · 💚 revived';
                 showRollToast({
                     expression: exprMatch ? exprMatch[1] : (r.spell_healing || '1d4'),
                     total: r.auto_heal_rolled || r.auto_heal_applied,
                     breakdown: r.auto_heal_breakdown,
-                    note: '✚ ' + (r.spell_name || 'Heal') + (tgt ? ' → ' + tgt : ''),
+                    note: `✚ ${r.spell_name || 'Heal'}${tgt ? ' → ' + tgt : ''}${suffix}`,
                     user_id: r.caster_user_id,
                     user_name: r.caster_user_name,
                     char_name: r.caster_char_name,
