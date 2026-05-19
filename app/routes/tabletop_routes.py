@@ -8474,7 +8474,7 @@ async def use_second_wind(
             "character_id": char.id,
             "character_name": char.name,
             "user_color": caster_color,
-            "feature_name": f"💨 Second Wind → +{actual_healed} HP",
+            "feature_name": "💨 Second Wind",
             "feature_desc": (
                 f"Bonus action: rolled {expr} = {recovered}. HP "
                 f"{hp_cur} → {hp_result['hp']['current']} / {hp_max}."

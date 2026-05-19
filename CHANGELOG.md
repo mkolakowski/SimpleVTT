@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.34.1] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Strip the "+N HP" suffix from the Second Wind feature-card title.** User noticed the roll-log card for Garrik's Second Wind showed "💨 Second Wind → +7 HP" in the title and ALSO "Bonus action: rolled 1d10+5 = 7. HP 21 → 28 / 38" in the description — the HP detail was duplicated. The HP bar updates on its own when the heal applies, so the title only needs to name the feature; the description already carries the dice + HP transition for readers who want the detail. PATCH — single-line server tweak.
+**Description:** One edit in `app/routes/tabletop_routes.py` `/use_second_wind` — `"feature_name": f"💨 Second Wind → +{actual_healed} HP"` → `"feature_name": "💨 Second Wind"`. The `feature_desc` line is unchanged, so the roll-card subtitle still narrates the dice expression + roll total + HP before/after for anyone scanning the log.
+
+### Changed
+- `app/routes/tabletop_routes.py` `/use_second_wind` — `feature_name` is now just "💨 Second Wind"; HP delta stays in `feature_desc`.
+
+### Notes
+- **What to test:** open `/campaign/1` as the GM. Open Garrik's sheet → use Second Wind. Roll-log card shows "💨 Second Wind" as the title (no "+N HP"), with the dice + HP transition still in the smaller description line under it. The HP bar updates as before.
+- **Backward compat.** Existing harness test asserts `"Second Wind" in feature_name`, which still passes. No schema changes.
+
+---
+
 ## [2.34.0] - 2026-05-19
 
 **Schema version:** 56
