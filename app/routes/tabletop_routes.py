@@ -723,6 +723,23 @@ def _purge_attack_damage_log() -> None:
         _attack_damage_log.pop(k, None)
 
 
+# v2.37.0 Phase T.3d: side-channel context for PC save-or-suck spells.
+# When ``/cast_spell`` creates a RollRequest for a PC-targeted save
+# spell (Hold Person at a player ally), we stash the spell's slug +
+# the target's character_id here so that when the PC clicks Roll on
+# their prompt — which lands in ``/roll_request/{id}/respond`` —
+# we can install the matching condition buff on the PC if they
+# failed the save. Keyed by ``roll_request.id``. 8-hour TTL.
+_save_request_context: dict[int, dict] = {}
+
+
+def _purge_save_request_context() -> None:
+    cutoff = _time.time() - 8 * 3600
+    stale = [k for k, v in _save_request_context.items() if v.get("ts", 0) < cutoff]
+    for k in stale:
+        _save_request_context.pop(k, None)
+
+
 async def _apply_damage_to_combatant(
     db: Session,
     campaign_id: int,
@@ -6138,7 +6155,52 @@ async def respond_roll_request(
             },
         },
     )
-    return {"ok": True, "total": rec.total, "breakdown": rec.breakdown}
+
+    # v2.37.0 Phase T.3d: if this roll-request response corresponds to
+    # a save-or-suck spell prompted at a PC (Hold Person at Krieger,
+    # etc.) and the PC FAILED the save, install the matching condition
+    # buff on them via ``_install_buff`` (PC-keyed sibling of the NPC
+    # path used in T.3c). Context lives in ``_save_request_context``
+    # keyed by req_id; populated by /cast_spell at prompt-creation time.
+    auto_buff_installed = ""
+    _purge_save_request_context()
+    ctx = _save_request_context.get(roll_req.id)
+    if ctx and ctx.get("campaign_id") == campaign_id and roll_req.dc is not None:
+        if result.total < roll_req.dc:
+            cond = _SPELL_CONDITION_MAP.get(ctx.get("spell_slug") or "")
+            tgt_char_id = ctx.get("target_character_id")
+            if cond and tgt_char_id:
+                buff = {
+                    "key": cond["key"],
+                    "name": cond["name"],
+                    "icon": cond.get("icon", "💫"),
+                    "source_char_id": int(ctx.get("caster_char_id") or 0),
+                    "source_char_name": ctx.get("caster_char_name") or "",
+                    "source_spell": ctx.get("spell_name") or "",
+                    "duration_rounds": int(cond.get("duration_rounds", 10)),
+                    "duration_max": int(cond.get("duration_rounds", 10)),
+                    "concentration": bool(cond.get("concentration")),
+                    "effects": list(cond.get("effects", [])),
+                }
+                installed = await _install_buff(
+                    campaign_id, int(tgt_char_id), buff,
+                )
+                if installed:
+                    auto_buff_installed = cond["name"]
+                    _mirror_buffs_to_sheet(
+                        db, int(tgt_char_id),
+                        _get_buffs(campaign_id, int(tgt_char_id)),
+                    )
+        # One-shot — drop the context whether failure or pass so a
+        # later test on the same request can't accidentally trigger.
+        _save_request_context.pop(roll_req.id, None)
+
+    return {
+        "ok": True,
+        "total": rec.total,
+        "breakdown": rec.breakdown,
+        "auto_buff_installed": auto_buff_installed,
+    }
 
 
 # ----------- API: cast spell -----------
@@ -6612,6 +6674,7 @@ async def cast_spell(
     auto_save_target_name = ""
     auto_save_target_kind = ""  # "pc", "npc", or ""
     auto_save_prompted = False
+    auto_save_prompt_id = 0
     auto_save_dc = 0
     auto_save_rolled = None
     auto_save_passed = None
@@ -6682,6 +6745,25 @@ async def cast_spell(
                     },
                 })
                 auto_save_prompted = True
+                auto_save_prompt_id = req.id
+                # v2.37.0 Phase T.3d: stash the cast context so the
+                # roll-response handler can install the matching
+                # condition buff if the PC fails. Slug + char_id +
+                # DC give /roll_request/{id}/respond enough to look
+                # the buff up in _SPELL_CONDITION_MAP.
+                _purge_save_request_context()
+                _save_request_context[req.id] = {
+                    "ts": _time.time(),
+                    "campaign_id": campaign_id,
+                    "spell_slug": spell_slug,
+                    "spell_name": payload["spell_name"],
+                    "target_character_id": int(tgt_char.id),
+                    "target_name": tgt_char.name,
+                    "dc": int(auto_save_dc),
+                    "save_ability": save_ability,
+                    "caster_char_id": int(char.id),
+                    "caster_char_name": char.name,
+                }
             elif target_combatant.get("token_template_id"):
                 # ---- NPC target → server rolls the save ----
                 auto_save_target_kind = "npc"
@@ -6837,6 +6919,7 @@ async def cast_spell(
         payload["auto_save_target_name"] = auto_save_target_name
         payload["auto_save_target_kind"] = auto_save_target_kind
         payload["auto_save_prompted"] = auto_save_prompted
+        payload["auto_save_prompt_id"] = auto_save_prompt_id
         payload["auto_save_rolled"] = auto_save_rolled
         payload["auto_save_passed"] = auto_save_passed
         payload["auto_save_breakdown"] = auto_save_breakdown
@@ -6879,6 +6962,7 @@ async def cast_spell(
         "auto_save_target_name": auto_save_target_name,
         "auto_save_target_kind": auto_save_target_kind,
         "auto_save_prompted": auto_save_prompted,
+        "auto_save_prompt_id": auto_save_prompt_id,
         "auto_save_rolled": auto_save_rolled,
         "auto_save_passed": auto_save_passed,
         "auto_save_breakdown": auto_save_breakdown,

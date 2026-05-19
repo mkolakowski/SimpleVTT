@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.37.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Phase T.3d — PC save-or-suck spells auto-install conditions on save failure.** T.3c (v2.32.0) handled the NPC side: hostile cast at an NPC → server rolls inline → buff installs if the NPC fails. T.3d closes the loop for PCs: hostile NPC casts Hold Person at a PC ally → `/cast_spell` creates a RollRequest scoped to the PC's owner AND stashes the cast context (spell slug + target char_id + DC) in a new TTL-bounded `_save_request_context` dict keyed by req_id. When the PC clicks Roll (POSTs `/roll_request/{id}/respond`), the response handler reads the context and installs the matching condition buff on the PC via `_install_buff` if they failed. Cast response gains `auto_save_prompt_id`; respond response gains `auto_buff_installed`. MINOR — new server-side correlation hook + 3 new harness tests.
+**Description:** Three edits. **(1)** `app/routes/tabletop_routes.py` — new module-level `_save_request_context: dict[int, dict]` + `_purge_save_request_context()` TTL helper (8 h, mirrors `_attack_damage_log` / `_heal_claims` pattern). **(2)** `/cast_spell` PC save branch — after creating the RollRequest, stashes `{ts, campaign_id, spell_slug, spell_name, target_character_id, target_name, dc, save_ability, caster_char_id, caster_char_name}` in the context dict keyed by `req.id`. Surfaces `auto_save_prompt_id` on the payload + response so the rolling player's UI knows which prompt to mark. **(3)** `/roll_request/{id}/respond` — after rolling + broadcasting, looks up the request id in `_save_request_context`. If found AND `result.total < roll_req.dc` AND the spell slug is in `_SPELL_CONDITION_MAP`, builds the condition buff dict (same shape T.3c uses) and calls `_install_buff(campaign_id, target_character_id, buff)` (PC-keyed installer). Mirrors the buff to the sheet via `_mirror_buffs_to_sheet`. One-shot: drops the context regardless of pass/fail so a later /respond on the same request can't double-fire. Response carries `auto_buff_installed` (buff name string when installed, empty otherwise).
+**Description (cont):** Why TTL-bounded dict instead of a DB column. The cast→prompt→response correlation only needs to live until the player clicks Roll (typically within minutes of the cast). Adding a column to `roll_requests` would require a schema migration + cleanup on table truncation; the in-memory dict matches the existing `_heal_claims` pattern and survives only for the 8 h TTL window. Trade-off: server restart drops in-flight prompts. Acceptable for v1 since restart is GM-initiated and players naturally re-cast.
+
+### Added
+- `app/routes/tabletop_routes.py` `_save_request_context` + `_purge_save_request_context` — in-memory cast→prompt correlation.
+- `app/routes/tabletop_routes.py` `/cast_spell` payload + response — `auto_save_prompt_id` field.
+- `app/routes/tabletop_routes.py` `/roll_request/{id}/respond` — T.3d branch installs condition buff on PC save failure; response gains `auto_buff_installed`.
+- `tests/harness/test_save_spell_pc_buff.py` — 3 new tests (cast creates prompt with id; fail installs Paralyzed; non-stashed request doesn't trigger).
+
+### Changed
+- `tests/harness/test_cast_spell_save.py` `test_save_for_half_applies_half_on_success` — Sacred Flame damage range updated from `1..8` to `2..16` per v2.36.0 cantrip scaling (Tavik is L5).
+
+### Notes
+- **What to test:** open `/campaign/1` as the GM. Cast Hold Person from a hostile NPC source at Krieger (or open Tavik's sheet and cast at Krieger as a hostile-spell example). Krieger's player sees a "WIS save · DC 14" prompt in their roll log. They click Roll → if their d20 + Wis mod < 14, Krieger gains a Paralyzed buff on the init tracker (visible Phase C buff chip). Click "✗ End buff" or wait for the 10-round duration to expire. The Hold Person cast card carries `auto_save_prompt_id` so the chat UI could (future) highlight when the prompt is resolved.
+- **Backward compat.** Non-save spells, NPC targets (T.3c still handles those server-side), and casts without a target all skip the new code path. Existing `/roll_request/respond` callers without a stashed context get the same response shape as before (`auto_buff_installed: ""`).
+- **Filed.** Concentration cleanup (caster loses concentration → drop paired NPC + PC buffs) — T.3e. Still wants a `source_concentration_char_id` backlink on the buff to track.
+
+---
+
 ## [2.36.0] - 2026-05-19
 
 **Schema version:** 56

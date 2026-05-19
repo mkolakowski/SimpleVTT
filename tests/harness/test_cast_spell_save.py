@@ -227,9 +227,11 @@ async def test_save_for_half_applies_half_on_success(gm_client, tavik_rested, ro
     data = resp.json()
     assert data["auto_save_target_kind"] == "npc"
     assert isinstance(data["auto_save_passed"], bool)
-    # Damage was rolled even if rolled=0 is theoretically possible.
-    # auto_save_damage_rolled should be 1..8 for a d8.
-    assert 1 <= data["auto_save_damage_rolled"] <= 8
+    # v2.36.0 cantrip scaling: Sacred Flame is 1d8 at L1-4 and 2d8 at
+    # L5-10. Tavik is L5 in the demo seed, so we expect 2d8 range
+    # (2..16). Older versions of this test asserted 1..8 — bump for
+    # the scaling tier.
+    assert 2 <= data["auto_save_damage_rolled"] <= 16
     if data["auto_save_passed"]:
         # Save-for-half default: half (rounded down).
         assert data["auto_save_damage_applied"] == data["auto_save_damage_rolled"] // 2
