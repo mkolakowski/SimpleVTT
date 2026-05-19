@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.29.1] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Heal-applied result rows ("🩹 Krieger Stonefist +N HP") persist across refresh.** v2.28.0's roll-log persistence captures the spell-cast broadcast but not the follow-up `heal_applied` broadcast that fires when someone clicks the legacy "🩹 Apply Healing" button on a cast card. On refresh the cast card came back but the result row was gone, so the user couldn't see who had been healed. (T.4's auto-heal line already persists because it's part of the spell-cast payload itself.) Fix: also persist `heal_applied` events and replay them through `_onHealApplied` during hydration. Entries are chronologically ordered in localStorage so the replay naturally hits the cast first, then mutates it with the heal-applied row. PATCH — extending the v2.28.0 persistence to one more broadcast type.
+**Description:** Two edits in `app/static/tabletop.js`. **(1)** `_onHealApplied` — append `_persistRollEntry('heal_applied', d)` at the end so every heal_applied broadcast snapshots into the same `simplevtt:rolllog:${CAMPAIGN_ID}` buffer that v2.28.0 set up. The 100-entry FIFO trim applies; heal_applied rows roll off with their parent cast. **(2)** `_hydrateRollLog` — add the `heal_applied` branch to the replay switch, calling `_onHealApplied(e.data)`. The `_rollLogHydrating` guard prevents double-persistence.
+
+### Fixed
+- `app/static/tabletop.js` — "🩹 Krieger Stonefist +N HP" rows on spell-cast cards now survive page refresh.
+
+### Notes
+- **What to test:** open `/campaign/1`. Cast Cure Wounds without a target (so the legacy claim flow fires); click 🩹 Apply Healing → result row appears under the card. F5 refresh → the result row reappears underneath the same card.
+- **Backward compat.** Pure additive — same localStorage key as v2.28.0, just one more event type captured.
+
+---
+
 ## [2.29.0] - 2026-05-19
 
 **Schema version:** 56

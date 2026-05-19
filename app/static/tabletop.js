@@ -1555,6 +1555,7 @@
                     if (e.type === 'spell_cast')         appendSpellCast(e.data);
                     else if (e.type === 'weapon_attack') appendWeaponAttack(e.data);
                     else if (e.type === 'feature_used')  _appendFeatureUsed(e.data);
+                    else if (e.type === 'heal_applied')  _onHealApplied(e.data);
                 } catch (err) {
                     console.warn('[rolllog] hydrate skipped', e.type, err);
                 }
@@ -1997,6 +1998,14 @@
         if (typeof window._updateMiniHpDisplay === 'function') {
             window._updateMiniHpDisplay(d.char_id, d.new_hp);
         }
+        // v2.29.1: persist heal_applied to the roll-log buffer so the
+        // "🩹 Krieger Stonefist +N HP" result row survives a refresh.
+        // The row is rendered by mutating the existing spell-cast card,
+        // so on replay we need the heal_applied entry to fire AFTER the
+        // matching spell_cast. Entries are stored in chronological
+        // order in localStorage so the replay loop hits them in the
+        // right sequence naturally.
+        _persistRollEntry('heal_applied', d);
     }
 
     // ---------- Death save broadcast handler (v2.1.0) ----------
