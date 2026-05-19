@@ -2752,8 +2752,12 @@
                 o5eTimer = setTimeout(() => doSearch(searchInput.value.trim()), 350);
             });
 
-            // Clear search when tab is opened
-            modal.querySelectorAll('.atm-tab-btn').forEach(btn => {
+            // Clear search when tab is opened.
+            // v2.25.2 fix: ``modal`` was a closure-scope variable inside
+            // the addBtn click handler and isn't visible here (this IIFE
+            // runs at script init, before any click). Re-resolve via
+            // document.querySelectorAll scoped to the modal id.
+            document.querySelectorAll('#add-token-modal .atm-tab-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     if (btn.dataset.tab === 'atm-tab-open5e') {
                         searchInput.value = '';

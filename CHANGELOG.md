@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.25.2] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Fix two latent JS errors surfacing after v2.25.1's stale-combatant cleanup.** User reported `tabletop.js:2756 Uncaught ReferenceError: modal is not defined` AND `1:24536 Uncaught ReferenceError: tokens is not defined` from `_resolveCombatantImage` after the v2.25.1 localStorage cleanup let renderBattle proceed further than before. Both are pre-existing bugs that didn't surface in the demo path until orphan combatants needed portrait-healing.
+1. `tabletop.js` Open5e search IIFE at line 2680 referenced `modal` (declared inside a sibling click-handler at line 2442). The IIFE runs at script init time — `modal` doesn't exist yet. Replaced with `document.querySelectorAll('#add-token-modal .atm-tab-btn')`.
+2. `tabletop.html` `_resolveCombatantImage` referenced `tokens` — but the in-scope identifier is `allTokens` (built from `initData.tokens` at IIFE init). The bug only surfaced when a combatant lacked `image_url` AND the portrait-heal pass ran during renderBattle. Demo combatants are pre-seeded with `image_url`, so the path was cold until v2.25.1's cleanup kept some orphan-but-rehab entries that hit the heal pass.
+PATCH — fixes two ReferenceErrors that were blocking renderBattle for users with stale localStorage.
+**Description:** Two edits. **(1)** `app/static/tabletop.js` `modal.querySelectorAll('.atm-tab-btn')` → `document.querySelectorAll('#add-token-modal .atm-tab-btn')` so the lookup doesn't depend on a closure-scope variable that hasn't been initialised at IIFE-run time. **(2)** `app/templates/tabletop.html` `_resolveCombatantImage` references `tokens.find(...)` → `allTokens.find(...)` so the function actually runs without ReferenceError.
+
+### Fixed
+- `app/static/tabletop.js` — Open5e search IIFE no longer throws `modal is not defined` at script init.
+- `app/templates/tabletop.html` `_resolveCombatantImage` — uses the correct `allTokens` identifier; portrait-heal pass runs without ReferenceError.
+
+### Notes
+- **What to test:** hard-refresh the browser. Console errors `modal is not defined` and `tokens is not defined` should be gone. The init tracker should now render combatants (the v2.25.1 cleanup pass drops orphans + renderBattle's portrait heal runs through cleanly).
+- **Both bugs are pre-existing.** `modal is not defined` would have thrown at every page load on browsers where `#atm-o5e-search` exists in the DOM (most modern templates); somehow the script kept working anyway — likely the IIFE's error was swallowed and only became visible after my v2.25.1 cleanup changes pushed execution past the throw point. `tokens is not defined` similarly cold until the heal pass ran.
+
+---
+
 ## [2.25.1] - 2026-05-19
 
 **Schema version:** 56

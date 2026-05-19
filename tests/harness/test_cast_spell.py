@@ -74,6 +74,13 @@ async def test_cast_tavik_healing_word(gm_client, gm_ws, roster):
     to fixture characters in Phase 1.5.
     """
     tavik = roster["Brother Tavik Stonebrow"]
+    # v2.25.2: long-rest Tavik so accumulated state from prior tests
+    # (drained spell slots) doesn't 409 the cast. The harness doesn't
+    # auto-reset PC state between runs; flaky-test fix.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/rest",
+        json={"type": "long"},
+    )
     HEALING_WORD_INDEX = 5
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/cast_spell",

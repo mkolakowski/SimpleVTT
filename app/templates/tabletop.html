@@ -3998,15 +3998,23 @@ let CONC_DATA = {{ conc_by_char | tojson }};
      * success so re-renders skip the resolve work. */
     function _resolveCombatantImage(c) {
         if (c.image_url) return c.image_url;
+        // v2.25.2 fix: was referencing an undefined ``tokens``
+        // identifier. The token list in this scope is ``allTokens``
+        // (built from ``initData.tokens`` at IIFE init). The bug only
+        // surfaced when a combatant lacked ``image_url`` AND the
+        // portrait-heal pass ran during renderBattle (the demo's
+        // pre-seeded init avoids this because every combatant carries
+        // image_url; stale localStorage combatants from a prior demo
+        // reset hit the path).
         let tok = null;
         if (c.char_id != null) {
-            tok = tokens.find(t => t.character_id === c.char_id);
+            tok = allTokens.find(t => t.character_id === c.char_id);
         }
         if (!tok && c.token_template_id != null) {
-            tok = tokens.find(t => t.token_template_id === c.token_template_id);
+            tok = allTokens.find(t => t.token_template_id === c.token_template_id);
         }
         if (!tok && c.name) {
-            tok = tokens.find(t => t.label === c.name);
+            tok = allTokens.find(t => t.label === c.name);
         }
         if (tok && tok.image_url) {
             c.image_url = tok.image_url;
