@@ -4887,6 +4887,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             newCur.economy.reaction = false;
             newCur.economy.movement = 0;
             newCur.economy.dash_bonus_ft = 0;  // v2.8.3
+            // v2.20.0 Phase B: reset Colossus Slayer "used this turn"
+            // flag so the next attack against a below-max-HP target
+            // re-fires Rowan's +1d6.
+            newCur.economy.colossus_slayer_used = false;
             // v2.8.1: clear the new active combatant's movement breadcrumb
             // so the canvas overlay starts fresh for their turn. The
             // previous combatant's path stops rendering automatically
@@ -4924,6 +4928,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             c.economy.reaction = false;
             c.economy.movement = 0;
             c.economy.dash_bonus_ft = 0;  // v2.8.3
+            c.economy.colossus_slayer_used = false;  // v2.20.0
             // v2.8.1: wipe everyone's movement breadcrumb when init
             // (re)starts so no stale path renders for the first turn.
             c.movement_path = [];

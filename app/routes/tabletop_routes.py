@@ -6903,6 +6903,245 @@ def _rage_damage_bonus(barbarian_lv: int) -> int:
     return 2
 
 
+# v2.20.0 Phase B — roll-time intercepts. /attack reads attacker's
+# buffs from the hub battle state at damage-roll time and folds in
+# any auto-applied uplifts. Currently supported:
+#
+# - Rage (Barbarian self-buff). When damage_type is physical
+#   (bludgeoning / piercing / slashing) AND attack is melee-or-thrown
+#   STR-based (heuristic: physical damage type), add a flat
+#   ``melee_str_damage_bonus`` to the damage roll AND roll the attack
+#   d20 with advantage.
+# - Hunter's Mark (Ranger concentration on target). When
+#   target_combatant_id matches the buff's
+#   ``weapon_hit_bonus_target_combatant_id``, roll +1d6 (force or
+#   weapon type, per buff's stored damage_type) and stack onto damage.
+# - Hex (Warlock concentration on target). Same shape as Hunter's
+#   Mark but +1d6 necrotic. Stacks with weapon damage type.
+# - Colossus Slayer (Ranger Hunter's Prey at Hunter Lv 3+). Once per
+#   turn, when the target's current HP is below max, add +1d6 of
+#   the weapon's damage type. Tracked via the
+#   ``combatant.economy.colossus_slayer_used`` flag (reset at turn
+#   start alongside the other action chips in the GM's nextTurn
+#   handler — handled client-side by tabletop.js).
+#
+# Each uplift is a separate dice roll; the resulting list is returned
+# as ``auto_uplifts`` on the /attack response + broadcast payload so
+# the chat-card client can render them as labeled lines below the
+# base damage. The aggregate ``auto_uplift_total`` is the sum across
+# all auto-uplifts (used by the chat card's "Total damage" line; can
+# be ignored if the client wants to display per-type breakdowns).
+
+_PHYSICAL_DAMAGE_TYPES = {"bludgeoning", "piercing", "slashing"}
+
+
+def _hunter_level_from_sheet(sheet: dict) -> int:
+    """Ranger-Hunter level helper. Returns 0 for non-Hunters."""
+    if not sheet:
+        return 0
+    primary = (sheet.get("class") or "").strip().lower()
+    sub = (sheet.get("subclass") or "").strip().lower()
+    if primary == "ranger" and "hunter" in sub:
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "ranger" \
+                and "hunter" in (entry.get("subclass") or "").strip().lower():
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _compute_attack_auto_uplifts(
+    *,
+    campaign_id: int,
+    attacker_char_id: int,
+    attacker_sheet: dict,
+    target_combatant_id: str | None,
+    attack_damage_type: str,
+) -> list[dict]:
+    """Compute auto-applied uplifts from attacker's buffs + class
+    features at /attack time.
+
+    Returns a list of ``{label, expression, total, breakdown,
+    damage_type, source}`` dicts — each a separately-rolled uplift.
+    The list is empty when no uplifts apply.
+
+    Side effects: none. The caller is responsible for marking the
+    Colossus Slayer "used this turn" flag via the action-economy
+    helpers — this function reads the flag from the hub combatant but
+    doesn't mutate it (the GM-side turn-advance handler resets the
+    flag alongside action chips).
+    """
+    uplifts: list[dict] = []
+    state = hub.get_battle(campaign_id)
+    attacker_combatant = None
+    target_combatant = None
+    if state:
+        for c in state.get("combatants") or []:
+            if c.get("char_id") == attacker_char_id:
+                attacker_combatant = c
+            if target_combatant_id and c.get("id") == target_combatant_id:
+                target_combatant = c
+
+    attacker_buffs = (attacker_combatant or {}).get("buffs") or []
+    damage_type_l = (attack_damage_type or "").strip().lower()
+    is_physical = damage_type_l in _PHYSICAL_DAMAGE_TYPES
+
+    # 1. Rage damage bonus (flat, applies on physical melee/thrown).
+    #    The buff itself doesn't carry a die expression — it's a flat
+    #    int. Roll it as a "+N" virtual roll so the breakdown reads
+    #    "+2 [Rage]" uniformly with the other uplifts.
+    for b in attacker_buffs:
+        if not isinstance(b, dict):
+            continue
+        if b.get("key") != "rage":
+            continue
+        effects = b.get("effects") or {}
+        bonus = int(effects.get("melee_str_damage_bonus") or 0)
+        if bonus > 0 and is_physical:
+            uplifts.append({
+                "label": "Rage",
+                "expression": f"+{bonus}",
+                "total": bonus,
+                "breakdown": f"+{bonus}",
+                "damage_type": attack_damage_type or "bludgeoning",
+                "source": "rage",
+            })
+
+    # 2. Hunter's Mark / Hex weapon-hit riders. Target-keyed: only
+    #    fire when target_combatant_id matches the buff's stored
+    #    target. Skip when target is unknown.
+    if target_combatant_id:
+        for b in attacker_buffs:
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects") or {}
+            dice = (effects.get("weapon_hit_bonus_dice") or "").strip()
+            tgt = effects.get("weapon_hit_bonus_target_combatant_id")
+            if not dice or tgt != target_combatant_id:
+                continue
+            try:
+                r = dice_mod.roll(dice)
+                rider_type = (effects.get("weapon_hit_bonus_damage_type")
+                              or attack_damage_type or "force")
+                uplifts.append({
+                    "label": b.get("name") or b.get("key") or "Bonus dice",
+                    "expression": dice,
+                    "total": r.total,
+                    "breakdown": r.breakdown,
+                    "damage_type": rider_type,
+                    "source": b.get("key") or "buff",
+                })
+            except dice_mod.DiceParseError:
+                pass
+
+    # 3. Colossus Slayer (Ranger Hunter's Prey at Lv 3+).
+    #    Once per turn: +1d6 vs target whose current HP < max HP. Uses
+    #    the same damage type as the weapon. Tracked via
+    #    ``combatant.economy.colossus_slayer_used`` flag — reset at
+    #    turn start by the GM-side nextTurn handler (alongside action
+    #    chips).
+    hunter_lv = _hunter_level_from_sheet(attacker_sheet)
+    has_cs_feature = False
+    if hunter_lv >= 3:
+        for cf in (attacker_sheet.get("class_features") or []):
+            if (cf or {}).get("key") == "colossus-slayer":
+                has_cs_feature = True
+                break
+    if has_cs_feature and target_combatant is not None:
+        # "Below max HP" — strict less-than.
+        cur = int(target_combatant.get("hp_current") or 0)
+        mx = int(target_combatant.get("hp_max") or 0)
+        already_used = bool(
+            (attacker_combatant or {}).get("economy", {}).get("colossus_slayer_used")
+        )
+        if mx > 0 and cur < mx and not already_used:
+            try:
+                r = dice_mod.roll("1d6")
+                uplifts.append({
+                    "label": "Colossus Slayer",
+                    "expression": "1d6",
+                    "total": r.total,
+                    "breakdown": r.breakdown,
+                    "damage_type": attack_damage_type or "piercing",
+                    "source": "colossus-slayer",
+                })
+            except dice_mod.DiceParseError:
+                pass
+
+    return uplifts
+
+
+async def _mark_colossus_slayer_used(
+    campaign_id: int, attacker_char_id: int,
+) -> None:
+    """Set ``combatant.economy.colossus_slayer_used = True`` on the
+    attacker so subsequent attacks this turn don't re-roll Colossus
+    Slayer. Reset is handled client-side by the GM's nextTurn handler.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == attacker_char_id:
+            target = c
+            break
+    if target is None:
+        return
+    economy = target.get("economy") or {}
+    if not isinstance(economy, dict):
+        economy = {}
+        target["economy"] = economy
+    economy["colossus_slayer_used"] = True
+    hub.set_battle(campaign_id, state)
+
+
+def _has_rage_str_advantage(
+    campaign_id: int, attacker_char_id: int, damage_type: str,
+) -> bool:
+    """Return True if the attacker has Rage active AND the attack
+    qualifies as STR-based (physical damage type). Used to apply
+    advantage on the d20 attack roll.
+    """
+    damage_type_l = (damage_type or "").strip().lower()
+    if damage_type_l not in _PHYSICAL_DAMAGE_TYPES:
+        return False
+    for b in _get_buffs(campaign_id, attacker_char_id):
+        if (b or {}).get("key") != "rage":
+            continue
+        effects = (b or {}).get("effects") or {}
+        adv_list = effects.get("advantage_on") or []
+        if "str_attack" in adv_list:
+            return True
+    return False
+
+
+def _resistance_halve(
+    damage_amount: int, damage_type: str, target_sheet: dict,
+) -> tuple[int, bool]:
+    """If the target's ``_buffs_active`` has resistance to
+    ``damage_type``, return (halved, True). Otherwise (damage_amount,
+    False). RAW: resistance halves damage (floor).
+    """
+    if damage_amount <= 0 or not damage_type:
+        return damage_amount, False
+    damage_type_l = damage_type.strip().lower()
+    for b in (target_sheet or {}).get("_buffs_active") or []:
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects") or {}
+        resists = [str(r).strip().lower() for r in (effects.get("resistance_to") or [])]
+        if damage_type_l in resists:
+            return damage_amount // 2, True
+    return damage_amount, False
+
+
 @router.post("/api/campaign/{campaign_id}/use_arcane_recovery")
 async def use_arcane_recovery(
     campaign_id: int,
@@ -9596,6 +9835,11 @@ async def use_attack(
     if char_id <= 0 or attack_index < 0:
         raise HTTPException(400, "character_id and attack_index are required")
 
+    # v2.20.0 Phase B: optional target_combatant_id for buff-driven
+    # uplifts that need to know the target (Hunter's Mark / Hex match,
+    # Colossus Slayer below-max-HP check).
+    target_combatant_id = (body.get("target_combatant_id") or "").strip() or None
+
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(403, "Not a member")
@@ -9643,6 +9887,15 @@ async def use_attack(
 
     is_save = save_dc > 0 and save_ability
 
+    # v2.20.0 Phase B: detect Rage-driven advantage on STR-based
+    # attacks. RAW heuristic: physical damage type + barbarian's Rage
+    # buff active = advantage on the d20 attack roll. Stacks with the
+    # character's existing roll_state (advantage + advantage = still
+    # advantage; advantage + disadvantage = even per RAW, which
+    # ``_apply_roll_state`` already handles when both directions
+    # are stamped).
+    rage_advantage = _has_rage_str_advantage(campaign_id, char.id, damage_type)
+
     # Build the to-hit expression. Accept "+5", "5", "1d4+3" etc.
     attack_total = None
     attack_breakdown = ""
@@ -9653,9 +9906,16 @@ async def use_attack(
             else "+" + attack_bonus_raw
         atk_expr = "1d20" + (bonus_expr if bonus_expr.startswith(("+", "-")) else "+" + bonus_expr)
         # v2.2.0: apply character roll_state to the attack d20.
+        # v2.20.0: layer Rage advantage on top by stamping "a" if it
+        # isn't already there. ``_apply_roll_state`` already handles
+        # the kh1 / kl1 suffix; we add ours if neither direction was
+        # set by the character's roll_state.
         atk_expr, attack_roll_state_applied = _apply_roll_state(
             atk_expr, (char.sheet or {}).get("roll_state"),
         )
+        if rage_advantage and "kh1" not in atk_expr and "kl1" not in atk_expr:
+            atk_expr = atk_expr.replace("1d20", "2d20kh1", 1)
+            attack_roll_state_applied = "advantage_rage"
         try:
             r = dice_mod.roll(atk_expr)
             attack_total = r.total
@@ -9668,6 +9928,9 @@ async def use_attack(
         atk_expr, attack_roll_state_applied = _apply_roll_state(
             "1d20", (char.sheet or {}).get("roll_state"),
         )
+        if rage_advantage and "kh1" not in atk_expr and "kl1" not in atk_expr:
+            atk_expr = atk_expr.replace("1d20", "2d20kh1", 1)
+            attack_roll_state_applied = "advantage_rage"
         try:
             r = dice_mod.roll(atk_expr)
             attack_total = r.total
@@ -9687,6 +9950,52 @@ async def use_attack(
         except dice_mod.DiceParseError:
             damage_total = None
             damage_breakdown = ""
+
+    # v2.20.0 Phase B: auto-uplifts from attacker's buffs + class
+    # features. Reads the hub state for active buffs (Rage / Hunter's
+    # Mark / Hex) + the sheet for class_features (Colossus Slayer).
+    # Each uplift is a separately-rolled die expression; the list
+    # rides on the broadcast as ``auto_uplifts`` for the chat card to
+    # render. Damage type per uplift varies (Hex is necrotic, Rage
+    # inherits weapon type, Colossus Slayer = weapon type) — resistance
+    # at damage-application time will apply per type.
+    auto_uplifts = _compute_attack_auto_uplifts(
+        campaign_id=campaign_id,
+        attacker_char_id=char.id,
+        attacker_sheet=sheet,
+        target_combatant_id=target_combatant_id,
+        attack_damage_type=damage_type,
+    )
+    # Mark Colossus Slayer "used this turn" if it was actually
+    # rolled — the helper itself reads but doesn't mutate.
+    if any(u.get("source") == "colossus-slayer" for u in auto_uplifts):
+        await _mark_colossus_slayer_used(campaign_id, char.id)
+
+    # Aggregate auto-uplift damage into the base damage_total so the
+    # existing "Total damage" line in chat cards remains accurate
+    # without needing client changes. The structured list is still
+    # exposed via ``auto_uplifts`` for clients that want per-type
+    # rendering.
+    auto_uplift_total = 0
+    for u in auto_uplifts:
+        try:
+            auto_uplift_total += int(u.get("total") or 0)
+        except (TypeError, ValueError):
+            pass
+    if auto_uplift_total > 0:
+        if damage_total is not None:
+            damage_total = damage_total + auto_uplift_total
+        else:
+            damage_total = auto_uplift_total
+        # Append a one-line summary to the breakdown so chat-card
+        # readers see "1d12+4=10 + Rage +2 + Hunter's Mark 1d6=4" inline.
+        suffix_parts = []
+        for u in auto_uplifts:
+            lbl = u.get("label") or u.get("source") or "Bonus"
+            bd = u.get("breakdown") or ""
+            suffix_parts.append(f"{lbl} {bd}")
+        if suffix_parts:
+            damage_breakdown = (damage_breakdown + "  +  " + "  +  ".join(suffix_parts)).strip()
 
     # v2.16.0: per-attack uplifts. ``bonus_damage`` (e.g. "3d6" for Sneak
     # Attack) rolls separately and rides on the broadcast as its own
@@ -9794,6 +10103,14 @@ async def use_attack(
         "bonus_damage_breakdown": bonus_damage_breakdown,
         "slot_spent_class": slot_spent_class,
         "slot_spent_level": slot_spent_level,
+        # v2.20.0 Phase B: auto-applied uplifts from attacker's buffs +
+        # class features (Rage / Hunter's Mark / Hex / Colossus Slayer).
+        # Structured per-uplift list with damage_type so future chat-card
+        # work can render labeled lines + resistance can apply per type.
+        # Aggregate total is already folded into damage_total above.
+        "auto_uplifts": auto_uplifts,
+        "auto_uplift_total": auto_uplift_total,
+        "target_combatant_id": target_combatant_id or "",
         "range": range_str,
         "save_dc": save_dc if is_save else 0,
         "save_ability": save_ability if is_save else "",
@@ -9825,6 +10142,9 @@ async def use_attack(
         "bonus_damage_breakdown": bonus_damage_breakdown,
         "slot_spent_class": slot_spent_class,
         "slot_spent_level": slot_spent_level,
+        "auto_uplifts": auto_uplifts,
+        "auto_uplift_total": auto_uplift_total,
+        "target_combatant_id": target_combatant_id or "",
         "attack_name": name,
         "damage_type": damage_type,
         "is_save": is_save,
@@ -12143,9 +12463,35 @@ async def patch_sheet_fields(
         is_damage = reason == "damage"
         is_crit = bool(body.get("is_crit"))
         damage_amount = int(body.get("damage_amount") or 0)
+
+        # v2.20.0 Phase B: resistance. When the caller passes a
+        # damage_type AND the target has Rage (or any other buff with
+        # ``resistance_to`` containing that type), halve the damage
+        # before HP application. The halved value flows into
+        # ``_apply_hp_change`` so the death-save state machine + the
+        # massive-damage threshold both see the post-resistance number,
+        # which matches RAW (resistance applies before HP is dealt).
+        # incoming_hp's "current" is the player's pre-resistance new HP;
+        # we recompute to keep them in sync.
+        damage_type = str(body.get("damage_type") or "").strip().lower()
+        resistance_applied = False
+        new_hp_current = int(incoming_hp.get("current") or 0)
+        if is_damage and damage_amount > 0:
+            halved_damage, resistance_applied = _resistance_halve(
+                damage_amount, damage_type, char.sheet or {},
+            )
+            if resistance_applied:
+                # Recompute the new HP from the existing current HP -
+                # halved damage. We can't just halve the difference
+                # because the client may have applied other effects.
+                existing_hp_inner = (char.sheet or {}).get("hp") or {}
+                old_current = int(existing_hp_inner.get("current") or 0)
+                new_hp_current = max(0, old_current - halved_damage)
+                damage_amount = halved_damage
+
         hp_result = _apply_hp_change(
             char,
-            int(incoming_hp.get("current") or 0),
+            new_hp_current,
             is_damage=is_damage,
             is_crit=is_crit,
             damage_amount=damage_amount,
@@ -12173,8 +12519,16 @@ async def patch_sheet_fields(
                 "source": "sheet_patch",
             },
         })
-    return {"ok": True, "hp": hp_result["hp"] if hp_result else None,
-            "death_saves": hp_result["death_saves"] if hp_result else None}
+    return {
+        "ok": True,
+        "hp": hp_result["hp"] if hp_result else None,
+        "death_saves": hp_result["death_saves"] if hp_result else None,
+        # v2.20.0 Phase B: signal whether resistance halved the damage
+        # before applying. Useful for the player UI to surface a "🛡
+        # resisted" toast.
+        "resistance_applied": bool(hp_result and resistance_applied) if hp_result else False,
+        "damage_amount_after_resistance": damage_amount if hp_result and is_damage else None,
+    }
 
 
 # ----------- API: death saving throws (v2.1.0) -----------
