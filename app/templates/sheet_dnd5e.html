@@ -1625,7 +1625,129 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         window._savedRaceData = null;
     }
 })();
+
+// ── v2.29.0 Target picker modal ────────────────────────────────────────────
+// Surfaces a modal listing every combatant in the init tracker so the player
+// can choose a target when none is currently set (i.e. they didn't double-
+// click a token on the map). The tabletop maintains the combatants list at
+// ``localStorage["simplevtt_battle_${CAMPAIGN_ID}"]`` — we read from there so
+// the sheet (which lives in a separate page / iframe) sees the latest
+// state. ``window._promptTargetPicker(opts)`` returns a Promise that
+// resolves to either ``{target_combatant_id, target_character_id,
+// target_name}`` (picked), ``{}`` (Skip — proceed without target), or
+// ``null`` (Cancel — abort the whole action). Callers should treat ``null``
+// as a user-initiated abort.
+(function () {
+    function _escTP(s) {
+        return String(s ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+    window._promptTargetPicker = function (opts) {
+        opts = opts || {};
+        const title = opts.title || 'Choose a target';
+        const subtitle = opts.subtitle || '';
+        let combatants = [];
+        try {
+            const raw = localStorage.getItem(`simplevtt_battle_${CAMPAIGN_ID}`);
+            if (raw) {
+                const battle = JSON.parse(raw);
+                if (battle && Array.isArray(battle.combatants)) {
+                    combatants = battle.combatants;
+                }
+            }
+        } catch (_) {}
+        if (opts.excludeCharId) {
+            combatants = combatants.filter(c => c.char_id !== opts.excludeCharId);
+        }
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'target-picker-overlay';
+            const rows = combatants.length
+                ? combatants.map((c) => `
+                    <button type="button" class="target-picker-row" data-cid="${_escTP(c.id || '')}">
+                        <span class="target-picker-name">${_escTP(c.name || '?')}</span>
+                        <span class="target-picker-hp">${c.hp_current ?? '?'} / ${c.hp_max ?? '?'} HP</span>
+                    </button>`).join('')
+                : '<div class="target-picker-empty">No combatants in the init tracker.<br>Add tokens via "🗺 From Map" on the tabletop.</div>';
+            overlay.innerHTML = `
+                <div class="target-picker-modal">
+                    <div class="target-picker-header">
+                        <div class="target-picker-title">${_escTP(title)}</div>
+                        ${subtitle ? `<div class="target-picker-subtitle">${_escTP(subtitle)}</div>` : ''}
+                    </div>
+                    <div class="target-picker-list">${rows}</div>
+                    <div class="target-picker-actions">
+                        <button type="button" class="target-picker-skip">Skip (no target)</button>
+                        <button type="button" class="target-picker-cancel">Cancel</button>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            function close(result) {
+                overlay.remove();
+                document.removeEventListener('keydown', escHandler);
+                resolve(result);
+            }
+            const escHandler = (e) => { if (e.key === 'Escape') close(null); };
+            document.addEventListener('keydown', escHandler);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(null); });
+            overlay.querySelectorAll('.target-picker-row').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const c = combatants.find(x => x.id === btn.dataset.cid);
+                    if (!c) { close(null); return; }
+                    close({
+                        target_combatant_id: c.id || '',
+                        target_character_id: c.char_id || null,
+                        target_name: c.name || '',
+                    });
+                });
+            });
+            overlay.querySelector('.target-picker-skip').addEventListener('click', () => close({}));
+            overlay.querySelector('.target-picker-cancel').addEventListener('click', () => close(null));
+        });
+    };
+})();
 </script>
+<style>
+.target-picker-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+}
+.target-picker-modal {
+    background: var(--panel, #1a1d23);
+    border: 1px solid var(--border, #2c2f36);
+    border-radius: 10px;
+    max-width: 420px; width: 100%;
+    max-height: 80vh; display: flex; flex-direction: column;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.target-picker-header { padding: 14px 18px; border-bottom: 1px solid var(--border, #2c2f36); }
+.target-picker-title { font-size: 16px; font-weight: 700; color: var(--fg, #ddd); }
+.target-picker-subtitle { font-size: 12px; color: var(--fg-mute, #888); margin-top: 4px; }
+.target-picker-list { padding: 8px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.target-picker-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px; min-height: 44px;
+    background: transparent; border: 1px solid transparent;
+    border-radius: 6px; color: var(--fg, #ddd); text-align: left;
+    cursor: pointer; font-size: 14px;
+}
+.target-picker-row:hover { background: rgba(255,200,100,0.08); border-color: var(--accent, #d4a85e); }
+.target-picker-name { font-weight: 600; }
+.target-picker-hp { font-size: 12px; color: var(--fg-mute, #888); }
+.target-picker-empty { padding: 24px; text-align: center; color: var(--fg-mute, #888); font-size: 13px; line-height: 1.5; }
+.target-picker-actions { padding: 10px 14px; border-top: 1px solid var(--border, #2c2f36); display: flex; gap: 8px; justify-content: flex-end; }
+.target-picker-skip, .target-picker-cancel {
+    min-height: 36px; padding: 8px 14px; border-radius: 6px;
+    border: 1px solid var(--border, #2c2f36); background: transparent;
+    color: var(--fg, #ddd); cursor: pointer; font-size: 13px;
+}
+.target-picker-skip:hover { background: rgba(255,200,100,0.08); }
+.target-picker-cancel:hover { background: rgba(255,100,100,0.08); }
+</style>
 <!-- Curated subclass data MUST load before sheet.js — when localStorage has
      cached subclass lists, sheet.js's init flow runs to completion in
      microtasks before the next <script> tag is parsed, and the subclass
@@ -2681,6 +2803,34 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             }
                         }
                     } catch (_) {}
+                    // v2.29.0: prompt the target-picker modal whenever no
+                    // target is set. Self-cast / utility spells (Misty
+                    // Step, Mage Armor, Detect Magic, etc.) use the
+                    // "Skip (no target)" button to proceed without one;
+                    // the existing untargeted cast UX is preserved with
+                    // one extra click. Spells need server-side SRD
+                    // enrichment to know which truly need a target —
+                    // that's loaded at cast time, too late for this
+                    // gate, so a universal prompt is the right v1.
+                    if (!_spTgt.target_combatant_id && !_spTgt.target_character_id) {
+                        if (typeof window._promptTargetPicker === 'function') {
+                            const picked = await window._promptTargetPicker({
+                                title: `Choose target — ${s.name || 'Spell'}`,
+                                excludeCharId: {{ char.id }},
+                            });
+                            if (picked === null) {
+                                // Cancelled — revert the optimistic slot decrement.
+                                if (slotRow) {
+                                    slotRow.dataset.used = prevUsed;
+                                    if (window._ssSyncInputs) window._ssSyncInputs(slotRow);
+                                    if (window._ssRenderPips) window._ssRenderPips(slotRow);
+                                }
+                                btn.disabled = false;
+                                return;
+                            }
+                            _spTgt = picked;
+                        }
+                    }
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -4329,7 +4479,23 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // the player double-clicked a token on the map. The
                     // localStorage mirror is populated by tabletop.js
                     // whenever ``_targeting._publish()`` runs.
-                    const _tgtBody = _targetBodyFields();
+                    // v2.29.0: if no target is set, prompt the modal
+                    // picker. User can pick an init combatant, skip
+                    // (proceed without target — narrative attacks),
+                    // or cancel the whole strike.
+                    let _tgtBody = _targetBodyFields();
+                    if (!_tgtBody.target_combatant_id && !_tgtBody.target_character_id) {
+                        const _atkName = (attacks[idx] && attacks[idx].name) || 'Attack';
+                        const picked = await window._promptTargetPicker({
+                            title: `Choose target — ${_atkName}`,
+                            excludeCharId: MY_CHAR_ID,
+                        });
+                        if (picked === null) {
+                            btn.disabled = false;
+                            return;  // cancelled
+                        }
+                        _tgtBody = picked;
+                    }
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },

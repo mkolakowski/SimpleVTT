@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.29.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Target-picker modal prompts when no target is set.** Clicking Strike or a spell-cast on the full sheet without first double-clicking a token now pops a centered modal listing every combatant in the init tracker. Pick a combatant → proceed with that target; click **Skip (no target)** for narrative attacks / self-cast spells; Cancel / ESC / click-outside aborts the whole action. The modal reads from `localStorage["simplevtt_battle_${CAMPAIGN_ID}"]` (the tabletop's battle-state mirror) so the sheet — which lives in its own page — sees the current init roster without a server round-trip. MINOR — additive UI on the sheet's attack / spell-cast flows.
+**Description:** Three edits in `app/templates/sheet_dnd5e.html`. **(1)** New global `window._promptTargetPicker(opts)` in the shared script block. Returns a Promise resolving to `{target_combatant_id, target_character_id, target_name}` (picked), `{}` (Skip — proceed with no target), or `null` (Cancel — abort). The combatants list is read from the tabletop's localStorage mirror; `opts.excludeCharId` filters the caster out so they can't accidentally target themselves. Empty-init case shows a helpful "No combatants — add tokens via 🗺 From Map" hint. **(2)** `.target-picker-*` CSS — overlay + modal + clickable rows (each row showing name + HP) + Skip / Cancel buttons in the toast-accent palette, 44px row min-height per the touch-target rule. **(3)** Wire-up in the `.atk-strike` and `.sp-cast` click handlers — when `_targetBodyFields()` / inline localStorage read returns no target, `await window._promptTargetPicker(...)`. On Cancel, revert the optimistic slot-decrement (spell-cast only) and reset the button; on Skip, proceed with an empty target body (preserves the existing untargeted behavior); on Pick, splice the descriptors into the POST body.
+**Description (cont):** Why spells universally prompt (not just heal / attack / save spells). The sheet's spell list is built from `sheet["spells"]` (demo seed shape: `{name, level, _slug, casting_time, prepared}`) — none of the action descriptors (`healing`, `attack_roll`, `save_ability`) are populated client-side. They're enriched server-side at cast time from the SRD JSON via the `_slug`. By the time the server knows whether a spell needs a target, the cast has already happened — too late to prompt. So v1 prompts for every spell cast that has no target; self-cast / utility spells (Misty Step, Mage Armor, Detect Magic) use the **Skip** button to dismiss the picker and proceed untargeted. A future commit can ship client-side enrichment (load SRD JSON in the page) so the prompt only fires for spells that truly need a target — for now the extra Skip click is the right v1 tradeoff vs. server complexity.
+**Description (cont 2):** Class-feature flows. The user asked for class-feature uses needing a target to also prompt. The existing bespoke pickers (Lay on Hands / Bardic Inspiration / Cutting Words) already cover the specific features the demo PCs have today and have richer per-feature UX (charge sliders, BI die selectors). They stay as-is for v1. The generic `/use_feature` endpoint doesn't take a target argument so adding a picker there would be cosmetic only. When new class features that need a target ship (Phase B / future class content), they get the picker via the same `window._promptTargetPicker` global.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — `window._promptTargetPicker(opts)` modal helper + `.target-picker-*` styles.
+- `app/templates/sheet_dnd5e.html` `.atk-strike` and `.sp-cast` click handlers — fall back to the picker when no target is set; respect Pick / Skip / Cancel.
+
+### Notes
+- **What to test:** open Tavik's full sheet without first double-clicking a token. Click Strike on any attack → picker opens with the in-init combatants; pick Krieger → strike resolves against him. Cast Healing Word → picker prompts → pick Krieger → auto-heal applies as in v2.27.2. Cast Misty Step → picker prompts → click **Skip (no target)** → cast proceeds. ESC at any picker dismisses without doing anything. Click outside the modal also dismisses.
+- **Backward compat.** When a target IS already set (double-clicked token on the tabletop) the picker never opens — the existing flow is untouched.
+- **Storage.** No new keys — the picker reuses the tabletop's `simplevtt_battle_${CAMPAIGN_ID}` mirror.
+
+---
+
 ## [2.28.0] - 2026-05-19
 
 **Schema version:** 56
