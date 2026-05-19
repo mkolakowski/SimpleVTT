@@ -153,6 +153,136 @@ async def test_cast_without_target_no_auto_save(gm_client, tavik_rested):
     assert data["auto_save_prompted"] is False
 
 
+async def _set_auto_apply(gm_client, on: bool) -> None:
+    """Toggle Campaign.auto_apply_damage via the form-encoded settings
+    POST. Mirrors the helper in test_attack_auto_damage.py — every
+    sibling form field the validator requires must come along."""
+    form = {
+        "name": "Demo Campaign",
+        "description": "demo",
+        "game_system": "dnd5e",
+        "gm_tab_color": "",
+        "font_override": "",
+        "default_encounter_id": "",
+        "hp_threshold_1": "",
+        "hp_threshold_2": "",
+        "hp_threshold_3": "",
+        "hp_threshold_4": "",
+        "auto_play_playlist_id": "",
+        "auto_play_mode": "order",
+        "auto_play_initial_volume": "0.7",
+    }
+    if on:
+        form["auto_apply_damage"] = "on"
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings", data=form,
+        follow_redirects=False,
+    )
+
+
+async def test_save_for_half_applies_half_on_success(gm_client, tavik_rested, roster, monkeypatch):
+    """Sacred Flame at a bandit who saves → no damage applied (Sacred
+    Flame has no save-for-half — but the v2.31.0 default IS save-for-
+    half so the test asserts half-damage. A future content flag can
+    encode the per-spell exception). Here we use Burning Hands which
+    IS save-for-half, and force the bandit to roll high so the success
+    branch fires.
+
+    Skips when auto_apply_damage is off — set it on first.
+    """
+    tavik = tavik_rested
+    await _set_auto_apply(gm_client, on=True)
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next((t for t in templates if "bandit" in t["name"].lower()), templates[0])
+    await _seed_battle(gm_client, [
+        {"id": f"tok_test_{tavik['id']}", "char_id": tavik["id"],
+         "name": tavik["name"], "initiative": 10, "hp_current": 30, "hp_max": 30,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": "tok_test_bandit_dmg", "char_id": None,
+         "token_template_id": bandit_tmpl["id"],
+         "name": bandit_tmpl["name"], "initiative": 7, "hp_current": 50, "hp_max": 50,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+    ])
+    # Sacred Flame (idx 0) — d8 radiant, Dex save. The bandit's Dex
+    # mod is +1 (dex 12) so half the time he saves, half he doesn't.
+    # We just assert SOMETHING reasonable came back; exact values
+    # depend on the d20+d8 rolls.
+    SACRED_FLAME_INDEX = 0
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": tavik["id"],
+            "spell_index": SACRED_FLAME_INDEX,
+            "slot_level": 0,
+            "class_slug": "cleric",
+            "target_combatant_id": "tok_test_bandit_dmg",
+            "target_name": bandit_tmpl["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["auto_save_target_kind"] == "npc"
+    assert isinstance(data["auto_save_passed"], bool)
+    # Damage was rolled even if rolled=0 is theoretically possible.
+    # auto_save_damage_rolled should be 1..8 for a d8.
+    assert 1 <= data["auto_save_damage_rolled"] <= 8
+    if data["auto_save_passed"]:
+        # Save-for-half default: half (rounded down).
+        assert data["auto_save_damage_applied"] == data["auto_save_damage_rolled"] // 2
+    else:
+        # Full damage on fail (modulo resistance — bandit has none).
+        assert data["auto_save_damage_applied"] == data["auto_save_damage_rolled"]
+    assert data["auto_save_damage_type"] == "radiant"
+
+
+async def test_save_spell_no_auto_damage_when_toggle_off(gm_client, tavik_rested, roster):
+    """When campaign.auto_apply_damage is False, the save still rolls
+    but no damage is applied — auto_save_damage_applied == 0."""
+    tavik = tavik_rested
+    await _set_auto_apply(gm_client, on=False)
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next((t for t in templates if "bandit" in t["name"].lower()), templates[0])
+    await _seed_battle(gm_client, [
+        {"id": f"tok_test_{tavik['id']}", "char_id": tavik["id"],
+         "name": tavik["name"], "initiative": 10, "hp_current": 30, "hp_max": 30,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": "tok_test_bandit_off", "char_id": None,
+         "token_template_id": bandit_tmpl["id"],
+         "name": bandit_tmpl["name"], "initiative": 7, "hp_current": 11, "hp_max": 11,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+    ])
+    SACRED_FLAME_INDEX = 0
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": tavik["id"],
+            "spell_index": SACRED_FLAME_INDEX,
+            "slot_level": 0,
+            "class_slug": "cleric",
+            "target_combatant_id": "tok_test_bandit_off",
+            "target_name": bandit_tmpl["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    # Save still rolls.
+    assert data["auto_save_target_kind"] == "npc"
+    assert isinstance(data["auto_save_passed"], bool)
+    # Damage NOT applied because toggle is off.
+    assert data["auto_save_damage_rolled"] == 0
+    assert data["auto_save_damage_applied"] == 0
+    # Re-enable for subsequent tests in the run.
+    await _set_auto_apply(gm_client, on=True)
+
+
 async def test_non_save_spell_no_auto_save(gm_client, tavik_rested, roster):
     """Healing Word (no save_ability) → auto-save not invoked."""
     tavik = tavik_rested

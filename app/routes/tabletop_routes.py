@@ -6457,6 +6457,64 @@ async def cast_spell(
                             "dc": auto_save_dc,
                         },
                     })
+
+        # v2.31.0 Phase T.3b: auto-apply damage on save-for-half spells
+        # (Fireball, Burning Hands, Sacred Flame, etc.). Full on fail,
+        # half (rounded down) on success — the default save-for-half
+        # rule. Gated by ``campaign.auto_apply_damage`` (same toggle as
+        # weapon attacks), so the GM opts in. NPC-target only for v1
+        # (PCs use the existing chat-card "Roll Damage" button + manual
+        # apply). Save-or-suck spells (Hold Person — no damage on the
+        # action) skip this block; the buff installer is filed as a
+        # follow-up.
+        damage_expr = ""
+        damage_type = ""
+        for a in (spell.get("actions") or []):
+            if a.get("damage"):
+                damage_expr = a.get("damage") or ""
+                damage_type = a.get("damage_type") or ""
+                break
+        if not damage_expr:
+            damage_expr = spell.get("damage") or ""
+            damage_type = spell.get("damage_type") or damage_type
+        auto_save_damage_rolled = 0
+        auto_save_damage_applied = 0
+        auto_save_damage_breakdown = ""
+        auto_save_damage_type = damage_type
+        if (
+            damage_expr
+            and auto_save_target_kind == "npc"
+            and auto_save_passed is not None
+            and target_combatant
+            and bool(campaign.auto_apply_damage)
+        ):
+            try:
+                _dr = dice_mod.roll(damage_expr)
+                auto_save_damage_rolled = max(0, int(_dr.total))
+                auto_save_damage_breakdown = _dr.breakdown
+            except dice_mod.DiceParseError:
+                auto_save_damage_rolled = 0
+            if auto_save_damage_rolled > 0:
+                # Save-for-half: full damage on fail, half on success.
+                # Sacred Flame and similar "no effect on success" spells
+                # are filed for the action schema — for now save-for-
+                # half is the universal default.
+                proposed = (
+                    auto_save_damage_rolled if not auto_save_passed
+                    else auto_save_damage_rolled // 2
+                )
+                if proposed > 0:
+                    dmg_result = await _apply_damage_to_combatant(
+                        db, campaign_id, target_combatant, proposed,
+                        damage_type=damage_type,
+                        attack_id=cast_id,
+                    )
+                    auto_save_damage_applied = int(dmg_result.get("applied") or 0)
+        payload["auto_save_damage_rolled"] = auto_save_damage_rolled
+        payload["auto_save_damage_applied"] = auto_save_damage_applied
+        payload["auto_save_damage_breakdown"] = auto_save_damage_breakdown
+        payload["auto_save_damage_type"] = auto_save_damage_type
+
         payload["auto_save_ability"] = save_ability
         payload["auto_save_dc"] = auto_save_dc
         payload["auto_save_target_name"] = auto_save_target_name
@@ -6507,6 +6565,10 @@ async def cast_spell(
         "auto_save_rolled": auto_save_rolled,
         "auto_save_passed": auto_save_passed,
         "auto_save_breakdown": auto_save_breakdown,
+        # v2.31.0 Phase T.3b: echo damage applied on save-for-half.
+        "auto_save_damage_rolled": payload.get("auto_save_damage_rolled", 0) if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} else 0,
+        "auto_save_damage_applied": payload.get("auto_save_damage_applied", 0) if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} else 0,
+        "auto_save_damage_type": payload.get("auto_save_damage_type", "") if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} else "",
     }
 
 

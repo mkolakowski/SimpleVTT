@@ -1842,11 +1842,26 @@
             const verdict = passed
                 ? '<span class="weapon-atk-resist">✅ saved</span>'
                 : '<span class="weapon-atk-hit">❌ failed</span>';
+            // v2.31.0 Phase T.3b: damage line if save-for-half auto-
+            // applied. Server already wrote the damage via the same
+            // _attack_damage_log entry the weapon-attack Undo button
+            // uses, so we can offer a ↶ Undo right here.
+            const dmgApplied = d.auto_save_damage_applied || 0;
+            const dmgType = d.auto_save_damage_type
+                ? ` ${escapeHTML(d.auto_save_damage_type)}` : '';
+            const dmgLine = dmgApplied > 0
+                ? `<div class="weapon-atk-line">
+                    <span class="weapon-atk-label">🎲 Applied</span>
+                    <span class="weapon-atk-total">${tgt} −${dmgApplied}${dmgType}</span>
+                    <span class="weapon-atk-applied">${passed ? '(half on save)' : '(full)'}</span>
+                    <button type="button" class="weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this damage">↶ Undo</button>
+                </div>`
+                : '';
             return `<div class="weapon-atk-line">
                 <span class="weapon-atk-label">📋 ${ab} save</span>
                 <span class="weapon-atk-total">${tgt}: ${escapeHTML(String(d.auto_save_rolled))}</span>
                 <span class="weapon-atk-applied">vs DC ${dc} — ${verdict}</span>
-            </div>`;
+            </div>${dmgLine}`;
         }
         return '';
     }
@@ -1937,10 +1952,14 @@
         // endpoint as attack-damage undo (server detects the heal
         // entry's is_heal flag and reverses by damaging the same
         // amount).
-        const healUndoBtn = li.querySelector('.weapon-atk-undo');
-        if (healUndoBtn) {
-            healUndoBtn.addEventListener('click', async () => {
-                healUndoBtn.disabled = true;
+        // v2.31.0 Phase T.3b: also wires save-for-half damage undo
+        // buttons. querySelectorAll iterates every ``.weapon-atk-undo``
+        // on the card; heal cards only have one, save-spell cards may
+        // have one (damage applied), and a future spell that combines
+        // both (some homebrew?) would wire both with the same handler.
+        li.querySelectorAll('.weapon-atk-undo').forEach((undoBtn) => {
+            undoBtn.addEventListener('click', async () => {
+                undoBtn.disabled = true;
                 try {
                     const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/undo_attack_damage`, {
                         method: 'POST',
@@ -1951,18 +1970,18 @@
                         let body; try { body = await r.json(); } catch { body = null; }
                         (window.showToast || function(m){ alert(m); })(
                             `Undo failed: ${body ? JSON.stringify(body) : r.status}`, 'error');
-                        healUndoBtn.disabled = false;
+                        undoBtn.disabled = false;
                         return;
                     }
                     const data = await r.json().catch(() => ({}));
-                    healUndoBtn.textContent = `↶ Reverted ${data.reverted || ''}`;
-                    healUndoBtn.classList.add('undone');
+                    undoBtn.textContent = `↶ Reverted ${data.reverted || ''}`;
+                    undoBtn.classList.add('undone');
                 } catch (e) {
                     console.warn('undo_attack_damage failed:', e);
-                    healUndoBtn.disabled = false;
+                    undoBtn.disabled = false;
                 }
             });
-        }
+        });
 
         // Stash the cast metadata on the element so the roll listener can
         // correlate save responses back to this card (matches by note prefix).

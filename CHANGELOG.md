@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.31.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Phase T.3b — auto-apply damage on save-for-half spells (NPC targets).** Extends v2.30.0's auto-resolve so when an NPC fails a save vs Fireball / Burning Hands / Sacred Flame / etc., the server rolls the spell's damage AND applies it (full on fail, half rounded down on success). Gated by the existing `Campaign.auto_apply_damage` toggle so the GM opts in (consistent with weapon-attack auto-damage from T.2). The applied damage logs into `_attack_damage_log[cast_id]` exactly like a weapon attack, so the chat-card `↶ Undo` button reuses the same `/undo_attack_damage` path. MINOR — additive auto-effect on the v2.30.0 T.3 plumbing. No schema changes.
+**Description:** Three edits. **(1)** `app/routes/tabletop_routes.py` `/cast_spell` — new auto-damage block immediately after the auto-save NPC branch. Resolves `damage` + `damage_type` via the same fallback pattern (action-tier first, then top-level), gates on `campaign.auto_apply_damage`, rolls the dice with `dice_mod.roll`, computes the proposed amount (full vs half), and calls the existing `_apply_damage_to_combatant` helper from T.2. Payload + response gain four `auto_save_damage_*` fields. **(2)** `app/static/tabletop.js` `_autoSaveLineHtml` — appends a "🎲 Applied NAME −N TYPE (half on save / full)" line under the save verdict when `auto_save_damage_applied > 0`, with an Undo button reusing the same `.weapon-atk-undo` class. **(3)** `appendSpellCast` undo wire-up — switched from `querySelector` to `querySelectorAll().forEach` so heal-undo and save-damage-undo buttons both fire correctly even when a future spell combines effects on one card. **(4)** `tests/harness/test_cast_spell_save.py` — 2 new harness tests covering save-for-half application (verifies full / half logic) and the toggle-off path (no damage applied when `auto_apply_damage` is False).
+**Description (cont):** Why save-for-half is the default (not save-or-nothing). The action_schema doesn't yet carry a per-spell "no effect on success" flag — RAW that's a minority pattern (Sacred Flame, some psychic dispels). Defaulting to save-for-half matches the majority of damage spells (Fireball, Burning Hands, Cone of Cold, Lightning Bolt, …) and is the right v1 tradeoff. A future content-side flag (`action.save_no_effect_on_success: true`) can encode the exceptions; the server code already isolates the half-damage math so adding the flag is a one-line change.
+**Description (cont 2):** Why save-or-suck (Hold Person, Charm Person) isn't yet auto-applied. RAW these install a buff (paralyzed, charmed) for the spell's duration. The Phase C buff installer (`_install_buff`) exists, but mapping each save-or-suck spell to its buff effect (the duration, the condition tag, the "save again at end of each turn" loop) needs per-spell wiring. Filed as T.3c. For today the GM applies the buff manually via the existing /end_buff / mini-sheet path.
+
+### Added
+- `app/routes/tabletop_routes.py` `/cast_spell` — auto-damage block for NPC save-for-half spells, gated by `campaign.auto_apply_damage`.
+- `app/static/tabletop.js` `_autoSaveLineHtml` — additional damage line with Undo button when save-for-half damage was applied.
+- `tests/harness/test_cast_spell_save.py` — 2 new harness tests (`test_save_for_half_applies_half_on_success`, `test_save_spell_no_auto_damage_when_toggle_off`).
+
+### Changed
+- `app/static/tabletop.js` `appendSpellCast` undo wire-up — `querySelectorAll` over `.weapon-atk-undo` so future spells with multiple Undo-able effects (heal + damage on one card) all work.
+
+### Notes
+- **What to test:** open `/campaign/1` as the GM. Settings → "Auto-apply damage to targets" ON. Double-click a bandit on the map. Cast Burning Hands from Thalindra (or Sacred Flame from Tavik). Bandit fails its Dex save → chat card shows "❌ failed" + "🎲 Applied Bandit −7 fire (full) ↶ Undo". Bandit's HP bar drops by 7. Click ↶ Undo → HP restores. Now turn off the toggle and recast — save still rolls and the verdict shows, but no damage applies.
+- **Backward compat.** Pure additive — toggle off skips the damage block. Spells without a `damage` field (Hold Person) ignore the new block entirely.
+- **Filed for T.3c.** Save-or-suck buff installer (Hold Person → Paralyzed for 1m; Charm Person → Charmed for 1h). Needs a per-spell condition-tag mapping + duration parse.
+
+---
+
 ## [2.30.0] - 2026-05-19
 
 **Schema version:** 56
