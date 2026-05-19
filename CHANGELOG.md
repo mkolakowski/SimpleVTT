@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.28.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Roll log persists across page refreshes.** WS-only chat-card entries (spell casts, weapon attacks, feature-uses) used to vanish on F5 because the server only persists plain `roll` records and `roll_request`s — everything else lived only in the broadcast stream. This commit snapshots those broadcasts to `localStorage` keyed by campaign id (last 100, FIFO trim) and replays them through their original append functions on page load, so the cards rebuild identically with all buttons (↶ Undo on auto-damage / auto-heal, 🩹 Apply Healing, 📋 prompt-save) freshly wired. MINOR — additive client-side persistence, no schema changes.
+**Description:** Three edits in `app/static/tabletop.js`. **(1)** New `_persistRollEntry(type, data)` + `_hydrateRollLog()` helpers + `window._clearRollLog()` exposed for a future GM "Clear log" button (callable from the console today). Storage key: `simplevtt:rolllog:${CAMPAIGN_ID}`. Cap: 100 entries — older entries roll off FIFO-style. A `_rollLogHydrating` guard prevents the replay from re-saving each entry. **(2)** Each of `appendSpellCast`, `appendWeaponAttack`, `_appendFeatureUsed` calls `_persistRollEntry('<type>', data)` after the card appends. `appendRoll` and `appendRollRequest` are deliberately NOT persisted because the server already pre-renders them via Jinja (`{% for r in rolls %}`) and through the RollRequest table — localStorage replay would double-render. **(3)** `_hydrateRollLog()` runs once at the end of the IIFE, after every append fn is defined.
+**Description (cont):** Why we replay through the append fns instead of snapshotting innerHTML. The chat cards carry click handlers wired at append time (`.weapon-atk-undo` for damage/heal undo, `.spell-cast-heal-btn` for legacy claim flow, save / damage / attack action buttons via `renderActionButtons`'s handler map). Snapshotting `roll-list.innerHTML` would restore the visual state but every button would be dead. Replaying through the append fns re-runs the full wire-up — the same closures capture fresh `d` and `li` references, every handler works. Server-side state (heal_claims, _attack_damage_log) has an 8h TTL so Undo / Apply Healing still resolve correctly for recent entries; older entries return the friendly 404s / `already_auto_applied` messages introduced in v2.26.2.
+**Description (cont 2):** Known caveats — chronological ordering. The server-rendered `roll` entries appear at the top of the drawer (their natural Jinja position), then the replayed WS-only entries append at the bottom. If a roll happened AFTER a spell cast, the order is inverted on refresh. Acceptable for v1 — the cards still all exist; ordering polish can ship later (probably via a single unified "history" feed on the server). The auto-heal / auto-damage Undo buttons on replayed cards rely on server-side log entries that may have expired (8h TTL) — clicking after that returns the friendly "Damage log entry not found or expired" 404, same as today.
+
+### Added
+- `app/static/tabletop.js` — `_persistRollEntry` / `_hydrateRollLog` / `window._clearRollLog` for localStorage-backed roll log history.
+- `app/static/tabletop.js` — persist hooks in `appendSpellCast`, `appendWeaponAttack`, `_appendFeatureUsed`.
+
+### Notes
+- **What to test:** open `/campaign/1`. Cast Healing Word from Tavik at Krieger. Roll an attack. Fire a feature. F5 refresh → the spell-cast / attack / feature cards all reappear with their Undo / Apply Healing / Save buttons functional. Plain rolls were already persistent via the server. To clear the buffer, run `_clearRollLog()` in the console.
+- **Backward compat.** Pure client-side localStorage addition. No server changes; the existing roll log behavior is unchanged for users who never refresh.
+- **Storage budget.** ~5 KB per entry × 100 entries ≈ 500 KB per campaign. Well under the typical 5–10 MB localStorage cap.
+
+---
+
 ## [2.27.2] - 2026-05-19
 
 **Schema version:** 56

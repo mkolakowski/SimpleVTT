@@ -1509,6 +1509,66 @@
         if (body) body.scrollTop = body.scrollHeight;
     }
 
+    // v2.28.0: roll-log persistence. Snapshot WS-only chat-card events
+    // (spell_cast / weapon_attack / feature_used) to localStorage keyed
+    // by campaign id so they survive page refreshes. On page load we
+    // replay the saved entries through the same append fns so the
+    // cards rebuild identically, with all buttons (Undo / Apply
+    // Healing / Save prompts) freshly wired. Plain ``roll`` records
+    // are NOT persisted here — the server-side render in
+    // ``tabletop.html`` (Jinja ``{% for r in rolls %}``) already
+    // surfaces the persistent roll history, so localStorage replay
+    // would double-render them. Same for ``roll_request`` which is
+    // stored in the RollRequest table. Capped at 100 most-recent
+    // WS-only entries to bound storage; older entries roll off
+    // FIFO-style. ``window._clearRollLog()`` flushes the buffer
+    // (intended for a future GM "Clear log" button — callable from
+    // the console today).
+    const _ROLL_LOG_KEY = `simplevtt:rolllog:${CAMPAIGN_ID}`;
+    const _ROLL_LOG_MAX = 100;
+    let _rollLogHydrating = false;
+    function _persistRollEntry(type, data) {
+        if (_rollLogHydrating) return;
+        try {
+            const raw = localStorage.getItem(_ROLL_LOG_KEY);
+            const entries = raw ? JSON.parse(raw) : [];
+            if (!Array.isArray(entries)) return;
+            entries.push({ type, data, ts: Date.now() });
+            if (entries.length > _ROLL_LOG_MAX) {
+                entries.splice(0, entries.length - _ROLL_LOG_MAX);
+            }
+            localStorage.setItem(_ROLL_LOG_KEY, JSON.stringify(entries));
+        } catch (_) { /* private-mode localStorage etc. */ }
+    }
+    function _hydrateRollLog() {
+        let entries;
+        try {
+            const raw = localStorage.getItem(_ROLL_LOG_KEY);
+            if (!raw) return;
+            entries = JSON.parse(raw);
+        } catch (_) { return; }
+        if (!Array.isArray(entries) || !entries.length) return;
+        _rollLogHydrating = true;
+        try {
+            for (const e of entries) {
+                try {
+                    if (e.type === 'spell_cast')         appendSpellCast(e.data);
+                    else if (e.type === 'weapon_attack') appendWeaponAttack(e.data);
+                    else if (e.type === 'feature_used')  _appendFeatureUsed(e.data);
+                } catch (err) {
+                    console.warn('[rolllog] hydrate skipped', e.type, err);
+                }
+            }
+        } finally {
+            _rollLogHydrating = false;
+        }
+    }
+    window._clearRollLog = function () {
+        try { localStorage.removeItem(_ROLL_LOG_KEY); } catch (_) {}
+        const ul = document.getElementById('roll-list');
+        if (ul) ul.innerHTML = '';
+    };
+
     function appendRoll(r) {
         // Re-apply visibility filter on the client (server already does this
         // for non-broadcast targets but every client receives the same payload).
@@ -1560,6 +1620,8 @@
             </div>`;
         ul.appendChild(li);
         _scrollRollLogToBottom();
+        // ``roll`` not persisted to localStorage — server pre-renders
+        // rolls history via Jinja, so replay would double-render.
     }
 
     function appendRollRequest(req) {
@@ -1666,6 +1728,8 @@
 
         ul.appendChild(li);
         _scrollRollLogToBottom();
+        // ``roll_request`` not persisted to localStorage — server
+        // stores it in the RollRequest table (same reason as ``roll``).
     }
 
     // ---------- Toast (transient overlay notification) ----------
@@ -1870,6 +1934,7 @@
         // Stash the cast metadata on the element so the roll listener can
         // correlate save responses back to this card (matches by note prefix).
         li._spellCast = { ...d, _saveLabel: null };
+        _persistRollEntry('spell_cast', d);
     }
 
     async function _applyHealing(d, li, btn) {
@@ -2152,6 +2217,7 @@
             </div>`;
         ul.appendChild(li);
         _scrollRollLogToBottom();
+        _persistRollEntry('feature_used', d);
     }
 
     // ---------- Weapon-attack card ----------
@@ -2299,6 +2365,7 @@
             spell_save_ability: d.save_ability,
             spell_name: d.attack_name,
         };
+        _persistRollEntry('weapon_attack', d);
     }
 
     async function promptAttackSave(d, li, btn) {
@@ -3047,4 +3114,12 @@
             'noopener'
         );
     };
+
+    // v2.28.0: rehydrate the roll log from localStorage so chat-card
+    // history survives page refreshes. Runs once after the append fns
+    // are defined; the ``_rollLogHydrating`` guard inside
+    // ``_persistRollEntry`` prevents the replay from re-saving each
+    // entry. Each card rebuilds through its original append fn so
+    // all click handlers (Undo / Apply Healing / Save) re-wire.
+    _hydrateRollLog();
 })();
