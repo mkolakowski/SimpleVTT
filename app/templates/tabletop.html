@@ -558,6 +558,62 @@
     .econ-chip.mov { color: #80e0a0; }
     .econ-chip.mov.near { color: #e8a040; border-color: rgba(232,160,64,.4); background: rgba(232,160,64,.08); }
     .econ-chip.mov.over { color: #ff7070; border-color: rgba(255,112,112,.5); background: rgba(255,112,112,.1); }
+    /* v2.19.0 Phase C.1: buff chips. Sit below the action-economy chips,
+       one chip per active timed buff (Rage, Hunter's Mark, Hex, ...).
+       Purple-tinted to distinguish from the green/amber economy chips.
+       The × end button is sized to the 32px dense-panel floor (per
+       CLAUDE.md exception for compact row-based UIs). */
+    .buff-chips {
+        display: flex;
+        gap: 4px;
+        margin-top: 3px;
+        flex-wrap: wrap;
+    }
+    .buff-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1;
+        padding: 3px 4px 3px 6px;
+        min-height: 24px;
+        border: 1px solid rgba(167,139,250,.5);
+        border-radius: 3px;
+        background: rgba(167,139,250,.12);
+        color: #c4b5fd;
+        white-space: nowrap;
+        letter-spacing: 0.3px;
+    }
+    .buff-chip .buff-dur {
+        opacity: 0.75;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+    }
+    .buff-end {
+        min-height: 18px;
+        height: 18px;
+        width: 18px;
+        padding: 0;
+        font-size: 14px;
+        line-height: 1;
+        border: 1px solid rgba(167,139,250,.4);
+        border-radius: 50%;
+        background: rgba(0,0,0,.25);
+        color: #c4b5fd;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        touch-action: manipulation;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+    .buff-end:hover {
+        background: rgba(255,112,112,.25);
+        color: #ff9090;
+        border-color: rgba(255,112,112,.5);
+    }
     /* v2.4.21: roll-state pill + death-saves tracker share one row. The
        roll pill shrinks to content; the death-saves tracker auto-hides
        its 6-pip row when the character is alive. */
@@ -4566,6 +4622,28 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     ${econChip('reaction', 'Rxn', !!econ.reaction)}
                     ${movChip}
                 </div>`;
+                // v2.19.0 Phase C.1: buff badges row. Renders one chip
+                // per active buff (Rage, Hunter's Mark, Hex, ...) with
+                // duration remaining + a × button to end manually.
+                // Empty list renders nothing (no row, no padding). Auto-
+                // expire happens in the GM's nextTurn handler — each buff
+                // belonging to the combatant whose turn is ENDING gets
+                // its duration_rounds decremented; buffs at 0 are dropped
+                // (filtered out) before the PUT /battle.
+                const buffs = Array.isArray(c.buffs) ? c.buffs : [];
+                const buffChip = (b) => {
+                    const dur = Number.isFinite(b.duration_rounds)
+                        ? ` <span class="buff-dur">${b.duration_rounds}r</span>` : '';
+                    const icon = b.icon ? `${b.icon} ` : '';
+                    const ttl = (b.desc || b.name || '').replace(/"/g, '&quot;');
+                    return `<span class="buff-chip" title="${ttl}">
+                        ${icon}${b.name || b.key}${dur}
+                        <button type="button" class="buff-end" data-char-id="${c.char_id || ''}" data-key="${b.key}" title="End ${b.name || b.key}">×</button>
+                    </span>`;
+                };
+                const buffChips = buffs.length
+                    ? `<div class="buff-chips">${buffs.map(buffChip).join('')}</div>`
+                    : '';
                 return `<div class="init-entry${isActive ? ' active-turn' : ''}" data-idx="${i}" data-char-id="${slotId}">
                     <div class="mini-header" data-idx="${i}" data-char-id="${slotId}">
                         ${tokenImg}
@@ -4573,6 +4651,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             <div class="mini-header-name">${c.name}</div>
                             <div class="mini-header-sub">Init <strong>${c.initiative}</strong> &nbsp;·&nbsp; HP <strong style="color:${col};">${c.hp_current}</strong> / ${c.hp_max}</div>
                             ${economyChips}
+                            ${buffChips}
                         </div>
                         ${sheetBtn}
                         <span class="mini-header-arrow">▶</span>
@@ -4634,6 +4713,51 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 pushBattle(); renderBattle();
             }));
         }
+
+        // v2.19.0 Phase C.1: buff × button — end a buff manually. Fires
+        // /end_buff which removes the entry server-side + broadcasts
+        // buff_update. Bound for both GM and players (anyone who owns
+        // a row sees the row, and the server enforces ownership). NPC
+        // buffs (char_id missing) are GM-only since /end_buff needs a
+        // character_id — for v1 the GM ends NPC buffs by clicking the
+        // ×, which still PUTs /battle through the local mutation path
+        // below.
+        list.querySelectorAll('.buff-end').forEach(btn => btn.addEventListener('click', async (ev) => {
+            ev.stopPropagation();
+            const cidStr = btn.dataset.charId;
+            const key = btn.dataset.key;
+            if (!key) return;
+            const cid = parseInt(cidStr, 10);
+            if (Number.isFinite(cid) && cid > 0) {
+                // PC path: server-side end (auth: owner / GM).
+                try {
+                    const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/end_buff`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ character_id: cid, key }),
+                    });
+                    if (!r.ok) {
+                        let body; try { body = await r.json(); } catch { body = null; }
+                        (window.showToast || function(m){ alert(m); })(
+                            `End buff failed: ${body ? JSON.stringify(body) : r.status}`, 'error');
+                    }
+                    // Success path: server broadcasts buff_update, which
+                    // the WS handler above patches into local battle state.
+                } catch (e) {
+                    console.warn('end_buff fetch failed:', e);
+                }
+            } else {
+                // NPC path (no char_id) — GM-only local mutation + PUT.
+                if (!IS_GM) return;
+                for (const c of battle.combatants || []) {
+                    if (!Array.isArray(c.buffs)) continue;
+                    const before = c.buffs.length;
+                    c.buffs = c.buffs.filter(b => b.key !== key);
+                    if (c.buffs.length !== before) break;  // removed one — done
+                }
+                pushBattle(); renderBattle();
+            }
+        }));
 
         /* ⑤ Expand/collapse for ALL card entries — moves mini-body in/out of the sheet slot */
         list.querySelectorAll('.init-entry').forEach(entry => {
@@ -4709,6 +4833,42 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 fetch(`/api/campaign/${CAMPAIGN_ID}/concentration/${cur.char_id}/tick`, {
                     method: 'POST',
                 }).catch(e => console.warn('Concentration tick failed:', e));
+            }
+            // v2.19.0 Phase C.1: tick the ending combatant's buffs.
+            // Each buff installed by them ticks down by 1 round; buffs
+            // that hit 0 are dropped before the pushBattle() below. Auto-
+            // expire is GM-driven (the GM owns turn advancement); the
+            // PUT /battle broadcast cascades the new buff lists to every
+            // client. We tick buffs OWNED by the ending combatant (their
+            // source_caster_id), not buffs ON them — Hunter's Mark cast
+            // by Rowan ticks on Rowan's turn end, not on the marked
+            // creature's turn end. For v1 self-buffs (Rage) the two are
+            // the same since source_caster_id == target_combatant_id.
+            const curId = cur?.id;
+            if (curId) {
+                for (const c of battle.combatants) {
+                    if (!Array.isArray(c.buffs)) continue;
+                    const tickedBuffs = [];
+                    for (const b of c.buffs) {
+                        const owner = b.source_caster_id || c.id;  // self-buffs default to combatant
+                        if (owner !== curId) { tickedBuffs.push(b); continue; }
+                        const dur = Number.isFinite(b.duration_rounds) ? b.duration_rounds : null;
+                        if (dur == null) { tickedBuffs.push(b); continue; }  // permanent buff
+                        const next_ = dur - 1;
+                        if (next_ <= 0) {
+                            // Expired — drop from list (don't push).
+                            if (typeof window.showToast === 'function' && c === cur) {
+                                window.showToast(`⏱ ${b.name || b.key} expired on ${c.name}`, 'info');
+                            }
+                            continue;
+                        }
+                        tickedBuffs.push({ ...b, duration_rounds: next_ });
+                    }
+                    if (tickedBuffs.length !== c.buffs.length
+                            || tickedBuffs.some((b, i) => b !== c.buffs[i])) {
+                        c.buffs = tickedBuffs;
+                    }
+                }
             }
         }
         const next = (battle.turn_index + 1) % battle.combatants.length;
@@ -4912,6 +5072,21 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const next = !!data.used;
             if (combatant.economy[slot] === next) return;
             combatant.economy[slot] = next;
+            saveBattle();
+            renderBattle();
+            return;
+        }
+        // v2.19.0 Phase C.1: buff_update — server installed / removed a
+        // buff on a combatant. Replace the combatant's buffs list and
+        // re-render badges. The whole list is broadcast (not just a
+        // diff) so the client doesn't have to track delete-by-key.
+        if (msg.type === 'buff_update') {
+            const data = msg.data || {};
+            const cid = parseInt(data.character_id, 10);
+            if (!Number.isFinite(cid)) return;
+            const combatant = (battle.combatants || []).find(c => c.char_id === cid);
+            if (!combatant) return;
+            combatant.buffs = Array.isArray(data.buffs) ? data.buffs : [];
             saveBattle();
             renderBattle();
             return;

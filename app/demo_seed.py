@@ -2786,6 +2786,11 @@ def seed_encounter(
             "color": tok.color,
             "dex_mod": dex_mod,
             "image_url": tok.image_url,
+            # v2.19.0 Phase C.1: structured buff list (Rage, Hunter's
+            # Mark, Hex, Bless, ...). Empty at seed time; /use_rage etc.
+            # install entries when fired. Auto-expire ticks down at
+            # each turn boundary; client renders one chip per buff.
+            "buffs": [],
         })
     battle_state = {
         "combatants": combatants,

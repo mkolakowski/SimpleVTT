@@ -4594,6 +4594,13 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     const isCuttingWords = featureKey === 'cutting-words';
                     const isSecondWind = featureKey === 'second-wind';
                     const isActionSurge = featureKey === 'action-surge';
+                    // v2.19.0 Phase C.1: Rage routes to /use_rage which
+                    // installs the rage buff on the combatant + decrements
+                    // the Rage counter + marks the bonus chip. The buff
+                    // is rendered as a badge in the init tracker; (B)
+                    // Phase B will read its effects to apply damage /
+                    // advantage / resistance at roll time.
+                    const isRage = featureKey === 'rage';
 
                     // Resolve the cutting-words target via the picker
                     // BEFORE building the fetch closure. Awaiting the
@@ -4642,6 +4649,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     const endpoint = isCuttingWords ? 'use_cutting_words'
                                    : isSecondWind ? 'use_second_wind'
                                    : isActionSurge ? 'use_action_surge'
+                                   : isRage ? 'use_rage'
                                    : 'use_feature';
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
                         method: 'POST',
@@ -4657,6 +4665,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 override: !!override,
                             } : isActionSurge ? {
                                 character_id: MY_CHAR_ID,
+                            } : isRage ? {
+                                character_id: MY_CHAR_ID,
+                                override: !!override,
                             } : {
                                 character_id: MY_CHAR_ID,
                                 feature_key: featureKey,
@@ -4712,6 +4723,8 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             window.showToast(`💨 Second Wind: ${data.expression} = +${data.actual_healed} HP (now ${data.hp.current}/${data.hp.max})`, 'info');
                         } else if (isActionSurge) {
                             window.showToast(`⚡ Action Surge: action chip refunded — take another action this turn.`, 'info');
+                        } else if (isRage) {
+                            window.showToast(`🦬 Rage activated: +${data.damage_bonus} dmg, ${data.duration_rounds} rounds (${data.remaining}/${data.max} uses left)`, 'info');
                         } else {
                             const lbl = data.feature_label || 'Feature used';
                             const slotTxt = data.slot && data.slot !== 'free' ? ` (${data.slot})` : '';

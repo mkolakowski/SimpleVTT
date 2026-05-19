@@ -242,6 +242,121 @@ async def _mark_battle_economy(
     })
 
 
+# v2.19.0 Phase C.1: buff slot helpers. A "buff" is a structured timed
+# effect installed on a combatant in the hub battle state — Rage,
+# Hunter's Mark, Hex, Bless, Faerie Fire, etc. Unlike the action-economy
+# chips (single bool per slot), buffs are a list per combatant carrying
+# (key, name, duration, effects) so the future (B) roll-time intercept
+# can read the effects without a separate lookup table.
+#
+# Storage: ``combatant["buffs"]`` — a list of dicts, each:
+#   {
+#     "key":               str slug, unique per combatant (rage / hunters-mark / ...),
+#     "name":              str display name,
+#     "icon":              str emoji,
+#     "source_caster_id":  str combatant id of who installed it (for concentration tracking in C.2),
+#     "target_combatant_id": str combatant id of who it affects (self for rage),
+#     "duration_rounds":   int rounds remaining; client-side tick decrements at turn boundary,
+#     "duration_max":      int original duration,
+#     "concentration":     bool (C.2 will gate one-at-a-time),
+#     "effects":           dict — informational structure read by (B) intercepts (damage_bonus, advantage_on, resistance_to, etc.),
+#     "desc":              str short tooltip text,
+#   }
+#
+# Mutations broadcast ``buff_update`` so every connected client refreshes
+# its init-tracker badges. The same WS handler runs for install /
+# refresh / remove — clients diff against the prior list.
+
+async def _install_buff(
+    campaign_id: int, character_id: int, buff: dict,
+) -> bool:
+    """Install (or replace) a buff on the combatant whose ``char_id``
+    matches. Returns True if the install succeeded, False if there's
+    no active battle or the character isn't in init. If a buff with
+    the same ``key`` already exists, it's overwritten (refresh
+    semantics — re-casting Rage extends the duration cleanly).
+    Broadcasts ``buff_update`` with the full new buff list for the
+    target combatant.
+    """
+    if not isinstance(buff, dict) or not buff.get("key"):
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == character_id:
+            target = c
+            break
+    if target is None:
+        return False
+    buffs = target.get("buffs")
+    if not isinstance(buffs, list):
+        buffs = []
+        target["buffs"] = buffs
+    key = str(buff["key"])
+    # Replace existing entry with same key (refresh) or append new one.
+    new_list = [b for b in buffs if (b or {}).get("key") != key]
+    new_list.append(dict(buff))
+    target["buffs"] = new_list
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "buff_update",
+        "data": {
+            "character_id": character_id,
+            "buffs": new_list,
+        },
+    })
+    return True
+
+
+async def _remove_buff(
+    campaign_id: int, character_id: int, key: str,
+) -> bool:
+    """Remove a single buff by key. Returns True if removed, False if
+    nothing matched. Broadcasts ``buff_update`` with the new (possibly
+    empty) buff list when a removal happened; no-op silently otherwise.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == character_id:
+            target = c
+            break
+    if target is None:
+        return False
+    buffs = target.get("buffs") or []
+    new_list = [b for b in buffs if (b or {}).get("key") != key]
+    if len(new_list) == len(buffs):
+        return False
+    target["buffs"] = new_list
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "buff_update",
+        "data": {
+            "character_id": character_id,
+            "buffs": new_list,
+            "removed_key": key,
+        },
+    })
+    return True
+
+
+def _get_buffs(campaign_id: int, character_id: int) -> list[dict]:
+    """Read helper: return the current buff list for a character (or
+    empty list if no battle / not in init). Read-only — never mutates.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return []
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == character_id:
+            return list(c.get("buffs") or [])
+    return []
+
+
 # ----------- helpers -----------
 
 def _user_can_view_campaign(db: Session, user: User, campaign: Campaign) -> bool:
@@ -6600,6 +6715,38 @@ def _fighter_level_from_sheet(sheet: dict) -> int:
     return 0
 
 
+def _barbarian_level_from_sheet(sheet: dict) -> int:
+    """Barbarian-level helper (mirrors `_fighter_level_from_sheet`).
+    v2.19.0: added for Rage damage scaling — +2 Lv 1-8, +3 Lv 9-15, +4
+    Lv 16+.
+    """
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "barbarian":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "barbarian":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _rage_damage_bonus(barbarian_lv: int) -> int:
+    """RAW Rage damage bonus by Barbarian level. Lv 1-8 = +2, Lv 9-15 =
+    +3, Lv 16+ = +4."""
+    if barbarian_lv >= 16:
+        return 4
+    if barbarian_lv >= 9:
+        return 3
+    return 2
+
+
 @router.post("/api/campaign/{campaign_id}/use_arcane_recovery")
 async def use_arcane_recovery(
     campaign_id: int,
@@ -7123,6 +7270,245 @@ async def use_action_surge(
         "remaining": as_cur - 1,
         "action_chip_refunded": True,
     }
+
+
+# ----------- API: Rage (Barbarian Lv 1) -----------
+#
+# v2.19.0 Phase C.1: first user of the buff-slot infrastructure. Rage
+# is the canonical test case for structured timed effects — damage
+# bonus + advantage on STR + resistance to physical, all stamped onto
+# the combatant for 10 rounds. The actual roll-time application of
+# those effects waits on Phase B (the (B) roll-time intercept reads
+# combatant.buffs and applies bonuses); this endpoint just installs
+# the buff + decrements the Rage counter + marks the bonus chip.
+
+@router.post("/api/campaign/{campaign_id}/use_rage")
+async def use_rage(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Activate Rage — install the rage buff on the barbarian in the
+    hub battle state + decrement the Rage counter + mark the bonus
+    action chip.
+
+    Body: ``{character_id, override?}``.
+
+    RAW: Bonus action. While raging (max 1 minute / 10 rounds): +2
+    damage on melee STR attacks (Lv 1-8; +3 at Lv 9-15, +4 at Lv 16+),
+    advantage on STR checks and saves, resistance to bludgeoning /
+    piercing / slashing. Ends early if KO'd or if turn ends without
+    attacking or taking damage — v1 doesn't auto-detect the "no attack
+    / no damage" branch; player ends it manually via the buff badge ×
+    button (`/end_buff`).
+
+    Validates Barbarian Lv 1+ (409 wrong_class), rage counter has uses
+    (404 no resource / 409 out_of_uses). Phase 4 over-budget gate on
+    the bonus slot per the v2.6.1 pattern.
+
+    Broadcasts:
+    - ``feature_used`` (rage announce + remaining counter)
+    - ``resource_update`` (rage counter)
+    - ``buff_update`` (rage buff appears on the barbarian's combatant)
+    - ``economy_update`` (bonus chip flipped) via `_mark_battle_economy`
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Barbarian character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    barb_lv = _barbarian_level_from_sheet(sheet)
+    if barb_lv < 1:
+        raise HTTPException(409, "Rage requires Barbarian level 1+")
+
+    # Verify rage counter has uses left.
+    resources = list(sheet.get("resources") or [])
+    rage_idx = -1
+    rage_row = None
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "rage":
+            rage_row = dict(r)
+            rage_idx = i
+            break
+    if rage_row is None:
+        raise HTTPException(404, "No Rage resource on this sheet")
+    rage_cur = int(rage_row.get("current") or 0)
+    rage_max = int(rage_row.get("max") or 0)
+    if rage_cur <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Rage",
+        })
+
+    # Phase 4 over-budget gate (bonus slot).
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "bonus",
+            "char_name": char.name,
+            "source": "rage",
+            "label": "Rage",
+            "strict": strict,
+        })
+
+    # Decrement counter.
+    rage_row["current"] = rage_cur - 1
+    resources[rage_idx] = rage_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Install the rage buff on the barbarian's combatant. ``effects`` is
+    # informational — (B) Phase B roll-time intercept will read these
+    # fields when applying the rage damage bonus / advantage flags /
+    # resistance.
+    damage_bonus = _rage_damage_bonus(barb_lv)
+    buff = {
+        "key": "rage",
+        "name": "Rage",
+        "icon": "🦬",
+        "source_caster_id": None,   # filled by C.2 with combatant id
+        "target_combatant_id": None,
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "effects": {
+            "melee_str_damage_bonus": damage_bonus,
+            "advantage_on": ["str_check", "str_save", "str_attack"],
+            "resistance_to": ["bludgeoning", "piercing", "slashing"],
+        },
+        "desc": (
+            f"+{damage_bonus} damage on melee STR attacks, advantage on STR "
+            f"checks / saves, resistance to bludgeoning / piercing / slashing. "
+            f"Lasts 10 rounds or until ended early."
+        ),
+    }
+    installed = await _install_buff(campaign_id, char.id, buff)
+
+    # Mark the bonus slot.
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": f"🦬 Rage activated (+{damage_bonus} dmg, 10 rounds)",
+            "feature_desc": (
+                f"Bonus action. +{damage_bonus} damage on melee STR attacks, "
+                f"advantage on STR checks / saves, resistance to physical "
+                f"damage. Ends in 10 rounds or when turn ends without "
+                f"attacking / taking damage."
+            ),
+            "source": "rage",
+            "remaining": rage_cur - 1,
+            "max": rage_max,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "rage",
+            "current": rage_cur - 1,
+            "max": rage_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "remaining": rage_cur - 1,
+        "max": rage_max,
+        "damage_bonus": damage_bonus,
+        "duration_rounds": 10,
+        "buff_installed": installed,
+    }
+
+
+# ----------- API: End a buff manually (Phase C.1 manual removal) -----------
+
+@router.post("/api/campaign/{campaign_id}/end_buff")
+async def end_buff(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Remove a buff from a combatant by key.
+
+    Body: ``{character_id, key}``.
+
+    Auth: owner of the character or any GM. (Not the buff installer —
+    the rage'd barbarian's player can end their own rage; the GM can
+    end anyone's.)
+
+    Returns 404 if no battle / character not in init / buff not on
+    the combatant. Broadcasts ``buff_update`` with the new list.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    key = str(body.get("key") or "").strip()
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not key:
+        raise HTTPException(400, "key is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    removed = await _remove_buff(campaign_id, char.id, key)
+    if not removed:
+        raise HTTPException(404, f"No '{key}' buff on this character")
+
+    return {"ok": True, "removed_key": key}
 
 
 # ----------- API: get a character's current action-economy state -----------
