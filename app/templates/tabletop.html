@@ -236,6 +236,23 @@
     }
     .spell-cast-body { padding: 8px 10px 10px; }
     .spell-cast-name { font-size: 14px; font-weight: 700; color: var(--fg); margin-bottom: 3px; }
+    /* v2.23.0 Phase T.8: target tag on chat cards. Crimson palette
+       matches the in-canvas target ring + the floating targeting chip
+       so a glance ties the card's "→ NAME" to the token on the map. */
+    .target-tag {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 2px 8px;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.4;
+        color: #fff;
+        background: rgba(220, 38, 38, 0.85);
+        border: 1px solid rgba(255, 200, 200, 0.4);
+        border-radius: 10px;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
     .spell-cast-meta { font-size: 11px; color: var(--fg-mute); margin-bottom: 6px; }
     .spell-cast-desc {
         font-size: 11px; color: var(--fg-mute); line-height: 1.5;

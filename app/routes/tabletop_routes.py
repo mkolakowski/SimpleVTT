@@ -481,6 +481,24 @@ def _get_buffs(campaign_id: int, character_id: int) -> list[dict]:
     return []
 
 
+def _lookup_combatant_name(campaign_id: int, combatant_id: str | None) -> str:
+    """v2.23.0 Phase T.8: resolve a hub combatant id to its display
+    name. Returns the empty string when ``combatant_id`` is falsy, no
+    battle is active, or the combatant isn't in init. Used by the
+    /attack broadcast so the chat card can render ``→ NAME`` without
+    a second client lookup.
+    """
+    if not combatant_id:
+        return ""
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return ""
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant_id:
+            return c.get("name") or ""
+    return ""
+
+
 def _mirror_buffs_to_sheet(
     db: Session, character_id: int, buffs: list[dict],
 ) -> None:
@@ -10162,6 +10180,11 @@ async def use_attack(
         "auto_uplifts": auto_uplifts,
         "auto_uplift_total": auto_uplift_total,
         "target_combatant_id": target_combatant_id or "",
+        # v2.23.0 Phase T.8: resolve the target's display name from the
+        # hub battle state so the chat card can render "→ NAME" without
+        # the client needing a second lookup. Empty string when no
+        # target was set or the target isn't in init.
+        "target_name": _lookup_combatant_name(campaign_id, target_combatant_id) if target_combatant_id else "",
         "range": range_str,
         "save_dc": save_dc if is_save else 0,
         "save_ability": save_ability if is_save else "",
@@ -10196,6 +10219,9 @@ async def use_attack(
         "auto_uplifts": auto_uplifts,
         "auto_uplift_total": auto_uplift_total,
         "target_combatant_id": target_combatant_id or "",
+        # v2.23.0 Phase T.8: echo resolved target name so the rolling
+        # player's local toast can include the target without WS lag.
+        "target_name": _lookup_combatant_name(campaign_id, target_combatant_id) if target_combatant_id else "",
         "attack_name": name,
         "damage_type": damage_type,
         "is_save": is_save,

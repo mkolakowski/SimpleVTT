@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.23.0] - 2026-05-19
+
+**Schema version:** 55
+**Commit summary:** **Phase T.8 — chat-card per-target rendering + roll-toast target suffix.** Surfaces the target_name field that T.1 added to the action broadcasts. The roll-log chat cards (`weapon_attack`, `spell_cast`, `feature_used`) now render a crimson `→ NAME` tag next to the action name when a target was set. The full-sheet's roll-toast (`.atk-strike` handler) also appends `→ NAME` to its note so the rolling player sees the target in their own popup, not just in the chat log. /attack broadcast + response gain a `target_name` field (resolved server-side from the hub combatant) — other targeting endpoints already include it. New `_lookup_combatant_name` helper in `tabletop_routes.py` is the resolver. Pure UX polish; no contract changes. MINOR — new visible UI surface (target tags + extended toast text).
+**Description:** Five edits. **(1)** `app/routes/tabletop_routes.py` — new `_lookup_combatant_name(campaign_id, combatant_id)` helper that scans the hub battle state for the matching combatant id and returns its display name (empty string when not in init or no battle). **(2)** `app/routes/tabletop_routes.py` `/attack` — payload + response gain a `target_name` field populated via the new helper. **(3)** `app/static/tabletop.js` — new `_targetTagHtml(d)` helper builds the `<span class="target-tag">→ NAME</span>` markup from the broadcast's `target_name` field; injected into `appendSpellCast`, `appendWeaponAttack`, and `_appendFeatureUsed`. **(4)** `app/templates/tabletop.html` — `.target-tag` CSS (crimson palette matching the in-canvas target ring + the floating targeting chip so the chat card visually ties back to the token on the map). **(5)** `app/templates/sheet_dnd5e.html` `.atk-strike` handler — builds a `tgtSuffix = ' → ' + data.target_name` string and appends it to both the attack-roll and damage-roll toast notes (`🎯 Greataxe → Vex — attack`). **(6)** `tests/harness/test_attack_buff_intercepts.py` — new `test_attack_broadcast_includes_target_name` test seeding a combatant with the real roster name and asserting `/attack` response carries `target_name`. Suite grows 128 → 129.
+**Description (cont):** Why crimson tag color. Matches the in-canvas target ring (`#dc2626`) + the floating "🎯 Targeting" chip from T.0. A player who double-clicks a token sees the same crimson visual cue in three places: the ring around the token on the map, the chip at the bottom of the map pane, and the tag on the eventual chat-log card. The triple-tie makes "what got targeted" hard to miss.
+**Description (cont 2):** Why /attack needed `target_name` added server-side. Phase B (v2.20.0) added `target_combatant_id` to the /attack broadcast but not `target_name` — the chat card would have needed a second client-side lookup against the hub state to resolve the name. The new `_lookup_combatant_name` helper centralizes that resolution server-side; the chat card just reads `d.target_name` uniformly across all action types. Other targeting endpoints (`/cast_spell` from T.1, `/cast_hunters_mark` and `/cast_hex` from C.2, `/use_cutting_words` from B.7, `/use_lay_on_hands` from priority #3) already populate `target_name` directly so no edit needed there.
+**Description (cont 3):** What this DOESN'T do. Targeting doesn't yet drive damage application — `/attack` still returns damage_total + damage_breakdown for the rolling player to read; no HP is applied to the target's sheet automatically. That's **T.2 (auto-damage with campaign toggle)**, which the user wants next. T.8 is purely the visual feedback for what T.1 already wired into the broadcasts.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_lookup_combatant_name(campaign_id, combatant_id)` helper.
+- `app/routes/tabletop_routes.py` `/attack` — `target_name` field on broadcast + response.
+- `app/static/tabletop.js` — `_targetTagHtml(d)` helper + integration into all three chat-card renderers.
+- `app/templates/tabletop.html` — `.target-tag` CSS (crimson rounded pill).
+- `app/templates/sheet_dnd5e.html` — `.atk-strike` toast note appends `→ TARGET`.
+- `tests/harness/test_attack_buff_intercepts.py` — `test_attack_broadcast_includes_target_name`. Suite 128 → 129.
+
+### Notes
+- **What to test:** Open `/campaign/1` as Bob. Double-click Vex on the map → 🎯 chip appears. Open Thalindra's mini-sheet, click 🪄 Cast on Magic Missile → roll-log card now reads "🪄 Magic Missile → Vex". Same for 🗡 Strike on weapon attacks — toast shows "🎯 Dagger → Vex — attack" + the chat card shows the tag. Cast Hunter's Mark / Hex / Cutting Words / Lay on Hands / Bardic Inspiration → `feature_used` cards now show `→ NAME` next to the feature name. Press Escape to clear targeting; subsequent actions show no tag.
+- **Backward compat.** Pure additive — broadcasts without `target_name` (older payloads or actions fired without a target) render no tag.
+- **Magic Missile clarification.** Magic Missile RAW is three darts × 1d4+1 each — there's no single damage roll at cast time, so no roll toast fires for the cast itself. The chat card has buttons to roll each dart manually (or all three with a damage picker). T.2's auto-damage will apply the rolled damage to the target's HP; until then, players manually apply HP via the init-tracker HP input.
+- **Next per-feature commit candidates.** (T.2) hit determination + auto-damage with `Campaign.auto_apply_damage` toggle. (T.9) mobile target selector popup. (T.3) save-spell target list + auto/prompt resolution. (T.4) heal flows wired to target.
+
+---
+
 ## [2.22.0] - 2026-05-18
 
 **Schema version:** 55

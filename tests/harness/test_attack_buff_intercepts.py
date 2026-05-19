@@ -330,6 +330,40 @@ async def test_resistance_halves_damage(gm_client, krieger_full):
     assert data["hp"]["current"] == 50  # 55 - 5, not 55 - 10
 
 
+async def test_attack_broadcast_includes_target_name(gm_client, krieger_full, roster):
+    """v2.23.0 Phase T.8: /attack response + broadcast carry target_name
+    resolved from the combatant's name in the hub state.
+    """
+    krieger = krieger_full
+    pip = roster["Pip Quickfingers"]
+    pip_cid = f"tok_{pip['id']}"
+    # Seed Pip's combatant with his real roster name so we can assert
+    # against it.
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                _mkc(f"tok_{krieger['id']}", krieger['id'], name="Krieger"),
+                _mkc(pip_cid, pip['id'], hp_cur=20, hp_max=30, name=pip['name']),
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": krieger["id"],
+            "attack_index": 0,
+            "target_combatant_id": pip_cid,
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["target_combatant_id"] == pip_cid
+    assert data["target_name"] == pip["name"]
+
+
 async def test_resistance_does_not_halve_unrelated_type(gm_client, krieger_full):
     """Krieger rages but takes 10 fire damage — no resistance applies."""
     krieger = krieger_full

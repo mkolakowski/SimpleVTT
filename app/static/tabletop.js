@@ -1719,6 +1719,18 @@
         };
     }
 
+    // v2.23.0 Phase T.8: render a "→ NAME" target tag on chat cards.
+    // Pulled directly from the broadcast's ``target_name`` field, which
+    // every targeting-aware endpoint sets (/attack, /cast_spell,
+    // /cast_hunters_mark, /cast_hex, /use_lay_on_hands, /use_bardic_
+    // inspiration, /use_cutting_words). Empty string when no target
+    // was set — caller renders nothing in that case.
+    function _targetTagHtml(d) {
+        const name = (d && (d.target_name || d.target_character_name)) || '';
+        if (!name) return '';
+        return `<span class="target-tag" title="Targeted: ${escapeHTML(name)}">→ ${escapeHTML(name)}</span>`;
+    }
+
     function appendSpellCast(d) {
         const ul = document.getElementById('roll-list');
         if (!ul) return;
@@ -1763,7 +1775,7 @@
                     <span class="roll-card-time">${timeStr}</span>
                 </div>
                 <div class="spell-cast-body">
-                    <div class="spell-cast-name">🪄 ${escapeHTML(d.spell_name || 'Spell')}</div>
+                    <div class="spell-cast-name">🪄 ${escapeHTML(d.spell_name || 'Spell')} ${_targetTagHtml(d)}</div>
                     ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
                     ${d.spell_desc ? `<div class="spell-cast-desc">${escapeHTML(d.spell_desc)}</div>` : ''}
                     <div class="spell-cast-actions"></div>
@@ -2057,6 +2069,7 @@
                 <div class="roll-card-body" style="padding:6px 10px 8px;">
                     <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
                         <strong style="font-size:13px;">${escapeHTML(feat)}</strong>
+                        ${_targetTagHtml(d)}
                         ${remaining}
                         ${src ? `<span style="font-size:10px;color:var(--muted,#888);">${escapeHTML(src)}</span>` : ''}
                     </div>
@@ -2137,7 +2150,7 @@
                     <span class="roll-card-time">${timeStr}</span>
                 </div>
                 <div class="spell-cast-body">
-                    <div class="spell-cast-name">🗡 ${escapeHTML(d.attack_name || 'Attack')}</div>
+                    <div class="spell-cast-name">🗡 ${escapeHTML(d.attack_name || 'Attack')} ${_targetTagHtml(d)}</div>
                     ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
                     ${atkLineHtml}
                     ${dmgLineHtml}

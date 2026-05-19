@@ -4370,6 +4370,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     if (data && typeof window.showRollToast === 'function') {
                         const me = (window.ME && window.ME.id) || null;
                         const nm = data.attack_name || 'Attack';
+                        // v2.23.0 Phase T.8: include target in the
+                        // toast note when set, mirroring the chat-card
+                        // ``→ NAME`` tag.
+                        const tgtSuffix = data.target_name ? ' → ' + data.target_name : '';
                         if (data.is_save) {
                             // Save-DC attacks don't have an attack-roll d20;
                             // jump straight to the damage roll if present.
@@ -4378,13 +4382,13 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 expression: '1d20',
                                 total: data.attack_total,
                                 breakdown: data.attack_breakdown,
-                                note: '🎯 ' + nm + ' — attack',
+                                note: '🎯 ' + nm + tgtSuffix + ' — attack',
                                 visibility: 'public',
                                 user_id: me,
                             });
                         }
                         if (data.damage_breakdown) {
-                            const dmgNote = '🎲 ' + nm + (data.damage_type ? ' — ' + data.damage_type : ' — damage');
+                            const dmgNote = '🎲 ' + nm + tgtSuffix + (data.damage_type ? ' — ' + data.damage_type : ' — damage');
                             // Try to extract the dice expression from the
                             // breakdown so the popup animates the right number
                             // of dice. Fallback to "1d6" if parsing fails.
