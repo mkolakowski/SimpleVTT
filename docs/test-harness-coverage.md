@@ -1,0 +1,430 @@
+# Test Harness Coverage
+
+Living catalog of the click-through harness suite at `tests/harness/`.
+
+> **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
+
+**Total tests:** 171 (as of v2.35.1, 2026-05-19).
+**Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
+**Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
+
+---
+
+## Categories
+
+- [Smoke & infrastructure](#smoke--infrastructure)
+- [Generic rolls + roll requests](#generic-rolls--roll-requests)
+- [Weapon attacks](#weapon-attacks)
+- [Spell casting](#spell-casting)
+- [Class features](#class-features)
+- [Items](#items)
+- [HP & death-save state machine](#hp--death-save-state-machine)
+- [Buffs & concentration](#buffs--concentration)
+- [Tabletop operations](#tabletop-operations)
+
+---
+
+## Smoke & infrastructure
+
+### `test_smoke.py`
+Sanity checks that the harness can even talk to the demo app.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_healthz` | `GET /healthz` → 200, JSON `{ok, app_version, schema_version}`. |
+| `test_version` | `GET /version` → 200, matches `app/version.py`. |
+| `test_roster_fixture` | The `roster` fixture loads and contains all 12 demo PCs by name. |
+| `test_gm_can_open_ws` | `WS /ws/campaign/1` as GM accepts connection + emits an opening `state` message. |
+
+### `test_concurrency.py`
+Multi-client races and late-joiner behavior. Guards the per-campaign `CampaignHub` + WS broadcast pipeline.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_concurrent_attacks_both_broadcasts_arrive` | Two simultaneous `/attack` POSTs (GM + Alice) both produce `weapon_attack` WS events to every client. |
+| `test_concurrent_rolls_all_arrive` | Burst of 10 `/roll` POSTs arrives in order on the GM's WS. |
+| `test_late_joiner_does_not_get_replay` | A client connecting AFTER a roll fires doesn't see the past event (intended — WS doesn't replay history). |
+| `test_late_joiner_does_get_subsequent_broadcasts` | Same client sees broadcasts that fire AFTER they connected. |
+| `test_multi_tab_same_user_both_receive` | Alice with two WS connections receives each broadcast on both. |
+
+---
+
+## Generic rolls + roll requests
+
+### `test_roll.py`
+The `/roll` endpoint + WS broadcast shape + visibility filter.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_roll_d20` | `1d20` returns `{total, breakdown, expression}`; WS `roll` event matches. |
+| `test_roll_4d6` | Multi-die expression rolls correctly; breakdown contains 4 brackets. |
+| `test_roll_invalid_visibility` | `visibility: "garbage"` → 400. |
+| `test_roll_gm_only_hidden_from_player` | `gm_only` roll's WS event doesn't reach Alice's WS but does reach the GM's. |
+| `test_roll_gm_and_roller_hidden_from_non_roller` | `gm_and_roller` roll from Alice reaches Alice + GM but not Bob. |
+
+### `test_roll_request.py`
+GM-driven roll-prompt flow used by T.3 PC save spells.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_gm_creates_roll_request` | `POST /roll_request` as GM → 200 + numeric `id`. |
+| `test_non_gm_cannot_create_roll_request` | Alice → 403. |
+| `test_roll_request_missing_label_400` | Empty `label` → 400. |
+| `test_respond_to_roll_request` | GM responds on Pip's behalf; server resolves WIS-save mod + rolls `1d20+mod`; response carries `total` + `breakdown`. |
+| `test_respond_invalid_req_id_404` | Bogus `req_id` → 404. |
+| `test_respond_for_someone_elses_character_403` | Alice responds for Krieger (not hers) → 403 (or 404 fallback). |
+
+---
+
+## Weapon attacks
+
+### `test_attack.py`
+Basic `/attack` happy paths + error paths + bonus-damage uplifts.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_attack_pip_shortsword` | Pip's L1 attack (`index=0`) rolls a d20 + slashing dmg; broadcast matches. |
+| `test_attack_pip_dagger` | Same flow at `index=1`. |
+| `test_attack_tavik_warhammer` | Tavik's L1 attack works; carries `damage_type=bludgeoning`. |
+| `test_attack_invalid_index` | `attack_index=999` → 404. |
+| `test_attack_missing_character_id` | Empty body → 400. |
+| `test_attack_sneak_attack_uplift` | Pip with `uplifts=["sneak-attack"]` rolls extra `1d6` damage; broadcast carries the uplift in `auto_uplifts`. |
+| `test_attack_divine_smite_spends_slot` | Sir Caelan's Smite consumes a L1 paladin slot + adds radiant dice. |
+| `test_attack_divine_smite_no_slot` | Smite without an available slot → 409. |
+| `test_attack_spend_slot_missing_class` | `spend_spell_slot` without `class_slug` → 400. |
+
+### `test_attack_auto_damage.py`
+T.2 hit determination + auto-applied damage + Undo. Gated by `Campaign.auto_apply_damage` toggle.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_attack_hit_determination_without_auto_apply` | Toggle off: response carries `hit` / `target_ac` but no HP change. |
+| `test_attack_auto_apply_on_hit` | Toggle on: hits apply damage; `damage_applied > 0`, target HP drops. |
+| `test_attack_crit_doubles_damage` | Forced crit doubles the damage dice (via `_double_dice_for_crit`). |
+| `test_undo_attack_damage` | `POST /undo_attack_damage` reverses the HP change for the cast id. |
+| `test_undo_unknown_attack_id` | Unknown id → 404. |
+| `test_undo_missing_attack_id_field` | Empty body → 400. |
+
+### `test_attack_buff_intercepts.py`
+Phase B damage-flow intercepts — Rage / Hunter's Mark / Colossus Slayer / resistance.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_rage_adds_damage_bonus` | Krieger with Rage buff adds +2 damage to a melee strength attack. |
+| `test_rage_advantage_on_attack` | Reckless attack flag rolls 2d20 keep-highest. |
+| `test_hunters_mark_rider_on_marked_target` | Rowan's strike vs marked target adds 1d6 bonus dice. |
+| `test_hunters_mark_does_not_fire_on_other_target` | Strike vs unmarked target → no bonus dice. |
+| `test_colossus_slayer_fires_vs_below_max_hp` | Hunter Ranger's bonus 1d8 fires when target HP < max. |
+| `test_colossus_slayer_skips_full_hp_target` | Same archer vs full-HP target → no bonus. |
+| `test_colossus_slayer_once_per_turn` | Second attack in the same turn skips the bonus (1/turn limit). |
+| `test_resistance_halves_damage` | Krieger's slashing attack on a slashing-resistant NPC → halved. |
+| `test_resistance_does_not_halve_unrelated_type` | Different damage type → no halving. |
+| `test_attack_broadcast_includes_target_name` | Broadcast `target_name` populated when init-tracker combatant resolves. |
+
+---
+
+## Spell casting
+
+### `test_cast_spell.py`
+Basic `/cast_spell` happy paths + slot-consumption errors.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_magic_missile` | Thalindra's Magic Missile (L1) decrements a wizard slot; broadcast names the spell. |
+| `test_cast_misty_step_bonus_action` | Misty Step at L2 marks the bonus chip. |
+| `test_cast_tavik_healing_word` | Tavik's bonus-action heal cast (long-rest pre-fixture). |
+| `test_cast_invalid_spell_index` | `spell_index=999` → 404. |
+| `test_cast_missing_fields` | Empty body → 400. |
+
+### `test_cast_spell_target.py`
+Phase T.1 target descriptors plumbed into `/cast_spell` body + WS broadcast.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cast_spell_with_target_character_id` | `target_character_id` resolves to `target_combatant_id` server-side; broadcast carries all 3 fields. |
+| `test_cast_spell_target_combatant_id_wins` | When both descriptors are present, explicit combatant_id wins. |
+| `test_cast_spell_no_target` | No descriptor → broadcast fields empty. |
+| `test_cast_spell_target_npc_by_name` | NPC target via `target_name` only resolves to its combatant id. |
+
+### `test_cast_spell_attack.py`
+Phase T.4b auto-rolled spell attacks (Fire Bolt etc.) — hit vs AC, crit doubling, damage apply.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_fire_bolt_resolves_hit_vs_npc` | Fire Bolt vs bandit: `auto_attack_hit`/`total`/`target_ac` populated; damage rolls when hit + toggle on. |
+| `test_spell_attack_no_damage_when_toggle_off` | Toggle off: attack rolls but `damage_applied == 0`. |
+| `test_spell_attack_no_target_skips_block` | No target → `auto_attack_hit is None`. |
+| `test_non_attack_spell_skips_attack_block` | Healing Word (no `attack_roll`) → block skipped. |
+
+### `test_cast_spell_heal.py`
+Phase T.4 auto-healing — target-aware HP apply, revive, undo, max-HP cap.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_heal_auto_applies_on_target` | Tavik → Pip (HP=10): `auto_heal_applied > 0`, Pip's HP rises. |
+| `test_cast_without_target_no_auto_heal` | No target → `auto_heal_applied == 0`, heal_claim registered. |
+| `test_heal_revives_dying_target` | Dying Pip → Healing Word brings him back; `auto_heal_revived: True`. |
+| `test_undo_heal_reverses_hp` | `/undo_attack_damage` reverses the heal via the `is_heal` flag. |
+| `test_heal_auto_applies_with_only_character_id` | Target PC not in init: synthesized-combatant fallback still applies heal. |
+| `test_heal_caps_at_max_hp` | Pip at max-1 → only 1 HP applied even if dice rolled higher. |
+
+### `test_cast_spell_save.py`
+Phase T.3 save-spell auto-resolution + T.3b save-for-half damage + T.3c condition install.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_save_spell_prompts_pc_target` | Hold Person → Pip (PC): `auto_save_prompted=True`, RollRequest created for Pip's owner. |
+| `test_save_spell_auto_rolls_npc` | Hold Person → bandit (NPC): server rolls save, `auto_save_rolled`/`passed` populated. |
+| `test_cast_without_target_no_auto_save` | No target → save fields empty. |
+| `test_save_for_half_applies_half_on_success` | Sacred Flame: full damage on fail, half on success. |
+| `test_save_spell_no_auto_damage_when_toggle_off` | Toggle off: save rolls but no damage applied. |
+| `test_save_or_suck_installs_buff_on_fail` | Hold Person on bandit failure: Paralyzed buff installed on combatant. |
+| `test_save_or_suck_skips_unknown_spell` | Sacred Flame (has damage, not save-or-suck) → no buff installed. |
+| `test_non_save_spell_no_auto_save` | Healing Word (no `save_ability`) → save block skipped. |
+
+---
+
+## Class features
+
+### `test_use_rage.py`
+Barbarian Rage install + end_buff (Phase C primitive sanity).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_rage_happy_path` | `/use_rage` installs Rage buff; broadcast carries `feature_used`. |
+| `test_rage_out_of_uses` | Calling beyond counter → 409. |
+| `test_rage_wrong_class` | Non-Barbarian → 409. |
+| `test_rage_missing_character_id` | Empty body → 400. |
+| `test_end_buff_happy_path` | `/end_buff` removes Rage. |
+| `test_end_buff_not_found` | Removing a buff that isn't installed → 404. |
+| `test_end_buff_missing_fields` | Empty body → 400. |
+
+### `test_use_second_wind.py`
+Fighter Second Wind heal-roll (v2.34.x `dice_*` envelope).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_second_wind_happy_path` | Rolls 1d10+lv, applies HP, decrements counter; `feature_used` includes `Second Wind` substring. |
+| `test_second_wind_out_of_uses` | Counter exhausted → 409. |
+| `test_second_wind_wrong_class` | Non-Fighter → 409. |
+| `test_second_wind_missing_character_id` | Empty body → 400. |
+
+### `test_use_action_surge.py`
+Fighter Action Surge: refunds the action chip.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_action_surge_happy_path` | Decrement counter + broadcast `feature_used`. |
+| `test_action_surge_refunds_action_chip` | The `action` economy chip flips back to unused. |
+| `test_action_surge_out_of_uses` | 409 when counter is empty. |
+| `test_action_surge_wrong_class` | Non-Fighter → 409. |
+| `test_action_surge_missing_character_id` | 400. |
+
+### `test_use_arcane_recovery.py`
+Wizard Arcane Recovery: half-level slot refund.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_arcane_recovery_happy_path` | Refunds requested slots up to the level/2 allowance. |
+| `test_arcane_recovery_allowance` | Allowance maxes at `ceil(wiz_level/2)`. |
+| `test_arcane_recovery_l6_rejected` | L6 slot rejected (RAW). |
+| `test_arcane_recovery_missing_slots` | Empty body → 400. |
+| `test_arcane_recovery_invalid_slot_entry` | Non-int level → 400. |
+| `test_arcane_recovery_wrong_class` | Non-Wizard → 409. |
+| `test_arcane_recovery_missing_character_id` | 400. |
+
+### `test_use_bardic_inspiration.py`
+Bard grants a Bardic Inspiration die to a target (Phase C resource).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_bi_happy_path` | Adds BI die to target; decrements bard's counter. |
+| `test_bi_missing_fields` | Missing target → 400. |
+| `test_bi_self_target` | Bard grants to themselves → succeeds (RAW edge case). |
+| `test_bi_no_bard_resource` | Non-Bard caller → 409. |
+| `test_bi_unknown_target` | Unknown target id → 404. |
+
+### `test_use_cutting_words.py`
+Bardic Inspiration die used as a reaction debuff (College of Lore).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cutting_words_happy_path` | Rolls a BI die, broadcasts a `feature_used` describing the subtraction. |
+| `test_cutting_words_no_target` | Generic broadcast text when no target was passed. |
+| `test_cutting_words_target_name_fallback` | `target_name` alone is acceptable. |
+| `test_cutting_words_target_character_id_wins` | Explicit char_id beats name. |
+| `test_cutting_words_missing_character_id` | 400. |
+| `test_cutting_words_unknown_character` | 404. |
+| `test_cutting_words_wrong_class` | Non-Bard caller → 409. |
+| `test_cutting_words_out_of_uses` | BI counter exhausted → 409. |
+
+### `test_use_lay_on_hands.py`
+Paladin Lay on Hands: heal from a per-day pool.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_loh_happy_path` | Heals targeted PC; decrements pool. |
+| `test_loh_missing_fields` | 400. |
+| `test_loh_zero_amount` | Amount ≤ 0 → 400. |
+| `test_loh_no_paladin_resource` | Non-Paladin caller → 409. |
+| `test_loh_unknown_target` | Unknown target id → 404. |
+
+### `test_use_feature.py`
+Generic `/use_feature` endpoint — Rogue Cunning Action, Channel Divinity options, Paladin Divine Sense, plus several curated single-shot features.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cunning_action_dash` | Pip's Dash flips the bonus chip. |
+| `test_cunning_action_disengage` | Same flow for Disengage. |
+| `test_cunning_action_hide` | Same flow for Hide. |
+| `test_channel_divinity_turn_undead` | Tavik's Turn Undead consumes CD charge. |
+| `test_channel_divinity_sacred_weapon` | Sacred Weapon variant works. |
+| `test_channel_divinity_turn_the_unholy` | Turn the Unholy CD variant. |
+| `test_channel_divinity_preserve_life` | Preserve Life CD variant. |
+| `test_divine_sense_announces` | Paladin announces aura sense; no resource cost. |
+| `test_cleansing_touch_curated` | Curated feature label fires. |
+| `test_indomitable_curated` | Fighter Indomitable variant. |
+| `test_stroke_of_luck_curated` | Rogue Stroke of Luck. |
+| `test_font_of_magic_curated` | Sorcerer Font of Magic announce. |
+| `test_action_surge_is_free` | Action Surge via the generic endpoint is action-economy-free (refunds the action chip). |
+| `test_unknown_feature_key` | Unknown key → 404. |
+| `test_missing_required_fields` | 400. |
+
+---
+
+## Items
+
+### `test_use_item.py`
+`/use_item` consumable + non-consumable paths (heal potions, story items).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_item_missing_fields` | Empty body → 400. |
+| `test_use_item_unknown_index` | Out-of-range item index → 404. |
+| `test_use_item_non_consumable` | Story item (qty 1, non-consumable) → fires feature_used but doesn't decrement. |
+
+> Heal-potion happy path is covered indirectly via `heal_applied` broadcasts in `test_cast_spell_heal.py` and the v2.27.1 routing logic. A dedicated potion-heal test is **filed**.
+
+---
+
+## HP & death-save state machine
+
+### `test_death_save.py`
+The dying / stable / dead state machine. Core HP transitions through 0.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_drop_to_zero_sets_dying` | Damaging Pip to 0 (with safe magnitude) → death-save POST returns 200 (state is dying). |
+| `test_death_save_roll_updates_counters` | POST returns flat `{ok, raw, outcome, status, successes, failures, hp}`; one roll advances either counter. |
+| `test_death_save_409_when_alive` | POST on a long-rested alive PC → 409. |
+| `test_death_save_override_sets_status` | GM `/death-save/override` force-sets `{status, successes, failures}`. |
+| `test_stabilize_endpoint` | `/stabilize` sets status=stable, counters=0. |
+| `test_stabilize_forbidden_for_non_gm` | Alice → 403. |
+| `test_override_to_alive_bumps_hp_to_1` | Override `status="alive"` from 0-HP-dying → HP bumps to 1 automatically. |
+
+---
+
+## Buffs & concentration
+
+### `test_end_buff.py`
+Manual buff removal via `/end_buff`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_end_buff_removes_rage` | Install Rage via `/use_rage`, then `/end_buff` drops it; `/character/{id}/buffs` no longer lists it. |
+| `test_end_buff_missing_character_id_400` | 400. |
+| `test_end_buff_missing_key_400` | 400. |
+| `test_end_buff_unknown_key_404` | Buff not present → 404. |
+| `test_end_buff_non_owner_403` | Alice tries to drop Krieger's buff → 403/404. |
+
+### `test_concentration_buffs.py`
+Phase C concentration handling — Hunter's Mark, Hex, swap, concentration-save trigger.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_hunters_mark_happy_path` | Ranger Rowan installs HM on target; `cast_hunters_mark` broadcasts a `buff_update`. |
+| `test_hunters_mark_wrong_class` | Non-Ranger → 409. |
+| `test_hunters_mark_missing_target` | No target → 400. |
+| `test_hunters_mark_missing_character_id` | 400. |
+| `test_hex_happy_path` | Warlock Magnus installs Hex; same buff-update shape. |
+| `test_hex_wrong_class` | Non-Warlock → 409. |
+| `test_concentration_swap` | Casting a second concentration spell drops the first (RAW one-at-a-time). |
+| `test_concentration_save_on_damage` | Damage event triggers a concentration CON save; failure drops the buff. |
+
+### `test_buff_sheet_mirror.py`
+Phase C.3 — buffs persist to `sheet["_buffs_active"]` for cross-page visibility.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_rage_mirrors_to_sheet` | After `/use_rage`, the sheet mirror contains the Rage entry. |
+| `test_end_buff_clears_sheet_mirror` | After `/end_buff`, the mirror is empty. |
+| `test_hunters_mark_mirrors_to_sheet` | Hunter's Mark also mirrors. |
+| `test_put_battle_mirrors_to_sheet` | A raw `PUT /battle` with buffs in the combatants array updates the sheet mirror. |
+| `test_put_battle_clears_sheet_on_buff_drop` | Removing the buff via PUT clears the mirror. |
+
+---
+
+## Tabletop operations
+
+### `test_move.py`
+Token-list GET + token-move POST.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_tokens_list` | `GET /tokens` returns all live tokens. |
+| `test_move_pip_one_cell` | Single-cell move broadcasts `token_update` with the new x/y. |
+| `test_move_chebyshev_diagonal` | Diagonal move counts as one cell (chebyshev distance). |
+| `test_move_unknown_token` | Unknown token id → 404. |
+
+### `test_rest.py`
+Short rest (Song of Rest) + long rest.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_short_rest_song_of_rest_happy_path` | Short rest with hit dice → broadcasts hp restore. |
+| `test_long_rest_happy_path` | Long rest refills HP + spell slots + class features. |
+| `test_short_rest_invalid_type` | `type: "bogus"` → 400. |
+| `test_short_rest_no_hit_dice` | No HD left → cannot short rest. |
+
+### `test_transform.py`
+Druid Wild Shape / Polymorph form transitions.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_wild_shape_happy_path` | Mira → beast form; `transform` broadcast carries new sheet. |
+| `test_transform_missing_slug` | 400. |
+| `test_transform_invalid_source` | `source: "garbage"` → 400. |
+| `test_transform_cr_cap_enforced` | Druid CR cap rejects high-CR beasts. |
+| `test_transform_already_transformed` | Cannot transform while transformed (409). |
+| `test_revert_when_not_transformed` | Reverting a base-form character → 409. |
+| `test_transform_over_budget_flag` | Carries `over_budget: true` when action chip already used. |
+
+---
+
+## Filed (not yet implemented)
+
+The following endpoint surfaces are exercised indirectly by other tests but lack a dedicated test file. Tracked for future expansion; low regression risk today.
+
+- `/api/campaign/{cid}/encounters/*` — load, duplicate, spawn, delete.
+- `/api/campaign/{cid}/character/{id}/economy` GET — the action-chip JSON view.
+- Token CRUD beyond `/move` — create, image upload, delete.
+- Template CRUD — `/templates`, `/templates/{id}`, image upload, monster import.
+- `/character/{id}/sheet-fields` PATCH edge cases — massive-damage instant-kill, temp HP absorption, `hp_change_reason: "heal"` death-save reset.
+- `/character/{id}/resource` POST — used by class-feature charge counters.
+- `/character/{id}/place-token` POST.
+- `/use_item` heal happy path — covered indirectly via the `heal_applied` broadcast in `test_cast_spell_heal.py`.
+
+---
+
+## Updating this doc
+
+When you change tests, update the corresponding section in the same commit. Conventions:
+
+- **Added test** → new row in the file's table.
+- **Removed test** → strike the row out (`~~test_name~~`) and leave the file's total-test-count number in the header in sync.
+- **Renamed test** → rename the row.
+- **Behavior change** → update the "What it asserts" cell.
+
+When a whole new test file lands, add a new H3 (`###`) section under the appropriate category. If the category doesn't fit, add a new H2 (`##`) and link it from the [Categories](#categories) list.
+
+The total-test-count line at the top is updated each time the file changes. Run `python3 -m pytest tests/harness/ -q` to confirm the number.

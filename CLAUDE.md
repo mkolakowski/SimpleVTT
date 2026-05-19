@@ -76,6 +76,14 @@ state. See `tests/harness/test_use_lay_on_hands.py` for the pattern.
 suite on every push to `main`/`dev` and every PR against them. A
 regression fails the workflow before merge, not in production.
 
+**Update the coverage catalog.** Every test change — add, remove,
+rename, or material assertion shift — also updates
+[`docs/test-harness-coverage.md`](docs/test-harness-coverage.md) in
+the same commit. That file is the navigable index of what each test
+asserts; it's expected to stay in sync with the suite. Bump the
+total-test-count line at the top after running
+`python3 -m pytest tests/harness/ -q` so the header tracks reality.
+
 ## Third-party APIs must be Docker Compose services
 
 When integrating any external API or data service, add it as a named service in

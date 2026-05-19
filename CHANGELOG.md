@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.35.2] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Document the harness suite + CLAUDE.md rule to keep the doc in sync.** Added `docs/test-harness-coverage.md` — a categorized catalog of all 171 harness tests with one row per test summarizing what it asserts. Categories: Smoke & infrastructure, Generic rolls + roll requests, Weapon attacks, Spell casting, Class features, Items, HP & death-save state machine, Buffs & concentration, Tabletop operations. Header tracks total test count + cmdline to verify it. A new "Filed (not yet implemented)" section names the lower-priority endpoint gaps (encounters CRUD, economy GET, token CRUD, sheet-fields PATCH edges) so future expansion has a checklist. CLAUDE.md "every new endpoint commit lands a harness test" rule now requires the catalog to be updated in the same commit as any test change. PATCH — docs only.
+**Description:** Two edits. **(1)** New `docs/test-harness-coverage.md` (~280 lines). Organized by category with H3 per test file; each file gets a one-line scope description + a markdown table of `Test | What it asserts`. Closing "Updating this doc" section explicitly lists the conventions for adds / removes / renames / behavior changes. **(2)** `CLAUDE.md` harness section gains an "Update the coverage catalog" bullet pointing at the new file + requiring the total-test-count line to be re-checked via `pytest -q` on each commit.
+
+### Added
+- `docs/test-harness-coverage.md` — categorized catalog of every harness test.
+- `CLAUDE.md` — "Update the coverage catalog" bullet under the harness-discipline section.
+
+### Notes
+- **What to test:** open `docs/test-harness-coverage.md`; the table-of-categories near the top should link to nine H2 sections. Each H3 (one per test file) carries its file's scope sentence + a table of tests. Run `python3 -m pytest tests/harness/ -q` — the count should equal the header (171 at this commit).
+- **Contract.** Any test added/removed/renamed/changed in future commits must also update the catalog. This rule lives in CLAUDE.md so it surfaces in pre-commit reviews.
+
+---
+
 ## [2.35.1] - 2026-05-19
 
 **Schema version:** 56
