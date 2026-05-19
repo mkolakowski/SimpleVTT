@@ -809,6 +809,29 @@
                         color:var(--s-mute);line-height:1.6;"></div>
         </fieldset>
 
+        {# ── Active Effects (v2.19.2 Phase C.3) ──────────────────────
+             Renders the character's active buff list (Rage, Hunter's
+             Mark, Hex, Bless, Faerie Fire, ...). Source: char.sheet[
+             "_buffs_active"] mirror written by /use_rage /
+             /cast_hunters_mark / /cast_hex etc., kept in sync with the
+             hub battle state on every PUT /battle (see the GM
+             auto-expire path). Empty list → fieldset auto-hides via JS.
+             Each chip carries an × end button (calls /end_buff) and a
+             tooltip with the full description. The init-tracker chip
+             is the source of truth for live duration countdowns; the
+             sheet shows presence + effects without numeric duration.
+        #}
+        <fieldset id="active-effects-fieldset" class="collapsible" data-collapse-key="active-effects" style="display:none;">
+            <legend><span class="fs-chevron">▼</span>Active Effects
+                <span id="active-effects-count" style="font-size:11px;margin-left:6px;color:var(--s-mute);"></span>
+            </legend>
+            <textarea id="active-effects-data" style="display:none;" readonly>{{ (sheet.get('_buffs_active') or []) | tojson }}</textarea>
+            <div id="active-effects-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;"></div>
+            <p id="active-effects-empty" class="muted" style="font-size:12px;margin:6px 0 0;display:none;">
+                No active effects.
+            </p>
+        </fieldset>
+
         {# ── Defenses ─────────────────────────────────────────────────
              Four chip-toggle rows (damage resistances / immunities /
              vulnerabilities and condition immunities). Each row shows
@@ -7264,6 +7287,126 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
     }
 })();
 
+/* ── Active Effects panel (v2.19.2 Phase C.3) ──────────────────────────────
+   Renders char.sheet["_buffs_active"] in #active-effects-list as one chip
+   per buff (icon + name + target if any). × button on each chip calls
+   /end_buff. Fieldset hides itself when the list is empty.
+
+   Source of truth: the sheet-side _buffs_active list (server-mirrored by
+   the install / end / PUT-battle paths). Live updates flow via:
+   - WS ``buff_update`` for the same character — patch the list and re-render
+   - WS ``concentration_save`` with dropped_key — remove that buff and
+     re-render
+
+   The init-tracker chip carries the live duration countdown; this panel
+   shows presence + effects only.
+   ──────────────────────────────────────────────────────────────────────── */
+(function () {
+    const fieldsetEl = document.getElementById('active-effects-fieldset');
+    const listEl = document.getElementById('active-effects-list');
+    const countEl = document.getElementById('active-effects-count');
+    const emptyEl = document.getElementById('active-effects-empty');
+    if (!fieldsetEl || !listEl) return;
+
+    // Seed from server-rendered sheet field if present. The Jinja
+    // template doesn't emit it directly (the field is a JSON snapshot,
+    // not a form input); fetch it via sheet API on init.
+    let _buffs = [];
+
+    function _esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function render() {
+        if (!_buffs.length) {
+            fieldsetEl.style.display = 'none';
+            return;
+        }
+        fieldsetEl.style.display = '';
+        countEl.textContent = `(${_buffs.length})`;
+        emptyEl.style.display = 'none';
+        listEl.innerHTML = _buffs.map(b => {
+            const icon = b.icon ? `${_esc(b.icon)} ` : '';
+            const name = _esc(b.name || b.key);
+            const target = b.target_name ? ` → ${_esc(b.target_name)}` : '';
+            const conc = b.concentration
+                ? ` <span style="color:#e8a;font-size:10px;">⏱ Conc</span>` : '';
+            const desc = _esc(b.desc || '');
+            return `<span class="ae-chip" title="${desc}">
+                ${icon}${name}${target}${conc}
+                <button type="button" class="ae-end" data-key="${_esc(b.key)}" title="End ${name}">×</button>
+            </span>`;
+        }).join('');
+
+        listEl.querySelectorAll('.ae-end').forEach(btn => {
+            btn.addEventListener('click', async (ev) => {
+                ev.stopPropagation();
+                const key = btn.dataset.key;
+                if (!key || typeof CAMPAIGN_ID === 'undefined') return;
+                try {
+                    const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/end_buff`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            character_id: typeof MY_CHAR_ID !== 'undefined' ? MY_CHAR_ID : null,
+                            key,
+                        }),
+                    });
+                    if (!r.ok) {
+                        let body; try { body = await r.json(); } catch { body = null; }
+                        (window.showToast || function(m){ alert(m); })(
+                            `End ${key} failed: ${body ? JSON.stringify(body) : r.status}`, 'error');
+                        return;
+                    }
+                    // Optimistic local removal; the buff_update WS will
+                    // also fire and confirm.
+                    _buffs = _buffs.filter(b => b.key !== key);
+                    render();
+                } catch (e) {
+                    console.warn('end_buff fetch failed:', e);
+                }
+            });
+        });
+    }
+
+    function _hydrate() {
+        // Initial population from the server-rendered textarea
+        // (#active-effects-data is a Jinja-inlined JSON snapshot of
+        // sheet["_buffs_active"]). WS ``buff_update`` patches the
+        // list afterwards.
+        const dataEl = document.getElementById('active-effects-data');
+        if (!dataEl) return;
+        try {
+            const parsed = JSON.parse(dataEl.value || '[]');
+            _buffs = Array.isArray(parsed) ? parsed : [];
+        } catch { _buffs = []; }
+        render();
+    }
+
+    document.addEventListener('vtt:ws-message', (ev) => {
+        const msg = ev.detail;
+        if (!msg) return;
+        const myCharId = typeof MY_CHAR_ID !== 'undefined' ? MY_CHAR_ID : null;
+        if (myCharId == null) return;
+        if (msg.type === 'buff_update') {
+            const d = msg.data || {};
+            if (d.character_id !== myCharId) return;
+            // Strip live-only fields to match the sheet's stripped mirror.
+            _buffs = (Array.isArray(d.buffs) ? d.buffs : []).map(b => {
+                const out = {...b};
+                delete out.duration_rounds;
+                delete out.duration_max;
+                return out;
+            });
+            render();
+        }
+    });
+
+    _hydrate();
+})();
+
 /* ── HP per Level tracker (edit panel) ────────────────────────────────────
    Renders sheet["hp_rolls"] as a per-class table inside #hp-rolls-editor.
    - First level of the FIRST class on the roster is locked to ``max_die + CON``.
@@ -8329,6 +8472,44 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
 .cf-use.dim-slot:hover,
 .inv-use.dim-slot:hover {
     opacity: 0.55;
+}
+
+/* v2.19.2 Phase C.3: Active Effects chips. Match the init-tracker's
+   purple-tinted .buff-chip styling so a player recognises the same
+   chip in both places. The × end button keeps the 44 px touch target
+   floor (this isn't a dense-panel context — sheet rows are large). */
+.ae-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    padding: 6px 10px;
+    min-height: 32px;
+    border: 1px solid rgba(167,139,250,.5);
+    border-radius: 5px;
+    background: rgba(167,139,250,.12);
+    color: #c4b5fd;
+    white-space: nowrap;
+}
+.ae-end {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 4px 8px;
+    font-size: 16px;
+    line-height: 1;
+    border: 1px solid rgba(167,139,250,.4);
+    border-radius: 4px;
+    background: rgba(0,0,0,.25);
+    color: #c4b5fd;
+    cursor: pointer;
+    margin-left: 2px;
+}
+.ae-end:hover {
+    background: rgba(255,112,112,.25);
+    color: #ff9090;
+    border-color: rgba(255,112,112,.5);
 }
 </style>
 

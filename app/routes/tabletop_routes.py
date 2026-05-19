@@ -350,6 +350,7 @@ def _concentration_buff_for(
 
 async def _maybe_concentration_save(
     campaign_id: int, char: Character, damage_amount: int,
+    db: Session | None = None,
 ) -> dict | None:
     """If the character is concentrating on a buff and just took
     ``damage_amount`` damage, roll a CON save (DC = max(10, damage //
@@ -400,6 +401,12 @@ async def _maybe_concentration_save(
         dropped_key = buff.get("key")
         if dropped_key:
             await _remove_buff(campaign_id, char.id, dropped_key)
+            # v2.19.2 Phase C.3: sync the sheet mirror so the Active
+            # Effects panel updates when concentration breaks mid-fight.
+            if db is not None:
+                _mirror_buffs_to_sheet(
+                    db, char.id, _get_buffs(campaign_id, char.id),
+                )
 
     await hub.broadcast(campaign_id, {
         "type": "concentration_save",
@@ -472,6 +479,38 @@ def _get_buffs(campaign_id: int, character_id: int) -> list[dict]:
         if c.get("char_id") == character_id:
             return list(c.get("buffs") or [])
     return []
+
+
+def _mirror_buffs_to_sheet(
+    db: Session, character_id: int, buffs: list[dict],
+) -> None:
+    """v2.19.2 Phase C.3: mirror the (live) buff list onto the
+    character sheet's ``_buffs_active`` field so out-of-combat display
+    works AND so the sheet survives across page loads. The
+    ``duration_rounds`` + ``duration_max`` fields are stripped from the
+    sheet copy — the init tracker is the source of truth for live
+    countdowns; the sheet only renders presence + effects.
+
+    Caller must commit the session (helper does flag_modified + a
+    commit so the sheet write is visible immediately, mirroring the
+    pattern other helpers use).
+    """
+    char = db.query(Character).filter(Character.id == character_id).first()
+    if not char:
+        return
+    from sqlalchemy.orm.attributes import flag_modified
+    stripped = [
+        {k: v for k, v in (b or {}).items()
+         if k not in ("duration_rounds", "duration_max")}
+        for b in (buffs or [])
+    ]
+    sheet = dict(char.sheet or {})
+    if sheet.get("_buffs_active") == stripped:
+        return  # idempotent — nothing changed
+    sheet["_buffs_active"] = stripped
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
 
 
 # ----------- helpers -----------
@@ -7524,6 +7563,11 @@ async def use_rage(
     }
     installed = await _install_buff(campaign_id, char.id, buff)
 
+    # v2.19.2 Phase C.3: mirror to char.sheet["_buffs_active"] so the
+    # full sheet's Active Effects panel renders Rage even when the
+    # init tracker isn't open.
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
@@ -7625,7 +7669,45 @@ async def end_buff(
     if not removed:
         raise HTTPException(404, f"No '{key}' buff on this character")
 
+    # v2.19.2 Phase C.3: sync sheet mirror.
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
     return {"ok": True, "removed_key": key}
+
+
+# ----------- API: GET buffs (read helper, mostly for harness tests) -----------
+
+@router.get("/api/campaign/{campaign_id}/character/{char_id}/buffs")
+def get_character_buffs(
+    campaign_id: int,
+    char_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Return the character's active buff list.
+
+    Returns both the live hub view (``buffs`` — current source of truth
+    during combat, includes live duration_rounds) and the sheet mirror
+    (``sheet_buffs`` — persistent snapshot, duration stripped) so callers
+    can verify the C.3 mirror is in sync. Allowed to anyone who can
+    view the campaign.
+
+    v2.19.2 Phase C.3 added — primary use case is harness verification
+    that /use_rage / /cast_hunters_mark / etc. update the sheet mirror.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Character not found")
+    return {
+        "character_id": char_id,
+        "buffs": _get_buffs(campaign_id, char_id),
+        "sheet_buffs": list((char.sheet or {}).get("_buffs_active") or []),
+    }
 
 
 # ----------- API: Hunter's Mark (Ranger L1) — Phase C.2 -----------
@@ -7824,6 +7906,7 @@ async def cast_hunters_mark(
         ),
     }
     await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")
@@ -8061,6 +8144,7 @@ async def cast_hex(
         ),
     }
     await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")
@@ -9990,6 +10074,22 @@ async def update_battle(
     state = await request.json()
     hub.set_battle(campaign_id, state)
     await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+
+    # v2.19.2 Phase C.3: mirror each PC's buff list to their sheet so
+    # the full-sheet Active Effects panel reflects auto-expire ticks
+    # done client-side by the GM's nextTurn handler. PUT /battle is
+    # the post-tick sync point — the GM JS decrements duration_rounds
+    # locally, drops expired buffs, then pushes the whole state here.
+    # The mirror helper is idempotent (no-op when sheet already matches
+    # the new list), so the cost is one query + at most one write per
+    # PC combatant per turn-end. NPC buffs (combatants without char_id)
+    # are not mirrored — they have no sheet.
+    for c in (state.get("combatants") or []):
+        char_id = c.get("char_id")
+        if not char_id:
+            continue
+        _mirror_buffs_to_sheet(db, char_id, c.get("buffs") or [])
+
     return {"ok": True}
 
 
@@ -12057,8 +12157,9 @@ async def patch_sheet_fields(
     # concentrating on a buff, roll a CON save (DC = max(10, damage//2))
     # and drop the buff on fail. Auto-rolled server-side; broadcasts
     # ``concentration_save`` so every client sees the result.
+    # v2.19.2 Phase C.3: pass db so the sheet mirror updates on fail.
     if hp_result and is_damage and damage_amount > 0:
-        await _maybe_concentration_save(campaign_id, char, damage_amount)
+        await _maybe_concentration_save(campaign_id, char, damage_amount, db=db)
 
     if hp_result and hp_result["status_changed"]:
         await hub.broadcast(campaign_id, {
