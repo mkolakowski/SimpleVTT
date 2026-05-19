@@ -358,10 +358,11 @@
                     char_name: r.caster_char_name,
                 });
             }
-            // v2.33.0: delay the damage toast by 600 ms so the attack
-            // toast lands first and the user reads them sequentially
-            // (the dice animation lasts ~1.5 s but the verdict line is
-            // visible immediately). The delay is skipped on save-DC
+            // v2.33.1: delay the damage toast until the attack-roll
+            // dice finish animating. The spin schedule in
+            // ``showRollToast`` adds up to ~1460 ms; 1600 ms gives a
+            // small breath between the d20 landing and the damage
+            // dice starting to roll. The delay is skipped on save-DC
             // attacks (no attack-roll toast to wait for).
             if (r.damage_breakdown) {
                 const exprMatch = String(r.damage_breakdown).match(/(\d+d\d+(?:[+-]\d+)?)/);
@@ -391,7 +392,7 @@
                     char_name: r.caster_char_name,
                 });
                 if (!r.is_save && r.attack_breakdown) {
-                    setTimeout(fire, 600);
+                    setTimeout(fire, 1600);
                 } else {
                     fire();
                 }

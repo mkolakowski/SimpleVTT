@@ -4575,9 +4575,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             }
                             const dmgNote = `🎲 ${nm}${tgtSuffix}${data.damage_type ? ' — ' + data.damage_type : ''}${suffix}`;
                             const exprMatch = data.damage_breakdown.match(/(\d+d\d+(?:[+-]\d+)?)/);
-                            // v2.33.0: delay the damage toast 600 ms so
-                            // it lands after the attack-roll toast (same
-                            // sequencing as the WS-broadcast path).
+                            // v2.33.1: delay the damage toast until the
+                            // attack-roll dice finish animating (~1.5 s
+                            // spin schedule + small breath = 1600 ms).
+                            // Same sequencing as the WS-broadcast path.
                             const fire = () => window.showRollToast({
                                 expression: exprMatch ? exprMatch[1] : '1d6',
                                 total: data.damage_total,
@@ -4587,7 +4588,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 user_id: me,
                             });
                             if (!data.is_save && data.attack_breakdown) {
-                                setTimeout(fire, 600);
+                                setTimeout(fire, 1600);
                             } else {
                                 fire();
                             }
@@ -4599,9 +4600,12 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         if (data.bonus_damage_total != null && data.bonus_damage_total > 0) {
                             const bonusNote = '✨ ' + (data.bonus_damage_label || 'Bonus damage');
                             const bonusExprMatch = (data.bonus_damage_breakdown || '').match(/(\d+d\d+(?:[+-]\d+)?)/);
-                            // v2.33.0: stagger bonus damage at t=1200ms
-                            // so the user reads attack → damage → bonus
-                            // sequentially (each ~600 ms apart).
+                            // v2.33.1: stagger bonus damage so it lands
+                            // after the damage-roll dice finish (1600 ms
+                            // damage start + 1600 ms spin = 3200 ms from
+                            // the attack click). Reads attack → damage →
+                            // bonus, each appearing once the previous
+                            // dice have settled.
                             setTimeout(() => window.showRollToast({
                                 expression: bonusExprMatch ? bonusExprMatch[1] : '1d6',
                                 total: data.bonus_damage_total,
@@ -4609,7 +4613,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 note: bonusNote,
                                 visibility: 'public',
                                 user_id: me,
-                            }), 1200);
+                            }), 3200);
                         }
                     }
                 } finally {

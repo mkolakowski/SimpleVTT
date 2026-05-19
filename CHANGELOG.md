@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.33.1] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Damage toast now fires after the attack-roll dice finish animating (not during).** v2.33.0 delayed the damage toast by 600 ms, but the dice-spin schedule in `showRollToast` runs ~1460 ms — so the damage popup launched while the d20 was still mid-spin, making both animations overlap on screen. Bumping the delay to 1600 ms gives a small breath after the attack die lands before the damage roll begins. Bonus damage (Sneak Attack / Divine Smite) follows the same rule: 3200 ms total from the strike so it lands after the base damage dice finish. PATCH — pure timing tweak.
+**Description:** Two edits. **(1)** `app/static/roll_toast.js` — `setTimeout(fire, 600)` → `setTimeout(fire, 1600)` on the WS-broadcast damage toast. **(2)** `app/templates/sheet_dnd5e.html` — sheet-side direct toast block matches (`600` → `1600` for damage; `1200` → `3200` for bonus damage). Save-DC attacks still fire damage immediately (no prior toast to wait for).
+
+### Changed
+- `app/static/roll_toast.js` — damage toast delay 600 ms → 1600 ms.
+- `app/templates/sheet_dnd5e.html` `.atk-strike` — same 1600 ms delay for damage; 3200 ms for bonus damage.
+
+### Notes
+- **What to test:** Strike with Krieger's Greataxe. The attack d20 spins and settles → ~100 ms pause → the damage dice toast appears and starts its own spin. With a Sneak Attack uplift (Pip), the bonus damage toast lands a second after the base damage settles.
+
+---
+
 ## [2.33.0] - 2026-05-19
 
 **Schema version:** 56
