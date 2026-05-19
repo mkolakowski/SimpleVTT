@@ -731,23 +731,68 @@
         applyTransform();
     }, { passive: false });
 
-    // v2.21.0 Phase T.0: right-click opens the character sheet. Was
-    // a bare preventDefault — double-click used to open the sheet, but
-    // T.0 took that gesture for targeting. Falls through to default
-    // preventDefault when the right-click misses every token so we
-    // don't pop the browser's native context menu on the map.
-    canvas.addEventListener('contextmenu', (ev) => {
+    // v2.21.0 Phase T.0: right-click opens the character or monster
+    // sheet. Was a bare preventDefault — double-click used to open the
+    // sheet, but T.0 took that gesture for targeting.
+    //
+    // v2.21.1 fix-up:
+    // - Also listens on ``mapPane`` (the parent of canvas) so the
+    //   contextmenu fires even if some overlay sits between canvas
+    //   and the cursor.
+    // - Also handles NPC tokens (``token_template_id``) — opens the
+    //   monster sheet via the existing v2.3.15 drawer link pattern.
+    //   Originally only PC sheets were wired up.
+    // - Falls back to a synthetic anchor click for the actual
+    //   navigation so the GM's iframe-drawer interceptor (the
+    //   ``a.character-sheet-link`` / ``a.monster-sheet-link``
+    //   delegated handler in tabletop.html) catches it. That works
+    //   around popup blockers AND gives the GM the in-pane drawer
+    //   view they're used to from the init-tracker 📋 Sheet button.
+    function _openSheetForToken(token) {
+        if (!token) return false;
+        if (token.is_hidden && !ME.isGm) return false;
+        let url, cls, name;
+        if (token.character_id) {
+            url = `/campaign/${CAMPAIGN_ID}/character/${token.character_id}/sheet`;
+            cls = 'character-sheet-link';
+            name = token.label || '';
+        } else if (token.token_template_id) {
+            url = `/campaign/${CAMPAIGN_ID}/monster-template/${token.token_template_id}/sheet`;
+            cls = 'monster-sheet-link';
+            name = token.label || '';
+        } else {
+            return false;
+        }
+        // Synthetic anchor click — the document-level interceptor in
+        // tabletop.html picks it up and opens in the iframe drawer for
+        // GMs; for non-GMs the anchor's target="_blank" falls through
+        // to a new tab (the interceptor is GM-only).
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.className = cls;
+        if (cls === 'character-sheet-link') a.dataset.characterName = name;
+        else a.dataset.monsterName = name;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return true;
+    }
+    function _handleRightClick(ev) {
         ev.preventDefault();
         const [x, y] = clientToCanvas(ev);
         for (let i = tokens.length - 1; i >= 0; i--) {
             const t = tokens[i];
-            if (pointInToken(x, y, t) && t.character_id) {
-                if (t.is_hidden && !ME.isGm) continue;
-                openSheet(t.character_id);
-                return;
-            }
+            if (!pointInToken(x, y, t)) continue;
+            if (_openSheetForToken(t)) return;
         }
-    });
+    }
+    canvas.addEventListener('contextmenu', _handleRightClick);
+    // Defense-in-depth: also listen on mapPane in case overlays sit
+    // between the cursor and the canvas at right-click time.
+    mapPane.addEventListener('contextmenu', _handleRightClick);
 
     // ---------- Drag handling ----------
     let dragging = null;     // { token, offsetX, offsetY }
@@ -1092,29 +1137,17 @@
             if (ev.touches.length === 1) {
                 const t = ev.touches[0];
                 tapStart = { time: Date.now(), x: t.clientX, y: t.clientY };
-                // v2.21.0 Phase T.0: long-press → openSheet. The old
-                // double-tap = openSheet gesture moved to "double-tap
-                // targets"; long-press fills in as the touch equivalent
-                // of right-click. Cancelled if the finger moves (pan
-                // / drag) or lifts before 600 ms.
-                tapStart._longPressTimer = setTimeout(() => {
-                    if (!tapStart) return;
-                    const moved = Math.hypot(
-                        (window._lastTouchX ?? tapStart.x) - tapStart.x,
-                        (window._lastTouchY ?? tapStart.y) - tapStart.y,
-                    );
-                    if (moved >= 12) return;  // they moved — not a long-press
-                    const [wx, wy] = clientToCanvasXY(tapStart.x, tapStart.y);
-                    for (let i = tokens.length - 1; i >= 0; i--) {
-                        const tok = tokens[i];
-                        if (!pointInToken(wx, wy, tok)) continue;
-                        if (!tok.character_id) continue;
-                        if (tok.is_hidden && !ME.isGm) continue;
-                        openSheet(tok.character_id);
-                        tapStart._longPressFired = true;
-                        break;
-                    }
-                }, 600);
+                // v2.21.0 Phase T.0 fix-up (v2.21.1): the long-press →
+                // openSheet timer was removed. iOS Safari blocks
+                // ``window.open`` from async setTimeout callbacks (not
+                // a user-initiated gesture by the time the timer fires)
+                // AND the iOS native long-press menu on image elements
+                // competes for the same gesture, so the long-press
+                // implementation was unreliable in two distinct ways.
+                // For now, sheet-open on touch falls back to the init
+                // tracker's "📋 Sheet" button. A future commit can
+                // introduce a two-finger tap or a long-press-on-empty-
+                // map → "tap a token" mode that side-steps both issues.
 
                 // Spawn click-to-set: a tap while armed consumes the touch.
                 if (spawnArmingCharId != null && spawnContext && spawnContext.encounterId) {
@@ -1181,17 +1214,6 @@
         }, { passive: false });
 
         mapPane.addEventListener('touchmove', (ev) => {
-            // v2.21.0 Phase T.0: any meaningful movement aborts the
-            // pending long-press (the touch is panning / dragging, not
-            // holding). Threshold matches the tap-detection moved<12.
-            if (tapStart && tapStart._longPressTimer && ev.touches.length === 1) {
-                const t = ev.touches[0];
-                const moved = Math.hypot(t.clientX - tapStart.x, t.clientY - tapStart.y);
-                if (moved >= 12) {
-                    clearTimeout(tapStart._longPressTimer);
-                    tapStart._longPressTimer = null;
-                }
-            }
             if (touchPinch && ev.touches.length >= 2) {
                 const [t1, t2] = ev.touches;
                 const newDist = touchDist(t1, t2);
@@ -1275,19 +1297,14 @@
             // Tap / double-tap detection: only fires when the lift moved
             // very little since touchstart (i.e., not a pan or drag).
             // v2.21.0 Phase T.0: double-tap now targets (was openSheet).
-            // Long-press (~600 ms, no significant movement) opens the
-            // sheet — the sheet gesture migrated off double-tap to make
-            // room for targeting. ``longPressFired`` short-circuits the
-            // subsequent tap-end logic so the long-press doesn't ALSO
-            // count as a tap.
+            // Sheet-open on touch falls back to the init-tracker
+            // "📋 Sheet" button — see the touchstart comment for the
+            // long-press attempt that was reverted in v2.21.1.
             if (tapStart && ev.changedTouches.length === 1 && ev.touches.length === 0) {
                 const ct = ev.changedTouches[0];
                 const moved = Math.hypot(ct.clientX - tapStart.x, ct.clientY - tapStart.y);
                 const dt = Date.now() - tapStart.time;
-                if (tapStart._longPressFired) {
-                    // Long-press already opened the sheet — eat this tap.
-                    tapStart = null;
-                } else if (moved < 12 && dt < 350) {
+                if (moved < 12 && dt < 350) {
                     const now = Date.now();
                     const dx = ct.clientX - lastTap.x;
                     const dy = ct.clientY - lastTap.y;
