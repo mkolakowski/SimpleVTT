@@ -3009,6 +3009,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         _renderMiniSlotPips(slotRow);
                     }
                 }
+                // v2.22.0 Phase T.1: include current target if set.
+                const _targetsC = (window._targetingState
+                    && window._targetingState.getTargets()) || [];
+                const _tC0 = _targetsC[0] || null;
                 const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3018,6 +3022,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         slot_level: lvl,
                         class_slug: classSlug,
                         override: !!override,
+                        ...(_tC0 ? {
+                            target_combatant_id: _tC0.combatant_id || '',
+                            target_character_id: _tC0.character_id || null,
+                            target_name: _tC0.name || '',
+                        } : {}),
                     }),
                 });
                 let resp = await doFetch(false);
@@ -3632,6 +3641,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     const charId = parseInt(rawCharId, 10);
                     const idx = parseInt(btn.dataset.attackIdx, 10);
                     if (!charId || isNaN(idx)) return;
+                    // v2.22.0 Phase T.1: pick up the current target (if
+                    // any) from the targeting state set by double-click.
+                    // Single-target attacks consume the first entry;
+                    // multi-target (T.5+ AoE) will iterate. The endpoint
+                    // accepts target_combatant_id since Phase B
+                    // (v2.20.0).
+                    const _targets = (window._targetingState
+                        && window._targetingState.getTargets()) || [];
+                    const _t0 = _targets[0] || null;
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -3639,6 +3657,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             character_id: charId,
                             attack_index: idx,
                             override: !!override,
+                            ...(_t0 ? {
+                                target_combatant_id: _t0.combatant_id || '',
+                                target_character_id: _t0.character_id || null,
+                                target_name: _t0.name || '',
+                            } : {}),
                         }),
                     });
                     let resp = await doFetch(false);

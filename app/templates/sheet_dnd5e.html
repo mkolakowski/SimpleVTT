@@ -2661,6 +2661,26 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 }
                 btn.disabled = true;
                 try {
+                    // v2.22.0 Phase T.1: target descriptors from the
+                    // tabletop's localStorage mirror (written by
+                    // tabletop.js ``_targeting._publish()``). Inlined
+                    // because this IIFE doesn't share scope with the
+                    // attacks IIFE's ``_targetBodyFields`` helper.
+                    let _spTgt = {};
+                    try {
+                        const _raw = localStorage.getItem(`simplevtt:targeting:${CAMPAIGN_ID}`);
+                        if (_raw) {
+                            const _arr = JSON.parse(_raw);
+                            if (Array.isArray(_arr) && _arr.length) {
+                                const _t = _arr[0];
+                                _spTgt = {
+                                    target_combatant_id: _t.combatant_id || '',
+                                    target_character_id: _t.character_id || null,
+                                    target_name: _t.name || '',
+                                };
+                            }
+                        }
+                    } catch (_) {}
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -2670,6 +2690,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             slot_level: lvl,
                             class_slug: spellClass,
                             override: !!override,
+                            ..._spTgt,
                         }),
                     });
                     let resp = await doFetch(false);
@@ -3963,6 +3984,31 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 
+    // v2.22.0 Phase T.1: read the current target from the parent
+    // tabletop's localStorage mirror. The full sheet runs in its own
+    // page (or an iframe drawer) with a separate ``window`` object,
+    // so we can't see ``window._targetingState`` directly. The mirror
+    // is written by tabletop.js's ``_targeting._publish()`` on every
+    // change. Returns the first target descriptor or null.
+    function _readSharedTarget() {
+        try {
+            const key = `simplevtt:targeting:${CAMPAIGN_ID}`;
+            const raw = localStorage.getItem(key);
+            if (!raw) return null;
+            const arr = JSON.parse(raw);
+            return Array.isArray(arr) && arr.length ? arr[0] : null;
+        } catch (_) { return null; }
+    }
+    function _targetBodyFields() {
+        const t = _readSharedTarget();
+        if (!t) return {};
+        return {
+            target_combatant_id: t.combatant_id || '',
+            target_character_id: t.character_id || null,
+            target_name: t.name || '',
+        };
+    }
+
     // ── Load attacks (handle legacy {name, bonus, damage} list) ──
     let attacks = [];
     try {
@@ -4279,6 +4325,11 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 }
 
                 try {
+                    // v2.22.0 Phase T.1: include target descriptors if
+                    // the player double-clicked a token on the map. The
+                    // localStorage mirror is populated by tabletop.js
+                    // whenever ``_targeting._publish()`` runs.
+                    const _tgtBody = _targetBodyFields();
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -4287,6 +4338,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             attack_index: idx,
                             override: !!override,
                             ...upliftBody,
+                            ..._tgtBody,
                         }),
                     });
                     let resp = await doFetch(false);

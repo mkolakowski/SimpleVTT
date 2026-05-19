@@ -251,6 +251,23 @@
         _publish() {
             try { render(); } catch (_) {}
             _updateTargetingChip();
+            // v2.22.0 Phase T.1: mirror the current targets into
+            // localStorage so the full character sheet (which runs in
+            // a separate page/iframe with its own ``window`` object)
+            // can pick up the target before submitting an action. Key
+            // namespaced by campaign so two campaigns open in different
+            // tabs don't cross-contaminate. JSON.stringify the list so
+            // the receiver can read structured ``{token_id, char_id,
+            // combatant_id, name}`` descriptors without re-resolving.
+            try {
+                const targets = this.getTargets();
+                const key = `simplevtt:targeting:${CAMPAIGN_ID}`;
+                if (targets.length) {
+                    localStorage.setItem(key, JSON.stringify(targets));
+                } else {
+                    localStorage.removeItem(key);
+                }
+            } catch (_) { /* localStorage may be disabled in private mode */ }
             try { document.dispatchEvent(new CustomEvent('vtt:targeting-change', { detail: this.getTargets() })); } catch (_) {}
         },
     };

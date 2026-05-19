@@ -5701,6 +5701,17 @@ async def cast_spell(
     if char_id <= 0 or spell_index < 0:
         raise HTTPException(400, "character_id and spell_index are required")
 
+    # v2.22.0 Phase T.1: optional target descriptors. ``target_combatant_id``
+    # is the stable combatant.id from the hub battle state (preferred);
+    # ``target_character_id`` + ``target_name`` are fallbacks for callers
+    # that don't have a combatant id handy. Each selector is resolved
+    # below into a (combatant_id, display_name) pair via the existing
+    # ``_resolve_target_combatant`` helper.
+    target_combatant_id_in = (body.get("target_combatant_id") or "").strip() or None
+    target_character_id_in = body.get("target_character_id")
+    target_character_id_in = int(target_character_id_in) if target_character_id_in else None
+    target_name_in = (body.get("target_name") or "").strip() or None
+
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
         raise HTTPException(403, "Not a member")
@@ -5809,6 +5820,26 @@ async def cast_spell(
 
     cast_id = uuid.uuid4().hex[:12]
 
+    # v2.22.0 Phase T.1: resolve the target descriptors (any combination
+    # of combatant_id / character_id / name) into a canonical pair for
+    # the broadcast. ``_resolve_target_combatant`` returns
+    # ``(combatant_id, display_name)``; when the target isn't currently
+    # in init the combatant_id falls back to None and the broadcast
+    # carries name-only. T.2 will use ``target_combatant_id`` to read
+    # the target's AC; for now the chat card just shows the target
+    # name in the cast line.
+    target_combatant_id, target_name_resolved = await _resolve_target_combatant(
+        campaign_id,
+        target_character_id=target_character_id_in,
+        target_name=target_name_in,
+    )
+    # When the caller passed an explicit combatant_id, prefer it over
+    # whatever the char_id / name resolver returned (the caller knows
+    # which init slot they meant — supports double-targeting the same
+    # name with different tokens).
+    if target_combatant_id_in:
+        target_combatant_id = target_combatant_id_in
+
     payload = {
         "id": cast_id,
         "caster_user_id": user.id,
@@ -5841,6 +5872,16 @@ async def cast_spell(
         # Client's renderActionButtons consumes this directly; if empty the
         # client synthesizes a single Action from the legacy fields above.
         "actions": spell.get("actions") or [],
+        # v2.22.0 Phase T.1: target descriptors. ``target_combatant_id`` is
+        # the stable combatant.id when the target is in init; None
+        # otherwise. ``target_character_id`` carries through when the
+        # target is a PC. ``target_name`` always set when any target was
+        # provided. The chat card uses these to render "Lyra casts
+        # Fireball at Vex"; T.2 will use combatant_id to look up AC for
+        # auto-hit determination.
+        "target_combatant_id": target_combatant_id or "",
+        "target_character_id": target_character_id_in,
+        "target_name": target_name_resolved or target_name_in or "",
     }
 
     # Register heal claims so /apply_healing can validate and roll server-side
@@ -5871,7 +5912,17 @@ async def cast_spell(
     # _mark_battle_economy keeps an over-budget cast from re-flipping
     # the chip (it's already used — that's why we got here).
     await _mark_battle_economy(campaign_id, char.id, slot_for_economy)
-    return {"ok": True, "id": cast_id, "slot": updated_slot, "over_budget": was_used}
+    return {
+        "ok": True,
+        "id": cast_id,
+        "slot": updated_slot,
+        "over_budget": was_used,
+        # v2.22.0 Phase T.1: echo the resolved target so the rolling
+        # player's toast can name them without waiting for the WS round-trip.
+        "target_combatant_id": target_combatant_id or "",
+        "target_character_id": target_character_id_in,
+        "target_name": target_name_resolved or target_name_in or "",
+    }
 
 
 # ----------- API: use class feature (Phase 3 action-economy) -----------
