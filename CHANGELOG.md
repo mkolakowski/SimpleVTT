@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.35.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Roll-toast audit: every server-side dice roll now fires a dice toast.** Reviewed all `dice_mod.roll` call sites and found three rolling surfaces with no toast: `/use_second_wind` (1d10+lv heal), `/use_cutting_words` (1dN BI die), and `/cast_spell` save-for-half damage (Fireball / Burning Hands / Sacred Flame post-save damage roll). Other surfaces — `/roll`, `/attack` (atk+dmg+bonus), `/cast_spell` (auto-heal + auto-attack + NPC save), `/apply_healing`, `/use_item` (heal_applied), `/roll_request/respond` — were already toasting. This commit closes the gap via a unified `dice_*` payload on `feature_used` broadcasts (mirrors the `auto_*_breakdown` convention) and a new toast branch for save-for-half damage. MINOR — additive UI on existing event types.
+**Description:** Three edits. **(1)** `app/routes/tabletop_routes.py` `/use_second_wind` — `feature_desc` collapsed to "Bonus action"; added `dice_expression` ("1d10+5"), `dice_total`, `dice_breakdown`, `dice_note` ("💨 Second Wind") fields. **(2)** Same endpoint `/use_cutting_words` — dropped the inline "rolled 1d6 → 4" sentence from `feature_desc`; added `dice_*` fields tagged "🎭 Cutting Words → -N from NAME". **(3)** `app/static/roll_toast.js` — new `feature_used` handler fires `showRollToast` when `dice_expression && dice_breakdown` are populated; new spell_cast branch fires the save-for-half damage toast (note format mirrors weapon-attack damage with target / type / applied / half-on-save tags). **(4)** Other rolling endpoints audited and confirmed-already-toasting: `/use_item` heal (via `heal_applied`), Sneak Attack uplift (via `weapon_attack`), Reckless Attack uplift (via `weapon_attack`), Channel Divinity / Bardic Inspiration grants (no roll).
+**Description (cont):** Why a generic `dice_*` envelope on `feature_used` rather than per-feature event types. Three of these features are heals or debuffs; another two (Second Wind and Cutting Words) need different layouts in the chat card. A new event type per feature would duplicate the broadcast pipeline. Putting the optional `dice_expression`/`dice_total`/`dice_breakdown`/`dice_note` fields on `feature_used` lets future features (Smite die preview, Hexblade's Curse extra die, etc.) opt in with a single broadcast addition. Features without dice (Rage, Action Surge, Lay on Hands) ignore the fields entirely.
+
+### Added
+- `app/routes/tabletop_routes.py` `/use_second_wind` — `dice_expression` / `dice_total` / `dice_breakdown` / `dice_note` fields on the `feature_used` broadcast.
+- `app/routes/tabletop_routes.py` `/use_cutting_words` — same `dice_*` envelope.
+- `app/static/roll_toast.js` — `feature_used` handler fires when `dice_*` populated; `spell_cast` branch fires for `auto_save_damage_breakdown` (save-for-half spells).
+
+### Changed
+- `app/routes/tabletop_routes.py` `/use_second_wind` `feature_desc` is now just "Bonus action" — dice + HP info lives on the toast and the HP bar.
+- `app/routes/tabletop_routes.py` `/use_cutting_words` `feature_desc` no longer inlines the "rolled 1dN → R" sentence — that's the dice toast's job now.
+
+### Notes
+- **What to test:** Garrik uses Second Wind → dice toast pops with "💨 Second Wind" animating a d10+5 result, chat-card description shows only "Bonus action" + (0/1 left) chip. Lyra uses Cutting Words on a bandit → toast pops with the BI die. Cast Burning Hands at a bandit (auto-apply on) → save-roll toast + 1600 ms later → damage toast with "🎲 Burning Hands → Bandit — fire · −7 HP (full)" if failed, "(half on save)" if saved. Every roll the server makes now has a visible toast.
+- **Backward compat.** `feature_used` events without `dice_*` fields skip the toast (Rage, Action Surge, generic feature use, etc.). Existing chat-card rendering is unchanged.
+
+---
+
 ## [2.34.2] - 2026-05-19
 
 **Schema version:** 56

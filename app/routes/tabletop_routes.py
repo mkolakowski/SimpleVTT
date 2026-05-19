@@ -7789,10 +7789,14 @@ async def use_cutting_words(
             "user_color": caster_color,
             "feature_name": feature_name,
             "feature_desc": (
-                f"Reaction: rolled 1d{die_size} → {rolled}. "
-                f"GM applies the reduction to {target_phrase}'s "
+                f"Reaction. GM applies the reduction to {target_phrase}'s "
                 f"triggering attack roll, ability check, or damage roll."
             ),
+            # v2.35.0: dice fields so roll_toast.js fires the BI die toast.
+            "dice_expression": f"1d{die_size}",
+            "dice_total": rolled,
+            "dice_breakdown": breakdown,
+            "dice_note": f"🎭 Cutting Words → -{rolled}{(' from ' + display_name) if display_name else ''}",
             "source": "cutting-words",
             "remaining": cur - 1,
             "max": mx,
@@ -8475,7 +8479,13 @@ async def use_second_wind(
             "character_name": char.name,
             "user_color": caster_color,
             "feature_name": "💨 Second Wind",
-            "feature_desc": f"Bonus action: rolled {expr} = {recovered}.",
+            "feature_desc": "Bonus action",
+            # v2.35.0: dice fields so roll_toast.js fires the heal die
+            # animation instead of inlining the result in feature_desc.
+            "dice_expression": expr,
+            "dice_total": recovered,
+            "dice_breakdown": breakdown,
+            "dice_note": "💨 Second Wind",
             "source": "second-wind",
             "remaining": sw_cur - 1,
             "max": sw_max,

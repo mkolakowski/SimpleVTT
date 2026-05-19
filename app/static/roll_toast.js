@@ -456,6 +456,33 @@
                     }), 1600);
                 }
             }
+            // v2.35.0: save-for-half damage toast (Fireball, Burning
+            // Hands, Sacred Flame, etc.). Server rolled damage when the
+            // NPC saved/failed; auto_save_damage_breakdown carries the
+            // breakdown. Fires after the save-roll toast (which lands
+            // via the inline ``roll`` broadcast in T.3) so the user
+            // reads save → damage in sequence.
+            if (r.auto_save_damage_rolled && r.auto_save_damage_breakdown) {
+                const exprMatch = String(r.auto_save_damage_breakdown).match(/(\d+d\d+(?:[+-]\d+)?)/);
+                const tgt = r.auto_save_target_name || r.target_name || '';
+                const typeBit = r.auto_save_damage_type
+                    ? ' — ' + r.auto_save_damage_type : '';
+                const applied = r.auto_save_damage_applied || 0;
+                const passed = r.auto_save_passed;
+                const suffix = applied > 0
+                    ? ` · −${applied} HP${passed ? ' (half on save)' : ' (full)'}`
+                    : '';
+                showRollToast({
+                    expression: exprMatch ? exprMatch[1] : '1d6',
+                    total: r.auto_save_damage_rolled,
+                    breakdown: r.auto_save_damage_breakdown,
+                    note: `🎲 ${r.spell_name || 'Spell'}${tgt ? ' → ' + tgt : ''}${typeBit}${suffix}`,
+                    user_id: r.caster_user_id,
+                    user_name: r.caster_user_name,
+                    char_name: r.caster_char_name,
+                });
+            }
+
             if (r.auto_heal_applied && r.auto_heal_breakdown) {
                 const exprMatch = String(r.auto_heal_breakdown).match(/(\d+d\d+(?:[+-]\d+)?)/);
                 const tgt = r.auto_heal_target_name || r.target_name || '';
@@ -476,6 +503,26 @@
                     user_id: r.caster_user_id,
                     user_name: r.caster_user_name,
                     char_name: r.caster_char_name,
+                });
+            }
+            return;
+        }
+
+        if (msg.type === 'feature_used') {
+            // v2.35.0: dice toast for feature_used broadcasts that
+            // carry ``dice_*`` fields. Used by /use_second_wind
+            // (1d10+lv heal) and /use_cutting_words (1dN BI die) so
+            // the dice animation appears like other rolls instead of
+            // being inlined in the feature-card description. Other
+            // feature uses (Rage, Action Surge, Lay on Hands) carry
+            // no dice and skip this branch.
+            if (r.dice_expression && r.dice_breakdown) {
+                showRollToast({
+                    expression: r.dice_expression,
+                    total: r.dice_total,
+                    breakdown: r.dice_breakdown,
+                    note: r.dice_note || r.feature_name || 'Feature',
+                    user_name: r.character_name || '',
                 });
             }
             return;
