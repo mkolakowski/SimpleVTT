@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.30.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Phase T.3 — save-spell auto-resolution.** When a spell carries a `save_ability` (Hold Person, Fireball, Burning Hands, Sacred Flame, etc. — fetched from SRD enrichment) AND a target is selected, `/cast_spell` now resolves the save automatically: **PC targets** get a `RollRequest` scoped to their player so the prompt lands in their UI without a GM button click; **NPC targets** are rolled server-side using the monster template's ability scores (raw mod — demo NPCs aren't proficient in any saves) and broadcast as a `roll` event so the dice toast fires and `_appendSaveResultToSpellCard` correlates the result back to the cast card. Spell save DC is computed from the caster's `8 + proficiency + spellcasting_ability_mod`. The chat card renders a new `📋` line summarizing the save (DC, target, rolled value + pass/fail for NPCs). MINOR — new visible UI surface + new fields on the `/cast_spell` response. No schema changes.
+**Description:** Three edits. **(1)** `app/routes/tabletop_routes.py` `/cast_spell` — new auto-save block after the auto-heal block (~80 lines). Resolves `save_ability` via the same SRD enrichment fallback (top-level → `actions[*].save_ability`), computes the DC from `char.sheet`, distinguishes PC (has `target_combatant.char_id` + `owner_user_id`) from NPC (has `target_combatant.token_template_id`), and emits the matching event. PC path creates a `RollRequest` row + broadcasts `roll_request` with `target_user_ids=[owner_id]`. NPC path projects the template via `_monster_template_to_sheet` → `_resolve_stat_modifier` for the raw save mod → rolls `1d20+mod` → broadcasts `roll` with the cast's note label so the existing save-correlation logic picks it up. Broadcast payload + response gain seven new `auto_save_*` fields. **(2)** `app/static/tabletop.js` — new `_autoSaveLineHtml(d)` helper renders either "📋 Prompted NAME for WIS save (DC 14)" (PC) or "📋 WIS save NAME: 12 vs DC 14 — ❌ failed" (NPC). Hooked into `appendSpellCast` HTML right under the auto-heal line. **(3)** `tests/harness/test_cast_spell_save.py` — 4 new harness tests covering the PC prompt path, NPC auto-roll, no-target fallback, and non-save-spell no-op.
+**Description (cont):** Why server creates RollRequests inline instead of calling the `/roll_request` endpoint. That endpoint is GM-only (`raise 403` when the caller isn't a GM), but `/cast_spell` is callable by any character owner. Inlining the DB write + broadcast bypasses the gate while preserving the same DB shape, audit trail, and WS payload — players still see the same roll_request card they'd get from a manual GM prompt, and existing `_appendSaveResultToSpellCard` correlation works unchanged because the label format matches.
+**Description (cont 2):** Damage application on failed saves — deferred. RAW for save-or-suck spells (Hold Person) the fail effect is "paralyzed" — applied via a buff. For save-for-half spells (Fireball) the fail effect is full damage, success is half. Both need a damage / buff application step keyed off `auto_save_passed`. v1 just surfaces the save result; the GM can manually apply the buff or damage. A follow-up (T.3b) can wire the auto-effect step using the existing Phase C buff installer + Phase T.2 damage path. Filed.
+
+### Added
+- `app/routes/tabletop_routes.py` `/cast_spell` — auto-save block for PC (prompt) and NPC (server-roll) targets.
+- `app/static/tabletop.js` `_autoSaveLineHtml` — chat-card line summarizing the save with DC + pass/fail.
+- `tests/harness/test_cast_spell_save.py` — 4 new harness tests (PC prompt, NPC auto-roll, no-target, non-save-spell).
+
+### Notes
+- **What to test:** open `/campaign/1` as the GM. Double-click Krieger to target him. Cast Hold Person from Tavik → chat card shows "📋 Prompted Krieger Stonefist — WIS save · DC 14", and Krieger's owner sees a roll_request card in their roll log. Now double-click a bandit token and cast Hold Person → chat card shows "📋 WIS save Bandit: 8 vs DC 14 — ❌ failed" with the dice toast firing. Cast Hold Person with no target → no save line (existing untargeted UX unchanged).
+- **Backward compat.** Pure additive — non-save spells skip the block entirely, no-target casts skip the block. The existing manual "📋 Prompt save" button on the chat card still works for follow-up saves if needed.
+- **Filed for T.3b.** Auto-apply the consequence (buff for save-or-suck, half/full damage for save-for-half) when `auto_save_passed` is decided. Today the GM applies manually.
+
+---
+
 ## [2.29.1] - 2026-05-19
 
 **Schema version:** 56

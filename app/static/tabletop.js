@@ -1820,6 +1820,37 @@
         </div>`;
     }
 
+    // v2.30.0 Phase T.3: auto-save line for spell_cast cards. Three
+    // states:
+    //   - PC target prompted   → "📋 Prompted NAME for ABL save (DC N)"
+    //   - NPC target auto-rolled → "📋 NAME ABL save: 12 — ❌ failed (DC 14)"
+    //   - No auto-save invoked → '' (nothing rendered)
+    function _autoSaveLineHtml(d) {
+        if (!d || !d.auto_save_target_kind) return '';
+        const ab = escapeHTML(d.auto_save_ability || '');
+        const tgt = escapeHTML(d.auto_save_target_name || d.target_name || '');
+        const dc = d.auto_save_dc || 0;
+        if (d.auto_save_target_kind === 'pc' && d.auto_save_prompted) {
+            return `<div class="weapon-atk-line">
+                <span class="weapon-atk-label">📋 Prompted</span>
+                <span class="weapon-atk-total">${tgt} — ${ab} save</span>
+                <span class="weapon-atk-applied">DC ${dc}</span>
+            </div>`;
+        }
+        if (d.auto_save_target_kind === 'npc' && d.auto_save_rolled != null) {
+            const passed = d.auto_save_passed;
+            const verdict = passed
+                ? '<span class="weapon-atk-resist">✅ saved</span>'
+                : '<span class="weapon-atk-hit">❌ failed</span>';
+            return `<div class="weapon-atk-line">
+                <span class="weapon-atk-label">📋 ${ab} save</span>
+                <span class="weapon-atk-total">${tgt}: ${escapeHTML(String(d.auto_save_rolled))}</span>
+                <span class="weapon-atk-applied">vs DC ${dc} — ${verdict}</span>
+            </div>`;
+        }
+        return '';
+    }
+
     function appendSpellCast(d) {
         const ul = document.getElementById('roll-list');
         if (!ul) return;
@@ -1878,6 +1909,7 @@
                     ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
                     ${d.spell_desc ? `<div class="spell-cast-desc">${escapeHTML(d.spell_desc)}</div>` : ''}
                     ${_autoHealLineHtml(d)}
+                    ${_autoSaveLineHtml(d)}
                     <div class="spell-cast-actions"></div>
                     ${_overBudgetBadge(d)}
                     <div class="spell-cast-results"></div>

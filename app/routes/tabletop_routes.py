@@ -6327,6 +6327,145 @@ async def cast_spell(
             payload["auto_heal_hp_after"] = auto_heal_hp_after
             payload["auto_heal_revived"] = auto_heal_revived
 
+    # v2.30.0 Phase T.3: save-spell auto-resolution.
+    # When the spell carries a ``save_ability`` (top-level OR on an
+    # action — same SRD-enrichment fallback the heal path uses) AND
+    # a target was selected, resolve the save automatically:
+    #   - PC target  → create a RollRequest scoped to the target's
+    #                  owner_user_id, broadcast as a roll_request
+    #                  card so the player rolls in their own UI.
+    #   - NPC target → roll the save server-side from the monster's
+    #                  ability scores (raw mod; no proficiency in
+    #                  the demo seed) and broadcast as a ``roll``
+    #                  event with a note that the chat card's
+    #                  ``_appendSaveResultToSpellCard`` correlates
+    #                  back to the cast.
+    # The cast broadcast/response carry ``auto_save_*`` fields so
+    # the chat card / toast can name the targeted creature and DC
+    # without waiting for the WS round-trip.
+    save_ability_raw = spell.get("save_ability") or next(
+        (a.get("save_ability") for a in (spell.get("actions") or []) if a.get("save_ability")),
+        "",
+    )
+    save_ability = (save_ability_raw or "").strip().upper()[:3]
+    auto_save_target_name = ""
+    auto_save_target_kind = ""  # "pc", "npc", or ""
+    auto_save_prompted = False
+    auto_save_dc = 0
+    auto_save_rolled = None
+    auto_save_passed = None
+    auto_save_breakdown = ""
+    if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} and (
+        target_combatant_id or target_character_id_in
+    ):
+        # Spell save DC = 8 + caster proficiency + spellcasting mod.
+        caster_sheet = char.sheet or {}
+        caster_prof = int(caster_sheet.get("proficiency_bonus") or 2)
+        caster_spc = (caster_sheet.get("spellcasting_ability") or "").strip().upper()[:3]
+        if caster_spc not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+            caster_spc = "WIS"  # safe fallback for non-spellcaster casts (shouldn't happen)
+        caster_ab = int((caster_sheet.get("abilities") or {}).get(caster_spc, 10))
+        caster_spc_mod = (caster_ab - 10) // 2
+        auto_save_dc = 8 + caster_prof + caster_spc_mod
+
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if not target_combatant and target_character_id_in:
+            target_combatant = {
+                "char_id": int(target_character_id_in),
+                "id": target_combatant_id or "",
+                "name": target_name_resolved or target_name_in or "",
+            }
+        if target_combatant:
+            auto_save_target_name = target_combatant.get("name", "") or target_name_resolved or ""
+            ab_long = {
+                "STR": "STR", "DEX": "DEX", "CON": "CON",
+                "INT": "INT", "WIS": "WIS", "CHA": "CHA",
+            }[save_ability]
+            stat_key = f"{save_ability.lower()}_save"
+            note_label = f"{payload['spell_name']} — {ab_long} save"
+            tgt_char_id = target_combatant.get("char_id")
+            tgt_char = None
+            if tgt_char_id:
+                tgt_char = db.query(Character).filter(
+                    Character.id == int(tgt_char_id),
+                    Character.campaign_id == campaign_id,
+                ).first()
+            if tgt_char and tgt_char.owner_user_id:
+                # ---- PC target → roll-request prompt ----
+                auto_save_target_kind = "pc"
+                req = RollRequest(
+                    campaign_id=campaign_id,
+                    created_by_user_id=user.id,
+                    label=note_label,
+                    base_expression="1d20",
+                    stat_key=stat_key,
+                    dc=auto_save_dc,
+                    visibility=Visibility.PUBLIC,
+                )
+                db.add(req)
+                db.commit()
+                db.refresh(req)
+                await hub.broadcast(campaign_id, {
+                    "type": "roll_request",
+                    "data": {
+                        "id": req.id,
+                        "label": req.label,
+                        "stat_key": req.stat_key,
+                        "base_expression": req.base_expression,
+                        "dc": req.dc,
+                        "visibility": req.visibility.value,
+                        "created_by_name": user.display_name,
+                        "created_by_user_id": user.id,
+                        "target_user_ids": [tgt_char.owner_user_id],
+                        "target_user_names": [tgt_char.name],
+                    },
+                })
+                auto_save_prompted = True
+            elif target_combatant.get("token_template_id"):
+                # ---- NPC target → server rolls the save ----
+                auto_save_target_kind = "npc"
+                tmpl = db.query(TokenTemplate).filter(
+                    TokenTemplate.id == int(target_combatant["token_template_id"]),
+                ).first()
+                if tmpl:
+                    npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
+                    npc_mod, _ = _resolve_stat_modifier(
+                        npc_sheet, "dnd5e", stat_key,
+                    )
+                    expr = f"1d20{npc_mod:+d}"
+                    try:
+                        _r = dice_mod.roll(expr)
+                        auto_save_rolled = int(_r.total)
+                        auto_save_breakdown = _r.breakdown
+                    except dice_mod.DiceParseError:
+                        auto_save_rolled = 0
+                        auto_save_breakdown = ""
+                    auto_save_passed = auto_save_rolled >= auto_save_dc
+                    # Broadcast as a regular roll so the toast fires
+                    # AND ``_appendSaveResultToSpellCard`` correlates
+                    # the result back to the cast card via note prefix.
+                    await hub.broadcast(campaign_id, {
+                        "type": "roll",
+                        "data": {
+                            "expression": expr,
+                            "total": auto_save_rolled,
+                            "breakdown": auto_save_breakdown,
+                            "note": note_label,
+                            "user_name": auto_save_target_name,
+                            "char_name": auto_save_target_name,
+                            "visibility": Visibility.PUBLIC.value,
+                            "dc": auto_save_dc,
+                        },
+                    })
+        payload["auto_save_ability"] = save_ability
+        payload["auto_save_dc"] = auto_save_dc
+        payload["auto_save_target_name"] = auto_save_target_name
+        payload["auto_save_target_kind"] = auto_save_target_kind
+        payload["auto_save_prompted"] = auto_save_prompted
+        payload["auto_save_rolled"] = auto_save_rolled
+        payload["auto_save_passed"] = auto_save_passed
+        payload["auto_save_breakdown"] = auto_save_breakdown
+
     await hub.broadcast(campaign_id, {"type": "spell_cast", "data": payload})
     if updated_slot is not None:
         await hub.broadcast(campaign_id, {
@@ -6359,6 +6498,15 @@ async def cast_spell(
         "auto_heal_target_name": auto_heal_target_name,
         "auto_heal_hp_after": auto_heal_hp_after,
         "auto_heal_revived": auto_heal_revived,
+        # v2.30.0 Phase T.3: echo auto-save resolution.
+        "auto_save_ability": save_ability if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} else "",
+        "auto_save_dc": auto_save_dc,
+        "auto_save_target_name": auto_save_target_name,
+        "auto_save_target_kind": auto_save_target_kind,
+        "auto_save_prompted": auto_save_prompted,
+        "auto_save_rolled": auto_save_rolled,
+        "auto_save_passed": auto_save_passed,
+        "auto_save_breakdown": auto_save_breakdown,
     }
 
 
