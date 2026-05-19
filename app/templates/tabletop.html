@@ -253,6 +253,52 @@
         vertical-align: middle;
         white-space: nowrap;
     }
+    /* v2.24.0 Phase T.2: Hit/Miss/Crit badge + HP-after summary +
+       Undo button on weapon-attack chat cards. */
+    .weapon-atk-hit {
+        display: inline-block;
+        margin: 0 4px;
+        padding: 1px 7px;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 1.4;
+        border-radius: 9px;
+        vertical-align: middle;
+    }
+    .weapon-atk-hit.hit { background: rgba(76, 217, 100, 0.18); color: #4cd964; border: 1px solid rgba(76, 217, 100, 0.35); }
+    .weapon-atk-hit.miss { background: rgba(150, 150, 150, 0.15); color: #aaa; border: 1px solid rgba(150, 150, 150, 0.35); }
+    .weapon-atk-hit.crit { background: rgba(251, 184, 138, 0.22); color: #fbb88a; border: 1px solid rgba(251, 184, 138, 0.5); font-weight: 800; text-shadow: 0 0 4px rgba(251, 184, 138, 0.5); }
+    .weapon-atk-ac { font-weight: 500; opacity: 0.85; font-size: 10px; }
+    .weapon-atk-applied {
+        margin-left: 6px;
+        font-size: 11px;
+        color: #c4b5fd;
+        font-weight: 500;
+    }
+    .weapon-atk-resist { color: #80e0a0; font-size: 10px; }
+    .weapon-atk-dead { color: #ff7070; font-weight: 700; }
+    .weapon-atk-dying { color: #fbb88a; font-style: italic; font-size: 10px; }
+    .weapon-atk-undo {
+        margin-left: 6px;
+        padding: 2px 8px;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 1.2;
+        min-height: 22px;
+        background: rgba(0, 0, 0, 0.3);
+        color: #c4b5fd;
+        border: 1px solid rgba(167, 139, 250, 0.4);
+        border-radius: 4px;
+        cursor: pointer;
+    }
+    .weapon-atk-undo:hover { background: rgba(167, 139, 250, 0.18); }
+    .weapon-atk-undo:disabled { opacity: 0.5; cursor: not-allowed; }
+    .weapon-atk-undo.undone {
+        background: rgba(76, 217, 100, 0.15);
+        color: #4cd964;
+        border-color: rgba(76, 217, 100, 0.4);
+        cursor: default;
+    }
     .spell-cast-meta { font-size: 11px; color: var(--fg-mute); margin-bottom: 6px; }
     .spell-cast-desc {
         font-size: 11px; color: var(--fg-mute); line-height: 1.5;

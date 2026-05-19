@@ -512,6 +512,20 @@ def _apply_inline_migrations() -> None:
                 "BOOLEAN NOT NULL DEFAULT FALSE"
             ))
 
+    # ---- Schema v56 (2.24.0): campaigns.auto_apply_damage ----
+    # Phase T.2 toggle. When True, /attack auto-applies HP changes to
+    # the targeted creature (resistance via Phase B's _resistance_halve
+    # halves correctly; crit doubles damage dice). Defaults False so
+    # existing tables aren't surprised by HP mutations — GM opts in via
+    # the campaign settings page when ready.
+    camp_cols_v56 = _column_names("campaigns")
+    with engine.begin() as conn:
+        if camp_cols_v56 and "auto_apply_damage" not in camp_cols_v56:
+            conn.execute(text(
+                "ALTER TABLE campaigns ADD COLUMN auto_apply_damage "
+                "BOOLEAN NOT NULL DEFAULT FALSE"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

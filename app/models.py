@@ -180,6 +180,18 @@ class Campaign(Base):
     # input and can't be snapped back.
     strict_action_economy: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false")
+    # v2.24.0 Phase T.2: auto-apply damage to targeted creatures.
+    # When False (default), /attack rolls damage + broadcasts but the
+    # GM/player still manually applies HP via the init-tracker HP
+    # input or the sheet HP field. When True, /attack reads the
+    # target combatant's AC from sheet/template, computes hit/miss,
+    # doubles damage dice on a crit, and auto-applies the resulting
+    # damage to the target via _apply_hp_change (resistance from
+    # Phase B halves correctly). Per the v2.21.0 plan questionnaire
+    # the toggle defaults OFF so existing tables aren't surprised by
+    # unexpected HP changes; GMs opt in once they trust the flow.
+    auto_apply_damage: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false")
     # GM-assigned color for the primary GM in the roll log
     gm_color: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     # Tint color for the GM Tools tab in the tabletop sidebar

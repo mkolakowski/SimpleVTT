@@ -499,6 +499,222 @@ def _lookup_combatant_name(campaign_id: int, combatant_id: str | None) -> str:
     return ""
 
 
+def _lookup_combatant(campaign_id: int, combatant_id: str | None) -> dict | None:
+    """v2.24.0 Phase T.2: return the full combatant dict (or None)."""
+    if not combatant_id:
+        return None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return None
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant_id:
+            return c
+    return None
+
+
+def _read_target_ac(
+    db: Session, campaign_id: int, combatant: dict | None,
+) -> int:
+    """v2.24.0 Phase T.2: read the target's AC for hit determination.
+
+    Resolution order:
+    1. PC combatant (has ``char_id``): ``character.sheet["ac"]``.
+    2. Monster combatant (has ``token_template_id``): the template's
+       ``sheet["armor_class"]`` or ``sheet["ac"]``.
+    3. Fallback: 10 (DC for an unarmored medium creature; matches the
+       SRD default when AC is missing).
+
+    Returns 10 on any lookup miss so the hit determination still
+    produces a sane comparison rather than skipping it.
+    """
+    if not combatant:
+        return 10
+    char_id = combatant.get("char_id")
+    if char_id:
+        char = db.query(Character).filter(Character.id == char_id).first()
+        if char:
+            ac = (char.sheet or {}).get("ac")
+            try:
+                return int(ac) if ac is not None else 10
+            except (TypeError, ValueError):
+                return 10
+    tmpl_id = combatant.get("token_template_id")
+    if tmpl_id:
+        tmpl = db.query(TokenTemplate).filter(TokenTemplate.id == tmpl_id).first()
+        if tmpl:
+            sheet = tmpl.sheet or {}
+            ac = sheet.get("armor_class") or sheet.get("ac")
+            try:
+                return int(ac) if ac is not None else 10
+            except (TypeError, ValueError):
+                return 10
+    return 10
+
+
+def _double_dice_for_crit(expr: str) -> str:
+    """v2.24.0 Phase T.2: RAW crit doubles weapon damage DICE (not the
+    flat modifier). ``1d12+4`` becomes ``2d12+4``; ``2d6+3`` becomes
+    ``4d6+3``. Preserves flat modifiers untouched. Works on
+    multi-die-group expressions like ``1d8+1d4+5`` by doubling each
+    die-group it finds.
+
+    Implementation: regex-substitute every ``Nd...`` token (with
+    optional sign prefix) by ``(2N)d...``. Leaves +N / -N flat
+    modifiers alone.
+    """
+    import re as _re
+    if not expr or not expr.strip():
+        return expr
+    def _double(m: "_re.Match[str]") -> str:
+        sign = m.group("sign") or ""
+        count = int(m.group("count") or 1)
+        sides = m.group("sides")
+        mod = m.group("mod") or ""
+        return f"{sign}{count * 2}d{sides}{mod}"
+    pat = _re.compile(
+        r"(?P<sign>[+-])?(?P<count>\d*)d(?P<sides>\d+)(?P<mod>(?:kh|kl|a|d)\d*)?",
+        _re.IGNORECASE,
+    )
+    return pat.sub(_double, expr)
+
+
+# v2.24.0 Phase T.2: in-memory log of recent damage applications per
+# attack_id so the rolling player can undo their last hit if they
+# misclicked. Keyed by attack_id; entry holds the campaign, the target
+# (char_id OR combatant_id), and the actual HP delta applied. Capped
+# implicitly by clear-on-restart + the ``_purge_attack_damage_log``
+# call at write time (drops entries older than 8 hours).
+_attack_damage_log: dict[str, dict] = {}
+
+
+def _purge_attack_damage_log() -> None:
+    """Drop entries older than 8 hours so an idle demo doesn't grow
+    the dict unbounded. Called at every write site."""
+    cutoff = _time.time() - 8 * 3600
+    stale = [k for k, v in _attack_damage_log.items() if v.get("ts", 0) < cutoff]
+    for k in stale:
+        _attack_damage_log.pop(k, None)
+
+
+async def _apply_damage_to_combatant(
+    db: Session,
+    campaign_id: int,
+    combatant: dict,
+    damage_amount: int,
+    damage_type: str,
+    *,
+    is_crit: bool = False,
+    attack_id: str | None = None,
+) -> dict:
+    """Apply ``damage_amount`` damage to the target combatant. Two
+    paths:
+
+    - PC (``combatant['char_id']`` set): routes through
+      ``_apply_hp_change`` so the death-save state machine + the
+      Phase B resistance halving + the Phase C.2 concentration-save
+      hook all fire. Commits db.
+    - NPC (``token_template_id`` only): mutates the hub combatant's
+      ``hp_current`` directly and broadcasts ``battle_update`` so
+      every client refreshes. No resistance lookup yet — monsters
+      don't carry the v2.19.2 ``_buffs_active`` sheet field.
+
+    Logs the applied delta in ``_attack_damage_log[attack_id]`` so
+    the chat card's Undo button can revert it.
+
+    Returns ``{applied, hp_before, hp_after, resistance_applied,
+    is_dying, is_dead}``.
+    """
+    _purge_attack_damage_log()
+    char_id = combatant.get("char_id")
+    if char_id:
+        char = db.query(Character).filter(Character.id == char_id).first()
+        if not char:
+            return {"applied": 0, "hp_before": 0, "hp_after": 0,
+                    "resistance_applied": False, "is_dying": False, "is_dead": False}
+        sheet = char.sheet or {}
+        hp = dict(sheet.get("hp") or {})
+        hp_cur = int(hp.get("current") or 0)
+        # Apply resistance (Phase B) BEFORE _apply_hp_change so the
+        # massive-damage threshold uses the post-resistance number.
+        applied, resistance_applied = _resistance_halve(
+            damage_amount, damage_type, sheet,
+        )
+        new_hp = max(0, hp_cur - applied)
+        result = _apply_hp_change(
+            char, new_hp,
+            is_damage=True, is_crit=is_crit, damage_amount=applied,
+        )
+        db.commit()
+        # Phase C.2 concentration save trigger.
+        if applied > 0:
+            await _maybe_concentration_save(campaign_id, char, applied, db=db)
+        await hub.broadcast(campaign_id, {
+            "type": "character_hp_update",
+            "data": {
+                "character_id": char.id,
+                "hp": result["hp"],
+                "delta": -applied,
+                "source": "attack",
+            },
+        })
+        if attack_id:
+            _attack_damage_log[attack_id] = {
+                "ts": _time.time(),
+                "campaign_id": campaign_id,
+                "target_char_id": char.id,
+                "applied": applied,
+                "was_resistance": resistance_applied,
+            }
+        return {
+            "applied": applied,
+            "hp_before": hp_cur,
+            "hp_after": result["hp"]["current"],
+            "resistance_applied": resistance_applied,
+            "is_dying": result["death_saves"]["status"] == "dying",
+            "is_dead": result["death_saves"]["status"] == "dead",
+        }
+    # NPC path: mutate hub combatant directly.
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return {"applied": 0, "hp_before": 0, "hp_after": 0,
+                "resistance_applied": False, "is_dying": False, "is_dead": False}
+    # Re-find the combatant by id in case the caller passed a stale ref.
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant.get("id"):
+            target = c
+            break
+    if target is None:
+        return {"applied": 0, "hp_before": 0, "hp_after": 0,
+                "resistance_applied": False, "is_dying": False, "is_dead": False}
+    hp_cur = int(target.get("hp_current") or 0)
+    hp_max = int(target.get("hp_max") or 0)
+    applied = damage_amount  # NPCs don't have resistance buffs yet
+    new_hp = max(0, hp_cur - applied)
+    target["hp_current"] = new_hp
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update",
+        "data": state,
+    })
+    if attack_id:
+        _attack_damage_log[attack_id] = {
+            "ts": _time.time(),
+            "campaign_id": campaign_id,
+            "target_combatant_id": target.get("id"),
+            "applied": applied,
+            "was_resistance": False,
+        }
+    return {
+        "applied": applied,
+        "hp_before": hp_cur,
+        "hp_after": new_hp,
+        "resistance_applied": False,
+        "is_dying": False,
+        "is_dead": new_hp == 0 and hp_max > 0,
+    }
+
+
 def _mirror_buffs_to_sheet(
     db: Session, character_id: int, buffs: list[dict],
 ) -> None:
@@ -1204,6 +1420,9 @@ async def campaign_settings_save(
     # v2.8.0: strict action-economy. When on, players can't override the
     # Phase 4 over-budget modal — only the GM can clear a spent chip.
     strict_action_economy: bool = Form(False),
+    # v2.24.0 Phase T.2: auto-apply HP damage on attacks that hit. Off
+    # by default — GM opts in via the campaign settings page.
+    auto_apply_damage: bool = Form(False),
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -1222,6 +1441,8 @@ async def campaign_settings_save(
     campaign.potions_as_bonus_action = potions_as_bonus_action
     # v2.8.0: strict action-economy gating
     campaign.strict_action_economy = strict_action_economy
+    # v2.24.0 Phase T.2: auto-apply damage toggle
+    campaign.auto_apply_damage = auto_apply_damage
     # Default-encounter-on-session-start setting. Validate the encounter
     # belongs to this campaign before assigning; empty / invalid clears.
     de_raw = (default_encounter_id or "").strip()
@@ -10008,12 +10229,31 @@ async def use_attack(
             attack_total = None
             attack_breakdown = ""
 
-    # Pre-roll damage if a dice expression is provided.
+    # v2.24.0 Phase T.2: detect crit from the kept d20 value. Matches
+    # both "1d20[20]" (single die) and "2d20[X,20]kh1=20" (advantage
+    # whose kept high was 20). Disadvantage where the LOW kept value is
+    # 20 (both dice rolled 20) is also a crit — same =20 subtotal
+    # pattern. Skipped for save-DC attacks (no d20 attack roll).
+    is_crit = False
+    if not is_save and attack_breakdown:
+        import re as _re_crit
+        _crit_m = _re_crit.search(
+            r"\d*d20[^d=+ ]*=(\d+)", attack_breakdown, _re_crit.IGNORECASE,
+        )
+        if _crit_m and int(_crit_m.group(1)) == 20:
+            is_crit = True
+
+    # Pre-roll damage if a dice expression is provided. v2.24.0 Phase
+    # T.2: on a crit, double the dice (not the flat modifier) — RAW
+    # "all the damage dice of a critical hit are doubled" (PHB 196).
     damage_total = None
     damage_breakdown = ""
-    if damage_expr_raw:
+    damage_expr_effective = damage_expr_raw
+    if damage_expr_raw and is_crit:
+        damage_expr_effective = _double_dice_for_crit(damage_expr_raw)
+    if damage_expr_effective:
         try:
-            r = dice_mod.roll(damage_expr_raw)
+            r = dice_mod.roll(damage_expr_effective)
             damage_total = r.total
             damage_breakdown = r.breakdown
         except dice_mod.DiceParseError:
@@ -10114,8 +10354,14 @@ async def use_attack(
         slot_spent_level = slot_level
 
     if bonus_damage_expr:
+        # v2.24.0 Phase T.2: crit also doubles player-picked uplift
+        # dice (Sneak Attack / Divine Smite). Same _double_dice_for_crit
+        # helper that's applied to the base damage above.
+        bonus_expr_effective = (
+            _double_dice_for_crit(bonus_damage_expr) if is_crit else bonus_damage_expr
+        )
         try:
-            r = dice_mod.roll(bonus_damage_expr)
+            r = dice_mod.roll(bonus_expr_effective)
             bonus_damage_total = r.total
             bonus_damage_breakdown = r.breakdown
         except dice_mod.DiceParseError:
@@ -10131,6 +10377,48 @@ async def use_attack(
         flag_modified(char, "sheet")
         db.commit()
 
+    # v2.24.0 Phase T.2: hit determination + auto-apply damage.
+    # ``hit`` is computed whenever a target is set so the chat card
+    # can render a Hit/Miss badge regardless of the campaign toggle.
+    # Auto-apply HP changes only fires when:
+    #   - campaign.auto_apply_damage is True
+    #   - target_combatant_id resolves to a combatant in hub state
+    #   - the attack rolled damage_total > 0
+    #   - hit is True (attack_total >= target_ac)
+    # Crit always hits regardless of AC. Saves (is_save=True) skip the
+    # hit determination here — they're handled by T.3's save-spell
+    # path (server rolls / prompts the target's save).
+    attack_id = uuid.uuid4().hex[:12]
+    hit = None
+    target_ac = None
+    damage_applied = 0
+    target_hp_before = None
+    target_hp_after = None
+    target_resistance_applied = False
+    target_dying = False
+    target_dead = False
+    target_combatant = _lookup_combatant(campaign_id, target_combatant_id) if target_combatant_id else None
+    if target_combatant and not is_save and attack_total is not None:
+        target_ac = _read_target_ac(db, campaign_id, target_combatant)
+        hit = is_crit or (attack_total >= target_ac)
+        if (
+            hit
+            and bool(campaign.auto_apply_damage)
+            and (damage_total or 0) + (bonus_damage_total or 0) > 0
+        ):
+            total_damage = int((damage_total or 0) + (bonus_damage_total or 0))
+            apply_result = await _apply_damage_to_combatant(
+                db, campaign_id, target_combatant,
+                total_damage, damage_type,
+                is_crit=is_crit, attack_id=attack_id,
+            )
+            damage_applied = apply_result["applied"]
+            target_hp_before = apply_result["hp_before"]
+            target_hp_after = apply_result["hp_after"]
+            target_resistance_applied = apply_result["resistance_applied"]
+            target_dying = apply_result["is_dying"]
+            target_dead = apply_result["is_dead"]
+
     # Resolve caster display info
     membership = (
         db.query(CampaignMembership)
@@ -10143,7 +10431,6 @@ async def use_attack(
     )
     caster_color = char.color or player_color
 
-    attack_id = uuid.uuid4().hex[:12]
     payload = {
         "id": attack_id,
         "caster_user_id": user.id,
@@ -10185,6 +10472,27 @@ async def use_attack(
         # the client needing a second lookup. Empty string when no
         # target was set or the target isn't in init.
         "target_name": _lookup_combatant_name(campaign_id, target_combatant_id) if target_combatant_id else "",
+        # v2.24.0 Phase T.2: hit determination + auto-damage results.
+        # ``hit`` is None when no target was set or it's a save spell;
+        # True/False otherwise. ``target_ac`` revealed only when hit is
+        # determined (so blind-AC tables can hide it on miss via a
+        # future setting). ``damage_applied`` is 0 when auto-apply is
+        # off OR the attack missed; >0 when HP changed. ``is_crit``
+        # surfaces the crit flag for the chat card's crit badge.
+        "hit": hit,
+        "is_crit": is_crit,
+        "target_ac": target_ac,
+        "damage_applied": damage_applied,
+        "target_hp_before": target_hp_before,
+        "target_hp_after": target_hp_after,
+        "target_resistance_applied": target_resistance_applied,
+        "target_dying": target_dying,
+        "target_dead": target_dead,
+        # Echo whether the campaign auto-applies damage so the chat
+        # card can render the Hit/Miss badge differently when the
+        # GM is still in "manual apply" mode (badge becomes a hint,
+        # not a confirmation of HP change).
+        "auto_applied": bool(campaign.auto_apply_damage),
         "range": range_str,
         "save_dc": save_dc if is_save else 0,
         "save_ability": save_ability if is_save else "",
@@ -10222,6 +10530,14 @@ async def use_attack(
         # v2.23.0 Phase T.8: echo resolved target name so the rolling
         # player's local toast can include the target without WS lag.
         "target_name": _lookup_combatant_name(campaign_id, target_combatant_id) if target_combatant_id else "",
+        # v2.24.0 Phase T.2: hit + auto-damage results echoed for the
+        # rolling player's local toast.
+        "hit": hit,
+        "is_crit": is_crit,
+        "target_ac": target_ac,
+        "damage_applied": damage_applied,
+        "target_hp_after": target_hp_after,
+        "auto_applied": bool(campaign.auto_apply_damage),
         "attack_name": name,
         "damage_type": damage_type,
         "is_save": is_save,
@@ -10230,6 +10546,99 @@ async def use_attack(
         "roll_state_applied": attack_roll_state_applied or None,
         "over_budget": was_used,
     }
+
+
+# ----------- API: Undo applied attack damage (v2.24.0 Phase T.2) -----------
+
+@router.post("/api/campaign/{campaign_id}/undo_attack_damage")
+async def undo_attack_damage(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Revert the HP change applied by a previous /attack auto-damage.
+
+    Body: ``{attack_id}``.
+
+    Looks up ``attack_id`` in the in-memory ``_attack_damage_log`` (8-hour
+    TTL). Applies a healing of equal magnitude back to the target — PCs
+    go through ``_apply_hp_change`` (handles dying → alive transitions
+    cleanly), NPCs get the hub combatant's ``hp_current`` bumped up.
+    Broadcasts ``character_hp_update`` (PC) or ``battle_update`` (NPC)
+    so every client refreshes.
+
+    Returns 404 when the attack_id is unknown / expired / never had
+    auto-damage applied. Auth: any campaign viewer can call (the
+    in-memory log already filters to the rolling player's recent
+    attacks; cross-player undo is desirable for the GM correcting a
+    misclick by a player). A future commit can tighten to caster /
+    GM only if play-testing reveals abuse.
+    """
+    body = await request.json()
+    attack_id = str(body.get("attack_id") or "").strip()
+    if not attack_id:
+        raise HTTPException(400, "attack_id is required")
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    _purge_attack_damage_log()
+    entry = _attack_damage_log.get(attack_id)
+    if not entry or entry.get("campaign_id") != campaign_id:
+        raise HTTPException(404, "Damage log entry not found or expired")
+    applied = int(entry.get("applied") or 0)
+    if applied <= 0:
+        # Nothing was actually applied (e.g. miss). Treat as no-op.
+        _attack_damage_log.pop(attack_id, None)
+        return {"ok": True, "no_op": True}
+
+    target_char_id = entry.get("target_char_id")
+    target_combatant_id = entry.get("target_combatant_id")
+
+    if target_char_id:
+        char = db.query(Character).filter(Character.id == target_char_id).first()
+        if not char:
+            raise HTTPException(404, "Target character not found")
+        sheet = char.sheet or {}
+        hp_cur = int((sheet.get("hp") or {}).get("current") or 0)
+        hp_max = int((sheet.get("hp") or {}).get("max") or 0)
+        new_hp = min(hp_max, hp_cur + applied) if hp_max > 0 else (hp_cur + applied)
+        result = _apply_hp_change(char, new_hp)
+        db.commit()
+        await hub.broadcast(campaign_id, {
+            "type": "character_hp_update",
+            "data": {
+                "character_id": char.id,
+                "hp": result["hp"],
+                "delta": +applied,
+                "source": "undo_attack",
+            },
+        })
+        _attack_damage_log.pop(attack_id, None)
+        return {"ok": True, "reverted": applied, "hp_after": result["hp"]["current"]}
+
+    if target_combatant_id:
+        state = hub.get_battle(campaign_id)
+        if not state:
+            raise HTTPException(404, "No active battle to revert into")
+        target = None
+        for c in state.get("combatants") or []:
+            if c.get("id") == target_combatant_id:
+                target = c
+                break
+        if target is None:
+            raise HTTPException(404, "Target combatant no longer in init")
+        hp_cur = int(target.get("hp_current") or 0)
+        hp_max = int(target.get("hp_max") or 0)
+        new_hp = min(hp_max, hp_cur + applied) if hp_max > 0 else (hp_cur + applied)
+        target["hp_current"] = new_hp
+        hub.set_battle(campaign_id, state)
+        await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+        _attack_damage_log.pop(attack_id, None)
+        return {"ok": True, "reverted": applied, "hp_after": new_hp}
+
+    raise HTTPException(404, "Damage log entry has no target reference")
 
 
 # ----------- API: Open5e item proxy (weapons / armor / magic items) -----------

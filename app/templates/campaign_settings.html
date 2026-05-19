@@ -194,6 +194,13 @@
                     <span class="muted" style="font-size:12px;display:block;">When on, players <strong>can't override</strong> the over-budget modal on a spent action / bonus / reaction slot — the modal's Confirm button is hidden and the only way past a spent chip is the GM clicking it on the init tracker to refund the slot (e.g. when Action Surge / Haste grants an extra action). The token-drag isn't blocked (the GM is authoritative on the canvas), but the first drag that pushes a combatant past their walking speed posts an audit entry to the roll log. Off by default — leave off if your table prefers the lighter-touch "click through with an audit badge" behaviour.</span>
                 </span>
             </label>
+            <label style="flex-direction:row;align-items:center;gap:10px;margin-top:10px;">
+                <input type="checkbox" name="auto_apply_damage"
+                       {% if campaign.auto_apply_damage %}checked{% endif %}>
+                <span><strong>Auto-apply damage to targets</strong>
+                    <span class="muted" style="font-size:12px;display:block;">When on, weapon attacks that double-clicked a token as their target auto-resolve hit/miss against the target's AC and apply HP damage server-side (with Phase B resistance halving). Critical hits double the weapon's damage dice (RAW). Misses leave HP unchanged. Off by default — leave off for tables that prefer the GM to apply HP manually. Heals always auto-apply regardless (lower risk). The chat card surfaces an <strong>↶ Undo</strong> button next to each applied damage line for ~8 hours so misclicks can be reverted.</span>
+                </span>
+            </label>
         </fieldset>
         <fieldset>
             <legend>🎵 Audio on session start</legend>

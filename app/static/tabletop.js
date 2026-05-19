@@ -2100,20 +2100,41 @@
         if (d.range)       metaBits.push(escapeHTML(d.range));
         if (d.damage_type) metaBits.push(escapeHTML(d.damage_type));
 
+        // v2.24.0 Phase T.2: Hit/Miss/Crit badge next to the attack
+        // total. ``d.hit`` is null when no target was set (skip badge);
+        // True/False otherwise. ``d.is_crit`` adds a crit pill in front.
+        const _hitBadge =
+            d.hit === true
+                ? `<span class="weapon-atk-hit ${d.is_crit ? 'crit' : 'hit'}">${d.is_crit ? '💥 Crit!' : '✅ Hit'}${d.target_ac != null ? ` <span class="weapon-atk-ac">(AC ${d.target_ac})</span>` : ''}</span>`
+                : d.hit === false
+                ? `<span class="weapon-atk-hit miss">❌ Miss${d.target_ac != null ? ` <span class="weapon-atk-ac">(AC ${d.target_ac})</span>` : ''}</span>`
+                : '';
         // Attack roll line (skipped for save-based attacks)
         const atkLineHtml = !d.is_save && d.attack_total != null
             ? `<div class="weapon-atk-line">
                    <span class="weapon-atk-label">🎯 To hit</span>
                    <span class="weapon-atk-total">${d.attack_total}</span>
+                   ${_hitBadge}
                    <span class="weapon-atk-breakdown">${formatBreakdown(d.attack_breakdown || '')}</span>
                </div>`
             : '';
 
+        // v2.24.0 Phase T.2: when auto-apply fired, show the target's
+        // HP transition and an Undo button. ``damage_applied`` is 0
+        // when no auto-apply happened (toggle off, no target, miss).
+        const _appliedHtml = (d.damage_applied || 0) > 0 && d.target_hp_after != null
+            ? ` <span class="weapon-atk-applied">→ ${d.target_hp_before != null ? d.target_hp_before + ' → ' : ''}${d.target_hp_after} HP${d.target_resistance_applied ? ' <span class="weapon-atk-resist">🛡 resisted</span>' : ''}${d.target_dead ? ' <span class="weapon-atk-dead">💀</span>' : d.target_dying ? ' <span class="weapon-atk-dying">💤 dying</span>' : ''}</span>`
+            : '';
+        const _undoBtnHtml = (d.damage_applied || 0) > 0
+            ? `<button type="button" class="weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this damage application">↶ Undo</button>`
+            : '';
         // Damage line (always present if a damage expression was set)
         const dmgLineHtml = d.damage_total != null
             ? `<div class="weapon-atk-line">
                    <span class="weapon-atk-label">💥 Damage</span>
                    <span class="weapon-atk-total">${d.damage_total}${d.damage_type ? ' <span class="weapon-atk-dmgtype">' + escapeHTML(d.damage_type) + '</span>' : ''}</span>
+                   ${_appliedHtml}
+                   ${_undoBtnHtml}
                    <span class="weapon-atk-breakdown">${formatBreakdown(d.damage_breakdown || '')}</span>
                </div>`
             : '';
@@ -2166,6 +2187,35 @@
 
         const saveBtn = li.querySelector('.weapon-atk-save-btn');
         if (saveBtn) saveBtn.addEventListener('click', () => promptAttackSave(d, li, saveBtn));
+
+        // v2.24.0 Phase T.2: wire the ↶ Undo button. POSTs the attack
+        // id back; server reverts HP via the in-memory damage log.
+        const undoBtn = li.querySelector('.weapon-atk-undo');
+        if (undoBtn) {
+            undoBtn.addEventListener('click', async () => {
+                undoBtn.disabled = true;
+                try {
+                    const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/undo_attack_damage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ attack_id: d.id }),
+                    });
+                    if (!r.ok) {
+                        let body; try { body = await r.json(); } catch { body = null; }
+                        (window.showToast || function(m){ alert(m); })(
+                            `Undo failed: ${body ? JSON.stringify(body) : r.status}`, 'error');
+                        undoBtn.disabled = false;
+                        return;
+                    }
+                    const data = await r.json().catch(() => ({}));
+                    undoBtn.textContent = `↶ Reverted ${data.reverted || ''}`;
+                    undoBtn.classList.add('undone');
+                } catch (e) {
+                    console.warn('undo_attack_damage failed:', e);
+                    undoBtn.disabled = false;
+                }
+            });
+        }
 
         // Stash the attack metadata on the element so the roll listener can
         // correlate save responses back to this card (matches by note prefix).
