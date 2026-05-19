@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.35.1] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Harness expansion: 18 new tests covering death-save state machine, end_buff, and roll_request endpoints.** Audited the harness against the router endpoint list and found three high-value surfaces with no dedicated test file: the death-save state machine (`/death-save`, `/death-save/override`, `/stabilize` — central to HP transitions through 0), the manual buff-removal endpoint (`/end_buff` — Phase C primitive used by Rage termination, condition cleanup, T.3c condition install undo path), and the GM roll-request flow (`/roll_request`, `/roll_request/{id}/respond` — created programmatically by T.3 PC saves but never tested as endpoints). All three were tested indirectly via the features that USE them; this commit adds focused contract tests so future regressions trip the harness directly. PATCH — pure test additions, no source changes.
+**Description:** Three new test files. **(1)** `tests/harness/test_death_save.py` (7 tests): drop a PC to 0 HP and verify dying state (POSTing a death-save returns 200, not 409); rolling a save returns the flat `{ok, raw, outcome, status, successes, failures, hp}` shape; 409 when rolling on a non-dying char; GM override force-sets status + counters; stabilize endpoint sets `stable`; 403 for non-GM stabilize; override to alive bumps HP to 1 when dying-at-0. The `_drop_to_zero` helper resets prior dying/dead state via the override endpoint before damaging, and uses `damage_amount: 1` (not 99) so RAW's massive-damage instant-kill rule doesn't fire during setup. **(2)** `tests/harness/test_end_buff.py` (5 tests): install Rage via `/use_rage` and verify `/end_buff` removes it (using the `/character/{id}/buffs` GET helper); 400 missing character_id; 400 missing key; 404 unknown buff key; 403/404 for non-owner/non-GM. **(3)** `tests/harness/test_roll_request.py` (6 tests): GM creates a request; non-GM gets 403; missing label = 400; respond on behalf of a PC by char_id resolves the stat modifier and rolls; invalid req_id = 404; player responding for someone else's char = 403.
+**Description (cont):** Audit summary (endpoints reviewed; new coverage in **bold**):
+- `/roll`, `/attack` (atk + dmg + bonus), `/cast_spell` (heal/attack/save/condition), `/apply_healing` (indirect via heal tests), `/use_*` (rage, second_wind, action_surge, lay_on_hands, bardic_inspiration, cutting_words, arcane_recovery, feature, item), `/cast_hunters_mark` and `/cast_hex` (via concentration_buffs), `/move`, `/rest`, `/transform` — all already covered.
+- **`/death-save`, `/death-save/override`, `/stabilize`** — newly covered.
+- **`/end_buff`** — newly covered.
+- **`/roll_request`, `/roll_request/{id}/respond`** — newly covered.
+- Remaining gaps filed (encounters CRUD, `/character/{id}/economy` GET, token CRUD, template CRUD, sheet-fields PATCH edge cases) — lower priority; these endpoints are exercised by the demo UI but haven't shipped behavior-affecting changes recently.
+
+### Added
+- `tests/harness/test_death_save.py` — 7 tests for the dying/stable/dead state machine and GM overrides.
+- `tests/harness/test_end_buff.py` — 5 tests for manual buff removal.
+- `tests/harness/test_roll_request.py` — 6 tests for roll-request creation + player response.
+
+### Notes
+- **Total test count.** 153 → 171.
+- **Filed.** Encounters CRUD test file (load/save/duplicate), economy GET, token CRUD, sheet-fields PATCH edge cases (massive-damage instant-kill, temp HP absorption). All exercised indirectly today; dedicated coverage is worthwhile but lower priority than the three surfaces in this commit.
+
+---
+
 ## [2.35.0] - 2026-05-19
 
 **Schema version:** 56
