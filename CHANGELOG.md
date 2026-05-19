@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.27.1] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Heal-claim flow routes to the spell's intended target (not the GM's first owned PC); roll toast fires for healing rolls.** User reported healing applying to "a random party member" instead of the targeted ally. Root cause: the legacy `/apply_healing` endpoint heals `Character.owner_user_id == user.id .first()` — i.e. "the first PC the calling user owns" — which works in the player-controlled-one-PC case but is effectively random for a GM who owns every demo PC. Fix: the heal_claim now carries the cast's target descriptors, and `/apply_healing` routes the heal to that target. Plus a roll-toast for the healing roll, so the user can see the rolled value the same way attacks surface attack-roll + damage-roll toasts. PATCH — bug fix + additive toast.
+**Description:** Three edits. **(1)** `app/routes/tabletop_routes.py` `/cast_spell` heal-claim registration — stores `target_combatant_id`, `target_character_id`, `target_name` on the claim dict so `/apply_healing` can route the heal to the intended target. **(2)** `app/routes/tabletop_routes.py` `/apply_healing` resolution order — (a) prefer `claim["target_character_id"]` → load the Character row directly; (b) fall back to `claim["target_combatant_id"]` → resolve via `_lookup_combatant` → load Character by `combatant.char_id`; (c) final fallback to "calling user's first owned PC" (legacy behavior) so genuinely target-less casts still work. 404 only when none of the three resolves to a Character. **(3)** `app/static/roll_toast.js` — new branches in the WS-message listener for `spell_cast` (when `auto_heal_breakdown` is present, fire a heal-die toast with the breakdown) and `heal_applied` (legacy claim flow's broadcast). Both extract the dice expression from the breakdown via the same regex the weapon-attack branch uses, so the toast animates the right number of dice with the v2.27.0 "+N" chip beside it.
+**Description (cont):** Why heal-claim resolution prefers `target_character_id` over `target_combatant_id`. Both should resolve to the same character when the target is in init, but `target_character_id` is the more canonical descriptor — it survives even if the combatant has been removed from the init tracker between cast time and apply time (e.g. GM cleaned the tracker after the cast but the chat card's button is still clickable). Combatant lookup is the secondary path because it's the source-of-truth for which init slot was meant when two PCs share a name.
+
+### Fixed
+- `app/routes/tabletop_routes.py` `/apply_healing` — heals the cast's intended target instead of the calling user's first owned PC. Resolution: target_character_id → target_combatant_id → user's first PC (fallback).
+- `app/routes/tabletop_routes.py` `/cast_spell` — heal_claim payload stores target descriptors so the legacy Apply Healing button routes correctly.
+
+### Added
+- `app/static/roll_toast.js` — dice toast for healing rolls. Fires on `spell_cast` broadcasts with `auto_heal_breakdown` set (T.4 auto-apply path) AND on `heal_applied` broadcasts (legacy claim flow), so every heal — auto-applied or button-claimed — surfaces a dice animation with the v2.27.0 raw-die + "+N" chip layout.
+
+### Notes
+- **What to test:** double-click Krieger on the map. Cast Healing Word from Tavik's full sheet. The heal-die toast pops with the rolled 1d4 value and Krieger's name in the note line; the chat card's auto-heal line shows the same value applied to Krieger's HP bar. Click ↶ Undo → Krieger's HP reverts. Now cast Healing Word with NO target set; click "🩹 Apply Healing" on the chat card → the heal still routes to whichever PC the claim was intended for (or the calling user's PC if none), and the dice toast pops on `heal_applied`.
+- **Backward compat.** Pure routing improvement; the legacy "user's first PC" fallback stays for casts that genuinely never had a target. No schema or contract changes.
+
+---
+
 ## [2.27.0] - 2026-05-19
 
 **Schema version:** 56

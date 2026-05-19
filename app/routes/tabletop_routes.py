@@ -6251,6 +6251,14 @@ async def cast_spell(
             "claimed": set(),        # user_ids who have already claimed
             "campaign_id": campaign_id,
             "expires": _time.time() + 8 * 3600,
+            # v2.27.1: store the intended target so the legacy
+            # /apply_healing endpoint routes the heal to the right
+            # combatant — pre-T.4 it heals the calling user's first
+            # owned PC, which is effectively random for a GM who
+            # owns all party PCs.
+            "target_combatant_id": target_combatant_id or "",
+            "target_character_id": target_character_id_in,
+            "target_name": target_name_resolved or target_name_in or "",
         }
 
     # v2.26.0 Phase T.4: auto-apply healing to the targeted combatant.
@@ -9288,14 +9296,39 @@ async def apply_healing(
     if max_targets > 1 and len(claimed) >= max_targets:
         raise HTTPException(409, "All healing charges have been used")
 
-    # Find the user's character in this campaign (first owned character)
-    char = (
-        db.query(Character)
-        .filter(Character.campaign_id == campaign_id, Character.owner_user_id == user.id)
-        .first()
-    )
+    # v2.27.1: route the heal to the cast's intended target if the
+    # claim carries one (stored at registration time from cast_spell's
+    # target descriptors). This is the right behavior for almost every
+    # caller: the GM clicking "Apply Healing" on a Tavik → Krieger
+    # cast expects Krieger to be healed, not the GM's first owned PC.
+    # Fall back to "first character owned by calling user" only when
+    # the claim has no stored target (truly self-claim flow, like
+    # Mass Healing Word AoE with no specific target).
+    char = None
+    stored_target_char_id = claim.get("target_character_id")
+    if stored_target_char_id:
+        char = db.query(Character).filter(
+            Character.id == int(stored_target_char_id),
+            Character.campaign_id == campaign_id,
+        ).first()
     if not char:
-        raise HTTPException(404, "You have no character in this campaign")
+        stored_target_combatant_id = claim.get("target_combatant_id")
+        if stored_target_combatant_id:
+            target_combatant = _lookup_combatant(campaign_id, stored_target_combatant_id)
+            if target_combatant and target_combatant.get("char_id"):
+                char = db.query(Character).filter(
+                    Character.id == int(target_combatant["char_id"]),
+                    Character.campaign_id == campaign_id,
+                ).first()
+    if not char:
+        # Fallback: calling user's first owned PC in the campaign.
+        char = (
+            db.query(Character)
+            .filter(Character.campaign_id == campaign_id, Character.owner_user_id == user.id)
+            .first()
+        )
+    if not char:
+        raise HTTPException(404, "No target character resolved for this heal claim")
 
     # Roll the healing dice server-side
     try:

@@ -365,5 +365,47 @@
             }
             return;
         }
+
+        if (msg.type === 'spell_cast') {
+            // v2.27.1: dice toast for the healing roll when T.4 auto-
+            // applied the heal to the targeted ally. Casts WITHOUT a
+            // target still register a heal_claim and surface the
+            // chat-card "Apply Healing" button — the heal_applied
+            // broadcast (below) fires the toast for that path. This
+            // branch only fires when the server pre-rolled + applied
+            // the heal, so the broadcast carries auto_heal_breakdown.
+            if (r.auto_heal_applied && r.auto_heal_breakdown) {
+                const exprMatch = String(r.auto_heal_breakdown).match(/(\d+d\d+(?:[+-]\d+)?)/);
+                const tgt = r.auto_heal_target_name || r.target_name || '';
+                showRollToast({
+                    expression: exprMatch ? exprMatch[1] : (r.spell_healing || '1d4'),
+                    total: r.auto_heal_rolled || r.auto_heal_applied,
+                    breakdown: r.auto_heal_breakdown,
+                    note: '✚ ' + (r.spell_name || 'Heal') + (tgt ? ' → ' + tgt : ''),
+                    user_id: r.caster_user_id,
+                    user_name: r.caster_user_name,
+                    char_name: r.caster_char_name,
+                });
+            }
+            return;
+        }
+
+        if (msg.type === 'heal_applied') {
+            // v2.27.1: dice toast for the legacy heal-claim flow
+            // (Apply Healing button). The /apply_healing endpoint
+            // rolls server-side and broadcasts heal_applied with
+            // {dice, rolled, breakdown, char_name}.
+            if (r.breakdown && r.rolled != null) {
+                const exprMatch = String(r.breakdown).match(/(\d+d\d+(?:[+-]\d+)?)/);
+                showRollToast({
+                    expression: exprMatch ? exprMatch[1] : (r.dice || '1d4'),
+                    total: r.rolled,
+                    breakdown: r.breakdown,
+                    note: '✚ Heal → ' + (r.char_name || ''),
+                    user_name: r.healer_name || '',
+                });
+            }
+            return;
+        }
     });
 })();
