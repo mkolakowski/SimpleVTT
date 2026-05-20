@@ -347,6 +347,19 @@
      the dark-theme defaults. -->
 <link rel="stylesheet" href="/static/style.css">
 <link rel="stylesheet" href="/static/style-fantasy-themes.css">
+<style>
+  /* v2.43.6 fix: style.css applies ``body { display: flex; flex-direction:
+     column; }`` + ``html, body { height: 100% }`` for the base.html
+     topnav-+-container-+-footer layout. The guide is long-form
+     content rendered standalone — that flex layout makes every
+     child of <body> (h1, p, h2, the example cards) a flex item
+     competing for a fixed viewport height, which collapses the
+     example cards to near-zero height (the visual bug reported in
+     v2.43.5: "None of the examples populate"). Restore normal block
+     flow so the guide's natural content height drives layout. */
+  html, body { height: auto; min-height: 100%; }
+  body { display: block; }
+</style>
 </head>
 <body>
 

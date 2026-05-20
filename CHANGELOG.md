@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.6] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Fix `/wiki/roll-log-guide` visual bug — example cards collapsed to zero height when the guide imported `style.css`.** v2.43.4 added a `<link>` to `/static/style.css` in the guide HTML so theme tokens would cascade from the user's selected theme. That stylesheet also carries the base.html layout rule `body { display: flex; flex-direction: column; }` + `html, body { height: 100% }` — designed for the topnav-+-container-+-footer chrome of every other page. For a standalone long-form document like the roll-log guide, that turned every direct child of `<body>` (each `<h1>`, `<p>`, `<h2>`, `<div class="roll-card">`, etc.) into a flex item competing for the fixed viewport height; flex-shrink: 1 (the default) collapsed the example cards to near-zero height. The user reported it as "the examples don't populate" — the cards were in the DOM but their flex layout had crushed them down to roughly border-thickness. PATCH — pure visual fix; no schema, contract, or endpoint changes.
+**Description:** One edit. **(1)** `docs/wiki/roll-log-guide.html` — added a small `<style>` block AFTER the `<link rel="stylesheet">` lines that resets `html, body { height: auto; min-height: 100%; }` + `body { display: block; }`. Same-specificity element selectors (style.css's `body` rule vs the override) → last-declared wins, so the override is active. `min-height: 100%` keeps the body filling the viewport when content is short (so the theme's `--bg` still extends to the bottom), while `height: auto` lets it grow past the viewport when there's lots of content (so flex item collapsing stops).
+**Description (cont):** Why this manifested only on `sepia`. It didn't — the bug was theme-independent. The user happened to view the page in sepia (the demo's default `APP_DEFAULT_THEME`) and noticed then. The dark-theme rendering in earlier sessions was either (a) viewed via `file://` (where `/static/style.css` 404s, so the body flex rule never applied), or (b) the short variants of the page (before the v2.43.1 weapon-attack section added more cards) fit inside the viewport so the flex-shrink didn't visibly collapse them. v2.43.6 fixes all 14 themes.
+
+### Fixed
+- `docs/wiki/roll-log-guide.html` — added a post-link `<style>` block that overrides `style.css`'s body-flex layout (intended for base.html pages) back to a normal block flow. Example cards now render at their natural content height.
+
+### Notes
+- **What to test:** open `http://localhost:8013/wiki/roll-log-guide` while logged in with any theme — Dark, Sepia, Forest, Light, Bubblegum, Fire, etc. All sections (`roll`, `weapon_attack`, `spell_cast`, `feature_used`) should render their example cards at full height. Switch themes via the user-menu, hard-refresh the guide tab — the palette adapts and the cards stay visible.
+- **Backward compat.** Pure CSS-override; no JS, no route, no schema. File:// previews continue to work because the inline `:root` fallback at the top of the guide carries the dark-theme tokens (and `style.css` doesn't load on file://, so the body-flex override has nothing to override — block flow is the default anyway).
+
+---
+
 ## [2.43.5] - 2026-05-19
 
 **Schema version:** 56
