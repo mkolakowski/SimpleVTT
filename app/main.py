@@ -21,6 +21,7 @@ from .routes import (
     homebrew_routes,
     tabletop_routes,
     user_routes,
+    wiki_routes,
 )
 from .version import APP_VERSION, SCHEMA_VERSION
 
@@ -48,6 +49,7 @@ app.include_router(admin_routes.router)
 app.include_router(homebrew_routes.router)
 app.include_router(audio_routes.router)
 app.include_router(user_routes.router)
+app.include_router(wiki_routes.router)
 
 
 # v2.3.28: when an expired-session HTML page load hits a route guarded by

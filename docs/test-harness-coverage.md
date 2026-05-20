@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 189 (as of v2.40.0, 2026-05-19).
+**Total tests:** 193 (as of v2.43.3, 2026-05-19).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -436,6 +436,19 @@ Druid Wild Shape / Polymorph form transitions.
 | `test_transform_already_transformed` | Cannot transform while transformed (409). |
 | `test_revert_when_not_transformed` | Reverting a base-form character → 409. |
 | `test_transform_over_budget_flag` | Carries `over_budget: true` when action chip already used. |
+
+---
+
+## Wiki
+
+Read-only doc-hub routes added in v2.43.3. Tests live in `tests/harness/test_wiki.py`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_wiki_home_renders` | `GET /wiki` → 200, HTML body contains "SimpleVTT wiki" + a link to `/wiki/roll-log-guide`. |
+| `test_wiki_guide_serves_roll_log` | `GET /wiki/roll-log-guide` → 200, HTML body contains "roll-log" (case-insensitive). |
+| `test_wiki_unknown_slug_404` | `GET /wiki/no-such-page` → 404. |
+| `test_wiki_traversal_blocked` | URL-encoded `../` in the slug → 404 / 400 (path-traversal blocked). |
 
 ---
 

@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.3] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **New `/wiki` + `/wiki/<slug>` routes serving the in-repo wiki content; footer link added next to the version stamp.** v2.43.2 created the on-disk wiki at `docs/wiki/`; this commit serves it from the running app. `GET /wiki` renders a Jinja landing page (`app/templates/wiki.html`) that mirrors `docs/wiki/README.md` — available-guides table + TODO roadmap + contributing notes. `GET /wiki/<slug>` serves a self-contained HTML guide from `docs/wiki/<slug>.html` (currently just `roll-log-guide`). Footer in `base.html` now reads `SimpleVTT v2.43.3 · schema v56 · Wiki` with the Wiki text linking to `/wiki`. Dockerfile updated to `COPY docs/wiki /app/docs/wiki` so the guide content ships with the image. PATCH — additive read-only routes; no schema or contract changes, no auth required.
+**Description:** Six edits. **(1)** New `app/routes/wiki_routes.py` — two routes. `GET /wiki` renders `wiki.html` via `templates.TemplateResponse`. `GET /wiki/{slug}` validates the slug against `[a-zA-Z0-9_-]` (rejects directory traversal) then serves `docs/wiki/<slug>.html` via `FileResponse`. Missing slugs 404. **(2)** New `app/templates/wiki.html` extending `base.html` with the wiki landing page content — Available-guides table (currently the roll-log guide) + TODO roadmap (operator how-tos, contributor system explainers, reference cards) + contributing-guides note. **(3)** `app/main.py` — imports + registers `wiki_routes.router`. **(4)** `app/templates/base.html` — footer line now ends with `· <a href="/wiki">Wiki</a>` so users have a discoverable entry point next to the version stamp. **(5)** `Dockerfile` — added `COPY docs/wiki /app/docs/wiki` after the `COPY app` step so the wiki HTML guides are available at runtime for the file-serving route. **(6)** `tests/harness/test_wiki.py` — four new tests: happy-path for `/wiki` (200 + landing content + guide link present), happy-path for `/wiki/roll-log-guide` (200 + HTML body contains "roll-log"), error-path for `/wiki/no-such-page` (404), error-path for `/wiki/..%2Fpasswd` (404/400 — path-traversal blocked).
+**Description (cont):** Why not gate behind auth. The wiki is reference documentation. Gating it behind `require_user` would mean an anonymous visitor can't read it from the demo deployment without registering, defeating the point of a discoverable doc hub. Read-only, no PII, deliberately public.
+**Description (cont 2):** Why a Jinja template for the landing + a static file for the guide. The landing page benefits from the `base.html` chrome (topnav, footer with version, theme adoption) so it sits naturally in the app. The roll-log guide is a self-contained HTML file (inline CSS that mimics the dark-theme tokens) — wrapping it in `base.html` would double-up CSS and break the file://-openable property of the source file. Serving it via FileResponse keeps the source artifact unchanged.
+**Description (cont 3):** Why ship the wiki content inside the Docker image instead of via a volume mount. Volume mounts are for state that needs to persist across image rebuilds (uploads, homebrew); reference documentation is part of the release — it should always match the version of the app serving it. `COPY docs/wiki /app/docs/wiki` (rather than `COPY docs /app/docs`) keeps the image lean — plan docs and the test-harness-coverage catalog stay out of the image.
+
+### Added
+- `app/routes/wiki_routes.py` — `GET /wiki` (Jinja landing) + `GET /wiki/{slug}` (FileResponse for `docs/wiki/<slug>.html`, with slug validation against `[a-zA-Z0-9_-]`).
+- `app/templates/wiki.html` — Jinja landing page mirroring `docs/wiki/README.md` content.
+- `tests/harness/test_wiki.py` — four tests covering the two routes.
+- `Dockerfile` — `COPY docs/wiki /app/docs/wiki` so guides ship in the image.
+
+### Changed
+- `app/main.py` — imports + registers `wiki_routes.router`.
+- `app/templates/base.html` — footer line ends with ` · <a href="/wiki">Wiki</a>` linking to the new landing page.
+- `docs/test-harness-coverage.md` — total bumped to 193, new "Wiki" section documents the four new tests.
+
+### Notes
+- **What to test:** open `http://localhost:8013/` (any non-tabletop page — the tabletop view suppresses the footer block by design). The bottom row reads `SimpleVTT v2.43.3 · schema v56 · Wiki` with "Wiki" as a clickable link to `/wiki`. The landing page lists the roll-log guide and the TODO roadmap. Click the guide link to load `/wiki/roll-log-guide` — the self-contained HTML mock renders. Hit `/wiki/anything-else` to confirm the 404.
+- **Backward compat.** Additive endpoints, no auth gate, no schema. Tabletop view's footer override (`{% block footer %}{% endblock %}` in `tabletop.html`) is preserved — the wiki link is footer-only, so it doesn't appear on the immersive tabletop screen by design. A future commit can also surface the link in the topnav if cross-page reach is wanted.
+
+### Filed
+- **Wiki link in the topnav.** Today the wiki link is footer-only, meaning it's not reachable from the tabletop view (which suppresses the footer). If desk-side reach matters, a follow-up can add `<a href="/wiki" target="_blank">📚</a>` next to the user-menu in the topnav.
+
+---
+
 ## [2.43.2] - 2026-05-19
 
 **Schema version:** 56

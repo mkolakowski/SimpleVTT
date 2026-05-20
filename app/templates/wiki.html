@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block title %}Wiki — SimpleVTT{% endblock %}
+{% block head %}
+<style>
+  .wiki-wrap {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 20px 8px 60px;
+  }
+  .wiki-wrap h1 {
+      font-size: 24px;
+      letter-spacing: 0.2px;
+      margin: 0 0 6px;
+  }
+  .wiki-wrap .lede {
+      color: var(--fg-mute);
+      font-size: 14px;
+      margin: 0 0 24px;
+      line-height: 1.55;
+  }
+  .wiki-wrap h2 {
+      font-size: 16px;
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+      margin: 36px 0 8px;
+  }
+  .wiki-wrap h3 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--fg);
+      margin: 22px 0 6px;
+  }
+  .wiki-wrap table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 10px 0 16px;
+  }
+  .wiki-wrap th, .wiki-wrap td {
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      text-align: left;
+  }
+  .wiki-wrap th {
+      background: var(--bg-2);
+      font-weight: 600;
+      font-size: 12px;
+  }
+  .wiki-wrap td a { color: var(--accent); }
+  .wiki-wrap td a:hover { text-decoration: underline; }
+  .wiki-wrap ul { padding-left: 22px; }
+  .wiki-wrap ul li { margin: 3px 0; font-size: 14px; line-height: 1.5; }
+  .wiki-wrap code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      color: var(--accent);
+      padding: 1px 6px;
+      border-radius: 3px;
+  }
+  .wiki-wrap .todo-checkbox {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 1.5px solid var(--fg-mute);
+      border-radius: 3px;
+      margin-right: 6px;
+      vertical-align: -2px;
+  }
+  .wiki-wrap .status-shipped {
+      color: var(--c-heal, #4ade80);
+      font-weight: 600;
+  }
+  .wiki-wrap .pointer-list a {
+      color: var(--accent);
+  }
+</style>
+{% endblock %}
+{% block content %}
+<div class="wiki-wrap">
+  <h1>SimpleVTT wiki</h1>
+  <p class="lede">
+    In-repo documentation hub for SimpleVTT — how-to guides, system explainers, and visual references
+    for contributors and operators. This page mirrors <code>docs/wiki/README.md</code> in the repo; new
+    guides land as <code>.md</code> or <code>.html</code> files under <code>docs/wiki/</code>.
+  </p>
+
+  <p>
+    This wiki complements the canonical references that live elsewhere in the repo:
+  </p>
+  <ul class="pointer-list">
+    <li><code>README.md</code> (repo root) — install + deploy quickstart.</li>
+    <li><code>CHANGELOG.md</code> (repo root) — release history + version-bump rules.</li>
+    <li><code>CLAUDE.md</code> (repo root) — contributor / agent guidelines.</li>
+    <li><code>docs/roll-log-card-layout.md</code> — text/semantic reference for the roll-log card structure (companion to the roll-log guide below).</li>
+    <li><code>docs/test-harness-coverage.md</code> — categorized index of every harness test.</li>
+    <li><code>docs/plans/</code> — design docs + implementation roadmaps.</li>
+  </ul>
+
+  <h2>Available guides</h2>
+  <table>
+    <thead>
+      <tr><th>Guide</th><th>Format</th><th>Audience</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a href="/wiki/roll-log-guide">Roll-log guide</a></td>
+        <td>HTML (visual)</td>
+        <td>GMs + contributors</td>
+        <td><span class="status-shipped">✅ shipped (v{{ APP_VERSION }})</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>TODO — guides to write</h2>
+  <p>
+    This wiki is a stub. The list below is what we want it to grow into. Each unchecked item is a
+    self-contained write-up task; when somebody writes the guide, they tick the box and add a row to
+    the "Available guides" table above.
+  </p>
+
+  <h3>How-to guides (operator + GM-facing)</h3>
+  <ul>
+    <li><span class="todo-checkbox"></span> <strong>First-run setup.</strong> Stand up a fresh <code>docker compose up</code>, register the first user, create a campaign, invite players, run a first session.</li>
+    <li><span class="todo-checkbox"></span> <strong>Inviting players.</strong> Open vs. invite-only membership, GM colors, per-player portraits, demo-user accounts.</li>
+    <li><span class="todo-checkbox"></span> <strong>Running a session as GM.</strong> Initiative tracker, action-economy chips, target picker, the GM Tools drawer, encounter snapshots.</li>
+    <li><span class="todo-checkbox"></span> <strong>Building an encounter.</strong> Encounters panel CRUD, token templates, monsters from the SRD bestiary vs homebrew, spawn-point layout.</li>
+    <li><span class="todo-checkbox"></span> <strong>Maps + grids + tokens.</strong> Uploading maps, scaling, grid overlay (<code>show_grid</code>), placing PC and monster tokens.</li>
+    <li><span class="todo-checkbox"></span> <strong>Homebrew content authoring.</strong> Custom monsters, items, spells; the homebrew JSON contract.</li>
+    <li><span class="todo-checkbox"></span> <strong>Player onboarding.</strong> What players see vs. GM, the character sheet, the roll log, the dice toast, per-character action economy.</li>
+    <li><span class="todo-checkbox"></span> <strong>Backups + restore.</strong> The <code>simplevtt-backup</code> container, daily <code>pg_dump</code>, restoring, campaign export / import.</li>
+    <li><span class="todo-checkbox"></span> <strong>Theming.</strong> The 8 built-in themes (Dark / Midnight / Dim / Light / Forest / Bubblegum / OLED / Fire), per-user theme + font preferences, accessibility.</li>
+  </ul>
+
+  <h3>System explainers (contributor-facing)</h3>
+  <ul>
+    <li><span class="todo-checkbox"></span> <strong>Architecture overview.</strong> FastAPI + SQLAlchemy + Jinja2 + HTMX + vanilla JS + Postgres. Where the realtime hub lives (<code>app/realtime.py</code>). The per-campaign WebSocket fan-out model.</li>
+    <li><span class="todo-checkbox"></span> <strong>The action-economy system.</strong> The four chips (Act / Bns / Rxn / Mov), the over-budget gate, <code>strict_action_economy</code>, the audit badge.</li>
+    <li><span class="todo-checkbox"></span> <strong>The targeting system (Phase T.0–T.9).</strong> Double-tap targeting, target-picker modal, <code>window._targetingState</code>, localStorage cross-tab sync, the mobile 🎯 button.</li>
+    <li><span class="todo-checkbox"></span> <strong>The buff slot system (Phase C).</strong> <code>_install_buff</code> / <code>_remove_buff</code>, concentration anchors, paired-buff cleanup, save-or-suck condition install.</li>
+    <li><span class="todo-checkbox"></span> <strong>The damage flow (Phase B).</strong> Resistance, vulnerability, Hunter's Mark, Colossus Slayer, Smite uplifts, the <code>_attack_damage_log</code> for Undo.</li>
+    <li><span class="todo-checkbox"></span> <strong>Auto-resolution: attack, save, heal, damage.</strong> When the server resolves rolls vs prompts the client; the campaign-level <code>auto_apply_damage</code> toggle; the spell-cast pill row.</li>
+    <li><span class="todo-checkbox"></span> <strong>The roll log + dice toast.</strong> Card variants, the oversized pill row, persistence, visibility filtering, the dice toast lifecycle.</li>
+    <li><span class="todo-checkbox"></span> <strong>The click-through test harness.</strong> Why it exists, how <code>conftest.py</code> wires the demo, the <code>WSCollector</code> contract, when to add a test.</li>
+    <li><span class="todo-checkbox"></span> <strong>SRD + local content resolution.</strong> <code>app/data/local/dnd5e/</code> JSON, the <code>local_content.resolve</code> lookup, how spells / items / monsters are enriched.</li>
+    <li><span class="todo-checkbox"></span> <strong>Schema migrations.</strong> The inline <code>_apply_inline_migrations()</code> model, <code>SCHEMA_VERSION</code> bumps, how to write a forward-only step.</li>
+    <li><span class="todo-checkbox"></span> <strong>Realtime broadcasts.</strong> Full catalog (battle_update, roll, weapon_attack, spell_cast, feature_used, …), payload shapes, visibility filtering, client handler map.</li>
+  </ul>
+
+  <h3>Reference cards</h3>
+  <ul>
+    <li><span class="todo-checkbox"></span> <strong>Card variant reference</strong> — quick visual index of every roll-log card type. (Roll-log guide is the first entry of this category.)</li>
+    <li><span class="todo-checkbox"></span> <strong>Theme palette reference</strong> — side-by-side strip showing all 8 themes' tokens.</li>
+    <li><span class="todo-checkbox"></span> <strong>Endpoint catalog</strong> — every <code>/api/campaign/{cid}/…</code> endpoint with method, payload shape, broadcast(s) emitted.</li>
+  </ul>
+
+  <h2>Contributing guides</h2>
+  <p>
+    A guide entry lives at <code>docs/wiki/&lt;slug&gt;.{md,html}</code> and gets a row in the
+    "Available guides" table above. Each guide should:
+  </p>
+  <ul>
+    <li>Open with a one-sentence summary of what it covers + audience.</li>
+    <li>State the version it was written for (so future readers can date the screenshots / examples).</li>
+    <li>Include code-location pointers for anything in the codebase the reader might want to grep.</li>
+    <li>For HTML mocks: be self-contained (inline CSS, no external assets) so it opens with <code>file://</code> and survives moves.</li>
+  </ul>
+  <p>
+    Update <code>docs/wiki/README.md</code> <em>and</em> <code>app/templates/wiki.html</code>'s
+    "Available guides" table when you add a guide so the index stays in sync.
+  </p>
+</div>
+{% endblock %}
