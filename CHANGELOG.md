@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.8] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **New wiki guide — toast notifications.** Documents the two distinct toast surfaces (the animated dice popup at `app/static/roll_toast.js` + the small left-bordered status strip via `window.showToast`), including their visual anatomy, the WS broadcast types that fire each, the 1600 ms attack→damage sequencing rule, the visibility filter, code-location pointers, and how the two surfaces relate to the persistent roll-log card. Self-contained HTML (inline CSS + theme-aware via the `/static/style.css` link) — drops into the existing `/wiki/<slug>` route with no code changes. Both wiki indexes (the on-disk `docs/wiki/README.md` + the served `app/templates/wiki.html`) gain the new guide row; the "Roll log + dice toast" TODO line is now checked off and links to both guides. PATCH — docs-only commit.
+**Description:** Three edits. **(1)** New `docs/wiki/toast-notifications-guide.html` — ~480-line standalone HTML guide with seven sections: (a) dice toast anatomy + when it fires + sequencing timeline + visibility filter, (b) status toast variants (info / success / error) + lifecycle + how to fire from JS, (c) how the two surfaces stack together with the persistent roll-log card, (d) theme adaptation, (e) code-location pointers. Inline `<style>` block carries dark-theme fallback tokens; the `/static/style.css` + `/static/style-fantasy-themes.css` links AFTER override via the `data-theme="X"` attribute the `wiki_guide` route injects. The v2.43.6 body-flex layout override is also in place. **(2)** `docs/wiki/README.md` — added the new guide as a row in the "Available guides" table; checked off the "Roll log + dice toast" TODO with links to both guides. **(3)** `app/templates/wiki.html` (the served landing page) — same: new table row + the TODO entry's checkbox styled as completed (`background: var(--c-heal); border-color: var(--c-heal);`).
+**Description (cont):** Why a separate guide instead of folding into the roll-log guide. Toasts and roll-log cards are *complementary* surfaces — the dice toast is transient peripheral feedback while the card is the persistent audit trail. Each has its own visual anatomy, lifecycle, and trigger rules. Splitting into two guides lets contributors land at the right doc when they're investigating a specific surface (e.g. "why isn't the dice toast firing for this new endpoint" → toast guide; "how do I gate this card on visibility" → roll-log guide). Cross-references at the bottom of each guide tie them together.
+
+### Added
+- `docs/wiki/toast-notifications-guide.html` — new wiki guide.
+- `docs/wiki/README.md` — new row in the "Available guides" table.
+- `app/templates/wiki.html` — new row in the "Available guides" table.
+
+### Changed
+- `docs/wiki/README.md` — "The roll log + dice toast" TODO ticked off with links to both guides.
+- `app/templates/wiki.html` — same TODO entry visually marked as completed via filled green checkbox + italic shipped-callout.
+
+### Notes
+- **What to test:** open `/wiki` — the "Available guides" table now lists both guides. Click the new "Toast notifications guide" link — opens in the same tab (it's an internal wiki nav). The guide renders with the user's active theme. Click any of the example mocks (no JS — these are static HTML snapshots), confirm the colors map to the theme.
+- **Backward compat.** Pure docs addition, no code, no schema, no contract change. The `/wiki/<slug>` route was already generic — dropping the HTML in `docs/wiki/` is enough to make it servable.
+
+---
+
 ## [2.43.7] - 2026-05-19
 
 **Schema version:** 56

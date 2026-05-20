@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SimpleVTT — Toast notifications guide (v2.43.8)</title>
+<style>
+  /* ── Theme tokens (fallback to "dark" when no data-theme is set,
+     e.g. file:// preview. The /static/style.css link AFTER this block
+     overrides these via CSS cascade when /wiki/<slug> injects a
+     ``data-theme="X"`` attribute on <html>). ── */
+  :root {
+    --bg:        #15171c;
+    --bg-2:      #20232a;
+    --panel:     #20232a;
+    --border:    #2c303a;
+    --input-bg:  #2a2d36;
+    --fg:        #e8e8ee;
+    --fg-mute:   #9aa0aa;
+    --accent:    #6cb4ff;
+    --danger:    #d74a4a;
+    --c-heal:    #4ade80;
+    --c-crit:    #fbbf24;
+    --c-damage:  #fb923c;
+    --c-buff:    #5ec1d6;
+    --accent-bg: color-mix(in srgb, var(--accent) 12%, var(--bg));
+    --accent-border: color-mix(in srgb, var(--accent) 35%, var(--border));
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 24px 80px;
+    line-height: 1.5;
+  }
+  h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+  h1 .version { font-size: 12px; color: var(--fg-mute); font-weight: 400; margin-left: 8px; }
+  .lede { font-size: 14px; color: var(--fg-mute); margin: 6px 0 24px; }
+  h2 {
+    font-size: 16px; margin: 36px 0 6px;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+  h3 {
+    font-size: 13px; margin: 22px 0 6px;
+    color: var(--fg);
+    text-transform: uppercase; letter-spacing: 0.6px;
+  }
+  p, ul, ol { font-size: 14px; }
+  ul li, ol li { margin: 3px 0; }
+  code, .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+    margin: 10px 0 16px;
+  }
+  th, td {
+    border: 1px solid var(--border); padding: 6px 10px; text-align: left;
+  }
+  th { background: var(--bg-2); font-weight: 600; font-size: 12px; }
+  .callout {
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-2));
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px; border-radius: 4px;
+    font-size: 13px; margin: 10px 0;
+  }
+  .callout strong { color: var(--accent); }
+
+  /* ── Roll-toast (dice popup) anatomy mock ── */
+  .roll-toast-mock {
+    background: var(--accent-bg);
+    border: 1px solid var(--accent-border);
+    border-radius: 10px;
+    padding: 12px 20px;
+    min-width: 220px;
+    max-width: 320px;
+    text-align: center;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.55);
+    margin: 12px auto;
+  }
+  .rt-label { font-size: 11px; color: var(--accent); margin-bottom: 5px; }
+  .rt-dice { display: flex; justify-content: center; align-items: center; gap: 4px; }
+  .rt-die {
+    width: 60px; height: 60px;
+    color: var(--accent); opacity: 0.85;
+  }
+  .rt-total { font-size: 38px; font-weight: 700; line-height: 1; color: var(--fg); margin-top: 4px; }
+  .rt-bonus {
+    display: inline-block; margin-left: 6px;
+    font-size: 14px; font-weight: 700; color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 8px;
+    padding: 2px 6px; vertical-align: middle;
+  }
+  .rt-sum { font-size: 20px; font-weight: 800; color: var(--fg); margin-top: 4px; }
+  .rt-breakdown { font-size: 11px; color: var(--fg-mute); margin-top: 5px; font-family: monospace; }
+  .rt-dismiss { font-size: 9px; color: var(--fg-mute); margin-top: 6px; opacity: 0.6; }
+
+  /* ── Status toast (vtt-toast) anatomy mock ── */
+  .vtt-toast-mock {
+    background: var(--bg-2);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 8px 14px;
+    font-size: 13px;
+    max-width: 400px;
+    margin: 8px auto;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.32);
+  }
+  .vtt-toast-mock.vtt-toast-info    { border-left-color: var(--accent); }
+  .vtt-toast-mock.vtt-toast-success { border-left-color: var(--c-heal); }
+  .vtt-toast-mock.vtt-toast-error   { border-left-color: var(--danger); }
+
+  /* ── Sequence timeline mock ── */
+  .timeline {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 8px 14px;
+    align-items: start;
+    margin: 12px 0 18px;
+    font-size: 13px;
+  }
+  .timeline .t {
+    color: var(--accent); font-family: monospace; font-weight: 600;
+    text-align: right; padding-top: 4px;
+  }
+  .timeline .e {
+    border-left: 2px solid var(--border); padding: 4px 0 4px 12px;
+    color: var(--fg);
+  }
+  .timeline .e .what { font-weight: 600; }
+  .timeline .e .desc { font-size: 12px; color: var(--fg-mute); }
+
+  .footer {
+    margin-top: 60px; padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--fg-mute);
+  }
+</style>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style-fantasy-themes.css">
+<style>
+  /* v2.43.6 fix: see roll-log-guide.html — style.css's body-flex layout
+     would collapse our long-form children to zero height. Override
+     back to block flow. */
+  html, body { height: auto; min-height: 100%; }
+  body { display: block; }
+</style>
+</head>
+<body>
+
+<h1>Toast notifications <span class="version">v2.43.8</span></h1>
+<p class="lede">
+  SimpleVTT has <strong>two distinct toast surfaces</strong>: the <strong>dice toast</strong>
+  (a transient pop-up that animates the dice for every server roll) and the <strong>status toast</strong>
+  (a small left-bordered message strip for confirmations, info, and errors). They look different,
+  fire from different code paths, and serve different purposes. This guide documents both — what
+  they show, when they fire, how they're sequenced, and how to use them from new code.
+</p>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<h2>1 · The dice toast — animated roll popup</h2>
+<p>
+  Fires for every server-side roll the user has visibility to see. Renders a dice-shape SVG, a label,
+  the per-die breakdown, and the total. The dice "wobble" for ~1.4 seconds, then settle on the final
+  values. Click anywhere on the toast to dismiss early; otherwise it auto-dismisses after ~5 seconds.
+</p>
+
+<h3>Anatomy</h3>
+<div class="roll-toast-mock">
+  <div class="rt-label">🎯 Greataxe → Bandit vs AC 12 · ✅ HIT</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <polygon points="50,7 93,71.5 7,71.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" opacity="0.45"/>
+      <polygon points="93,28.5 50,93 7,28.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" opacity="0.45"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">16</text>
+    </svg>
+    <span class="rt-bonus">+5</span>
+  </div>
+  <div class="rt-total">21</div>
+  <div class="rt-breakdown">1d20[16] + 5</div>
+  <div class="rt-dismiss">tap to dismiss</div>
+</div>
+
+<table>
+  <thead><tr><th>Slot</th><th>What it shows</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Label</strong></td><td>One-line narrative — the spell / attack / roll name + target tag + verdict (HIT / MISS / CRIT)</td></tr>
+    <tr><td><strong>Dice SVG</strong></td><td>One shape per die in the expression (d4, d6, d8, d10, d12, d20, d100). Up to 6 dice. For advantage / disadvantage, both dice render with the kept one highlighted.</td></tr>
+    <tr><td><strong>Bonus chip "+N"</strong></td><td>v2.27.0: the flat modifier from the expression (e.g. <code>1d20+5</code> → die face shows the d20 result, chip shows <code>+5</code>)</td></tr>
+    <tr><td><strong>Total</strong></td><td>The big number — the result the table acts on</td></tr>
+    <tr><td><strong>Breakdown</strong></td><td>dice.py's expanded form with bracketed die faces (e.g. <code>1d20[16] + 5</code>)</td></tr>
+  </tbody>
+</table>
+
+<h3>When the dice toast fires</h3>
+<table>
+  <thead><tr><th>Broadcast type</th><th>What the toast shows</th></tr></thead>
+  <tbody>
+    <tr><td><code>roll</code></td><td>Plain dice roll from <code>/roll</code> (or any endpoint that broadcasts one). Visibility filter applies.</td></tr>
+    <tr><td><code>weapon_attack</code></td><td>Two toasts in sequence: the d20 attack roll first, then 1600 ms later the damage roll (save-DC attacks skip the d20 and fire the damage toast immediately).</td></tr>
+    <tr><td><code>spell_cast</code> (with <code>auto_attack_*</code>)</td><td>Same two-toast sequence as weapon_attack for Fire Bolt / Eldritch Blast / etc.</td></tr>
+    <tr><td><code>spell_cast</code> (with <code>auto_save_damage_*</code>)</td><td>Save-for-half damage toast (Fireball, Sacred Flame, …) — fires after the save-roll toast lands.</td></tr>
+    <tr><td><code>feature_used</code> (with <code>dice_*</code> fields)</td><td>Second Wind / Lay on Hands / Bardic Inspiration / any feature that rolls a die — the heal / bonus die animates as its own toast.</td></tr>
+    <tr><td><code>heal_applied</code></td><td>A toast confirming the HP delta when a heal lands on a target via the legacy heal-claim flow.</td></tr>
+  </tbody>
+</table>
+
+<h3>Sequencing — attack → damage</h3>
+<p>
+  When a weapon attack or spell attack lands, the server broadcasts a single payload containing both the
+  d20 attack roll AND the damage roll. The client fires the d20 toast immediately, then waits 1600 ms
+  before firing the damage toast. This is enough time for the d20 to land + give a small "breath"
+  between the two animations:
+</p>
+<div class="timeline">
+  <div class="t">+0 ms</div>
+  <div class="e">
+    <div class="what">🎯 d20 toast appears</div>
+    <div class="desc">Dice begin wobbling. The toast carries the attack note (name → target, AC, HIT/MISS/CRIT verdict).</div>
+  </div>
+  <div class="t">~1.4 s</div>
+  <div class="e">
+    <div class="what">🎯 d20 toast lands on its final value</div>
+    <div class="desc">Wobble stops. The total is highlighted; the breakdown is now readable.</div>
+  </div>
+  <div class="t">+1.6 s</div>
+  <div class="e">
+    <div class="what">🎲 damage toast appears</div>
+    <div class="desc">Second toast stacks above the first. Damage dice begin wobbling.</div>
+  </div>
+  <div class="t">~3.0 s</div>
+  <div class="e">
+    <div class="what">🎲 damage toast lands</div>
+    <div class="desc">Both toasts now visible together; user reads them top-to-bottom.</div>
+  </div>
+  <div class="t">~5–6 s</div>
+  <div class="e">
+    <div class="what">Auto-dismiss begins</div>
+    <div class="desc">Toasts fade out unless the user clicks to dismiss earlier.</div>
+  </div>
+</div>
+
+<h3>Position + stacking</h3>
+<p>
+  Tabletop view: bottom-center of the viewport (<code>#roll-toast-container { position: fixed;
+  bottom: 24px; left: 50%; transform: translateX(-50%); }</code>). Multiple toasts stack
+  bottom-up via <code>flex-direction: column-reverse</code>.
+</p>
+<p>
+  Mobile breakpoint: the container moves to center-of-screen + bumps z-index to 500 (so it sits above
+  the touch-friendly UI overlays). Padding grows to 18 px × 28 px so the touch area is comfortable.
+</p>
+
+<h3>Visibility filter</h3>
+<p>
+  The dice toast respects the same visibility filter as the roll-log card (defense-in-depth):
+</p>
+<ul>
+  <li><code>public</code> — toast fires for everyone</li>
+  <li><code>gm_and_roller</code> — only the GM + the rolling user see the toast</li>
+  <li><code>gm_only</code> — only the GM sees the toast</li>
+</ul>
+<p>
+  Server-side <code>/roll</code> only broadcasts to eligible sockets; the client double-checks before
+  firing. For <code>weapon_attack</code> / <code>spell_cast</code> / <code>feature_used</code>, no
+  visibility field is set — they're always public table actions.
+</p>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<h2>2 · The status toast — confirmations, info, errors</h2>
+<p>
+  Lightweight bottom-anchored message strips that confirm user actions or surface errors. Distinct
+  from the dice toast: no dice animation, no breakdown — just a colored left border + text.
+</p>
+
+<h3>Variants</h3>
+<div class="vtt-toast-mock vtt-toast-info">🩹 +6 HP applied to your character!</div>
+<div class="vtt-toast-mock vtt-toast-success">Encounter saved.</div>
+<div class="vtt-toast-mock vtt-toast-error">Healing failed: target was already at full HP.</div>
+
+<table>
+  <thead><tr><th>Kind</th><th>Class</th><th>Left-border color</th><th>Use case</th></tr></thead>
+  <tbody>
+    <tr><td>info</td><td><code>.vtt-toast-info</code></td><td><code>var(--accent)</code></td><td>Confirmations, "did it" messages (default if no kind is passed)</td></tr>
+    <tr><td>success</td><td><code>.vtt-toast-success</code></td><td><code>var(--c-heal)</code> green</td><td>Positive outcomes — "Saved", "Restored", etc.</td></tr>
+    <tr><td>error</td><td><code>.vtt-toast-error</code></td><td><code>var(--danger)</code></td><td>Failures: HTTP errors, validation, out-of-range, etc.</td></tr>
+  </tbody>
+</table>
+
+<h3>Lifecycle</h3>
+<ul>
+  <li>Fades in from below (~180 ms transform + opacity transition).</li>
+  <li>Holds visible for 4.2 seconds.</li>
+  <li>Fades out (~260 ms) — auto-removed from DOM.</li>
+  <li>Multiple toasts stack vertically in <code>#vtt-toast-stack</code>.</li>
+</ul>
+
+<h3>How to fire one from JS</h3>
+<p>
+  <code>window.showToast</code> is registered globally by <code>app/static/tabletop.js</code> (and
+  fallback-registered by <code>app/static/action_buttons.js</code> for pages that don't load the
+  tabletop bundle):
+</p>
+<pre style="background:var(--bg-2);padding:10px;border-radius:4px;border:1px solid var(--border);font-size:12px;overflow:auto;"><code style="background:transparent;color:var(--fg);">// Default kind ('info')
+window.showToast('🩹 +6 HP applied to your character!');
+
+// Explicit kind
+window.showToast('Encounter saved.', 'success');
+window.showToast('Healing failed: ' + error.message, 'error');</code></pre>
+
+<h3>When NOT to use a status toast</h3>
+<ul>
+  <li>For dice rolls — use the dice toast (it fires automatically off the WS broadcast).</li>
+  <li>For information that needs to persist (HP delta, condition install) — those belong on the
+    roll-log card's pill row, not a transient toast.</li>
+  <li>For modal flows (target picker, confirmation dialogs) — those open their own UI surfaces.</li>
+</ul>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<h2>3 · The two surfaces together</h2>
+<div class="callout">
+  <strong>Dice toast and status toast can stack.</strong> A spell cast that lands a damage roll AND
+  triggers a server error (e.g. expired heal_claim) fires the dice toast and the error status toast
+  in parallel — they live in different containers (<code>#roll-toast-container</code> vs
+  <code>#vtt-toast-stack</code>) and don't collide.
+</div>
+<p>
+  The complementary relationship with the roll log (the persistent card drawer):
+</p>
+<ul>
+  <li><strong>Dice toast</strong> — transient, in-your-face. The "did this just happen?" surface.</li>
+  <li><strong>Roll log card</strong> — persistent. The "what happened" audit trail with the ↶ Undo
+    button + the outcome pills.</li>
+  <li><strong>Status toast</strong> — transient, peripheral. Confirmations + errors.</li>
+</ul>
+<p>
+  A complete weapon-attack flow surfaces all three:
+</p>
+<ol>
+  <li>User clicks "Strike" on a weapon — the sheet posts to <code>/attack</code>.</li>
+  <li>Server broadcasts <code>weapon_attack</code> over WebSocket.</li>
+  <li><strong>Dice toast</strong> #1: d20 to-hit appears at the bottom of the screen.</li>
+  <li><strong>Roll log card</strong>: the attack card lands in the drawer (pill row + dice in
+    <code>▾ details</code>).</li>
+  <li>After 1600 ms — <strong>dice toast</strong> #2: damage dice appear.</li>
+  <li>If auto-apply was on — the target's HP bar updates in the canvas + initiative tracker.</li>
+  <li>If the user clicked the ↶ Undo pill on the card — the server reverts, and a
+    <strong>status toast</strong> confirms ("Reverted 9 damage to Bandit").</li>
+</ol>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<h2>4 · Themes — toasts adapt</h2>
+<p>
+  Both surfaces use the CSS custom properties (<code>--accent</code>, <code>--danger</code>,
+  <code>--c-heal</code>, <code>--bg-2</code>, <code>--border</code>) so all 14 themes (8 core +
+  6 fantasy) re-tint without per-theme overrides. The bonus chip "+N" on the dice toast borrows
+  <code>--accent</code> for its border + color, so the accent picks up the theme; the status toast's
+  left border switches between <code>var(--accent)</code> / <code>var(--c-heal)</code> /
+  <code>var(--danger)</code> depending on kind.
+</p>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<h2>5 · Where the code lives</h2>
+<ul>
+  <li><strong>Dice toast renderer:</strong> <code>app/static/roll_toast.js</code> —
+    <code>showRollToast(rollData)</code> entry point; <code>vtt:ws-message</code> CustomEvent
+    listener dispatches off the WebSocket message types.</li>
+  <li><strong>Dice toast CSS:</strong> <code>app/static/style.css</code> top section
+    (<code>#roll-toast-container</code>, <code>.roll-toast</code>, <code>.rt-die</code>,
+    <code>.rt-total</code>, <code>.rt-bonus</code>, <code>.rt-out</code> fade-out animation).</li>
+  <li><strong>Status toast renderer:</strong> <code>app/static/tabletop.js</code>
+    <code>function showToast(msg, kind)</code>, registered as <code>window.showToast</code>. Fallback
+    registration in <code>app/static/action_buttons.js</code> so character-sheet pages also get the
+    helper without loading the tabletop bundle.</li>
+  <li><strong>Status toast CSS:</strong> <code>app/static/style.css</code> bottom section
+    (<code>#vtt-toast-stack</code>, <code>.vtt-toast</code>, <code>.vtt-toast-info</code>,
+    <code>.vtt-toast-success</code>, <code>.vtt-toast-error</code>).</li>
+  <li><strong>WS handler that dispatches the toast events:</strong> <code>app/static/tabletop.js</code>
+    inside the WebSocket <code>onmessage</code> handler — every incoming message also fires a
+    <code>document.dispatchEvent(new CustomEvent('vtt:ws-message', { detail: msg }))</code> so the
+    decoupled <code>roll_toast.js</code> listener picks it up.</li>
+  <li><strong>Sequencing constant:</strong> the 1600 ms attack-to-damage delay is hardcoded in
+    <code>app/static/roll_toast.js</code> in two places (<code>weapon_attack</code> and
+    <code>spell_cast</code> handlers). Both use the same value so behavior stays uniform.</li>
+</ul>
+
+<div class="footer">
+  Generated for SimpleVTT v2.43.8 · companion to
+  <a href="/wiki/roll-log-guide" style="color:var(--accent)">the roll-log guide</a> and
+  <code>docs/roll-log-card-layout.md</code>.
+</div>
+
+</body>
+</html>

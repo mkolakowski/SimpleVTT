@@ -16,6 +16,7 @@ This wiki complements the canonical references that live elsewhere in the repo:
 | Guide | Format | Audience | Status |
 |-------|--------|----------|--------|
 | [Roll-log guide](roll-log-guide.html) | HTML (visual) | GMs + contributors | ✅ shipped (v2.43.1) |
+| [Toast notifications guide](toast-notifications-guide.html) | HTML (visual) | GMs + contributors | ✅ shipped (v2.43.8) |
 
 ## TODO — guides to write
 
@@ -41,7 +42,7 @@ This wiki is a stub. The list below is what we want it to grow into.
 - [ ] **The buff slot system (Phase C).** `_install_buff` / `_remove_buff` / `_get_buffs`, concentration anchors, paired-buff cleanup on concentration drop, save-or-suck condition install, the buff descriptive layer on the sheet.
 - [ ] **The damage flow (Phase B).** Resistance, vulnerability, Hunter's Mark, Colossus Slayer, Smite uplifts, the `_attack_damage_log` for Undo, the `/undo_attack_damage` endpoint.
 - [ ] **Auto-resolution: attack, save, heal, damage.** When the server resolves rolls server-side vs prompts the client; the campaign-level `auto_apply_damage` toggle; `auto_attack_*` / `auto_save_*` / `auto_heal_*` payload fields; the spell-cast pill row.
-- [ ] **The roll log + dice toast.** Card variants, the oversized pill row, persistence in localStorage, visibility filtering, the dice toast lifecycle.
+- [x] **The roll log + dice toast.** Card variants, the oversized pill row, persistence in localStorage, visibility filtering, the dice toast lifecycle. → [roll-log-guide.html](roll-log-guide.html) + [toast-notifications-guide.html](toast-notifications-guide.html).
 - [ ] **The click-through test harness.** Why the harness exists, how `conftest.py` wires the demo PCs to authenticated httpx clients, the `WSCollector` contract, when to add a happy-path vs error-path test. See also `docs/plans/test-harness.md`.
 - [ ] **SRD + local content resolution.** `app/data/local/dnd5e/` JSON files, the `local_content.resolve(slug, type=…)` lookup, how spells / items / monsters are enriched.
 - [ ] **Schema migrations.** The inline `_apply_inline_migrations()` model in `app/database.py`, `SCHEMA_VERSION` bumps, how to write a forward-only migration step.
