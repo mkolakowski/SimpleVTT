@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.42.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Roll-log redesign — collapsible ▼ Result block (default) + user-toggleable Compact pill mode (Proposal 3 + Proposal 1 hybrid).** Picked direction after the v2.41.0 mockup review. The auto-effect consequences on spell-cast cards (heal / attack / save / damage / buff install) now live inside a `▼ Result` collapsible block — open by default so live play sees what happened, foldable for scrollback hygiene. The toast (v2.33.0+) still fires, so the user's stated tradeoff from Proposal 3 (loss of audit trail) is closed: the details ALSO persist in the log card behind the collapsible. A new per-user toolbar toggle in the roll-log drawer flips between **`verbose`** (default — the collapsible block) and **`simple`** (pill-row chips, Proposal 1). State persists in localStorage. MINOR — new UI mode + new toolbar widget; no schema or contract changes.
+**Description:** Four edits. **(1)** `app/static/tabletop.js` — new `_rollLogMode()` / `_setRollLogMode()` helpers that read / write `localStorage["simplevtt:rolllog_mode"]` (legal values `verbose` / `simple`, default `verbose`). New `_spellResultSummary(d)` produces the one-liner ("+4 HP · ✅ hit · −7 fire") shown in the collapsed `▼ Result` chip. New `_spellResultChipsHtml(d)` emits the simple-mode pill row, with chip variants for heal / hit / miss / crit / damage / buff / prompt / undo. New unified `_spellResultBlockHtml(d)` reads the current mode and emits either the `<details class="result-block" open>` wrapper OR the chip row, returning '' when no auto-effects fired. `appendSpellCast` swapped its three `_auto*LineHtml()` direct emits for a single `${_spellResultBlockHtml(d)}` call. **(2)** `app/templates/tabletop.html` — `.result-block` + `.result-block-summary` + `.result-chips` + `.result-chip` (with color-coded variants per consequence type) CSS. Plus `.rolllog-toolbar` for the new top-of-drawer button row. **(3)** Same file — new `#rolllog-mode-toggle` button rendered above the roll list. Wire-up at the bottom of the script's IIFE: applies saved state on load and flips it on click. **(4)** `docs/roll-log-card-layout.md` — new "Display modes (v2.42.0)" section at the top documenting the two modes + the toolbar toggle.
+**Description (cont):** Why default to verbose with the block open. Live combat needs to see consequences immediately — a folded block hides the outcome of the roll the player just made. Open-by-default keeps the live action visible; the GM folds older cards when they want to scan the log. Simple-mode users skip that step entirely (chips are always visible). The toast still fires either way as a transient pop-up so the rolling player gets feedback in their peripheral vision.
+**Description (cont 2):** Why per-user not per-campaign. Display preferences are personal (some GMs want maximum detail, some want compact pills). A per-campaign setting would force everyone at the table into the same mode. localStorage is the right scope — same approach the existing init-tracker uses for client-side state. Trade-off: lost on browser-data clear; new browser = back to default. Acceptable.
+**Description (cont 3):** Why only spell-cast cards. Weapon-attack cards already pack actionable info (the dice IS the at-a-glance content) and don't benefit much from collapse. Feature-used cards got their toggle in v2.41.0 already. Spell-cast was the densest case after T.3 / T.3b / T.3c / T.4 / T.4b / T.4c shipped layered auto-effect lines. The new mode is gated to spell-cast cards for now; weapon-attack / feature-used can opt in later if they grow.
+
+### Added
+- `app/static/tabletop.js` — `_rollLogMode` / `_setRollLogMode` helpers, `_spellResultSummary`, `_spellResultChipsHtml`, `_spellResultBlockHtml` unified emitter.
+- `app/templates/tabletop.html` — `.result-block` + `.result-chips` CSS, `#rolllog-mode-toggle` toolbar button.
+- `docs/roll-log-card-layout.md` — "Display modes (v2.42.0)" section + table comparing verbose vs simple.
+
+### Changed
+- `app/static/tabletop.js` `appendSpellCast` — three direct `_auto*LineHtml()` emits replaced by single `_spellResultBlockHtml(d)` call. Same content lands either as the collapsible block (default) or the chip row (simple mode).
+
+### Notes
+- **What to test:** open `/campaign/1`. Cast Hold Person from Tavik at a bandit who fails the save. Default view shows `▼ Result (Bandit failed · 🥶 paralyzed)` with the detailed lines open below. Click the `▼ Result` summary to fold; the one-liner chip stays visible. Click the "Compact: OFF" button at the top of the roll log → it flips to "Compact: ON" + future casts render as pill rows (`[📋 WIS 8/14 ❌] [🥶 Paralyzed · 10r] [↶ Undo]`). The dice toast pops in both modes. Reload the page — preference persists.
+- **Backward compat.** Pre-v2.42.0 cards rendered before the page reload are gone after refresh (roll log replay was added v2.28.0 — they re-render in the new layout). The unified `_spellResultBlockHtml` returns '' when no auto-effects fired, so utility-only casts (Misty Step, Mage Armor) look exactly like they did before.
+- **Toast unchanged.** The v2.33.0 sequencing (attack toast → 1600 ms → damage toast) still applies. The card and the toast are complementary surfaces: toast = transient at-a-glance; card = persistent audit trail.
+
+---
+
 ## [2.41.0] - 2026-05-19
 
 **Schema version:** 56

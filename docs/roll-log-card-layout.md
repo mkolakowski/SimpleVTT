@@ -6,6 +6,22 @@ The roll log (right-side drawer on the tabletop) collects four kinds of cards. E
 
 A long fight at the table generates a lot of cards — saves, attacks, spell descriptions, feature uses. If every card unfurls its full description by default, the log becomes a wall of text and the actionable info (HP delta, hit/miss, ↶ Undo button) gets buried. v2.41.0 introduced a `<details>` block so the narrative content (spell description, feature flavor text, dice breakdown) is one tap away rather than always-on.
 
+## Display modes (v2.42.0)
+
+A user-toggleable setting at the top of the roll-log drawer switches between two display modes for spell-cast cards' auto-effect consequences. The state lives in `localStorage["simplevtt:rolllog_mode"]` and applies to newly-rendered cards (existing cards in the DOM keep the mode they were rendered with).
+
+| Mode | Label | What it does |
+|------|-------|--------------|
+| **`verbose`** (default) | "Compact: OFF" | Auto-effect lines (heal / attack / save / damage / buff) live inside a `▼ Result` collapsible block, open by default. Folded state shows a one-liner summary chip. |
+| **`simple`** | "Compact: ON" | Auto-effect lines collapse into a horizontal pill row — one chip per consequence, always visible. The `▼ Result` block is replaced entirely. |
+
+Both modes:
+- Fire the **dice toast** (v2.33.0+) for every server roll.
+- Keep the `▾ Spell details` toggle for the spell's RAW flavor text.
+- Surface the `↶ Undo` button identically (server endpoint unchanged).
+
+The toggle button is in the toolbar at the top of the roll log; click to flip.
+
 ## Common anatomy
 
 ```

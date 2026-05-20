@@ -1914,6 +1914,153 @@
         return '';
     }
 
+    // v2.42.0: roll-log display mode. ``verbose`` (default) renders
+    // the auto-effect consequences (heal / attack / save / damage /
+    // buff) inside a collapsible ▼ Result block that opens by default;
+    // ``simple`` renders them as a single horizontal chip row instead.
+    // Either way the dice toast (v2.33.0+) still fires + the spell
+    // details ▾ stays. Mode persists per-user in localStorage and a
+    // toggle in the roll-log drawer header flips it.
+    function _rollLogMode() {
+        try { return localStorage.getItem('simplevtt:rolllog_mode') || 'verbose'; }
+        catch (_) { return 'verbose'; }
+    }
+    function _setRollLogMode(mode) {
+        const m = mode === 'simple' ? 'simple' : 'verbose';
+        try { localStorage.setItem('simplevtt:rolllog_mode', m); } catch (_) {}
+        document.body.classList.toggle('rolllog-simple', m === 'simple');
+        const btn = document.getElementById('rolllog-mode-toggle');
+        if (btn) btn.textContent = m === 'simple' ? 'Compact: ON' : 'Compact: OFF';
+    }
+    // Sync the body class at load so CSS that gates on it is correct
+    // from the first render.
+    document.body.classList.toggle('rolllog-simple', _rollLogMode() === 'simple');
+    // Wire the toolbar toggle button. The button lives in the roll-log
+    // drawer (server-rendered in tabletop.html), so it exists by the
+    // time this IIFE runs (script at end of body).
+    (function _wireRollLogModeToggle() {
+        const btn = document.getElementById('rolllog-mode-toggle');
+        if (!btn) return;
+        // Apply the saved state to the button label.
+        _setRollLogMode(_rollLogMode());
+        btn.addEventListener('click', () => {
+            const next = _rollLogMode() === 'simple' ? 'verbose' : 'simple';
+            _setRollLogMode(next);
+        });
+    })();
+
+    // Short one-liner summary used as the chip in the collapsed
+    // ▼ Result block header — at-a-glance verdict so the GM can fold
+    // the block but still see what happened.
+    function _spellResultSummary(d) {
+        const bits = [];
+        if (d && d.auto_heal_applied > 0) {
+            bits.push(`+${d.auto_heal_applied} HP`);
+            if (d.auto_heal_revived) bits.push('revived');
+        }
+        if (d && d.auto_attack_hit === true) bits.push(d.auto_attack_crit ? '💥 crit' : '✅ hit');
+        if (d && d.auto_attack_hit === false) bits.push('❌ miss');
+        if (d && d.auto_attack_damage_applied > 0) {
+            bits.push(`−${d.auto_attack_damage_applied}${d.auto_attack_damage_type ? ' ' + d.auto_attack_damage_type : ''}`);
+        }
+        if (d && d.auto_save_target_kind === 'pc' && d.auto_save_prompted) bits.push('save prompted');
+        if (d && d.auto_save_target_kind === 'npc' && d.auto_save_passed === true) bits.push('✅ saved');
+        if (d && d.auto_save_target_kind === 'npc' && d.auto_save_passed === false) bits.push('❌ failed');
+        if (d && d.auto_save_damage_applied > 0) {
+            bits.push(`−${d.auto_save_damage_applied}${d.auto_save_damage_type ? ' ' + d.auto_save_damage_type : ''}`);
+        }
+        if (d && d.auto_save_buff_name) bits.push(d.auto_save_buff_name.toLowerCase());
+        return bits.join(' · ');
+    }
+
+    // Compact pill-style chips for simple mode. Each chip carries
+    // the same data the verbose lines do, just trimmed. Undo chip
+    // gets the ``weapon-atk-undo`` class so the existing wire-up at
+    // the bottom of ``appendSpellCast`` picks it up.
+    function _spellResultChipsHtml(d) {
+        if (!d) return '';
+        const chips = [];
+        // Heal
+        if (d.auto_heal_applied > 0) {
+            const tgt = d.auto_heal_target_name || d.target_name || '';
+            chips.push(`<span class="result-chip chip-heal">✚ ${escapeHTML(tgt)} +${d.auto_heal_applied} HP</span>`);
+            if (d.auto_heal_revived) {
+                chips.push('<span class="result-chip chip-buff">💚 revived</span>');
+            }
+        }
+        // Attack
+        if (d.auto_attack_hit != null) {
+            const verdict = d.auto_attack_crit ? '💥' : d.auto_attack_hit ? '✅' : '❌';
+            const cls = d.auto_attack_crit ? 'chip-crit' : d.auto_attack_hit ? 'chip-hit' : 'chip-miss';
+            const tgt = d.auto_attack_target_name || d.target_name || '';
+            chips.push(
+                `<span class="result-chip ${cls}">🎯 ${escapeHTML(tgt)}: ${d.auto_attack_total}/${d.auto_attack_target_ac} ${verdict}</span>`
+            );
+            if (d.auto_attack_damage_applied > 0) {
+                const type = d.auto_attack_damage_type ? ` ${escapeHTML(d.auto_attack_damage_type)}` : '';
+                chips.push(`<span class="result-chip chip-damage">🎲 −${d.auto_attack_damage_applied}${type}</span>`);
+            }
+        }
+        // Save (PC prompted / NPC auto-rolled)
+        if (d.auto_save_target_kind === 'pc' && d.auto_save_prompted) {
+            chips.push(
+                `<span class="result-chip chip-prompt">📋 ${escapeHTML(d.auto_save_target_name || '')} ${d.auto_save_ability} save (DC ${d.auto_save_dc})</span>`
+            );
+        }
+        if (d.auto_save_target_kind === 'npc' && d.auto_save_rolled != null) {
+            const cls = d.auto_save_passed ? 'chip-hit' : 'chip-miss';
+            const v = d.auto_save_passed ? '✅' : '❌';
+            chips.push(
+                `<span class="result-chip ${cls}">📋 ${escapeHTML(d.auto_save_target_name || '')} ${d.auto_save_ability} ${d.auto_save_rolled}/${d.auto_save_dc} ${v}</span>`
+            );
+        }
+        if (d.auto_save_damage_applied > 0) {
+            const type = d.auto_save_damage_type ? ` ${escapeHTML(d.auto_save_damage_type)}` : '';
+            const tag = d.auto_save_passed ? ' (half)' : '';
+            chips.push(`<span class="result-chip chip-damage">🎲 −${d.auto_save_damage_applied}${type}${tag}</span>`);
+        }
+        if (d.auto_save_buff_name) {
+            chips.push(
+                `<span class="result-chip chip-buff">${escapeHTML(d.auto_save_buff_icon || '💫')} ${escapeHTML(d.auto_save_buff_name)} · ${d.auto_save_buff_duration}r</span>`
+            );
+        }
+        // Undo chip (when anything was actually applied).
+        const anyApplied = (
+            (d.auto_heal_applied || 0) > 0
+            || (d.auto_attack_damage_applied || 0) > 0
+            || (d.auto_save_damage_applied || 0) > 0
+        );
+        if (anyApplied) {
+            chips.push(
+                `<button type="button" class="result-chip chip-undo weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this cast's HP changes">↶ Undo</button>`
+            );
+        }
+        return chips.join('');
+    }
+
+    // Unified result-block emitter. Renders either the verbose
+    // collapsible block (default) or the simple chip row, based on
+    // ``_rollLogMode()`` at append time. Returns '' when the cast
+    // produced no auto-effects (no heal / attack / save fired).
+    function _spellResultBlockHtml(d) {
+        if (!d) return '';
+        const heal = _autoHealLineHtml(d);
+        const save = _autoSaveLineHtml(d);
+        const attack = _autoAttackLineHtml(d);
+        if (!heal && !save && !attack) return '';
+        if (_rollLogMode() === 'simple') {
+            const chips = _spellResultChipsHtml(d);
+            return chips ? `<div class="result-chips">${chips}</div>` : '';
+        }
+        const summary = _spellResultSummary(d);
+        const summaryHtml = summary
+            ? ` <span class="result-block-summary">${escapeHTML(summary)}</span>` : '';
+        return `<details class="result-block" open>
+            <summary>▼ Result${summaryHtml}</summary>
+            <div class="result-block-body">${heal}${save}${attack}</div>
+        </details>`;
+    }
+
     function appendSpellCast(d) {
         const ul = document.getElementById('roll-list');
         if (!ul) return;
@@ -1971,9 +2118,7 @@
                     <div class="spell-cast-name">🪄 ${escapeHTML(d.spell_name || 'Spell')} ${_targetTagHtml(d)}</div>
                     ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
                     ${d.spell_desc ? `<details class="roll-card-details"><summary>▾ details</summary><div class="spell-cast-desc">${escapeHTML(d.spell_desc)}</div></details>` : ''}
-                    ${_autoHealLineHtml(d)}
-                    ${_autoSaveLineHtml(d)}
-                    ${_autoAttackLineHtml(d)}
+                    ${_spellResultBlockHtml(d)}
                     <div class="spell-cast-actions"></div>
                     ${_overBudgetBadge(d)}
                     <div class="spell-cast-results"></div>
