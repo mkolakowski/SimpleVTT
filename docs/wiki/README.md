@@ -23,6 +23,7 @@ This wiki complements the canonical references that live elsewhere in the repo:
 | [First-run setup](first-run-setup.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.17) |
 | [Running a session as GM](running-a-session-as-gm.md) | Markdown (how-to) | GMs | ✅ shipped (v2.43.18) |
 | [The character sheet](the-character-sheet.md) | Markdown (how-to) | Players + GMs | ✅ shipped (v2.43.19) |
+| [Demo mode](demo-mode.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.21) |
 
 ## TODO — guides to write
 

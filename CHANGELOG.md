@@ -10,6 +10,50 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.21] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Wiki plan exec #7 — Demo mode. Recommended-first-7 from `docs/plans/wiki-expansion.md` is now complete.** Tier 3 doc #1 (new — added in the v2.43.13 planning pass). New `docs/wiki/demo-mode.md` is the operator-facing companion to the existing `docs/plans/demo-mode.md` design doc — covers the four env vars, the surgical wipe mechanism, the seed contents (3 users, 12 PCs, tavern map, 9 tokens, 4 templates, 1 encounter, 2 homebrew files, 8-10 sample rolls), the lifespan-handler reset loop, the four safety guards that protect against accidental production deployment, the on-demand admin reset endpoint, the deferred features (per-visitor accounts + rate limiting), and a five-item troubleshooting section. PATCH — additive doc.
+**Description:** Three edits. **(1)** New `docs/wiki/demo-mode.md` — opens with the "do not enable on production" callout (the only truly load-bearing operational warning in demo mode), then a quick-start `.env` diff so operators can flip the switch in 30 seconds. Covers the seed-data table (12 PCs + the homebrew Goblin Captain + the bundled tavern map), the reset mechanism (lifespan asyncio task, single transaction, FK ordering fix from v2.3.5), the env vars (with the v2.3.2 compose-forwarding fix called out), what demo users can / can't do, the on-demand `/admin/demo/reset` endpoint, the four safety guards (surgical wipe + non-dismissible banner + visible credentials + startup log line), and what was explicitly deferred (per-visitor ephemeral accounts + built-in rate limiting). **(2)** `docs/wiki/README.md` updated. **(3)** `app/templates/wiki.html` updated.
+**Description (cont):** Why operator-facing instead of design-rationale-replicating. The existing `docs/plans/demo-mode.md` covers the *why* (architectural tradeoffs, alternatives considered, deferred work). The wiki guide covers the *what* (here's the env var, here's what it does, here's the seed contents you can expect, here's how to debug). Both serve different readers; cross-link rather than duplicate.
+**Description (cont 2):** Why the 12-PC table breakdown. Operators standing up a public demo want to know what's in the box before they let visitors loose. Listing the 12 demo characters by name + class makes the demo's coverage concrete — "this is what every PHB class plays like at Lv 5". Side effect: it's the only place outside the seeder code where the full demo roster is enumerated, so a future audit can spot-check this against `app/demo_seed.py` for drift.
+
+### Added
+- `docs/wiki/demo-mode.md` — Tier 3 operator how-to.
+
+### Changed
+- `docs/wiki/README.md` — "Available guides" updated.
+- `app/templates/wiki.html` — same.
+
+### Notes
+- **What to test:** open `/wiki/demo-mode` — markdown renders through the wiki_md.html theme wrapper. Tables (seed contents + env vars) render with the standard styling. The `diff` code block at the top renders in monospace with the theme's `--bg-2` background.
+- **Backward compat.** Doc-only.
+
+### Recommended-first-7 complete
+
+The seven-guide priority sequence from `docs/plans/wiki-expansion.md` is now done:
+
+| # | Guide | Tier | Commit |
+|---|-------|------|--------|
+| 1 | Realtime broadcasts catalog | 0 | `8179caa` v2.43.14 |
+| 2 | Endpoint catalog | 0 | `2055d18` v2.43.15 |
+| 3 | Architecture overview | 0 | `bd43a9e` v2.43.16 |
+| 4 | First-run setup | 1 | `9b37df4` v2.43.17 |
+| 5 | Running a session as GM | 1 | `5de9519` v2.43.18 |
+| 6 | The character sheet | 1 (new) | `be8f227` v2.43.19 |
+| 7 | Demo mode | 3 (new) | `acf3c1a` v2.43.21 (this commit) |
+
+The remaining wiki TODO entries (Tier 2 system explainers + Tier 3 customization + Tier 4 reference cards) can be picked off in any order — Tier 0 + the operator-onboarding chain are in place so cross-links resolve.
+
+### Next up
+
+Open ground. Per the plan, candidate next batches:
+- **Tier 2 system explainers** (action-economy, targeting, buff slots, damage flow, auto-resolution, test harness, SRD content, schema migrations) — these unblock contributor onboarding.
+- **Tier 1 remaining operator how-tos** (inviting players, building an encounter, maps + grids + tokens, homebrew authoring, player onboarding, backups + restore, theming) — finish the operator onboarding sequence.
+- **The 15 net-new pages from the plan** (character sheet ✅, initiative tracker drawer, target picker modal, encounters CRUD walkthrough, roll requests, death-saves state machine, demo mode ✅, self-host upgrade, troubleshooting/FAQ, mobile/browser support, visibility model, spell content library, monster bestiary, item flow, multi-user concurrency).
+
+---
+
 ## [2.43.20] - 2026-05-20
 
 **Schema version:** 56
