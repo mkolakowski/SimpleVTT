@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.46.4] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Phase T.7b.2 — self-anchored cube shape (Thunderwave-style).** Adds `self_cube` as the sixth shape in the `_aoePicker` dispatch table. Self-anchored cubes (Thunderwave's "15 ft cube originating from you") extend from the caster's token in the cursor direction with edge = `size_ft`. Math is mechanically identical to the v2.46.0 line shape but with `width = length` (square cross-section); rather than duplicate the geometry, the picker shares the same axial-projection + perpendicular-distance hit-test, just with the half-width derived from `len_px / 2` instead of `secondary_ft`. Caster-filter (already in place for `self_sphere`) is extended to `self_cube` too. Adds Thunderwave to Lyra's prepared Lv 1 spell list. PATCH — additive shape, no API change, follows the v2.45.0 dispatch pattern.
+**Description:** Three edits. **(1)** `app/static/tabletop.js` — added `'self_cube'` to the origin-resolution branch in `start()`; added a `self_cube` hit-test that mirrors the `line` geometry with `halfW = len_px / 2`; added a `self_cube` render branch (same rectangle math as line, just with `halfW = len / 2`); extended the caster-token filter in `commit()` to skip both `self_sphere` AND `self_cube` self-anchored shapes; added a `self_cube` hint-chip label ("<size_ft> ft cube from you · aim with cursor · click to fire"). **(2)** `app/templates/sheet_dnd5e.html` — added `'self_cube'` to the `_AOE_SHAPES` allowlist. **(3)** `app/data/local/dnd5e/spells/thunderwave.json` — empty `area` block filled with `shape: "self_cube"`, `size_ft: 15`. **(4)** `app/demo_seed.py` Lyra block — added Thunderwave at Lv 1 prepared (Bard spell list).
+**Description (cont):** Why a distinct `self_cube` shape name instead of routing Thunderwave through the existing `cube` shape with a "self-anchored" flag. The picker dispatches on the `shape` string, and adding an axis-perpendicular `origin: "self" | "cursor"` flag would expand the decision matrix without making invalid combinations impossible (you'd have `(shape, origin)` pairs where most are nonsense — a "self-anchored sphere placed at cursor" doesn't exist). Distinct shape names keep the dispatch table flat and the JSON self-describing — a future spell-card summary can read `area.shape` and print "Cube (from you)" without parsing flags.
+**Description (cont 2):** Why no grid-axis snap. RAW, 5e cubes are technically axis-aligned to the grid (only 4 cardinal directions from the caster). Most digital tools (Roll20, FoundryVTT) snap; D&D Beyond doesn't. I chose to NOT snap for v1: free rotation gives the GM more positional flexibility, and the visual cube is unambiguous about its orientation. If a cardinal-snap turns out to be desirable for grid players, it's a one-line addition to the render branch (round `ax, ay` to the nearest of `(±1, 0)` or `(0, ±1)`). Filed as a follow-up.
+
+### Added
+- `app/static/tabletop.js` — `self_cube` hit-test + render + caster-filter + hint-chip label.
+- `app/data/local/dnd5e/spells/thunderwave.json` — `area.shape = "self_cube"`, `area.size_ft = 15`.
+- `app/templates/sheet_dnd5e.html` — `self_cube` in the AoE-shape allowlist.
+- `app/demo_seed.py` — Thunderwave prepared on Lyra (Bard).
+
+### Notes
+- **What to test:** open `/campaign/1` as GM after rebuild. Open Lyra's mini-sheet, expand Spells, click Cast on Thunderwave. A 15 ft / 3-square flame-orange square anchored at Lyra's token should pivot with the cursor (free rotation, no grid snap); bandits inside light up yellow but Lyra herself is NOT highlighted (the caster-filter excludes her). Click to fire — CON saves auto-roll for NPCs, 2d8 thunder applies on fail/half on save. Confirm the previous five shapes (sphere, cone, line, cube, self_sphere) still work from their respective casters. Verify the multi-target pill row from v2.46.3 renders nicely on a Thunderwave that hits 3+ mooks.
+- **Backward compat.** Pure additive. The 208 harness tests still pass.
+
+### Filed
+- **Cardinal-snap for self_cube.** RAW 5e cubes are axis-aligned (4 cardinal directions). One-line render-branch addition: round the axis vector to the nearest cardinal. Until then, free rotation.
+
+---
+
 ## [2.46.3] - 2026-05-20
 
 **Schema version:** 56

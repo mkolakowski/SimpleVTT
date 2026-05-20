@@ -329,7 +329,8 @@
             // character (off-map / token not placed), bail with a
             // null resolve so the cast handler can surface an error.
             this.origin = null;
-            if (this.shape === 'cone' || this.shape === 'line' || this.shape === 'self_sphere') {
+            if (this.shape === 'cone' || this.shape === 'line'
+                    || this.shape === 'self_sphere' || this.shape === 'self_cube') {
                 this.origin = _aoePicker._resolveOrigin(opts.char_id);
                 if (!this.origin) {
                     this._cleanup();
@@ -367,10 +368,11 @@
             for (const t of tokens) {
                 if (t.is_hidden && !ME.isGm) continue;
                 // Self-anchored shapes never target the caster
-                // themselves — Spirit Guardians, Antimagic Field, etc.
-                // affect "creatures of your choice within range", which
-                // by convention excludes the caster.
-                if (this.shape === 'self_sphere'
+                // themselves — Spirit Guardians, Antimagic Field,
+                // Thunderwave etc. affect creatures "originating from"
+                // or "around" the caster, which by RAW convention
+                // excludes the caster.
+                if ((this.shape === 'self_sphere' || this.shape === 'self_cube')
                         && this.casterCharId
                         && t.character_id === this.casterCharId) {
                     continue;
@@ -441,6 +443,23 @@
                 // area but is filtered out below in the commit so the
                 // PC doesn't roll a save against their own spell.
                 return Math.hypot(tcx - this.origin.x, tcy - this.origin.y) <= len_px;
+            }
+            if (this.shape === 'self_cube' && this.origin) {
+                // Self-anchored cube (Thunderwave): extends from the
+                // caster's square in the cursor direction with edge =
+                // size_ft. Math is identical to ``line`` but with
+                // width = length (square cross-section). Half-width =
+                // edge / 2.
+                const ox = this.origin.x, oy = this.origin.y;
+                const adx = canvasX - ox, ady = canvasY - oy;
+                const amag = Math.hypot(adx, ady);
+                if (amag < 1) return false;
+                const ax = adx / amag, ay = ady / amag;
+                const rx = tcx - ox, ry = tcy - oy;
+                const par = rx * ax + ry * ay;
+                const perp = Math.abs(rx * (-ay) + ry * ax);
+                const halfW = len_px / 2;
+                return par >= 0 && par <= len_px && perp <= halfW;
             }
             return false;
         },
@@ -513,6 +532,9 @@
         } else if (shape === 'self_sphere') {
             shapeLabel = 'emanation';
             verb = 'click to confirm';
+        } else if (shape === 'self_cube') {
+            shapeLabel = 'cube from you';
+            verb = 'aim with cursor · click to fire';
         } else {
             shapeLabel = 'sphere';
             verb = 'click to place';
@@ -833,6 +855,31 @@
                 const ax = adx / amag, ay = ady / amag;
                 const px = -ay, py = ax;
                 const halfW = (_aoePicker.secondary_ft / 5) * gridSize / 2;
+                const farX = ox + ax * len, farY = oy + ay * len;
+                ctx.beginPath();
+                ctx.moveTo(ox  + px * halfW, oy  + py * halfW);
+                ctx.lineTo(farX + px * halfW, farY + py * halfW);
+                ctx.lineTo(farX - px * halfW, farY - py * halfW);
+                ctx.lineTo(ox  - px * halfW, oy  - py * halfW);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.arc(ox, oy, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#dc2626';
+                ctx.fill();
+            } else if (_aoePicker.shape === 'self_cube' && _aoePicker.origin) {
+                // Same rectangle as line, but width = length (square
+                // cross-section). Thunderwave-style: one face of the
+                // cube touches the caster's square; the cube extends
+                // in the cursor direction.
+                const ox = _aoePicker.origin.x, oy = _aoePicker.origin.y;
+                const adx = cx - ox, ady = cy - oy;
+                const amag = Math.hypot(adx, ady) || 1;
+                const ax = adx / amag, ay = ady / amag;
+                const px = -ay, py = ax;
+                const halfW = len / 2;
                 const farX = ox + ax * len, farY = oy + ay * len;
                 ctx.beginPath();
                 ctx.moveTo(ox  + px * halfW, oy  + py * halfW);

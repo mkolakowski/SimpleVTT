@@ -44,8 +44,8 @@
       "transform_picker": "",
       "upcast": [],
       "area": {
-        "shape": "",
-        "size_ft": 0,
+        "shape": "self_cube",
+        "size_ft": 15,
         "secondary_ft": 0
       }
     }

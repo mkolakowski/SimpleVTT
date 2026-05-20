@@ -775,6 +775,12 @@ def _bard_sheet(name: str) -> dict:
             {"name": "Cure Wounds", "level": 1, "prepared": True, "_slug": "cure-wounds", "casting_time": "1 action"},
             {"name": "Faerie Fire", "level": 1, "prepared": True, "_slug": "faerie-fire", "casting_time": "1 action"},
             {"name": "Heroism", "level": 1, "prepared": True, "_slug": "heroism", "casting_time": "1 action"},
+            # v2.46.4 — Thunderwave exercises the T.7b.2 self-anchored
+            # cube picker: 15 ft cube originating from the caster,
+            # aimed via the cursor. Bard list, CON save vs thunder.
+            {"name": "Thunderwave", "level": 1, "prepared": True, "_slug": "thunderwave",
+             "casting_time": "1 action", "damage": "2d8", "save_ability": "CON",
+             "desc": "15 ft cube from caster (aim with cursor), CON save DC 14 for half. 2d8 thunder. Push 10 ft on fail."},
             {"name": "Suggestion", "level": 2, "prepared": True, "_slug": "suggestion", "casting_time": "1 action"},
             {"name": "Invisibility", "level": 2, "prepared": True, "_slug": "invisibility", "casting_time": "1 action"},
             {"name": "Hold Person", "level": 2, "prepared": True, "_slug": "hold-person", "casting_time": "1 action"},
