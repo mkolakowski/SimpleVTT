@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.47.2] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Fix — desktop right-click pan suppressed by the v2.21.2 iPad-trackpad pointerdown handler.** The v2.21.2 commit added a `pointerdown` listener to handle iPad Pro Magic Keyboard trackpad two-finger taps (where iOS Safari sometimes suppresses the follow-up `contextmenu` event). That handler calls `_handleRightClick(ev)` which calls `ev.preventDefault()`. Per the W3C Pointer Events spec, calling `preventDefault()` on `pointerdown` suppresses the subsequent compatibility `mousedown` — and the mousedown right-click branch is what sets up the pan state. Result: on desktop Chrome (which has been tightening enforcement of this rule), right-click drag stops working but zoom (wheel, not pointer) keeps working. v2.47.1's removal of the mousedown right-click intercept didn't help because the mousedown was being suppressed at the pointerdown layer. Fix: gate the pointerdown handler on `navigator.maxTouchPoints > 0` so it only fires on touch-capable devices (iPad). Desktop mice fall through to the existing contextmenu handler, which fires AFTER mouseup and doesn't interfere with pan.
+**Description:** One edit. `app/static/tabletop.js` `_handleRightClickPointer` — added `if (!navigator.maxTouchPoints) return;` gate at the top, with an inline comment explaining the spec interaction. iPad (where `navigator.maxTouchPoints > 0` because the device has a touchscreen even when a trackpad is connected) still gets the pointerdown right-click → sheet-open path. Desktop mice (where `maxTouchPoints === 0`) skip the pointerdown handler entirely and rely on the contextmenu handler.
+**Description (cont):** Why `navigator.maxTouchPoints` instead of UA sniffing. UA strings are unreliable (iPad Safari masquerades as "Macintosh" by default in iPadOS 13+). `maxTouchPoints` is the official feature-detection signal for "this device has a touchscreen" — true on iPad, false on regular Mac/PC. Trackpad-only devices like Magic Trackpad on Mac without a touchscreen would also return 0, so they fall into the desktop path — which is correct (their contextmenu fires normally).
+**Description (cont 2):** Why v2.47.1's fix didn't resolve this. v2.47.1 removed the mousedown right-click intercept, which would have helped if the picker state was stuck. But the actual root cause was that the pointerdown was suppressing the mousedown entirely — the picker-state hypothesis from v2.47.1 was wrong. The user reported "cursor changes to grab on hover but right-click is fully ignored," which is the signature of mousedown not firing (no cursor change to 'move', no panning state set). This patch addresses the actual root cause.
+**Description (cont 3):** Why no harness test. The bug is a browser-spec-interaction edge case that the Python harness (HTTP + WS only) and Playwright smoke harness (basic click-through) don't reach. A test would need to inject pointerdown events with preventDefault, verify mousedown doesn't fire, and verify the gating check makes it fire — all of which is more test infrastructure than the one-line fix warrants. Filing the broader "test canvas event handlers" gap for a future audit.
+
+### Fixed
+- `app/static/tabletop.js` `_handleRightClickPointer` — gated on `navigator.maxTouchPoints > 0` so desktop mice fall through to the contextmenu handler instead of having their mousedown suppressed by pointerdown's `preventDefault()`.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM in a desktop browser after rebuild + hard refresh (Cmd+Shift+R / Ctrl+Shift+R). Right-click + drag on the map — cursor should change to "move" and the map should pan. Release — cursor returns to "grab". Right-click on a token — context menu suppressed, sheet drawer opens. On iPad Pro with Magic Keyboard trackpad, two-finger tap on a token still opens the sheet drawer (the pointerdown path still runs because `maxTouchPoints > 0`).
+- **Backward compat.** Pure bug fix; no API change. All 209 harness tests still pass.
+
+### Filed
+- **Harness coverage for canvas event handlers.** The pan / drag / pointer-event interactions aren't tested today; a regression like this slipped through. Future test infrastructure could synthesize pointer events and assert the mouse compatibility events fire.
+
+---
+
 ## [2.47.1] - 2026-05-20
 
 **Schema version:** 56

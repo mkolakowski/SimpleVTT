@@ -1258,17 +1258,25 @@
     // between the cursor and the canvas at right-click time.
     mapPane.addEventListener('contextmenu', _handleRightClick);
 
-    // v2.21.2: iPad Pro Magic Keyboard trackpad — two-finger tap or
-    // Control+click fires ``pointerdown`` with ``button === 2`` and
-    // ``pointerType === 'mouse'``, but iOS Safari sometimes suppresses
-    // the subsequent ``contextmenu`` event (intercepted by the system
-    // text-selection long-press menu). Adding a ``pointerdown`` path
-    // covers the trackpad gesture independently. The ``button !== 2``
-    // and ``pointerType === 'touch'`` filters keep this from
-    // intercepting normal clicks / drag-starts / touchscreen taps.
+    // v2.21.2 / v2.47.2 fix: iPad Pro Magic Keyboard trackpad fires
+    // ``pointerdown`` with ``button === 2`` and ``pointerType ==
+    // 'mouse'`` for two-finger tap / Control+click, but iOS Safari
+    // sometimes suppresses the subsequent ``contextmenu`` event
+    // (intercepted by the system text-selection long-press menu), so
+    // this pointerdown path was added to cover the trackpad gesture.
+    //
+    // v2.47.2 — gate on ``navigator.maxTouchPoints > 0`` so this
+    // handler only fires on touch-capable devices (iPad). On desktop
+    // mice, ``_handleRightClick`` calls ``preventDefault()`` which
+    // per the W3C Pointer Events spec suppresses the subsequent
+    // ``mousedown`` — and that mousedown is what starts pan. So on
+    // desktop, let the contextmenu handler do the work (it fires
+    // after mouseup, so pan completes first) and skip pointerdown
+    // entirely.
     function _handleRightClickPointer(ev) {
         if (ev.button !== 2) return;            // only right button
         if (ev.pointerType === 'touch') return; // touchscreen tap, not trackpad
+        if (!navigator.maxTouchPoints) return;  // desktop mouse — contextmenu handles it
         _handleRightClick(ev);
     }
     canvas.addEventListener('pointerdown', _handleRightClickPointer);
