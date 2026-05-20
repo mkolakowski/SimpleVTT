@@ -2,20 +2,17 @@
 {% block title %}Wiki — SimpleVTT{% endblock %}
 {% block head %}
 <style>
+  /* v2.43.10: documentation column is centered in the viewport via
+     max-width + margin: 0 auto so there's equal space to the left
+     and right. Everything inside (text, headings, lists, table) is
+     left-justified — the v2.43.9 ``text-align: center`` experiment
+     made centered prose hard to read; reverted to the natural
+     left-aligned flow. */
   .wiki-wrap {
-      max-width: 920px;
+      max-width: 820px;
       margin: 0 auto;
-      padding: 20px 8px 60px;
-      text-align: center;
+      padding: 20px 36px 60px;
   }
-  /* v2.43.9: center the structural elements. Long-form prose +
-     bullet lists stay left-aligned + capped for readability —
-     centered paragraphs past one line are fatiguing. */
-  .wiki-wrap h1, .wiki-wrap h2, .wiki-wrap h3 { text-align: center; }
-  .wiki-wrap .lede { text-align: center; }
-  .wiki-wrap p { text-align: left; max-width: 760px; margin-left: auto; margin-right: auto; }
-  .wiki-wrap ul, .wiki-wrap ol { display: inline-block; text-align: left; }
-  .wiki-wrap table { margin-left: auto; margin-right: auto; }
   .wiki-wrap h1 {
       font-size: 24px;
       letter-spacing: 0.2px;

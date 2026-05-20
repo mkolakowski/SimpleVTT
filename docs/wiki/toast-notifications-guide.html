@@ -26,27 +26,27 @@
     --accent-border: color-mix(in srgb, var(--accent) 35%, var(--border));
   }
 
+  /* v2.43.10: documentation column is centered in the viewport via
+     max-width + margin: 0 auto so there's equal space to the left
+     and right. Everything inside (text, headings, lists, mocks) is
+     left-justified — the v2.43.9 ``text-align: center`` experiment
+     made centered prose hard to read; reverted to the natural
+     left-aligned flow. The h4 callouts in the gallery sections that
+     v2.43.9 set inline to ``text-align: center`` are reset below. */
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background: var(--bg);
     color: var(--fg);
-    max-width: 1100px;
+    max-width: 880px;
     margin: 0 auto;
-    padding: 28px 24px 80px;
+    padding: 28px 36px 80px;
     line-height: 1.5;
-    text-align: center;
   }
-  /* v2.43.9: center-align headings + mocks + lists (the structural
-     elements). Long-form paragraphs stay left-aligned + capped at
-     800 px for comfortable reading. */
-  h1, h2, h3 { text-align: center; }
-  .lede { text-align: center; }
-  p { text-align: left; max-width: 800px; margin-left: auto; margin-right: auto; }
-  ul, ol { display: inline-block; text-align: left; }
-  table { margin-left: auto; margin-right: auto; }
-  .timeline { margin-left: auto; margin-right: auto; max-width: 700px; }
-  pre { display: inline-block; text-align: left; }
-  .callout { max-width: 800px; margin-left: auto; margin-right: auto; }
+  /* The gallery section's h4 labels had inline ``style="text-align:center"``
+     in v2.43.9. Override back to left-align so they match the rest of
+     the page. */
+  h4[style*="text-align:center"] { text-align: left !important; }
+  p[style*="text-align:center"]  { text-align: left !important; }
   h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
   h1 .version { font-size: 12px; color: var(--fg-mute); font-weight: 400; margin-left: 8px; }
   .lede { font-size: 14px; color: var(--fg-mute); margin: 6px 0 24px; }

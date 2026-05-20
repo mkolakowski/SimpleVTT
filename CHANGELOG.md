@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.10] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Revert v2.43.9's `text-align: center` on wiki pages — center the documentation column with equal margins instead, text inside stays left-justified.** v2.43.9 read "center aligned" too literally: it set `text-align: center` on the body + headings + mocks, which made centered prose hard to read past one line. The intent was "center the documentation column so the page has equal space on the left and right — but keep the text itself left-aligned" (standard typography for long-form docs). v2.43.10 reverts the centering, drops the column width from 1100 px / 920 px to a tighter 880 px / 820 px (so the side-gutters are more visible), and pads horizontally by 36 px. PATCH — docs polish; no schema or contract changes.
+**Description:** Three edits. **(1)** `docs/wiki/roll-log-guide.html` — removed `text-align: center`, removed the per-element centering overrides (`h1/h2/h3`, `.lede`, `p`, `ul/ol`, `table`, `.roll-card`, `.col2`). New body: `max-width: 880px; margin: 0 auto; padding: 28px 36px 80px;`. Natural left-aligned flow inside the column. **(2)** `docs/wiki/toast-notifications-guide.html` — same revert + override rules for the gallery section's `<h4 style="text-align:center">` callouts (v2.43.9 set them inline; v2.43.10 uses `[style*="text-align:center"]` selectors with `!important` to override the inline style back to left-aligned). **(3)** `app/templates/wiki.html` — `.wiki-wrap` reset: `max-width: 820px; padding: 20px 36px 60px;` and dropped the centering rules.
+**Description (cont):** Why drop the column width. With `max-width: 1100px` the documentation took up most of the viewport — the "equal space left and right" the user asked for wasn't visible because the column WAS the viewport. Tightening to 820–880 px gives ~50 px of breathing room per side on a typical 1280 px laptop screen and ~300 px per side on a 1920 px monitor. Padding inside the column grew from 24 px → 36 px so the text doesn't kiss the visible column edge.
+**Description (cont 2):** Why `!important` on the override selectors. The v2.43.9 gallery added inline `style="text-align: center"` to each `<h4>` label. Inline styles have specificity (0, 1, 0, 0) — higher than any class/element selector. The only way to override without editing every gallery `<h4>` (~24 of them) is `!important` on a selector that matches the inline-style attribute pattern. Cleaner than a 24-line replace, but explicitly noted as a temporary measure — a future commit can scrub the inline styles from the gallery markup entirely.
+
+### Changed
+- `docs/wiki/roll-log-guide.html` — body returns to standard left-aligned flow; column tightened to 880 px with 36 px horizontal padding.
+- `docs/wiki/toast-notifications-guide.html` — same revert + `!important` overrides for the v2.43.9 inline-style centered labels in the gallery sections.
+- `app/templates/wiki.html` — `.wiki-wrap` reset to standard flow at 820 px.
+
+### Notes
+- **What to test:** open `/wiki`, `/wiki/roll-log-guide`, `/wiki/toast-notifications-guide`. The documentation column is visibly centered in the viewport with equal margins to the left and right. All text inside — headings, paragraphs, lists, table cells, gallery labels — is left-justified.
+- **Backward compat.** Pure CSS polish; no code change.
+
+---
+
 ## [2.43.9] - 2026-05-19
 
 **Schema version:** 56
