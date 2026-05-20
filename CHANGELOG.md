@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.2] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **New `docs/wiki/` doc hub with a TODO roadmap; moved `roll-log-guide.html` into it as the first guide.** Scaffolds an in-repo wiki for contributor + operator documentation. The roll-log visual guide that landed in v2.42.4 (and was rewritten in v2.43.0 / v2.43.1) becomes the first entry. The new `docs/wiki/README.md` is a landing page with an "Available guides" table + a structured TODO list of how-to guides (first-run setup, running a session, building an encounter, homebrew authoring, backups, theming) + system explainers (architecture, action-economy, targeting, buff slots, damage flow, auto-resolution, roll log, test harness, SRD content, schema migrations, realtime broadcasts) + reference cards (card-variant index, theme palette, endpoint catalog) so future contributors have a clear backlog to chip away at. PATCH — pure docs-organization change; no code touched.
+**Description:** Two edits. **(1)** `git mv docs/roll-log-guide.html docs/wiki/roll-log-guide.html` — the visual roll-log guide moves under the new wiki root so guides cluster together. The HTML is self-contained (inline CSS) so its `file://` open behavior survives the move. The internal "companion to `docs/roll-log-card-layout.md`" reference stays accurate because the markdown layout doc didn't move. **(2)** New `docs/wiki/README.md` — landing page with: (a) a paragraph framing what the wiki is + how it complements `README.md` / `CHANGELOG.md` / `CLAUDE.md` / the existing `docs/*.md` references; (b) an "Available guides" table listing the roll-log guide; (c) a multi-section TODO list of guides to write, grouped by audience (operator / GM how-tos vs. contributor system explainers vs. reference cards); (d) a "Contributing guides" note describing the slug + version + self-contained-HTML conventions for new guides.
+**Description (cont):** Why a TODO checklist not actual draft pages. The user explicitly asked for a TODO list of pending guides, not the guides themselves. Putting unwritten guides as `- [ ]` checkboxes makes the backlog visible to anyone landing on the wiki (and discoverable to future contributors via `grep -r "TODO"`). Each unchecked item is a self-contained task — when somebody writes the guide, they tick the box and add the row to the "Available guides" table.
+**Description (cont 2):** Why under `docs/wiki/` not at `docs/`. Three reasons: (a) keeps the existing `docs/*.md` references (`roll-log-card-layout.md`, `test-harness-coverage.md`, `encounters-plan.md`, `multi-system-refactor.md`) as their own first-class peers — they're not "wiki guides", they're canonical reference docs / plans; (b) gives a clear directory to grow into (one folder per guide format, sortable by filename); (c) makes the GitHub Wiki distinction explicit — this is an *in-repo* wiki, versioned alongside the code, deliberately not the separate GitHub Wiki repo (which can't be auto-tested or doc-linted from CI).
+
+### Added
+- `docs/wiki/README.md` — wiki landing page + TODO roadmap for how-to guides and system explainers.
+
+### Changed
+- `docs/roll-log-guide.html` → `docs/wiki/roll-log-guide.html` (`git mv`).
+
+### Notes
+- **What to test:** open `docs/wiki/README.md` (or browse it on GitHub) — the table should list the roll-log guide with a link that resolves. Click into `roll-log-guide.html` — the inline CSS still renders correctly post-move. The TODO list groups guides by audience.
+- **Backward compat.** Inside the repo, anything that referenced the old path `docs/roll-log-guide.html` is now broken; a `grep` confirmed only `CHANGELOG.md` mentioned it (in v2.42.4 / v2.43.0 / v2.43.1 entries) and those are archival history that should not be rewritten. New entries reference the new path.
+
+---
+
 ## [2.43.1] - 2026-05-19
 
 **Schema version:** 56
