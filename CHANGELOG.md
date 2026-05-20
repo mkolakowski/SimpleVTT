@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.17] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Wiki plan exec #4 — First-run setup guide.** Tier 1 doc #1 — opens the operator onboarding sequence. New `docs/wiki/first-run-setup.md` is the end-to-end walkthrough for a fresh stand-up: docker prereqs, repo clone, env config, compose up, first user registration, admin auto-promotion, campaign creation, player invite (two flows), map + token upload, smoke test (dice roll + weapon attack), backup setup, HTTPS reverse-proxy notes, demo-mode opt-in, troubleshooting. Targets the 30-minute path from `git clone` to a working session with a GM + a player + a working dice roll. PATCH — additive doc.
+**Description:** Three edits. **(1)** New `docs/wiki/first-run-setup.md` — 12-step walkthrough with copy-pasteable commands. Each step includes verification (curl /healthz, browser flows, what to look for in logs). Notable choices: the `APP_SECRET_KEY` generation command (`python -c "import secrets; print(secrets.token_urlsafe(48))"`) is inline so operators don't have to leave the page; the env-var table shows both default + when-to-change for the 7 vars that matter on day one; the "What to do next" closing table threads to every Tier 1+3 sibling guide so the operator has a clear discovery path. **(2-3)** Both wiki indexes updated; TODO ticked.
+**Description (cont):** Why a 12-step format with verification per step. Operator onboarding fails most often at silent steps (the server boots but auth doesn't work; the migration applies but seeded data isn't there). Per-step verification with concrete output ("→ `{"ok":true,"app_version":...}`") gives the operator a fail-fast checkpoint at every transition. The troubleshooting section at the bottom captures the five failure modes that have come up in self-host attempts: stale `APP_SECRET_KEY` placeholder, browser cache after upgrade, expired-session JSON exposure, visibility setting confusion, migration rollback path.
+**Description (cont 2):** Why two invite flows. The default `APP_ALLOW_LOCAL_REGISTRATION=true` enables the simpler "send a URL to your player" flow. The `false` variant is for instance operators who want zero stranger signups — they create accounts via the admin panel + share temp credentials. Both flows are documented so the operator picks per-instance.
+
+### Added
+- `docs/wiki/first-run-setup.md` — Tier 1 operator onboarding guide.
+
+### Changed
+- `docs/wiki/README.md` — "Available guides" + TODO updated.
+- `app/templates/wiki.html` — same.
+
+### Notes
+- **What to test:** open `/wiki/first-run-setup` — the markdown renders through the wiki_md.html theme wrapper. Code blocks (the `diff` example, the curl commands, the python secret-key snippet) render in monospace with the theme's `--bg-2` background. The 12-step structure is scannable via the `<h2>` numbered headers.
+- **Backward compat.** Doc-only; no code, schema, or contract changes.
+
+### Next up (from `docs/plans/wiki-expansion.md` recommended ship order)
+- **#5 Running a session as GM** (Tier 1) — densest GM guide; cross-references action-economy, targeting, initiative, encounter snapshots.
+- **#6 The character sheet** (Tier 1, new) — anatomy of the most-touched player surface.
+- **#7 Demo mode** (Tier 3, new) — promote from `docs/plans/demo-mode.md`.
+
+---
+
 ## [2.43.16] - 2026-05-20
 
 **Schema version:** 56

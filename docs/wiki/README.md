@@ -20,6 +20,7 @@ This wiki complements the canonical references that live elsewhere in the repo:
 | [Realtime broadcasts catalog](realtime-broadcasts-catalog.md) | Markdown (reference) | Contributors | ✅ shipped (v2.43.14) |
 | [Endpoint catalog](endpoint-catalog.md) | Markdown (reference) | Contributors | ✅ shipped (v2.43.15) |
 | [Architecture overview](architecture-overview.md) | Markdown (system map) | Contributors | ✅ shipped (v2.43.16) |
+| [First-run setup](first-run-setup.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.17) |
 
 ## TODO — guides to write
 
@@ -27,7 +28,7 @@ This wiki is a stub. The list below is what we want it to grow into.
 
 ### How-to guides (operator + GM-facing)
 
-- [ ] **First-run setup.** Stand up a fresh `docker compose up`, register the first user, create a campaign, invite players, and run a first session. Where the seed data goes; how to disable demo mode; how to reset the database.
+- [x] **First-run setup.** Stand up a fresh `docker compose up`, register the first user, create a campaign, invite players, and run a first session. Where the seed data goes; how to disable demo mode; how to reset the database. → [first-run-setup.md](first-run-setup.md).
 - [ ] **Inviting players.** The two membership flows (open registration vs invite-only), GM colors, per-player portrait, the demo-user accounts.
 - [ ] **Running a session as GM.** Initiative tracker, action-economy chips, target picker, the GM Tools drawer, encounter snapshots.
 - [ ] **Building an encounter.** Encounters panel CRUD, token templates, monsters from the SRD bestiary vs homebrew, spawn-point layout, default-encounter wiring on a campaign.
