@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.42.2] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Fix spell-cast "Roll damage" button — attribute to the caster + hide on success.** Two bugs reported on v2.42.0's Fire Bolt card after a miss (where the auto-damage block doesn't fire so the manual "🎲 Roll 1d10 fire" button appears): clicking the button (a) attributed the roll to the *user's* primary PC instead of the caster of the spell (a GM rolling damage for Thalindra's miss got "Brother Tavik Stonebrow" — the GM's own PC — on the roll card), and (b) the button stayed visible + clickable after firing, with no visual commit-state. PATCH — handler bug fix; no schema or contract changes.
+**Description:** Three edits. **(1)** `app/static/tabletop.js` `appendSpellCast` — the `handlers.damage` callback now takes the button as its third argument and delegates to a new `_castDamageClick(d, damageExpr, li, btn)` helper instead of the legacy `openDamagePicker` flow. **(2)** Same file — new `_castDamageClick` helper: looks up the caster from `d.caster_char_id` in the local `characters` array, calls `rollSpellDamage(d, expr, caster, li)` directly (skipping the multi-token picker), and on success hides the button via `btn.style.display = 'none'`. On failure the button re-enables so the user can retry. Falls back to the legacy picker if `caster_char_id` isn't resolvable (NPC casts, third-party templates without a character link). **(3)** Same file `rollSpellDamage` — now returns `true` on HTTP 200 / `false` on failure so the caller can decide whether to commit the UI hide. Previously the function only toasted an error and returned undefined, which made it impossible for the new handler to distinguish success from a quietly-failed roll.
+**Description (cont):** Why skip the picker for spell-cast cards. The picker existed to disambiguate "as which token am I rolling?" — useful when the GM is rolling raw damage with no associated caster. But on a spell-cast card the caster is canonical (the spell was cast BY this character) — the note line "Fire Bolt damage (as Thalindra)" should always say Thalindra, not whichever token the GM happens to also own. The legacy `openDamagePicker` + `_myCharsForCast` flow stays in place for other callers; the change is local to the spell-cast handler.
+**Description (cont 2):** Why hide vs. disable. A disabled button still occupies space in the card and looks "broken" (greyed out / dim). Hiding it commits the card to its post-roll state — the damage chip on the (future) ▼ Result block + the new `roll` entry in the log are the receipts; the action button has served its purpose and goes away. Mirrors the heal-button pattern at `_applyHealing` line ≈2205 (`btn.style.display = 'none'` when the heal was already auto-applied).
+
+### Fixed
+- `app/static/tabletop.js` `appendSpellCast` — spell-cast "🎲 Roll {expr} {type}" damage button now attributes to the caster (`d.caster_char_id`) instead of opening the multi-token picker, and hides itself on a successful roll.
+
+### Changed
+- `app/static/tabletop.js` `rollSpellDamage` — returns boolean (true on HTTP 200, false on failure) so the new `_castDamageClick` handler can gate the button-hide on actual success.
+
+### Notes
+- **What to test:** open `/campaign/1` as the GM. Run `python3 scripts/demo_seed_rolls.py` to populate cards. On the Fire Bolt card (Thalindra → Bandit, missed), click "🎲 Roll 1d10 fire". The resulting roll-log entry's note should read "Fire Bolt damage (as Thalindra Moonwhisper)" — not "(as Brother Tavik Stonebrow)". The button itself disappears immediately after clicking, leaving the card committed to its result state.
+- **Backward compat.** No payload or endpoint changes. The display name on the spawned `roll` card is still driven by the WS broadcast's `user_id` → `USER_CHAR_NAMES` mapping (the rolling *user*, not the spell's caster), so the avatar / header in the roll card itself remains the GM's. Tagging that header with the caster's char name would need a server-side `as_char_id` param on `/roll` + a hub broadcast change — filed.
+
+### Filed
+- **`/roll` `as_char_id` param.** The note line correctly says "as Thalindra" now, but the card avatar + header name still reflect the *user* (the GM rolling on behalf of Thalindra). A follow-up would extend the `/roll` endpoint to accept an optional `as_char_id` that overrides `char_name` / `portrait_url` / `user_color` in the WS broadcast. Out of scope for this commit; the note line already disambiguates for readers.
+
+---
+
 ## [2.42.1] - 2026-05-19
 
 **Schema version:** 56

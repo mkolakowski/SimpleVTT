@@ -2134,7 +2134,7 @@
             characterLevel: d.character_level || 1,
             handlers: {
                 save:   (_action, btn) => promptSpellSave(d, li, btn),
-                damage: (_action, dmgExpr) => openDamagePicker(d, dmgExpr, li),
+                damage: (_action, dmgExpr, btn) => _castDamageClick(d, dmgExpr, li, btn),
                 heal:   (_action, btn) => _applyHealing(d, li, btn),
                 // attack and toggle handlers are wired through where consumers
                 // need them — the spell-cast card itself only uses save/damage/heal.
@@ -2707,6 +2707,36 @@
         return characters.filter(c => c.owner_user_id === ME.id);
     }
 
+    // v2.42.2: spell-cast damage button handler. The damage of a spell is
+    // attributed to the caster by definition (Fire Bolt by Thalindra → roll
+    // is "Fire Bolt damage as Thalindra") — no picker needed even for GMs
+    // who own multiple tokens. Falls through to ``openDamagePicker`` only
+    // when the caster char isn't in the local ``characters`` array (legacy
+    // safety net; shouldn't trigger in normal play).
+    async function _castDamageClick(d, damageExpr, li, btn) {
+        if (btn && btn.disabled) return;
+        const caster = d.caster_char_id
+            ? characters.find(c => c.id === d.caster_char_id)
+            : null;
+        if (!caster) {
+            // No identified caster — fall back to the legacy picker.
+            return openDamagePicker(d, damageExpr, li);
+        }
+        if (btn) btn.disabled = true;
+        try {
+            const ok = await rollSpellDamage(d, damageExpr, caster, li);
+            // Hide the button after a successful roll so the card visibly
+            // commits to the result. The roll itself lands as a new entry
+            // in the log via the WS broadcast. On failure, re-enable so the
+            // user can retry.
+            if (ok && btn) btn.style.display = 'none';
+            else if (!ok && btn) btn.disabled = false;
+        } catch (e) {
+            console.warn('spell damage roll failed:', e);
+            if (btn) btn.disabled = false;
+        }
+    }
+
     function openDamagePicker(d, damageExpr, li) {
         const choices = _myCharsForCast(d);
         if (!choices.length) {
@@ -2756,7 +2786,11 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ expression: damageExpr, visibility, note }),
         });
-        if (!resp.ok) showToast('Damage roll failed: ' + await resp.text(), 'error');
+        if (!resp.ok) {
+            showToast('Damage roll failed: ' + await resp.text(), 'error');
+            return false;
+        }
+        return true;
     }
 
     function formatBreakdown(s) {
