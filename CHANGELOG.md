@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.42.4] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **New `docs/roll-log-guide.html` — visual reference for the roll-log layout with both display modes shown side-by-side.** Standalone HTML companion to `docs/roll-log-card-layout.md`. Renders live HTML/CSS approximations of every card variant (`roll`, `weapon_attack`, `spell_cast`, `feature_used`) plus side-by-side comparisons of the verbose ▼ Result block vs. the compact pill row for three spell-cast scenarios (Healing Word heal, Hold Person save-or-suck, Fire Bolt spell attack). Also documents the toolbar toggle, auto-resolution button suppression (v2.42.3), the feature-source tag, theme adaptation across the 6 most distinctive themes, persistence + visibility filtering, and code-location pointers. PATCH — pure documentation addition.
+**Description:** One edit. **(1)** `docs/roll-log-guide.html` — new ~600-line HTML doc with inline CSS that mirrors the live dark-theme tokens from `app/static/style.css` so the embedded mocks look exactly like what you'd see on the tabletop. Self-contained: opens directly in a browser, no build step, no asset paths to resolve. Each card mockup is a real `.roll-card` / `.spell-cast-card` / `.feature-used-card` rendered with the live CSS class names (so any drift in the live styles can be spot-checked by diffing this file against `tabletop.html`'s inline style block).
+**Description (cont):** Why a side-by-side comparison instead of two separate sections. The whole point of the v2.42.0 mode toggle is that the same payload can render two ways — so the most useful reference shows both renderings of the SAME cast next to each other, not the two modes in isolation. Three scenarios (heal / save / spell-attack) cover the main result-block / chip-row patterns and let a reader see the heuristic ("verbose = block with collapsible body; compact = horizontal pill row, no body").
+**Description (cont 2):** Why HTML not Markdown. The .md companion (`docs/roll-log-card-layout.md`) already exists and covers the textual / semantic layout. This file is for *visual* reference — somebody wondering "what does the new chip row actually look like?" can open one file and see it rendered. A pure-markdown reproduction would need screenshot capture + a static asset directory, which is more maintenance than a single self-contained HTML file with inline mocks.
+
+### Added
+- `docs/roll-log-guide.html` — visual reference for the v2.42.0–v2.42.3 roll-log layout. Includes side-by-side verbose vs. compact comparisons for three spell-cast scenarios + reference renderings of `roll` / `weapon_attack` / `feature_used` cards + a theme-adaptation strip + code-location pointers.
+
+### Notes
+- **What to test:** open `docs/roll-log-guide.html` in any browser (file:// works — no build step). Confirm each mock card visually matches what the live tabletop renders for the same scenario. The "Compact: OFF" / "Compact: ON" toolbar mock in the toolbar section + the theme strips at the bottom are static — no JS interaction.
+- **Backward compat.** Doc-only commit; no code, schema, or contract changes.
+
+---
+
 ## [2.42.3] - 2026-05-19
 
 **Schema version:** 56

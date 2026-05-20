@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SimpleVTT — Roll-log guide (v2.42.3)</title>
+<style>
+  /* ── Theme tokens (mirrors the default "dark" theme from app/static/style.css) ── */
+  :root {
+    --bg:        #15171c;
+    --bg-2:      #20232a;
+    --panel:     #20232a;
+    --border:    #2c303a;
+    --input-bg:  #2a2d36;
+    --fg:        #e8e8ee;
+    --fg-mute:   #9aa0aa;
+    --accent:    #6cb4ff;
+    --danger:    #d74a4a;
+    --c-heal:    #4ade80;
+    --c-crit:    #fbbf24;
+    --c-damage:  #fb923c;
+    --c-buff:    #5ec1d6;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 24px 80px;
+    line-height: 1.5;
+  }
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    margin: 0 0 4px;
+  }
+  h1 .version {
+    font-size: 12px;
+    color: var(--fg-mute);
+    font-weight: 400;
+    margin-left: 8px;
+  }
+  .lede {
+    font-size: 14px;
+    color: var(--fg-mute);
+    margin: 6px 0 24px;
+  }
+  h2 {
+    font-size: 16px;
+    margin: 36px 0 6px;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+  h3 {
+    font-size: 13px;
+    margin: 22px 0 6px;
+    color: var(--fg);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  p, ul, ol { font-size: 14px; }
+  ul li, ol li { margin: 3px 0; }
+  code, .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    background: rgba(108, 180, 255, 0.10);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .col2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin: 10px 0 18px;
+  }
+  .col-head {
+    font-size: 11px;
+    color: var(--fg-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin: 0 0 4px;
+  }
+  .callout {
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-2));
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--fg);
+    margin: 10px 0;
+  }
+  .callout strong { color: var(--accent); }
+
+  /* ── Roll-log card shell (matches the live tabletop.css) ── */
+  .roll-card {
+    border-radius: 8px;
+    border: 1px solid rgba(167, 139, 250, 0.35);
+    background: var(--bg);
+    overflow: hidden;
+    font-size: 12px;
+    box-shadow: 0 3px 14px rgba(0, 0, 0, 0.22);
+    display: flex;
+    margin: 6px 0;
+  }
+  .roll-card.feature-used-card,
+  .roll-card.spell-cast-card { flex-direction: column; }
+
+  .roll-card-total-col {
+    width: 58px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+    border-right: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    padding: 10px 6px;
+  }
+  .roll-card-total {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .roll-card-right {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .roll-card-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px;
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.15), rgba(108, 180, 255, 0.10));
+    border-bottom: 2px solid var(--accent);
+  }
+  .roll-card-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(128, 128, 128, 0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex-shrink: 0;
+  }
+  .roll-card-user {
+    font-weight: 700; flex: 1; font-size: 12px;
+  }
+  .roll-card-time {
+    font-size: 10px; color: var(--fg-mute);
+    margin-left: auto; flex-shrink: 0;
+  }
+  .roll-card-body { padding: 6px 10px 8px; }
+  .roll-card-note {
+    font-size: 11px;
+    color: var(--fg-mute);
+    font-style: italic;
+    margin-bottom: 3px;
+  }
+  .roll-card-expr {
+    font-size: 12px; color: var(--fg-mute);
+    font-family: monospace; margin-bottom: 2px;
+  }
+  .roll-card-breakdown {
+    font-size: 11px; color: var(--fg-mute);
+    font-family: monospace;
+  }
+  .roll-card-breakdown strong { color: var(--fg); font-weight: 700; }
+  .roll-card-details summary {
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--fg-mute);
+    list-style: none;
+    padding: 2px 0;
+    min-height: 18px;
+  }
+  .roll-card-details summary::-webkit-details-marker { display: none; }
+  .roll-card-details[open] summary { color: var(--fg); }
+
+  /* Spell-cast specifics */
+  .spell-cast-slot {
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+    border-radius: 8px;
+    padding: 1px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 6px;
+  }
+  .spell-cast-name {
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 3px;
+  }
+  .target-tag {
+    background: color-mix(in srgb, var(--c-buff) 18%, transparent);
+    color: var(--c-buff);
+    border: 1px solid color-mix(in srgb, var(--c-buff) 40%, transparent);
+    border-radius: 8px;
+    padding: 1px 7px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 4px;
+  }
+  .spell-cast-meta {
+    font-size: 11px;
+    color: var(--fg-mute);
+    margin-bottom: 4px;
+  }
+
+  /* ▼ Result block (verbose mode) */
+  .result-block {
+    border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+    border-radius: 4px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .result-block > summary {
+    cursor: pointer;
+    list-style: none;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    min-height: 24px;
+  }
+  .result-block > summary::-webkit-details-marker { display: none; }
+  .result-block-summary {
+    font-weight: 400;
+    color: var(--fg-mute);
+    font-size: 11px;
+    margin-left: 6px;
+  }
+  .result-block-body { padding: 6px 8px 8px; }
+  .result-line {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 12px;
+    margin: 2px 0;
+  }
+  .result-line .label { color: var(--fg-mute); }
+  .result-line .strong { font-weight: 700; }
+
+  /* ▼ Result chips (compact mode) */
+  .result-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .result-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--fg) 8%, var(--bg-2));
+    font-size: 11px;
+    color: var(--fg);
+    min-height: 22px;
+  }
+  .result-chip.chip-heal   { border-color: var(--c-heal);   color: var(--c-heal); }
+  .result-chip.chip-hit    { border-color: var(--c-heal);   color: var(--c-heal); }
+  .result-chip.chip-miss   { border-color: var(--danger);   color: var(--danger); }
+  .result-chip.chip-crit   { border-color: var(--c-crit);   color: var(--c-crit); }
+  .result-chip.chip-damage { border-color: var(--c-damage); color: var(--c-damage); }
+  .result-chip.chip-buff   { border-color: var(--c-buff);   color: var(--c-buff); }
+  .result-chip.chip-undo {
+    border-color: var(--accent); color: var(--accent);
+    background: transparent;
+  }
+
+  /* Weapon attack-line shell */
+  .weapon-atk-line {
+    display: flex; align-items: baseline; gap: 6px;
+    padding: 4px 0;
+    font-size: 12px;
+  }
+  .weapon-atk-label { font-size: 11px; color: var(--fg-mute); }
+  .weapon-atk-total {
+    font-weight: 800; font-size: 16px;
+    color: var(--accent); width: 28px; text-align: center;
+  }
+  .weapon-atk-hit {
+    padding: 1px 6px; border-radius: 8px;
+    font-size: 11px; font-weight: 600;
+  }
+  .weapon-atk-hit.hit  { color: var(--c-heal); background: color-mix(in srgb, var(--c-heal) 12%, transparent); border: 1px solid var(--c-heal); }
+  .weapon-atk-hit.miss { color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); border: 1px solid var(--danger); }
+  .weapon-atk-hit.crit { color: var(--c-crit); background: color-mix(in srgb, var(--c-crit) 12%, transparent); border: 1px solid var(--c-crit); }
+  .weapon-atk-breakdown {
+    margin-left: auto;
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--fg-mute);
+  }
+  .weapon-atk-undo {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 14px;
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    margin-left: auto;
+  }
+
+  /* Buttons / action chips on cards (for the "before-strip" pictures) */
+  .spell-cast-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 14px;
+    padding: 3px 10px;
+    font-size: 11px;
+    margin: 4px 4px 0 0;
+    cursor: pointer;
+  }
+
+  /* Toolbar mock */
+  .rolllog-toolbar {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    background: var(--input-bg);
+    display: flex; gap: 6px; align-items: center;
+  }
+  .rolllog-toolbar button {
+    font-size: 11px;
+    padding: 4px 10px;
+    background: var(--input-bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  /* Theme cycle preview */
+  .theme-row {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 14px;
+    align-items: center;
+    margin: 6px 0;
+  }
+  .theme-name {
+    font-size: 11px;
+    color: var(--fg-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .theme-strip {
+    display: flex; gap: 4px; padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    align-items: center;
+  }
+  .theme-swatch {
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .theme-block-demo {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: auto;
+  }
+
+  .footer {
+    margin-top: 60px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--fg-mute);
+  }
+</style>
+</head>
+<body>
+
+<h1>The SimpleVTT roll-log <span class="version">v2.42.3</span></h1>
+<p class="lede">
+  Every action at the virtual table — a die roll, a weapon swing, a spell cast, a class feature use —
+  produces a card in the roll-log drawer on the right side of the tabletop. This page documents the
+  card anatomy, both display modes (<strong>verbose</strong> default + <strong>compact</strong> opt-in),
+  and how the log adapts as outcomes land.
+</p>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<h2>The toolbar — switching display modes</h2>
+<p>
+  At the top of the roll-log drawer is a single button that flips the spell-cast cards
+  between two display modes. The state persists per-user in <code>localStorage</code>
+  (key: <code>simplevtt:rolllog_mode</code>).
+</p>
+<div class="rolllog-toolbar">
+  <button type="button">Compact: OFF</button>
+</div>
+<p class="lede" style="margin-top:8px;">
+  The label reads <strong>Compact: OFF</strong> in verbose mode (default) and <strong>Compact: ON</strong>
+  in pill-row mode. Click the button to flip; the change applies to all cards rendered <em>after</em>
+  the flip (existing cards in the DOM keep the mode they were rendered with).
+</p>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<h2>Card anatomy — what's always visible vs. tucked away</h2>
+<p>
+  Every card has the same five-zone structure. The <strong>headline</strong> is always visible — total,
+  who rolled, target, time. The narrative tail (dice expression, breakdown, flavor text) lives behind a
+  <code>▾ details</code> toggle that's collapsed by default. This keeps the at-a-glance scan clean while
+  the audit trail is one tap away.
+</p>
+<div class="roll-card">
+  <div class="roll-card-total-col"><span class="roll-card-total">17</span></div>
+  <div class="roll-card-right">
+    <div class="roll-card-header">
+      <div class="roll-card-avatar">🎲</div>
+      <span class="roll-card-user">Krieger Stonefist</span>
+      <span class="roll-card-time">09:23 PM</span>
+    </div>
+    <div class="roll-card-body">
+      <div class="roll-card-note">🎯 Initiative roll · DEX +2</div>
+      <details class="roll-card-details">
+        <summary>▾ details</summary>
+        <div class="roll-card-expr">1d20+2</div>
+        <div class="roll-card-breakdown">1d20[<strong>15</strong>] + 2 = <strong>17</strong></div>
+      </details>
+    </div>
+  </div>
+</div>
+<ul>
+  <li><strong>Total column</strong> — the big number, the only thing the table needs to act on.</li>
+  <li><strong>Header</strong> — avatar, name, optional badge (<code>GM only</code> / <code>GM + you</code>), time.</li>
+  <li><strong>Note line</strong> — short narrative summary ("Initiative roll", "🎯 Greataxe → Bandit").</li>
+  <li><strong>▾ details</strong> — dice expression + per-die breakdown, collapsed by default.</li>
+</ul>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<h2>The four card variants</h2>
+
+<!-- ─── 1. roll ─── -->
+<h3>1 · <code>roll</code> — plain dice roll</h3>
+<p>
+  Emitted by <code>/roll</code>. Headline is the total + a short note ("what was rolled"). The
+  expression and breakdown live in <code>▾ details</code>. Sample above.
+</p>
+
+<!-- ─── 2. weapon_attack ─── -->
+<h3>2 · <code>weapon_attack</code> — <code>/attack</code> endpoint result</h3>
+<p>
+  Carries the attack roll <em>and</em> the damage roll inline (the dice ARE the at-a-glance point of an
+  attack card). Hit / miss / crit verdict is a badge on the attack line. When auto-apply-damage is on,
+  the damage line shows the HP delta and the ↶ Undo button so the GM can revert one click.
+</p>
+<div class="roll-card">
+  <div class="roll-card-total-col"><span class="roll-card-total">21</span></div>
+  <div class="roll-card-right">
+    <div class="roll-card-header">
+      <div class="roll-card-avatar">🗡</div>
+      <span class="roll-card-user">Krieger Stonefist</span>
+      <span class="roll-card-time">09:23 PM</span>
+    </div>
+    <div class="roll-card-body">
+      <div class="roll-card-note">🎯 Greataxe → Bandit · ✅ HIT</div>
+      <div class="weapon-atk-line">
+        <span class="weapon-atk-label">🎯 To hit</span>
+        <span class="weapon-atk-total">21</span>
+        <span class="weapon-atk-hit hit">✅ Hit <span style="opacity:0.7">(AC 12)</span></span>
+        <span class="weapon-atk-breakdown">1d20[<strong>16</strong>]+5</span>
+      </div>
+      <div class="weapon-atk-line">
+        <span class="weapon-atk-label">💥 Damage</span>
+        <span class="weapon-atk-total">9</span>
+        <span style="color:var(--c-damage);font-size:11px;">−9 HP · 50 → 41</span>
+        <button class="weapon-atk-undo">↶ Undo</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 3. spell_cast ─── -->
+<h3>3 · <code>spell_cast</code> — the richest variant + the one that has two display modes</h3>
+<p>
+  Spell-cast cards collect the spell name, target, slot level, and every auto-resolution outcome — heal
+  applied, attack roll vs. AC, save prompt / result, condition install, save-for-half damage. Because
+  there can be a lot to fit, this is the only card type that varies between the verbose <strong>▼ Result</strong>
+  block and the compact <strong>pill row</strong>.
+</p>
+
+<div class="col2">
+  <div>
+    <p class="col-head">Verbose mode (Compact: OFF) — default</p>
+    <div class="roll-card spell-cast-card">
+      <div class="roll-card-header">
+        <div class="roll-card-avatar">🪄</div>
+        <span class="roll-card-user">Brother Tavik Stonebrow</span>
+        <span class="spell-cast-slot">Lv 1 slot</span>
+        <span class="roll-card-time">09:23 PM</span>
+      </div>
+      <div class="roll-card-body">
+        <div class="spell-cast-name">🪄 Healing Word <span class="target-tag">→ Pip Quickfingers</span></div>
+        <div class="spell-cast-meta">Evocation · 1 bonus action · 60 feet</div>
+        <details class="result-block" open>
+          <summary>▼ Result <span class="result-block-summary">+5 HP · 8 → 13</span></summary>
+          <div class="result-block-body">
+            <div class="result-line">
+              <span class="label">✚ Healed</span>
+              <span class="strong" style="color:var(--c-heal)">Pip Quickfingers</span>
+              <span style="color:var(--c-heal)">+5 HP</span>
+              <span style="color:var(--fg-mute)">(8 → 13)</span>
+              <button class="weapon-atk-undo" style="margin-left:auto;">↶ Undo</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <p class="col-head">Compact mode (Compact: ON)</p>
+    <div class="roll-card spell-cast-card">
+      <div class="roll-card-header">
+        <div class="roll-card-avatar">🪄</div>
+        <span class="roll-card-user">Brother Tavik Stonebrow</span>
+        <span class="spell-cast-slot">Lv 1 slot</span>
+        <span class="roll-card-time">09:23 PM</span>
+      </div>
+      <div class="roll-card-body">
+        <div class="spell-cast-name">🪄 Healing Word <span class="target-tag">→ Pip Quickfingers</span></div>
+        <div class="spell-cast-meta">Evocation · 1 bonus action · 60 feet</div>
+        <div class="result-chips">
+          <span class="result-chip chip-heal">✚ +5 HP Pip (8 → 13)</span>
+          <button class="result-chip chip-undo">↶ Undo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="lede">
+  Side-by-side again, this time with a more involved cast: <strong>Hold Person</strong> on a bandit who
+  failed the WIS save.
+</p>
+
+<div class="col2">
+  <div>
+    <p class="col-head">Verbose mode</p>
+    <div class="roll-card spell-cast-card">
+      <div class="roll-card-header">
+        <div class="roll-card-avatar">🪄</div>
+        <span class="roll-card-user">Brother Tavik Stonebrow</span>
+        <span class="spell-cast-slot">Lv 2 slot</span>
+        <span class="roll-card-time">09:23 PM</span>
+      </div>
+      <div class="roll-card-body">
+        <div class="spell-cast-name">🪄 Hold Person <span class="target-tag">→ Bandit</span></div>
+        <div class="spell-cast-meta">Enchantment · 1 action · 60 feet · <span style="color:var(--accent)">Concentration</span></div>
+        <details class="result-block" open>
+          <summary>▼ Result <span class="result-block-summary">Bandit failed · 🥶 Paralyzed</span></summary>
+          <div class="result-block-body">
+            <div class="result-line">
+              <span class="label">📋 WIS save</span>
+              <span class="strong">Bandit:</span>
+              <span style="font-weight:700;">8</span>
+              <span class="label">vs DC 14 —</span>
+              <span style="color:var(--danger);font-weight:600;">❌ failed</span>
+            </div>
+            <div class="result-line">
+              <span class="label">🥶 Installed</span>
+              <span class="strong" style="color:var(--c-buff)">Paralyzed</span>
+              <span style="color:var(--fg-mute)">on Bandit · 10 rounds</span>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <p class="col-head">Compact mode</p>
+    <div class="roll-card spell-cast-card">
+      <div class="roll-card-header">
+        <div class="roll-card-avatar">🪄</div>
+        <span class="roll-card-user">Brother Tavik Stonebrow</span>
+        <span class="spell-cast-slot">Lv 2 slot</span>
+        <span class="roll-card-time">09:23 PM</span>
+      </div>
+      <div class="roll-card-body">
+        <div class="spell-cast-name">🪄 Hold Person <span class="target-tag">→ Bandit</span></div>
+        <div class="spell-cast-meta">Enchantment · 1 action · 60 feet · <span style="color:var(--accent)">Concentration</span></div>
+        <div class="result-chips">
+          <span class="result-chip chip-miss">📋 WIS 8/14 ❌</span>
+          <span class="result-chip chip-buff">🥶 Paralyzed · 10r</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="lede">
+  And a third variant: <strong>Fire Bolt</strong> (a spell attack that hit + applied damage).
+</p>
+
+<div class="col2">
+  <div>
+    <p class="col-head">Verbose mode</p>
+    <div class="roll-card spell-cast-card">
+      <div class="roll-card-header">
+        <div class="roll-card-avatar">🪄</div>
+        <span class="roll-card-user">Thalindra Moonwhisper</span>
+        <span class="spell-cast-slot">Cantrip</span>
+        <span class="roll-card-time">09:23 PM</span>
+      </div>
+      <div class="roll-card-body">
+        <div class="spell-cast-name">🪄 Fire Bolt <span class="target-tag">→ Bandit</span></div>
+        <div class="spell-cast-meta">Evocation · 1 action · 120 feet</div>
+        <details class="result-block" open>
+          <summary>▼ Result <span class="result-block-summary">✅ hit · −7 fire</span></summary>
+          <div class="result-block-body">
+            <div class="result-line">
+              <span class="label">🎯 Spell attack</span>
+              <span class="strong">Bandit:</span>
+              <span style="font-weight:700;">19</span>
+              <span class="label">vs AC 12 —</span>
+              <span style="color:var(--c-heal);font-weight:600;">✅ HIT</span>
+            </div>
+            <div class="result-line">
+              <span class="label">🎲 Applied</span>
+              <span class="strong" style="color:var(--c-damage)">−7 fire</span>
+              <span style="color:var(--fg-mute)">(41 → 34 HP)</span>
+              <button class="weapon-atk-undo" style="margin-left:auto;">↶ Undo</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <p class="col-head">Compact mode</p>
+    <div class="roll-card spell-cast-card">
+      <div class="roll-card-header">
+        <div class="roll-card-avatar">🪄</div>
+        <span class="roll-card-user">Thalindra Moonwhisper</span>
+        <span class="spell-cast-slot">Cantrip</span>
+        <span class="roll-card-time">09:23 PM</span>
+      </div>
+      <div class="roll-card-body">
+        <div class="spell-cast-name">🪄 Fire Bolt <span class="target-tag">→ Bandit</span></div>
+        <div class="spell-cast-meta">Evocation · 1 action · 120 feet</div>
+        <div class="result-chips">
+          <span class="result-chip chip-hit">🎯 19/12 ✅</span>
+          <span class="result-chip chip-damage">🎲 −7 fire (41 → 34)</span>
+          <button class="result-chip chip-undo">↶ Undo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── 4. feature_used ─── -->
+<h3>4 · <code>feature_used</code> — class features, racial traits, items</h3>
+<p>
+  Class features (Second Wind, Rage, Lay on Hands, Cunning Action, Channel Divinity, …) get their own
+  card variant. The header carries a "Class Feature" / "Item" / "Racial Trait" / "Feat" tag — parallel
+  to how spell-cast cards show "Cantrip" or "Lv 1 slot". If the feature has limited uses, a counter chip
+  <code>(0/1 left)</code> appears in the body row. Dice rolls (Second Wind's d10, Lay on Hands' point
+  spend) fire as separate dice toasts; the card stays clean.
+</p>
+<div class="roll-card feature-used-card">
+  <div class="roll-card-header">
+    <div class="roll-card-avatar">✨</div>
+    <span class="roll-card-user">Garrik Ironside</span>
+    <span class="spell-cast-slot">Class Feature</span>
+    <span class="roll-card-time">09:23 PM</span>
+  </div>
+  <div class="roll-card-body">
+    <div style="display:flex;align-items:baseline;gap:8px;">
+      <strong style="font-size:13px;">💨 Second Wind</strong>
+      <span style="font-size:11px;color:var(--fg-mute);">(0/1 left)</span>
+    </div>
+    <details class="roll-card-details">
+      <summary>▾ details</summary>
+      <div style="font-size:11px;color:var(--fg-mute);margin-top:3px;">Bonus action: rolled 1d10+5 = 9.</div>
+    </details>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<h2>Auto-resolution suppresses redundant buttons</h2>
+<div class="callout">
+  When the server-side auto-resolution path (campaign-toggled <strong>Auto-apply damage</strong>) already
+  rolled the spell's attack / save / damage / heal, the manual "🎲 Roll damage" / "📋 Prompt save" /
+  "🩹 Apply Healing" buttons on the spell-cast card are <strong>not rendered</strong>. The outcome is
+  already in the ▼ Result block (or the chip row) + the ↶ Undo button is there for one-click revert.
+</div>
+<p>
+  This is gated per-button by the auto-resolution flags carried on the cast payload:
+</p>
+<ul>
+  <li><code>auto_heal_applied &gt; 0</code> → "🩹 Apply Healing" button hidden</li>
+  <li><code>auto_attack_hit != null</code> → "🎲 Roll {damage}" button hidden (the auto-attack ran, regardless of hit / miss outcome)</li>
+  <li><code>auto_save_target_kind != null</code> → "📋 Prompt save" + "🎲 Roll damage" buttons hidden (PC was prompted or NPC was auto-rolled)</li>
+</ul>
+<p>
+  Spells with no auto-resolution path (Magic Missile auto-hits, Misty Step utility) keep their manual
+  buttons because the auto-flags stay <code>null</code> on those payloads.
+</p>
+
+<h3>The "Roll damage" button — fallback behavior</h3>
+<p>
+  For spells that still surface a manual damage button (Magic Missile, Scorching Ray with no auto-attack,
+  homebrew utility cantrips):
+</p>
+<ul>
+  <li>Clicking the button rolls the damage as <strong>the caster</strong> — not as some other token the
+    GM happens to own. The new roll-log entry's note reads <code>{Spell} damage (as {Caster})</code>.</li>
+  <li>The button hides itself on a successful roll so the card visually commits to its result state.</li>
+  <li>On HTTP failure the button re-enables so the user can retry.</li>
+</ul>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<h2>Themes — the log adapts</h2>
+<p>
+  The roll-log layout uses CSS custom properties so all eight built-in themes re-tint the ▼ Result
+  block + chip pills without per-theme overrides. Outcome colors (heal=green, damage=orange, crit=amber,
+  buff=cyan, miss=danger) carry semantic meaning and stay consistent; the block accent and chip surface
+  follow the theme.
+</p>
+<div class="theme-row">
+  <span class="theme-name">Dark (default)</span>
+  <div class="theme-strip" style="background:#15171c;border-color:#2c303a;">
+    <span class="theme-swatch" style="background:#6cb4ff;"></span>
+    <span class="theme-swatch" style="background:#4ade80;"></span>
+    <span class="theme-swatch" style="background:#fb923c;"></span>
+    <span class="theme-swatch" style="background:#d74a4a;"></span>
+    <span class="theme-block-demo" style="background:rgba(108,180,255,0.12);color:#6cb4ff;border:1px solid rgba(108,180,255,0.28);">▼ Result</span>
+  </div>
+</div>
+<div class="theme-row">
+  <span class="theme-name">Midnight</span>
+  <div class="theme-strip" style="background:#0d0f14;border-color:#1e2230;">
+    <span class="theme-swatch" style="background:#a78bfa;"></span>
+    <span class="theme-swatch" style="background:#4ade80;"></span>
+    <span class="theme-swatch" style="background:#fb923c;"></span>
+    <span class="theme-swatch" style="background:#f87171;"></span>
+    <span class="theme-block-demo" style="background:rgba(167,139,250,0.12);color:#a78bfa;border:1px solid rgba(167,139,250,0.28);">▼ Result</span>
+  </div>
+</div>
+<div class="theme-row">
+  <span class="theme-name">Forest</span>
+  <div class="theme-strip" style="background:#0b150e;border-color:#1a3020;">
+    <span class="theme-swatch" style="background:#4ade80;"></span>
+    <span class="theme-swatch" style="background:#4ade80;"></span>
+    <span class="theme-swatch" style="background:#fb923c;"></span>
+    <span class="theme-swatch" style="background:#f87171;"></span>
+    <span class="theme-block-demo" style="background:rgba(74,222,128,0.12);color:#4ade80;border:1px solid rgba(74,222,128,0.28);">▼ Result</span>
+  </div>
+</div>
+<div class="theme-row">
+  <span class="theme-name">Fire</span>
+  <div class="theme-strip" style="background:#110800;border-color:#2e1600;">
+    <span class="theme-swatch" style="background:#f97316;"></span>
+    <span class="theme-swatch" style="background:#4ade80;"></span>
+    <span class="theme-swatch" style="background:#fb923c;"></span>
+    <span class="theme-swatch" style="background:#ef4444;"></span>
+    <span class="theme-block-demo" style="background:rgba(249,115,22,0.12);color:#f97316;border:1px solid rgba(249,115,22,0.28);">▼ Result</span>
+  </div>
+</div>
+<div class="theme-row">
+  <span class="theme-name">Light</span>
+  <div class="theme-strip" style="background:#f2f4f8;border-color:#dde1ea;">
+    <span class="theme-swatch" style="background:#2563eb;"></span>
+    <span class="theme-swatch" style="background:#16a34a;"></span>
+    <span class="theme-swatch" style="background:#c2410c;"></span>
+    <span class="theme-swatch" style="background:#dc2626;"></span>
+    <span class="theme-block-demo" style="background:rgba(37,99,235,0.12);color:#2563eb;border:1px solid rgba(37,99,235,0.28);">▼ Result</span>
+  </div>
+</div>
+<div class="theme-row">
+  <span class="theme-name">Bubblegum</span>
+  <div class="theme-strip" style="background:#fdf0f8;border-color:#f0c8e8;">
+    <span class="theme-swatch" style="background:#d946a8;"></span>
+    <span class="theme-swatch" style="background:#15803d;"></span>
+    <span class="theme-swatch" style="background:#b91c1c;"></span>
+    <span class="theme-swatch" style="background:#dc2626;"></span>
+    <span class="theme-block-demo" style="background:rgba(217,70,168,0.12);color:#d946a8;border:1px solid rgba(217,70,168,0.28);">▼ Result</span>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<h2>Persistence + visibility</h2>
+<p>
+  Roll-log cards <strong>survive page refreshes</strong> via <code>localStorage</code> (key
+  <code>simplevtt:rolllog:${CAMPAIGN_ID}</code>, last 100 WS-only entries, FIFO trim). Server-rendered
+  Jinja roll history at page load still comes down fresh and re-renders through the same append
+  functions — so the new layout applies to historic rolls too.
+</p>
+<p>
+  Each <code>roll</code> event carries a visibility field:
+</p>
+<ul>
+  <li><code>public</code> (default) — broadcast to everyone in the campaign.</li>
+  <li><code>gm_and_roller</code> — GM + the rolling user only. Card has an amber "GM + you" badge + border.</li>
+  <li><code>gm_only</code> — GM only. Card has a danger-colored "GM only" badge + border.</li>
+</ul>
+<p>
+  <code>weapon_attack</code> / <code>spell_cast</code> / <code>feature_used</code> are always public —
+  they reflect public table actions.
+</p>
+
+<!-- ════════════════════════════════════════════════════════════════════ -->
+<h2>Where the code lives</h2>
+<ul>
+  <li><strong>Card rendering:</strong> <code>app/static/tabletop.js</code> — <code>appendRoll</code>,
+    <code>appendSpellCast</code>, <code>_appendFeatureUsed</code>, <code>appendWeaponAttack</code>,
+    <code>appendRollRequest</code>.</li>
+  <li><strong>Result-block / chip toggle:</strong> same file — <code>_rollLogMode</code>,
+    <code>_setRollLogMode</code>, <code>_spellResultSummary</code>, <code>_spellResultChipsHtml</code>,
+    <code>_spellResultBlockHtml</code>.</li>
+  <li><strong>Persistence:</strong> same file — <code>_persistRollEntry</code> + <code>_hydrateRollLog</code>.</li>
+  <li><strong>Card CSS + toggle CSS:</strong> <code>app/templates/tabletop.html</code> — inline
+    <code>&lt;style&gt;</code> block.</li>
+  <li><strong>Theme tokens (incl. <code>--c-heal</code> / <code>--c-crit</code> / <code>--c-damage</code> / <code>--c-buff</code>):</strong> <code>app/static/style.css</code>.</li>
+  <li><strong>Dice toast (separate transient surface):</strong> <code>app/static/roll_toast.js</code>.</li>
+</ul>
+
+<div class="footer">
+  Generated for SimpleVTT v2.42.3 · companion to
+  <code>docs/roll-log-card-layout.md</code>.
+</div>
+
+</body>
+</html>
