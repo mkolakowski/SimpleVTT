@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.46.2] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Phase T.7c — AoE self-centered sphere shape (emanation around the caster).** Adds `self_sphere` as the fifth shape in the `_aoePicker` dispatch table, completing the T.7 work. Self-centered emanations (Spirit Guardians, Antimagic Field, Holy Aura) anchor at the caster's token with radius = `size_ft`; the cursor doesn't move the center — it only serves as the click-to-confirm gesture. Hit-test: token in-emanation iff `dist(token, caster_origin) ≤ radius_px`, with the caster's own token filtered out of the resolved target list (the caster doesn't roll a save against their own emanation). Backfills `spirit-guardians.json` with `shape: "self_sphere"`, `size_ft: 15`; Tavik (Cleric Lv 5) already has Spirit Guardians prepared at Lv 3 so the demo exercises the emanation picker without seed changes. T.7 phase now complete (line + cube + self-centered sphere all shipped). PATCH because it's a small geometry addition on top of the v2.45.0 shape-aware refactor.
+**Description:** Three edits. **(1)** `app/static/tabletop.js` — added `'self_sphere'` to the origin-resolution branch in `start()` (same path as cone/line); added a new `'self_sphere'` case to `_tokenInShape()` that ignores the cursor argument entirely and tests distance from origin; added a caster-filter in `commit()` (skip tokens whose `character_id === casterCharId` for self-anchored shapes); added a new `'self_sphere'` render branch (filled circle centered at origin, dashed stroke, plus the origin dot); added a new `casterCharId` state field stashed from `opts.char_id` so the filter can reference it without re-resolving; added a `'self_sphere'` hint-chip label ("<size_ft> ft emanation · click to confirm"). **(2)** `app/templates/sheet_dnd5e.html` — added `'self_sphere'` to the `_AOE_SHAPES` allowlist. **(3)** `app/data/local/dnd5e/spells/spirit-guardians.json` — empty `area` block filled with `shape: "self_sphere"`, `size_ft: 15`.
+**Description (cont):** Why `self_sphere` instead of reusing `sphere` with an origin flag. The picker dispatches purely on the `shape` string today, and adding a separate field (`origin_at_caster: bool`) would create a 2-axis decision matrix (shape × origin) where most combinations are invalid (a "line placed at cursor" isn't a real shape). Distinct shape names keep the dispatch flat and the JSON self-describing — a future PHB-style summary in the spell card can read `area.shape` and print "Emanation" without parsing flags.
+**Description (cont 2):** Why filter the caster out of the target list at the picker level instead of the server. Server-side filtering would need to know which token corresponds to the casting character, which it already does for the existing single-target paths — but the multi-target dispatch (v2.44.0) trusts the `target_combatant_ids` list the client sends. Filtering on the client at picker time keeps the server contract simple ("here are the combatants the GM picked, resolve saves for each") and lines up with RAW where Spirit Guardians explicitly says "affects creatures of your choice within range" — the caster isn't a valid choice. Other-shape spells that DO affect the caster (zone buffs, future placed emanations centered on a friendly token) won't hit this filter because they're not `self_sphere`.
+**Description (cont 3):** Why no harness test. Same logic as T.6 / T.7a / T.7b — self-anchored geometry lives entirely client-side; the v2.44.0 server contract is shape-agnostic. The picker-level caster-filter behavior is a UI concern that the existing harness suite doesn't reach (no Playwright assertion at this level of granularity); a future test addition there would cover it.
+
+### Added
+- `app/static/tabletop.js` — `self_sphere` hit-test + render + caster-filter + hint-chip label.
+- `app/data/local/dnd5e/spells/spirit-guardians.json` — `area.shape = "self_sphere"`, `area.size_ft = 15`.
+- `app/templates/sheet_dnd5e.html` — `self_sphere` in the AoE-shape allowlist.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Open Tavik Stonebrow's mini-sheet, expand Spells, click Cast on Spirit Guardians. A 15 ft / 3-square flame-orange circle should anchor at Tavik's token regardless of where the cursor moves; tokens INSIDE the circle (other than Tavik) light up yellow. Click anywhere to confirm — the cast fires with the multi-target list (excluding Tavik). Bandits roll WIS saves; on fail, take 3d8 radiant damage; on save, half. Verify Tavik is NOT in `auto_save_targets`. Confirm Fireball (sphere placed at cursor), Burning Hands (cone from caster), Lightning Bolt (line from caster), and Faerie Fire (cube placed at cursor) all still work from their respective casters.
+- **Backward compat.** Pure additive. The 208 harness tests still pass.
+
+### T.7 phase complete
+Line (T.7a, v2.46.0) + cube (T.7b, v2.46.1) + self-centered sphere (T.7c, this commit) all shipped. The Phase T targeting roadmap's shape work is now done. Remaining T-phase work in the roadmap:
+
+- **T.7b.2 — Self-anchored cubes** (Thunderwave). Still filed.
+- **Cone with a non-self origin click** (Cone of Cold). Still filed.
+- **T.5c — Roll-log card per-target rendering for AoE**. Still filed (the multi-target dispatch returns `auto_save_targets`, but the cast card today only renders the headline single-target view).
+- **T.5d — PC AoE save orchestration**. Still filed.
+
+### Filed
+- **SRD area-block backfill sweep.** Now that the picker supports five shapes (sphere, cone, line, cube, self_sphere), the curated SRD JSON files for AoE spells that don't yet have populated `area` blocks should be backfilled. Concrete list: Cone of Cold (placed cone — needs cone-with-origin-click), Wall of Fire / Wall of Ice / Wall of Stone (line variants), Thunderwave (self-anchored cube), Cloud of Daggers / Hypnotic Pattern / Stinking Cloud (cubes / spheres), Antimagic Field / Holy Aura (self_sphere), Cloudkill / Sleet Storm (placed sphere). Each one should land as its own PATCH commit per the per-commit-bump rule.
+
+---
+
 ## [2.46.1] - 2026-05-20
 
 **Schema version:** 56

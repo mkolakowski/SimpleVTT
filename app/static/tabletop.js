@@ -308,6 +308,7 @@
         size_ft: 0,
         secondary_ft: 0,
         spellName: '',
+        casterCharId: 0,      // for self_sphere: filter caster out of target list
         origin: null,         // { x, y } canvas coords — non-null for cone/line/self-sphere
         cursor: null,         // { x, y } canvas coords
         _resolve: null,       // promise resolver — null when inactive
@@ -321,13 +322,14 @@
             this.size_ft = Number(opts.size_ft) || 0;
             this.secondary_ft = Number(opts.secondary_ft) || 0;
             this.spellName = String(opts.name || 'Spell');
+            this.casterCharId = parseInt(opts.char_id, 10) || 0;
             this.cursor = null;
             // Shapes that need an origin = caster's token resolve it
             // up-front. If we can't find a token for the casting
             // character (off-map / token not placed), bail with a
             // null resolve so the cast handler can surface an error.
             this.origin = null;
-            if (this.shape === 'cone' || this.shape === 'line') {
+            if (this.shape === 'cone' || this.shape === 'line' || this.shape === 'self_sphere') {
                 this.origin = _aoePicker._resolveOrigin(opts.char_id);
                 if (!this.origin) {
                     this._cleanup();
@@ -364,6 +366,15 @@
             };
             for (const t of tokens) {
                 if (t.is_hidden && !ME.isGm) continue;
+                // Self-anchored shapes never target the caster
+                // themselves — Spirit Guardians, Antimagic Field, etc.
+                // affect "creatures of your choice within range", which
+                // by convention excludes the caster.
+                if (this.shape === 'self_sphere'
+                        && this.casterCharId
+                        && t.character_id === this.casterCharId) {
+                    continue;
+                }
                 if (!this._tokenInShape(t, canvasX, canvasY)) continue;
                 const combatant = _resolveCombatant(t);
                 if (combatant && combatant.id) target_combatant_ids.push(combatant.id);
@@ -423,6 +434,14 @@
                 return Math.abs(tcx - canvasX) <= half
                     && Math.abs(tcy - canvasY) <= half;
             }
+            if (this.shape === 'self_sphere' && this.origin) {
+                // Self-centered emanation (Spirit Guardians, Antimagic
+                // Field). Cursor doesn't move the center; the click
+                // only serves as a confirmation. Caster IS in the
+                // area but is filtered out below in the commit so the
+                // PC doesn't roll a save against their own spell.
+                return Math.hypot(tcx - this.origin.x, tcy - this.origin.y) <= len_px;
+            }
             return false;
         },
 
@@ -454,6 +473,7 @@
             this.size_ft = 0;
             this.secondary_ft = 0;
             this.spellName = '';
+            this.casterCharId = 0;
             this.origin = null;
             this.cursor = null;
             this._resolve = null;
@@ -490,6 +510,9 @@
         } else if (shape === 'cube') {
             shapeLabel = 'cube';
             verb = 'click to place';
+        } else if (shape === 'self_sphere') {
+            shapeLabel = 'emanation';
+            verb = 'click to confirm';
         } else {
             shapeLabel = 'sphere';
             verb = 'click to place';
@@ -786,6 +809,20 @@
                 ctx.rect(cx - half, cy - half, len, len);
                 ctx.fill();
                 ctx.stroke();
+            } else if (_aoePicker.shape === 'self_sphere' && _aoePicker.origin) {
+                // Emanation: filled circle anchored at the caster's
+                // token center, ignoring cursor position. Cursor only
+                // serves as the click-to-confirm gesture.
+                const ox = _aoePicker.origin.x, oy = _aoePicker.origin.y;
+                ctx.beginPath();
+                ctx.arc(ox, oy, len, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.arc(ox, oy, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#dc2626';
+                ctx.fill();
             } else if (_aoePicker.shape === 'line' && _aoePicker.origin) {
                 // Rectangle from origin along aim axis: length × width.
                 // Four corners at origin ± perp*(W/2) and origin +

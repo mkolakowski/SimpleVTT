@@ -40,8 +40,8 @@
       "transform_picker": "",
       "upcast": [],
       "area": {
-        "shape": "",
-        "size_ft": 0,
+        "shape": "self_sphere",
+        "size_ft": 15,
         "secondary_ft": 0
       }
     }
