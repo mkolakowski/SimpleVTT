@@ -8928,9 +8928,17 @@ async def use_second_wind(
             "character_name": char.name,
             "user_color": caster_color,
             "feature_name": "💨 Second Wind",
-            "feature_desc": "Bonus action",
+            # v2.43.12: restore the dice-roll info inline. v2.43.0
+            # dropped it to "Bonus action" when the heal pill landed,
+            # but readers (esp. spectating players who can't see the
+            # caster's HP delta on their own sheet) want the rolled
+            # expression + raw total in the card body too. The heal
+            # pill below carries the *applied* HP (capped at max);
+            # this string carries what was *rolled* — they're different
+            # numbers when the caster was near full HP.
+            "feature_desc": f"Bonus action · rolled {expr} = {recovered}",
             # v2.35.0: dice fields so roll_toast.js fires the heal die
-            # animation instead of inlining the result in feature_desc.
+            # animation as a separate transient surface.
             "dice_expression": expr,
             "dice_total": recovered,
             "dice_breakdown": breakdown,

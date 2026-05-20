@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.12] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Restore Second Wind's rolled-dice info in `feature_desc` + add 9 broadcast-payload-shape tests covering every roll-log / toast surface.** Two bundled changes. **(a)** v2.43.0 dropped Second Wind's `feature_desc` from `"Bonus action: rolled 1d10+5 = 9"` to `"Bonus action"` when the heal pill landed — readers (especially spectating players who can't see the caster's HP sheet directly) want the raw rolled total back in the card body. Restored to `"Bonus action · rolled {expr} = {recovered}"`. **(b)** New `tests/harness/test_broadcast_payload_shapes.py` — 9 tests that fire a happy-path call to each broadcast-producing endpoint (`/roll`, `/attack`, `/cast_spell` heal/attack/save, `/use_feature`, `/use_second_wind`, `/use_lay_on_hands`) and assert every field the client roll-log card + dice toast read is present. Catches silent payload regressions before they hit production. PATCH — additive tests + one display string restored; no schema or contract changes.
+**Description:** Two edits. **(1)** `app/routes/tabletop_routes.py` `/use_second_wind` — `feature_desc` restored to `f"Bonus action · rolled {expr} = {recovered}"`. The heal pill (with the *applied* HP, capped at max) still shows below; the desc carries what was *rolled* (different when the caster was near full HP). **(2)** New `tests/harness/test_broadcast_payload_shapes.py` — covers all five broadcast types with one happy-path test each (some types like spell_cast split into heal / attack / save variants). Each test calls `_assert_keys(payload, required, context)` to compare the broadcast's keys to the union of fields read by the client. Lists every field the corresponding append* / showRollToast handler touches; when a field becomes optional or gets renamed, the test breaks loudly.
+**Description (cont):** Why a separate file instead of folding into the per-endpoint tests. Behavior tests (chip flips, HP deltas, counter decrements) and shape tests (what fields the payload carries) answer different questions. Splitting keeps each file under 200 lines and makes the shape contract auditable in one place — when a future commit adds a new `auto_*` field, the shape test for that broadcast type is where the assertion lives. Per-endpoint files would each gain a copy of the same key-set, drifting over time. The new file also serves as living documentation for what each broadcast carries.
+**Description (cont 2):** Field coverage per broadcast type. **roll**: `total`, `expression`, `breakdown`, `user_id`, `user_name`, `visibility`, `note` (the breakdown pill needs `breakdown`; the dice toast needs `expression`+`total`+`breakdown`; the visibility filter needs `visibility`+`user_id`). **weapon_attack**: 13 fields including all the v2.24.0 hit-determination + HP-delta fields. **spell_cast** heal/attack/save: the relevant `auto_*` sub-tree per outcome path. **feature_used** simple: header + feature_name + feature_desc + over_budget. **feature_used (Second Wind)**: also the v2.35.0 `dice_*` fields + the v2.43.0 `heal_*` fields. **feature_used (Lay on Hands)**: just the `heal_*` fields (no dice — paladin picks the amount).
+
+### Added
+- `tests/harness/test_broadcast_payload_shapes.py` — 9 tests asserting field presence on every broadcast type the roll-log / toast surfaces consume.
+
+### Changed
+- `app/routes/tabletop_routes.py` `/use_second_wind` — `feature_desc` carries the rolled expression + raw total again ("Bonus action · rolled 1d10+5 = 9"). The heal pill below carries the actual applied HP (capped at max).
+- `docs/test-harness-coverage.md` — total bumped to 204 (was 195); new "Broadcast payload shapes" section documenting all 9 tests.
+
+### Notes
+- **What to test:** open `/campaign/1`. Click Garrik's Second Wind. Roll-log card now reads `💨 Second Wind · Bonus action · rolled 1d10+5 = 9` plus the heal pill below. Run `python3 -m pytest tests/harness/test_broadcast_payload_shapes.py -v` to confirm all 9 shape tests pass — they should match the field list the corresponding tabletop.js / roll_toast.js code reads.
+- **Backward compat.** Pure additive: client display string restored to its v2.42.x form on Second Wind, no schema, no contract. Existing 195 tests untouched.
+
+---
+
 ## [2.43.11] - 2026-05-19
 
 **Schema version:** 56
