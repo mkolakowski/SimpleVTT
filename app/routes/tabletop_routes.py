@@ -7685,10 +7685,15 @@ async def use_lay_on_hands(
             "character_name": char.name,
             "user_color": caster_color,
             "feature_name": f"🙏 Lay on Hands → {target.name}",
-            "feature_desc": (
-                f"Spent {amount} HP from pool ({pool_cur} → {pool_cur - amount} / {pool_max})." +
-                (f" Healed {actual_healed} HP." if actual_healed > 0 else " Target was already at full HP.")
-            ),
+            "feature_desc": f"Spent {amount} HP from pool ({pool_cur} → {pool_cur - amount} / {pool_max})",
+            # v2.43.0: heal_amount + heal_target_name + before/after
+            # surface the actual heal on the broadcast so the client
+            # renders an oversized heal pill. Pool delta stays in the
+            # inline feature_desc since it's caster-side accounting.
+            "heal_amount": actual_healed,
+            "heal_target_name": target.name,
+            "heal_hp_before": target_cur,
+            "heal_hp_after": result["hp"]["current"],
             "source": "lay-on-hands",
             "remaining": pool_cur - amount,
             "max": pool_max,
@@ -8828,6 +8833,14 @@ async def use_second_wind(
             "dice_total": recovered,
             "dice_breakdown": breakdown,
             "dice_note": "💨 Second Wind",
+            # v2.43.0: heal_amount is the actual HP delta after the
+            # max-HP cap (recovered may exceed it). Surfaced so the
+            # client renders an oversized heal pill on the feature_used
+            # card. Zero when Garrik was already at max HP.
+            "heal_amount": actual_healed,
+            "heal_target_name": char.name,
+            "heal_hp_before": hp_cur,
+            "heal_hp_after": hp_result["hp"]["current"],
             "source": "second-wind",
             "remaining": sw_cur - 1,
             "max": sw_max,

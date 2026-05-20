@@ -56,6 +56,12 @@ async def test_second_wind_happy_path(gm_client, gm_ws, garrik_full):
     msg = await gm_ws.wait_for("feature_used")
     assert msg["data"]["source"] == "second-wind"
     assert "Second Wind" in msg["data"]["feature_name"]
+    # v2.43.0: heal_amount carries the actual HP delta (capped by max
+    # HP). When Garrik starts at full HP it's 0; the field is still
+    # present. heal_target_name is the caster (self-heal).
+    assert "heal_amount" in msg["data"]
+    assert msg["data"]["heal_target_name"] == garrik["name"]
+    assert msg["data"]["heal_amount"] == data["actual_healed"]
 
     ru_msg = await gm_ws.wait_for("resource_update")
     assert ru_msg["data"]["key"] == "second-wind"

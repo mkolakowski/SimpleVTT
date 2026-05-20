@@ -1810,255 +1810,79 @@
     // ↶ Undo button (reuses /undo_attack_damage which detects heal
     // entries via the is_heal flag and reverses by damaging the same
     // amount). Empty when no auto-heal happened.
-    function _autoHealLineHtml(d) {
-        if (!d || !d.auto_heal_applied || d.auto_heal_applied <= 0) return '';
-        const tgt = d.auto_heal_target_name || d.target_name || '';
-        const before = d.auto_heal_hp_before;
-        const after = d.auto_heal_hp_after;
-        const revived = d.auto_heal_revived
-            ? ' <span class="weapon-atk-resist">💚 revived</span>'
-            : '';
-        const hpDelta = (before != null && after != null)
-            ? ` (${before} → ${after} HP)` : '';
-        return `<div class="weapon-atk-line">
-            <span class="weapon-atk-label">✚ Healed</span>
-            <span class="weapon-atk-total">${escapeHTML(tgt)} +${d.auto_heal_applied} HP</span>
-            <span class="weapon-atk-applied">${hpDelta}${revived}</span>
-            <button type="button" class="weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this heal">↶ Undo</button>
-        </div>`;
-    }
-
-    // v2.34.0 Phase T.4b: auto-attack-roll line for spell_cast cards
-    // (Fire Bolt / Eldritch Blast / Inflict Wounds / Guiding Bolt /
-    // Scorching Ray / Chill Touch / Ray of Frost / Vampiric Touch /
-    // etc.). Renders the hit determination + optional damage applied,
-    // mirroring the weapon-attack chat card from T.2.
-    function _autoAttackLineHtml(d) {
-        if (!d || d.auto_attack_hit == null) return '';
-        const tgt = escapeHTML(d.auto_attack_target_name || d.target_name || '');
-        const verdict = d.auto_attack_crit
-            ? '<span class="weapon-atk-crit">💥 CRIT</span>'
-            : (d.auto_attack_hit
-                ? '<span class="weapon-atk-hit">✅ HIT</span>'
-                : '<span class="weapon-atk-miss">❌ MISS</span>');
-        const ac = d.auto_attack_target_ac ? ` vs AC ${d.auto_attack_target_ac}` : '';
-        const dmgApplied = d.auto_attack_damage_applied || 0;
-        const dmgType = d.auto_attack_damage_type
-            ? ` ${escapeHTML(d.auto_attack_damage_type)}` : '';
-        const dmgLine = dmgApplied > 0
-            ? `<div class="weapon-atk-line">
-                <span class="weapon-atk-label">🎲 Applied</span>
-                <span class="weapon-atk-total">${tgt} −${dmgApplied}${dmgType}</span>
-                <span class="weapon-atk-applied">${d.auto_attack_crit ? '(crit)' : ''}</span>
-                <button type="button" class="weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this damage">↶ Undo</button>
-            </div>`
-            : '';
-        return `<div class="weapon-atk-line">
-            <span class="weapon-atk-label">🎯 Spell attack</span>
-            <span class="weapon-atk-total">${tgt}: ${escapeHTML(String(d.auto_attack_total || 0))}</span>
-            <span class="weapon-atk-applied">${ac} — ${verdict}</span>
-        </div>${dmgLine}`;
-    }
-
-    // v2.30.0 Phase T.3: auto-save line for spell_cast cards. Three
-    // states:
-    //   - PC target prompted   → "📋 Prompted NAME for ABL save (DC N)"
-    //   - NPC target auto-rolled → "📋 NAME ABL save: 12 — ❌ failed (DC 14)"
-    //   - No auto-save invoked → '' (nothing rendered)
-    function _autoSaveLineHtml(d) {
-        if (!d || !d.auto_save_target_kind) return '';
-        const ab = escapeHTML(d.auto_save_ability || '');
-        const tgt = escapeHTML(d.auto_save_target_name || d.target_name || '');
-        const dc = d.auto_save_dc || 0;
-        if (d.auto_save_target_kind === 'pc' && d.auto_save_prompted) {
-            return `<div class="weapon-atk-line">
-                <span class="weapon-atk-label">📋 Prompted</span>
-                <span class="weapon-atk-total">${tgt} — ${ab} save</span>
-                <span class="weapon-atk-applied">DC ${dc}</span>
-            </div>`;
-        }
-        if (d.auto_save_target_kind === 'npc' && d.auto_save_rolled != null) {
-            const passed = d.auto_save_passed;
-            const verdict = passed
-                ? '<span class="weapon-atk-resist">✅ saved</span>'
-                : '<span class="weapon-atk-hit">❌ failed</span>';
-            // v2.31.0 Phase T.3b: damage line if save-for-half auto-
-            // applied. Server already wrote the damage via the same
-            // _attack_damage_log entry the weapon-attack Undo button
-            // uses, so we can offer a ↶ Undo right here.
-            const dmgApplied = d.auto_save_damage_applied || 0;
-            const dmgType = d.auto_save_damage_type
-                ? ` ${escapeHTML(d.auto_save_damage_type)}` : '';
-            const dmgLine = dmgApplied > 0
-                ? `<div class="weapon-atk-line">
-                    <span class="weapon-atk-label">🎲 Applied</span>
-                    <span class="weapon-atk-total">${tgt} −${dmgApplied}${dmgType}</span>
-                    <span class="weapon-atk-applied">${passed ? '(half on save)' : '(full)'}</span>
-                    <button type="button" class="weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this damage">↶ Undo</button>
-                </div>`
-                : '';
-            // v2.32.0 Phase T.3c: save-or-suck buff installed.
-            const buffLine = d.auto_save_buff_name
-                ? `<div class="weapon-atk-line">
-                    <span class="weapon-atk-label">${escapeHTML(d.auto_save_buff_icon || '💫')} ${escapeHTML(d.auto_save_buff_name)}</span>
-                    <span class="weapon-atk-total">${tgt}</span>
-                    <span class="weapon-atk-applied">${d.auto_save_buff_duration ? `${d.auto_save_buff_duration} rounds` : ''}</span>
-                </div>`
-                : '';
-            return `<div class="weapon-atk-line">
-                <span class="weapon-atk-label">📋 ${ab} save</span>
-                <span class="weapon-atk-total">${tgt}: ${escapeHTML(String(d.auto_save_rolled))}</span>
-                <span class="weapon-atk-applied">vs DC ${dc} — ${verdict}</span>
-            </div>${dmgLine}${buffLine}`;
-        }
-        return '';
-    }
-
-    // v2.42.0: roll-log display mode. ``verbose`` (default) renders
-    // the auto-effect consequences (heal / attack / save / damage /
-    // buff) inside a collapsible ▼ Result block that opens by default;
-    // ``simple`` renders them as a single horizontal chip row instead.
-    // Either way the dice toast (v2.33.0+) still fires + the spell
-    // details ▾ stays. Mode persists per-user in localStorage and a
-    // toggle in the roll-log drawer header flips it.
-    function _rollLogMode() {
-        try { return localStorage.getItem('simplevtt:rolllog_mode') || 'verbose'; }
-        catch (_) { return 'verbose'; }
-    }
-    function _setRollLogMode(mode) {
-        const m = mode === 'simple' ? 'simple' : 'verbose';
-        try { localStorage.setItem('simplevtt:rolllog_mode', m); } catch (_) {}
-        document.body.classList.toggle('rolllog-simple', m === 'simple');
-        const btn = document.getElementById('rolllog-mode-toggle');
-        if (btn) btn.textContent = m === 'simple' ? 'Compact: ON' : 'Compact: OFF';
-    }
-    // Sync the body class at load so CSS that gates on it is correct
-    // from the first render.
-    document.body.classList.toggle('rolllog-simple', _rollLogMode() === 'simple');
-    // Wire the toolbar toggle button. The button lives in the roll-log
-    // drawer (server-rendered in tabletop.html), so it exists by the
-    // time this IIFE runs (script at end of body).
-    (function _wireRollLogModeToggle() {
-        const btn = document.getElementById('rolllog-mode-toggle');
-        if (!btn) return;
-        // Apply the saved state to the button label.
-        _setRollLogMode(_rollLogMode());
-        btn.addEventListener('click', () => {
-            const next = _rollLogMode() === 'simple' ? 'verbose' : 'simple';
-            _setRollLogMode(next);
-        });
-    })();
-
-    // Short one-liner summary used as the chip in the collapsed
-    // ▼ Result block header — at-a-glance verdict so the GM can fold
-    // the block but still see what happened.
-    function _spellResultSummary(d) {
-        const bits = [];
-        if (d && d.auto_heal_applied > 0) {
-            bits.push(`+${d.auto_heal_applied} HP`);
-            if (d.auto_heal_revived) bits.push('revived');
-        }
-        if (d && d.auto_attack_hit === true) bits.push(d.auto_attack_crit ? '💥 crit' : '✅ hit');
-        if (d && d.auto_attack_hit === false) bits.push('❌ miss');
-        if (d && d.auto_attack_damage_applied > 0) {
-            bits.push(`−${d.auto_attack_damage_applied}${d.auto_attack_damage_type ? ' ' + d.auto_attack_damage_type : ''}`);
-        }
-        if (d && d.auto_save_target_kind === 'pc' && d.auto_save_prompted) bits.push('save prompted');
-        if (d && d.auto_save_target_kind === 'npc' && d.auto_save_passed === true) bits.push('✅ saved');
-        if (d && d.auto_save_target_kind === 'npc' && d.auto_save_passed === false) bits.push('❌ failed');
-        if (d && d.auto_save_damage_applied > 0) {
-            bits.push(`−${d.auto_save_damage_applied}${d.auto_save_damage_type ? ' ' + d.auto_save_damage_type : ''}`);
-        }
-        if (d && d.auto_save_buff_name) bits.push(d.auto_save_buff_name.toLowerCase());
-        return bits.join(' · ');
-    }
-
-    // Compact pill-style chips for simple mode. Each chip carries
-    // the same data the verbose lines do, just trimmed. Undo chip
-    // gets the ``weapon-atk-undo`` class so the existing wire-up at
-    // the bottom of ``appendSpellCast`` picks it up.
-    function _spellResultChipsHtml(d) {
+    // v2.43.0: oversized pill row for spell-cast auto-effect outcomes.
+    // Replaces the v2.42.0 ▼ Result collapsible + the v2.42.0 simple-
+    // mode small chip row. One pill per consequence; no drop-down,
+    // no toggle — always rendered the same way. The pills are big
+    // enough to read across the table and carry their own colors via
+    // the chip-* modifier classes (heal / hit / miss / crit / damage /
+    // buff / prompt / undo). Returns '' when the cast produced no
+    // auto-effects so utility-only spells (Mage Armor, Misty Step)
+    // render without an empty pill row.
+    function _spellResultPillsHtml(d) {
         if (!d) return '';
-        const chips = [];
+        const pills = [];
         // Heal
         if (d.auto_heal_applied > 0) {
             const tgt = d.auto_heal_target_name || d.target_name || '';
-            chips.push(`<span class="result-chip chip-heal">✚ ${escapeHTML(tgt)} +${d.auto_heal_applied} HP</span>`);
+            const before = d.auto_heal_hp_before;
+            const after = d.auto_heal_hp_after;
+            const hpDelta = (before != null && after != null)
+                ? ` (${before} → ${after})` : '';
+            pills.push(`<span class="result-pill chip-heal">✚ ${escapeHTML(tgt)} +${d.auto_heal_applied} HP${hpDelta}</span>`);
             if (d.auto_heal_revived) {
-                chips.push('<span class="result-chip chip-buff">💚 revived</span>');
+                pills.push('<span class="result-pill chip-buff">💚 revived</span>');
             }
         }
         // Attack
         if (d.auto_attack_hit != null) {
-            const verdict = d.auto_attack_crit ? '💥' : d.auto_attack_hit ? '✅' : '❌';
+            const verdict = d.auto_attack_crit ? '💥 CRIT' : d.auto_attack_hit ? '✅ HIT' : '❌ MISS';
             const cls = d.auto_attack_crit ? 'chip-crit' : d.auto_attack_hit ? 'chip-hit' : 'chip-miss';
             const tgt = d.auto_attack_target_name || d.target_name || '';
-            chips.push(
-                `<span class="result-chip ${cls}">🎯 ${escapeHTML(tgt)}: ${d.auto_attack_total}/${d.auto_attack_target_ac} ${verdict}</span>`
+            const ac = d.auto_attack_target_ac != null ? `/${d.auto_attack_target_ac}` : '';
+            pills.push(
+                `<span class="result-pill ${cls}">🎯 ${escapeHTML(tgt)}: ${d.auto_attack_total}${ac} ${verdict}</span>`
             );
             if (d.auto_attack_damage_applied > 0) {
                 const type = d.auto_attack_damage_type ? ` ${escapeHTML(d.auto_attack_damage_type)}` : '';
-                chips.push(`<span class="result-chip chip-damage">🎲 −${d.auto_attack_damage_applied}${type}</span>`);
+                pills.push(`<span class="result-pill chip-damage">🎲 −${d.auto_attack_damage_applied}${type}</span>`);
             }
         }
         // Save (PC prompted / NPC auto-rolled)
         if (d.auto_save_target_kind === 'pc' && d.auto_save_prompted) {
-            chips.push(
-                `<span class="result-chip chip-prompt">📋 ${escapeHTML(d.auto_save_target_name || '')} ${d.auto_save_ability} save (DC ${d.auto_save_dc})</span>`
+            pills.push(
+                `<span class="result-pill chip-prompt">📋 ${escapeHTML(d.auto_save_target_name || '')} ${escapeHTML(d.auto_save_ability || '')} save · DC ${d.auto_save_dc}</span>`
             );
         }
         if (d.auto_save_target_kind === 'npc' && d.auto_save_rolled != null) {
             const cls = d.auto_save_passed ? 'chip-hit' : 'chip-miss';
-            const v = d.auto_save_passed ? '✅' : '❌';
-            chips.push(
-                `<span class="result-chip ${cls}">📋 ${escapeHTML(d.auto_save_target_name || '')} ${d.auto_save_ability} ${d.auto_save_rolled}/${d.auto_save_dc} ${v}</span>`
+            const v = d.auto_save_passed ? '✅ saved' : '❌ failed';
+            pills.push(
+                `<span class="result-pill ${cls}">📋 ${escapeHTML(d.auto_save_target_name || '')}: ${d.auto_save_rolled}/${d.auto_save_dc} ${v}</span>`
             );
         }
         if (d.auto_save_damage_applied > 0) {
             const type = d.auto_save_damage_type ? ` ${escapeHTML(d.auto_save_damage_type)}` : '';
             const tag = d.auto_save_passed ? ' (half)' : '';
-            chips.push(`<span class="result-chip chip-damage">🎲 −${d.auto_save_damage_applied}${type}${tag}</span>`);
+            pills.push(`<span class="result-pill chip-damage">🎲 −${d.auto_save_damage_applied}${type}${tag}</span>`);
         }
         if (d.auto_save_buff_name) {
-            chips.push(
-                `<span class="result-chip chip-buff">${escapeHTML(d.auto_save_buff_icon || '💫')} ${escapeHTML(d.auto_save_buff_name)} · ${d.auto_save_buff_duration}r</span>`
+            pills.push(
+                `<span class="result-pill chip-buff">${escapeHTML(d.auto_save_buff_icon || '💫')} ${escapeHTML(d.auto_save_buff_name)} · ${d.auto_save_buff_duration}r</span>`
             );
         }
-        // Undo chip (when anything was actually applied).
+        // Undo pill (when anything was actually applied).
         const anyApplied = (
             (d.auto_heal_applied || 0) > 0
             || (d.auto_attack_damage_applied || 0) > 0
             || (d.auto_save_damage_applied || 0) > 0
         );
         if (anyApplied) {
-            chips.push(
-                `<button type="button" class="result-chip chip-undo weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this cast's HP changes">↶ Undo</button>`
+            pills.push(
+                `<button type="button" class="result-pill chip-undo weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this cast's HP changes">↶ Undo</button>`
             );
         }
-        return chips.join('');
-    }
-
-    // Unified result-block emitter. Renders either the verbose
-    // collapsible block (default) or the simple chip row, based on
-    // ``_rollLogMode()`` at append time. Returns '' when the cast
-    // produced no auto-effects (no heal / attack / save fired).
-    function _spellResultBlockHtml(d) {
-        if (!d) return '';
-        const heal = _autoHealLineHtml(d);
-        const save = _autoSaveLineHtml(d);
-        const attack = _autoAttackLineHtml(d);
-        if (!heal && !save && !attack) return '';
-        if (_rollLogMode() === 'simple') {
-            const chips = _spellResultChipsHtml(d);
-            return chips ? `<div class="result-chips">${chips}</div>` : '';
-        }
-        const summary = _spellResultSummary(d);
-        const summaryHtml = summary
-            ? ` <span class="result-block-summary">${escapeHTML(summary)}</span>` : '';
-        return `<details class="result-block" open>
-            <summary>▼ Result${summaryHtml}</summary>
-            <div class="result-block-body">${heal}${save}${attack}</div>
-        </details>`;
+        return pills.length ? `<div class="result-pills">${pills.join('')}</div>` : '';
     }
 
     function appendSpellCast(d) {
@@ -2121,6 +1945,12 @@
         if (d.spell_concentration) metaBits.push('<span style="color:var(--accent)">Concentration</span>');
         if (d.spell_ritual)        metaBits.push('<span style="color:var(--accent)">Ritual</span>');
 
+        // v2.43.0: target tag relocated from the body's name row up
+        // into the header (next to the slot chip). Inline the spell
+        // school / casting time / range / concentration / ritual
+        // bits with the spell name in a single row so the cast scans
+        // top-to-bottom: who → what → outcome (pills) → buttons.
+        const targetTagHtml = _targetTagHtml(d);
         const li = document.createElement('li');
         li.dataset.castId = d.id;
         li.innerHTML = `
@@ -2128,14 +1958,17 @@
                 <div class="roll-card-header">
                     <div class="roll-card-avatar">${avatarInner}</div>
                     <span class="roll-card-user" data-uid="${d.caster_user_id}"${color ? ` style="color:${escapeHTML(color)}"` : ''}>${escapeHTML(dispName)}</span>
+                    ${targetTagHtml}
                     <span class="spell-cast-slot">${escapeHTML(slotLabel)}</span>
                     <span class="roll-card-time">${timeStr}</span>
                 </div>
                 <div class="spell-cast-body">
-                    <div class="spell-cast-name">🪄 ${escapeHTML(d.spell_name || 'Spell')} ${_targetTagHtml(d)}</div>
-                    ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
+                    <div class="spell-cast-name-row">
+                        <span class="spell-cast-name">🪄 ${escapeHTML(d.spell_name || 'Spell')}</span>
+                        ${metaBits.length ? `<span class="spell-cast-meta-inline">· ${metaBits.join(' · ')}</span>` : ''}
+                    </div>
                     ${d.spell_desc ? `<details class="roll-card-details"><summary>▾ details</summary><div class="spell-cast-desc">${escapeHTML(d.spell_desc)}</div></details>` : ''}
-                    ${_spellResultBlockHtml(d)}
+                    ${_spellResultPillsHtml(d)}
                     <div class="spell-cast-actions"></div>
                     ${_overBudgetBadge(d)}
                     <div class="spell-cast-results"></div>
@@ -2489,31 +2322,49 @@
         const feat  = d.feature_name || 'feature';
         const tagLabel = _featureSourceLabel(d.source);
         const remaining = (d.max && d.max > 0)
-            ? `<span style="font-size:11px;color:var(--muted,#888);">(${d.remaining}/${d.max} left)</span>`
+            ? `<span class="feature-used-counter">(${d.remaining}/${d.max} left)</span>`
             : '';
-        // v2.41.0: feature_desc now lives inside a collapsible
-        // ``<details>`` block so it doesn't dominate the card. Title +
-        // resource counter + over-budget badge stay visible at-a-glance;
-        // tap "▾ details" to read the narrative description.
-        const desc = d.feature_desc
-            ? `<details class="roll-card-details"><summary>▾ details</summary><div style="font-size:11px;color:var(--muted,#888);margin-top:3px;line-height:1.35;">${escapeHTML(d.feature_desc)}</div></details>`
+        // v2.43.0: feature_desc is now an inline tail next to the
+        // feature name (it was a collapsible ▾ details block in
+        // v2.41.0). Most descs are short ("Bonus action", "Spent
+        // 5 HP from pool"); long ones wrap to the next line.
+        const descInline = d.feature_desc
+            ? `<span class="feature-used-desc">· ${escapeHTML(d.feature_desc)}</span>`
             : '';
+        // v2.43.0: oversized heal pill when the feature actually
+        // healed someone. Server adds ``heal_amount`` / ``heal_target_name``
+        // / ``heal_hp_before`` / ``heal_hp_after`` on broadcasts where
+        // a heal landed (Second Wind, Lay on Hands). Mirrors the
+        // spell-cast result-pill row so the eye finds the outcome
+        // in the same place across card types.
+        let healPill = '';
+        if (d.heal_amount && d.heal_amount > 0) {
+            const tgt = d.heal_target_name || name;
+            const before = d.heal_hp_before;
+            const after = d.heal_hp_after;
+            const hpDelta = (before != null && after != null) ? ` (${before} → ${after})` : '';
+            healPill = `<div class="result-pills">
+                <span class="result-pill chip-heal">✚ ${escapeHTML(tgt)} +${d.heal_amount} HP${hpDelta}</span>
+            </div>`;
+        }
+        const targetTagHtml = _targetTagHtml(d);
         const li = document.createElement('li');
         li.innerHTML = `
             <div class="roll-card feature-used-card">
                 <div class="roll-card-header">
                     <div class="roll-card-avatar">✨</div>
                     <span class="roll-card-user" data-uid="${d.character_id || ''}"${color ? ` style="color:${escapeHTML(color)}"` : ''}>${escapeHTML(name)}</span>
+                    ${targetTagHtml}
                     <span class="spell-cast-slot">${escapeHTML(tagLabel)}</span>
                     <span class="roll-card-time">${hhmm}</span>
                 </div>
                 <div class="roll-card-body" style="padding:6px 10px 8px;">
-                    <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
-                        <strong style="font-size:13px;">${escapeHTML(feat)}</strong>
-                        ${_targetTagHtml(d)}
+                    <div class="feature-used-name-row">
+                        <strong class="feature-used-name">${escapeHTML(feat)}</strong>
+                        ${descInline}
                         ${remaining}
                     </div>
-                    ${desc}
+                    ${healPill}
                     ${_overBudgetBadge(d)}
                 </div>
             </div>`;

@@ -54,6 +54,11 @@ async def test_loh_happy_path(gm_client, gm_ws, roster):
     msg = await gm_ws.wait_for("feature_used", timeout=3.0)
     assert "Lay on Hands" in msg["data"]["feature_name"]
     assert msg["data"]["source"] == "lay-on-hands"
+    # v2.43.0: heal_amount + heal_target_name are surfaced on the
+    # broadcast so the client can render the oversized heal pill.
+    assert "heal_amount" in msg["data"]
+    assert "heal_target_name" in msg["data"]
+    assert msg["data"]["heal_target_name"] == pip["name"]
     # heal_applied also fires when actual_healed > 0
     await asyncio.sleep(0.3)
     heals = gm_ws.buffered("heal_applied")

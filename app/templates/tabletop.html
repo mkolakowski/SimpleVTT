@@ -204,90 +204,77 @@
     .roll-card-details summary:hover { color: var(--fg); }
     .roll-card-details[open] summary::after { content: ' (close)'; opacity: 0.6; }
     .roll-card-details[open] summary { color: var(--fg); }
-    /* v2.42.0: ▼ Result block — wraps the auto-effect lines on spell-
-       cast cards. Open by default so the consequence is visible in
-       real-time; the GM can fold older cards for scrollback hygiene.
-       v2.42.1: colors derived from --accent + color-mix so the block
-       tints with each theme (dark amber, midnight violet, light blue,
-       bubblegum pink, fire orange, …). */
-    .result-block {
-        border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
-        border-radius: 4px;
+    /* v2.43.0: oversized pill row for spell-cast + feature-used
+       auto-effect outcomes. Replaces the v2.42.0 ▼ Result collapsible
+       (and the v2.42.0 simple-mode small chip row). Always shown the
+       same way — no display-mode toggle. Each pill carries one
+       consequence (heal, attack-roll verdict, damage applied, save
+       prompted / outcome, condition installed, Undo) so the eye can
+       scan a horizontal bar of color-coded outcomes. Background
+       blends fg + bg-2 so chips stay legible on light themes; semantic
+       colors come from --c-* vars in style.css. */
+    .result-pills {
+        display: flex; flex-wrap: wrap; gap: 6px;
         margin-top: 8px;
-        overflow: hidden;
     }
-    .result-block > summary {
-        cursor: pointer;
-        list-style: none;
-        background: color-mix(in srgb, var(--accent) 12%, transparent);
-        padding: 5px 10px;
-        font-size: 12px;
-        font-weight: 600;
-        color: var(--accent);
-        user-select: none;
-        min-height: 24px;
-        line-height: 1.4;
-    }
-    .result-block > summary::-webkit-details-marker { display: none; }
-    .result-block > summary:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); }
-    .result-block-summary {
-        font-weight: 400;
-        color: var(--fg-mute);
-        font-size: 11px;
-        margin-left: 6px;
-    }
-    .result-block-body { padding: 4px 6px 6px; }
-    /* v2.42.0: simple-mode chip row — drop-in replacement for the
-       ▼ Result block. Compact pill chips for each consequence.
-       v2.42.1: chip background uses color-mix(fg, bg-2) so it stays
-       legible on both dark themes and light themes (light/bubblegum).
-       Semantic colors (heal/hit/miss/crit/damage/buff) come from
-       --c-* vars defined in style.css and overridden per-theme. */
-    .result-chips {
-        display: flex; flex-wrap: wrap; gap: 4px;
-        margin-top: 6px;
-    }
-    .result-chip {
-        display: inline-flex; align-items: center; gap: 3px;
-        padding: 3px 8px;
-        border: 1px solid var(--border);
-        border-radius: 12px;
+    .result-pill {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 5px 12px;
+        border: 1.5px solid var(--border);
+        border-radius: 16px;
         background: color-mix(in srgb, var(--fg) 8%, var(--bg-2));
-        font-size: 11px;
+        font-size: 13px;
+        font-weight: 600;
         color: var(--fg);
         line-height: 1.3;
-        min-height: 22px;
+        min-height: 30px;
     }
-    .result-chip.chip-heal   { border-color: var(--c-heal);   color: var(--c-heal); }
-    .result-chip.chip-hit    { border-color: var(--c-heal);   color: var(--c-heal); }
-    .result-chip.chip-miss   { border-color: var(--danger);   color: var(--danger); }
-    .result-chip.chip-crit   { border-color: var(--c-crit);   color: var(--c-crit); }
-    .result-chip.chip-damage { border-color: var(--c-damage); color: var(--c-damage); }
-    .result-chip.chip-buff   { border-color: var(--c-buff);   color: var(--c-buff); }
-    .result-chip.chip-prompt { border-color: var(--accent);   color: var(--accent); }
-    button.result-chip.chip-undo {
+    .result-pill.chip-heal   { border-color: var(--c-heal);   color: var(--c-heal); }
+    .result-pill.chip-hit    { border-color: var(--c-heal);   color: var(--c-heal); }
+    .result-pill.chip-miss   { border-color: var(--danger);   color: var(--danger); }
+    .result-pill.chip-crit   { border-color: var(--c-crit);   color: var(--c-crit); }
+    .result-pill.chip-damage { border-color: var(--c-damage); color: var(--c-damage); }
+    .result-pill.chip-buff   { border-color: var(--c-buff);   color: var(--c-buff); }
+    .result-pill.chip-prompt { border-color: var(--accent);   color: var(--accent); }
+    button.result-pill.chip-undo {
         border-color: var(--accent); color: var(--accent);
         background: transparent; cursor: pointer;
-        font-family: inherit; min-height: 28px;
+        font-family: inherit;
     }
-    button.result-chip.chip-undo:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
-    button.result-chip.chip-undo.undone {
+    button.result-pill.chip-undo:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+    button.result-pill.chip-undo.undone {
         opacity: 0.5; cursor: default; border-color: var(--border); color: var(--fg-mute);
     }
-    /* v2.42.0: Compact-mode toggle bar at the top of the roll-log
-       drawer. Persistent button — state restored from localStorage on
-       page load by ``_setRollLogMode`` in tabletop.js. v2.42.1: was
-       referencing the undefined --panel var; switched to --input-bg so
-       the strip is visibly distinct from the drawer panel beneath it. */
-    .rolllog-toolbar {
-        padding: 6px 10px;
-        border-bottom: 1px solid var(--border);
-        background: var(--input-bg);
+
+    /* v2.43.0: spell-cast / feature-used inline-meta styles. The
+       spell-cast-name-row puts the spell name + school / casting time
+       / range / concentration / ritual bits on a single line; the
+       feature-used-name-row does the same for feature_name + the
+       inline feature_desc tail + the resource counter chip. */
+    .spell-cast-name-row,
+    .feature-used-name-row {
         display: flex;
-        gap: 6px;
-        align-items: center;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 4px;
+        font-size: 13px;
     }
-    #rolllog-mode-toggle { font-size: 11px; padding: 4px 10px; }
+    .spell-cast-name { font-weight: 700; }
+    .spell-cast-meta-inline {
+        font-size: 11px;
+        color: var(--fg-mute);
+    }
+    .feature-used-name { font-weight: 700; }
+    .feature-used-desc {
+        font-size: 11px;
+        color: var(--fg-mute);
+        font-style: italic;
+    }
+    .feature-used-counter {
+        font-size: 11px;
+        color: var(--fg-mute);
+        margin-left: auto;
+    }
 
     /* ── Roll request cards ── */
     .roll-req-card {
@@ -1285,15 +1272,6 @@
 <!-- ── Roll log drawer ── -->
 <div id="roll-log-drawer" class="drawer-panel">
     <div class="drawer-body">
-        <!-- v2.42.0: roll-log display mode toggle. ``Compact: OFF`` is
-             the default; auto-effect consequences render inside a
-             collapsible ▼ Result block, open by default. ``Compact: ON``
-             swaps the block for a horizontal pill row. State persists
-             per-user in localStorage. Wired by ``_setRollLogMode`` in
-             tabletop.js. -->
-        <div class="rolllog-toolbar">
-            <button id="rolllog-mode-toggle" type="button" class="tt-btn" title="Toggle compact pill row vs detailed result block">Compact: OFF</button>
-        </div>
         <ul class="roll-list" id="roll-list">
             {% for r in rolls %}
             {% set vis_class = 'vis-gm-only' if r.visibility.value == 'gm_only' else ('vis-gm-roller' if r.visibility.value == 'gm_and_roller' else '') %}

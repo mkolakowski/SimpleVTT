@@ -215,7 +215,7 @@ Fighter Second Wind heal-roll (v2.34.x `dice_*` envelope).
 
 | Test | What it asserts |
 |------|-----------------|
-| `test_second_wind_happy_path` | Rolls 1d10+lv, applies HP, decrements counter; `feature_used` includes `Second Wind` substring. |
+| `test_second_wind_happy_path` | Rolls 1d10+lv, applies HP, decrements counter; `feature_used` includes `Second Wind` substring; broadcast carries v2.43.0 `heal_amount` + `heal_target_name` (== caster). |
 | `test_second_wind_out_of_uses` | Counter exhausted → 409. |
 | `test_second_wind_wrong_class` | Non-Fighter → 409. |
 | `test_second_wind_missing_character_id` | Empty body → 400. |
@@ -274,7 +274,7 @@ Paladin Lay on Hands: heal from a per-day pool.
 
 | Test | What it asserts |
 |------|-----------------|
-| `test_loh_happy_path` | Heals targeted PC; decrements pool. |
+| `test_loh_happy_path` | Heals targeted PC; decrements pool; broadcast carries v2.43.0 `heal_amount` + `heal_target_name` (== target). |
 | `test_loh_missing_fields` | 400. |
 | `test_loh_zero_amount` | Amount ≤ 0 → 400. |
 | `test_loh_no_paladin_resource` | Non-Paladin caller → 409. |
