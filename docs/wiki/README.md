@@ -18,6 +18,7 @@ This wiki complements the canonical references that live elsewhere in the repo:
 | [Roll-log guide](roll-log-guide.html) | HTML (visual) | GMs + contributors | ✅ shipped (v2.43.1) |
 | [Toast notifications guide](toast-notifications-guide.html) | HTML (visual) | GMs + contributors | ✅ shipped (v2.43.8) |
 | [Realtime broadcasts catalog](realtime-broadcasts-catalog.md) | Markdown (reference) | Contributors | ✅ shipped (v2.43.14) |
+| [Endpoint catalog](endpoint-catalog.md) | Markdown (reference) | Contributors | ✅ shipped (v2.43.15) |
 
 ## TODO — guides to write
 
@@ -53,7 +54,7 @@ This wiki is a stub. The list below is what we want it to grow into.
 
 - [ ] **Card variant reference** — quick visual index of every roll-log card type. (Roll-log guide HTML is the first entry of this category.)
 - [ ] **Theme palette reference** — side-by-side strip showing all 8 themes' tokens (--bg, --bg-2, --fg, --accent, --danger, --c-heal, --c-crit, --c-damage, --c-buff).
-- [ ] **Endpoint catalog** — every `/api/campaign/{cid}/…` endpoint with method, payload shape, broadcast(s) emitted. Generated or hand-curated.
+- [x] **Endpoint catalog** — every `/api/campaign/{cid}/…` endpoint with method, payload shape, broadcast(s) emitted. → [endpoint-catalog.md](endpoint-catalog.md).
 
 ## Contributing guides
 

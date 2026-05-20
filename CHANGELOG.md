@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.15] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Wiki plan exec #2 — Endpoint catalog.** Tier 0 doc #2 from the v2.43.13 plan. Hand-curated `docs/wiki/endpoint-catalog.md` (~350 lines) covering every gameplay-relevant HTTP endpoint: table actions (`/roll`, `/attack`, `/cast_spell`, `/use_*`, `/apply_healing`, `/undo_attack_damage`, `/roll_request`), battle state (`/battle`, `/character/{cid}/economy`), character + sheet (sheet-fields PATCH, death-save, rest, resource, transform, color, ring-style, buffs, place-token), tokens, encounters, maps, session lifecycle, templates, settings, roster, auth. Cross-references the broadcasts catalog so endpoint → broadcast → handler is traceable in either direction. Out-of-scope (noted in the doc): open5e proxy routes, the homebrew CRUD endpoints, and Jinja page routes — 139+ endpoints in `tabletop_routes.py` alone, so the catalog focuses on the core gameplay surface. PATCH — additive doc.
+**Description:** Three edits. **(1)** New `docs/wiki/endpoint-catalog.md` — opens with a conventions section (auth column, body shape, broadcasts column, harness column, the `override` flag), then sections by purpose: table actions, battle state, character + sheet, tokens, encounters, maps, session lifecycle, templates, settings, roster, auth, health endpoints. Closes with "Adding a new endpoint" — codified version of the CLAUDE.md harness rule + how to choose a URL prefix + the slot-resolution server-side pattern. Cross-links every entry's harness test file. **(2)** `docs/wiki/README.md` — adds the endpoint catalog row to "Available guides"; ticks off the "Endpoint catalog" TODO. **(3)** `app/templates/wiki.html` — same.
+**Description (cont):** Why hand-curated instead of auto-generated from OpenAPI. The FastAPI app does expose `/openapi.json`, but the auto-generated schema lists every route with method + path + 200 response — no broadcast info, no harness pointers, no narrative ("why does this exist", "what's the override flag for"). The catalog's value is the narrative + cross-references, which the OpenAPI dump can't carry. Filed: a future script could merge OpenAPI's URL/method list with this catalog's annotations to catch endpoints we forgot to document.
+**Description (cont 2):** Why scope to gameplay endpoints (not the homebrew CRUD or open5e proxies). The open5e proxies are SRD data lookups, not table actions — they shouldn't carry the same UX framing as `/roll` or `/cast_spell`. The homebrew CRUD (custom-classes, custom-feats, etc.) is its own domain — large, mostly admin-facing, deserves its own future guide. The catalog noted as "out of scope" both for honesty + as a marker for a future expansion.
+
+### Added
+- `docs/wiki/endpoint-catalog.md` — Tier 0 contributor reference: every gameplay endpoint with method, body, auth, broadcasts, harness pointer.
+
+### Changed
+- `docs/wiki/README.md` — "Available guides" table gains the catalog; "Endpoint catalog" TODO ticked.
+- `app/templates/wiki.html` — same.
+
+### Notes
+- **What to test:** open `/wiki/endpoint-catalog` — the 350-line catalog renders through the markdown pipeline + the `wiki_md.html` theme wrapper. Table sections (table actions, battle, character, tokens, encounters, maps, etc.) all render with the centered-880px-column layout. Switch themes via the user menu; the catalog re-tints.
+- **Backward compat.** Doc-only; no code or schema.
+
+### Next up (from `docs/plans/wiki-expansion.md` recommended ship order)
+- **#3 Architecture overview** (Tier 0) — the last foundational doc.
+- **#4 First-run setup** (Tier 1) — opens the operator-onboarding sequence.
+
+---
+
 ## [2.43.14] - 2026-05-20
 
 **Schema version:** 56
