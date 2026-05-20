@@ -1619,8 +1619,11 @@
                     </div>
                     <div class="roll-card-body">
                         ${r.note ? `<div class="roll-card-note">${escapeHTML(r.note)}</div>` : ''}
-                        <div class="roll-card-expr">${escapeHTML(r.expression)}</div>
-                        <div class="roll-card-breakdown">${formatBreakdown(r.breakdown)}</div>
+                        <details class="roll-card-details">
+                            <summary>▾ details</summary>
+                            <div class="roll-card-expr">${escapeHTML(r.expression)}</div>
+                            <div class="roll-card-breakdown">${formatBreakdown(r.breakdown)}</div>
+                        </details>
                     </div>
                 </div>
             </div>`;
@@ -1967,7 +1970,7 @@
                 <div class="spell-cast-body">
                     <div class="spell-cast-name">🪄 ${escapeHTML(d.spell_name || 'Spell')} ${_targetTagHtml(d)}</div>
                     ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
-                    ${d.spell_desc ? `<div class="spell-cast-desc">${escapeHTML(d.spell_desc)}</div>` : ''}
+                    ${d.spell_desc ? `<details class="roll-card-details"><summary>▾ details</summary><div class="spell-cast-desc">${escapeHTML(d.spell_desc)}</div></details>` : ''}
                     ${_autoHealLineHtml(d)}
                     ${_autoSaveLineHtml(d)}
                     ${_autoAttackLineHtml(d)}
@@ -2299,8 +2302,12 @@
         const remaining = (d.max && d.max > 0)
             ? `<span style="font-size:11px;color:var(--muted,#888);">(${d.remaining}/${d.max} left)</span>`
             : '';
+        // v2.41.0: feature_desc now lives inside a collapsible
+        // ``<details>`` block so it doesn't dominate the card. Title +
+        // resource counter + over-budget badge stay visible at-a-glance;
+        // tap "▾ details" to read the narrative description.
         const desc = d.feature_desc
-            ? `<div style="font-size:11px;color:var(--muted,#888);margin-top:3px;line-height:1.35;">${escapeHTML(d.feature_desc)}</div>`
+            ? `<details class="roll-card-details"><summary>▾ details</summary><div style="font-size:11px;color:var(--muted,#888);margin-top:3px;line-height:1.35;">${escapeHTML(d.feature_desc)}</div></details>`
             : '';
         const li = document.createElement('li');
         li.innerHTML = `

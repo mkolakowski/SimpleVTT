@@ -183,6 +183,27 @@
     .roll-card.vis-gm-roller .roll-card-total { color: #d4a84a; }
     .roll-card-breakdown { font-size: 11px; color: var(--fg-mute); font-family: monospace; word-break: break-all; line-height: 1.6; }
     .roll-card-breakdown strong { color: var(--fg); font-weight: 700; }
+    /* v2.41.0: collapsible details on roll-log cards. Headline stays
+       visible (total, note, target, verdict, applied / Undo); the
+       breakdown / dice / narrative description tucks behind a ▾ click
+       so the log scans easily but still has the audit trail one tap
+       away. ``<details>`` is a native HTML element — the open state
+       persists for the lifetime of the card in the DOM. */
+    .roll-card-details { margin-top: 4px; }
+    .roll-card-details summary {
+        cursor: pointer;
+        font-size: 11px;
+        color: var(--fg-mute);
+        list-style: none;
+        padding: 2px 0;
+        user-select: none;
+        min-height: 18px;
+        line-height: 1.4;
+    }
+    .roll-card-details summary::-webkit-details-marker { display: none; }
+    .roll-card-details summary:hover { color: var(--fg); }
+    .roll-card-details[open] summary::after { content: ' (close)'; opacity: 0.6; }
+    .roll-card-details[open] summary { color: var(--fg); }
 
     /* ── Roll request cards ── */
     .roll-req-card {

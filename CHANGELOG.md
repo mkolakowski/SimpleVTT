@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.41.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Roll-log cards gain a collapsible `▾ details` section + new `docs/roll-log-card-layout.md`.** Narrative text (dice breakdown, spell description, feature flavor) now lives behind a tap-to-expand toggle on every card, keeping the at-a-glance headline (total, target, hit/miss, HP delta, ↶ Undo) clean. Implementation uses the native HTML `<details>` element. Plus a layout doc walking through every card type's anatomy — headline-vs-details split, visibility rules, persistence behavior. MINOR — visible UI tightening + new docs file; no schema or contract changes.
+**Description:** Five edits. **(1)** `app/static/tabletop.js` `appendRoll` — wraps `roll-card-expr` + `roll-card-breakdown` in `<details class="roll-card-details"><summary>▾ details</summary>…</details>`. The card's total (big number) + note (rich narrative line including target / verdict / HP delta from v2.33.0) stay visible. **(2)** Same file `appendSpellCast` — wraps the `spell_desc` block in the same details container. Auto-heal / auto-attack / auto-save lines (the consequence summary) stay outside the toggle because they're the actionable info, not reference text. **(3)** Same file `_appendFeatureUsed` — wraps `feature_desc` in details. Feature name + resource counter + over-budget badge stay visible. **(4)** `app/templates/tabletop.html` — `.roll-card-details` CSS (cursor pointer summary, hidden default `::-webkit-details-marker`, hover state, `[open] summary::after { content: ' (close)' }`). Touch-target friendly (18 px line-height summary). **(5)** New `docs/roll-log-card-layout.md` — anatomy of each card type (roll / weapon_attack / spell_cast / feature_used), with tables breaking down "what's always visible" vs "what's collapsed into details", plus sections on visibility filtering, localStorage persistence, and where the rendering code lives.
+**Description (cont):** Why `<details>` not a custom toggle. The HTML element is purpose-built for this, fully accessible (keyboard navigation, screen readers announce "expandable / collapsed"), and CSS-styleable without any JS state. Custom toggle would re-invent that wheel + need its own click handlers, focus management, and persistence shimming. The trade-off is that the open/closed state doesn't persist across page refreshes — each card reverts to closed. Acceptable since the headline is the load-bearing info and details are reference-only.
+**Description (cont 2):** Why weapon_attack isn't wrapped in v2.41.0. Its breakdown spans are inline-with-each-line (attack line shows `1d20[14]+5 = 19` as a small monospace tail; damage line shows `1d8[6]+3 = 9` similarly). The dice IS the point of the attack card — collapsing it would hide what GMs and players are checking against. If the card becomes too dense in future (multi-beam EB at L11 with 3 beam rows + bonus damage + save prompt), it can opt in then.
+
+### Added
+- `app/static/tabletop.js` — `<details class="roll-card-details">` wrapper around `appendRoll` breakdown, `appendSpellCast` `spell_desc`, and `_appendFeatureUsed` `feature_desc`.
+- `app/templates/tabletop.html` — `.roll-card-details` CSS with hover + open-state styling.
+- `docs/roll-log-card-layout.md` — new layout reference describing each card variant's headline + collapsible details split.
+
+### Notes
+- **What to test:** open `/campaign/1`. Cast Healing Word from Tavik. Roll-log card shows the headline (target tag, auto-heal line with HP delta + Undo) immediately. The spell's flavor description ("A creature of your choice…") sits behind `▾ details`. Tap it to read; tap "(close)" to collapse. Same on a plain `/roll`: the breakdown tucks away. Same on `feature_used`: Second Wind shows just the title + counter; "Bonus action: rolled 1d10+5 = 9" lives in details.
+- **Backward compat.** Pure UI tweak — no schema, no broadcast shape changes. Cards rendered before v2.41.0 (from the localStorage replay) re-render with the new layout because both pass through the same append fns. Server-rendered Jinja roll history at page load still uses the older layout (no details wrapper) but those rolls have minimal content and don't need collapsing.
+
+---
+
 ## [2.40.0] - 2026-05-19
 
 **Schema version:** 56
