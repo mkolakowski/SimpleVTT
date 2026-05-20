@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.13] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **New `docs/plans/wiki-expansion.md` — prioritized roadmap for the remaining wiki pages, with 15 net-new pages added to the TODO list and a recommended ship order.** The v2.43.2 `docs/wiki/README.md` TODO listed 21 unwritten guides flat (9 how-tos + 9 system explainers + 3 reference cards). This plan organizes them into 4 priority tiers, identifies which Tier 0 pages unblock the rest, and adds 15 missing guides the original TODO didn't cover (character sheet anatomy, initiative tracker drawer, target picker modal, encounters CRUD walkthrough, roll requests, death-saves state machine, demo mode, self-host upgrade, troubleshooting/FAQ, mobile/browser-support, visibility model, spell content library status, monster bestiary status, Use Item flow, multi-user concurrency). Recommends an ordered first-7 to ship next. PATCH — doc-only commit.
+**Description:** One edit. **(1)** New `docs/plans/wiki-expansion.md` — five sections: (a) current state inventory (what's shipped vs TODO); (b) Tier 0–4 prioritization of every existing TODO item with format + rationale; (c) 15 new pages not in the existing TODO, each with format / tier / why; (d) cross-cutting conventions (version stamp, code-location pointers, cross-links, self-contained HTML, the v2.43.10 centered-column-with-left-justified-prose layout pattern); (e) a recommended first-7 ship order so contributors don't have to re-prioritize each time.
+**Description (cont):** Why tier the existing TODO instead of just writing the new pages. The original TODO is alphabetical-by-instinct, not prioritized. Tier 0 (architecture overview, broadcasts catalog, endpoint catalog) is foundational — every subsequent guide cross-links into it, so writing those first saves redundant re-explanation in every later page. Tier 1 is operator/new-user onboarding; Tier 2 is contributor system explainers; Tier 3 is content authoring / customization; Tier 4 is reference cards. Tagging the tier on each page lets a writer pick the highest-value next page without rereading the whole TODO.
+**Description (cont 2):** Why 15 net-new pages. The original TODO covered system explainers but missed several user-facing surfaces (character sheet, initiative tracker, encounters CRUD, target picker, death-saves) and operational concerns (demo mode promotion, upgrade guide, troubleshooting, browser support, visibility model). The new pages aren't intended as exhaustive — they're the ones we've referenced informally in commits without ever documenting; promote them to first-class guides so future onboarding doesn't have to grep through commits.
+
+### Added
+- `docs/plans/wiki-expansion.md` — prioritized roadmap for the remaining wiki guides + 15 net-new pages.
+
+### Notes
+- **What to test:** open `docs/plans/wiki-expansion.md` — confirm the four-tier structure renders correctly on GitHub. No app behavior changed.
+- **Backward compat.** Pure docs commit; no code, no schema, no tests. The existing `docs/wiki/README.md` TODO list remains the day-to-day checklist; this plan is the meta-doc that informs when/how to tackle items.
+
+---
+
 ## [2.43.12] - 2026-05-19
 
 **Schema version:** 56
