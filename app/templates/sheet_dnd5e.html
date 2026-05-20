@@ -2819,64 +2819,33 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // single-target picker because ``window._openAoe
                     // Picker`` is not defined there.
                     const _AOE_SHAPES = new Set(['sphere', 'cone', 'line', 'cube', 'self_sphere', 'self_cube']);
-                    // v2.47.3 — when the sheet is loaded inside the
-                    // tabletop's iframe drawer, ``window`` is the
-                    // iframe's own window and ``_openAoePicker`` lives
-                    // on the parent. Look up the picker in both
-                    // scopes; the iframe's window.parent is same-
-                    // origin so cross-frame access is allowed.
-                    let _aoePickerFn = null;
-                    if (typeof window._openAoePicker === 'function') {
-                        _aoePickerFn = window._openAoePicker;
-                    } else if (window.parent && window.parent !== window) {
-                        try {
-                            if (typeof window.parent._openAoePicker === 'function') {
-                                _aoePickerFn = window.parent._openAoePicker;
-                            }
-                        } catch (_) { /* cross-origin iframe — fall through */ }
-                    }
+                    // v2.48.0 Phase T.5e: AoE detection deferred to
+                    // the cast card's "📍 Place AoE" button. The
+                    // sheet just submits the cast with NO target
+                    // descriptors; the server creates a pending-
+                    // placement card and the caster (or GM) clicks
+                    // the button on the card to open the picker. This
+                    // moves the picker out of the cast button's
+                    // synchronous click handler — it can sit on the
+                    // log indefinitely until the caster is ready,
+                    // and the GM can place it if the player isn't.
                     let _spArea = null;
-                    if (_aoePickerFn) {
-                        try {
-                            const _detail = await _fetchSpellDetail(s.name);
-                            const _action = _detail && Array.isArray(_detail.actions)
-                                ? _detail.actions.find(a =>
-                                    a && a.area
-                                    && _AOE_SHAPES.has(a.area.shape)
-                                    && (Number(a.area.size_ft) || 0) > 0)
-                                : null;
-                            if (_action) _spArea = _action.area;
-                        } catch (_) {}
-                    }
+                    try {
+                        const _detail = await _fetchSpellDetail(s.name);
+                        const _action = _detail && Array.isArray(_detail.actions)
+                            ? _detail.actions.find(a =>
+                                a && a.area
+                                && _AOE_SHAPES.has(a.area.shape)
+                                && (Number(a.area.size_ft) || 0) > 0)
+                            : null;
+                        if (_action) _spArea = _action.area;
+                    } catch (_) {}
                     if (_spArea) {
-                        const placed = await _aoePickerFn({
-                            shape: _spArea.shape,
-                            size_ft: _spArea.size_ft,
-                            secondary_ft: _spArea.secondary_ft || 0,
-                            name: s.name,
-                            // Cone (and later line / self-sphere) need
-                            // the caster's token as the origin. The
-                            // picker resolves the token via the active
-                            // map's ``tokens`` array by character_id;
-                            // if the caster isn't on the map, the
-                            // picker returns null immediately so we
-                            // revert the slot below.
-                            char_id: {{ char.id }},
-                        });
-                        if (placed === null) {
-                            // Cancelled the AoE placement — revert slot.
-                            if (slotRow) {
-                                slotRow.dataset.used = prevUsed;
-                                if (window._ssSyncInputs) window._ssSyncInputs(slotRow);
-                                if (window._ssRenderPips) window._ssRenderPips(slotRow);
-                            }
-                            btn.disabled = false;
-                            return;
-                        }
-                        // Replace single-target descriptors with the
-                        // multi-target list so the T.5a server path
-                        // dispatches the per-target save + damage loop.
-                        _spTgt = { target_combatant_ids: placed.target_combatant_ids || [] };
+                        // AoE spell — drop any pre-selected single
+                        // target so the server marks this cast as
+                        // pending_aoe_placement and the cast card
+                        // renders the Place AoE button.
+                        _spTgt = {};
                     } else if (!_spTgt.target_combatant_id && !_spTgt.target_character_id) {
                         // v2.29.0: prompt the target-picker modal whenever no
                         // target is set. Self-cast / utility spells (Misty

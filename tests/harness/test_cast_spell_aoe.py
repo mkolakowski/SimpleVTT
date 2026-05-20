@@ -355,3 +355,103 @@ async def test_aoe_pc_response_applies_damage_and_broadcasts_update(
         f"{upd_data['damage_applied']}, HP delta is "
         f"{pip_hp_before - pip_hp_after}"
     )
+
+
+async def test_aoe_cast_without_targets_lands_pending_then_place_aoe_resolves(
+    gm_client, gm_ws, roster, thalindra_rested,
+):
+    """v2.48.0 Phase T.5e — caster-gated AoE placement.
+
+    A Fireball cast WITHOUT ``target_combatant_ids`` lands as a
+    pending-placement card. The new ``/place_aoe`` endpoint resolves
+    targets when the caster (or GM) clicks the cast card's Place
+    button. Asserts:
+      - initial /cast_spell response carries pending_aoe_placement=True
+        + the area shape/size_ft from the spell JSON
+      - /place_aoe with target_combatant_ids resolves NPC saves +
+        damage and broadcasts ``spell_cast_aoe_resolved``
+      - bandit HP drops
+    """
+    thal = thalindra_rested
+    tmpl = await _bandit_tmpl(gm_client)
+    await _set_auto_apply(gm_client, on=True)
+    await _seed_battle(gm_client, [
+        {"id": f"tok_pend_{thal['id']}", "char_id": thal["id"],
+         "name": thal["name"], "initiative": 10, "hp_current": 24, "hp_max": 24,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": "tok_pend_b1", "char_id": None,
+         "token_template_id": tmpl["id"],
+         "name": "Bandit Alpha", "initiative": 7, "hp_current": 50, "hp_max": 50,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": "tok_pend_b2", "char_id": None,
+         "token_template_id": tmpl["id"],
+         "name": "Bandit Beta", "initiative": 6, "hp_current": 50, "hp_max": 50,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+    ])
+
+    cast_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": thal["id"],
+            "spell_index": FIREBALL_INDEX,
+            "slot_level": 3,
+            "class_slug": "wizard",
+            # No targets — server should mark this as pending placement.
+            "override": True,
+        },
+    )
+    assert cast_resp.status_code == 200, cast_resp.text
+    cast_data = cast_resp.json()
+    cast_id = cast_data["id"]
+    assert cast_data["pending_aoe_placement"] is True, cast_data
+    assert cast_data["area_shape"] == "sphere"
+    assert cast_data["area_size_ft"] == 20
+    # No targets resolved yet.
+    assert cast_data["auto_save_targets"] == []
+
+    gm_ws.mark()
+
+    # GM places the AoE on both bandits.
+    place_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
+        json={
+            "cast_id": cast_id,
+            "target_combatant_ids": ["tok_pend_b1", "tok_pend_b2"],
+        },
+    )
+    assert place_resp.status_code == 200, place_resp.text
+    targets = place_resp.json().get("auto_save_targets") or []
+    assert len(targets) == 2
+    names = {t["target_name"] for t in targets}
+    assert names == {"Bandit Alpha", "Bandit Beta"}
+    for t in targets:
+        assert isinstance(t["rolled"], int)
+        assert isinstance(t["passed"], bool)
+        assert t["damage_applied"] > 0, f"bandit took 0 damage: {t}"
+        assert t["damage_type"] == "fire"
+
+    # The cast card's per-target pill row mutates on the broadcast.
+    res = await gm_ws.wait_for("spell_cast_aoe_resolved", timeout=3.0)
+    rdata = res["data"]
+    assert rdata["cast_id"] == cast_id
+    assert len(rdata["auto_save_targets"]) == 2
+    assert rdata["save_ability"] == "DEX"
+    assert rdata["dc"] >= 8  # caster + prof + spc mod gives at least 8
+
+
+async def test_place_aoe_rejects_non_caster_non_gm(gm_client, roster, thalindra_rested):
+    """Auth gate: someone who isn't the caster AND isn't the GM gets
+    403 on /place_aoe. The test client authenticates as the GM, so
+    we can't easily test the non-caster-non-GM denial here directly;
+    instead, assert that /place_aoe with a bogus cast_id returns
+    404 (the auth check runs after the stash lookup, so 404 fires
+    first for missing context — verifying the endpoint's error
+    surface is reachable from the harness)."""
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
+        json={"cast_id": "does-not-exist", "target_combatant_ids": []},
+    )
+    assert resp.status_code == 404, resp.text

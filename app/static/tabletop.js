@@ -1937,6 +1937,8 @@
                 _onHealApplied(msg.data);
             } else if (msg.type === 'spell_cast_target_updated') {
                 _onSpellCastTargetUpdated(msg.data);
+            } else if (msg.type === 'spell_cast_aoe_resolved') {
+                _onSpellCastAoeResolved(msg.data);
             } else if (msg.type === 'feature_used') {
                 _appendFeatureUsed(msg.data);
             } else if (msg.type === 'presence_update') {
@@ -2033,6 +2035,7 @@
                     else if (e.type === 'feature_used')  _appendFeatureUsed(e.data);
                     else if (e.type === 'heal_applied')  _onHealApplied(e.data);
                     else if (e.type === 'spell_cast_target_updated') _onSpellCastTargetUpdated(e.data);
+                    else if (e.type === 'spell_cast_aoe_resolved') _onSpellCastAoeResolved(e.data);
                 } catch (err) {
                     console.warn('[rolllog] hydrate skipped', e.type, err);
                 }
@@ -2292,6 +2295,29 @@
     function _spellResultPillsHtml(d) {
         if (!d) return '';
         const pills = [];
+        // v2.48.0 Phase T.5e: pending AoE placement. Render a "📍
+        // Place AoE" button instead of any other pills — the cast
+        // hasn't resolved targets yet. The button is enabled only
+        // for the caster or the GM; everyone else sees a disabled
+        // "Waiting for placement" pill so they know the cast is
+        // still pending. The actual click handler is wired in
+        // appendSpellCast below (so it can call _openAoePicker and
+        // POST /place_aoe).
+        if (d.pending_aoe_placement) {
+            const isCaster = typeof ME !== 'undefined' && ME && ME.id === d.caster_user_id;
+            const canPlace = isCaster || (ME && ME.isGm);
+            if (canPlace) {
+                const label = `📍 Place ${escapeHTML(d.area_shape || 'AoE')}`;
+                pills.push(
+                    `<button type="button" class="result-pill chip-prompt spell-cast-place-aoe" data-cast-id="${escapeHTML(d.id || '')}" title="Open the placement picker on the canvas">${label}</button>`
+                );
+            } else {
+                pills.push(
+                    `<span class="result-pill chip-prompt">⏳ Awaiting placement…</span>`
+                );
+            }
+            return pills.length ? `<div class="result-pills">${pills.join('')}</div>` : '';
+        }
         // Heal
         if (d.auto_heal_applied > 0) {
             const tgt = d.auto_heal_target_name || d.target_name || '';
@@ -2544,6 +2570,61 @@
             });
         });
 
+        // v2.48.0 Phase T.5e: wire the Place AoE button when the cast
+        // is in pending-placement mode. Click opens the canvas picker
+        // (caster + GM only) and POSTs /place_aoe with the swept-up
+        // target_combatant_ids; the server resolves saves + damage
+        // and broadcasts ``spell_cast_aoe_resolved`` which the handler
+        // below applies to the card in place.
+        li.querySelectorAll('.spell-cast-place-aoe').forEach((placeBtn) => {
+            placeBtn.addEventListener('click', async () => {
+                if (placeBtn.disabled) return;
+                placeBtn.disabled = true;
+                try {
+                    const opts = {
+                        shape: d.area_shape || 'sphere',
+                        size_ft: d.area_size_ft || 0,
+                        secondary_ft: d.area_secondary_ft || 0,
+                        name: d.spell_name || 'Spell',
+                        char_id: d.caster_char_id,
+                    };
+                    const placed = (typeof _openAoePicker === 'function')
+                        ? await _openAoePicker(opts)
+                        : (typeof window._openAoePicker === 'function')
+                            ? await window._openAoePicker(opts)
+                            : null;
+                    if (placed === null) {
+                        placeBtn.disabled = false;
+                        return;
+                    }
+                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/place_aoe`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            cast_id: d.id,
+                            target_combatant_ids: placed.target_combatant_ids || [],
+                        }),
+                    });
+                    if (!resp.ok) {
+                        let body; try { body = await resp.json(); } catch { body = null; }
+                        (window.showToast || function(m){ alert(m); })(
+                            `Place AoE failed: ${body ? JSON.stringify(body) : resp.status}`,
+                            'error');
+                        placeBtn.disabled = false;
+                        return;
+                    }
+                    // Success — the server's spell_cast_aoe_resolved
+                    // broadcast lands shortly and the handler below
+                    // mutates the card. Leave the button disabled in
+                    // the meantime so a fast second click can't double-
+                    // resolve.
+                } catch (e) {
+                    console.warn('place_aoe failed:', e);
+                    placeBtn.disabled = false;
+                }
+            });
+        });
+
         // Stash the cast metadata on the element so the roll listener can
         // correlate save responses back to this card (matches by note prefix).
         li._spellCast = { ...d, _saveLabel: null };
@@ -2667,6 +2748,46 @@
             else body.appendChild(tmp.firstElementChild);
         }
         _persistRollEntry('spell_cast_target_updated', d);
+    }
+
+    // v2.48.0 Phase T.5e: the caster (or GM) placed a pending AoE
+    // cast and the server resolved every target. Pull the populated
+    // auto_save_targets list onto the cast card's stashed metadata,
+    // clear the pending flag (so the Place button is replaced by
+    // the per-target pill row), backfill auto_save_dc and ability
+    // so the per-target pill renderer's labels work, and re-render
+    // the .result-pills block in place.
+    function _onSpellCastAoeResolved(d) {
+        if (!d || !d.cast_id) return;
+        const ul = document.getElementById('roll-list');
+        if (!ul) return;
+        const li = ul.querySelector(`li[data-cast-id="${d.cast_id}"]`);
+        if (!li || !li._spellCast) return;
+        const cast = li._spellCast;
+        cast.auto_save_targets = Array.isArray(d.auto_save_targets) ? d.auto_save_targets : [];
+        cast.pending_aoe_placement = false;
+        if (d.dc != null) cast.auto_save_dc = d.dc;
+        if (d.save_ability) cast.auto_save_ability = d.save_ability;
+        const body = li.querySelector('.spell-cast-body');
+        if (!body) return;
+        const newHtml = _spellResultPillsHtml(cast);
+        const existing = body.querySelector('.result-pills');
+        if (existing) {
+            if (newHtml) {
+                const tmp = document.createElement('div');
+                tmp.innerHTML = newHtml;
+                existing.replaceWith(tmp.firstElementChild);
+            } else {
+                existing.remove();
+            }
+        } else if (newHtml) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = newHtml;
+            const actions = body.querySelector('.spell-cast-actions');
+            if (actions) actions.before(tmp.firstElementChild);
+            else body.appendChild(tmp.firstElementChild);
+        }
+        _persistRollEntry('spell_cast_aoe_resolved', d);
     }
 
     // ---------- Death save broadcast handler (v2.1.0) ----------

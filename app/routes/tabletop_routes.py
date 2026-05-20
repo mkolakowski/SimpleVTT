@@ -954,6 +954,54 @@ def _purge_save_request_context() -> None:
         _save_request_context.pop(k, None)
 
 
+# v2.48.0 Phase T.5e: caster-gated AoE placement. When an AoE spell
+# (Fireball / Burning Hands / etc.) is cast WITHOUT a target list,
+# the cast card lands in "pending placement" state — the caster (or
+# GM) sees a "📍 Place AoE" button on the card that, when clicked,
+# opens the on-canvas placement picker and POSTs ``/place_aoe`` with
+# the swept-up target_combatant_ids. The stash carries everything
+# the place_aoe endpoint needs to resolve targets: damage expr,
+# damage type, save ability, DC, the auto_apply_damage flag the
+# campaign had at cast time, the caster id (for auth), the spell
+# slug/name (for the broadcast metadata). Keyed by cast_id; 8-hour
+# TTL same as the save-request context.
+_pending_aoe_casts: dict[str, dict] = {}
+
+
+def _purge_pending_aoe_casts() -> None:
+    cutoff = _time.time() - 8 * 3600
+    stale = [k for k, v in _pending_aoe_casts.items() if v.get("ts", 0) < cutoff]
+    for k in stale:
+        _pending_aoe_casts.pop(k, None)
+
+
+# Shape names from app/data/local/dnd5e/spells/*.json that trigger
+# the AoE placement picker on the client. Mirrors the client-side
+# ``_AOE_SHAPES`` Set in sheet_dnd5e.html.
+_AOE_SHAPE_SET = frozenset({
+    "sphere", "cone", "line", "cube", "self_sphere", "self_cube",
+})
+
+
+def _extract_aoe_area(spell: dict) -> dict | None:
+    """Return the first AoE area block on a spell's actions list, or
+    None if the spell isn't a recognised AoE. Used by ``/cast_spell``
+    to flip the cast into pending-placement mode when no targets were
+    supplied, AND by ``/place_aoe`` to pull the area for the broadcast
+    metadata."""
+    for action in (spell.get("actions") or []):
+        area = action.get("area") or {}
+        shape = (area.get("shape") or "").strip()
+        size_ft = int(area.get("size_ft") or 0)
+        if shape in _AOE_SHAPE_SET and size_ft > 0:
+            return {
+                "shape": shape,
+                "size_ft": size_ft,
+                "secondary_ft": int(area.get("secondary_ft") or 0),
+            }
+    return None
+
+
 async def _apply_damage_to_combatant(
     db: Session,
     campaign_id: int,
@@ -6731,6 +6779,31 @@ async def cast_spell(
         "target_name": target_name_resolved or target_name_in or "",
     }
 
+    # v2.48.0 Phase T.5e: caster-gated AoE placement. When the spell
+    # carries an AoE area block AND no targets were supplied (neither
+    # target_combatant_id nor target_combatant_ids), the cast lands in
+    # "pending placement" state: the existing save/attack/damage
+    # resolution blocks below all skip naturally because they're
+    # gated on a target being present, so the broadcast goes out with
+    # a ``pending_aoe_placement: True`` flag that tells the client to
+    # render a "📍 Place AoE" button (gated to caster + GM) instead
+    # of an empty pill row. The button posts to ``/place_aoe`` with
+    # the swept-up target_combatant_ids; that endpoint pulls the
+    # spell context from ``_pending_aoe_casts[cast_id]`` to resolve
+    # saves + damage.
+    _aoe_area_info = _extract_aoe_area(spell)
+    _has_aoe_targets = bool(target_combatant_id or target_combatant_ids_in)
+    pending_aoe_placement = bool(_aoe_area_info and not _has_aoe_targets)
+    payload["pending_aoe_placement"] = pending_aoe_placement
+    if _aoe_area_info:
+        payload["area_shape"] = _aoe_area_info["shape"]
+        payload["area_size_ft"] = _aoe_area_info["size_ft"]
+        payload["area_secondary_ft"] = _aoe_area_info["secondary_ft"]
+    else:
+        payload["area_shape"] = ""
+        payload["area_size_ft"] = 0
+        payload["area_secondary_ft"] = 0
+
     # Register heal claims so /apply_healing can validate and roll server-side
     if payload["spell_healing"]:
         _purge_heal_claims()
@@ -7461,6 +7534,65 @@ async def cast_spell(
         payload["auto_save_passed"] = auto_save_passed
         payload["auto_save_breakdown"] = auto_save_breakdown
 
+    # v2.48.0 Phase T.5e: stash the AoE context so the placement
+    # endpoint can resolve targets later. Skipped when targets were
+    # already supplied (the existing AoE multi-target path ran the
+    # resolution inline). The stash captures the DC + damage_expr +
+    # campaign auto_apply_damage flag computed at cast time so the
+    # placement preserves the "same casting" semantics — changing the
+    # campaign toggle after cast but before placement won't re-roll
+    # damage post-hoc.
+    if pending_aoe_placement:
+        _purge_pending_aoe_casts()
+        # Compute the save DC from the caster sheet — same formula
+        # the resolution block uses but computed here because the
+        # resolution block is skipped when no targets are supplied.
+        _caster_sheet = char.sheet or {}
+        _caster_prof = int(_caster_sheet.get("proficiency_bonus") or 2)
+        _caster_spc = (_caster_sheet.get("spellcasting_ability") or "").strip().upper()[:3]
+        if _caster_spc not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+            _caster_spc = "WIS"
+        _caster_ab = int((_caster_sheet.get("abilities") or {}).get(_caster_spc, 10))
+        _caster_spc_mod = (_caster_ab - 10) // 2
+        _pending_dc = 8 + _caster_prof + _caster_spc_mod
+        # damage_expr + damage_type pulled from the spell same way the
+        # resolution block does, but inline.
+        _pending_dmg_expr = ""
+        _pending_dmg_type = ""
+        _pending_dmg_scaling = None
+        for _a in (spell.get("actions") or []):
+            if _a.get("damage"):
+                _pending_dmg_expr = _a.get("damage") or ""
+                _pending_dmg_type = _a.get("damage_type") or ""
+                _pending_dmg_scaling = _a.get("damage_scaling") or None
+                break
+        if not _pending_dmg_expr:
+            _pending_dmg_expr = spell.get("damage") or ""
+            _pending_dmg_type = spell.get("damage_type") or _pending_dmg_type
+        _pending_caster_level = int((char.sheet or {}).get("level") or 1)
+        _pending_tier = _pick_damage_tier(_pending_dmg_scaling, _pending_caster_level)
+        if _pending_tier and _pending_tier.get("damage"):
+            _pending_dmg_expr = _pending_tier["damage"]
+        _save_ability_for_stash = (spell.get("save_ability") or next(
+            (a.get("save_ability") for a in (spell.get("actions") or []) if a.get("save_ability")),
+            "",
+        ) or "").strip().upper()[:3]
+        _pending_aoe_casts[cast_id] = {
+            "ts": _time.time(),
+            "campaign_id": campaign_id,
+            "caster_user_id": user.id,
+            "caster_char_id": int(char.id),
+            "caster_char_name": char.name,
+            "spell_slug": spell_slug,
+            "spell_name": payload["spell_name"],
+            "save_ability": _save_ability_for_stash,
+            "dc": int(_pending_dc),
+            "damage_expr": _pending_dmg_expr,
+            "damage_type": _pending_dmg_type,
+            "auto_apply_damage": bool(campaign.auto_apply_damage),
+            "area": _aoe_area_info or {},
+        }
+
     await hub.broadcast(campaign_id, {"type": "spell_cast", "data": payload})
     if updated_slot is not None:
         await hub.broadcast(campaign_id, {
@@ -7531,6 +7663,214 @@ async def cast_spell(
         "auto_attack_damage_breakdown": payload.get("auto_attack_damage_breakdown", ""),
         # v2.40.0 multi-beam: per-beam detail for Eldritch Blast etc.
         "auto_attack_beams": payload.get("auto_attack_beams", []),
+        # v2.48.0 Phase T.5e: caster-gated AoE placement. True when the
+        # cast lands in pending-placement mode (AoE spell, no targets
+        # supplied); the client renders a "📍 Place AoE" button on
+        # the cast card instead of the empty pill row, and the button
+        # posts to /place_aoe to resolve targets.
+        "pending_aoe_placement": payload.get("pending_aoe_placement", False),
+        "area_shape": payload.get("area_shape", ""),
+        "area_size_ft": payload.get("area_size_ft", 0),
+        "area_secondary_ft": payload.get("area_secondary_ft", 0),
+    }
+
+
+# ----------- API: place AoE (Phase T.5e — caster-gated placement) -----------
+
+@router.post("/api/campaign/{campaign_id}/place_aoe")
+async def place_aoe(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Resolve a pending AoE cast's targets.
+
+    Posted by the cast card's "📍 Place AoE" button after the caster
+    or GM picks the placement on the canvas. Looks up the pending
+    cast context (stashed by /cast_spell when it was AoE without
+    targets), authorises the requester (must be the original caster
+    OR the campaign GM), rolls per-target NPC saves + save-for-half
+    damage, fires PC roll_requests via the v2.47.0 T.5d path, and
+    broadcasts a ``spell_cast_aoe_resolved`` event that the client
+    uses to populate the cast card's per-target pill row.
+    """
+    body = await request.json()
+    cast_id = (body.get("cast_id") or "").strip()
+    target_combatant_ids = body.get("target_combatant_ids") or []
+    if not cast_id:
+        raise HTTPException(400, "cast_id is required")
+    if not isinstance(target_combatant_ids, list):
+        raise HTTPException(400, "target_combatant_ids must be a list")
+
+    _purge_pending_aoe_casts()
+    ctx = _pending_aoe_casts.get(cast_id)
+    if not ctx or ctx.get("campaign_id") != campaign_id:
+        raise HTTPException(404, "pending AoE cast not found")
+
+    # Auth: caster or GM only.
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(404, "campaign not found")
+    is_gm = _user_is_gm(user, campaign, db)
+    if user.id != ctx.get("caster_user_id") and not is_gm:
+        raise HTTPException(403, "only the caster or GM can place this AoE")
+
+    save_ability = ctx.get("save_ability") or ""
+    dc = int(ctx.get("dc") or 0)
+    damage_expr = ctx.get("damage_expr") or ""
+    damage_type = ctx.get("damage_type") or ""
+    auto_apply_damage = bool(ctx.get("auto_apply_damage"))
+
+    auto_save_targets: list[dict] = []
+    for tid in target_combatant_ids:
+        extra = _lookup_combatant(campaign_id, tid)
+        if not extra:
+            continue
+        extra_name = extra.get("name") or ""
+        extra_char_id = extra.get("char_id")
+        extra_pc = None
+        if extra_char_id:
+            extra_pc = db.query(Character).filter(
+                Character.id == int(extra_char_id),
+                Character.campaign_id == campaign_id,
+            ).first()
+        extra_is_pc = bool(extra_pc and extra_pc.owner_user_id)
+
+        if extra_is_pc:
+            # Mirror the v2.47.0 T.5d PC AoE branch: fire a
+            # roll_request scoped to the PC, stash the AoE-respond
+            # context under the request id so /roll_request/{id}/
+            # respond applies save-for-half damage + broadcasts
+            # ``spell_cast_target_updated`` when the PC submits.
+            note_label = f"{ctx['spell_name']} — {save_ability} save"
+            stat_key = f"{save_ability.lower()}_save" if save_ability else ""
+            req = RollRequest(
+                campaign_id=campaign_id,
+                created_by_user_id=user.id,
+                label=note_label,
+                base_expression="1d20",
+                stat_key=stat_key,
+                dc=dc,
+                visibility=Visibility.PUBLIC,
+            )
+            db.add(req)
+            db.commit()
+            db.refresh(req)
+            await hub.broadcast(campaign_id, {
+                "type": "roll_request",
+                "data": {
+                    "id": req.id,
+                    "label": req.label,
+                    "stat_key": req.stat_key,
+                    "base_expression": req.base_expression,
+                    "dc": req.dc,
+                    "visibility": req.visibility.value,
+                    "created_by_name": user.display_name,
+                    "created_by_user_id": user.id,
+                    "target_user_ids": [extra_pc.owner_user_id],
+                    "target_user_names": [extra_pc.name],
+                },
+            })
+            _purge_save_request_context()
+            _save_request_context[req.id] = {
+                "ts": _time.time(),
+                "campaign_id": campaign_id,
+                "spell_slug": ctx.get("spell_slug") or "",
+                "spell_name": ctx.get("spell_name") or "",
+                "target_character_id": int(extra_pc.id),
+                "target_name": extra_pc.name,
+                "dc": dc,
+                "save_ability": save_ability,
+                "caster_char_id": int(ctx.get("caster_char_id") or 0),
+                "caster_char_name": ctx.get("caster_char_name") or "",
+                "is_aoe": True,
+                "cast_id": cast_id,
+                "combatant_id": extra.get("id"),
+                "damage_expr": damage_expr,
+                "damage_type": damage_type,
+                "auto_apply_damage": auto_apply_damage,
+            }
+            auto_save_targets.append({
+                "combatant_id": extra.get("id"),
+                "target_name": extra_name,
+                "rolled": None,
+                "breakdown": "",
+                "passed": None,
+                "damage_applied": 0,
+                "damage_type": damage_type,
+                "pc_skipped": True,
+                "pending_request_id": req.id,
+            })
+            continue
+
+        # NPC target — roll save server-side + apply save-for-half.
+        if not extra.get("token_template_id"):
+            continue
+        tmpl = db.query(TokenTemplate).filter(
+            TokenTemplate.id == int(extra["token_template_id"]),
+        ).first()
+        if not tmpl:
+            continue
+        npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
+        npc_mod, _ = _resolve_stat_modifier(
+            npc_sheet, "dnd5e", f"{save_ability.lower()}_save",
+        )
+        expr = f"1d20{npc_mod:+d}"
+        try:
+            r = dice_mod.roll(expr)
+            rolled = int(r.total)
+            bd = r.breakdown
+        except dice_mod.DiceParseError:
+            rolled = 0
+            bd = ""
+        passed = rolled >= dc
+        dmg_applied = 0
+        if damage_expr and auto_apply_damage:
+            try:
+                dr = dice_mod.roll(damage_expr)
+                dmg_rolled = max(0, int(dr.total))
+            except dice_mod.DiceParseError:
+                dmg_rolled = 0
+            if dmg_rolled > 0:
+                proposed = dmg_rolled if not passed else dmg_rolled // 2
+                if proposed > 0:
+                    dr_result = await _apply_damage_to_combatant(
+                        db, campaign_id, extra, proposed,
+                        damage_type=damage_type,
+                        attack_id=cast_id,
+                    )
+                    dmg_applied = int(dr_result.get("applied") or 0)
+        auto_save_targets.append({
+            "combatant_id": extra.get("id"),
+            "target_name": extra_name,
+            "rolled": rolled,
+            "breakdown": bd,
+            "passed": passed,
+            "damage_applied": dmg_applied,
+            "damage_type": damage_type,
+        })
+
+    # Broadcast the resolved AoE so every client's cast card mutates
+    # in place: pending button → per-target pill row.
+    await hub.broadcast(campaign_id, {
+        "type": "spell_cast_aoe_resolved",
+        "data": {
+            "cast_id": cast_id,
+            "auto_save_targets": auto_save_targets,
+            "save_ability": save_ability,
+            "dc": dc,
+        },
+    })
+
+    # One-shot: drop the stash so a second /place_aoe for the same
+    # cast_id can't re-resolve and double-apply damage.
+    _pending_aoe_casts.pop(cast_id, None)
+
+    return {
+        "ok": True,
+        "cast_id": cast_id,
+        "auto_save_targets": auto_save_targets,
     }
 
 
