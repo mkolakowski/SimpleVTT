@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.42.1] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Theme audit on the v2.42.0 roll-log layout — replace hardcoded amber + neon chip colors with theme-aware vars.** The v2.42.0 ▼ Result block and Compact-mode pill chips were styled with literal `rgba(212, 168, 94, …)` amber + neon-on-dark semantic colors (#4ade80 / #fb923c / #fbbf24 / #f87171), all picked against the dark theme. Six other themes (midnight, dim, light, forest, bubblegum, oled, fire) inherited those literals and the result was a green block on a blue-accent theme, an amber block on a pink-accent theme, and neon-on-near-white text on the light themes. Plus the `.rolllog-toolbar` background pointed at an undefined `var(--panel)` so the toggle strip was invisibly transparent. PATCH — polish + theme correctness on the v2.42.0 layout; no schema, contract, or content changes.
+**Description:** Three edits. **(1)** `app/templates/tabletop.html` — `.result-block` border + summary background swapped from `rgba(212, 168, 94, …)` literals to `color-mix(in srgb, var(--accent) X%, transparent)` so the block tints with whatever theme accent is active. `.result-chip` background swapped from `rgba(0,0,0,0.18)` (illegible on light themes) to `color-mix(in srgb, var(--fg) 8%, var(--bg-2))` so the chip surface adapts. `.result-chip.chip-heal` / `.chip-hit` / `.chip-crit` / `.chip-damage` / `.chip-buff` now read from `var(--c-heal)` / `var(--c-crit)` / `var(--c-damage)` / `var(--c-buff)` (new vars). `.chip-miss` switched from literal `#f87171` to `var(--danger)` — the theme-aware danger color was already what it conceptually wanted. `.chip-undo` hover swapped from amber literal to `color-mix(in srgb, var(--accent) 18%, transparent)`. `.rolllog-toolbar` background fixed from `var(--panel)` (undefined → transparent) to `var(--input-bg)` so the toolbar is a visible control strip on every theme. **(2)** `app/static/style.css` `:root` — four new semantic-color vars defined globally (`--c-heal: #4ade80`, `--c-crit: #fbbf24`, `--c-damage: #fb923c`, `--c-buff: #5ec1d6`) with a docstring explaining they're outcome tints independent of `--accent` so heal stays green / damage stays orange regardless of the theme's accent palette. **(3)** Same file `[data-theme="light"]` + `[data-theme="bubblegum"]` blocks — override the four `--c-*` vars to deeper, more saturated shades (`#16a34a` / `#b45309` / `#c2410c` / `#0e7490` and similar) that hold legibility on a near-white background. Other themes inherit the dark-friendly defaults and look correct out-of-the-box.
+**Description (cont):** Why `--c-*` are semantic + theme-overridable, not accent-derived. Heal is always positive (green), damage is always hot (orange), crit is always lucky (amber), buff is always cool (cyan) — these tints carry information across themes. Tying them to `--accent` would make a "heal" chip pink in bubblegum and orange in fire, which destroys the at-a-glance read of the chip row. The right model is "semantic tints adapt their saturation to the theme background but keep their hue", which is exactly what `--c-heal: #4ade80` in the default + `--c-heal: #16a34a` in the light theme delivers — same green family, different saturation for the surface.
+**Description (cont 2):** Why `.chip-miss` aliases `--danger` not its own `--c-miss`. Miss = bad/danger and that's already a first-class theme primitive (used by HP-at-zero badges, error states, GM-only borders). One source of truth wins over two near-identical vars. The chip just borrows it.
+
+### Added
+- `app/static/style.css` `:root` — `--c-heal`, `--c-crit`, `--c-damage`, `--c-buff` semantic-color vars with default dark-theme values.
+- `app/static/style.css` `[data-theme="light"]` + `[data-theme="bubblegum"]` — override the four `--c-*` vars to legible-on-light shades.
+
+### Changed
+- `app/templates/tabletop.html` `.result-block` + `.result-block > summary` (+ `:hover`) — `rgba(212, 168, 94, …)` literals → `color-mix(var(--accent) …)`. Block now tints to the active theme's accent.
+- `app/templates/tabletop.html` `.result-chip` background — `rgba(0,0,0,0.18)` → `color-mix(var(--fg) 8%, var(--bg-2))`. Adapts to light themes.
+- `app/templates/tabletop.html` `.result-chip.chip-*` — color literals replaced with `var(--c-heal)` / `var(--danger)` / `var(--c-crit)` / `var(--c-damage)` / `var(--c-buff)`.
+- `app/templates/tabletop.html` `.chip-undo:hover` — amber literal → `color-mix(var(--accent) 18%, transparent)`.
+- `app/templates/tabletop.html` `.rolllog-toolbar` — `background: var(--panel)` (undefined) → `var(--input-bg)`.
+
+### Notes
+- **What to test:** open `/campaign/1`. Click the user-menu avatar → cycle through every theme (Dark / Midnight / Dim / Light / Forest / Bubblegum / OLED / Fire). For each: cast a spell with auto-effects (Healing Word → Krieger, then Fire Bolt → Bandit) and confirm the ▼ Result block border + title takes the theme's accent color, the chips remain legible on both light and dark surfaces, and the "Compact: OFF/ON" toolbar strip is visibly distinct from the drawer panel beneath it. Heal pill stays green, damage pill stays orange, miss pill stays red on every theme.
+- **Backward compat.** Pure presentational change; no JS / payload / endpoint / schema changes. Pre-v2.42.1 cards in the localStorage replay re-render with the new colors because the chip classes are stable.
+
+---
+
 ## [2.42.0] - 2026-05-19
 
 **Schema version:** 56

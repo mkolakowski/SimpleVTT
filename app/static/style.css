@@ -91,6 +91,18 @@
 
 /* ── Theme tokens ──────────────────────────────────────────────────────── */
 
+/* Semantic chip colors (v2.42.1) — outcome tints used by the roll-log
+   chip pills + result-block. Independent of --accent so they keep their
+   meaning across themes (heal=green, damage=orange, crit=amber, buff=cyan)
+   even when the theme accent is something else. Default values are tuned
+   for dark backgrounds; light themes override below. */
+:root {
+    --c-heal:   #4ade80;
+    --c-crit:   #fbbf24;
+    --c-damage: #fb923c;
+    --c-buff:   #5ec1d6;
+}
+
 /* Dark (default) */
 :root,
 [data-theme="dark"] {
@@ -161,6 +173,13 @@
     --btn-hover: #bfdbfe;
     --error-bg: #fee2e2;
     --error-fg: #991b1b;
+
+    /* Semantic chip color overrides — the neon defaults are illegible
+       on a near-white background. Use deeper, more saturated shades. */
+    --c-heal:   #16a34a;
+    --c-crit:   #b45309;
+    --c-damage: #c2410c;
+    --c-buff:   #0e7490;
 }
 
 /* Forest — deep woodland greens */
@@ -193,6 +212,12 @@
     --btn-hover: #f8c8e8;
     --error-bg: #fee2e2;
     --error-fg: #991b1b;
+
+    /* Semantic chip color overrides — same reason as the `light` theme. */
+    --c-heal:   #15803d;
+    --c-crit:   #a16207;
+    --c-damage: #b91c1c;
+    --c-buff:   #155e75;
 }
 
 /* OLED — pure black for pixel-off savings on OLED screens */
