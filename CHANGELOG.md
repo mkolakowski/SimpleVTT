@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.44.2] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Demo content — Shatter on Lyra to exercise the T.5b AoE picker at a second radius.** Adds the SRD spell Shatter (Lv 2, 10 ft sphere, CON save, 3d8 thunder) to Lyra Sunstrider's prepared spell list and populates the empty `area` block in `shatter.json` with `shape: "sphere"`, `size_ft: 10`. Fireball (Thalindra, 20 ft / 4 squares) was the only AoE spell exercising the picker before this — Shatter at 10 ft / 2 squares gives GMs a smaller-radius comparison so they see how the preview circle scales with `size_ft`. Also fills out Lyra's previously-thin Lv 2 prepared list (3 → 4 spells) with a damage option to complement her crowd-control Hold Person + Suggestion + Invisibility. PATCH — demo data tweak + SRD content fill-in, no schema or endpoint changes.
+**Description:** Two edits. **(1)** `app/data/local/dnd5e/spells/shatter.json` — the curated SRD spell file shipped with an empty `area` block (`shape: ""`, `size_ft: 0`); set `shape: "sphere"` and `size_ft: 10` so the T.5b client picker detects it the same way it detects Fireball. **(2)** `app/demo_seed.py` Lyra block — added a `{"name": "Shatter", "level": 2, "prepared": True, "_slug": "shatter", ...}` row between Hold Person and Hypnotic Pattern with a brief `desc` summarizing the rules text + an inline comment explaining the demo-content rationale. Lyra is a Lv 5 Lore Bard so she has 3 Lv 2 slots to spend; Shatter is on the Bard list already so no Magical Secrets accounting is needed.
+**Description (cont):** Why Lyra and not one of the other AoE-capable PCs. Thalindra (Wizard) and Mira (Druid) both already have Fireball — adding a second sphere spell to either would just duplicate the demo at the same 20 ft radius. Cassia (Sorcerer Lv 5, Draconic) has Burning Hands + Fireball but Burning Hands is a 15 ft cone (T.6 work, not T.5b). Lyra was the cleanest fit: a class that gets Shatter naturally, has Lv 2 slots, and previously had no AoE save spell at slot 2 to demo the picker's smaller-radius scaling.
+**Description (cont 2):** Why edit the SRD JSON file directly instead of adding a homebrew override. The Open5e mirror's source data shipped Shatter with an empty `area` block — same way Fireball did until v2.44.0. The fix is in the curated SRD JSON (which is what the picker reads via `_fetchSpellDetail`); a homebrew override would only shadow the SRD for one campaign and leave the upstream demo gap intact. The `_attribution` header on the file already names the SRD source + CC BY 4.0 / OGL 1.0a licensing terms, and adding the `area` fields rephrases nothing — the spell's mechanical text already names the 10 ft radius. Filed as a follow-up: a sweep of the remaining sphere/cone/cube SRD spells to backfill empty `area` blocks now that the picker has a use for them.
+
+### Added
+- `app/data/local/dnd5e/spells/shatter.json` — `area.shape = "sphere"`, `area.size_ft = 10`.
+- `app/demo_seed.py` Lyra block — Shatter at Lv 2 prepared.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM after `docker compose up -d --build`. Open Lyra Sunstrider's mini-sheet, expand Spells, click Cast on Shatter. A 10 ft / 2-square dashed crimson circle should follow the cursor — half the diameter of Fireball's. Place it; on bandits inside, CON saves auto-roll (NPC) and 3d8 thunder applies (full / half). Compare against casting Fireball from Thalindra to see the radius difference visually. The picker UI is unchanged — only the spell's `area.size_ft` differs.
+- **Backward compat.** Demo-data + SRD-content fill only. No schema migration, no endpoint change, no broadcast change. The 208 harness tests still cover the multi-target dispatch contract (v2.44.0 `test_cast_spell_aoe.py`).
+
+### Filed
+- **SRD sphere/cone/cube backfill sweep.** Burning Hands (15 ft cone), Cone of Cold, Sleet Storm (40 ft sphere), Stinking Cloud (20 ft sphere), Cloud of Daggers (5 ft cube), Spirit Guardians (15 ft emanation) etc. all ship with empty `area` blocks today. As shapes other than sphere land (T.6 cone, T.7 line/cube), backfill these JSONs the same way Fireball + Shatter were so the picker activates everywhere it should.
+
+---
+
 ## [2.44.1] - 2026-05-20
 
 **Schema version:** 56

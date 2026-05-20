@@ -770,6 +770,13 @@ def _bard_sheet(name: str) -> dict:
             {"name": "Suggestion", "level": 2, "prepared": True, "_slug": "suggestion", "casting_time": "1 action"},
             {"name": "Invisibility", "level": 2, "prepared": True, "_slug": "invisibility", "casting_time": "1 action"},
             {"name": "Hold Person", "level": 2, "prepared": True, "_slug": "hold-person", "casting_time": "1 action"},
+            # v2.44.2 — Shatter showcases the T.5b AoE picker at the
+            # smaller 10 ft radius (2 squares vs Fireball's 20 ft / 4
+            # squares), so GMs comparing the two see how the picker
+            # scales. Bard list spell; CON save vs thunder damage.
+            {"name": "Shatter", "level": 2, "prepared": True, "_slug": "shatter",
+             "casting_time": "1 action", "damage": "3d8", "save_ability": "CON",
+             "desc": "10 ft radius sphere within 60 ft, CON save DC 14 for half. 3d8 thunder. Inorganic targets have disadvantage on the save."},
             {"name": "Hypnotic Pattern", "level": 3, "prepared": True, "_slug": "hypnotic-pattern", "casting_time": "1 action"},
             {"name": "Dispel Magic", "level": 3, "prepared": True, "_slug": "dispel-magic", "casting_time": "1 action"},
             {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball",
