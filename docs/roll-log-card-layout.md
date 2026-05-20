@@ -35,47 +35,67 @@ The four card variants below differ in **what goes in the body row** and **what 
 
 ## 1. `roll` — plain dice roll
 
-Emitted by `/roll`. Headline is the total (big number in the left column) + a short note line. No outcome pills (a plain roll has no auto-resolution outcome). The dice expression + per-die breakdown live in `▾ details`.
+Emitted by `/roll`. Headline is the total (big number in the left column) + a short note line + a **single breakdown pill** showing the dice formula with bold die faces (v2.43.1 — the `▾ details` collapsible that wrapped this in v2.41.0 is gone; the breakdown is always visible). No "outcome" pill — a plain roll has no auto-resolution outcome; the dice itself is the outcome.
 
 ### Header (always visible)
 
 | Field | Purpose | Example |
 |-------|---------|---------|
 | `total` | Big number in the left column | `19` |
-| `note` | One-line narrative | `🎯 Greataxe → Bandit · vs AC 12 · ✅ HIT` |
+| `note` | One-line narrative | `🎯 Initiative roll · DEX +2` |
 | `user_name` / `char_name` / `portrait_url` | Who rolled | Krieger Stonefist + 🪓 |
 | `visibility` badge | `GM only` / `GM + you` chip when not public | `GM only` |
 | `time` | Local clock | `03:15 PM` |
 
-### `▾ details` (collapsed by default)
+### Body pill (always visible)
 
 | Field | Purpose | Example |
 |-------|---------|---------|
-| `expression` | The submitted dice formula | `1d20+5` |
-| `breakdown` | dice.py's expanded form with bracketed die faces | `1d20[14]+5 = 19` |
+| breakdown pill | `🎲` + `dice.py`'s expanded form with bracketed die faces (bolded inside `[…]`) | `🎲 1d20[15]+2 = 17` |
+
+If the broadcast carries no `breakdown` (very rare — server-side dice always populate it), the pill falls back to showing `expression` alone.
 
 ---
 
 ## 2. `weapon_attack` — `/attack` endpoint result
 
-Emitted on every weapon strike. Carries the attack roll + damage + applied-HP delta + crit / hit / miss verdict. Lines are inline (always visible) because each line is actionable.
+Emitted on every weapon strike. v2.43.1 converted this card to the oversized pill row pattern (parity with spell-cast). Target tag in the header; attack name + meta (range, damage type) inlined on one body row; one pill per outcome (attack-roll verdict + AC, damage applied + HP delta + resist marker, bonus damage attribution, ↶ Undo, save prompt for breath-weapon-style attacks). The per-line dice breakdown moves to `▾ details`.
 
-### Lines (always visible)
+### Header (always visible)
+
+| Field | Purpose | Example |
+|-------|---------|---------|
+| `caster_char_name` | Who attacked | `Krieger Stonefist` |
+| target tag (v2.43.1) | Target combatant chip | `→ Bandit` |
+| `⚔ Attack` chip | Static slot label | `⚔ Attack` |
+| `time` | Local clock | `03:15 PM` |
+
+### Body row (always visible)
 
 ```
-🎯 To hit         17     ✅ HIT vs AC 12      1d20[12]+5
-💥 Damage         9      −9 HP · 11 → 2 HP    ↶ Undo
-✨ Sneak Attack   +6                          1d6[6]
+🗡 Greataxe · 5 ft. · slashing
 ```
 
-| Block | Purpose |
-|-------|---------|
-| **Attack line** | d20 result · hit/miss/crit verdict · target AC |
-| **Damage line** | damage total · type · `damage_applied` HP delta · ↶ Undo button (T.2 auto-apply) |
-| **Bonus damage line** | Sneak Attack / Divine Smite / etc. — separate so attribution is clear |
-| **Prompt-save button** | For save-DC weapons (Breath Weapon, etc.) |
+Attack name + inline range + inline damage type, joined with `·` dots.
 
-Weapon-attack cards do **not** use the oversized pill row — their inline attack/damage lines already carry the same information in a denser format and the dice expression is the at-a-glance content of the card.
+### Outcome pill row (always visible when the attack hit something)
+
+| Pill | Class | When it fires |
+|------|-------|---------------|
+| `🎯 21/12 ✅ HIT` | `chip-hit` / `chip-miss` / `chip-crit` | `attack_total != null && !is_save` |
+| `💥 9 slashing (50 → 41 HP) 🛡 💤` | `chip-damage` | `damage_total != null` — applied delta / resist / dying-or-dead status appended |
+| `✨ Sneak Attack +9` | `chip-buff` | `bonus_damage_total > 0` |
+| `↶ Undo` | `chip-undo` button | `damage_applied > 0` |
+| `📋 Prompt CON save · DC 15` | `chip-prompt` button | `is_save == true` (Breath Weapon-style attacks) |
+
+### `▾ details` (collapsed by default)
+
+| Field | Purpose | Example |
+|-------|---------|---------|
+| attack breakdown | `🎯 1d20[16]+5 = 21` | bold die face |
+| damage breakdown | `💥 1d12[6]+3 = 9` | per-die roll |
+| bonus damage breakdown | `✨ 1d6[6] = 6` | sneak / smite dice |
+| `desc` (optional) | RAW attack description if the schema carries one | |
 
 ---
 

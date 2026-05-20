@@ -1619,11 +1619,9 @@
                     </div>
                     <div class="roll-card-body">
                         ${r.note ? `<div class="roll-card-note">${escapeHTML(r.note)}</div>` : ''}
-                        <details class="roll-card-details">
-                            <summary>▾ details</summary>
-                            <div class="roll-card-expr">${escapeHTML(r.expression)}</div>
-                            <div class="roll-card-breakdown">${formatBreakdown(r.breakdown)}</div>
-                        </details>
+                        <div class="result-pills">
+                            <span class="result-pill">🎲 ${r.breakdown ? formatBreakdown(r.breakdown) : escapeHTML(r.expression || '')}</span>
+                        </div>
                     </div>
                 </div>
             </div>`;
@@ -2392,66 +2390,61 @@
         if (d.range)       metaBits.push(escapeHTML(d.range));
         if (d.damage_type) metaBits.push(escapeHTML(d.damage_type));
 
-        // v2.24.0 Phase T.2: Hit/Miss/Crit badge next to the attack
-        // total. ``d.hit`` is null when no target was set (skip badge);
-        // True/False otherwise. ``d.is_crit`` adds a crit pill in front.
-        const _hitBadge =
-            d.hit === true
-                ? `<span class="weapon-atk-hit ${d.is_crit ? 'crit' : 'hit'}">${d.is_crit ? '💥 Crit!' : '✅ Hit'}${d.target_ac != null ? ` <span class="weapon-atk-ac">(AC ${d.target_ac})</span>` : ''}</span>`
-                : d.hit === false
-                ? `<span class="weapon-atk-hit miss">❌ Miss${d.target_ac != null ? ` <span class="weapon-atk-ac">(AC ${d.target_ac})</span>` : ''}</span>`
+        // v2.43.1: weapon-attack outcome row uses the same oversized
+        // pill pattern as spell-cast. Each line of the v2.24.0 inline
+        // "weapon-atk-line" layout maps to one pill (attack-roll
+        // verdict + AC, damage applied + HP delta + resist marker,
+        // bonus damage attribution, ↶ Undo, save prompt). The
+        // per-pill dice breakdown moves to ▾ details below the pill
+        // row so the card scans top-to-bottom: who → what → outcome.
+        const pills = [];
+        if (!d.is_save && d.attack_total != null) {
+            const cls = d.is_crit ? 'chip-crit' : (d.hit === false ? 'chip-miss' : 'chip-hit');
+            const verdict = d.is_crit ? '💥 CRIT' : (d.hit === false ? '❌ MISS' : (d.hit === true ? '✅ HIT' : ''));
+            const ac = d.target_ac != null ? `/${d.target_ac}` : '';
+            const verdictTail = verdict ? ` ${verdict}` : '';
+            pills.push(`<span class="result-pill ${cls}">🎯 ${d.attack_total}${ac}${verdictTail}</span>`);
+        }
+        if (d.damage_total != null) {
+            const type = d.damage_type ? ` ${escapeHTML(d.damage_type)}` : '';
+            const applied = (d.damage_applied || 0) > 0 && d.target_hp_after != null
+                ? ` (${d.target_hp_before != null ? d.target_hp_before + ' → ' : ''}${d.target_hp_after} HP)`
                 : '';
-        // Attack roll line (skipped for save-based attacks)
-        const atkLineHtml = !d.is_save && d.attack_total != null
-            ? `<div class="weapon-atk-line">
-                   <span class="weapon-atk-label">🎯 To hit</span>
-                   <span class="weapon-atk-total">${d.attack_total}</span>
-                   ${_hitBadge}
-                   <span class="weapon-atk-breakdown">${formatBreakdown(d.attack_breakdown || '')}</span>
-               </div>`
+            const resist = d.target_resistance_applied ? ' 🛡' : '';
+            const status = d.target_dead ? ' 💀' : (d.target_dying ? ' 💤' : '');
+            pills.push(`<span class="result-pill chip-damage">💥 ${d.damage_total}${type}${applied}${resist}${status}</span>`);
+        }
+        if (d.bonus_damage_total != null && d.bonus_damage_total > 0) {
+            const bonusLabel = d.bonus_damage_label || 'Bonus';
+            pills.push(`<span class="result-pill chip-buff">✨ ${escapeHTML(bonusLabel)} +${d.bonus_damage_total}</span>`);
+        }
+        if ((d.damage_applied || 0) > 0) {
+            pills.push(`<button type="button" class="result-pill chip-undo weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this damage application">↶ Undo</button>`);
+        }
+        if (d.is_save) {
+            pills.push(`<button type="button" class="result-pill chip-prompt weapon-atk-save-btn" title="Prompt all players for a ${escapeHTML(d.save_ability)} save">📋 Prompt ${escapeHTML(d.save_ability)} save · DC ${escapeHTML(String(d.save_dc || ''))}</button>`);
+        }
+        const pillsHtml = pills.length ? `<div class="result-pills">${pills.join('')}</div>` : '';
+
+        // Detailed dice breakdowns (attack roll d20 + base damage +
+        // bonus damage) move into ▾ details so the card stays clean.
+        // The pills above carry the totals; the breakdown is audit.
+        const detailRows = [];
+        if (!d.is_save && d.attack_total != null) {
+            detailRows.push(`<div class="roll-card-breakdown">🎯 ${formatBreakdown(d.attack_breakdown || '')}</div>`);
+        }
+        if (d.damage_total != null && d.damage_breakdown) {
+            detailRows.push(`<div class="roll-card-breakdown">💥 ${formatBreakdown(d.damage_breakdown)}</div>`);
+        }
+        if (d.bonus_damage_total != null && d.bonus_damage_total > 0 && d.bonus_damage_breakdown) {
+            detailRows.push(`<div class="roll-card-breakdown">✨ ${formatBreakdown(d.bonus_damage_breakdown)}</div>`);
+        }
+        if (d.desc) detailRows.push(`<div class="spell-cast-desc">${escapeHTML(d.desc)}</div>`);
+        const detailsHtml = detailRows.length
+            ? `<details class="roll-card-details"><summary>▾ details</summary>${detailRows.join('')}</details>`
             : '';
 
-        // v2.24.0 Phase T.2: when auto-apply fired, show the target's
-        // HP transition and an Undo button. ``damage_applied`` is 0
-        // when no auto-apply happened (toggle off, no target, miss).
-        const _appliedHtml = (d.damage_applied || 0) > 0 && d.target_hp_after != null
-            ? ` <span class="weapon-atk-applied">→ ${d.target_hp_before != null ? d.target_hp_before + ' → ' : ''}${d.target_hp_after} HP${d.target_resistance_applied ? ' <span class="weapon-atk-resist">🛡 resisted</span>' : ''}${d.target_dead ? ' <span class="weapon-atk-dead">💀</span>' : d.target_dying ? ' <span class="weapon-atk-dying">💤 dying</span>' : ''}</span>`
-            : '';
-        const _undoBtnHtml = (d.damage_applied || 0) > 0
-            ? `<button type="button" class="weapon-atk-undo" data-attack-id="${escapeHTML(d.id || '')}" title="Revert this damage application">↶ Undo</button>`
-            : '';
-        // Damage line (always present if a damage expression was set)
-        const dmgLineHtml = d.damage_total != null
-            ? `<div class="weapon-atk-line">
-                   <span class="weapon-atk-label">💥 Damage</span>
-                   <span class="weapon-atk-total">${d.damage_total}${d.damage_type ? ' <span class="weapon-atk-dmgtype">' + escapeHTML(d.damage_type) + '</span>' : ''}</span>
-                   ${_appliedHtml}
-                   ${_undoBtnHtml}
-                   <span class="weapon-atk-breakdown">${formatBreakdown(d.damage_breakdown || '')}</span>
-               </div>`
-            : '';
-
-        // v2.16.0: bonus damage line (Sneak Attack / Divine Smite / etc.)
-        // Renders below the base damage line. Total + breakdown surfaced
-        // separately so the audience can read the attribution rather than
-        // having to mentally subtract base damage from a fused total.
-        // Label rides on the line label so the chat reads "Sneak Attack +12"
-        // (or "Divine Smite +9 radiant" if a damage type is specified by
-        // the future Smite picker; today the bonus inherits the base attack's
-        // damage type since the picker doesn't differentiate).
-        const bonusLabel = d.bonus_damage_label || 'Bonus';
-        const bonusLineHtml = d.bonus_damage_total != null && d.bonus_damage_total > 0
-            ? `<div class="weapon-atk-line">
-                   <span class="weapon-atk-label">✨ ${escapeHTML(bonusLabel)}</span>
-                   <span class="weapon-atk-total">+${d.bonus_damage_total}</span>
-                   <span class="weapon-atk-breakdown">${formatBreakdown(d.bonus_damage_breakdown || '')}</span>
-               </div>`
-            : '';
-
-        const saveBtnHtml = d.is_save
-            ? `<button class="spell-cast-btn weapon-atk-save-btn" type="button" title="Prompt all players for a ${escapeHTML(d.save_ability)} save">📋 Prompt ${escapeHTML(d.save_ability)} save (DC ${d.save_dc})</button>`
-            : '';
-
+        const targetTagHtml = _targetTagHtml(d);
         const li = document.createElement('li');
         li.dataset.attackId = d.id;
         li.innerHTML = `
@@ -2459,17 +2452,17 @@
                 <div class="roll-card-header">
                     <div class="roll-card-avatar">${avatarInner}</div>
                     <span class="roll-card-user" data-uid="${d.caster_user_id}"${color ? ` style="color:${escapeHTML(color)}"` : ''}>${escapeHTML(dispName)}</span>
+                    ${targetTagHtml}
                     <span class="spell-cast-slot">⚔ Attack</span>
                     <span class="roll-card-time">${timeStr}</span>
                 </div>
                 <div class="spell-cast-body">
-                    <div class="spell-cast-name">🗡 ${escapeHTML(d.attack_name || 'Attack')} ${_targetTagHtml(d)}</div>
-                    ${metaBits.length ? `<div class="spell-cast-meta">${metaBits.join(' · ')}</div>` : ''}
-                    ${atkLineHtml}
-                    ${dmgLineHtml}
-                    ${bonusLineHtml}
-                    ${d.desc ? `<div class="spell-cast-desc">${escapeHTML(d.desc)}</div>` : ''}
-                    ${saveBtnHtml ? `<div class="spell-cast-actions">${saveBtnHtml}</div>` : ''}
+                    <div class="spell-cast-name-row">
+                        <span class="spell-cast-name">🗡 ${escapeHTML(d.attack_name || 'Attack')}</span>
+                        ${metaBits.length ? `<span class="spell-cast-meta-inline">· ${metaBits.join(' · ')}</span>` : ''}
+                    </div>
+                    ${pillsHtml}
+                    ${detailsHtml}
                     ${_overBudgetBadge(d)}
                     <div class="spell-cast-results"></div>
                 </div>

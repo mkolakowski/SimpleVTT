@@ -214,20 +214,25 @@
        blends fg + bg-2 so chips stay legible on light themes; semantic
        colors come from --c-* vars in style.css. */
     .result-pills {
-        display: flex; flex-wrap: wrap; gap: 6px;
-        margin-top: 8px;
+        display: flex; flex-wrap: wrap; gap: 5px;
+        margin-top: 6px;
     }
+    /* v2.43.1: shortened from the v2.43.0 30 px min-height to 28 px.
+       Non-button pills don't need to meet the 32 px touch-target floor
+       (CLAUDE.md compact-panel rule applies to clickable elements
+       only); the chip-undo + chip-prompt button-pills below override
+       min-height back to 32 px so they remain touch-friendly. */
     .result-pill {
-        display: inline-flex; align-items: center; gap: 5px;
-        padding: 5px 12px;
+        display: inline-flex; align-items: center; gap: 4px;
+        padding: 3px 11px;
         border: 1.5px solid var(--border);
-        border-radius: 16px;
+        border-radius: 14px;
         background: color-mix(in srgb, var(--fg) 8%, var(--bg-2));
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
         color: var(--fg);
         line-height: 1.3;
-        min-height: 30px;
+        min-height: 28px;
     }
     .result-pill.chip-heal   { border-color: var(--c-heal);   color: var(--c-heal); }
     .result-pill.chip-hit    { border-color: var(--c-heal);   color: var(--c-heal); }
@@ -236,14 +241,24 @@
     .result-pill.chip-damage { border-color: var(--c-damage); color: var(--c-damage); }
     .result-pill.chip-buff   { border-color: var(--c-buff);   color: var(--c-buff); }
     .result-pill.chip-prompt { border-color: var(--accent);   color: var(--accent); }
-    button.result-pill.chip-undo {
-        border-color: var(--accent); color: var(--accent);
+    /* v2.43.1: clickable button-pills (chip-undo, chip-prompt save
+       prompt) keep the 32 px CLAUDE.md compact-panel touch floor —
+       the non-button pills above can shrink to 28 px since they
+       aren't tap targets. */
+    button.result-pill {
         background: transparent; cursor: pointer;
         font-family: inherit;
+        min-height: 32px;
+    }
+    button.result-pill.chip-undo {
+        border-color: var(--accent); color: var(--accent);
     }
     button.result-pill.chip-undo:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
     button.result-pill.chip-undo.undone {
         opacity: 0.5; cursor: default; border-color: var(--border); color: var(--fg-mute);
+    }
+    button.result-pill.chip-prompt:hover {
+        background: color-mix(in srgb, var(--accent) 18%, transparent);
     }
 
     /* v2.43.0: spell-cast / feature-used inline-meta styles. The
