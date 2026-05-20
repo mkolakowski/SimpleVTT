@@ -2803,19 +2803,22 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             }
                         }
                     } catch (_) {}
-                    // v2.44.1 Phase T.5b: spells with an AoE sphere
-                    // (Fireball, Shatter, etc.) bypass the single-target
-                    // picker and open the on-canvas placement mode
-                    // exposed by tabletop.js. The area data lives in the
-                    // spell's curated JSON (``actions[].area``) and is
-                    // fetched via the same Open5e endpoint the detail
-                    // panel uses; the result is cached so the second
-                    // cast in a session is instant. Only available when
-                    // the cast happens on the tabletop page (mini-sheet
-                    // shares window with tabletop.js) — the standalone
-                    // full-sheet falls through to the single-target
-                    // picker because ``window._openAoePicker`` is not
-                    // defined there.
+                    // v2.44.1 Phase T.5b → v2.45.0 Phase T.6: spells
+                    // with an AoE area (sphere = Fireball / Shatter;
+                    // cone = Burning Hands; line / cube / self-sphere
+                    // later) bypass the single-target picker and open
+                    // the on-canvas placement mode exposed by
+                    // tabletop.js. The area data lives in the spell's
+                    // curated JSON (``actions[].area``) and is fetched
+                    // via the same Open5e endpoint the detail panel
+                    // uses; the result is cached so the second cast
+                    // in a session is instant. Only available when
+                    // the cast happens on the tabletop page (mini-
+                    // sheet shares window with tabletop.js) — the
+                    // standalone full-sheet falls through to the
+                    // single-target picker because ``window._openAoe
+                    // Picker`` is not defined there.
+                    const _AOE_SHAPES = new Set(['sphere', 'cone']);
                     let _spArea = null;
                     if (typeof window._openAoePicker === 'function') {
                         try {
@@ -2823,7 +2826,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             const _action = _detail && Array.isArray(_detail.actions)
                                 ? _detail.actions.find(a =>
                                     a && a.area
-                                    && a.area.shape === 'sphere'
+                                    && _AOE_SHAPES.has(a.area.shape)
                                     && (Number(a.area.size_ft) || 0) > 0)
                                 : null;
                             if (_action) _spArea = _action.area;
@@ -2833,7 +2836,16 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         const placed = await window._openAoePicker({
                             shape: _spArea.shape,
                             size_ft: _spArea.size_ft,
+                            secondary_ft: _spArea.secondary_ft || 0,
                             name: s.name,
+                            // Cone (and later line / self-sphere) need
+                            // the caster's token as the origin. The
+                            // picker resolves the token via the active
+                            // map's ``tokens`` array by character_id;
+                            // if the caster isn't on the map, the
+                            // picker returns null immediately so we
+                            // revert the slot below.
+                            char_id: {{ char.id }},
                         });
                         if (placed === null) {
                             // Cancelled the AoE placement — revert slot.

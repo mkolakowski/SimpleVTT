@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.45.0] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Phase T.6 — AoE cone shape with aim-from-caster placement.** Extends the v2.44.1 `_aoePicker` from a single-shape (sphere) module to a shape-aware one, adding `cone` as the first non-sphere geometry. Cones originate at the caster's token (resolved from `char_id` against the active map's tokens), the mouse cursor sets the aim direction, and the picker renders the PHB cone template (isoceles triangle with width-at-distance equal to distance, i.e. half-angle ≈ 26.57°). Hit-test mirrors the printed template: a token is in-cone iff its axial component is in `[0, length]` AND its perpendicular component is at most half the axial component. Backfills `burning-hands.json` with `shape: "cone", size_ft: 15`; Magnus (Warlock) already has Burning Hands as a subclass-granted spell so the demo can exercise the cone picker without further seed changes. MINOR — new shape capability is additive; existing sphere flow is unchanged, single-target spells unaffected.
+**Description:** Four edits. **(1)** `app/static/tabletop.js` `_aoePicker` — refactored from a sphere-only module into a shape-dispatching one: new `origin: {x, y}` property for shapes that need a fixed caster-side origin; new `_tokenInShape(t, cx, cy)` shape-aware hit-test invoked from both `commit()` (for the final target list) and the render loop (for the live in-shape highlight rings); new `_resolveOrigin(charId)` helper that scans the canvas's `tokens` array for a token with matching `character_id` and returns its center in canvas coords; `_radiusPx` renamed to `_sizePx` with a back-compat alias. Cone-specific math is contained in two short blocks: hit-test (axial + perpendicular projection onto cursor-relative axis, in-cone iff `0 ≤ par ≤ length && perp ≤ par/2`) and render (filled triangle from origin to two far corners at `axis * L ± perp * L/2`, plus a small dot at the origin so the GM can see the cone's pivot point). **(2)** `app/templates/sheet_dnd5e.html` `.sp-cast` handler — generalized the AoE-shape detection from `=== 'sphere'` to membership in `_AOE_SHAPES = new Set(['sphere', 'cone'])`, plumbed `secondary_ft` through (used by T.7's line/cube), and now passes `char_id: {{ char.id }}` to `_openAoePicker` so cone (and later line / self-sphere) can resolve the caster's token. **(3)** `app/data/local/dnd5e/spells/burning-hands.json` — the curated SRD JSON shipped with an empty `area` block; set `shape: "cone"`, `size_ft: 15`. **(4)** Hint chip label is shape-aware: `15 ft cone · aim with cursor · click to fire · Esc to cancel` for cones vs the existing `20 ft sphere · click to place · Esc to cancel` for spheres.
+**Description (cont):** Why the triangle cone instead of a 53° circular sector. Both are valid readings of the PHB ("A cone's width at a given point along its length is equal to that point's distance from the point of origin" — the triangle interpretation gives the same width-equals-distance rule, the sector is what you get if "length" means slant range). The printed cone templates in published 5e adventures and the digital tools D&D Beyond / Roll20 / FoundryVTT all use the triangle. Matching that convention keeps the visual familiar to GMs migrating from those tools and avoids the "did this token get clipped by the curved edge?" edge case at the cone's far corners.
+**Description (cont 2):** Why the caster's token, not a separate origin click. The PHB cone "extends in a direction you choose from its point of origin"; for self-range spells like Burning Hands, the origin IS the caster (their hands). Letting the GM pick an arbitrary origin would let them aim Burning Hands from the wrong square — wrong RAW. Spells with a non-self range that use cones (Cone of Cold) will need a follow-up that asks for an origin click before the aim click; filed.
+**Description (cont 3):** Why no new harness test. The server-side multi-target dispatch in `/cast_spell` (v2.44.0 T.5a) is shape-agnostic — it just iterates the `target_combatant_ids` list. Cone geometry lives entirely client-side, so the existing `tests/harness/test_cast_spell_aoe.py` already covers the contract that matters (per-target save + damage + `pc_skipped` accounting). The picker UI itself is exercised by the Playwright smoke harness via the broader sheet flow.
+
+### Added
+- `app/static/tabletop.js` — cone hit-test + render + caster-origin resolution; generalized `_aoePicker` to be shape-aware.
+- `app/data/local/dnd5e/spells/burning-hands.json` — `area.shape = "cone"`, `area.size_ft = 15`.
+- `app/templates/sheet_dnd5e.html` `.sp-cast` handler — cone-aware shape detection + `char_id` plumbing + `secondary_ft` plumbing for T.7.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM after rebuild. Open Magnus's mini-sheet (right-click his token → mini-sheet), expand Spells, click Cast on Burning Hands. A flame-orange triangular wedge should anchor at Magnus's token and pivot to follow the cursor; bandit tokens whose centers fall inside the wedge highlight with a yellow ring. Click to fire — the multi-target body submits and the in-cone bandits take fire damage (full / half on DEX save). Right-click or Esc cancels. Confirm Fireball (sphere) still works from Thalindra. If Magnus isn't placed on the map, the picker should resolve to null and the spell-slot decrement should revert.
+- **Backward compat.** Pure additive client behavior. The v2.44.0 server contract handles cones with no change (multi-target loop is shape-agnostic). No schema change. The 208 harness tests still pass.
+
+### Filed
+- **T.7a — line shape** (Lightning Bolt: 100 ft × 5 ft from caster toward cursor).
+- **T.7b — cube shape** (Cloud of Daggers, Thunderwave: edge length, placed at cursor).
+- **T.7c — self-centered sphere** (Spirit Guardians, Antimagic Field: radius around caster; no separate placement click).
+- **Cone with a non-self origin click** (Cone of Cold and other ranged cones). Two-stage placement: click 1 picks the origin, click 2 picks the aim. Until shipped, all cones originate at the caster.
+
+---
+
 ## [2.44.2] - 2026-05-20
 
 **Schema version:** 56

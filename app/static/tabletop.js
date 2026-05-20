@@ -278,23 +278,38 @@
     };
     window._targetingState = _targeting;
 
-    // v2.44.1 Phase T.5b: AoE sphere/circle picker. The sheet's
-    // ``.sp-cast`` handler calls ``window._openAoePicker({shape,
-    // size_ft, name})`` for spells whose action carries ``area.shape
-    // == "sphere"``. The picker activates a placement mode on the
-    // canvas: mouse-follow preview circle, click-to-place, Escape /
-    // right-click to cancel. On placement, computes the set of token
-    // ids inside the circle and resolves the returned Promise with
-    // ``{target_combatant_ids, center}`` so the cast handler can
-    // submit the AoE multi-target body the T.5a endpoint accepts.
-    // Standard D&D 5e: 1 grid square = 5 ft, so radius_px =
-    // (size_ft / 5) * gridSize.
+    // v2.44.1 Phase T.5b → v2.45.0 Phase T.6: AoE placement picker.
+    // The sheet's ``.sp-cast`` handler calls ``window._openAoePicker(
+    // {shape, size_ft, name, char_id})`` for spells whose action
+    // carries a non-empty ``area`` block. The picker activates a
+    // placement mode on the canvas: shape-specific mouse-follow
+    // preview, click-to-place, Escape / right-click to cancel. On
+    // placement, computes the set of token ids inside the shape and
+    // resolves the returned Promise with ``{target_combatant_ids,
+    // center}`` so the cast handler can submit the AoE multi-target
+    // body the T.5a endpoint accepts.
+    //
+    // Standard D&D 5e: 1 grid square = 5 ft, so ``px_per_ft = gridSize
+    // / 5``. Supported shapes:
+    //   - ``sphere`` (T.5b): origin = cursor, radius = size_ft.
+    //   - ``cone``   (T.6):  origin = caster's token center, axis =
+    //                       direction(origin → cursor), length =
+    //                       size_ft. PHB cone: width at distance d
+    //                       equals d, i.e. half-angle = arctan(0.5)
+    //                       ≈ 26.57°. Modelled as an isoceles triangle
+    //                       from origin to the two far corners at
+    //                       (axis * L + perp * L/2) and (axis * L -
+    //                       perp * L/2), matching the printed cone
+    //                       template; cleaner than a circular sector
+    //                       for grid play.
     const _aoePicker = {
         active: false,
         shape: '',
         size_ft: 0,
+        secondary_ft: 0,
         spellName: '',
-        cursor: null,         // { x, y } in canvas (map) coords
+        origin: null,         // { x, y } canvas coords — non-null for cone/line/self-sphere
+        cursor: null,         // { x, y } canvas coords
         _resolve: null,       // promise resolver — null when inactive
 
         start(opts) {
@@ -304,10 +319,23 @@
             this.active = true;
             this.shape = String(opts.shape || 'sphere');
             this.size_ft = Number(opts.size_ft) || 0;
+            this.secondary_ft = Number(opts.secondary_ft) || 0;
             this.spellName = String(opts.name || 'Spell');
             this.cursor = null;
+            // Shapes that need an origin = caster's token resolve it
+            // up-front. If we can't find a token for the casting
+            // character (off-map / token not placed), bail with a
+            // null resolve so the cast handler can surface an error.
+            this.origin = null;
+            if (this.shape === 'cone') {
+                this.origin = _aoePicker._resolveOrigin(opts.char_id);
+                if (!this.origin) {
+                    this._cleanup();
+                    return Promise.resolve(null);
+                }
+            }
             document.body.classList.add('aoe-picker-active');
-            _showAoePickerHint(this.spellName, this.size_ft);
+            _showAoePickerHint(this.spellName, this.size_ft, this.shape);
             try { render(); } catch (_) {}
             return new Promise((resolve) => { this._resolve = resolve; });
         },
@@ -322,33 +350,23 @@
         commit(canvasX, canvasY) {
             if (!this.active) return;
             const resolve = this._resolve;
-            // Hit-test every token: token is inside iff its center is
-            // within radius_px of the click. Hidden tokens skipped for
-            // non-GM; PCs and NPCs are both included (server-side
-            // filters PCs into ``pc_skipped: True`` entries).
-            const radius_px = this._radiusPx();
             const target_combatant_ids = [];
-            for (const t of tokens) {
-                if (t.is_hidden && !ME.isGm) continue;
-                const tcx = t.x + gridSize / 2;
-                const tcy = t.y + gridSize / 2;
-                const dx = tcx - canvasX;
-                const dy = tcy - canvasY;
-                if (Math.hypot(dx, dy) > radius_px) continue;
-                // Resolve token → combatant id via the same lookup
-                // _targeting.getTargets() uses.
-                const battle = (window.battle && window.battle.combatants) || [];
-                let combatant = null;
+            const battle = (window.battle && window.battle.combatants) || [];
+            const _resolveCombatant = (t) => {
                 for (const c of battle) {
-                    if (c.source_token_id != null && c.source_token_id === t.id) { combatant = c; break; }
-                    if (t.character_id && c.char_id === t.character_id) { combatant = c; break; }
+                    if (c.source_token_id != null && c.source_token_id === t.id) return c;
+                    if (t.character_id && c.char_id === t.character_id) return c;
                     if (t.token_template_id
                             && c.token_template_id === t.token_template_id
-                            && c.name === t.label) { combatant = c; break; }
+                            && c.name === t.label) return c;
                 }
-                if (combatant && combatant.id) {
-                    target_combatant_ids.push(combatant.id);
-                }
+                return null;
+            };
+            for (const t of tokens) {
+                if (t.is_hidden && !ME.isGm) continue;
+                if (!this._tokenInShape(t, canvasX, canvasY)) continue;
+                const combatant = _resolveCombatant(t);
+                if (combatant && combatant.id) target_combatant_ids.push(combatant.id);
             }
             this._cleanup();
             if (resolve) resolve({
@@ -357,17 +375,63 @@
             });
         },
 
-        _radiusPx() {
+        /** Shape-aware hit-test. ``(canvasX, canvasY)`` is the click
+         *  position (cursor at commit time). */
+        _tokenInShape(t, canvasX, canvasY) {
+            const tcx = t.x + gridSize / 2;
+            const tcy = t.y + gridSize / 2;
+            const len_px = this._sizePx();
+            if (this.shape === 'sphere') {
+                return Math.hypot(tcx - canvasX, tcy - canvasY) <= len_px;
+            }
+            if (this.shape === 'cone' && this.origin) {
+                const ox = this.origin.x, oy = this.origin.y;
+                // Axis = direction from origin to cursor (unit vector).
+                const adx = canvasX - ox, ady = canvasY - oy;
+                const amag = Math.hypot(adx, ady);
+                if (amag < 1) return false; // degenerate aim
+                const ax = adx / amag, ay = ady / amag;
+                // Token relative to origin, projected onto axis (par)
+                // and perpendicular to axis (perp).
+                const rx = tcx - ox, ry = tcy - oy;
+                const par = rx * ax + ry * ay;
+                const perp = Math.abs(rx * (-ay) + ry * ax);
+                // PHB cone triangle: in-cone iff 0 ≤ par ≤ length and
+                // perp ≤ par / 2 (half-width = half the axial distance).
+                return par >= 0 && par <= len_px && perp <= par / 2;
+            }
+            return false;
+        },
+
+        /** Resolve a {x, y} canvas-space origin for the caster's token.
+         *  Returns null if no token with ``character_id === charId``
+         *  is on the active map. */
+        _resolveOrigin(charId) {
+            const cid = parseInt(charId, 10);
+            if (!cid) return null;
+            for (const t of tokens) {
+                if (t.character_id === cid) {
+                    return { x: t.x + gridSize / 2, y: t.y + gridSize / 2 };
+                }
+            }
+            return null;
+        },
+
+        _sizePx() {
             // 1 grid square = 5 ft by D&D 5e convention. The map
             // config doesn't carry a feet-per-square override today.
             return (this.size_ft / 5) * gridSize;
         },
+        // Back-compat alias — earlier T.5b code used _radiusPx().
+        _radiusPx() { return this._sizePx(); },
 
         _cleanup() {
             this.active = false;
             this.shape = '';
             this.size_ft = 0;
+            this.secondary_ft = 0;
             this.spellName = '';
+            this.origin = null;
             this.cursor = null;
             this._resolve = null;
             document.body.classList.remove('aoe-picker-active');
@@ -385,14 +449,18 @@
 
     // Floating hint chip for the AoE placement mode. Mirrors the
     // existing targeting chip's positioning but uses the damage tint
-    // so the user knows they're in a different mode.
-    function _showAoePickerHint(spellName, sizeFt) {
+    // so the user knows they're in a different mode. Label text varies
+    // by shape so the GM sees whether they're placing a sphere (click
+    // anywhere) vs aiming a cone (cursor = direction from caster).
+    function _showAoePickerHint(spellName, sizeFt, shape) {
         _hideAoePickerHint();
         const el = document.createElement('div');
         el.id = 'aoe-picker-hint';
+        const shapeLabel = shape === 'cone' ? 'cone' : 'sphere';
+        const verb = shape === 'cone' ? 'aim with cursor · click to fire' : 'click to place';
         el.innerHTML =
-            `<strong>💥 ${spellName}</strong> · ${sizeFt} ft sphere · ` +
-            `<span class="muted">click to place · Esc to cancel</span>`;
+            `<strong>💥 ${spellName}</strong> · ${sizeFt} ft ${shapeLabel} · ` +
+            `<span class="muted">${verb} · Esc to cancel</span>`;
         Object.assign(el.style, {
             position: 'absolute',
             top: '10px',
@@ -627,7 +695,7 @@
             ctx.stroke();
             ctx.restore();
         });
-        // T.5b: AoE picker preview circle. Drawn last so it sits on
+        // T.5b → T.6: AoE picker preview. Drawn last so it sits on
         // top of tokens and targeting rings. Translucent flame-orange
         // fill + dashed crimson stroke so it reads as "damage zone".
         // Tokens whose centers fall inside get a faint highlight ring
@@ -635,23 +703,54 @@
         if (_aoePicker.active && _aoePicker.cursor) {
             const cx = _aoePicker.cursor.x;
             const cy = _aoePicker.cursor.y;
-            const r = _aoePicker._radiusPx();
+            const len = _aoePicker._sizePx();
             ctx.save();
             ctx.fillStyle = 'rgba(220,38,38,0.18)';
             ctx.strokeStyle = '#dc2626';
             ctx.lineWidth = 2.5;
             ctx.setLineDash([8, 6]);
-            ctx.beginPath();
-            ctx.arc(cx, cy, r, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
+            if (_aoePicker.shape === 'sphere') {
+                ctx.beginPath();
+                ctx.arc(cx, cy, len, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            } else if (_aoePicker.shape === 'cone' && _aoePicker.origin) {
+                // Axis = origin → cursor (unit), perp = axis rotated 90°.
+                // Far corners at origin + axis*L ± perp*(L/2) — PHB
+                // cone template, width-at-distance d = d.
+                const ox = _aoePicker.origin.x, oy = _aoePicker.origin.y;
+                const adx = cx - ox, ady = cy - oy;
+                const amag = Math.hypot(adx, ady) || 1;
+                const ax = adx / amag, ay = ady / amag;
+                const px = -ay, py = ax;
+                const tipX  = ox + ax * len;
+                const tipY  = oy + ay * len;
+                const halfW = len / 2;
+                const leftX  = tipX + px * halfW, leftY  = tipY + py * halfW;
+                const rightX = tipX - px * halfW, rightY = tipY - py * halfW;
+                ctx.beginPath();
+                ctx.moveTo(ox, oy);
+                ctx.lineTo(leftX,  leftY);
+                ctx.lineTo(rightX, rightY);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+                // Small dot at origin so the caster's token has a
+                // visible "this is where the cone starts" marker.
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.arc(ox, oy, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#dc2626';
+                ctx.fill();
+            }
             ctx.restore();
-            // Highlight tokens inside the circle.
+            // Highlight tokens inside the shape using the same hit-test
+            // logic as commit().
             tokens.forEach(t => {
                 if (t.is_hidden && !ME.isGm) return;
+                if (!_aoePicker._tokenInShape(t, cx, cy)) return;
                 const tcx = t.x + gridSize / 2;
                 const tcy = t.y + gridSize / 2;
-                if (Math.hypot(tcx - cx, tcy - cy) > r) return;
                 const tr = (gridSize * t.size) / 2 - 4;
                 ctx.save();
                 ctx.lineWidth = 2.5;
