@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 204 (as of v2.43.12, 2026-05-19).
+**Total tests:** 205 (as of v2.43.14, 2026-05-20).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -451,6 +451,7 @@ Read-only doc-hub routes added in v2.43.3. Tests live in `tests/harness/test_wik
 | `test_wiki_guide_serves_roll_log` | `GET /wiki/roll-log-guide` → 200, HTML body contains "roll-log" (case-insensitive). |
 | `test_wiki_unknown_slug_404` | `GET /wiki/no-such-page` → 404. |
 | `test_wiki_traversal_blocked` | URL-encoded `../` in the slug → 404 / 400 (path-traversal blocked). |
+| `test_wiki_markdown_guide_renders` | v2.43.14: `/wiki/realtime-broadcasts-catalog` (a `.md` source) renders through the markdown package + wraps in the `wiki_md.html` template. Asserts `<h1`, `<table`, and the catalog's title text are present. |
 
 ---
 

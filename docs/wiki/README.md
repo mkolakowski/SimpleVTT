@@ -17,6 +17,7 @@ This wiki complements the canonical references that live elsewhere in the repo:
 |-------|--------|----------|--------|
 | [Roll-log guide](roll-log-guide.html) | HTML (visual) | GMs + contributors | ✅ shipped (v2.43.1) |
 | [Toast notifications guide](toast-notifications-guide.html) | HTML (visual) | GMs + contributors | ✅ shipped (v2.43.8) |
+| [Realtime broadcasts catalog](realtime-broadcasts-catalog.md) | Markdown (reference) | Contributors | ✅ shipped (v2.43.14) |
 
 ## TODO — guides to write
 
@@ -46,7 +47,7 @@ This wiki is a stub. The list below is what we want it to grow into.
 - [ ] **The click-through test harness.** Why the harness exists, how `conftest.py` wires the demo PCs to authenticated httpx clients, the `WSCollector` contract, when to add a happy-path vs error-path test. See also `docs/plans/test-harness.md`.
 - [ ] **SRD + local content resolution.** `app/data/local/dnd5e/` JSON files, the `local_content.resolve(slug, type=…)` lookup, how spells / items / monsters are enriched.
 - [ ] **Schema migrations.** The inline `_apply_inline_migrations()` model in `app/database.py`, `SCHEMA_VERSION` bumps, how to write a forward-only migration step.
-- [ ] **Realtime broadcasts.** The full broadcast catalog (battle_update, roll, weapon_attack, spell_cast, feature_used, resource_update, presence_update, character_death_save, heal_applied, …), payload shapes, visibility filtering, client handler map.
+- [x] **Realtime broadcasts.** The full broadcast catalog (battle_update, roll, weapon_attack, spell_cast, feature_used, resource_update, presence_update, character_death_save, heal_applied, …), payload shapes, visibility filtering, client handler map. → [realtime-broadcasts-catalog.md](realtime-broadcasts-catalog.md).
 
 ### Reference cards
 

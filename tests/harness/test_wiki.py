@@ -46,6 +46,22 @@ async def test_wiki_unknown_slug_404():
     assert resp.status_code == 404
 
 
+async def test_wiki_markdown_guide_renders():
+    """v2.43.14: GET /wiki/realtime-broadcasts-catalog — markdown
+    source file under docs/wiki/ is rendered through the markdown
+    package + wrapped in the wiki_md.html template. 200 + body
+    contains the catalog's title text.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/realtime-broadcasts-catalog")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "Realtime broadcasts catalog" in resp.text
+    # The markdown renders into proper HTML (h1/table/code etc.).
+    assert "<h1" in resp.text
+    assert "<table" in resp.text
+
+
 async def test_wiki_traversal_blocked():
     """Path-traversal characters in the slug are rejected before
     touching the filesystem. ../something resolves to /wiki/../something

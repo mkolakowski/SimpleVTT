@@ -14,9 +14,11 @@ To add a new guide:
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Optional
 
+import markdown as md_lib
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
@@ -67,8 +69,34 @@ def wiki_guide(
     """
     if not slug.replace("-", "").replace("_", "").isalnum():
         raise HTTPException(status_code=404, detail="Not found")
-    path = _WIKI_DIR / f"{slug}.html"
-    if not path.is_file():
+
+    # v2.43.14: try .md first (text-heavy guides like the broadcasts
+    # catalog + endpoint catalog), then .html (visual guides like the
+    # roll-log + toast guides). The .html branch keeps the v2.43.4
+    # behavior — read the file, inject data-theme into the <html>
+    # opener, return raw. The new .md branch renders through the
+    # ``markdown`` package + wraps in the wiki_md.html template so
+    # the same base.html chrome (topnav, footer, theme) wraps every
+    # text guide consistently.
+    md_path = _WIKI_DIR / f"{slug}.md"
+    html_path = _WIKI_DIR / f"{slug}.html"
+
+    if md_path.is_file():
+        source = md_path.read_text(encoding="utf-8")
+        rendered = md_lib.markdown(
+            source,
+            extensions=["tables", "fenced_code", "sane_lists"],
+        )
+        # Pull the first H1 as the page title, fall back to the slug.
+        m = re.search(r"<h1[^>]*>(.*?)</h1>", rendered, re.IGNORECASE | re.DOTALL)
+        title = re.sub(r"<[^>]+>", "", m.group(1)).strip() if m else slug
+        return templates.TemplateResponse("wiki_md.html", {
+            "request": request,
+            "title": title,
+            "body": rendered,
+        })
+
+    if not html_path.is_file():
         raise HTTPException(status_code=404, detail="Not found")
 
     user: Optional[User] = get_current_user(request, db)
@@ -76,7 +104,7 @@ def wiki_guide(
     # Read + inject. Keep the rewrite tiny: only the ``<html>`` opener
     # changes. The guide's existing inline `<link>` to style.css does
     # the rest of the work via CSS cascade.
-    html = path.read_text(encoding="utf-8")
+    html = html_path.read_text(encoding="utf-8")
     html = html.replace(
         '<html lang="en">',
         f'<html lang="en" data-theme="{theme}">',

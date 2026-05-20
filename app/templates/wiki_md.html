@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} — SimpleVTT wiki{% endblock %}
+{% block head %}
+<style>
+  /* v2.43.14: wiki guide rendered from a markdown source under
+     docs/wiki/. Inherits the centered-column-with-left-justified-prose
+     layout pattern (v2.43.10) shared with the HTML wiki guides. */
+  .wiki-md {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 28px 36px 80px;
+      line-height: 1.55;
+      font-size: 14px;
+  }
+  .wiki-md h1 {
+      font-size: 24px;
+      letter-spacing: 0.2px;
+      margin: 0 0 6px;
+  }
+  .wiki-md h2 {
+      font-size: 16px;
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 6px;
+      margin: 36px 0 8px;
+  }
+  .wiki-md h3 {
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin: 24px 0 6px;
+      color: var(--fg);
+  }
+  .wiki-md p { margin: 8px 0; }
+  .wiki-md ul, .wiki-md ol { padding-left: 22px; margin: 8px 0; }
+  .wiki-md li { margin: 3px 0; }
+  .wiki-md a { color: var(--accent); }
+  .wiki-md a:hover { text-decoration: underline; }
+  .wiki-md code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      color: var(--accent);
+      padding: 1px 6px;
+      border-radius: 3px;
+  }
+  .wiki-md pre {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      font-size: 12px;
+      overflow-x: auto;
+      line-height: 1.4;
+  }
+  .wiki-md pre code {
+      background: transparent;
+      color: var(--fg);
+      padding: 0;
+  }
+  .wiki-md table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0 18px;
+      font-size: 13px;
+  }
+  .wiki-md th, .wiki-md td {
+      border: 1px solid var(--border);
+      padding: 6px 10px;
+      text-align: left;
+      vertical-align: top;
+  }
+  .wiki-md th {
+      background: var(--bg-2);
+      font-weight: 600;
+      font-size: 12px;
+  }
+  .wiki-md blockquote {
+      border-left: 3px solid var(--accent);
+      background: color-mix(in srgb, var(--accent) 8%, var(--bg-2));
+      padding: 8px 12px;
+      margin: 10px 0;
+      border-radius: 0 4px 4px 0;
+  }
+  .wiki-md hr {
+      border: 0;
+      border-top: 1px solid var(--border);
+      margin: 28px 0;
+  }
+  .wiki-md strong { color: var(--fg); }
+</style>
+{% endblock %}
+{% block content %}
+<article class="wiki-md">
+  {{ body | safe }}
+</article>
+{% endblock %}

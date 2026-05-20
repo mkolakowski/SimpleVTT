@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.14] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Wiki expansion plan execution — Tier 0 doc #1: Realtime broadcasts catalog (markdown), plus the wiki route gains markdown rendering so text-heavy guides can land as `.md` instead of being converted to HTML.** First entry from the v2.43.13 plan's recommended ship order. New `docs/wiki/realtime-broadcasts-catalog.md` catalogs all 33 WS broadcast types — what fires them, the payload shape, the client handler, visibility rules, and a how-to for adding new types. The wiki route at `/wiki/<slug>` now looks for a `.md` source first (rendered through the new `markdown==3.7` dep + wrapped in `app/templates/wiki_md.html` for theme + chrome consistency), then falls back to the `.html` source for visual guides. PATCH — additive doc, additive route capability; no schema changes.
+**Description:** Six edits. **(1)** New `docs/wiki/realtime-broadcasts-catalog.md` — ~250-line reference: hub overview, quick index table of all 33 broadcast types (mapping type → fire-from endpoint → client handler), per-broadcast detail sections (with payload field lists + handler names), visibility filter docs, an "Adding a new broadcast type" convention checklist. Cross-links the harness payload-shape tests (`tests/harness/test_broadcast_payload_shapes.py`) as the field-presence contract. **(2)** `requirements.txt` — added `markdown==3.7`. **(3)** `app/routes/wiki_routes.py` — `wiki_guide` now checks for a `.md` source under `docs/wiki/<slug>.md`. When found, reads + renders through `markdown.markdown(extensions=["tables", "fenced_code", "sane_lists"])`, extracts the first `<h1>` as the page title, and returns through the new `wiki_md.html` template. Falls back to the v2.43.4 `.html` path when no `.md` source exists. **(4)** New `app/templates/wiki_md.html` — extends `base.html`; wraps the rendered body in `<article class="wiki-md">`; inline CSS uses the site theme tokens (so themes work) and the v2.43.10 centered-880px-column + left-aligned-prose pattern (so the prose reads comfortably). Headings, tables, code blocks, blockquotes, lists all styled to match the existing wiki guides. **(5)** Wiki indexes updated — `docs/wiki/README.md` "Available guides" table gets a new row for the catalog; the "Realtime broadcasts" TODO line is ticked off with a link. Same on `app/templates/wiki.html`. **(6)** New harness test `test_wiki_markdown_guide_renders` asserts `GET /wiki/realtime-broadcasts-catalog` → 200 + `text/html` content type + `<h1>` and `<table>` present (the markdown rendered into proper HTML) + the title text appears.
+**Description (cont):** Why add `markdown` as a dep instead of converting the catalog to HTML. The plan called for ~15 markdown-format guides ahead. Converting each to HTML by hand would be busywork + each conversion drifts from the source authoring format. The `markdown` package is ~50 KB, no native deps, well-maintained, widely used. The render-at-request-time cost is negligible for a doc page; could be cached in the future if it ever matters.
+**Description (cont 2):** Why a separate template (`wiki_md.html`) instead of putting the styles in the markdown source. The styling has to apply to whatever HTML the markdown package emits (h1, table, code, etc.) — those are global element selectors. Putting them in the template means one styling source applies to every future markdown guide, instead of each guide carrying its own inline `<style>` block.
+
+### Added
+- `docs/wiki/realtime-broadcasts-catalog.md` — Tier 0 contributor reference: catalog of all 33 WS broadcast types + payload shapes + client handlers + visibility rules.
+- `app/templates/wiki_md.html` — Jinja wrapper that styles the markdown-rendered body using site theme tokens.
+- `requirements.txt` — `markdown==3.7`.
+- `tests/harness/test_wiki.py::test_wiki_markdown_guide_renders` — asserts the `.md` rendering path works.
+
+### Changed
+- `app/routes/wiki_routes.py` `wiki_guide` — looks for `.md` source first (rendered via `markdown` lib + `wiki_md.html` template), then falls back to the existing `.html` source path.
+- `docs/wiki/README.md` — "Available guides" table gains the catalog row; "Realtime broadcasts" TODO ticked.
+- `app/templates/wiki.html` — same as `docs/wiki/README.md`.
+- `docs/test-harness-coverage.md` — total bumped to 205; new wiki-section row.
+
+### Notes
+- **What to test:** open `/wiki` — the "Available guides" table now lists three guides. Click "Realtime broadcasts catalog" → the markdown source renders as styled HTML at `/wiki/realtime-broadcasts-catalog` with the topnav + footer chrome from `base.html`. Switch themes via the user menu; the page palette adapts (theme tokens cascade through the wiki_md.html inline styles).
+- **Backward compat.** Existing `.html` guides (`roll-log-guide`, `toast-notifications-guide`) still resolve via the same `/wiki/<slug>` route — the new `.md` lookup runs first but immediately falls through when no `.md` source exists. Both guides still render with their inline `data-theme` injection unchanged.
+
+### Next up
+- **Endpoint catalog** (Tier 0, plan item #2) — same markdown format. Will land as `docs/wiki/endpoint-catalog.md`.
+- **Architecture overview** (Tier 0, plan item #3) — same format.
+
+---
+
 ## [2.43.13] - 2026-05-20
 
 **Schema version:** 56
