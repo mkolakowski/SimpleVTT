@@ -19,6 +19,7 @@ This wiki complements the canonical references that live elsewhere in the repo:
 | [Toast notifications guide](toast-notifications-guide.html) | HTML (visual) | GMs + contributors | ✅ shipped (v2.43.8) |
 | [Realtime broadcasts catalog](realtime-broadcasts-catalog.md) | Markdown (reference) | Contributors | ✅ shipped (v2.43.14) |
 | [Endpoint catalog](endpoint-catalog.md) | Markdown (reference) | Contributors | ✅ shipped (v2.43.15) |
+| [Architecture overview](architecture-overview.md) | Markdown (system map) | Contributors | ✅ shipped (v2.43.16) |
 
 ## TODO — guides to write
 
@@ -38,7 +39,7 @@ This wiki is a stub. The list below is what we want it to grow into.
 
 ### System explainers (contributor-facing)
 
-- [ ] **Architecture overview.** FastAPI + SQLAlchemy + Jinja2 + HTMX + vanilla JS + Postgres. Where the realtime hub lives (`app/realtime.py`). The per-campaign WebSocket fan-out model. Why no SPA framework.
+- [x] **Architecture overview.** FastAPI + SQLAlchemy + Jinja2 + HTMX + vanilla JS + Postgres. Where the realtime hub lives (`app/realtime.py`). The per-campaign WebSocket fan-out model. Why no SPA framework. → [architecture-overview.md](architecture-overview.md).
 - [ ] **The action-economy system.** The four chips (Act / Bns / Rxn / Mov), the over-budget gate, strict-action-economy mode, the `_mark_battle_economy` helper, Phase 4a layered dimming, the audit badge. See also `docs/plans/action-economy.md`.
 - [ ] **The targeting system (Phase T.0–T.9).** Double-tap targeting, the target-picker modal, the targeting state machine (`window._targetingState`), localStorage cross-tab sync, the mobile 🎯 button. See also `docs/plans/targeting.md`.
 - [ ] **The buff slot system (Phase C).** `_install_buff` / `_remove_buff` / `_get_buffs`, concentration anchors, paired-buff cleanup on concentration drop, save-or-suck condition install, the buff descriptive layer on the sheet.

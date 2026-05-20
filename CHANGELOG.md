@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.16] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Wiki plan exec #3 — Architecture overview.** Tier 0 doc #3 (last foundational doc) from the v2.43.13 plan. New `docs/wiki/architecture-overview.md` is the system map every new contributor reads first: tech stack rationale, request lifecycle (HTTP → ORM → hub broadcast → fan-out), the three state locations (Postgres / in-memory hub / browser localStorage) and their lifetimes, full directory layout, schema-migration model, the vanilla-JS+Jinja-no-SPA decision, auth model + 401-redirect handler, demo-mode summary, docker-compose deployment model, testing overview, and a closing "where to go from here" pointer table. Cross-links the [broadcasts catalog](realtime-broadcasts-catalog.md) + [endpoint catalog](endpoint-catalog.md) so the three Tier 0 docs form a navigable trio. PATCH — additive doc.
+**Description:** Three edits. **(1)** New `docs/wiki/architecture-overview.md` — ~300 lines: ASCII system diagram, tech-stack table (12 rows with rationale per layer), request-lifecycle walkthrough using the "Krieger swings a Greataxe" scenario, three-state-location table, directory layout with one-line annotations per module, schema migration narrative, frontend philosophy + the ~8000-LOC tabletop.js trade-off note, Docker Compose service breakdown, harness summary, version-bump policy. **(2)** Both wiki indexes updated. **(3)** TODO ticked in both indexes.
+**Description (cont):** Why the ASCII diagram at the top. New contributors land on this page and need a 5-second answer to "what's the shape of this thing." The diagram shows browser → FastAPI → Postgres + the WS hub off to the side. After that visual hit, the reader is willing to scroll through the tech-stack table + lifecycle walkthrough. Without the diagram, the prose is harder to land cold.
+**Description (cont 2):** Why a "where to go from here" closing section. The architecture overview deliberately doesn't deep-dive any subsystem — that's what the Tier 2 wiki guides are for. Closing with a pointer table ("a specific subsystem → its wiki guide; a specific endpoint → endpoint catalog; …") prevents this page from drifting into a 1500-line bible that has to be rewritten on every commit. Each subsystem owns its own depth; this doc owns the map.
+
+### Added
+- `docs/wiki/architecture-overview.md` — Tier 0 contributor onboarding doc.
+
+### Changed
+- `docs/wiki/README.md` — "Available guides" gains the overview; TODO ticked.
+- `app/templates/wiki.html` — same.
+
+### Notes
+- **What to test:** open `/wiki/architecture-overview` — the markdown renders with the ASCII diagram preserved (`<pre>` block from the fenced code), tables styled correctly, theme cascade through `wiki_md.html`.
+- **Backward compat.** Doc-only; no code or schema.
+
+### Next up (from `docs/plans/wiki-expansion.md` recommended ship order)
+- **#4 First-run setup** (Tier 1) — opens the operator onboarding sequence.
+- **#5 Running a session as GM** (Tier 1) — densest GM guide.
+- **#6 The character sheet** (Tier 1, new) — most-touched player surface.
+- **#7 Demo mode** (Tier 3, new) — promotion of `docs/plans/demo-mode.md`.
+
+Tier 0 (foundational) is now complete — every later guide can cross-link into broadcasts catalog + endpoint catalog + architecture overview without re-explaining the basics.
+
+---
+
 ## [2.43.15] - 2026-05-20
 
 **Schema version:** 56

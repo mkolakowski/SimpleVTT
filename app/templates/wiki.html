@@ -135,6 +135,12 @@
         <td>Contributors</td>
         <td><span class="status-shipped">✅ shipped</span></td>
       </tr>
+      <tr>
+        <td><a href="/wiki/architecture-overview">Architecture overview</a></td>
+        <td>Markdown (system map)</td>
+        <td>Contributors</td>
+        <td><span class="status-shipped">✅ shipped</span></td>
+      </tr>
     </tbody>
   </table>
 
@@ -160,7 +166,7 @@
 
   <h3>System explainers (contributor-facing)</h3>
   <ul>
-    <li><span class="todo-checkbox"></span> <strong>Architecture overview.</strong> FastAPI + SQLAlchemy + Jinja2 + HTMX + vanilla JS + Postgres. Where the realtime hub lives (<code>app/realtime.py</code>). The per-campaign WebSocket fan-out model.</li>
+    <li><span class="todo-checkbox" style="background:var(--c-heal);border-color:var(--c-heal);"></span> <strong>Architecture overview.</strong> <em>(Shipped — see the <a href="/wiki/architecture-overview">architecture overview</a>.)</em></li>
     <li><span class="todo-checkbox"></span> <strong>The action-economy system.</strong> The four chips (Act / Bns / Rxn / Mov), the over-budget gate, <code>strict_action_economy</code>, the audit badge.</li>
     <li><span class="todo-checkbox"></span> <strong>The targeting system (Phase T.0–T.9).</strong> Double-tap targeting, target-picker modal, <code>window._targetingState</code>, localStorage cross-tab sync, the mobile 🎯 button.</li>
     <li><span class="todo-checkbox"></span> <strong>The buff slot system (Phase C).</strong> <code>_install_buff</code> / <code>_remove_buff</code>, concentration anchors, paired-buff cleanup, save-or-suck condition install.</li>
