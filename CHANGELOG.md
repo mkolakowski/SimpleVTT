@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.5] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Wiki link in the topnav (in addition to the footer) so it's reachable from every page, including the tabletop.** v2.43.3 / v2.43.4 put the Wiki link in the footer with `target="_blank"`. The tabletop view suppresses the footer block (it's an immersive full-screen layout), so the link was effectively invisible during a session — exactly when a GM is most likely to want a docs lookup. v2.43.5 also surfaces the link in the always-visible topnav, with the same `target="_blank" rel="noopener noreferrer"` tabnabbing-safe pair. Visible to logged-out visitors too — the wiki is public reference docs. PATCH — additive nav surface; no schema or contract changes.
+**Description:** One edit. **(1)** `app/templates/base.html` — new `<a href="/wiki" target="_blank" rel="noopener noreferrer">Wiki</a>` link inside the `<nav>` block of the topnav, rendered BEFORE the `{% if user %}` guard so it's visible whether or not a user is logged in. Title attribute reads "Open the wiki in a new tab" so the new-tab behavior is signaled on hover.
+**Description (cont):** Why a separate topnav entry instead of just relying on the footer link. The footer is overridden to an empty block on `tabletop.html` because the tabletop is a full-screen-immersive layout — adding a footer there would steal real estate from the canvas and the drawer. The topnav stays visible on every page (it's the entry to the user menu, settings, characters, logout). Adding the Wiki link there is the only way to make it reachable from the tabletop without changing the tabletop layout itself.
+
+### Changed
+- `app/templates/base.html` — added a `Wiki` link to the topnav, opening in a new tab. The footer link from v2.43.3 stays in place — both entry points coexist (footer-discoverable + topnav-always-visible).
+
+### Notes
+- **What to test:** open `/campaign/1` (the tabletop). The topnav now shows `Wiki` between the brand and the user-menu links — clicking it opens the wiki in a new browser tab without disrupting the tabletop session. Same on `/`, `/characters`, `/settings`, `/login` — the link is visible everywhere.
+- **Backward compat.** Pure additive UI change; no JS, no route, no schema. Existing footer link from v2.43.3 stays in place.
+
+---
+
 ## [2.43.4] - 2026-05-19
 
 **Schema version:** 56

@@ -63,6 +63,13 @@
     <header class="topnav">
         <a href="/" class="brand">SimpleVTT<span class="brand-version" title="App version v{{ APP_VERSION }} · schema v{{ SCHEMA_VERSION }}">· v{{ APP_VERSION }}</span></a>
         <nav>
+            {# v2.43.5: wiki link in the topnav so it's reachable from
+               every page including the tabletop (which suppresses the
+               footer block). Opens in a new tab with the standard
+               tabnabbing-safe ``rel`` pair so the wiki doesn't steal
+               focus from an in-progress session. Visible to logged-out
+               visitors too — the wiki is public reference docs. #}
+            <a href="/wiki" target="_blank" rel="noopener noreferrer" title="Open the wiki in a new tab">Wiki</a>
             {% if user %}
                 <span class="user">{{ user.display_name }}{% if user.is_admin %} <em>(admin)</em>{% endif %}</span>
                 <a href="/characters">My Characters</a>
