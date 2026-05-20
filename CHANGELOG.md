@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.19] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Wiki plan exec #6 — The character sheet.** Tier 1 doc #3 (new — added in the v2.43.13 planning pass, not in the original `docs/wiki/README.md` TODO). New `docs/wiki/the-character-sheet.md` documents the most-touched player surface: the full-sheet vs mini-sheet duality, all 10 sections (header, HP, action-economy chips, abilities, skills, combat, spells, class features, inventory, description), the edit gestures per field, the WebSocket sync table (which edits broadcast which event types), the page-visibility-API throttle, mobile / iPad considerations, and GM-side editing notes. PATCH — additive doc.
+**Description:** Three edits. **(1)** New `docs/wiki/the-character-sheet.md` — opens with the two-surfaces-one-data-model framing (full sheet at `/character/{id}/sheet` vs mini-sheet on token click), then a section-by-section anatomy walking top to bottom. Per-section: a field-by-field "edit gesture" table so a player can find "how do I change X" without scrolling. The realtime-sync table maps each edit to its broadcast type + re-render scope. Closing sections cover the optimistic-update + page-visibility throttle behavior, mobile iPad considerations (citing the v2.4.24–v2.4.29 debounce work), and GM two-tab edit etiquette. **(2)** `docs/wiki/README.md` updated. **(3)** `app/templates/wiki.html` updated.
+**Description (cont):** Why two-surfaces upfront. New players land on the sheet via the topnav (full sheet) or via clicking their token mid-session (mini-sheet) and don't immediately realize the two are the same data. Establishing it as one model with two surfaces in the first paragraph saves repeated "wait, this is the same thing?" friction. Both surfaces reference the same `sheet_dnd5e.html` Jinja template — the differences are only in the modal scaffolding around it + the always-expanded action rows on the mini-sheet.
+**Description (cont 2):** Why no edit gestures from the GM side documented (yet). The GM-side editing today is the same as the player gesture for every section — clicking ✏ Edit on a character's sheet works identically whether you own the character or you're the GM. Two-tab race conditions are noted (etiquette: if the player is on the sheet, the GM avoids simultaneous edits) but the system tolerates concurrent edits with last-write-wins reconciliation via the broadcast model.
+
+### Added
+- `docs/wiki/the-character-sheet.md` — Tier 1 player + GM how-to.
+
+### Changed
+- `docs/wiki/README.md` — "Available guides" updated.
+- `app/templates/wiki.html` — same.
+
+### Notes
+- **What to test:** open `/wiki/the-character-sheet` — markdown renders through the wiki_md.html theme wrapper; the field-by-field edit-gesture tables (one per section) render with the standard table styling.
+- **Backward compat.** Doc-only.
+
+### Next up (final entry in the recommended-first-7)
+- **#7 Demo mode** (Tier 3, new) — promote from `docs/plans/demo-mode.md` to a first-class wiki guide.
+
+After #7 lands, the recommended-first-7 from `docs/plans/wiki-expansion.md` is complete. The remaining ~15 TODO entries can be picked off in any order — Tier 0 + the first Tier 1 onboarding sequence will be in place, so cross-links resolve.
+
+---
+
 ## [2.43.18] - 2026-05-20
 
 **Schema version:** 56
