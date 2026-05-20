@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 193 (as of v2.43.3, 2026-05-19).
+**Total tests:** 195 (as of v2.43.11, 2026-05-19).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -300,6 +300,8 @@ Generic `/use_feature` endpoint — Rogue Cunning Action, Channel Divinity optio
 | `test_action_surge_is_free` | Action Surge via the generic endpoint is action-economy-free (refunds the action chip). |
 | `test_unknown_feature_key` | Unknown key → 404. |
 | `test_missing_required_fields` | 400. |
+| `test_feature_desc_falls_back_when_client_omits` | v2.43.11: when the client doesn't send `desc`, the server falls back to the curated `_FEATURE_ECONOMY` desc and the option-specific entry (disengage) wins over the parent feature's. |
+| `test_feature_desc_client_override_wins` | Client-supplied `desc` overrides the server table. |
 
 ---
 

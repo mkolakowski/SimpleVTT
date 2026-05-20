@@ -111,52 +111,114 @@ def _casting_time_to_economy(ct: str) -> str:
 # instead of trusting the client. Keep the two tables in sync — slot
 # values diverge → server discards the client's claim and uses the
 # canonical one, so silent UI-only changes won't grant phantom slots.
-# Only the slot field needs mirroring (labels / descs are display-only
-# and live entirely client-side; the roll-log entry posts the
-# server-side display strings via the request body but the slot is
-# always re-derived here).
+#
+# v2.43.11: descriptions added so the feature_used broadcast gets a
+# desc populated even when the client didn't include one (mini-sheet
+# Use buttons, GM-tools panel, etc.). The roll-log feature card
+# inlines the desc next to the feature name. Source-of-truth still
+# stays the JS file — these descs are the server-side fallback used
+# when ``request.body.desc`` is empty.
 _FEATURE_ECONOMY: dict[str, dict] = {
     "cunning-action": {
         "slot": "bonus",
-        "options": {"dash": {}, "disengage": {}, "hide": {}},
-    },
-    "second-wind": {"slot": "bonus"},
-    "action-surge": {"slot": "free"},
-    "channel-divinity": {
-        "slot": "action",
-        # v2.14.3: per-option entries are slot-only; class/subclass
-        # filtering happens client-side in the picker. The mirror just
-        # needs the keys to validate that incoming option_key values
-        # are in the curated table (the JS file is the source of truth
-        # for class/subclass tags + labels + descs).
+        "desc": "Take Dash, Disengage, or Hide as a bonus action.",
         "options": {
-            # Cleric options
-            "turn-undead": {},
-            "preserve-life": {},
-            "radiance-of-the-dawn": {},
-            "guided-strike": {},
-            # Paladin options (v2.14.3)
-            "sacred-weapon": {},
-            "turn-the-unholy": {},
+            "dash":      {"desc": "Move up to your speed again this turn."},
+            "disengage": {"desc": "Your movement doesn't provoke opportunity attacks this turn."},
+            "hide":      {"desc": "Make a Dexterity (Stealth) check to hide."},
         },
     },
-    "lay-on-hands": {"slot": "action"},
-    "divine-smite": {"slot": "free"},
-    "divine-sense": {"slot": "action"},  # v2.15.6
-    "cleansing-touch": {"slot": "action"},  # v2.15.6 (Lv 14 Paladin)
-    "bardic-inspiration": {"slot": "bonus"},
-    "cutting-words": {"slot": "reaction"},  # v2.15.7 (Lore Bard Lv 3)
-    "flurry-of-blows": {"slot": "bonus"},
-    "patient-defense": {"slot": "bonus"},
-    "step-of-the-wind": {"slot": "bonus"},
-    "wild-shape": {"slot": "action"},
-    "rage": {"slot": "bonus"},
-    "reckless-attack": {"slot": "free"},
+    "second-wind": {
+        "slot": "bonus",
+        "desc": "Regain 1d10 + your fighter level HP. Recharges on a short or long rest.",
+    },
+    "action-surge": {
+        "slot": "free",
+        "desc": "Take one additional action on this turn. Recharges on a short or long rest.",
+    },
+    "channel-divinity": {
+        "slot": "action",
+        "desc": "Channel divine energy to fuel a class- and subclass-specific effect.",
+        # v2.14.3: per-option entries cover both Cleric + Paladin
+        # options under the same resource key. The picker filters by
+        # class/subclass client-side; the server only needs the keys
+        # to validate incoming option_keys + a desc to fall back to.
+        "options": {
+            # Cleric options
+            "turn-undead":         {"desc": "Each undead within 30 ft makes a Wisdom save or flees for 1 minute."},
+            "preserve-life":       {"desc": "Distribute 5 × cleric level HP among creatures within 30 ft (none raised above half max HP)."},
+            "radiance-of-the-dawn": {"desc": "Dispel magical darkness; deal 2d10 + cleric level radiant damage on a failed Con save (each enemy within 30 ft)."},
+            "guided-strike":       {"desc": "+10 bonus to one attack roll, declared after seeing the d20."},
+            # Paladin options (v2.14.3)
+            "sacred-weapon":       {"desc": "Imbue a weapon you hold with positive energy for 1 minute: +CHA mod to attack rolls, deals magical damage, emits 20 ft bright light."},
+            "turn-the-unholy":     {"desc": "Each fiend or undead within 30 ft that can see/hear you must succeed on a Wisdom save or be turned for 1 minute."},
+        },
+    },
+    "lay-on-hands": {
+        "slot": "action",
+        "desc": "Spend from your pool (5 × paladin level) to heal a touched creature or cure poison/disease.",
+    },
+    "divine-smite": {
+        "slot": "free",
+        "desc": "After hitting with a melee weapon attack, expend a spell slot for +2d8 radiant (+1d8 per slot level above 1st; +1d8 vs undead/fiends).",
+    },
+    "divine-sense": {
+        "slot": "action",
+        "desc": "Detect celestial / fiend / undead within 60 ft until end of next turn. 1 + CHA mod uses per long rest.",
+    },
+    "cleansing-touch": {
+        "slot": "action",
+        "desc": "End one spell on yourself or one willing creature you touch. CHA mod uses per long rest.",
+    },
+    "bardic-inspiration": {
+        "slot": "bonus",
+        "desc": "Pick one creature within 60 ft (other than yourself). They gain a bonus die to add to one ability check, attack roll, or save in the next 10 minutes.",
+    },
+    "cutting-words": {
+        "slot": "reaction",
+        "desc": "Reaction: spend 1 Bardic Inspiration use to subtract a BI die from an enemy attack roll, ability check, or damage roll within 60 ft.",
+    },
+    "flurry-of-blows": {
+        "slot": "bonus",
+        "desc": "Immediately after the Attack action, spend 1 ki to make two unarmed strikes as a bonus action.",
+    },
+    "patient-defense": {
+        "slot": "bonus",
+        "desc": "Spend 1 ki to take the Dodge action as a bonus action.",
+    },
+    "step-of-the-wind": {
+        "slot": "bonus",
+        "desc": "Spend 1 ki to take Disengage or Dash as a bonus action; your jump distance doubles for the turn.",
+    },
+    "wild-shape": {
+        "slot": "action",
+        "desc": "Transform into a beast you have seen before.",
+    },
+    "rage": {
+        "slot": "bonus",
+        "desc": "+damage on STR melee attacks, advantage on STR checks/saves, resistance to bludgeoning/piercing/slashing.",
+    },
+    "reckless-attack": {
+        "slot": "free",
+        "desc": "On your first attack this turn, gain advantage on melee STR attacks but attacks against you have advantage until your next turn.",
+    },
     "quickened-spell": {"slot": "bonus"},
-    "arcane-recovery": {"slot": "free"},  # v2.16.1 (Wizard Lv 1)
-    "indomitable": {"slot": "free"},      # v2.16.2 (Fighter Lv 9+)
-    "stroke-of-luck": {"slot": "free"},   # v2.16.2 (Rogue Lv 20)
-    "font-of-magic": {"slot": "free"},    # v2.16.2 (Sorcerer Lv 2)
+    "arcane-recovery": {
+        "slot": "free",
+        "desc": "Once per day during a short rest, regain spell slots whose combined level ≤ ⌈wizard_lv/2⌉. L6+ slots are not eligible.",
+    },
+    "indomitable": {
+        "slot": "free",
+        "desc": "Reroll a failed saving throw. Must use the new roll. 1/short rest at Lv 9, 2/short rest at Lv 13, 3/short rest at Lv 17.",
+    },
+    "stroke-of-luck": {
+        "slot": "free",
+        "desc": "Once per short or long rest: turn a missed attack into a hit, OR turn a failed ability check into a 20.",
+    },
+    "font-of-magic": {
+        "slot": "free",
+        "desc": "Spend or gain sorcery points; convert sorcery points to spell slots and vice-versa.",
+    },
 }
 
 
@@ -172,6 +234,36 @@ def _feature_economy_slot(feature_key: str, option_key: str | None) -> str | Non
     feat = _FEATURE_ECONOMY.get((feature_key or "").lower())
     if not feat:
         return None
+    parent_slot = feat.get("slot")
+    if option_key:
+        opt = (feat.get("options") or {}).get(option_key.lower())
+        if opt and opt.get("slot"):
+            return opt["slot"]
+    return parent_slot
+
+
+def _feature_economy_desc(feature_key: str, option_key: str | None) -> str:
+    """Resolve (feature, option) to a description string for the
+    feature_used broadcast. Option's desc takes precedence over the
+    parent feature's desc; falls back to the parent when the option
+    doesn't carry one. Returns "" when the feature isn't in the table.
+
+    Used by /use_feature as the fallback when the client request didn't
+    include a ``desc`` field — the mini-sheet's Use button, the GM-tools
+    panel, and the cf-use button on the full sheet all hit the same
+    endpoint, but only the full sheet's cf-use sends a desc today. v2.43.11
+    populates the desc from this table on every path so the roll-log
+    card always renders the inline tail next to the feature name.
+    """
+    feat = _FEATURE_ECONOMY.get((feature_key or "").lower())
+    if not feat:
+        return ""
+    opt_key = (option_key or "").lower() if option_key else None
+    if opt_key:
+        opt = (feat.get("options") or {}).get(opt_key) or {}
+        if opt.get("desc"):
+            return str(opt["desc"])
+    return str(feat.get("desc") or "")
     parent_slot = feat.get("slot")
     if option_key:
         opt = (feat.get("options") or {}).get(option_key.lower())
@@ -7258,7 +7350,17 @@ async def use_feature(
     feature_label = (body.get("label") or feature_key.replace("-", " ").title())[:160]
     if option_key:
         feature_label = f"{feature_label}: {(option_key or '').replace('-', ' ').title()}"
+    # v2.43.11: fall back to the curated _FEATURE_ECONOMY desc when the
+    # client request didn't include one. The cf-use button on the full
+    # sheet sends ``desc: btn.dataset.desc``, but the mini-sheet, the
+    # GM-tools panel, and any future caller that hits /use_feature
+    # generically would broadcast a feature_used with empty feature_desc
+    # — the roll-log card then renders just the feature name with no
+    # explanation of what was used. The fallback covers all those
+    # paths so every class-feature card carries its description.
     feature_desc = str(body.get("desc") or "")[:400]
+    if not feature_desc:
+        feature_desc = _feature_economy_desc(feature_key, option_key)[:400]
 
     # v2.6.1: Phase 4 over-budget gate. "free" features (Action Surge,
     # Divine Smite, Reckless Attack) never trigger the gate — they grant

@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.11] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Class-feature roll-log cards now always carry a description.** The `feature_used` broadcast's `feature_desc` field was only populated when the client sent one (via `btn.dataset.desc` on the full-sheet `cf-use` button). Mini-sheet Use buttons, GM-tools panel clicks, and any other caller hitting `/use_feature` left `feature_desc` empty, so the roll-log card rendered just the feature name with no explanation. v2.43.11 mirrors the descriptions from the client-side `dnd5e_feature_economy.js` into the server-side `_FEATURE_ECONOMY` table and adds a `_feature_economy_desc(feature_key, option_key)` helper that the `/use_feature` endpoint falls back to when the request body's `desc` is empty. The cf-use button's explicit `desc` still overrides the table (the client wins when it sends a custom string). PATCH — additive payload-content population; no schema or contract changes.
+**Description:** Three edits. **(1)** `app/routes/tabletop_routes.py` `_FEATURE_ECONOMY` — added `desc` fields to every entry mirroring the client-side `dnd5e_feature_economy.js`. Top-level entries cover the generic feature (Cunning Action: "Take Dash, Disengage, or Hide as a bonus action."); per-option entries cover the specific choice (Disengage: "Your movement doesn't provoke opportunity attacks this turn."). Channel Divinity options cover all six current variants (Cleric: Turn Undead, Preserve Life, Radiance of the Dawn, Guided Strike; Paladin: Sacred Weapon, Turn the Unholy). **(2)** Same file — new `_feature_economy_desc(feature_key, option_key)` helper. Option-specific desc takes precedence; falls back to the parent feature's desc when the option doesn't carry one; returns "" for unknown keys. **(3)** Same file `/use_feature` — when `body.get("desc")` is empty, calls `_feature_economy_desc(feature_key, option_key)` to fill it in before broadcasting. The client-supplied desc still wins when present, so a custom desc passed by a future caller (e.g. a "narrate this differently" UI surface) doesn't get clobbered.
+**Description (cont):** Two new harness tests in `tests/harness/test_use_feature.py`. `test_feature_desc_falls_back_when_client_omits` posts cunning-action / disengage WITHOUT a `desc` and asserts the broadcast's `feature_desc` is non-empty + contains either "opportunity" or "movement" (disengage-specific words). `test_feature_desc_client_override_wins` posts the same feature WITH a custom `desc` and asserts the broadcast carries that exact string. 195 tests total (was 193).
+**Description (cont 2):** Why mirror to the server instead of patching every UI caller. The cf-use button on the full sheet sends desc correctly today, but five other callers (the GM-tools panel, the mini-sheet Use buttons rendered by `dnd5e_class_resources.js`, the future iPad-friendly action panel, the chat-card "Use" button on the action-economy chip strip, and any third-party integration) would each need patching individually — five places to keep in sync with `dnd5e_feature_economy.js`'s desc strings. Server-side fallback is one place, agnostic of caller. The client-side override path stays in place so custom narration is still possible.
+
+### Added
+- `app/routes/tabletop_routes.py` `_feature_economy_desc(feature_key, option_key)` helper.
+- `app/routes/tabletop_routes.py` `_FEATURE_ECONOMY` — `desc` fields on every entry, plus per-option descs for cunning-action (3) + channel-divinity (6).
+- `tests/harness/test_use_feature.py` — `test_feature_desc_falls_back_when_client_omits` + `test_feature_desc_client_override_wins`.
+
+### Changed
+- `app/routes/tabletop_routes.py` `/use_feature` — populates `feature_desc` from `_feature_economy_desc` when the client request body's `desc` is empty.
+- `docs/test-harness-coverage.md` — total bumped to 195; two new rows in the use_feature section.
+
+### Notes
+- **What to test:** open `/campaign/1` as the GM. Click any Class Feature button on a sheet (Pip's Cunning Action: Disengage, Tavik's Channel Divinity: Turn Undead, Caelan's Cleansing Touch, Garrik's Indomitable, etc.). The roll-log card now reads `🏃 Cunning Action: Disengage · Your movement doesn't provoke opportunity attacks this turn.` (or the equivalent inline tail for each feature), matching the format Divine Sense already had. Custom descs passed by the cf-use button still win when present.
+- **Backward compat.** Pure payload-content expansion; no schema, no contract, no endpoint changes. Existing callers that DID send `desc` still see their string survive unchanged.
+
+---
+
 ## [2.43.10] - 2026-05-19
 
 **Schema version:** 56

@@ -322,3 +322,52 @@ async def test_missing_required_fields(gm_client):
         json={},
     )
     assert resp.status_code == 400
+
+
+async def test_feature_desc_falls_back_when_client_omits(gm_client, gm_ws, roster):
+    """v2.43.11: /use_feature looks up a curated description from
+    _FEATURE_ECONOMY when the client request didn't include a ``desc``.
+    Asserts the broadcast's ``feature_desc`` is non-empty for a known
+    feature even when no desc was sent, AND that the option-specific
+    desc takes precedence over the parent feature's desc.
+    """
+    pip = roster["Pip Quickfingers"]
+    # No ``desc`` in the body. Server should fall back to the disengage
+    # option's curated desc.
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": pip["id"],
+            "feature_key": "cunning-action",
+            "option_key": "disengage",
+            "label": "Cunning Action",
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    msg = await gm_ws.wait_for("feature_used")
+    desc = msg["data"]["feature_desc"]
+    assert desc, "expected feature_desc to be populated by server-side fallback"
+    assert "opportunity" in desc.lower() or "movement" in desc.lower(), (
+        f"expected disengage-specific desc, got: {desc!r}"
+    )
+
+
+async def test_feature_desc_client_override_wins(gm_client, gm_ws, roster):
+    """When the client DOES send a desc, it overrides the server table."""
+    pip = roster["Pip Quickfingers"]
+    custom_desc = "Pip nimbly disengages, leaving no opening."
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": pip["id"],
+            "feature_key": "cunning-action",
+            "option_key": "disengage",
+            "label": "Cunning Action",
+            "desc": custom_desc,
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    msg = await gm_ws.wait_for("feature_used")
+    assert msg["data"]["feature_desc"] == custom_desc
