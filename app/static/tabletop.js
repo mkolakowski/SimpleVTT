@@ -2265,23 +2265,63 @@
                 pills.push(`<span class="result-pill chip-damage">🎲 −${d.auto_attack_damage_applied}${type}</span>`);
             }
         }
-        // Save (PC prompted / NPC auto-rolled)
-        if (d.auto_save_target_kind === 'pc' && d.auto_save_prompted) {
-            pills.push(
-                `<span class="result-pill chip-prompt">📋 ${escapeHTML(d.auto_save_target_name || '')} ${escapeHTML(d.auto_save_ability || '')} save · DC ${d.auto_save_dc}</span>`
-            );
-        }
-        if (d.auto_save_target_kind === 'npc' && d.auto_save_rolled != null) {
-            const cls = d.auto_save_passed ? 'chip-hit' : 'chip-miss';
-            const v = d.auto_save_passed ? '✅ saved' : '❌ failed';
-            pills.push(
-                `<span class="result-pill ${cls}">📋 ${escapeHTML(d.auto_save_target_name || '')}: ${d.auto_save_rolled}/${d.auto_save_dc} ${v}</span>`
-            );
-        }
-        if (d.auto_save_damage_applied > 0) {
-            const type = d.auto_save_damage_type ? ` ${escapeHTML(d.auto_save_damage_type)}` : '';
-            const tag = d.auto_save_passed ? ' (half)' : '';
-            pills.push(`<span class="result-pill chip-damage">🎲 −${d.auto_save_damage_applied}${type}${tag}</span>`);
+        // Save: multi-target AoE (T.5c) takes precedence over the
+        // single-target headline pills. When the server sent a list
+        // of per-target outcomes (Fireball at 3 bandits, Burning Hands
+        // at 4 mooks, etc.), render one pill per target instead of
+        // collapsing to the headline view — the GM needs to see who
+        // saved, who failed, and how much damage each took.
+        const saveTargets = Array.isArray(d.auto_save_targets) ? d.auto_save_targets : [];
+        const multiSave = saveTargets.length > 1;
+        if (multiSave) {
+            const dc = d.auto_save_dc;
+            const ability = d.auto_save_ability || '';
+            let totalDmg = 0;
+            let dmgType = '';
+            for (const t of saveTargets) {
+                if (t.pc_skipped) {
+                    pills.push(
+                        `<span class="result-pill chip-prompt">📋 ${escapeHTML(t.target_name || '')} ${escapeHTML(ability)} save · DC ${dc} pending</span>`
+                    );
+                    continue;
+                }
+                if (t.rolled == null) continue;
+                const cls = t.passed ? 'chip-hit' : 'chip-miss';
+                const v = t.passed ? '✅' : '❌';
+                const type = t.damage_type ? ` ${escapeHTML(t.damage_type)}` : '';
+                const tag = t.passed ? ' (½)' : '';
+                const dmg = (t.damage_applied || 0) > 0
+                    ? ` · 🎲 −${t.damage_applied}${type}${tag}`
+                    : '';
+                pills.push(
+                    `<span class="result-pill ${cls}">📋 ${escapeHTML(t.target_name || '')} ${t.rolled}/${dc} ${v}${dmg}</span>`
+                );
+                totalDmg += (t.damage_applied || 0);
+                if (!dmgType && t.damage_type) dmgType = t.damage_type;
+            }
+            if (totalDmg > 0) {
+                const typeBit = dmgType ? ` ${escapeHTML(dmgType)}` : '';
+                pills.push(`<span class="result-pill chip-damage">Σ −${totalDmg}${typeBit}</span>`);
+            }
+        } else {
+            // Single-target headline view — unchanged from v2.43+.
+            if (d.auto_save_target_kind === 'pc' && d.auto_save_prompted) {
+                pills.push(
+                    `<span class="result-pill chip-prompt">📋 ${escapeHTML(d.auto_save_target_name || '')} ${escapeHTML(d.auto_save_ability || '')} save · DC ${d.auto_save_dc}</span>`
+                );
+            }
+            if (d.auto_save_target_kind === 'npc' && d.auto_save_rolled != null) {
+                const cls = d.auto_save_passed ? 'chip-hit' : 'chip-miss';
+                const v = d.auto_save_passed ? '✅ saved' : '❌ failed';
+                pills.push(
+                    `<span class="result-pill ${cls}">📋 ${escapeHTML(d.auto_save_target_name || '')}: ${d.auto_save_rolled}/${d.auto_save_dc} ${v}</span>`
+                );
+            }
+            if (d.auto_save_damage_applied > 0) {
+                const type = d.auto_save_damage_type ? ` ${escapeHTML(d.auto_save_damage_type)}` : '';
+                const tag = d.auto_save_passed ? ' (half)' : '';
+                pills.push(`<span class="result-pill chip-damage">🎲 −${d.auto_save_damage_applied}${type}${tag}</span>`);
+            }
         }
         if (d.auto_save_buff_name) {
             const dur = d.auto_save_buff_duration;
@@ -2290,11 +2330,16 @@
                 `<span class="result-pill chip-buff">${escapeHTML(d.auto_save_buff_icon || '💫')} ${escapeHTML(d.auto_save_buff_name)} · ${durLabel}</span>`
             );
         }
-        // Undo pill (when anything was actually applied).
+        // Undo pill (when anything was actually applied). For multi-
+        // target AoE, "applied" sums across per-target damage so the
+        // button shows when at least one bandit took damage.
+        const multiTargetDmg = saveTargets.reduce(
+            (acc, t) => acc + (t && t.damage_applied ? t.damage_applied : 0), 0);
         const anyApplied = (
             (d.auto_heal_applied || 0) > 0
             || (d.auto_attack_damage_applied || 0) > 0
             || (d.auto_save_damage_applied || 0) > 0
+            || multiTargetDmg > 0
         );
         if (anyApplied) {
             pills.push(

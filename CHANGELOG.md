@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.46.3] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Phase T.5c — per-target save pills in the roll-log cast card.** Closes the v2.44.0 gap where multi-target AoE casts (Fireball at 3 bandits, Burning Hands at 4 mooks, etc.) only showed the single-target headline view on the cast card, even though the response carried per-target outcomes on `auto_save_targets`. `_spellResultPillsHtml` now detects `auto_save_targets.length > 1` and renders one save-pill per target — name + roll/DC + verdict + per-target damage applied — followed by a `Σ −total damage` aggregate pill. PC targets in the AoE list (server marks them `pc_skipped: true` per v2.44.0 T.5d-filed) render with a `📋 PCName DEX save · DC 13 pending` chip-prompt pill so the GM can see at a glance which players still owe a save. PATCH — cast-card rendering enhancement, no API change, server payload already carried the data.
+**Description:** One edit. `app/static/tabletop.js` `_spellResultPillsHtml` — added a `multiSave` branch gated on `auto_save_targets.length > 1`. In multi-target mode: iterate the per-target list, render one pill per entry (`pc_skipped` → chip-prompt pending pill, NPC → chip-hit/chip-miss pill with roll/DC/verdict and inline damage), sum damage across targets for an aggregate `Σ` pill. The existing single-target headline branch (kept verbatim) handles `length ≤ 1` so all the v2.43+ casts that didn't carry an AoE list continue to render exactly as before. Also bumped the `anyApplied` guard that gates the Undo button to include the multi-target damage sum — so Undo shows up when at least one bandit took damage in a Fireball, not just when target #0 did.
+**Description (cont):** Why one pill per target instead of one collapsible "▼ details" toggle. The roll-log card is already a tall stack of pills; adding a second click to see the AoE results would hide critical info behind a gesture during the most-active part of combat (the GM just fired a Fireball and needs to know who's still standing). The per-target pills wrap naturally on narrow screens via the existing `result-pills` flex layout, and 8-bandit Fireballs only happen occasionally — a tall card on those rare occasions is the right tradeoff vs hiding the data behind a toggle every time.
+**Description (cont 2):** Why a Σ aggregate pill at the end. After 3-8 per-target pills the GM still wants a single "how much damage did this Fireball do?" number for narration ("the Fireball rolled 82 fire damage total, killing two bandits and wounding three"). Σ uses the math sigma character for compactness — the alternative `Total: -82 fire` reads more clearly but takes 50% more width and pushes pills onto a third wrap line on common monitor widths. Net: same info, less pixel cost.
+**Description (cont 3):** Why no toast change. `roll_toast.js` already fires a save-damage toast for the headline target (target #0). For multi-target AoE, firing N toasts (one per target) would spam the screen on a typical 4-bandit Fireball. The cast card now carries the per-target detail, and the toast retains its "headline + total" framing via the existing single-target logic — adequate for v1. A multi-target-aware toast (one toast with "→ N targets · Σ −82 fire") is filed.
+
+### Added
+- `app/static/tabletop.js` `_spellResultPillsHtml` — `multiSave` branch + per-target pill rendering + Σ aggregate pill + multi-target Undo gate.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM after rebuild. From Thalindra's mini-sheet, cast Fireball using the v2.44.1 AoE picker over 3 bandits. The cast card in the roll log should show three `📋 Bandit Alpha 5/13 ❌ · 🎲 −28 fire` chip-miss pills (or `✅` chip-hit when a bandit saves with half damage), followed by `Σ −total fire`. Now repeat with Pip Quickfingers (PC) standing in the radius: that line renders as `📋 Pip Quickfingers DEX save · DC 13 pending` chip-prompt instead. Cast a single-target Sacred Flame on one bandit: card should look exactly as before (single-target headline path, no AoE pill row). Undo button still works on the multi-target card and reverts all bandits' HP via the server's existing `attack_id` rollback.
+- **Backward compat.** Pure additive client-side rendering. Single-target casts are unchanged. The server payload (`auto_save_targets`) shipped in v2.44.0; this commit just renders it. The 208 harness tests still pass.
+
+### Filed
+- **Multi-target-aware toast.** Today the roll toast for save-damage fires only for target #0. Future iteration: emit one summary toast for AoE casts (`Fireball → 3 targets · Σ −82 fire`).
+
+---
+
 ## [2.46.2] - 2026-05-20
 
 **Schema version:** 56
