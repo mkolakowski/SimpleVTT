@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.47.1] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Fix — right-click pan blocked when AoE picker state is stuck active.** Regression introduced in v2.44.1 T.5b: the mousedown handler intercepted right-click during `_aoePicker.active` to cancel the picker, but `return`'d without falling through to the existing pan-start path. If the picker ever got into a stuck `active: true` state (e.g. a cast that interrupted before the Promise resolved — sheet closed mid-cast, page navigation, mini-sheet iframe reload), every subsequent right-click on the map would hit the cancel-and-return path and pan would never start. The user reported "zoom works, drag doesn't" with no console errors, and the picker isn't visible so there's no UI cue that it's "active." Fix: drop the mousedown right-click intercept entirely — the existing contextmenu handler already cancels the picker on right-click release, and contextmenu fires AFTER mouseup, so pan still works the whole time the right button is held.
+**Description:** One edit. `app/static/tabletop.js` canvas mousedown handler — removed the `if (ev.button === 2) { _aoePicker.cancel(); ... return; }` block. The remaining `if (_aoePicker.active && ev.button === 0) { _aoePicker.commit(...); return; }` still intercepts left-click commit so a click-to-place gesture doesn't accidentally start a token drag. Updated the inline comment to explain why right-click is deliberately NOT intercepted here.
+**Description (cont):** Why the contextmenu cancel is sufficient. The lifecycle is now: user right-clicks → mousedown sets `panning = {...}` and `cursor = 'move'` → user drags → mousemove updates `panX/panY` → user releases → mouseup clears `panning` → contextmenu fires → `_handleRightClick` sees `_aoePicker.active` and cancels. The pan completes normally, then the picker cancels at release time. If the picker was stuck active because of an earlier orphaned start, this right-click both pans the map AND cleans up the stuck state — defensive recovery.
+**Description (cont 2):** Why no harness test. The bug is a UI gesture interaction (mouse pan vs picker state) that the Python harness doesn't reach — the harness drives endpoints + WS broadcasts, not the canvas event loop. The Playwright smoke harness could in principle assert pan works after a forced-stuck picker state, but the fix is one-line in a hot path and the regression is reproducible by inspection of the diff; a test here would be defensive but high cost.
+
+### Fixed
+- `app/static/tabletop.js` canvas mousedown — removed right-click intercept that blocked pan when `_aoePicker.active` was stuck true. Contextmenu handler still cancels the picker on right-click release.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM after rebuild. Right-click + drag the map — it should pan smoothly. Cast Fireball, cancel mid-placement by right-click (or Esc), confirm right-click pan still works after. Cast Fireball, place it normally (left-click), confirm pan still works. The cancel-by-right-click gesture still works because contextmenu fires on right-button release.
+- **Backward compat.** Pure bug fix; no API change. All 209 harness tests still pass.
+
+---
+
 ## [2.47.0] - 2026-05-20
 
 **Schema version:** 56

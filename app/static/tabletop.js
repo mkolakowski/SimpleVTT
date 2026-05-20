@@ -1318,22 +1318,17 @@
     window.vttViewportCenterWorld = viewportCenterWorld;
 
     canvas.addEventListener('mousedown', (ev) => {
-        // T.5b: AoE picker intercepts mousedown so left-click places
-        // the circle and right-click cancels (suppressing pan-start).
-        // Runs before spawn-arming and drag logic so an in-flight
-        // picker can't be cut short by an unrelated gesture.
-        if (_aoePicker.active) {
-            if (ev.button === 0) {
-                const [wx, wy] = clientToCanvas(ev);
-                _aoePicker.commit(wx, wy);
-                ev.preventDefault();
-                return;
-            }
-            if (ev.button === 2) {
-                _aoePicker.cancel();
-                ev.preventDefault();
-                return;
-            }
+        // T.5b: AoE picker intercepts left-click mousedown so the
+        // commit-on-click gesture doesn't start a token drag. Right-
+        // click is deliberately NOT intercepted here — it falls
+        // through to the existing pan-start path. The contextmenu
+        // handler below cancels the picker on right-click release,
+        // so a stuck-active picker can never block panning.
+        if (_aoePicker.active && ev.button === 0) {
+            const [wx, wy] = clientToCanvas(ev);
+            _aoePicker.commit(wx, wy);
+            ev.preventDefault();
+            return;
         }
         // Click-to-set spawn: when armed (GM picked "Set" on a character
         // row in an encounter's spawn-points editor), eat the next
