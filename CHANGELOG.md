@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.20] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Character-sheet wiki guide gains an inline mini-sheet visual mock.** v2.43.19 documented the mini-sheet anatomy in prose; this commit adds a faithful HTML mock so readers see the actual rendering before reading about it. The mock uses CSS custom properties (`var(--accent)`, `var(--c-heal)`, `var(--c-buff)`, etc.) — re-tints with whichever theme the reader has active. Native `<details>` elements make the collapsible sections (Class Features, Inventory, Abilities & Skills) clickable right on the wiki page. PATCH — additive doc polish.
+**Description:** One edit. **(1)** `docs/wiki/the-character-sheet.md` — added a "Sample mini-sheet" subsection inside "Mini-sheet specifics". The mock is a single `<div>` rooted at the document level (so the markdown parser passes it through as raw HTML without wrapping). Shows: header chrome (gradient + accent border + 38px portrait + name + Lv 5 Barbarian sub + AC/Init right-rail), HP block (green bar at 78%, `38 / 49 HP`), action-economy chip strip (Act burned, Bns/Rxn unspent, Mov `0/30`), buff chip (`😤 Rage · 9 rounds` per the v2.43.7 "rounds" spelling), always-expanded Attacks section with two weapon rows + Strike buttons, three collapsible sections (Class Features pre-expanded with three Berserker features + descriptions; Inventory + Abilities & Skills as collapsed placeholders). Closes with a five-bullet "Key things to notice" callout pointing out the theme-cascade behavior, threshold-tint HP coloring, chip-strip read, buff-chip duration suffix, and the always-expanded attacks decision.
+**Description (cont):** Why HTML inline instead of a screenshot. Screenshots freeze the theme + go stale on every UI refresh. The inline mock uses the same CSS custom-property cascade as the live UI, so when the user is viewing in `light` or `forest` or `sepia`, the mock adapts. The native `<details>` elements make it interactive — readers can click the collapsibles right in the wiki and see the fold/unfold gesture work.
+**Description (cont 2):** Why a Lv 5 Barbarian (Krieger) instead of, say, a Wizard or a Cleric. Barbarian uses the visually-richest set of features in one snapshot — the Rage buff chip carries a duration counter (illustrating v2.43.7), the action-economy chip strip shows a spent Act + the movement counter visibly, and Class Features has three short entries that fit without scrolling. A spellcaster would need a spell-slot tracker + spell list which would push the mock past a single comfortable column.
+
+### Changed
+- `docs/wiki/the-character-sheet.md` — new "Sample mini-sheet" subsection with an inline theme-aware mock + interactive `<details>` collapsibles.
+
+### Notes
+- **What to test:** open `/wiki/the-character-sheet` and scroll to "Sample mini-sheet". The mock renders within the markdown body; clicking the section chevrons (Class Features, Inventory, Abilities & Skills) folds / unfolds them in place. Switch themes via the user menu, hard-refresh — the mock's accent / heal-bar / buff-chip / damage-chip colors re-tint to the active theme.
+- **Backward compat.** Pure doc addition.
+
+---
+
 ## [2.43.19] - 2026-05-20
 
 **Schema version:** 56

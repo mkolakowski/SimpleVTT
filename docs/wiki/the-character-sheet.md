@@ -124,12 +124,136 @@ Free-form text fields for backstory, personality traits, ideals, bonds, flaws. S
 
 The mini-sheet (token click on the tabletop) renders the same sections in a stacked modal panel. Differences:
 
-- **Tabs at the top.** The mini-sheet collapses the long page into expandable headers; click each to expand. Tap-friendly for iPad / touch.
+- **Collapsible section headers.** The mini-sheet folds the long page into expandable headers; click each to expand. Tap-friendly for iPad / touch.
 - **No "Edit" gestures.** The mini-sheet is read-only for editing — use the full sheet for those.
 - **Spell + Action rows are always expanded.** Faster click-to-Cast / click-to-Strike during play.
 - **GM sees mini-sheets for every token.** Players see their own + any NPCs the GM has marked visible.
 
 The mini-sheet is what the GM uses to drive monster turns — click the bandit's token, the bandit's mini-sheet opens, click **Strike** on its weapon.
+
+### Sample mini-sheet
+
+Here's how Krieger's mini-sheet looks during a session. Theme-aware — the markup uses the same CSS custom properties as the live mini-sheet, so it re-tints when you switch themes.
+
+<div style="max-width:340px;margin:14px auto;border:1px solid var(--border);border-radius:8px;background:var(--bg-2);overflow:hidden;box-shadow:0 6px 18px rgba(0,0,0,0.25);font-size:12px;line-height:1.4;">
+  <!-- ── Mini-header (always visible) ── -->
+  <div style="display:flex;align-items:flex-start;gap:8px;padding:8px 10px 7px;background:linear-gradient(135deg,rgba(167,139,250,.15),rgba(108,180,255,.10));border-bottom:2px solid var(--accent);">
+    <div style="width:38px;height:38px;border-radius:50%;background:color-mix(in srgb,var(--accent) 20%,transparent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;border:2px solid var(--accent);">🪓</div>
+    <div style="flex:1;min-width:0;">
+      <div style="font-size:13px;font-weight:700;color:var(--fg);">Krieger Stonefist</div>
+      <div style="font-size:10px;color:var(--accent);margin-top:2px;opacity:.85;">Lv 5 Barbarian (Berserker) · Half-Orc</div>
+    </div>
+    <div style="font-size:10px;color:var(--fg-mute);text-align:right;flex-shrink:0;">
+      <div style="font-weight:700;color:var(--fg);">AC 14</div>
+      <div>Init +2</div>
+    </div>
+  </div>
+
+  <!-- ── HP block ── -->
+  <div style="padding:8px 10px;border-bottom:1px solid var(--border);">
+    <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--fg-mute);margin-bottom:4px;">
+      <span style="color:var(--fg);font-weight:600;">HP</span>
+      <span><strong style="color:var(--c-heal);font-size:14px;">38</strong> / 49</span>
+    </div>
+    <div style="height:8px;background:var(--bg);border-radius:4px;overflow:hidden;border:1px solid var(--border);">
+      <div style="width:78%;height:100%;background:var(--c-heal);"></div>
+    </div>
+  </div>
+
+  <!-- ── Action-economy chip strip ── -->
+  <div style="padding:6px 10px;display:flex;gap:5px;border-bottom:1px solid var(--border);">
+    <span style="flex:1;text-align:center;padding:4px 6px;border:1.5px solid var(--c-damage);background:color-mix(in srgb,var(--c-damage) 18%,transparent);border-radius:4px;font-size:10px;font-weight:600;color:var(--c-damage);">⚔ Act</span>
+    <span style="flex:1;text-align:center;padding:4px 6px;border:1.5px solid var(--border);background:var(--bg);border-radius:4px;font-size:10px;color:var(--fg-mute);">💨 Bns</span>
+    <span style="flex:1;text-align:center;padding:4px 6px;border:1.5px solid var(--border);background:var(--bg);border-radius:4px;font-size:10px;color:var(--fg-mute);">🛡 Rxn</span>
+    <span style="flex:1;text-align:center;padding:4px 6px;border:1.5px solid var(--border);background:var(--bg);border-radius:4px;font-size:10px;color:var(--fg-mute);">👣 0/30</span>
+  </div>
+
+  <!-- ── Buff chips (active conditions) ── -->
+  <div style="padding:6px 10px;border-bottom:1px solid var(--border);display:flex;gap:4px;flex-wrap:wrap;">
+    <span style="display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border:1.5px solid var(--c-buff);color:var(--c-buff);background:color-mix(in srgb,var(--c-buff) 12%,transparent);border-radius:12px;font-size:11px;font-weight:600;">😤 Rage <span style="color:var(--fg-mute);font-weight:400;">9 rounds</span></span>
+  </div>
+
+  <!-- ── ⚔ Attacks (always expanded) ── -->
+  <div>
+    <div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:color-mix(in srgb,var(--accent) 8%,transparent);border-bottom:1px solid var(--border);font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.4px;">
+      <span>⚔ Attacks</span>
+    </div>
+    <div style="padding:6px 10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--border);">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:12px;color:var(--fg);">🪓 Greataxe</div>
+          <div style="font-size:10px;color:var(--fg-mute);">+7 to hit · 1d12+5 slashing · 5 ft.</div>
+        </div>
+        <button style="background:transparent;border:1.5px solid var(--c-damage);color:var(--c-damage);border-radius:14px;padding:4px 10px;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;">🗡 Strike</button>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:12px;color:var(--fg);">🗡 Handaxe (thrown)</div>
+          <div style="font-size:10px;color:var(--fg-mute);">+5 to hit · 1d6+3 slashing · 20/60</div>
+        </div>
+        <button style="background:transparent;border:1.5px solid var(--c-damage);color:var(--c-damage);border-radius:14px;padding:4px 10px;font-size:11px;font-weight:600;font-family:inherit;cursor:pointer;">🗡 Strike</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ✨ Class features (collapsible) ── -->
+  <details style="border-top:1px solid var(--border);">
+    <summary style="list-style:none;display:flex;align-items:center;gap:6px;padding:6px 10px;background:color-mix(in srgb,var(--accent) 8%,transparent);font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.4px;cursor:pointer;">
+      <span style="font-size:9px;">▶</span>
+      <span>✨ Class Features</span>
+      <span style="margin-left:auto;font-size:10px;color:var(--fg-mute);text-transform:none;font-weight:400;letter-spacing:0;">3 features</span>
+    </summary>
+    <div style="padding:6px 10px;font-size:11px;color:var(--fg-mute);">
+      <div style="padding:5px 0;border-bottom:1px dashed var(--border);">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <strong style="color:var(--fg);font-size:12px;">😤 Rage</strong>
+          <span style="font-size:10px;color:var(--fg-mute);">(2/3 left)</span>
+        </div>
+        <div style="font-size:10px;font-style:italic;margin-top:2px;">+damage on STR melee, advantage on STR checks/saves, resistance to bludgeoning/piercing/slashing.</div>
+      </div>
+      <div style="padding:5px 0;border-bottom:1px dashed var(--border);">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <strong style="color:var(--fg);font-size:12px;">⚡ Reckless Attack</strong>
+        </div>
+        <div style="font-size:10px;font-style:italic;margin-top:2px;">Gain advantage on STR melee attacks this turn — but attacks against you have advantage until next turn.</div>
+      </div>
+      <div style="padding:5px 0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <strong style="color:var(--fg);font-size:12px;">💢 Frenzy</strong>
+        </div>
+        <div style="font-size:10px;font-style:italic;margin-top:2px;">While raging, make a single melee weapon attack as a bonus action each turn. Exhaustion when rage ends.</div>
+      </div>
+    </div>
+  </details>
+
+  <!-- ── 🧪 Inventory (collapsible) ── -->
+  <details style="border-top:1px solid var(--border);">
+    <summary style="list-style:none;display:flex;align-items:center;gap:6px;padding:6px 10px;background:color-mix(in srgb,var(--accent) 8%,transparent);font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.4px;cursor:pointer;">
+      <span style="font-size:9px;">▶</span>
+      <span>🧪 Inventory</span>
+      <span style="margin-left:auto;font-size:10px;color:var(--fg-mute);text-transform:none;font-weight:400;letter-spacing:0;">8 items</span>
+    </summary>
+  </details>
+
+  <!-- ── 🎯 Abilities + skills (collapsible) ── -->
+  <details style="border-top:1px solid var(--border);">
+    <summary style="list-style:none;display:flex;align-items:center;gap:6px;padding:6px 10px;background:color-mix(in srgb,var(--accent) 8%,transparent);font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.4px;cursor:pointer;">
+      <span style="font-size:9px;">▶</span>
+      <span>🎯 Abilities &amp; Skills</span>
+    </summary>
+  </details>
+</div>
+
+<p style="text-align:center;font-size:11px;color:var(--fg-mute);margin-top:-8px;font-style:italic;">A live mini-sheet for a Lv 5 Barbarian, mid-fight (action spent, raging). Click a section header to fold / unfold — the mock above uses native <code style="font-style:normal;">&lt;details&gt;</code> so the chevrons work right here in your browser.</p>
+
+Key things to notice:
+
+- **Header chrome** uses the same accent-gradient + 2 px accent border-bottom as every other card in the app.
+- **HP bar** colors track the threshold tints (green at 78% — the HP threshold tints in campaign settings can flip this to amber / orange / red at lower percentages).
+- **Chip strip** lights up the spent action chip (Act burned, Bns / Rxn unspent, Mov shows remaining out of total).
+- **Buff chips** carry an icon + name + the rounds-remaining tail (v2.43.7 — "rounds" spelled out instead of the cryptic "r" suffix).
+- **Attacks section is always expanded** — Strike buttons are one tap away. Other sections (features, inventory, abilities) collapse so the modal stays compact.
+- **The whole panel is one CSS column** — on mobile / iPad it scrolls naturally; on desktop it fits in a side modal.
 
 ## Realtime sync
 
