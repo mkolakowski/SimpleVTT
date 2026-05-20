@@ -415,6 +415,14 @@
                 const halfW = (this.secondary_ft / 5) * gridSize / 2;
                 return par >= 0 && par <= len_px && perp <= halfW;
             }
+            if (this.shape === 'cube') {
+                // PHB cube ("within range"): axis-aligned square edge
+                // = size_ft, centered on the cursor. In-cube iff
+                // |tcx - cx| ≤ edge/2 AND |tcy - cy| ≤ edge/2.
+                const half = len_px / 2;
+                return Math.abs(tcx - canvasX) <= half
+                    && Math.abs(tcy - canvasY) <= half;
+            }
             return false;
         },
 
@@ -479,6 +487,9 @@
         } else if (shape === 'line') {
             shapeLabel = `× ${secondaryFt || 5} ft line`;
             verb = 'aim with cursor · click to fire';
+        } else if (shape === 'cube') {
+            shapeLabel = 'cube';
+            verb = 'click to place';
         } else {
             shapeLabel = 'sphere';
             verb = 'click to place';
@@ -767,6 +778,14 @@
                 ctx.arc(ox, oy, 4, 0, Math.PI * 2);
                 ctx.fillStyle = '#dc2626';
                 ctx.fill();
+            } else if (_aoePicker.shape === 'cube') {
+                // Axis-aligned square centered on cursor. No rotation
+                // — 5e cubes don't tilt relative to the grid.
+                const half = len / 2;
+                ctx.beginPath();
+                ctx.rect(cx - half, cy - half, len, len);
+                ctx.fill();
+                ctx.stroke();
             } else if (_aoePicker.shape === 'line' && _aoePicker.origin) {
                 // Rectangle from origin along aim axis: length × width.
                 // Four corners at origin ± perp*(W/2) and origin +

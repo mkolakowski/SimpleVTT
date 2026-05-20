@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.46.1] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Phase T.7b — AoE cube shape (placed at cursor, axis-aligned to grid).** Adds `cube` as the fourth shape in the `_aoePicker` dispatch table. "Within range" cubes (Faerie Fire, Cloud of Daggers, Hypnotic Pattern) are placed at the cursor and are axis-aligned to the grid — no rotation, per RAW. Hit-test: token in-cube iff `|tcx - cx| ≤ edge/2 AND |tcy - cy| ≤ edge/2`. Backfills `faerie-fire.json` with `shape: "cube"`, `size_ft: 20`; Lyra already has Faerie Fire on her prepared list (Bard) so the demo exercises the cube picker without seed changes. PATCH because it's a small geometry addition on top of v2.45.0/v2.46.0's shape-aware refactor — no new architectural surface.
+**Description:** Three edits. **(1)** `app/static/tabletop.js` — added a `'cube'` branch to `_tokenInShape()` (axis-aligned square hit-test centered on cursor); added a `'cube'` branch to the render loop (`ctx.rect` centered on cursor with translucent fill + dashed stroke); added a `'cube'` case to `_showAoePickerHint` (label = "<size_ft> ft cube · click to place"). No origin resolution needed — placed cubes use the cursor as the center, same as spheres. **(2)** `app/templates/sheet_dnd5e.html` — added `'cube'` to the `_AOE_SHAPES` allowlist. **(3)** `app/data/local/dnd5e/spells/faerie-fire.json` — empty `area` block filled with `shape: "cube"`, `size_ft: 20`.
+**Description (cont):** Why placed-at-cursor only for v1. D&D 5e has two cube placement modes: "within range" cubes (Cloud of Daggers, Faerie Fire, Hypnotic Pattern) get placed at a point the caster chooses, and "originating from you" cubes (Thunderwave) have one face touching one of the caster's adjacent squares. The placed mode is the common case — most cube spells use it. Self-anchored cubes need a separate path (origin = caster, then offset the cube so one face touches the origin in the cursor direction); filed as a follow-up. Until then, Thunderwave's empty area block stays empty so the picker doesn't fire incorrectly.
+**Description (cont 2):** Why axis-aligned to the grid (no rotation). The PHB cube template is always axis-aligned: "A cube is an area of effect that fills a perfect cube". 5e VTTs uniformly draw cubes parallel to the grid; rotating them would be confusing and non-RAW. Some non-D&D systems (PF2e) allow rotated bursts but 5e cubes don't, so we don't expose the option.
+**Description (cont 3):** Why no harness test. Same logic as T.6 and T.7a — cube geometry lives entirely client-side; the v2.44.0 server contract is shape-agnostic. The existing `test_cast_spell_aoe.py` already exercises the multi-target dispatch contract.
+
+### Added
+- `app/static/tabletop.js` — cube hit-test + render + hint-chip label.
+- `app/data/local/dnd5e/spells/faerie-fire.json` — `area.shape = "cube"`, `area.size_ft = 20`.
+- `app/templates/sheet_dnd5e.html` — `cube` in the AoE-shape allowlist.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Open Lyra's mini-sheet, expand Spells, click Cast on Faerie Fire. A flame-orange 20 ft / 4-square axis-aligned square should follow the cursor; tokens inside light up yellow. Place over the bandits to mark them with Faerie Fire (DEX save DC 14 — note Faerie Fire doesn't do damage, the save just resolves who's "lit up", but the multi-target dispatch still rolls the saves and records them on `auto_save_targets`). Confirm Fireball (sphere), Burning Hands (cone), and Lightning Bolt (line) still work from their respective casters.
+- **Backward compat.** Pure additive. The 208 harness tests still pass.
+
+### Filed
+- **T.7b.2 — Self-anchored cubes** (Thunderwave: 15 ft cube originating from caster, one face touching an adjacent square). Needs origin resolution + a 6-direction face-picker (or just "the face nearest the cursor"). Until shipped, Thunderwave's `area` block remains empty.
+- **T.7c — Self-centered sphere** (Spirit Guardians, Antimagic Field: radius around caster, no separate placement click).
+
+---
+
 ## [2.46.0] - 2026-05-20
 
 **Schema version:** 56

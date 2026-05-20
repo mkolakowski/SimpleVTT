@@ -43,8 +43,8 @@
       "transform_picker": "",
       "upcast": [],
       "area": {
-        "shape": "",
-        "size_ft": 0,
+        "shape": "cube",
+        "size_ft": 20,
         "secondary_ft": 0
       }
     }
