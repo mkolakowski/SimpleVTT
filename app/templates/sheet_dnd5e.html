@@ -2818,7 +2818,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // standalone full-sheet falls through to the
                     // single-target picker because ``window._openAoe
                     // Picker`` is not defined there.
-                    const _AOE_SHAPES = new Set(['sphere', 'cone']);
+                    const _AOE_SHAPES = new Set(['sphere', 'cone', 'line']);
                     let _spArea = null;
                     if (typeof window._openAoePicker === 'function') {
                         try {

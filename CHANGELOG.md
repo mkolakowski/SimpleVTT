@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.46.0] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Phase T.7a — AoE line shape (length × width from caster).** Adds `line` as the third shape in the `_aoePicker` dispatch table (after sphere v2.44.1 and cone v2.45.0). Lines originate at the caster's token, the mouse cursor sets the aim direction, and the picker renders a filled rectangle of `length = size_ft` × `width = secondary_ft` from origin to the aim point. Hit-test: token in-line iff its axial projection ∈ `[0, length]` AND its perpendicular distance from the axis is at most `width / 2`. Backfills `lightning-bolt.json` with `shape: "line"`, `size_ft: 100`, `secondary_ft: 5`; adds Lightning Bolt to Thalindra's prepared spell list right after Fireball (deliberately preserving the harness's `FIREBALL_INDEX = 7` assumption). MINOR — new shape capability is additive; existing sphere + cone flows are unchanged.
+**Description:** Four edits. **(1)** `app/static/tabletop.js` `_aoePicker` — extended `start()` to also resolve the caster's origin for `shape === 'line'` (same path cones use); extended `_tokenInShape()` with a line case (axial + perpendicular projection onto cursor-relative axis, with the perpendicular cap now reading from `secondary_ft` instead of axial-position-dependent half-angle); extended the render loop with a rectangle-fill case (four corners at `origin ± perp * (W/2)` and `origin + axis * L ± perp * (W/2)`); extended the hint-chip label to `<size_ft> ft × <secondary_ft> ft line · aim with cursor · click to fire · Esc to cancel`. **(2)** `app/templates/sheet_dnd5e.html` `.sp-cast` handler — added `'line'` to the `_AOE_SHAPES` allowlist set. The `secondary_ft` plumbing landed in v2.45.0 for exactly this case, so no new plumbing needed. **(3)** `app/data/local/dnd5e/spells/lightning-bolt.json` — empty `area` block filled with `shape: "line"`, `size_ft: 100`, `secondary_ft: 5`. **(4)** `app/demo_seed.py` Thalindra block — added Lightning Bolt at Lv 3 prepared, placed immediately AFTER Fireball with an inline comment naming the index-stability constraint that the AoE harness test depends on.
+**Description (cont):** Why between Fireball and Counterspell instead of after Counterspell. `tests/harness/test_cast_spell_aoe.py` hardcodes `FIREBALL_INDEX = 7` for Thalindra's spell list — moving Fireball would require updating the test. Inserting after Fireball keeps Fireball at index 7 and pushes Counterspell from 8 to 9, but Counterspell isn't indexed by any harness test (it's only referenced by name). Conservative pick: zero-risk to the existing AoE suite.
+**Description (cont 2):** Why `secondary_ft` for line width instead of inferring from `size_ft`. The PHB has multiple line widths — Lightning Bolt is 5 ft wide, but Wall of Fire (line variant) is 10 ft, and a few homebrew "thick laser" spells are wider. The curated JSON's `secondary_ft` field already existed in the schema for exactly this kind of multi-dimensional shape, so threading it through the picker is the right v1.
+**Description (cont 3):** Why no new harness test. Same logic as T.6 — the server-side multi-target dispatch is shape-agnostic; line geometry lives entirely client-side. The contract that matters (per-target save + damage + `pc_skipped` accounting) is already exercised by `test_cast_spell_aoe.py`.
+
+### Added
+- `app/static/tabletop.js` — line hit-test + render + hint-chip label.
+- `app/data/local/dnd5e/spells/lightning-bolt.json` — `area.shape = "line"`, `area.size_ft = 100`, `area.secondary_ft = 5`.
+- `app/templates/sheet_dnd5e.html` — `line` in the AoE-shape allowlist.
+- `app/demo_seed.py` — Lightning Bolt prepared on Thalindra (Wizard).
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Open Thalindra's mini-sheet, expand Spells, click Cast on Lightning Bolt. A long flame-orange rectangle should anchor at Thalindra's token and pivot to follow the cursor — 100 ft / 20 squares long × 5 ft / 1 square wide. Tokens directly in the path highlight yellow. Click to fire; in-line bandits take lightning damage on the multi-target dispatch. Compare: aim it along a corridor of bandits to see the line "thread" through them, vs Fireball's blob coverage. Right-click / Esc cancels and reverts the slot.
+- **Backward compat.** Pure additive client behavior. The v2.44.0 multi-target server contract handles lines with no change. No schema change. The 208 harness tests still pass (FIREBALL_INDEX stayed at 7).
+
+### Filed
+- **T.7b — cube shape** (Cloud of Daggers, Thunderwave: edge length, placed at cursor — Thunderwave is a "cube emanating from the caster" so origin = caster, but Cloud of Daggers is "5-foot cube within range" so origin = cursor; the cube path needs both modes).
+- **T.7c — self-centered sphere** (Spirit Guardians: 15 ft radius around caster; no separate placement click, but cone-style origin resolution).
+
+---
+
 ## [2.45.0] - 2026-05-20
 
 **Schema version:** 56

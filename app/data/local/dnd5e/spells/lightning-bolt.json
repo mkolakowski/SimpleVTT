@@ -42,9 +42,9 @@
       "transform_picker": "",
       "upcast": [],
       "area": {
-        "shape": "",
-        "size_ft": 0,
-        "secondary_ft": 0
+        "shape": "line",
+        "size_ft": 100,
+        "secondary_ft": 5
       }
     }
   ]

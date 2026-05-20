@@ -327,7 +327,7 @@
             // character (off-map / token not placed), bail with a
             // null resolve so the cast handler can surface an error.
             this.origin = null;
-            if (this.shape === 'cone') {
+            if (this.shape === 'cone' || this.shape === 'line') {
                 this.origin = _aoePicker._resolveOrigin(opts.char_id);
                 if (!this.origin) {
                     this._cleanup();
@@ -335,7 +335,7 @@
                 }
             }
             document.body.classList.add('aoe-picker-active');
-            _showAoePickerHint(this.spellName, this.size_ft, this.shape);
+            _showAoePickerHint(this.spellName, this.size_ft, this.shape, this.secondary_ft);
             try { render(); } catch (_) {}
             return new Promise((resolve) => { this._resolve = resolve; });
         },
@@ -400,6 +400,21 @@
                 // perp ≤ par / 2 (half-width = half the axial distance).
                 return par >= 0 && par <= len_px && perp <= par / 2;
             }
+            if (this.shape === 'line' && this.origin) {
+                // PHB line: rectangle from origin along aim axis with
+                // fixed width = secondary_ft. In-line iff axial
+                // component ∈ [0, length] and perpendicular ≤ width/2.
+                const ox = this.origin.x, oy = this.origin.y;
+                const adx = canvasX - ox, ady = canvasY - oy;
+                const amag = Math.hypot(adx, ady);
+                if (amag < 1) return false;
+                const ax = adx / amag, ay = ady / amag;
+                const rx = tcx - ox, ry = tcy - oy;
+                const par = rx * ax + ry * ay;
+                const perp = Math.abs(rx * (-ay) + ry * ax);
+                const halfW = (this.secondary_ft / 5) * gridSize / 2;
+                return par >= 0 && par <= len_px && perp <= halfW;
+            }
             return false;
         },
 
@@ -452,12 +467,22 @@
     // so the user knows they're in a different mode. Label text varies
     // by shape so the GM sees whether they're placing a sphere (click
     // anywhere) vs aiming a cone (cursor = direction from caster).
-    function _showAoePickerHint(spellName, sizeFt, shape) {
+    function _showAoePickerHint(spellName, sizeFt, shape, secondaryFt) {
         _hideAoePickerHint();
         const el = document.createElement('div');
         el.id = 'aoe-picker-hint';
-        const shapeLabel = shape === 'cone' ? 'cone' : 'sphere';
-        const verb = shape === 'cone' ? 'aim with cursor · click to fire' : 'click to place';
+        let shapeLabel;
+        let verb;
+        if (shape === 'cone') {
+            shapeLabel = 'cone';
+            verb = 'aim with cursor · click to fire';
+        } else if (shape === 'line') {
+            shapeLabel = `× ${secondaryFt || 5} ft line`;
+            verb = 'aim with cursor · click to fire';
+        } else {
+            shapeLabel = 'sphere';
+            verb = 'click to place';
+        }
         el.innerHTML =
             `<strong>💥 ${spellName}</strong> · ${sizeFt} ft ${shapeLabel} · ` +
             `<span class="muted">${verb} · Esc to cancel</span>`;
@@ -737,6 +762,30 @@
                 ctx.stroke();
                 // Small dot at origin so the caster's token has a
                 // visible "this is where the cone starts" marker.
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.arc(ox, oy, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#dc2626';
+                ctx.fill();
+            } else if (_aoePicker.shape === 'line' && _aoePicker.origin) {
+                // Rectangle from origin along aim axis: length × width.
+                // Four corners at origin ± perp*(W/2) and origin +
+                // axis*L ± perp*(W/2).
+                const ox = _aoePicker.origin.x, oy = _aoePicker.origin.y;
+                const adx = cx - ox, ady = cy - oy;
+                const amag = Math.hypot(adx, ady) || 1;
+                const ax = adx / amag, ay = ady / amag;
+                const px = -ay, py = ax;
+                const halfW = (_aoePicker.secondary_ft / 5) * gridSize / 2;
+                const farX = ox + ax * len, farY = oy + ay * len;
+                ctx.beginPath();
+                ctx.moveTo(ox  + px * halfW, oy  + py * halfW);
+                ctx.lineTo(farX + px * halfW, farY + py * halfW);
+                ctx.lineTo(farX - px * halfW, farY - py * halfW);
+                ctx.lineTo(ox  - px * halfW, oy  - py * halfW);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
                 ctx.setLineDash([]);
                 ctx.beginPath();
                 ctx.arc(ox, oy, 4, 0, Math.PI * 2);

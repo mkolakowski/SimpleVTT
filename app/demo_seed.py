@@ -391,6 +391,14 @@ def _wizard_sheet(name: str) -> dict:
             {"name": "Misty Step", "level": 2, "prepared": True, "_slug": "misty-step", "casting_time": "1 bonus action"},
             {"name": "Scorching Ray", "level": 2, "prepared": True, "_slug": "scorching-ray", "casting_time": "1 action"},
             {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball", "casting_time": "1 action"},
+            # v2.46.0 T.7a — Lightning Bolt exercises the line-shape
+            # AoE picker (100 ft × 5 ft from the caster). Sits AFTER
+            # Fireball so the FIREBALL_INDEX = 7 assumption in
+            # tests/harness/test_cast_spell_aoe.py stays valid; this
+            # spell lands at index 8.
+            {"name": "Lightning Bolt", "level": 3, "prepared": True, "_slug": "lightning-bolt",
+             "casting_time": "1 action", "damage": "8d6", "save_ability": "DEX",
+             "desc": "100 ft × 5 ft line from caster, DEX save DC 14 for half. 8d6 lightning."},
             {"name": "Counterspell", "level": 3, "prepared": True, "_slug": "counterspell", "casting_time": "1 reaction"},
         ],
         "spell_slots": {
