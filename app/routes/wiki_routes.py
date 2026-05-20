@@ -15,10 +15,16 @@ To add a new guide:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import HTMLResponse
+from sqlalchemy.orm import Session
 
+from ..auth import get_current_user
+from ..config import get_settings
+from ..database import get_db
+from ..models import User
 from ..templates import templates
 
 router = APIRouter()
@@ -38,16 +44,44 @@ def wiki_home(request: Request):
 
 
 @router.get("/wiki/{slug}", response_class=HTMLResponse)
-def wiki_guide(slug: str):
+def wiki_guide(
+    slug: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
     """Serve a self-contained HTML guide from ``docs/wiki/<slug>.html``.
 
     Slug is restricted to ``[a-zA-Z0-9_-]`` so we never traverse out of
     the wiki directory. Missing slugs return 404 (rather than serving
     the directory listing) so unknown paths don't fish for files.
+
+    v2.43.4: the guide HTML inherits the user's theme. We look up the
+    current user's ``theme`` preference (or fall back to the configured
+    default), then string-substitute the ``<html lang="en">`` opener
+    to add ``data-theme="<theme>"``. The guide's `<head>` already
+    `<link>`s to /static/style.css, which carries the theme blocks for
+    all 8 themes — the cascade picks the right one based on the
+    injected attribute. File:// previews (no server) still work
+    because the inline ``:root`` fallback in the guide stays in place
+    as the dark-theme default.
     """
     if not slug.replace("-", "").replace("_", "").isalnum():
         raise HTTPException(status_code=404, detail="Not found")
     path = _WIKI_DIR / f"{slug}.html"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Not found")
-    return FileResponse(path, media_type="text/html")
+
+    user: Optional[User] = get_current_user(request, db)
+    theme = (user.theme if user and user.theme else get_settings().default_theme) or "dark"
+    # Read + inject. Keep the rewrite tiny: only the ``<html>`` opener
+    # changes. The guide's existing inline `<link>` to style.css does
+    # the rest of the work via CSS cascade.
+    html = path.read_text(encoding="utf-8")
+    html = html.replace(
+        '<html lang="en">',
+        f'<html lang="en" data-theme="{theme}">',
+        1,
+    )
+    return HTMLResponse(html)
+
+

@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.4] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Wiki guide now inherits the user's theme; footer wiki link opens in a new tab.** Two small follow-ups on v2.43.3. **(a)** `/wiki/roll-log-guide` was rendered with a hardcoded dark-theme `:root` palette baked into the file; users on Light / Bubblegum / Forest / Fire / etc. saw the wrong palette. v2.43.4 has the route inject `data-theme="<user's theme>"` onto the `<html>` opener at serve time, and the guide HTML now also `<link>`s `/static/style.css` + `/static/style-fantasy-themes.css` AFTER the inline fallback so the cascade picks the right theme block (the inline `:root` block stays as the file:// preview fallback). **(b)** The footer "Wiki" link gained `target="_blank" rel="noopener noreferrer"` so it opens in a new tab — the wiki is a reference doc, not a navigation destination; opening in a new tab lets the user keep their current page state intact. PATCH — no schema, no contract, no new endpoints.
+**Description:** Four edits. **(1)** `app/routes/wiki_routes.py` `wiki_guide` — switched from `FileResponse` to `HTMLResponse` so we can string-rewrite the served HTML. Looks up the current user via `get_current_user` (optional, falls back to `settings.default_theme` when logged out), then string-substitutes `<html lang="en">` to `<html lang="en" data-theme="<theme>">`. The slug validation stays the same. **(2)** `docs/wiki/roll-log-guide.html` — added `<link rel="stylesheet" href="/static/style.css">` + `<link rel="stylesheet" href="/static/style-fantasy-themes.css">` AFTER the inline `<style>` block. CSS cascade rules: equal-specificity selectors (`:root` vs `[data-theme="X"]`) → last-declared wins → the external `[data-theme="X"]` blocks override the inline `:root` defaults when a theme attribute is present. File:// previews skip the external sheets (404) so the guide still renders standalone with dark-theme defaults. The inline `:root` block is now annotated as a "fallback when no data-theme is set" so future readers understand the cascade. **(3)** `app/templates/base.html` — footer link gained `target="_blank" rel="noopener noreferrer"`. The `rel` attribute closes the [tabnabbing](https://owasp.org/www-community/attacks/Reverse_Tabnabbing) vector that `target="_blank"` would otherwise open (the new tab's `window.opener` would be writable). **(4)** `Dockerfile` — no change (the previous v2.43.3 `COPY docs/wiki /app/docs/wiki` step is still what serves the updated HTML).
+**Description (cont):** Why HTMLResponse instead of FileResponse. FileResponse streams the file bytes unchanged — perfect for static assets but no way to inject the theme attribute. Switching to `HTMLResponse(path.read_text())` lets us do the tiny `<html>` opener rewrite while keeping the file otherwise identical. Cost: load the file into Python memory (negligible — the guide is ~30 KB) and lose the conditional-GET / etag handling that FileResponse provides. For a docs page that changes once per release, neither matters.
+**Description (cont 2):** Why open the wiki in a new tab. The wiki is reference documentation — when somebody clicks the footer link mid-session, they want to scan the docs without losing the page state of whatever they were doing (a half-typed roll, an open targeting picker, a configured encounter). `target="_blank"` preserves that. The `rel="noopener noreferrer"` is the standard safety pair: prevents the opened wiki from being able to manipulate the parent window via `window.opener`.
+
+### Changed
+- `app/routes/wiki_routes.py` — `GET /wiki/<slug>` switched from `FileResponse` to `HTMLResponse`, looks up the current user (optional), and injects `data-theme="<theme>"` on the served HTML's `<html>` opener.
+- `docs/wiki/roll-log-guide.html` — added `<link>` tags for `/static/style.css` + `/static/style-fantasy-themes.css` AFTER the inline `<style>` so per-theme CSS overrides the dark-theme fallback when served via `/wiki/<slug>`.
+- `app/templates/base.html` — footer wiki link gained `target="_blank" rel="noopener noreferrer"` so it opens in a new tab.
+
+### Notes
+- **What to test:** open `http://localhost:8013/` (any non-tabletop page). Click the "Wiki" link in the footer — it opens in a new browser tab. The wiki landing page shows up; click "Roll-log guide" — the guide renders with your current theme's palette (Light theme = light background, accent blue; Forest = green; Fire = orange ember; etc.). Switch your theme from the user-menu, hard-refresh the guide tab, confirm the palette switched.
+- **Backward compat.** The inline `:root` block in `roll-log-guide.html` is the file:// fallback — open the file directly from disk and it still renders in dark-theme defaults (no server, no `data-theme` injection, no `<link>` resolved → only `:root` applies).
+
+---
+
 ## [2.43.3] - 2026-05-19
 
 **Schema version:** 56

@@ -2,9 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>SimpleVTT — Roll-log guide (v2.43.0)</title>
+<title>SimpleVTT — Roll-log guide (v2.43.1)</title>
 <style>
-  /* ── Theme tokens (mirrors the default "dark" theme from app/static/style.css) ── */
+  /* ── Theme tokens (fallback to "dark" when no data-theme is set,
+     e.g. file:// preview. The /static/style.css link AFTER this block
+     overrides these via CSS cascade when /wiki/<slug> injects a
+     ``data-theme="X"`` attribute on <html>. Both selectors :root and
+     [data-theme="X"] have equal specificity, so the later-declared
+     rule wins — that's the link below). ── */
   :root {
     --bg:        #15171c;
     --bg-2:      #20232a;
@@ -331,6 +336,17 @@
     color: var(--fg-mute);
   }
 </style>
+<!-- v2.43.4: the site stylesheets, loaded AFTER the inline ``:root``
+     fallback above so the per-theme [data-theme="X"] rules win the
+     cascade when /wiki/roll-log-guide is served with a theme attribute
+     injected on <html>. Both core themes (dark, midnight, dim, light,
+     forest, bubblegum, oled, fire) and fantasy themes (hobbiton,
+     hearthstone, mosswood, inkwell, forge, sepia) are covered.
+     File:// previews skip these stylesheets (404) so the inline :root
+     remains the active rule — the guide still renders standalone with
+     the dark-theme defaults. -->
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/static/style-fantasy-themes.css">
 </head>
 <body>
 
