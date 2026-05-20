@@ -34,7 +34,19 @@
     margin: 0 auto;
     padding: 28px 24px 80px;
     line-height: 1.5;
+    text-align: center;
   }
+  /* v2.43.9: center-align headings + mocks + lists (the structural
+     elements). Long-form paragraphs stay left-aligned + capped at
+     800 px for comfortable reading. */
+  h1, h2, h3 { text-align: center; }
+  .lede { text-align: center; }
+  p { text-align: left; max-width: 800px; margin-left: auto; margin-right: auto; }
+  ul, ol { display: inline-block; text-align: left; }
+  table { margin-left: auto; margin-right: auto; }
+  .timeline { margin-left: auto; margin-right: auto; max-width: 700px; }
+  pre { display: inline-block; text-align: left; }
+  .callout { max-width: 800px; margin-left: auto; margin-right: auto; }
   h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
   h1 .version { font-size: 12px; color: var(--fg-mute); font-weight: 400; margin-left: 8px; }
   .lede { font-size: 14px; color: var(--fg-mute); margin: 6px 0 24px; }
@@ -217,6 +229,227 @@
   </tbody>
 </table>
 
+<h3>Gallery — dice toast variants</h3>
+<p>
+  Real scenarios you'll see at the table. Each mock is the final landed state — the wobble animation
+  that precedes it isn't shown here.
+</p>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Simple skill check (1d20+3)</h4>
+<div class="roll-toast-mock">
+  <div class="rt-label">🎲 Krieger — Athletics</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <polygon points="50,7 93,71.5 7,71.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" opacity="0.45"/>
+      <polygon points="93,28.5 50,93 7,28.5" fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round" opacity="0.45"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">14</text>
+    </svg>
+    <span class="rt-bonus">+3</span>
+  </div>
+  <div class="rt-total">17</div>
+  <div class="rt-breakdown">1d20[14] + 3</div>
+  <div class="rt-dismiss">tap to dismiss</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Natural 20 — critical hit</h4>
+<div class="roll-toast-mock" style="border-color:var(--c-crit); background:color-mix(in srgb, var(--c-crit) 12%, var(--bg));">
+  <div class="rt-label" style="color:var(--c-crit);">🎯 Greataxe → Bandit vs AC 12 · 💥 CRIT</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100" style="color:var(--c-crit);">
+      <polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">20</text>
+    </svg>
+    <span class="rt-bonus" style="border-color:var(--c-crit); color:var(--c-crit);">+5</span>
+  </div>
+  <div class="rt-total" style="color:var(--c-crit);">25</div>
+  <div class="rt-breakdown">1d20[20] + 5</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Natural 1 — miss</h4>
+<div class="roll-toast-mock" style="border-color:var(--danger); background:color-mix(in srgb, var(--danger) 12%, var(--bg));">
+  <div class="rt-label" style="color:var(--danger);">🎯 Shortsword → Bandit vs AC 12 · ❌ MISS</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100" style="color:var(--danger);">
+      <polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">1</text>
+    </svg>
+    <span class="rt-bonus" style="border-color:var(--danger); color:var(--danger);">+6</span>
+  </div>
+  <div class="rt-total" style="color:var(--danger);">7</div>
+  <div class="rt-breakdown">1d20[1] + 6</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Advantage — two d20s, kept highest</h4>
+<div class="roll-toast-mock">
+  <div class="rt-label">🎯 Perception (advantage)</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100" style="opacity:0.4;">
+      <polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">9</text>
+    </svg>
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">18</text>
+    </svg>
+    <span class="rt-bonus">+4</span>
+  </div>
+  <div class="rt-total">22</div>
+  <div class="rt-breakdown">2d20kh1[9, 18] + 4 (kept 18)</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Disadvantage — kept lowest</h4>
+<div class="roll-toast-mock">
+  <div class="rt-label">🎯 Stealth (disadvantage)</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">6</text>
+    </svg>
+    <svg class="rt-die" viewBox="0 0 100 100" style="opacity:0.4;">
+      <polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">15</text>
+    </svg>
+    <span class="rt-bonus">+1</span>
+  </div>
+  <div class="rt-total">7</div>
+  <div class="rt-breakdown">2d20kl1[6, 15] + 1 (kept 6)</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Damage roll — multi-dice with bonus</h4>
+<div class="roll-toast-mock">
+  <div class="rt-label">🎲 Greataxe → Bandit — slashing · −12 HP · 50 → 38 HP</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <polygon points="50,8 88,33 76,77 24,77 12,33" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">9</text>
+    </svg>
+    <span class="rt-bonus">+3</span>
+  </div>
+  <div class="rt-total">12</div>
+  <div class="rt-breakdown">1d12[9] + 3</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Healing roll (Second Wind, 1d10+5)</h4>
+<div class="roll-toast-mock" style="border-color:var(--c-heal); background:color-mix(in srgb, var(--c-heal) 12%, var(--bg));">
+  <div class="rt-label" style="color:var(--c-heal);">💨 Second Wind</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100" style="color:var(--c-heal);">
+      <polygon points="50,6 88,36 74,90 26,90 12,36" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">7</text>
+    </svg>
+    <span class="rt-bonus" style="border-color:var(--c-heal); color:var(--c-heal);">+5</span>
+  </div>
+  <div class="rt-total" style="color:var(--c-heal);">12</div>
+  <div class="rt-breakdown">1d10[7] + 5</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Save roll — failed</h4>
+<div class="roll-toast-mock">
+  <div class="rt-label">📋 Bandit WIS save vs DC 14 · ❌ failed</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">8</text>
+    </svg>
+    <span class="rt-bonus" style="border-color:var(--danger); color:var(--danger);">−1</span>
+  </div>
+  <div class="rt-total">7</div>
+  <div class="rt-breakdown">1d20[8] − 1</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Save-for-half damage (Fireball, 8d6, target saved)</h4>
+<div class="roll-toast-mock">
+  <div class="rt-label">🎲 Fireball → Bandit — fire · −12 HP (half on save)</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <rect x="10" y="10" width="80" height="80" rx="12" fill="none" stroke="currentColor" stroke-width="8"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="40" font-weight="800">3</text>
+    </svg>
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <rect x="10" y="10" width="80" height="80" rx="12" fill="none" stroke="currentColor" stroke-width="8"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="40" font-weight="800">5</text>
+    </svg>
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <rect x="10" y="10" width="80" height="80" rx="12" fill="none" stroke="currentColor" stroke-width="8"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="40" font-weight="800">6</text>
+    </svg>
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <rect x="10" y="10" width="80" height="80" rx="12" fill="none" stroke="currentColor" stroke-width="8"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="40" font-weight="800">2</text>
+    </svg>
+  </div>
+  <div class="rt-sum">24</div>
+  <div class="rt-breakdown">8d6[3,5,6,2,4,3,1,…] = 24</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Lethal blow — target dropped</h4>
+<div class="roll-toast-mock" style="border-color:var(--c-damage); background:color-mix(in srgb, var(--c-damage) 12%, var(--bg));">
+  <div class="rt-label" style="color:var(--c-damage);">🎲 Fire Bolt → Bandit — fire · −9 HP · 8 → 0 HP · ☠ dead</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100" style="color:var(--c-damage);">
+      <polygon points="50,6 88,36 74,90 26,90 12,36" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">9</text>
+    </svg>
+  </div>
+  <div class="rt-total" style="color:var(--c-damage);">9</div>
+  <div class="rt-breakdown">1d10[9]</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Resistance — damage halved</h4>
+<div class="roll-toast-mock">
+  <div class="rt-label">🎲 Fire Bolt → Frost Goblin — fire · −4 HP · 18 → 14 HP (resist)</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <polygon points="50,6 88,36 74,90 26,90 12,36" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">8</text>
+    </svg>
+  </div>
+  <div class="rt-total">8</div>
+  <div class="rt-breakdown">1d10[8] (halved by resist → 4)</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Bardic Inspiration grant (1d8)</h4>
+<div class="roll-toast-mock" style="border-color:var(--c-buff); background:color-mix(in srgb, var(--c-buff) 12%, var(--bg));">
+  <div class="rt-label" style="color:var(--c-buff);">🎵 Bardic Inspiration → Pip · 1d8 granted</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100" style="color:var(--c-buff);">
+      <polygon points="50,8 92,50 50,92 8,50" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="40" font-weight="800">6</text>
+    </svg>
+  </div>
+  <div class="rt-total" style="color:var(--c-buff);">6</div>
+  <div class="rt-breakdown">1d8[6]</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Initiative roll (multiple players at once)</h4>
+<div class="roll-toast-mock">
+  <div class="rt-label">🎲 Initiative</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">15</text>
+    </svg>
+    <span class="rt-bonus">+2</span>
+  </div>
+  <div class="rt-total">17</div>
+  <div class="rt-breakdown">1d20[15] + 2</div>
+</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ GM-only roll (private)</h4>
+<div class="roll-toast-mock" style="background:color-mix(in srgb, var(--danger) 14%, var(--bg)); border-color:color-mix(in srgb, var(--danger) 35%, var(--border));">
+  <div class="rt-label" style="color:var(--danger);">🎲 Bandit stealth · 🔒 GM only</div>
+  <div class="rt-dice">
+    <svg class="rt-die" viewBox="0 0 100 100">
+      <polygon points="50,7 93,28.5 93,71.5 50,93 7,71.5 7,28.5" fill="none" stroke="currentColor" stroke-width="8" stroke-linejoin="round"/>
+      <text x="50" y="54" text-anchor="middle" dominant-baseline="middle" fill="currentColor" font-size="34" font-weight="800">12</text>
+    </svg>
+    <span class="rt-bonus" style="border-color:var(--danger); color:var(--danger);">+3</span>
+  </div>
+  <div class="rt-total">15</div>
+  <div class="rt-breakdown">1d20[12] + 3</div>
+</div>
+
 <h3>Sequencing — attack → damage</h3>
 <p>
   When a weapon attack or spell attack lands, the server broadcasts a single payload containing both the
@@ -286,10 +519,6 @@
 </p>
 
 <h3>Variants</h3>
-<div class="vtt-toast-mock vtt-toast-info">🩹 +6 HP applied to your character!</div>
-<div class="vtt-toast-mock vtt-toast-success">Encounter saved.</div>
-<div class="vtt-toast-mock vtt-toast-error">Healing failed: target was already at full HP.</div>
-
 <table>
   <thead><tr><th>Kind</th><th>Class</th><th>Left-border color</th><th>Use case</th></tr></thead>
   <tbody>
@@ -298,6 +527,71 @@
     <tr><td>error</td><td><code>.vtt-toast-error</code></td><td><code>var(--danger)</code></td><td>Failures: HTTP errors, validation, out-of-range, etc.</td></tr>
   </tbody>
 </table>
+
+<h3>Gallery — status toast variants</h3>
+<p>
+  Each toast below mirrors what the user sees after a specific in-app action. Click sources are noted
+  alongside so future contributors know which call site emits which copy.
+</p>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Info — heal-applied confirmation</h4>
+<div class="vtt-toast-mock vtt-toast-info">🩹 +6 HP applied to your character!</div>
+<p style="text-align:center; font-size:11px; color:var(--fg-mute); margin-top:-4px;">
+  Source: <code>_applyHealing</code> in <code>tabletop.js</code> on a successful heal-claim apply.
+</p>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Info — already-auto-applied</h4>
+<div class="vtt-toast-mock vtt-toast-info">🩹 Heal was already auto-applied to the target.</div>
+<p style="text-align:center; font-size:11px; color:var(--fg-mute); margin-top:-4px;">
+  Source: T.4 fallback when the Apply Healing button was clicked on a card whose heal already landed
+  server-side. Button hides itself afterward.
+</p>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Info — Bardic Inspiration grant</h4>
+<div class="vtt-toast-mock vtt-toast-info">🎵 Granted 1d8 to Pip Quickfingers (10 min)</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Success — Undo confirmation</h4>
+<div class="vtt-toast-mock vtt-toast-success">↶ Reverted 9 damage to Bandit (50 ← 41 HP)</div>
+<p style="text-align:center; font-size:11px; color:var(--fg-mute); margin-top:-4px;">
+  Source: <code>undo_attack_damage</code> wire-up in <code>appendWeaponAttack</code> /
+  <code>appendSpellCast</code>.
+</p>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Success — encounter saved</h4>
+<div class="vtt-toast-mock vtt-toast-success">Encounter saved. (Tavern brawl · 6 combatants)</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Success — long rest applied</h4>
+<div class="vtt-toast-mock vtt-toast-success">💤 Long rest — HP, hit dice, slots, and short-rest features restored.</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Error — healing endpoint refused</h4>
+<div class="vtt-toast-mock vtt-toast-error">Healing failed: Unknown spell cast — it may have expired.</div>
+<p style="text-align:center; font-size:11px; color:var(--fg-mute); margin-top:-4px;">
+  Source: legacy heal-claim flow — the 8-hour TTL on <code>_heal_claims</code> expired before the
+  player clicked Apply Healing.
+</p>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Error — out of uses</h4>
+<div class="vtt-toast-mock vtt-toast-error">Second Wind failed: out_of_uses (0/1 left — needs a short rest).</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Error — over-budget gate</h4>
+<div class="vtt-toast-mock vtt-toast-error">⚠ Krieger already used their action this turn. (Strict action-economy is on; ask the GM to override.)</div>
+<p style="text-align:center; font-size:11px; color:var(--fg-mute); margin-top:-4px;">
+  Source: Phase 4 over-budget gate in <code>_mark_battle_economy</code> when
+  <code>strict_action_economy</code> is on.
+</p>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Error — target not selected</h4>
+<div class="vtt-toast-mock vtt-toast-error">No tokens available to roll damage as.</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Error — death save action failed</h4>
+<div class="vtt-toast-mock vtt-toast-error">Death save action failed: character is no longer dying.</div>
+
+<h4 style="text-align:center; color:var(--fg-mute); font-size:12px; margin-top:24px;">▸ Error — generic fetch fallback</h4>
+<div class="vtt-toast-mock vtt-toast-error">Undo failed: 404 Not Found</div>
+<p style="text-align:center; font-size:11px; color:var(--fg-mute); margin-top:-4px;">
+  Source: the <code>weapon-atk-undo</code> wire-up's <code>showToast</code> fallback when the server
+  returns a non-200 status for the undo POST. Shape varies by endpoint.
+</p>
 
 <h3>Lifecycle</h3>
 <ul>

@@ -6,7 +6,16 @@
       max-width: 920px;
       margin: 0 auto;
       padding: 20px 8px 60px;
+      text-align: center;
   }
+  /* v2.43.9: center the structural elements. Long-form prose +
+     bullet lists stay left-aligned + capped for readability —
+     centered paragraphs past one line are fatiguing. */
+  .wiki-wrap h1, .wiki-wrap h2, .wiki-wrap h3 { text-align: center; }
+  .wiki-wrap .lede { text-align: center; }
+  .wiki-wrap p { text-align: left; max-width: 760px; margin-left: auto; margin-right: auto; }
+  .wiki-wrap ul, .wiki-wrap ol { display: inline-block; text-align: left; }
+  .wiki-wrap table { margin-left: auto; margin-right: auto; }
   .wiki-wrap h1 {
       font-size: 24px;
       letter-spacing: 0.2px;

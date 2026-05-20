@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.9] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Center-align all three wiki surfaces (landing, roll-log guide, toast guide) and expand the toast guide's example gallery from 4 mocks to 23.** Two follow-ups on the v2.43.8 toast guide. **(a)** Wiki pages were already centered as a content block (`max-width + margin: 0 auto`) but the *content inside* was left-aligned. Now headings, lede, mocks, tables, and timelines are all `text-align: center`; long-form paragraphs stay left-aligned but capped at 800 px and centered as a block so prose still reads comfortably. **(b)** The toast guide gained two galleries — 13 dice-toast mocks (skill check, crit, miss, advantage, disadvantage, multi-die damage, healing, save, save-for-half, lethal blow, resistance, Bardic Inspiration grant, initiative, GM-only private roll) and 11 status-toast mocks (heal-applied / already-auto-applied / Bardic grant / Undo / encounter saved / long rest / heal-claim expired / out of uses / over-budget gate / no tokens / death-save failed / generic 404). Each mock is annotated with its trigger source so future contributors know which call site emits the copy. PATCH — docs-only, no code or schema changes.
+**Description:** Three edits. **(1)** `docs/wiki/roll-log-guide.html` — appended a center-align CSS block to the inline `<style>`: `body { text-align: center }` + element-specific overrides (`h1/h2/h3` centered, `p` left-aligned + capped at 800 px, `ul/ol` `display: inline-block` to stay left-aligned within centered context, `table` + `.roll-card` margin-auto). **(2)** `docs/wiki/toast-notifications-guide.html` — same center-align block. Plus two new `<h3>Gallery</h3>` sections: one with 13 dice-toast variants (each as a `.roll-toast-mock` with appropriate theme color tweaks for crit / miss / heal / damage / buff / GM-only); one with 11 status-toast variants (each annotated with trigger source). **(3)** `app/templates/wiki.html` — same center-align treatment on `.wiki-wrap`.
+**Description (cont):** Why structural elements only, not long-form prose. Centered paragraphs past one line are slow to read — the eye loses the start-of-line anchor. The standard typographic rule: keep prose left-aligned at a comfortable measure (≤80 chars per line); center the structural punctuation (headings, mocks, summaries). The user's "center aligned" ask reads as wanting visually balanced layout, not literal text-align on every character — the captured rule is "center what's structural; left-align what's prose".
+**Description (cont 2):** Why each gallery example is its own mocked toast rather than a screenshot. The mocks are real HTML with the same CSS classes the live toasts use (e.g. <code>.roll-toast-mock</code> wraps a real <code>.rt-die</code> SVG + <code>.rt-bonus</code> chip). Theme-aware: when the wiki guide is served with a `data-theme` attribute injected by `wiki_routes.py`, the inline `:root` colors give way to the active theme's tokens via cascade — so the example crit toast adopts the right amber for that theme, the heal toast adopts the right green, etc. Screenshots would freeze a single theme.
+
+### Added
+- `docs/wiki/toast-notifications-guide.html` — "Gallery — dice toast variants" section with 13 mocks (skill check, crit, miss, advantage, disadvantage, multi-die damage, healing, save, save-for-half, lethal blow, resistance, Bardic grant, initiative, GM-only).
+- Same file — "Gallery — status toast variants" section with 11 mocks (heal info, already-auto-applied, Bardic grant info, Undo success, encounter saved, long rest, heal-claim expired error, out of uses, over-budget gate, no tokens, death-save failed, generic 404).
+
+### Changed
+- `docs/wiki/roll-log-guide.html` — body + headings + mocks + tables are now center-aligned; paragraphs stay left-aligned at ≤800 px.
+- `docs/wiki/toast-notifications-guide.html` — same center-align treatment; the original 3 status-toast variants are absorbed into the new 11-mock gallery.
+- `app/templates/wiki.html` — `.wiki-wrap` gained center-align with the same prose-left exception.
+
+### Notes
+- **What to test:** open `/wiki`, `/wiki/roll-log-guide`, and `/wiki/toast-notifications-guide`. All three pages have a visually centered structure — headings, example cards, tables centered in the viewport; bullet lists and paragraphs remain left-aligned within their capped 760–800 px column. On the toast guide, scroll through the dice-toast gallery — every dice-color variant should be visible (the crit toast's amber, the miss toast's red, the heal toast's green, etc.). Cycle themes via the user menu, hard-refresh the guide tab — the gallery's themed mocks adapt.
+- **Backward compat.** Pure CSS polish + content expansion. No new code, no route changes, no schema. Existing harness tests (193 total) still pass.
+
+---
+
 ## [2.43.8] - 2026-05-19
 
 **Schema version:** 56
