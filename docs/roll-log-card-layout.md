@@ -132,7 +132,7 @@ Each consequence is its own pill:
 | `📋 Pip WIS save · DC 14` | `chip-prompt` | `auto_save_target_kind == "pc"` |
 | `📋 Bandit: 8/14 ❌ failed` | `chip-hit` / `chip-miss` | `auto_save_target_kind == "npc"` |
 | `🎲 −12 fire (half)` | `chip-damage` | `auto_save_damage_applied > 0` |
-| `🥶 Paralyzed · 10r` | `chip-buff` | `auto_save_buff_name` set |
+| `🥶 Paralyzed · 10 rounds` | `chip-buff` | `auto_save_buff_name` set |
 | `↶ Undo` | `chip-undo` button | any HP was actually applied |
 
 Utility-only casts (Mage Armor, Misty Step) have no auto-resolution outcomes — the pill row is omitted entirely.

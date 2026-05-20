@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.7] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Spell out "rounds" instead of the cryptic "r" suffix on buff duration labels.** Two locations — the spell-cast result-pill row (`🥶 Paralyzed · 10 rounds`) and the initiative-tracker buff chip (`Paralyzed 10 rounds ×`). Singular handled too: `1 round` for one-round buffs, `N rounds` otherwise. PATCH — pure copy fix; no schema, no contract, no JS API changes.
+**Description:** Two edits. **(1)** `app/static/tabletop.js` `_spellResultPillsHtml` — the buff pill emitter swapped the inline `${d.auto_save_buff_duration}r` for a `${dur === 1 ? '1 round' : durLabel}` block. **(2)** `app/templates/tabletop.html` initiative-tracker `buffChip` — same singular/plural logic for the `.buff-dur` span inside each buff chip on the initiative-tracker drawer. Also updated `docs/roll-log-card-layout.md` (the example pill in the spell-cast section) and `docs/wiki/roll-log-guide.html` (the save-or-suck example card) to use "10 rounds" so the doc matches the rendered UI.
+**Description (cont):** Why not also update `docs/mockups/roll-log-redesign.html`. That file is the frozen v2.42.0 design-comparison mockup the user picked Proposal 3 + Proposal 1 from. It's a historical artifact, not a live reference — editing it would rewrite the design-decision record. Leaving the two "10r" instances there preserves the original mock-up state.
+
+### Changed
+- `app/static/tabletop.js` `_spellResultPillsHtml` — buff pill duration suffix now reads "10 rounds" (or "1 round" for one-round buffs) instead of "10r".
+- `app/templates/tabletop.html` initiative-tracker `buffChip` — same change on the per-combatant buff chips so the two surfaces match.
+- `docs/roll-log-card-layout.md` — section 3's pill table updated.
+- `docs/wiki/roll-log-guide.html` — save-or-suck example card updated.
+
+### Notes
+- **What to test:** open `/campaign/1`. Cast Hold Person from Tavik on a bandit (or any save-or-suck spell that lands the condition). The chip-buff pill on the spell-cast card should read "🥶 Paralyzed · 10 rounds" (not "10r"). Same in the initiative-tracker drawer's per-combatant buff chip.
+- **Backward compat.** Pure presentation change. Pre-v2.43.7 cards re-rendered from localStorage replay use the new format because the duration value is part of the persisted payload — only the rendering changed.
+
+---
+
 ## [2.43.6] - 2026-05-19
 
 **Schema version:** 56

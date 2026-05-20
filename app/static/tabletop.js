@@ -1865,8 +1865,10 @@
             pills.push(`<span class="result-pill chip-damage">🎲 −${d.auto_save_damage_applied}${type}${tag}</span>`);
         }
         if (d.auto_save_buff_name) {
+            const dur = d.auto_save_buff_duration;
+            const durLabel = dur === 1 ? '1 round' : `${dur} rounds`;
             pills.push(
-                `<span class="result-pill chip-buff">${escapeHTML(d.auto_save_buff_icon || '💫')} ${escapeHTML(d.auto_save_buff_name)} · ${d.auto_save_buff_duration}r</span>`
+                `<span class="result-pill chip-buff">${escapeHTML(d.auto_save_buff_icon || '💫')} ${escapeHTML(d.auto_save_buff_name)} · ${durLabel}</span>`
             );
         }
         // Undo pill (when anything was actually applied).

@@ -5042,8 +5042,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // (filtered out) before the PUT /battle.
                 const buffs = Array.isArray(c.buffs) ? c.buffs : [];
                 const buffChip = (b) => {
+                    // v2.43.7: spell out "rounds" instead of the cryptic "r"
+                    // suffix — matches the spell-cast result-pill format.
                     const dur = Number.isFinite(b.duration_rounds)
-                        ? ` <span class="buff-dur">${b.duration_rounds}r</span>` : '';
+                        ? ` <span class="buff-dur">${b.duration_rounds} ${b.duration_rounds === 1 ? 'round' : 'rounds'}</span>` : '';
                     const icon = b.icon ? `${b.icon} ` : '';
                     const ttl = (b.desc || b.name || '').replace(/"/g, '&quot;');
                     return `<span class="buff-chip" title="${ttl}">
