@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.43.18] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Wiki plan exec #5 — Running a session as GM.** Tier 1 doc #2, the densest GM-facing guide. New `docs/wiki/running-a-session-as-gm.md` is the at-the-table reference: pre-session checklist, starting initiative, the action-economy chip strip, targeting patterns, auto-resolution outcome pills, cycling turns, buffs + concentration cleanup, HP edits + Undo, the death-save state machine summary, the visibility filter, roll requests (+ per-player targeting), mid-session housekeeping (encounter snapshots, map swap, resource adjustments, wandering-monster spawn, behind-the-screen rolls), ending the session, troubleshooting. Cross-references every existing wiki guide for surfaces with their own deep-dive doc. PATCH — additive doc.
+**Description:** Three edits. **(1)** New `docs/wiki/running-a-session-as-gm.md` — ~330 lines, organized by the session-loop arc (pre → start → run combat → cycle → housekeeping → end). The auto-resolution outcome table maps every pill type to its trigger condition + the phase-T number it was introduced in. The buffs + concentration section explicitly enumerates the four cleanup paths (failed CON save, `/end_buff`, replaced concentration, target-side condition `/end_buff`) so GMs know what does + doesn't trigger paired-buff drop. The troubleshooting section captures the six failure modes the GM is most likely to hit. **(2)** `docs/wiki/README.md` updated. **(3)** `app/templates/wiki.html` updated.
+**Description (cont):** Why "the densest" framing. Most session events touch 3-4 subsystems at once (an attack runs the chip strip + targeting + auto-resolution + the roll log + the dice toast). The guide can't be a thin overview — readers need enough detail to act in a live session without flipping to five other docs. Trade-off: long page. Mitigation: clear section headers + a table-of-everything-on-the-screen layout so the GM can keyboard-search.
+**Description (cont 2):** Why cross-link instead of inline. Several sections (action-economy, targeting, buff slots, death saves) have their own Tier 2 wiki guides planned in the TODO list. This doc gives the operational summary + the "click here, this happens" expectations; the deep design rationale stays in the Tier 2 docs. As those ship, this doc's cross-links go from "planned" to live without rewriting any of the GM-facing prose here.
+
+### Added
+- `docs/wiki/running-a-session-as-gm.md` — Tier 1 GM how-to guide.
+
+### Changed
+- `docs/wiki/README.md` — "Available guides" + TODO updated.
+- `app/templates/wiki.html` — same.
+
+### Notes
+- **What to test:** open `/wiki/running-a-session-as-gm` — markdown renders through the wiki_md.html theme wrapper. Tables (the auto-resolution outcome table + the per-row anatomy of the initiative tracker) render with the centered-880px-column layout. Cross-links to the existing roll-log + toast guides are clickable.
+- **Backward compat.** Doc-only.
+
+### Next up (from `docs/plans/wiki-expansion.md` recommended ship order)
+- **#6 The character sheet** (Tier 1, new) — anatomy of the most-touched player surface.
+- **#7 Demo mode** (Tier 3, new) — promote from `docs/plans/demo-mode.md`.
+
+After these two, the recommended-first-7 is complete and the next batch is open to any order.
+
+---
+
 ## [2.43.17] - 2026-05-20
 
 **Schema version:** 56

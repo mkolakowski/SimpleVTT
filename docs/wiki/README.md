@@ -21,6 +21,7 @@ This wiki complements the canonical references that live elsewhere in the repo:
 | [Endpoint catalog](endpoint-catalog.md) | Markdown (reference) | Contributors | ✅ shipped (v2.43.15) |
 | [Architecture overview](architecture-overview.md) | Markdown (system map) | Contributors | ✅ shipped (v2.43.16) |
 | [First-run setup](first-run-setup.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.17) |
+| [Running a session as GM](running-a-session-as-gm.md) | Markdown (how-to) | GMs | ✅ shipped (v2.43.18) |
 
 ## TODO — guides to write
 
@@ -30,7 +31,7 @@ This wiki is a stub. The list below is what we want it to grow into.
 
 - [x] **First-run setup.** Stand up a fresh `docker compose up`, register the first user, create a campaign, invite players, and run a first session. Where the seed data goes; how to disable demo mode; how to reset the database. → [first-run-setup.md](first-run-setup.md).
 - [ ] **Inviting players.** The two membership flows (open registration vs invite-only), GM colors, per-player portrait, the demo-user accounts.
-- [ ] **Running a session as GM.** Initiative tracker, action-economy chips, target picker, the GM Tools drawer, encounter snapshots.
+- [x] **Running a session as GM.** Initiative tracker, action-economy chips, target picker, the GM Tools drawer, encounter snapshots. → [running-a-session-as-gm.md](running-a-session-as-gm.md).
 - [ ] **Building an encounter.** Encounters panel CRUD, token templates, monsters from the SRD bestiary vs homebrew, spawn-point layout, default-encounter wiring on a campaign.
 - [ ] **Maps + grids + tokens.** Uploading maps, scaling, grid overlay (`show_grid`), placing PC and monster tokens, the token-tracker side panel.
 - [ ] **Homebrew content authoring.** Custom monsters (template editor), custom items, custom spells, the homebrew JSON contract.
