@@ -149,8 +149,9 @@ async def test_spell_attack_no_damage_when_toggle_off(gm_client, thalindra_reste
     data = resp.json()
     # Attack still rolls.
     assert isinstance(data["auto_attack_hit"], bool)
-    # Damage NOT applied because toggle is off.
-    assert data["auto_attack_damage_rolled"] == 0
+    # v2.40.0: damage IS rolled even with toggle off (consistent with
+    # /attack semantics — the chat card displays what WOULD have been
+    # applied). Only ``damage_applied`` stays 0 when toggle is off.
     assert data["auto_attack_damage_applied"] == 0
     # Re-enable for downstream tests.
     await _set_auto_apply(gm_client, on=True)
@@ -226,6 +227,65 @@ async def test_fire_bolt_scales_at_l5(gm_client, thalindra_rested):
             saw_hit_with_damage = True
             break
     assert saw_hit_with_damage, "no hit in 15 attempts — flaky environment?"
+
+
+async def test_eldritch_blast_multibeam_at_l5(gm_client, roster):
+    """v2.40.0 Phase T.4c-multibeam: Magnus (L5 Warlock) casts
+    Eldritch Blast at a bandit. The scaling tier carries
+    ``extra_beams: 1`` so the server should fire 2 attack rolls,
+    each rolling 1d10 damage independently on hit. Response carries
+    ``auto_attack_beams`` with 2 entries.
+    """
+    magnus = roster["Magnus Hexbinder"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+        json={"type": "long"},
+    )
+    await _set_auto_apply(gm_client, on=True)
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next((t for t in templates if "bandit" in t["name"].lower()), templates[0])
+    await _seed_battle(gm_client, [
+        {"id": f"tok_test_{magnus['id']}", "char_id": magnus["id"],
+         "name": magnus["name"], "initiative": 10, "hp_current": 30, "hp_max": 30,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": "tok_test_bandit_eb", "char_id": None,
+         "token_template_id": bandit_tmpl["id"],
+         "name": bandit_tmpl["name"], "initiative": 7, "hp_current": 50, "hp_max": 50,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+    ])
+    # Eldritch Blast is index 0 in Magnus's spell list (see demo_seed).
+    EB_INDEX = 0
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": magnus["id"],
+            "spell_index": EB_INDEX,
+            "slot_level": 0,
+            "class_slug": "warlock",
+            "target_combatant_id": "tok_test_bandit_eb",
+            "target_name": bandit_tmpl["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    beams = data.get("auto_attack_beams") or []
+    # Magnus at L5 → 2 beams (1 base + 1 extra_beams from tier).
+    assert len(beams) == 2, f"expected 2 beams, got {len(beams)}"
+    for b in beams:
+        assert "total" in b
+        assert "hit" in b
+        # Each beam rolls 1d10 (not 2d10) for damage when hit.
+        if b["hit"]:
+            min_dmg = 2 if b["crit"] else 1
+            max_dmg = 20 if b["crit"] else 10
+            assert min_dmg <= b["damage_rolled"] <= max_dmg, (
+                f"beam {b['beam']} rolled {b['damage_rolled']} — expected "
+                f"{min_dmg}..{max_dmg} (1d10 per beam)"
+            )
 
 
 async def test_non_attack_spell_skips_attack_block(gm_client, roster):

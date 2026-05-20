@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.40.0] - 2026-05-19
+
+**Schema version:** 56
+**Commit summary:** **Eldritch Blast multi-beam (T.4c follow-up) + encounters CRUD harness file.** Two bundled changes. **EB multi-beam**: previously Eldritch Blast inherited the cantrip-scaling pattern from v2.36.0 (1d10 → 2d10 → 3d10 → 4d10 on a single attack roll) which gave the right *expected* damage but the wrong *mechanic* — RAW EB adds extra BEAMS at L5/L11/L17, each with its own attack roll + 1d10 damage. New `ActionScalingTier.extra_beams: int` field carries the per-tier beam count. `/cast_spell` auto-attack block loops `1 + extra_beams` times, each beam rolling attack + damage independently, aggregating damage from all hits, applying once. Per-beam detail surfaces on the new `auto_attack_beams: list[dict]` payload field. **Encounters CRUD**: 9-test harness file covering `GET /encounters`, `POST /encounters` (build-from-blank), `PATCH /encounters/{id}`, `POST /encounters/{id}/duplicate`, `POST /encounters/{id}/update`, `POST /encounters/{id}/delete`, plus 403 auth gates. Closes the v2.35.1 filed coverage gap for encounter CRUD. MINOR — content + new tests; the EB schema field is additive.
+**Description:** Five edits. **(1)** `app/action_schema.py` `ActionScalingTier` — added `extra_beams: int = 0` field with docstring. **(2)** `app/data/local/dnd5e/spells/eldritch-blast.json` — replaced the (incorrect) `damage_scaling` array of doubled dice with the RAW multi-beam mapping: `damage: "1d10", extra_beams: 1/2/3` at L5/11/17. **(3)** `app/routes/tabletop_routes.py` `/cast_spell` auto-attack block — refactored the single-beam attack/damage logic into a loop. Each beam rolls `1d20+spell_atk_bonus`, parses nat 20 / nat 1, computes hit, and (if hit) rolls damage (crit doubles). Aggregate damage applies once via `_apply_damage_to_combatant` with the cast id, so Undo still works on the whole cast. Payload gets `auto_attack_beams: list[dict]` with per-beam `{beam, total, breakdown, hit, crit, damage_rolled, damage_breakdown}`. Headline fields (`auto_attack_total`, `auto_attack_breakdown`, etc.) reflect the highest-total beam for backward compat. **(4)** `tests/harness/test_cast_spell_attack.py` — new `test_eldritch_blast_multibeam_at_l5` asserts 2 beams at Magnus's L5, each rolling 1d10 not 2d10. Existing toggle-off test updated to reflect new semantic (damage IS rolled with toggle off, only `damage_applied` stays 0 — matches `/attack`). **(5)** `tests/harness/test_encounters.py` — new 9-test file covering encounter CRUD endpoints. Filed: `POST /encounters/{id}/load` happy-path test (destructive — wipes live tokens — needs a save-restore harness pattern not yet available).
+**Description (cont):** Why aggregate damage applies once. RAW each beam targets independently and applies its own damage. v2.40.0's single-target single-apply approximation simplifies the chat-card UI (one Undo button, one HP delta entry) while preserving correct total damage. Per-beam targeting (different beams hit different creatures) is filed for a later commit alongside T.5's AoE picker — both need the same multi-target selection pattern.
+**Description (cont 2):** Headline backward-compat. The pre-v2.40.0 chat card / toast / Undo button paths read `auto_attack_total` / `auto_attack_breakdown` / `auto_attack_damage_breakdown`. v2.40.0 sets those to the highest-total beam's values (a single d20 result + that beam's damage), so existing single-beam-aware UI continues to render sensibly. New UI work can opt into the per-beam `auto_attack_beams` array for richer rendering ("Beam 1: ✅ HIT 7 force | Beam 2: ❌ MISS").
+
+### Added
+- `app/action_schema.py` `ActionScalingTier.extra_beams` field.
+- `app/data/local/dnd5e/spells/eldritch-blast.json` — multi-beam `damage_scaling`.
+- `app/routes/tabletop_routes.py` `/cast_spell` — multi-beam attack-roll loop + `auto_attack_beams` payload/response field.
+- `tests/harness/test_cast_spell_attack.py` `test_eldritch_blast_multibeam_at_l5`.
+- `tests/harness/test_encounters.py` — 9 tests for encounter CRUD.
+
+### Changed
+- `tests/harness/test_cast_spell_attack.py` `test_spell_attack_no_damage_when_toggle_off` — assertion updated for new semantic (damage rolls regardless of toggle; only `damage_applied` gates).
+
+### Notes
+- **What to test:** open `/campaign/1`. Magnus (L5 Warlock) casts Eldritch Blast at a bandit (toggle on). Chat card / toast should reflect 2 attack rolls of 1d10 each (not a single 2d10). Per-beam detail in `auto_attack_beams` for future UI work. Encounters: GM Tools → Encounters → Save Snapshot creates an entry; rename it; duplicate; delete — all flow through the freshly-tested endpoints.
+- **Filed.** Per-beam-target selection (each EB beam hits a different creature) needs the AoE picker work that's part of T.5. `POST /encounters/{id}/load` happy-path test needs a save-and-restore harness pattern.
+
+---
+
 ## [2.39.0] - 2026-05-19
 
 **Schema version:** 56

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 179 (as of v2.39.0, 2026-05-19).
+**Total tests:** 189 (as of v2.40.0, 2026-05-19).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -155,6 +155,7 @@ Phase T.4b auto-rolled spell attacks (Fire Bolt etc.) — hit vs AC, crit doubli
 | `test_spell_attack_no_damage_when_toggle_off` | Toggle off: attack rolls but `damage_applied == 0`. |
 | `test_spell_attack_no_target_skips_block` | No target → `auto_attack_hit is None`. |
 | `test_fire_bolt_scales_at_l5` | v2.36.0 cantrip scaling: Thalindra (L5) Fire Bolt rolls 2d10 (range 2..20), not 1d10. |
+| `test_eldritch_blast_multibeam_at_l5` | v2.40.0 multi-beam: Magnus (L5) Eldritch Blast → 2 beams, each rolling 1d10 (range 1..10 per beam). |
 | `test_non_attack_spell_skips_attack_block` | Healing Word (no `attack_roll`) → block skipped. |
 
 ### `test_cast_spell_heal.py`
@@ -406,6 +407,23 @@ Short rest (Song of Rest) + long rest.
 | `test_short_rest_invalid_type` | `type: "bogus"` → 400. |
 | `test_short_rest_no_hit_dice` | No HD left → cannot short rest. |
 
+### `test_encounters.py`
+Encounters CRUD — `GET /encounters`, `POST /encounters`, `PATCH /encounters/{id}`, duplicate / update / delete. v2.40.0 closed the v2.35.1 audit gap.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_list_encounters_returns_array` | `GET /encounters` returns a JSON list. |
+| `test_non_gm_cannot_list` | 403 for non-GM. |
+| `test_create_blank_encounter` | `POST /encounters` with `payload` creates a build-from-blank draft; shows up in subsequent list. |
+| `test_create_encounter_missing_name_400` | Empty `name` → 400. |
+| `test_patch_encounter_updates_name` | `PATCH /encounters/{id}` rewrites name + description. |
+| `test_duplicate_encounter` | `POST /encounters/{id}/duplicate` creates a sibling row with a new id. |
+| `test_delete_encounter` | `POST /encounters/{id}/delete` removes the row from the list. |
+| `test_non_gm_cannot_create_403` | 403 for non-GM POST. |
+| `test_update_encounter_overwrites_payload` | `POST /encounters/{id}/update` snapshots live state into the saved payload (doesn't touch live state). |
+
+> `POST /encounters/{id}/load` happy-path test is **filed** — loading replaces live tokens + battle state which is destructive for the standing demo seed and breaks downstream tests. Needs a save-restore harness pattern.
+
 ### `test_transform.py`
 Druid Wild Shape / Polymorph form transitions.
 
@@ -425,7 +443,8 @@ Druid Wild Shape / Polymorph form transitions.
 
 The following endpoint surfaces are exercised indirectly by other tests but lack a dedicated test file. Tracked for future expansion; low regression risk today.
 
-- `/api/campaign/{cid}/encounters/*` — load, duplicate, spawn, delete.
+- `/api/campaign/{cid}/encounters/{id}/load` happy-path (destructive — wipes live tokens). The rest of the CRUD surface is now covered in `test_encounters.py`.
+- `/api/campaign/{cid}/encounters/{id}/spawn` — not yet covered.
 - `/api/campaign/{cid}/character/{id}/economy` GET — the action-chip JSON view.
 - Token CRUD beyond `/move` — create, image upload, delete.
 - Template CRUD — `/templates`, `/templates/{id}`, image upload, monster import.

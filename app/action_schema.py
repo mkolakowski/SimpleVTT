@@ -29,10 +29,19 @@ class ActionScalingTier(BaseModel):
 
     The renderer picks the highest tier whose ``level`` is ≤ the character's
     level. Earlier tiers stop applying once a later one takes effect.
+
+    ``extra_beams`` (v2.40.0) is the multi-attack counterpart for spells
+    where the scaling adds entire extra attacks rather than larger dice
+    per attack — Eldritch Blast is the canonical case (1 beam at L1-4,
+    2 at L5-10, 3 at L11-16, 4 at L17+). When set, /cast_spell rolls
+    ``1 + extra_beams`` attack rolls against the target, each
+    independently hitting/missing, and aggregates damage. Crit applies
+    per-beam.
     """
 
     level: int
     damage: str = ""
+    extra_beams: int = 0
 
 
 class AreaShape(BaseModel):

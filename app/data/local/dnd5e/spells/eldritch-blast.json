@@ -34,15 +34,18 @@
       "damage_scaling": [
         {
           "level": 5,
-          "damage": "2d10"
+          "damage": "1d10",
+          "extra_beams": 1
         },
         {
           "level": 11,
-          "damage": "3d10"
+          "damage": "1d10",
+          "extra_beams": 2
         },
         {
           "level": 17,
-          "damage": "4d10"
+          "damage": "1d10",
+          "extra_beams": 3
         }
       ],
       "attack_roll": true,

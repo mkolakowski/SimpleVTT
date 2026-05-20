@@ -6686,6 +6686,7 @@ async def cast_spell(
     auto_attack_damage_applied = 0
     auto_attack_damage_type = ""
     auto_attack_damage_breakdown = ""
+    beams: list[dict] = []
     # Save-ability detection has to happen up front so we can gate the
     # attack block — a spell with both flags wouldn't be RAW, but the
     # gate prevents accidental double-rolling.
@@ -6718,28 +6719,7 @@ async def cast_spell(
                 (caster_sheet_atk.get("abilities") or {}).get(caster_spc_atk, 10)
             )
             spell_atk_bonus = caster_prof_atk + ((caster_ab_atk - 10) // 2)
-            atk_expr = f"1d20{spell_atk_bonus:+d}"
-            try:
-                _ar = dice_mod.roll(atk_expr)
-                auto_attack_total = int(_ar.total)
-                auto_attack_breakdown = _ar.breakdown
-            except dice_mod.DiceParseError:
-                pass
-            # Pull the raw d20 face from the breakdown for nat-20 / nat-1
-            # detection. dice.py emits ``1d20[N]+B`` so we grab the
-            # bracketed value.
-            _nat_match = _re.search(r"\[(\d+)\]", auto_attack_breakdown)
-            nat = int(_nat_match.group(1)) if _nat_match else (
-                auto_attack_total - spell_atk_bonus
-            )
             auto_attack_target_ac = _read_target_ac(db, campaign_id, target_combatant)
-            if nat == 20:
-                auto_attack_hit = True
-                auto_attack_crit = True
-            elif nat == 1:
-                auto_attack_hit = False
-            else:
-                auto_attack_hit = auto_attack_total >= auto_attack_target_ac
             # Resolve damage dice from the action.
             _dmg_scaling = None
             for a in (spell.get("actions") or []):
@@ -6761,28 +6741,93 @@ async def cast_spell(
             _tier = _pick_damage_tier(_dmg_scaling, _caster_level_for_scaling)
             if _tier and _tier.get("damage"):
                 _dmg_base = _tier["damage"]
+            # v2.40.0 Phase T.4c-multibeam: when the scaling tier
+            # carries ``extra_beams: N``, fire N+1 separate attack
+            # rolls against the target (Eldritch Blast 2 beams at L5,
+            # 3 at L11, 4 at L17). Each beam independently
+            # hits/misses + rolls damage. Damage aggregates and
+            # applies once via _apply_damage_to_combatant; per-beam
+            # detail surfaces in ``auto_attack_beams`` for richer UI.
+            total_beams = 1 + int((_tier or {}).get("extra_beams") or 0)
+            beams: list[dict] = []
+            agg_damage_rolled = 0
+            agg_damage_breakdown_parts: list[str] = []
+            any_hit = False
+            any_crit = False
+            for beam_idx in range(total_beams):
+                beam = {
+                    "beam": beam_idx + 1,
+                    "total": 0,
+                    "breakdown": "",
+                    "hit": False,
+                    "crit": False,
+                    "damage_rolled": 0,
+                    "damage_breakdown": "",
+                }
+                atk_expr = f"1d20{spell_atk_bonus:+d}"
+                try:
+                    _ar = dice_mod.roll(atk_expr)
+                    beam["total"] = int(_ar.total)
+                    beam["breakdown"] = _ar.breakdown
+                except dice_mod.DiceParseError:
+                    pass
+                _nat_match = _re.search(r"\[(\d+)\]", beam["breakdown"])
+                nat = int(_nat_match.group(1)) if _nat_match else (
+                    beam["total"] - spell_atk_bonus
+                )
+                if nat == 20:
+                    beam["hit"] = True
+                    beam["crit"] = True
+                elif nat == 1:
+                    beam["hit"] = False
+                else:
+                    beam["hit"] = beam["total"] >= auto_attack_target_ac
+                if _dmg_base and beam["hit"]:
+                    roll_expr = (
+                        _double_dice_for_crit(_dmg_base) if beam["crit"] else _dmg_base
+                    )
+                    try:
+                        _dr = dice_mod.roll(roll_expr)
+                        beam["damage_rolled"] = max(0, int(_dr.total))
+                        beam["damage_breakdown"] = _dr.breakdown
+                    except dice_mod.DiceParseError:
+                        beam["damage_rolled"] = 0
+                    agg_damage_rolled += beam["damage_rolled"]
+                    if beam["damage_breakdown"]:
+                        agg_damage_breakdown_parts.append(
+                            f"beam {beam['beam']}: {beam['damage_breakdown']}"
+                            if total_beams > 1 else beam["damage_breakdown"]
+                        )
+                if beam["hit"]:
+                    any_hit = True
+                if beam["crit"]:
+                    any_crit = True
+                beams.append(beam)
+            # Aggregate fields for backward-compat. Single-beam casts
+            # behave identically to pre-v2.40.0. Multi-beam casts get
+            # the most-impressive beam's d20 (the highest total) as
+            # the headline number; per-beam detail lives in
+            # ``auto_attack_beams``.
+            headline = max(beams, key=lambda b: b["total"]) if beams else {}
+            auto_attack_total = int(headline.get("total") or 0)
+            auto_attack_breakdown = headline.get("breakdown") or ""
+            auto_attack_hit = any_hit
+            auto_attack_crit = any_crit
+            auto_attack_damage_rolled = agg_damage_rolled
+            auto_attack_damage_breakdown = " · ".join(agg_damage_breakdown_parts)
             if (
                 _dmg_base
-                and auto_attack_hit
+                and any_hit
                 and bool(campaign.auto_apply_damage)
+                and agg_damage_rolled > 0
             ):
-                # Crit doubles the damage dice (not the flat mod) per
-                # T.2's ``_double_dice_for_crit`` helper.
-                roll_expr = _double_dice_for_crit(_dmg_base) if auto_attack_crit else _dmg_base
-                try:
-                    _dr = dice_mod.roll(roll_expr)
-                    auto_attack_damage_rolled = max(0, int(_dr.total))
-                    auto_attack_damage_breakdown = _dr.breakdown
-                except dice_mod.DiceParseError:
-                    auto_attack_damage_rolled = 0
-                if auto_attack_damage_rolled > 0:
-                    dmg_result = await _apply_damage_to_combatant(
-                        db, campaign_id, target_combatant,
-                        auto_attack_damage_rolled,
-                        damage_type=auto_attack_damage_type,
-                        attack_id=cast_id,
-                    )
-                    auto_attack_damage_applied = int(dmg_result.get("applied") or 0)
+                dmg_result = await _apply_damage_to_combatant(
+                    db, campaign_id, target_combatant,
+                    agg_damage_rolled,
+                    damage_type=auto_attack_damage_type,
+                    attack_id=cast_id,
+                )
+                auto_attack_damage_applied = int(dmg_result.get("applied") or 0)
         payload["auto_attack_hit"] = auto_attack_hit
         payload["auto_attack_crit"] = auto_attack_crit
         payload["auto_attack_total"] = auto_attack_total
@@ -6793,6 +6838,7 @@ async def cast_spell(
         payload["auto_attack_damage_applied"] = auto_attack_damage_applied
         payload["auto_attack_damage_type"] = auto_attack_damage_type
         payload["auto_attack_damage_breakdown"] = auto_attack_damage_breakdown
+        payload["auto_attack_beams"] = beams  # v2.40.0 per-beam detail
 
     # v2.30.0 Phase T.3: save-spell auto-resolution.
     # When the spell carries a ``save_ability`` (top-level OR on an
@@ -7157,6 +7203,8 @@ async def cast_spell(
         "auto_attack_damage_applied": payload.get("auto_attack_damage_applied", 0),
         "auto_attack_damage_type": payload.get("auto_attack_damage_type", ""),
         "auto_attack_damage_breakdown": payload.get("auto_attack_damage_breakdown", ""),
+        # v2.40.0 multi-beam: per-beam detail for Eldritch Blast etc.
+        "auto_attack_beams": payload.get("auto_attack_beams", []),
     }
 
 
