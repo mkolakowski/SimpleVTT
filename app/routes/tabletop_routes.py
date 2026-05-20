@@ -6474,6 +6474,25 @@ async def cast_spell(
     target_character_id_in = body.get("target_character_id")
     target_character_id_in = int(target_character_id_in) if target_character_id_in else None
     target_name_in = (body.get("target_name") or "").strip() or None
+    # v2.44.0 Phase T.5: AoE multi-target list. When the client's
+    # sphere/circle picker places an AoE template, every token inside
+    # the circle is sent as a list of combatant ids. The first id
+    # drives the existing single-target resolution path (so save +
+    # damage + buff + condition install all run unchanged for target
+    # #0); the remaining ids are looped server-side at the end of the
+    # save-resolution block, appending one entry per target to a new
+    # ``auto_save_targets`` payload field. NPC-only for v1 — PC AoE
+    # saves need per-target roll_request orchestration (filed for
+    # T.5d follow-up).
+    target_combatant_ids_in = body.get("target_combatant_ids") or []
+    if not isinstance(target_combatant_ids_in, list):
+        target_combatant_ids_in = []
+    target_combatant_ids_in = [str(x).strip() for x in target_combatant_ids_in if str(x).strip()]
+    # When the AoE list is set + the single-target field is empty,
+    # promote the first AoE id into the single-target slot so the
+    # existing resolution path uses it as target #0.
+    if target_combatant_ids_in and not target_combatant_id_in:
+        target_combatant_id_in = target_combatant_ids_in[0]
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -7150,6 +7169,115 @@ async def cast_spell(
         payload["auto_save_damage_breakdown"] = auto_save_damage_breakdown
         payload["auto_save_damage_type"] = auto_save_damage_type
 
+        # v2.44.0 Phase T.5: AoE multi-target loop. The single-target
+        # path above already ran for ids[0]; loop ids[1:] now, doing
+        # the same NPC save-roll + save-for-half damage application
+        # per extra target. Each result lands in ``auto_save_targets``
+        # so the client can render one save-pill per target on the
+        # spell-cast card. PC ids in the list are skipped for v1
+        # (AoE-PC saves need a roll_request per target — filed).
+        auto_save_targets: list[dict] = []
+        # Always seed the list with target #0 (the single-target path's
+        # outcome) so the client has a uniform array to iterate, even
+        # for non-AoE casts. Skip when no save_ability is set or no
+        # NPC outcome was resolved (e.g. PC target, or no target at all).
+        if save_ability and auto_save_target_kind == "npc" and target_combatant:
+            auto_save_targets.append({
+                "combatant_id": target_combatant.get("id"),
+                "target_name": auto_save_target_name,
+                "rolled": auto_save_rolled,
+                "breakdown": auto_save_breakdown,
+                "passed": auto_save_passed,
+                "damage_applied": auto_save_damage_applied,
+                "damage_type": auto_save_damage_type,
+            })
+        # Extra AoE targets (skip the first; it already ran above).
+        for extra_id in target_combatant_ids_in[1:]:
+            extra = _lookup_combatant(campaign_id, extra_id)
+            if not extra:
+                continue
+            extra_name = extra.get("name") or ""
+            # PC AoE save: skipped for v1. The combatant has a char_id
+            # whose Character row has owner_user_id; if so we can't
+            # roll the save server-side. Append a placeholder so the
+            # client can render "Save prompt (PC)" but no auto-roll.
+            extra_char_id = extra.get("char_id")
+            extra_is_pc = False
+            if extra_char_id:
+                _ec = db.query(Character).filter(
+                    Character.id == int(extra_char_id),
+                    Character.campaign_id == campaign_id,
+                ).first()
+                extra_is_pc = bool(_ec and _ec.owner_user_id)
+            if extra_is_pc:
+                auto_save_targets.append({
+                    "combatant_id": extra.get("id"),
+                    "target_name": extra_name,
+                    "rolled": None,
+                    "breakdown": "",
+                    "passed": None,
+                    "damage_applied": 0,
+                    "damage_type": auto_save_damage_type,
+                    "pc_skipped": True,
+                })
+                continue
+            # NPC target: roll the save vs the same DC, then apply
+            # save-for-half damage. Same shape as the single-target
+            # path above but without the broadcast roll (AoE saves
+            # are aggregate; broadcasting 8 save rolls for a Fireball
+            # would spam the log).
+            if not extra.get("token_template_id"):
+                # No template to look up stats — skip.
+                continue
+            _tmpl = db.query(TokenTemplate).filter(
+                TokenTemplate.id == int(extra["token_template_id"]),
+            ).first()
+            if not _tmpl:
+                continue
+            _npc_sheet = _monster_template_to_sheet(_tmpl, campaign_id)
+            _npc_mod, _ = _resolve_stat_modifier(
+                _npc_sheet, "dnd5e", f"{save_ability.lower()}_save",
+            )
+            _expr = f"1d20{_npc_mod:+d}"
+            try:
+                _r = dice_mod.roll(_expr)
+                _rolled = int(_r.total)
+                _bd = _r.breakdown
+            except dice_mod.DiceParseError:
+                _rolled = 0
+                _bd = ""
+            _passed = _rolled >= auto_save_dc
+            # Roll damage fresh per target (each save is independent
+            # in RAW; the damage roll is shared but applied per
+            # target). v1 rolls once per target for simplicity —
+            # matches the per-beam pattern of Eldritch Blast (v2.40.0).
+            _dmg_applied = 0
+            if damage_expr and bool(campaign.auto_apply_damage):
+                try:
+                    _dr = dice_mod.roll(damage_expr)
+                    _dmg_rolled = max(0, int(_dr.total))
+                except dice_mod.DiceParseError:
+                    _dmg_rolled = 0
+                if _dmg_rolled > 0:
+                    proposed = _dmg_rolled if not _passed else _dmg_rolled // 2
+                    if proposed > 0:
+                        _dr_result = await _apply_damage_to_combatant(
+                            db, campaign_id, extra, proposed,
+                            damage_type=damage_type,
+                            attack_id=cast_id,
+                        )
+                        _dmg_applied = int(_dr_result.get("applied") or 0)
+            auto_save_targets.append({
+                "combatant_id": extra.get("id"),
+                "target_name": extra_name,
+                "rolled": _rolled,
+                "breakdown": _bd,
+                "passed": _passed,
+                "damage_applied": _dmg_applied,
+                "damage_type": damage_type,
+            })
+        payload["auto_save_targets"] = auto_save_targets
+
         # v2.32.0 Phase T.3c: save-or-suck condition install. When the
         # spell has NO damage roll but DOES have a save_ability AND
         # the target failed the save, look up the spell's slug in
@@ -7284,6 +7412,12 @@ async def cast_spell(
         "auto_save_buff_name": payload.get("auto_save_buff_name", ""),
         "auto_save_buff_icon": payload.get("auto_save_buff_icon", ""),
         "auto_save_buff_duration": payload.get("auto_save_buff_duration", 0),
+        # v2.44.0 Phase T.5: per-target save outcomes for AoE casts.
+        # When the cast was single-target, this is a 1-entry list
+        # mirroring the headline auto_save_* fields. For AoE casts
+        # (target_combatant_ids body), one entry per resolved target.
+        # Always a list (possibly empty); never null.
+        "auto_save_targets": payload.get("auto_save_targets", []),
         # v2.34.0 Phase T.4b: echo auto spell-attack-roll resolution.
         "auto_attack_hit": payload.get("auto_attack_hit"),
         "auto_attack_crit": payload.get("auto_attack_crit", False),

@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.44.0] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Phase T.5a — server-side multi-target dispatch for AoE save spells.** Resumes the targeting roadmap after the wiki-expansion pause. `/cast_spell` now accepts an optional `target_combatant_ids: list[str]` body field; when populated, the existing single-target save-resolution path runs for ids[0] (no behavior change) AND loops save + save-for-half damage for each additional id, emitting a per-target outcome list on the new `auto_save_targets` response/payload field. Fireball's `area` schema populated with `shape: "sphere"`, `size_ft: 20` as the first AoE-capable SRD spell. NPC-only for v1 — PC ids in the list are recorded as `pc_skipped: True` so the GM still resolves manually (per-target roll_request orchestration filed for T.5d). The client-side AoE picker UI (mouse-follow preview circle + click-to-place + tokens-in-circle computation) lands in v2.44.1 (T.5b) on top of this server contract. MINOR — new payload field + new behavior; backward-compat because the existing single-target body shape still works unchanged.
+**Description:** Three edits. **(1)** `app/data/local/dnd5e/spells/fireball.json` — populated the `area` block on the Cast action with `shape: "sphere"`, `size_ft: 20` (first SRD spell to opt in; v1.0 ships with one fixture so the harness has something to exercise). **(2)** `app/routes/tabletop_routes.py` `/cast_spell` — added `target_combatant_ids = body.get("target_combatant_ids") or []` parsing near the existing `target_combatant_id_in`. When the list is populated AND `target_combatant_id_in` is empty, promotes `ids[0]` into the single-target slot so the existing resolution path runs for target #0 unchanged. After the existing save + damage assignments to `payload`, a new loop walks `ids[1:]`: looks up each combatant, rolls the NPC save vs the same DC, applies save-for-half damage (rolled fresh per target — matches the v2.40.0 EB multi-beam pattern), and appends a `{combatant_id, target_name, rolled, breakdown, passed, damage_applied, damage_type}` entry to `auto_save_targets`. The first entry (target #0) is seeded from the existing single-target outcome so the client always reads a uniform list. PC targets in the AoE list are appended with `pc_skipped: True` instead of rolled — v1 doesn't auto-roll PC AoE saves (filed). The HTTP response dict also returns `auto_save_targets` (defaults to `[]`). **(3)** `tests/harness/test_cast_spell_aoe.py` — three tests: `test_fireball_hits_three_bandits` (Fireball at 3 bandits → 3 `auto_save_targets` entries, each with non-zero fire damage), `test_single_target_fallback_unchanged` (old single-target body still works + populates a 1-entry `auto_save_targets`), `test_aoe_list_with_pc_target_marks_pc_skipped` (mixed PC+NPC list → bandit resolved, PC entry has `pc_skipped: True` + `rolled: None`).
+**Description (cont):** Why promote `ids[0]` into the single-target slot instead of replacing the resolution path entirely. The existing single-target code handles every nuance: target lookup, PC roll_request branching, NPC save rolling, save-for-half damage, condition install, paired-buff cleanup, the `auto_save_*` headline payload fields. Replicating all of that in a multi-target loop would 2x the surface area. Promoting ids[0] reuses that logic for target #0 and only adds a thin per-target loop for the rest. Cost: damage is rolled per-target (vs once-and-applied-to-all), which is the RAW reading anyway and matches the v2.40.0 EB multi-beam decision.
+**Description (cont 2):** Why NPC-only for v1. The PC AoE save path needs to fire a `roll_request` per PC target and correlate the responses back to the cast card (similar to T.3d but multiplexed). That's its own orchestration: `_save_request_context` would need to grow a `cast_id → set of pending request ids` map; the cast card needs a "save: pending" state for each PC until they roll. Filed for T.5d. Until then PCs in the AoE list are skipped — the GM tells them to roll manually + applies the damage themselves. The picker UI in T.5b will warn when the placement circle includes PC tokens.
+
+### Added
+- `app/data/local/dnd5e/spells/fireball.json` — `area.shape = "sphere"`, `area.size_ft = 20`.
+- `app/routes/tabletop_routes.py` `/cast_spell` — `target_combatant_ids` body field + multi-target save/damage loop + `auto_save_targets` response/payload field.
+- `tests/harness/test_cast_spell_aoe.py` — three tests for the AoE multi-target dispatch.
+
+### Changed
+- `docs/test-harness-coverage.md` — total bumped to 208; new "test_cast_spell_aoe.py" subsection in the spell-casting category.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Open the JS console + manually POST a Fireball cast with `target_combatant_ids: ["tok_a","tok_b","tok_c"]` (need a battle seeded with those tokens). The response will carry `auto_save_targets` with 3 entries; each bandit's HP will drop by full or half (depending on save). The roll-log card today still renders the single-target headline view; T.5b adds the per-target pill row.
+- **Backward compat.** Pure additive payload field. Every existing harness test still passes (208 total). The single-target body shape (`target_combatant_id` without `_ids`) is unchanged.
+
+### Filed
+- **T.5b — Client-side AoE picker UI.** Mouse-follow preview circle on the canvas, click-to-place, tokens-in-circle hit-test using `map.grid_size` + `map.grid_size_ft`. Populate `_targeting` with the multi-target list, then submit the cast.
+- **T.5c — Roll-log card rendering for AoE.** Extend `_spellResultPillsHtml` to render one save-pill per target when `auto_save_targets.length > 1`.
+- **T.5d — PC AoE save orchestration.** Per-target `roll_request` correlation back to the cast card via an expanded `_save_request_context`. Until shipped, PC ids in the AoE list are skipped server-side.
+
+---
+
 ## [2.43.21] - 2026-05-20
 
 **Schema version:** 56
