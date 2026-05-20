@@ -10,6 +10,49 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.46.5] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **SRD area-block backfill sweep — 10 AoE spells populated with their `area` shape data.** With the v2.46.4 picker now supporting all six shapes (sphere, cone, line, cube, self_sphere, self_cube), the curated SRD spell JSON files that shipped with empty `area: {shape: "", size_ft: 0}` blocks could finally be filled in. This commit populates the area blocks for ten commonly-used AoE spells: Cone of Cold (cone), Color Spray (cone), Sleet Storm (sphere), Stinking Cloud (sphere), Spike Growth (sphere), Hypnotic Pattern (cube), Web (cube), Slow (cube), Fog Cloud (sphere), Entangle (cube), Cloudkill (sphere). Now any campaign using these spells gets the AoE picker automatically — they just need to be on a PC's prepared list. PATCH because it's pure SRD data fill; the picker code itself didn't change.
+**Description:** Eleven edits, all the same shape — set the `actions[0].area.shape` and `actions[0].area.size_ft` on each spell's curated JSON file. Shape determined from the spell's PHB description:
+- `cone-of-cold.json` → cone 60 ft (self, "blast of cold air erupts from your hands")
+- `color-spray.json` → cone 15 ft (self, "15-foot cone originating from you")
+- `sleet-storm.json` → sphere 40 ft (placed, "centered on a point you choose within range"). PHB calls this a 40-ft-radius cylinder; the picker doesn't have a cylinder shape today (filed), so it's treated as a sphere with matching radius — visually identical when projected onto the 2D grid.
+- `stinking-cloud.json` → sphere 20 ft (placed)
+- `spike-growth.json` → sphere 20 ft (placed, "centered on a point within range")
+- `hypnotic-pattern.json` → cube 30 ft (placed)
+- `web.json` → cube 20 ft (placed)
+- `slow.json` → cube 40 ft (placed, "40-foot cube within range")
+- `fog-cloud.json` → sphere 20 ft (placed)
+- `entangle.json` → cube 20 ft (placed, "20-foot square starting from a point within range"; the picker treats it as a cube since 5e squares on the grid ARE cubes in the abstract)
+- `cloudkill.json` → sphere 20 ft (placed)
+**Description (cont):** Why no cylinder shape for Sleet Storm. 5e has cylinder areas for a small set of spells (Sleet Storm, Storm Sphere, Cloud of Daggers + others). When viewed from top-down on a 2D grid, a cylinder and a sphere of the same radius are indistinguishable. The cylinder shape would only matter for vertical play (multi-level dungeons, flying creatures), which SimpleVTT's current 2D map doesn't model. Filing the cylinder shape (and a 3D-aware hit-test) as a follow-up if vertical play lands later.
+**Description (cont 2):** Why not also fill the wall spells (Wall of Fire, Wall of Ice, Wall of Stone, Wall of Force). Walls are conceptually different from area effects — they're persistent obstacles, not single-instant AoE hits, and they have a "long line OR ring" shape choice per RAW. The line variant could be approximated with the existing `line` shape, but the ring variant has no current shape, and the persistence layer (the wall stays for the duration) means simply firing the picker once on cast and resolving damage is the wrong model. Filed as a separate follow-up — wall spells need their own subsystem.
+**Description (cont 3):** Why not add demo PCs to exercise each new spell. Several demo PCs already have these spells prepared (Lyra has Hypnotic Pattern and Faerie Fire; Tavik has Spirit Guardians and could have Spike Growth via subclass; Mira has access to several druid AoE spells). The picker activates automatically the moment the area block is populated — no demo-seed changes needed. This commit purely unblocks future demo additions and player-built characters; the AoE picker becomes available across the SRD without code changes.
+
+### Changed
+- `app/data/local/dnd5e/spells/cone-of-cold.json` — `area.shape = "cone"`, `area.size_ft = 60`.
+- `app/data/local/dnd5e/spells/color-spray.json` — `cone`, 15 ft.
+- `app/data/local/dnd5e/spells/sleet-storm.json` — `sphere`, 40 ft.
+- `app/data/local/dnd5e/spells/stinking-cloud.json` — `sphere`, 20 ft.
+- `app/data/local/dnd5e/spells/spike-growth.json` — `sphere`, 20 ft.
+- `app/data/local/dnd5e/spells/hypnotic-pattern.json` — `cube`, 30 ft.
+- `app/data/local/dnd5e/spells/web.json` — `cube`, 20 ft.
+- `app/data/local/dnd5e/spells/slow.json` — `cube`, 40 ft.
+- `app/data/local/dnd5e/spells/fog-cloud.json` — `sphere`, 20 ft.
+- `app/data/local/dnd5e/spells/entangle.json` — `cube`, 20 ft.
+- `app/data/local/dnd5e/spells/cloudkill.json` — `sphere`, 20 ft.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM after rebuild. Try Lyra's Hypnotic Pattern — the cube picker opens at 30 ft. Add Spike Growth to Mira's prepared list and the sphere picker fires at 20 ft. The picker activates wherever a spell's curated `area.shape` matches the v2.46.4 allowlist; no other changes required.
+- **Backward compat.** Pure SRD content fill. No schema change, no API change. The 208 harness tests still pass; nothing in the test suite reads `area` directly except `test_cast_spell_aoe.py` which is Fireball-specific.
+
+### Filed
+- **Cylinder shape (Sleet Storm, Storm Sphere, etc.).** Treated as sphere in v1; meaningful only when vertical play lands.
+- **Wall spells** (Wall of Fire / Ice / Stone / Force). Need their own subsystem — persistent obstacle modelling, not single-tick AoE.
+
+---
+
 ## [2.46.4] - 2026-05-20
 
 **Schema version:** 56
