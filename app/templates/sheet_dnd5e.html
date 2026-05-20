@@ -2819,8 +2819,24 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // single-target picker because ``window._openAoe
                     // Picker`` is not defined there.
                     const _AOE_SHAPES = new Set(['sphere', 'cone', 'line', 'cube', 'self_sphere', 'self_cube']);
-                    let _spArea = null;
+                    // v2.47.3 — when the sheet is loaded inside the
+                    // tabletop's iframe drawer, ``window`` is the
+                    // iframe's own window and ``_openAoePicker`` lives
+                    // on the parent. Look up the picker in both
+                    // scopes; the iframe's window.parent is same-
+                    // origin so cross-frame access is allowed.
+                    let _aoePickerFn = null;
                     if (typeof window._openAoePicker === 'function') {
+                        _aoePickerFn = window._openAoePicker;
+                    } else if (window.parent && window.parent !== window) {
+                        try {
+                            if (typeof window.parent._openAoePicker === 'function') {
+                                _aoePickerFn = window.parent._openAoePicker;
+                            }
+                        } catch (_) { /* cross-origin iframe — fall through */ }
+                    }
+                    let _spArea = null;
+                    if (_aoePickerFn) {
                         try {
                             const _detail = await _fetchSpellDetail(s.name);
                             const _action = _detail && Array.isArray(_detail.actions)
@@ -2833,7 +2849,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         } catch (_) {}
                     }
                     if (_spArea) {
-                        const placed = await window._openAoePicker({
+                        const placed = await _aoePickerFn({
                             shape: _spArea.shape,
                             size_ft: _spArea.size_ft,
                             secondary_ft: _spArea.secondary_ft || 0,

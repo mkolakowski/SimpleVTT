@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.47.3] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Fix — AoE picker didn't appear when casting from the iframe sheet drawer.** The v2.44.1 T.5b picker code feature-detected `window._openAoePicker` to decide whether to open the on-canvas placement mode. That works when the sheet renders as a mini-sheet in the parent tabletop page (same window). It does NOT work when the sheet is loaded into the v2.3.15 `monster-sheet-drawer-iframe` — the iframe is a same-origin frame with its own `window` object, and `_openAoePicker` (defined inside tabletop.js's IIFE on the parent window) isn't reachable via the iframe's own `window`. Result: Fireball / Shatter / etc cast from inside the GM drawer fell through to the single-target picker (or no picker at all). Fix: when the sheet's own `window._openAoePicker` is undefined, fall back to `window.parent._openAoePicker` — same-origin iframes can call parent functions directly.
+**Description:** One edit. `app/templates/sheet_dnd5e.html` `.sp-cast` handler — replaced the bare `if (typeof window._openAoePicker === 'function')` check with a two-step resolver that prefers `window._openAoePicker` (when the sheet IS the tabletop window) and falls back to `window.parent._openAoePicker` (when the sheet is loaded inside an iframe drawer). The fallback is wrapped in a try/catch in case a future cross-origin iframe context throws on parent access. The resolved function is stashed in `_aoePickerFn` and used for the `await _aoePickerFn(...)` call below, replacing the previous direct `window._openAoePicker(...)`.
+**Description (cont):** Why same-origin iframes can reach parent. The drawer iframe is loaded from `/campaign/{cid}/character/{cid}/sheet` on the same host as the tabletop page, so the browser's same-origin policy allows `window.parent` access. The picker UI happens on the PARENT's canvas (preview circle, hit-test against parent's tokens, body cursor change), then the resolved Promise carries `target_combatant_ids` back into the iframe — which submits the cast via its own `fetch` to the server. The Promise crosses the same-origin frame boundary without modification.
+**Description (cont 2):** Why no harness test. The bug is a cross-frame `window` access — Python harness drives endpoints + WS, not JS-runtime `window` objects. A Playwright test could load the tabletop, open a PC sheet in the drawer, click Cast on Fireball, and assert the AoE picker appears (e.g. by detecting the `body.aoe-picker-active` class). That'd be a real test but the bug is reproducible from the code diff. Filing the broader "Playwright coverage for iframe-drawer casts" gap.
+**Description (cont 3):** Why only the AoE picker has this issue. Other sheet flows that interact with parent window state (target picker modal, buff display, init tracker updates) either (a) live on the sheet's own window (`_promptTargetPicker` is in sheet_dnd5e.html), (b) write to `localStorage` which is shared cross-frame (target descriptors), or (c) rely on WS broadcasts the parent listens to (HP updates). Only `_openAoePicker` is defined on tabletop.js's window AND consumed by the sheet's window — hence only this one needed the fix.
+
+### Fixed
+- `app/templates/sheet_dnd5e.html` `.sp-cast` handler — added `window.parent._openAoePicker` fallback so AoE picker fires when the sheet is loaded inside the iframe drawer.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM after rebuild + hard refresh. Click "📋 Sheet" on Thalindra in the init tracker — her sheet loads into the iframe drawer on the right. Expand Spells, click Cast on Fireball. The AoE preview circle should appear on the map; click to place. Confirm the cast fires with `target_combatant_ids` for the swept tokens. Same test with Lyra → Shatter, Magnus → Burning Hands, Thalindra → Lightning Bolt, Lyra → Faerie Fire, Tavik → Spirit Guardians, Lyra → Thunderwave.
+- **Backward compat.** Pure bug fix. Mini-sheet casts (rendered directly on tabletop page) keep working — the first branch `window._openAoePicker` resolves there. Standalone full-sheet page (separate tab, no parent) hits neither branch and falls through to the single-target picker, same as before. All 209 harness tests still pass.
+
+### Filed
+- **Playwright coverage for iframe-drawer casts.** No automated test today asserts that the AoE picker fires when the sheet is loaded inside the drawer. Future test could open the drawer, click Cast, assert `body.aoe-picker-active`.
+
+---
+
 ## [2.47.2] - 2026-05-20
 
 **Schema version:** 56
