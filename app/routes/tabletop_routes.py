@@ -6427,9 +6427,54 @@ async def respond_roll_request(
                                 ],
                             }
                             await _install_buff(campaign_id, caster_id, caster_buff)
-        # One-shot — drop the context whether failure or pass so a
-        # later test on the same request can't accidentally trigger.
-        _save_request_context.pop(roll_req.id, None)
+        # v2.47.0 Phase T.5d: AoE PC saves apply save-for-half damage
+        # and broadcast a per-target update so the cast card's pill
+        # row repaints. The condition-buff path above stays scoped to
+        # the existing single-target case; AoE PC saves don't install
+        # buffs (the only buff-installing save spells today are non-
+        # AoE save-or-suck — Hold Person, Suggestion, etc.).
+        if ctx and ctx.get("is_aoe") and roll_req.dc is not None:
+            _passed = result.total >= roll_req.dc
+            _dmg_applied = 0
+            _dmg_type = ctx.get("damage_type") or ""
+            _cast_id = ctx.get("cast_id") or ""
+            _combatant_id = ctx.get("combatant_id") or ""
+            if ctx.get("auto_apply_damage") and ctx.get("damage_expr"):
+                try:
+                    _dr = dice_mod.roll(ctx["damage_expr"])
+                    _dmg_rolled = max(0, int(_dr.total))
+                except dice_mod.DiceParseError:
+                    _dmg_rolled = 0
+                if _dmg_rolled > 0:
+                    proposed = _dmg_rolled if not _passed else _dmg_rolled // 2
+                    if proposed > 0:
+                        # Wrap the PC's character row in a combatant
+                        # dict so ``_apply_damage_to_combatant`` can
+                        # route through the PC HP / death-save path.
+                        _pc_combatant = {
+                            "char_id": int(ctx.get("target_character_id") or 0),
+                            "id": _combatant_id,
+                            "name": ctx.get("target_name") or "",
+                        }
+                        _dr_result = await _apply_damage_to_combatant(
+                            db, campaign_id, _pc_combatant, proposed,
+                            damage_type=_dmg_type,
+                            attack_id=_cast_id,
+                        )
+                        _dmg_applied = int(_dr_result.get("applied") or 0)
+            await hub.broadcast(campaign_id, {
+                "type": "spell_cast_target_updated",
+                "data": {
+                    "cast_id": _cast_id,
+                    "combatant_id": _combatant_id,
+                    "target_name": ctx.get("target_name") or "",
+                    "rolled": int(result.total),
+                    "passed": _passed,
+                    "damage_applied": _dmg_applied,
+                    "damage_type": _dmg_type,
+                },
+            })
+            _save_request_context.pop(roll_req.id, None)
 
     return {
         "ok": True,
@@ -7197,19 +7242,73 @@ async def cast_spell(
             if not extra:
                 continue
             extra_name = extra.get("name") or ""
-            # PC AoE save: skipped for v1. The combatant has a char_id
-            # whose Character row has owner_user_id; if so we can't
-            # roll the save server-side. Append a placeholder so the
-            # client can render "Save prompt (PC)" but no auto-roll.
+            # v2.47.0 Phase T.5d: PC AoE save orchestration.
+            # The combatant has a char_id whose Character row has an
+            # owner_user_id (= a player owns this PC). Fire a per-PC
+            # roll_request so the player can roll their save on the
+            # tabletop, and stash the cast context under the request
+            # id so /roll_request/{id}/respond can apply save-for-half
+            # damage and broadcast a per-target update event the
+            # client uses to patch the cast card's pill row.
             extra_char_id = extra.get("char_id")
-            extra_is_pc = False
+            extra_pc = None
             if extra_char_id:
-                _ec = db.query(Character).filter(
+                extra_pc = db.query(Character).filter(
                     Character.id == int(extra_char_id),
                     Character.campaign_id == campaign_id,
                 ).first()
-                extra_is_pc = bool(_ec and _ec.owner_user_id)
+            extra_is_pc = bool(extra_pc and extra_pc.owner_user_id)
             if extra_is_pc:
+                _aoe_note = f"{payload['spell_name']} — {save_ability} save"
+                _aoe_stat = f"{save_ability.lower()}_save"
+                _aoe_req = RollRequest(
+                    campaign_id=campaign_id,
+                    created_by_user_id=user.id,
+                    label=_aoe_note,
+                    base_expression="1d20",
+                    stat_key=_aoe_stat,
+                    dc=int(auto_save_dc),
+                    visibility=Visibility.PUBLIC,
+                )
+                db.add(_aoe_req)
+                db.commit()
+                db.refresh(_aoe_req)
+                await hub.broadcast(campaign_id, {
+                    "type": "roll_request",
+                    "data": {
+                        "id": _aoe_req.id,
+                        "label": _aoe_req.label,
+                        "stat_key": _aoe_req.stat_key,
+                        "base_expression": _aoe_req.base_expression,
+                        "dc": _aoe_req.dc,
+                        "visibility": _aoe_req.visibility.value,
+                        "created_by_name": user.display_name,
+                        "created_by_user_id": user.id,
+                        "target_user_ids": [extra_pc.owner_user_id],
+                        "target_user_names": [extra_pc.name],
+                    },
+                })
+                _purge_save_request_context()
+                _save_request_context[_aoe_req.id] = {
+                    "ts": _time.time(),
+                    "campaign_id": campaign_id,
+                    "spell_slug": spell_slug,
+                    "spell_name": payload["spell_name"],
+                    "target_character_id": int(extra_pc.id),
+                    "target_name": extra_pc.name,
+                    "dc": int(auto_save_dc),
+                    "save_ability": save_ability,
+                    "caster_char_id": int(char.id),
+                    "caster_char_name": char.name,
+                    # AoE-specific keys — present when this PC is one
+                    # of several targets caught in the picker circle.
+                    "is_aoe": True,
+                    "cast_id": cast_id,
+                    "combatant_id": extra.get("id"),
+                    "damage_expr": damage_expr,
+                    "damage_type": damage_type,
+                    "auto_apply_damage": bool(campaign.auto_apply_damage),
+                }
                 auto_save_targets.append({
                     "combatant_id": extra.get("id"),
                     "target_name": extra_name,
@@ -7219,6 +7318,7 @@ async def cast_spell(
                     "damage_applied": 0,
                     "damage_type": auto_save_damage_type,
                     "pc_skipped": True,
+                    "pending_request_id": _aoe_req.id,
                 })
                 continue
             # NPC target: roll the save vs the same DC, then apply

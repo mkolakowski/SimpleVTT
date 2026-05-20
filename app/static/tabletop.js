@@ -1932,6 +1932,8 @@
                 // for it to update its pip row in place.
             } else if (msg.type === 'heal_applied') {
                 _onHealApplied(msg.data);
+            } else if (msg.type === 'spell_cast_target_updated') {
+                _onSpellCastTargetUpdated(msg.data);
             } else if (msg.type === 'feature_used') {
                 _appendFeatureUsed(msg.data);
             } else if (msg.type === 'presence_update') {
@@ -2027,6 +2029,7 @@
                     else if (e.type === 'weapon_attack') appendWeaponAttack(e.data);
                     else if (e.type === 'feature_used')  _appendFeatureUsed(e.data);
                     else if (e.type === 'heal_applied')  _onHealApplied(e.data);
+                    else if (e.type === 'spell_cast_target_updated') _onSpellCastTargetUpdated(e.data);
                 } catch (err) {
                     console.warn('[rolllog] hydrate skipped', e.type, err);
                 }
@@ -2612,6 +2615,55 @@
         // order in localStorage so the replay loop hits them in the
         // right sequence naturally.
         _persistRollEntry('heal_applied', d);
+    }
+
+    // v2.47.0 Phase T.5d: a PC AoE save just resolved. Find the
+    // matching cast card in the roll log, mutate the relevant
+    // auto_save_targets entry (the PC pill goes from "pending" →
+    // "rolled / passed / damage_applied"), and re-render the pill
+    // row from the stashed cast data. The Σ aggregate pill in the
+    // v2.46.3 multi-target renderer picks up the new damage value
+    // automatically since it sums across the array.
+    function _onSpellCastTargetUpdated(d) {
+        if (!d || !d.cast_id) return;
+        const ul = document.getElementById('roll-list');
+        if (!ul) return;
+        const li = ul.querySelector(`li[data-cast-id="${d.cast_id}"]`);
+        if (!li || !li._spellCast) return;
+        const cast = li._spellCast;
+        const targets = Array.isArray(cast.auto_save_targets) ? cast.auto_save_targets : [];
+        const entry = targets.find(t => t && t.combatant_id === d.combatant_id);
+        if (!entry) return;
+        entry.rolled = d.rolled;
+        entry.passed = d.passed;
+        entry.damage_applied = d.damage_applied || 0;
+        entry.damage_type = d.damage_type || entry.damage_type;
+        delete entry.pc_skipped;
+        delete entry.pending_request_id;
+        // Re-render the entire pill row in place. ``_spellResultPillsHtml``
+        // returns a fresh ``<div class="result-pills">…</div>`` block so
+        // we look up the existing one by class and replace its outerHTML.
+        const body = li.querySelector('.spell-cast-body');
+        if (!body) return;
+        const newHtml = _spellResultPillsHtml(cast);
+        const existing = body.querySelector('.result-pills');
+        if (existing) {
+            if (newHtml) {
+                const tmp = document.createElement('div');
+                tmp.innerHTML = newHtml;
+                existing.replaceWith(tmp.firstElementChild);
+            } else {
+                existing.remove();
+            }
+        } else if (newHtml) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = newHtml;
+            // Insert above .spell-cast-actions per the original layout.
+            const actions = body.querySelector('.spell-cast-actions');
+            if (actions) actions.before(tmp.firstElementChild);
+            else body.appendChild(tmp.firstElementChild);
+        }
+        _persistRollEntry('spell_cast_target_updated', d);
     }
 
     // ---------- Death save broadcast handler (v2.1.0) ----------
