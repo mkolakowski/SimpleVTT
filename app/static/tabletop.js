@@ -2082,16 +2082,33 @@
         // Action buttons come from `d.actions` (new shape) or are synthesized
         // from the legacy regex-derived fields for backward compatibility.
         const _baseActions = (d.actions && d.actions.length) ? d.actions : [_synthesizeCastAction(d)];
-        // v2.26.1 fix: when the server already auto-applied the heal to
-        // the targeted ally (Phase T.4), the legacy "🩹 Apply Healing"
-        // button must NOT render — the heal_claim has been dropped, so
-        // clicking it would 404 with "Unknown spell cast — it may have
-        // expired." Strip the ``healing`` field from each action so
-        // action_buttons.js skips the heal button. The chat card already
-        // shows the applied-heal line + ↶ Undo button.
-        const actions = (d.auto_heal_applied > 0)
-            ? _baseActions.map(a => a.healing ? {...a, healing: ''} : a)
-            : _baseActions;
+        // v2.26.1: strip the legacy "🩹 Apply Healing" button when the
+        // server already auto-applied the heal (the heal_claim has been
+        // dropped server-side, so clicking would 404). v2.42.3: extend
+        // the same idea to auto-attack damage + auto-save outcomes —
+        // when the server resolved the spell's attack or save path, the
+        // manual "🎲 Roll damage" / "📋 Prompt SAVE" buttons are
+        // redundant (the chat card's ▼ Result block already shows the
+        // outcome + Undo). Magic Missile-style spells that have no
+        // auto-resolution path keep their manual buttons because
+        // auto_attack_hit / auto_save_target_kind stay null for them.
+        const _autoHeal   = d.auto_heal_applied > 0;
+        const _autoAttack = d.auto_attack_hit != null;
+        const _autoSave   = d.auto_save_target_kind != null;
+        const actions = _baseActions.map(a => {
+            let out = a;
+            if (_autoHeal && out.healing) out = {...out, healing: ''};
+            if (_autoAttack && (out.damage || (out.damage_scaling && out.damage_scaling.length))) {
+                out = {...out, damage: '', damage_scaling: []};
+            }
+            if (_autoSave) {
+                if (out.save_ability) out = {...out, save_ability: ''};
+                if (out.damage || (out.damage_scaling && out.damage_scaling.length)) {
+                    out = {...out, damage: '', damage_scaling: []};
+                }
+            }
+            return out;
+        });
         // Keep `damageExpr` available for downstream code paths that already
         // expect the single-string variable (openDamagePicker call below).
         const _firstDamageAction = actions.find(a => a.damage || (a.damage_scaling && a.damage_scaling.length)) || {};
@@ -2432,6 +2449,33 @@
         return `<div class="over-budget-badge" style="margin-top:6px;padding:4px 8px;border-radius:4px;background:rgba(255,165,74,0.12);border:1px solid rgba(255,165,74,0.4);color:#ffa54a;font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:4px;">⚠ Manual override — 2nd ${slotPhrase} this turn</div>`;
     }
 
+    // v2.42.3: source slug → human-readable tag for the feature-used
+    // card header. Mirrors how spell-cast cards show "Cantrip" / "Lv 1
+    // slot" — gives features parity so the roll log scans uniformly.
+    // Unknown sources fall through to "Feature" (safe default).
+    function _featureSourceLabel(src) {
+        if (!src) return 'Feature';
+        const map = {
+            'class-feature':    'Class Feature',
+            'second-wind':      'Class Feature',
+            'action-surge':     'Class Feature',
+            'rage':             'Class Feature',
+            'cunning-action':   'Class Feature',
+            'lay-on-hands':     'Class Feature',
+            'channel-divinity': 'Class Feature',
+            'bardic-inspiration': 'Class Feature',
+            'cutting-words':    'Class Feature',
+            'arcane-recovery':  'Class Feature',
+            'wild-shape':       'Class Feature',
+            'ki':               'Class Feature',
+            'racial':           'Racial Trait',
+            'race':             'Racial Trait',
+            'item-use':         'Item',
+            'feat':             'Feat',
+        };
+        return map[src] || 'Feature';
+    }
+
     function _appendFeatureUsed(d) {
         const ul = document.getElementById('roll-list');
         if (!ul) return;
@@ -2443,7 +2487,7 @@
         const color = d.user_color || '';
         const name  = d.character_name || 'Player';
         const feat  = d.feature_name || 'feature';
-        const src   = d.source || '';
+        const tagLabel = _featureSourceLabel(d.source);
         const remaining = (d.max && d.max > 0)
             ? `<span style="font-size:11px;color:var(--muted,#888);">(${d.remaining}/${d.max} left)</span>`
             : '';
@@ -2460,6 +2504,7 @@
                 <div class="roll-card-header">
                     <div class="roll-card-avatar">✨</div>
                     <span class="roll-card-user" data-uid="${d.character_id || ''}"${color ? ` style="color:${escapeHTML(color)}"` : ''}>${escapeHTML(name)}</span>
+                    <span class="spell-cast-slot">${escapeHTML(tagLabel)}</span>
                     <span class="roll-card-time">${hhmm}</span>
                 </div>
                 <div class="roll-card-body" style="padding:6px 10px 8px;">
@@ -2467,7 +2512,6 @@
                         <strong style="font-size:13px;">${escapeHTML(feat)}</strong>
                         ${_targetTagHtml(d)}
                         ${remaining}
-                        ${src ? `<span style="font-size:10px;color:var(--muted,#888);">${escapeHTML(src)}</span>` : ''}
                     </div>
                     ${desc}
                     ${_overBudgetBadge(d)}
