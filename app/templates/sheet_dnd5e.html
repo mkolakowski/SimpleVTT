@@ -2803,16 +2803,62 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             }
                         }
                     } catch (_) {}
-                    // v2.29.0: prompt the target-picker modal whenever no
-                    // target is set. Self-cast / utility spells (Misty
-                    // Step, Mage Armor, Detect Magic, etc.) use the
-                    // "Skip (no target)" button to proceed without one;
-                    // the existing untargeted cast UX is preserved with
-                    // one extra click. Spells need server-side SRD
-                    // enrichment to know which truly need a target —
-                    // that's loaded at cast time, too late for this
-                    // gate, so a universal prompt is the right v1.
-                    if (!_spTgt.target_combatant_id && !_spTgt.target_character_id) {
+                    // v2.44.1 Phase T.5b: spells with an AoE sphere
+                    // (Fireball, Shatter, etc.) bypass the single-target
+                    // picker and open the on-canvas placement mode
+                    // exposed by tabletop.js. The area data lives in the
+                    // spell's curated JSON (``actions[].area``) and is
+                    // fetched via the same Open5e endpoint the detail
+                    // panel uses; the result is cached so the second
+                    // cast in a session is instant. Only available when
+                    // the cast happens on the tabletop page (mini-sheet
+                    // shares window with tabletop.js) — the standalone
+                    // full-sheet falls through to the single-target
+                    // picker because ``window._openAoePicker`` is not
+                    // defined there.
+                    let _spArea = null;
+                    if (typeof window._openAoePicker === 'function') {
+                        try {
+                            const _detail = await _fetchSpellDetail(s.name);
+                            const _action = _detail && Array.isArray(_detail.actions)
+                                ? _detail.actions.find(a =>
+                                    a && a.area
+                                    && a.area.shape === 'sphere'
+                                    && (Number(a.area.size_ft) || 0) > 0)
+                                : null;
+                            if (_action) _spArea = _action.area;
+                        } catch (_) {}
+                    }
+                    if (_spArea) {
+                        const placed = await window._openAoePicker({
+                            shape: _spArea.shape,
+                            size_ft: _spArea.size_ft,
+                            name: s.name,
+                        });
+                        if (placed === null) {
+                            // Cancelled the AoE placement — revert slot.
+                            if (slotRow) {
+                                slotRow.dataset.used = prevUsed;
+                                if (window._ssSyncInputs) window._ssSyncInputs(slotRow);
+                                if (window._ssRenderPips) window._ssRenderPips(slotRow);
+                            }
+                            btn.disabled = false;
+                            return;
+                        }
+                        // Replace single-target descriptors with the
+                        // multi-target list so the T.5a server path
+                        // dispatches the per-target save + damage loop.
+                        _spTgt = { target_combatant_ids: placed.target_combatant_ids || [] };
+                    } else if (!_spTgt.target_combatant_id && !_spTgt.target_character_id) {
+                        // v2.29.0: prompt the target-picker modal whenever no
+                        // target is set. Self-cast / utility spells (Misty
+                        // Step, Mage Armor, Detect Magic, etc.) use the
+                        // "Skip (no target)" button to proceed without one;
+                        // the existing untargeted cast UX is preserved with
+                        // one extra click. Spells need server-side SRD
+                        // enrichment to know which truly need a target —
+                        // that's loaded at cast time, too late for this
+                        // gate, so a universal prompt is the right v1.
                         if (typeof window._promptTargetPicker === 'function') {
                             const picked = await window._promptTargetPicker({
                                 title: `Choose target — ${s.name || 'Spell'}`,

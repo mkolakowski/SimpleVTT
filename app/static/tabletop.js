@@ -278,6 +278,145 @@
     };
     window._targetingState = _targeting;
 
+    // v2.44.1 Phase T.5b: AoE sphere/circle picker. The sheet's
+    // ``.sp-cast`` handler calls ``window._openAoePicker({shape,
+    // size_ft, name})`` for spells whose action carries ``area.shape
+    // == "sphere"``. The picker activates a placement mode on the
+    // canvas: mouse-follow preview circle, click-to-place, Escape /
+    // right-click to cancel. On placement, computes the set of token
+    // ids inside the circle and resolves the returned Promise with
+    // ``{target_combatant_ids, center}`` so the cast handler can
+    // submit the AoE multi-target body the T.5a endpoint accepts.
+    // Standard D&D 5e: 1 grid square = 5 ft, so radius_px =
+    // (size_ft / 5) * gridSize.
+    const _aoePicker = {
+        active: false,
+        shape: '',
+        size_ft: 0,
+        spellName: '',
+        cursor: null,         // { x, y } in canvas (map) coords
+        _resolve: null,       // promise resolver — null when inactive
+
+        start(opts) {
+            // Cancel any in-flight picker so back-to-back AoE casts
+            // don't leak state.
+            if (this.active) this.cancel();
+            this.active = true;
+            this.shape = String(opts.shape || 'sphere');
+            this.size_ft = Number(opts.size_ft) || 0;
+            this.spellName = String(opts.name || 'Spell');
+            this.cursor = null;
+            document.body.classList.add('aoe-picker-active');
+            _showAoePickerHint(this.spellName, this.size_ft);
+            try { render(); } catch (_) {}
+            return new Promise((resolve) => { this._resolve = resolve; });
+        },
+
+        cancel() {
+            if (!this.active) return;
+            const resolve = this._resolve;
+            this._cleanup();
+            if (resolve) resolve(null);
+        },
+
+        commit(canvasX, canvasY) {
+            if (!this.active) return;
+            const resolve = this._resolve;
+            // Hit-test every token: token is inside iff its center is
+            // within radius_px of the click. Hidden tokens skipped for
+            // non-GM; PCs and NPCs are both included (server-side
+            // filters PCs into ``pc_skipped: True`` entries).
+            const radius_px = this._radiusPx();
+            const target_combatant_ids = [];
+            for (const t of tokens) {
+                if (t.is_hidden && !ME.isGm) continue;
+                const tcx = t.x + gridSize / 2;
+                const tcy = t.y + gridSize / 2;
+                const dx = tcx - canvasX;
+                const dy = tcy - canvasY;
+                if (Math.hypot(dx, dy) > radius_px) continue;
+                // Resolve token → combatant id via the same lookup
+                // _targeting.getTargets() uses.
+                const battle = (window.battle && window.battle.combatants) || [];
+                let combatant = null;
+                for (const c of battle) {
+                    if (c.source_token_id != null && c.source_token_id === t.id) { combatant = c; break; }
+                    if (t.character_id && c.char_id === t.character_id) { combatant = c; break; }
+                    if (t.token_template_id
+                            && c.token_template_id === t.token_template_id
+                            && c.name === t.label) { combatant = c; break; }
+                }
+                if (combatant && combatant.id) {
+                    target_combatant_ids.push(combatant.id);
+                }
+            }
+            this._cleanup();
+            if (resolve) resolve({
+                target_combatant_ids,
+                center: { x: canvasX, y: canvasY },
+            });
+        },
+
+        _radiusPx() {
+            // 1 grid square = 5 ft by D&D 5e convention. The map
+            // config doesn't carry a feet-per-square override today.
+            return (this.size_ft / 5) * gridSize;
+        },
+
+        _cleanup() {
+            this.active = false;
+            this.shape = '';
+            this.size_ft = 0;
+            this.spellName = '';
+            this.cursor = null;
+            this._resolve = null;
+            document.body.classList.remove('aoe-picker-active');
+            _hideAoePickerHint();
+            try { render(); } catch (_) {}
+        },
+    };
+
+    /** Convenience: feature-detected entry point that the sheet's
+     *  cast handler calls. Always returns a Promise — never throws. */
+    window._openAoePicker = function (opts) {
+        if (!opts || !opts.size_ft) return Promise.resolve(null);
+        return _aoePicker.start(opts);
+    };
+
+    // Floating hint chip for the AoE placement mode. Mirrors the
+    // existing targeting chip's positioning but uses the damage tint
+    // so the user knows they're in a different mode.
+    function _showAoePickerHint(spellName, sizeFt) {
+        _hideAoePickerHint();
+        const el = document.createElement('div');
+        el.id = 'aoe-picker-hint';
+        el.innerHTML =
+            `<strong>💥 ${spellName}</strong> · ${sizeFt} ft sphere · ` +
+            `<span class="muted">click to place · Esc to cancel</span>`;
+        Object.assign(el.style, {
+            position: 'absolute',
+            top: '10px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 200,
+            padding: '6px 12px',
+            borderRadius: '14px',
+            border: '1.5px solid var(--c-damage)',
+            background: 'color-mix(in srgb, var(--c-damage) 18%, var(--bg))',
+            color: 'var(--c-damage)',
+            fontSize: '12px',
+            fontWeight: '600',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.35)',
+            pointerEvents: 'none',
+        });
+        const host = document.getElementById('map-pane') || document.body;
+        host.appendChild(el);
+    }
+    function _hideAoePickerHint() {
+        const el = document.getElementById('aoe-picker-hint');
+        if (el) el.remove();
+    }
+
     // Floating chip rendered in #map-pane. Auto-removes when no
     // targets are selected; auto-rebuilds when at least one is.
     function _updateTargetingChip() {
@@ -488,6 +627,43 @@
             ctx.stroke();
             ctx.restore();
         });
+        // T.5b: AoE picker preview circle. Drawn last so it sits on
+        // top of tokens and targeting rings. Translucent flame-orange
+        // fill + dashed crimson stroke so it reads as "damage zone".
+        // Tokens whose centers fall inside get a faint highlight ring
+        // so the GM sees which combatants the click will sweep up.
+        if (_aoePicker.active && _aoePicker.cursor) {
+            const cx = _aoePicker.cursor.x;
+            const cy = _aoePicker.cursor.y;
+            const r = _aoePicker._radiusPx();
+            ctx.save();
+            ctx.fillStyle = 'rgba(220,38,38,0.18)';
+            ctx.strokeStyle = '#dc2626';
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([8, 6]);
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            // Highlight tokens inside the circle.
+            tokens.forEach(t => {
+                if (t.is_hidden && !ME.isGm) return;
+                const tcx = t.x + gridSize / 2;
+                const tcy = t.y + gridSize / 2;
+                if (Math.hypot(tcx - cx, tcy - cy) > r) return;
+                const tr = (gridSize * t.size) / 2 - 4;
+                ctx.save();
+                ctx.lineWidth = 2.5;
+                ctx.strokeStyle = '#fbbf24';
+                ctx.shadowColor = '#fbbf24';
+                ctx.shadowBlur = 8;
+                ctx.beginPath();
+                ctx.arc(tcx, tcy, tr + 6, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            });
+        }
         _updateGifOverlay();
     }
 
@@ -808,6 +984,13 @@
     let _lastSheetOpenAt = 0;
     function _handleRightClick(ev) {
         ev.preventDefault();
+        // T.5b: right-click during AoE placement cancels the picker
+        // instead of opening a sheet; the mousedown handler also
+        // suppresses the would-be pan-start.
+        if (_aoePicker.active) {
+            _aoePicker.cancel();
+            return;
+        }
         if (Date.now() - _lastSheetOpenAt < 300) return;
         const [x, y] = clientToCanvas(ev);
         for (let i = tokens.length - 1; i >= 0; i--) {
@@ -884,6 +1067,23 @@
     window.vttViewportCenterWorld = viewportCenterWorld;
 
     canvas.addEventListener('mousedown', (ev) => {
+        // T.5b: AoE picker intercepts mousedown so left-click places
+        // the circle and right-click cancels (suppressing pan-start).
+        // Runs before spawn-arming and drag logic so an in-flight
+        // picker can't be cut short by an unrelated gesture.
+        if (_aoePicker.active) {
+            if (ev.button === 0) {
+                const [wx, wy] = clientToCanvas(ev);
+                _aoePicker.commit(wx, wy);
+                ev.preventDefault();
+                return;
+            }
+            if (ev.button === 2) {
+                _aoePicker.cancel();
+                ev.preventDefault();
+                return;
+            }
+        }
         // Click-to-set spawn: when armed (GM picked "Set" on a character
         // row in an encounter's spawn-points editor), eat the next
         // left-click on the canvas as the spawn coordinate for that
@@ -985,12 +1185,27 @@
         if (banner) banner.style.display = 'none';
     };
     document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape' && _aoePicker.active) {
+            _aoePicker.cancel();
+            return;
+        }
         if (ev.key === 'Escape' && spawnArmingCharId != null) {
             window.vttCancelSpawnArming();
         }
     });
 
     canvas.addEventListener('mousemove', (ev) => {
+        // T.5b: when the AoE picker is live, follow the cursor with
+        // a preview circle by stashing the canvas-space pointer pos
+        // and re-rendering. Re-enters the same render() path as the
+        // rest of the canvas so the preview lives in the same draw
+        // stack as targeting rings.
+        if (_aoePicker.active) {
+            const [wx, wy] = clientToCanvas(ev);
+            _aoePicker.cursor = { x: wx, y: wy };
+            render();
+            return;
+        }
         if (panning) {
             panX = ev.clientX - panning.startX;
             panY = ev.clientY - panning.startY;

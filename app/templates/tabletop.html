@@ -1066,6 +1066,15 @@
     body.spawn-arming #vtt-canvas,
     body.spawn-arming #map-pane { cursor: crosshair !important; }
 
+    /* v2.44.1 T.5b — crosshair on the map while an AoE picker is live so
+       the GM knows the next click will place the sphere. Mirrors the
+       spawn-arming cursor rule; the hint chip (#aoe-picker-hint) is
+       built and styled inline by tabletop.js so it can theme against
+       --c-damage without a template-level rule. */
+    body.aoe-picker-active .canvas-host,
+    body.aoe-picker-active #vtt-canvas,
+    body.aoe-picker-active #map-pane { cursor: crosshair !important; }
+
     /* GM music drawer */
     .gm-playlist { margin-bottom: 4px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
     .gm-playlist-header { display: flex; align-items: center; gap: 6px; padding: 7px 10px; background: color-mix(in srgb, var(--bg-2) 38%, transparent); cursor: pointer; }
