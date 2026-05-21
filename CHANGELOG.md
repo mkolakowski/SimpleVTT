@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.28] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit O — `test_skull_overlay_at_zero_hp` lands the v2.49.4 regression test that motivated this entire suite.** From the plan's intro: "v2.49.4 added a 💀 skull overlay on 0-HP tokens. The skull never fired in real play. The Python harness suite passed all 212 tests because the broadcast was correct — but the canvas IIFE couldn't see ``window.battle`` (closure-scoped). A UI-layer test that placed Fireball + asserted 'skull is visible at (x, y) on the canvas after damage applied' would have caught it." **This is that test.** Seeds Pip's combatant at ``hp_cur=0`` (both server-side via `seed_battle` AND in localStorage via `seed_battle_into_page`), opens the GM tabletop, fetches Pip's token coords via the existing `/api/campaign/{cid}/tokens` endpoint, then samples the canvas at the token center via `ctx.getImageData(x, y, 1, 1)` and asserts the pixel matches a skull-emoji signature (saturated black-or-white from the white emoji fill or its 3px black stroke). `pages/canvas.py::CanvasReader` grew its first real methods today: `pixel_at(x, y)`, `grid_size()`, `pixel_at_token_center(token)`, and `has_skull_overlay_at_token(token)`. `helpers/battle.py` gained `list_tokens()` + `find_token_for_character(character_id)` to discover token coords from the same endpoint the canvas IIFE uses internally. PATCH — additive test + canvas-reader implementations + token helpers; no schema / runtime change. Full encounter-sim suite at 20 tests / ~35 s × 5 runs, no flake.
+**Description:** Three new files + two helpers + CanvasReader implementation. **(1)** `tests/encounter_sim/level_3_edge_cases/death_saves/test_skull_overlay_at_zero_hp.py` — the test. Restores Pip to alive at entry (defensive), seeds her combatant at hp_cur=0 with hp_max=35 so the canvas skull-render at `tabletop.js:777` triggers (`hpMax > 0 && hpCur <= 0`), pre-populates localStorage via `seed_battle_into_page` so the GM page's IIFE picks up the seeded combatant on first paint, fetches Pip's token via `find_token_for_character(pip["id"])`, samples the center pixel via `CanvasReader.pixel_at_token_center`, asserts the RGB sum is either ≥ 700 (white emoji fill) or ≤ 60 (black stroke or dim circle). The failure message names the exact regression class so a future regression authors immediately know what broke. Restores Pip to alive in the finally block. **(2)** `tests/encounter_sim/helpers/battle.py::list_tokens()` — GET wrapper around `/api/campaign/{cid}/tokens`. Returns the full token list with `{id, label, x, y, size, color, image_url, character_id, token_template_id, controller_user_id, is_hidden}`. **(3)** `tests/encounter_sim/helpers/battle.py::find_token_for_character(character_id)` — convenience that filters by `character_id`. **(4)** `tests/encounter_sim/pages/canvas.py::CanvasReader.pixel_at(x, y)` — calls `getImageData(x, y, 1, 1)` on `#vtt-canvas` via `page.evaluate`. Returns `[r, g, b, a]`. **(5)** `CanvasReader.grid_size()` — reads `#vtt-canvas[data-grid-size]` for the active map's grid cell size. **(6)** `CanvasReader.pixel_at_token_center(token)` — given a token dict, computes `(x + gridSize×size/2, y + gridSize×size/2)` and samples there. **(7)** `CanvasReader.has_skull_overlay_at_token(token)` — boolean heuristic against the saturated-black-or-white signature.
+**Description (cont):** Why HTTP token lookup instead of `window.allTokens`. First attempt used `page.evaluate("window.allTokens.find(...)")` — `allTokens` turned out to be `const` inside the IIFE at tabletop.html:4057, NOT on `window`. The HTTP endpoint `/api/campaign/{cid}/tokens` (added in v2.12.1, also used by the harness's `/move` tests) is the only stable way to read token positions from the test process. Avoid `window.battle.combatants` for this — combatants carry `char_id` but NOT screen position. Filed as a documented finding: "the page's allTokens is closure-local; tests fetch via HTTP."
+**Description (cont 2):** Why the heuristic vs. a strict pixel match. The skull emoji renders via the system font (`system-ui, sans-serif`) which varies across runners (macOS, Linux CI). Asserting on exact RGB values would break under font fallback differences. The heuristic — "skull glyph pixels are highly saturated black-or-white, vs portrait pixels which are mid-tones" — is loose enough to survive font variation but tight enough to catch the regression class (broadcast OK, canvas render broken → mid-tone portrait pixels remain because the skull never paints). A second comparison-with-alive snapshot would be even stricter; filed for follow-up if the heuristic flakes.
+**Description (cont 3):** Why this commit matters strategically. This is the suite's bona fides. Every prior commit (Phases 1-3, 17 tests through commit M) validated mechanisms that already had at least some harness or harness-ui coverage. THIS test catches a regression class the existing layers literally could not see — the broadcast-correct-but-canvas-broken gap. With this test in place, a future canvas-IIFE refactor that loses `window.battle` access cannot land green; with the test missing, that's exactly what happened in v2.49.4 and shipped to users. Verification: 5 sequential local runs × 20 tests pass at ~35 s/run, no flake.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/death_saves/test_skull_overlay_at_zero_hp.py` — **the v2.49.4 canvas-render regression test**. Pixel-samples the skull overlay at Pip's token center.
+- `tests/encounter_sim/helpers/battle.py::list_tokens()` — wrapper for `/api/campaign/{cid}/tokens`.
+- `tests/encounter_sim/helpers/battle.py::find_token_for_character(character_id)` — token lookup by PC id.
+
+### Changed
+- `tests/encounter_sim/pages/canvas.py::CanvasReader` — grew from a `__init__`-only stub to four real methods: `pixel_at(x, y)`, `grid_size()`, `pixel_at_token_center(token)`, `has_skull_overlay_at_token(token)`. First Phase 4 canvas-pixel implementation.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 3 / ~40 Level 3 tests landed. Death-saves subsystem at 3 / 4 (skull overlay shipped; remaining: massive damage instakill, Healing Word recovery).
+- **Runtime:** full encounter-sim suite at 20 tests / ~35 s.
+
+### Filed
+- **Massive damage instakill test** — damage ≥ 2×HP max skips dying and goes straight to dead. Needs an HP-change mechanic; consider routing through the `/sheet-fields` PATCH endpoint or via a /attack with enough damage.
+- **Healing Word recovery test** — Tavik casts Healing Word on a dying Pip → Pip's HP > 0 + tracker resets to alive. Exercises the heal_applied broadcast + the death-save state machine's "alive on healing" transition.
+- **Alive-vs-dead pixel snapshot comparison** — stricter variant of the skull test that takes a baseline portrait snapshot before damage-to-0 + a skull snapshot after, asserts the two differ significantly. Filed for if the heuristic flakes on a different font / CI runner.
+- **Other Phase 4 subsystems** (38 tests remaining): AoE picker variants, save resolution matrix, action-economy edge cases, concentration cleanup, multi-user offline/reconnect.
+
+---
+
 ## [2.49.27] - 2026-05-21
 
 **Schema version:** 56

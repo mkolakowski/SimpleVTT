@@ -68,6 +68,31 @@ def make_combatant(
     return out
 
 
+def list_tokens() -> list[dict]:
+    """GET ``/api/campaign/{cid}/tokens``. Returns each token's
+    ``{id, label, x, y, size, color, image_url, character_id,
+    token_template_id, controller_user_id, is_hidden}``.
+    """
+    client = _gm_client()
+    try:
+        resp = client.get(f"/api/campaign/{CAMPAIGN_ID}/tokens")
+        resp.raise_for_status()
+        return resp.json().get("tokens", [])
+    finally:
+        client.close()
+
+
+def find_token_for_character(character_id: int) -> dict | None:
+    """Return the demo token bound to ``character_id``, or None when
+    no matching token is on the active map. Convenience for canvas
+    pixel-sample tests that need the token's screen position.
+    """
+    for t in list_tokens():
+        if t.get("character_id") == character_id:
+            return t
+    return None
+
+
 def bandit_template_id() -> int:
     """Return the demo's Bandit template ID. NPC targets in save-spell
     tests need a real ``token_template_id`` so the server can look up
