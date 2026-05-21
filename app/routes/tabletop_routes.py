@@ -430,11 +430,17 @@ async def _install_buff(
     replaced_concentration_keys = []
     # v2.49.53: capture the (name, source_char_id) of each replaced
     # concentration buff so the 🔁 GM log below can name the old
-    # spell. The source filter keeps the log scoped to anchors the
-    # caster actually owned (skip paired conditions sourced by an
-    # enemy caster — the swap loop's pre-v2.49.53 behavior would
-    # have wrongly dragged those out too; that's a separate bug
-    # filed below).
+    # spell.
+    # v2.49.54: source filter at the swap-loop level. RAW's one-
+    # concentration-at-a-time rule only applies to the combatant's
+    # OWN anchors — a paired condition buff sustained by another
+    # caster (e.g. Paralyzed on a Hold Person victim, where source
+    # = enemy caster) isn't "the combatant's concentration." Pre-fix,
+    # if Magnus was a Hold Person victim AND cast Hex, the swap
+    # loop dropped Paralyzed too — wrong, because Tavik (the source
+    # caster) is still concentrating on Hold Person. The fix:
+    # treat buffs with source_char_id != self as non-swap candidates
+    # (keep them in new_list).
     replaced_concentration_meta: list[tuple[str, str, object]] = []
     for b in buffs:
         b = b or {}
@@ -442,11 +448,17 @@ async def _install_buff(
         if b_key == key:
             continue  # refresh — drop the old, append the new below
         if is_concentration and b.get("concentration"):
+            b_src = b.get("source_char_id")
+            if b_src is not None and b_src != character_id:
+                # v2.49.54: paired condition from another caster.
+                # Keep it; not ours to drop.
+                new_list.append(b)
+                continue
             replaced_concentration_keys.append(b_key)
             replaced_concentration_meta.append((
                 b_key or "",
                 b.get("name") or b_key or "Concentration",
-                b.get("source_char_id"),
+                b_src,
             ))
             continue
         new_list.append(b)
