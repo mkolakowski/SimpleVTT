@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.39] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit Z — save-resolution matrix opener: `test_npc_save_with_auto_damage_off`.** Opens the 6th and final Phase 4 subsystem. Pins the **auto-damage OFF** axis of the 5-dimension save-resolution combinatorial grid (`PC×NPC × pass×fail × auto-damage on×off × resistance×not × concentration×not`). Tavik casts Sacred Flame at Bandit Alpha with the campaign setting `auto_apply_damage=False`. The server STILL rolls the bandit's DEX save (`auto_save_passed` populated) but SKIPS the damage roll entirely — both `auto_save_damage_rolled` and `auto_save_damage_applied` come back as 0. The bandit's HP in the init tracker stays unchanged. This brackets the existing Phase 1 Tavik test (auto-damage ON) and proves the off-branch's server behavior + UI rendering. New subdirectory `level_3_edge_cases/save_resolution/`. PATCH — additive test only.
+**Description:** Two new files. `tests/encounter_sim/level_3_edge_cases/save_resolution/__init__.py` (empty package shell). `tests/encounter_sim/level_3_edge_cases/save_resolution/test_npc_save_with_auto_damage_off.py` — the test. Toggles `set_auto_apply(False)`, long-rests Tavik, seeds the battle, opens the GM tabletop. Casts Sacred Flame at Bandit Alpha with `set_dice_seed(42)`. Asserts: HTTP body's `auto_save_target_kind="npc"`, `auto_save_passed` is a bool (server STILL rolls), `auto_save_damage_rolled == 0` AND `auto_save_damage_applied == 0` (the key off-branch invariant — server skips the damage roll when applying is off). Waits for `spell_cast` WS frame to confirm the broadcast carries the same `auto_save_damage_applied: 0`. Verifies the roll-log card renders. Verifies Bandit Alpha's `.init-hp-cur` input STILL reads "30" (no damage applied). Teardown restores `set_auto_apply(False)` (demo default).
+**Description (cont):** Discovery: first write of this test assumed `auto_save_damage_rolled` would still be populated even when applied=0 (i.e. server rolls damage but doesn't apply it). Wrong — the server short-circuits the damage roll itself when auto-apply is off. The test was updated to assert BOTH rolled and applied are 0. This is a subtle behavior nuance: a future contributor reading test output would otherwise be confused "the save passed, the spell does damage, why didn't the server roll it?" The test docstring captures the answer.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/save_resolution/` — new subdirectory for save-resolution matrix tests.
+- `tests/encounter_sim/level_3_edge_cases/save_resolution/test_npc_save_with_auto_damage_off.py` — opens the matrix subsystem: NPC target × auto-damage OFF axis.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 15 / ~40 Level 3 tests landed. **All six plan subsystems now have at least one test landed** — death-saves complete, the other five have openers in place. Save-resolution: 1/12.
+- **Runtime:** full encounter-sim suite at 32 tests / ~55 s.
+
+### Filed
+- **Save resolution matrix — remaining 11 tests**: PC target × save outcomes, resistance branch (damage halved before save-for-half), concentration interaction (save spell on a concentrating PC triggers double saves on fail).
+
+---
+
 ## [2.49.38] - 2026-05-21
 
 **Schema version:** 56
