@@ -428,6 +428,14 @@ async def _install_buff(
     # client renders the swap atomically.
     new_list = []
     replaced_concentration_keys = []
+    # v2.49.53: capture the (name, source_char_id) of each replaced
+    # concentration buff so the 🔁 GM log below can name the old
+    # spell. The source filter keeps the log scoped to anchors the
+    # caster actually owned (skip paired conditions sourced by an
+    # enemy caster — the swap loop's pre-v2.49.53 behavior would
+    # have wrongly dragged those out too; that's a separate bug
+    # filed below).
+    replaced_concentration_meta: list[tuple[str, str, object]] = []
     for b in buffs:
         b = b or {}
         b_key = b.get("key")
@@ -435,6 +443,11 @@ async def _install_buff(
             continue  # refresh — drop the old, append the new below
         if is_concentration and b.get("concentration"):
             replaced_concentration_keys.append(b_key)
+            replaced_concentration_meta.append((
+                b_key or "",
+                b.get("name") or b_key or "Concentration",
+                b.get("source_char_id"),
+            ))
             continue
         new_list.append(b)
     new_list.append(dict(buff))
@@ -483,6 +496,42 @@ async def _install_buff(
                     "total": 0,
                     "breakdown": f"Concentration ends — incapacitated ({buff_label})",
                     "note": f"💀 {caster_name} lost concentration on {anchor_name}",
+                    "visibility": Visibility.GM_ONLY.value,
+                    "user_id": None,
+                    "user_name": "GM log",
+                    "char_name": caster_name,
+                },
+            })
+    # v2.49.53: 🔁 GM log when a new concentration cast voluntarily
+    # replaces an existing anchor the caster owned (one-at-a-time
+    # rule, RAW "you lose concentration on the previous spell").
+    # Filtered out when incapacitates_target is True — that path
+    # already emits 💀 above with the correct RAW cause; the swap
+    # is the mechanical cleanup, not the reason.
+    if (
+        is_concentration
+        and replaced_concentration_meta
+        and not incapacitates_target
+    ):
+        new_name = buff.get("name") or key
+        caster_name = target.get("name") or "Unknown"
+        for _, old_name, old_src in replaced_concentration_meta:
+            # Only log swaps of anchors the caster owned. A paired
+            # condition buff (concentration=True but source=enemy)
+            # would be wrongly dragged out by the swap loop today
+            # — filed as a follow-up bug; for now skip the log.
+            if old_src is not None and old_src != character_id:
+                continue
+            await hub.broadcast(campaign_id, {
+                "type": "roll",
+                "data": {
+                    "expression": "—",
+                    "total": 0,
+                    "breakdown": f"Concentration swapped — cast {new_name}",
+                    "note": (
+                        f"🔁 {caster_name} swapped concentration: "
+                        f"{old_name} → {new_name}"
+                    ),
                     "visibility": Visibility.GM_ONLY.value,
                     "user_id": None,
                     "user_name": "GM log",
