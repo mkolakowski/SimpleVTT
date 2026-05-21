@@ -442,6 +442,97 @@ async def test_aoe_cast_without_targets_lands_pending_then_place_aoe_resolves(
     assert rdata["dc"] >= 8  # caster + prof + spc mod gives at least 8
 
 
+async def test_place_aoe_auto_rolls_pc_save_and_applies_damage(
+    gm_client, gm_ws, roster, thalindra_rested,
+):
+    """v2.48.3 — /place_aoe auto-rolls PC saves alongside NPCs.
+
+    The v2.47.0 T.5d roll_request prompt path is bypassed for the
+    /place_aoe flow; instead the server rolls every PC target's
+    save server-side (using the PC's character sheet's save mod)
+    and applies save-for-half damage exactly like NPCs. The cast
+    card pill row shows the auto-rolled outcome for every target.
+    """
+    thal = thalindra_rested
+    pip = roster["Pip Quickfingers"]
+    tmpl = await _bandit_tmpl(gm_client)
+    await _set_auto_apply(gm_client, on=True)
+
+    # Long-rest Pip so an earlier test's damage doesn't leave her at
+    # low HP — 8d6 fireball can one-shot a low-HP rogue.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/rest",
+        json={"type": "long"},
+    )
+
+    async def _pip_hp():
+        roster_resp = await gm_client.get(
+            f"/api/campaign/{CAMPAIGN_ID}/roster"
+        )
+        chars = roster_resp.json()["characters"]
+        return int(next(c for c in chars if c["id"] == pip["id"])["hp_current"])
+    pip_hp_before = await _pip_hp()
+
+    await _seed_battle(gm_client, [
+        {"id": f"tok_pcr_{thal['id']}", "char_id": thal["id"],
+         "name": thal["name"], "initiative": 10, "hp_current": 24, "hp_max": 24,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": "tok_pcr_bandit", "char_id": None,
+         "token_template_id": tmpl["id"],
+         "name": "Bandit", "initiative": 7, "hp_current": 50, "hp_max": 50,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": f"tok_pcr_{pip['id']}", "char_id": pip["id"],
+         "name": pip["name"], "initiative": 8, "hp_current": pip_hp_before, "hp_max": 24,
+         "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+    ])
+
+    cast_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": thal["id"],
+            "spell_index": FIREBALL_INDEX,
+            "slot_level": 3,
+            "class_slug": "wizard",
+            "override": True,
+        },
+    )
+    assert cast_resp.status_code == 200, cast_resp.text
+    cast_id = cast_resp.json()["id"]
+
+    place_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
+        json={
+            "cast_id": cast_id,
+            "target_combatant_ids": ["tok_pcr_bandit", f"tok_pcr_{pip['id']}"],
+        },
+    )
+    assert place_resp.status_code == 200, place_resp.text
+    targets = place_resp.json().get("auto_save_targets") or []
+    assert len(targets) == 2
+    pip_entry = next(t for t in targets if t["target_name"] == pip["name"])
+    bandit_entry = next(t for t in targets if t["target_name"] == "Bandit")
+    # Both targets are auto-rolled — pc_skipped / pending_request_id
+    # never appear on the entry.
+    assert "pc_skipped" not in pip_entry
+    assert "pending_request_id" not in pip_entry
+    assert isinstance(pip_entry["rolled"], int)
+    assert isinstance(pip_entry["passed"], bool)
+    assert pip_entry["damage_applied"] > 0, f"Pip took 0 damage: {pip_entry}"
+    assert pip_entry["damage_type"] == "fire"
+    # Bandit auto-rolled too.
+    assert isinstance(bandit_entry["rolled"], int)
+    assert bandit_entry["damage_applied"] > 0
+
+    # Pip's HP dropped server-side.
+    pip_hp_after = await _pip_hp()
+    assert pip_hp_after < pip_hp_before, (
+        f"Pip's HP did not drop: before={pip_hp_before} after={pip_hp_after}"
+    )
+
+
 async def test_place_aoe_rejects_non_caster_non_gm(gm_client, roster, thalindra_rested):
     """Auth gate: someone who isn't the caster AND isn't the GM gets
     403 on /place_aoe. The test client authenticates as the GM, so

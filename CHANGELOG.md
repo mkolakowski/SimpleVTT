@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.48.3] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **AoE cast cards strip legacy action buttons + `/place_aoe` auto-rolls PC saves.** Two changes to the v2.48.0 placement flow. **(1) Strip the Roll Damage / Prompt SAVE buttons on AoE cast cards** so the only thing the GM sees is the "📍 Place sphere" button (when pending) or the per-target pill row (after placement). The legacy buttons would duplicate the placement's resolved outcomes and confuse the GM. **(2) `/place_aoe` now auto-rolls PC saves alongside NPCs** — the v2.47.0 T.5d roll_request prompt path is bypassed for the new flow. The server reads each PC's DEX (or whatever ability) save modifier from their character sheet, rolls `1d20+mod`, applies save-for-half damage via `_apply_damage_to_combatant` (PC HP / death-save / concentration path), and adds the resolved entry to `auto_save_targets`. The user's ask: "after the sphere is placed, have all selected characters automatically roll their dex saves and damage and present the results inside the spell's roll log post." Both NPCs and PCs now resolve in one Place click. PATCH — behavior shift on /place_aoe's PC handling, no API change; the older /cast_spell-with-targets path still uses the roll_request prompt for PCs (the v2.47.0 T.5d test still passes).
+**Description:** Three edits. **(1)** `app/static/tabletop.js` `appendSpellCast` — added `_isAoeSpell = Boolean(d.area_shape) && Number(d.area_size_ft) > 0` gate that strips `save_ability` + `damage`/`damage_scaling` from every action button alongside the existing `_autoSave` gate. Inline comment explains why: the placement flow's Place button + per-target pills already convey the cast's outcome, so legacy "Roll Damage" / "Prompt SAVE" buttons would be redundant + confusing. **(2)** `app/routes/tabletop_routes.py` `/place_aoe` PC branch — replaced the v2.47.0 T.5d roll_request creation + `_save_request_context` stash with an inline auto-roll: pull `pc_sheet = extra_pc.sheet`, compute `pc_mod = _resolve_stat_modifier(pc_sheet, "dnd5e", f"{save_ability.lower()}_save")`, roll `1d20+pc_mod` via `dice_mod.roll`, compute `passed = rolled >= dc`, roll fresh damage, apply via `_apply_damage_to_combatant` (the helper's PC path mutates `Character.sheet.hp.current` + commits db + broadcasts `character_hp_update`), append a fully-populated entry to `auto_save_targets`. Identical to the NPC branch but wrapped around the PC character row. **(3)** `tests/harness/test_cast_spell_aoe.py` — added `test_place_aoe_auto_rolls_pc_save_and_applies_damage` (cast → /place_aoe with NPC + PC → assert both targets have `rolled`/`passed`/`damage_applied` populated, no `pc_skipped` / `pending_request_id`, PC's HP dropped server-side). Test count 211 → 212.
+**Description (cont):** Why bypass the roll_request prompt for /place_aoe but keep it on /cast_spell-with-targets. Two reasons. (a) Workflow: the user explicitly asked for one-click resolution — the Place button should resolve EVERY target in the picker, including PCs caught in the radius. Firing roll_requests would re-introduce the "wait for the player to click" pause the placement flow was meant to eliminate. (b) Compat: /cast_spell-with-targets is the programmatic path (harness tests, future automation). Keeping the T.5d roll_request flow there preserves the existing v2.47.0 contract for callers that want player-agency saves. The two paths now have different PC handling but the same NPC handling — a known divergence, documented in the changelog and tests.
+**Description (cont 2):** Why "houserule" auto-rolling and not a per-campaign toggle. Some D&D tables prefer GM-rolled saves for AoE (faster, no waiting). Others prefer player-rolled (agency). The new flow defaults to GM-rolled; a future commit could add a `Campaign.aoe_pc_auto_save` toggle to switch. For v1 the user's explicit request is the default.
+**Description (cont 3):** Why strip the action buttons for ALL AoE spells, not just damage spells. The `_isAoeSpell` gate fires whenever `area_shape` is populated. Save-or-suck AoE spells like Hypnotic Pattern (30 ft cube, WIS save, charmed condition) and Hold Person (single-target, not AoE — not affected) ALSO get their action buttons stripped. The cast card just shows the Place button → per-target pills. The condition-install path is filed for a future iteration; today the per-target pills carry the save result but the buff doesn't auto-install on failures.
+
+### Fixed
+- `app/static/tabletop.js` `appendSpellCast` — strip Roll Damage / Prompt SAVE buttons on AoE cast cards (mirrors the existing `_autoSave` strip but gated on `area_shape` so it fires for the placement flow too).
+
+### Changed
+- `app/routes/tabletop_routes.py` `/place_aoe` — PC targets auto-roll their save server-side and apply save-for-half damage, instead of receiving a roll_request prompt. Mirrors NPC handling.
+
+### Added
+- `tests/harness/test_cast_spell_aoe.py` `test_place_aoe_auto_rolls_pc_save_and_applies_damage` — end-to-end: cast Fireball, /place_aoe with NPC + PC, assert both auto-rolled + damaged.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Cast Fireball from Thalindra; the card lands with ONLY the "📍 Place sphere" button (no Prompt SAVE / Roll Damage clutter). Click Place, drop the sphere over Pip + a Bandit. The card mutates to show both targets' save results AND damage applied — no roll_request prompt for Pip, just resolved pills. Confirm Pip's HP dropped on the init tracker.
+- **Backward compat.** /cast_spell directly with target_combatant_ids still uses the v2.47.0 roll_request prompt for PCs (the legacy harness test `test_aoe_pc_response_applies_damage_and_broadcasts_update` still passes). Only /place_aoe gets the auto-roll behavior. All 212 harness tests pass.
+
+### Filed
+- **`Campaign.aoe_pc_auto_save` toggle.** Today /place_aoe always auto-rolls PC saves. A campaign setting could switch to roll_request prompts for tables that prefer player agency.
+- **Save-or-suck condition install in /place_aoe.** Hypnotic Pattern + similar — server resolves the save but doesn't install the condition buff on failures. Mirror of the T.3d work for the AoE PC path.
+
+---
+
 ## [2.48.2] - 2026-05-20
 
 **Schema version:** 56

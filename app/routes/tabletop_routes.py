@@ -7738,69 +7738,59 @@ async def place_aoe(
         extra_is_pc = bool(extra_pc and extra_pc.owner_user_id)
 
         if extra_is_pc:
-            # Mirror the v2.47.0 T.5d PC AoE branch: fire a
-            # roll_request scoped to the PC, stash the AoE-respond
-            # context under the request id so /roll_request/{id}/
-            # respond applies save-for-half damage + broadcasts
-            # ``spell_cast_target_updated`` when the PC submits.
-            note_label = f"{ctx['spell_name']} — {save_ability} save"
-            stat_key = f"{save_ability.lower()}_save" if save_ability else ""
-            req = RollRequest(
-                campaign_id=campaign_id,
-                created_by_user_id=user.id,
-                label=note_label,
-                base_expression="1d20",
-                stat_key=stat_key,
-                dc=dc,
-                visibility=Visibility.PUBLIC,
+            # v2.48.3 — auto-roll the PC's save + apply save-for-half
+            # damage just like the NPC branch below. The v2.47.0
+            # roll_request prompt path is bypassed here (still used
+            # by the legacy /cast_spell-with-targets flow); the new
+            # /place_aoe UX gives the caster + GM one button that
+            # resolves every target in the picker, including PC
+            # allies caught in the radius. Mirrors a "GM rolls
+            # everyone's saves" houserule.
+            pc_sheet = extra_pc.sheet or {}
+            pc_mod, _ = _resolve_stat_modifier(
+                pc_sheet, "dnd5e", f"{save_ability.lower()}_save",
             )
-            db.add(req)
-            db.commit()
-            db.refresh(req)
-            await hub.broadcast(campaign_id, {
-                "type": "roll_request",
-                "data": {
-                    "id": req.id,
-                    "label": req.label,
-                    "stat_key": req.stat_key,
-                    "base_expression": req.base_expression,
-                    "dc": req.dc,
-                    "visibility": req.visibility.value,
-                    "created_by_name": user.display_name,
-                    "created_by_user_id": user.id,
-                    "target_user_ids": [extra_pc.owner_user_id],
-                    "target_user_names": [extra_pc.name],
-                },
-            })
-            _purge_save_request_context()
-            _save_request_context[req.id] = {
-                "ts": _time.time(),
-                "campaign_id": campaign_id,
-                "spell_slug": ctx.get("spell_slug") or "",
-                "spell_name": ctx.get("spell_name") or "",
-                "target_character_id": int(extra_pc.id),
-                "target_name": extra_pc.name,
-                "dc": dc,
-                "save_ability": save_ability,
-                "caster_char_id": int(ctx.get("caster_char_id") or 0),
-                "caster_char_name": ctx.get("caster_char_name") or "",
-                "is_aoe": True,
-                "cast_id": cast_id,
-                "combatant_id": extra.get("id"),
-                "damage_expr": damage_expr,
-                "damage_type": damage_type,
-                "auto_apply_damage": auto_apply_damage,
-            }
+            expr = f"1d20{pc_mod:+d}"
+            try:
+                r = dice_mod.roll(expr)
+                rolled = int(r.total)
+                bd = r.breakdown
+            except dice_mod.DiceParseError:
+                rolled = 0
+                bd = ""
+            passed = rolled >= dc
+            dmg_applied = 0
+            if damage_expr and auto_apply_damage:
+                try:
+                    dr = dice_mod.roll(damage_expr)
+                    dmg_rolled = max(0, int(dr.total))
+                except dice_mod.DiceParseError:
+                    dmg_rolled = 0
+                if dmg_rolled > 0:
+                    proposed = dmg_rolled if not passed else dmg_rolled // 2
+                    if proposed > 0:
+                        # Wrap PC character row in a combatant dict so
+                        # ``_apply_damage_to_combatant`` routes through
+                        # the PC HP / death-save / concentration path.
+                        pc_combatant = {
+                            "char_id": int(extra_pc.id),
+                            "id": extra.get("id"),
+                            "name": extra_pc.name,
+                        }
+                        dr_result = await _apply_damage_to_combatant(
+                            db, campaign_id, pc_combatant, proposed,
+                            damage_type=damage_type,
+                            attack_id=cast_id,
+                        )
+                        dmg_applied = int(dr_result.get("applied") or 0)
             auto_save_targets.append({
                 "combatant_id": extra.get("id"),
                 "target_name": extra_name,
-                "rolled": None,
-                "breakdown": "",
-                "passed": None,
-                "damage_applied": 0,
+                "rolled": rolled,
+                "breakdown": bd,
+                "passed": passed,
+                "damage_applied": dmg_applied,
                 "damage_type": damage_type,
-                "pc_skipped": True,
-                "pending_request_id": req.id,
             })
             continue
 

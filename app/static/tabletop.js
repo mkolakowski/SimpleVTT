@@ -2498,13 +2498,22 @@
         const _autoHeal   = d.auto_heal_applied > 0;
         const _autoAttack = d.auto_attack_hit != null;
         const _autoSave   = d.auto_save_target_kind != null;
+        // v2.48.3 — AoE spells strip ALL legacy action buttons (Roll
+        // Damage / Prompt SAVE / etc.). The v2.48.0 pending → place
+        // flow renders a Place button when pending and per-target
+        // pills once resolved; the legacy buttons would duplicate
+        // those outcomes and confuse the GM ("did I already roll the
+        // saves or do I still need to click Prompt?"). Detection
+        // mirrors the server-side ``pending_aoe_placement`` rule —
+        // the spell has a populated AoE area block.
+        const _isAoeSpell = Boolean(d.area_shape) && Number(d.area_size_ft) > 0;
         const actions = _baseActions.map(a => {
             let out = a;
             if (_autoHeal && out.healing) out = {...out, healing: ''};
             if (_autoAttack && (out.damage || (out.damage_scaling && out.damage_scaling.length))) {
                 out = {...out, damage: '', damage_scaling: []};
             }
-            if (_autoSave) {
+            if (_autoSave || _isAoeSpell) {
                 if (out.save_ability) out = {...out, save_ability: ''};
                 if (out.damage || (out.damage_scaling && out.damage_scaling.length)) {
                     out = {...out, damage: '', damage_scaling: []};
