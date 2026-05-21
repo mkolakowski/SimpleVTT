@@ -380,10 +380,10 @@ jobs:
             exit 1
           fi
 
-      - name: Run encounter-sim Level 1 smoke
+      - name: Run encounter-sim Level 1 smoke + Level 2 encounter
         run: |
           mkdir -p reports
-          pytest tests/encounter_sim/level_1_smoke/ \
+          pytest tests/encounter_sim/level_1_smoke/ tests/encounter_sim/level_2_encounter/ \
             --junitxml=reports/encounter-sim.xml \
             --html=reports/encounter-sim.html \
             --self-contained-html \

@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.22] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 3 commit I — first Level 2 test: `test_roll_log_replay_survives_refresh`.** Opening commit of Phase 3 (task #95, plan docs/plans/encounter-sim-test-suite.md). Level 2 is the multi-action / multi-round encounter suite; this first test exercises the **roll-log localStorage persistence + page-refresh replay** path. Three distinct card types are fired in sequence (Garrik Greatsword strike → `weapon_attack`, Tavik Sacred Flame → `spell_cast` save branch, Magnus Eldritch Blast → `spell_cast` attack-cantrip branch), the page is then reloaded, and the test asserts all three specific card texts re-appear in `#roll-list` from `_hydrateRollLog`. New `tests/encounter_sim/level_2_encounter/` directory shipped alongside the test (parallel to `level_1_smoke/`). The `encounter-sim` CI job's pytest invocation expanded to include the new level dir so the test runs in CI alongside Level 1. PATCH — additive test + CI dir expansion; no helper changes (Level 1's helpers carry the test unchanged).
+**Description:** Two new files + one CI tweak. **(1)** `tests/encounter_sim/level_2_encounter/__init__.py` (empty package shell). **(2)** `tests/encounter_sim/level_2_encounter/test_roll_log_replay_survives_refresh.py` — the test. Fires three card types via the existing `post_attack` / `cast_spell` helpers, waits for each WS broadcast with a `predicate=` filter on `caster_char_name` so a prior frame can't satisfy the wait, opens the roll-log drawer, then `gm_page.reload()` + reopens the drawer + asserts the three specific card texts ("Greatsword", "Sacred Flame", "Eldritch Blast") survive into the rehydrated DOM. **(3)** `.github/workflows/test-harness.yml::encounter-sim job` — pytest invocation extended from `tests/encounter_sim/level_1_smoke/` to `tests/encounter_sim/level_1_smoke/ tests/encounter_sim/level_2_encounter/`. ``continue-on-error: true`` stays in place until Phase 3 reaches its own "5 green CI runs" milestone.
+**Description (cont):** Why text-based assertions instead of card-count assertions. First write of the test asserted `post_count >= pre_count` on `#roll-list > li`. The assertion failed at `pre=104, post=103` because (a) the page-load Jinja injects historical rolls into the DOM (the rolls page side, ~100 entries in our dev container's accumulated demo state), (b) the localStorage key `simplevtt:rolllog:<cid>` caps at 100 entries — so adding our 3 fired actions evicted 3 from the cap, leaving the localStorage replay with 100 entries that overlap historically-rendered ones in complex ways. The contract this test cares about is "the cards I just fired persist across refresh" — text-based assertions encode that directly without the cap-vs-history accounting.
+**Description (cont 2):** Why three card types instead of the plan's five. The plan said "5 actions" but the meaningful coverage is one of EACH renderer branch — `appendWeaponAttack`, `appendSpellCast` save branch, `appendSpellCast` attack branch. Three covers all three; bumping to five adds runtime without coverage. The plan's "5" was an illustrative round number from the design phase.
+**Description (cont 3):** Why no harness test. Test-only addition exercising existing endpoints + a client-side feature (localStorage persistence) — `_persistRollEntry` / `_hydrateRollLog` live in `app/static/tabletop.js`, not the server. Verification: 5 sequential local runs at ~4.1 s/run, no flake. The encounter-sim CI job will pick up the new directory on the next push.
+
+### Added
+- `tests/encounter_sim/level_2_encounter/__init__.py` — package shell.
+- `tests/encounter_sim/level_2_encounter/test_roll_log_replay_survives_refresh.py` — first Level 2 test; validates `_persistRollEntry` / `_hydrateRollLog` across a page reload.
+
+### Changed
+- `.github/workflows/test-harness.yml::encounter-sim job` — pytest invocation now collects from both Level 1 and Level 2 directories. `continue-on-error: true` unchanged (Phase 3 still needs its own CI-corroboration milestone).
+
+### Notes
+- **Backward compat.** Additive only — no helpers / pages touched.
+- **Phase 3 progress:** 1 / 6 Level 2 scenarios landed. 5 remaining (per the plan): tavern_brawl_baseline, concentration_lifecycle, aoe_persistent_marker, buff_install_decrement, action_economy_strict_mode.
+- **Runtime check:** new test ~4.1 s. Full encounter-sim suite (13 tests now: 12 Level 1 + 1 Level 2) projects to ~25 s — well under the Phase 3 budget of ≤4 min for 6 tests.
+
+### Filed
+- **Phase 3 commit J** — `test_buff_install_decrement` (Krieger's Rage duration tick-down across turns). Builds directly on `test_krieger_rage`; needs a turn-advance helper (probably ``advance_turn(page)`` on TabletopPage that clicks the GM's "Next Turn" button or PUTs an incremented battle state).
+- **Phase 3 commit K** — `test_action_economy_strict_mode`. Needs a non-GM page fixture (Alice login) since the strict-mode gate only applies to non-GMs.
+- **Phase 3 commits L / M / N** — `test_concentration_lifecycle` (Hex), `test_aoe_persistent_marker` (Spike Growth — depends on v2.49.0 re-trigger feature still being on the Phase B backlog), `test_tavern_brawl_baseline` (3 PCs + 3 NPCs, multi-round, the headline Phase 3 test).
+
+---
+
 ## [2.49.21] - 2026-05-21
 
 **Schema version:** 56
