@@ -14958,11 +14958,15 @@ async def patch_sheet_fields(
     char.sheet = _apply_sheet_patch(char.sheet, body_for_patch)
 
     hp_result = None
+    pre_patch_current_hp = None
     if incoming_hp is not None and "current" in incoming_hp:
         # Preserve max/temp by writing them first, then routing current
         # through the state machine.
         sheet = dict(char.sheet or {})
         existing_hp = dict(sheet.get("hp") or {})
+        # v2.49.42 — snapshot the pre-patch current HP so we can emit
+        # a character_hp_update broadcast with the right delta below.
+        pre_patch_current_hp = int(existing_hp.get("current") or 0)
         if "max" in incoming_hp:
             existing_hp["max"] = int(incoming_hp.get("max") or 0)
         if "temp" in incoming_hp:
@@ -15030,6 +15034,32 @@ async def patch_sheet_fields(
                 "source": "sheet_patch",
             },
         })
+
+    # v2.49.42 — also broadcast ``character_hp_update`` whenever HP
+    # actually changed, NOT just on status-boundary crossings. Pre-fix:
+    # PATCH /sheet-fields fired ``character_death_save`` only when
+    # ``hp_result["status_changed"]`` (e.g. crossing into dying / stable
+    # / dead), so a vanilla 35→25 HP drop within "alive" went silent —
+    # non-GM observers' ``window.battle.combatants[…].hp_current`` stayed
+    # at 35 until something else triggered a refresh. The character_hp_
+    # update broadcast pattern (no IS_GM guard at tabletop.js:3102, fed
+    # by /attack and /cast_spell paths) is the right place to plug this
+    # gap — same shape, same client handler. Surfaced by the encounter-
+    # sim test_alice_observes_hp_update which had to use /attack instead
+    # of PATCH /sheet-fields to get an observable HP change for Alice.
+    if hp_result and pre_patch_current_hp is not None:
+        new_current = int(hp_result["hp"].get("current") or 0)
+        if new_current != pre_patch_current_hp:
+            await hub.broadcast(campaign_id, {
+                "type": "character_hp_update",
+                "data": {
+                    "character_id": char.id,
+                    "hp": hp_result["hp"],
+                    "delta": new_current - pre_patch_current_hp,
+                    "source": "sheet_patch",
+                },
+            })
+
     return {
         "ok": True,
         "hp": hp_result["hp"] if hp_result else None,

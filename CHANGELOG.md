@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.42] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Fix bug #3 from encounter-sim: PATCH /sheet-fields HP changes within "alive" broadcast nothing.** Third application-side bug surfaced by the new encounter-sim test suite (after v2.49.40 force_gm_sync + v2.49.41 concentration cleanup). Pre-fix: `PATCH /api/campaign/{cid}/character/{cid}/sheet-fields` only broadcast `character_death_save` when `hp_result["status_changed"]` — i.e. on transitions into / out of dying / stable / dead. A vanilla HP change within "alive" (e.g. GM sets a PC's HP from 35 to 25 via the sheet edit panel, or a test PATCHes HP for setup) fired NO broadcast. Non-GM clients had no signal to update their local `window.battle.combatants[…].hp_current`, so Alice's HP-bar view stayed stale until something else triggered a state refresh. Surfaced by the encounter-sim `test_alice_observes_hp_update` (v2.49.35) which originally tried PATCH /sheet-fields and got no broadcast — the test was rewritten to use /attack to find one. With the fix landed, both paths broadcast `character_hp_update`. Fix: snapshot `pre_patch_current_hp` before `_apply_hp_change`; after the existing `character_death_save` (still fires on status change), broadcast `character_hp_update` whenever `new_current != pre_patch_current_hp`. Uses the same shape `_apply_damage_to_combatant` uses — same client handler at tabletop.js:3102 (no IS_GM guard). 3 new harness tests pin the broadcast contract; total harness 222 → 225. PATCH — bug fix; no schema or API contract change.
+**Description:** Three edits. **(1)** `app/routes/tabletop_routes.py::patch_sheet_fields` — snapshot `pre_patch_current_hp = int(existing_hp.get("current") or 0)` before mutating the sheet, then after the conditional `character_death_save` broadcast, emit `character_hp_update` whenever HP actually changed. Suppressed if `new_current == pre_patch_current_hp` so no-op PATCHes (settings-form HP=HP) don't spam the WS channel. Source label `"sheet_patch"` distinguishes from `"attack"` / `"undo_attack"` / `"heal"` sources. **(2)** `tests/harness/test_sheet_patch_hp_broadcast.py` (NEW) — 3 tests covering: HP-down within alive broadcasts with negative delta, HP-up (heal) broadcasts with positive delta, no-op PATCH suppresses the broadcast. **(3)** `docs/test-harness-coverage.md` — catalog entry for the new test file; total count 222 → 225.
+**Description (cont):** Why character_hp_update is the right broadcast type (not a new one). The existing `character_hp_update` already covers PC HP changes from `_apply_damage_to_combatant` (`/attack`, `/cast_spell`) and `_apply_heal_to_combatant` (heal endpoints). The client handler at tabletop.js:3102 already mutates `window.battle.combatants[…].hp_current` AND `charById[…].hp_current` AND triggers a canvas re-render (the v2.49.4 skull overlay rides on this same render pass). PATCH /sheet-fields had been the ONE damage / heal path NOT broadcasting it — closing that gap unifies all HP-change paths under one broadcast.
+**Description (cont 2):** Why suppress the no-op broadcast. The settings page submits PATCH /sheet-fields with the full sheet body on every save — even unrelated edits like "rename a feat" arrive with `hp: {current: 35}` because the form serializer doesn't know which fields changed. Without the no-op suppression, every settings save would spam `character_hp_update` to every client. The `new_current != pre_patch_current_hp` guard kills the spam path; only ACTUAL HP changes fire the broadcast.
+**Description (cont 3):** Verification. Ran the new tests BEFORE the fix landed (all 3 failed — no broadcast); ran AFTER (all 3 pass). 225 harness tests pass; 32 encounter-sim tests still pass (no regressions). The encounter-sim `test_alice_observes_hp_update` could now use PATCH /sheet-fields instead of /attack as its damage trigger; not refactored in this commit (the existing test still validates the broadcast → DOM path the same way), but filed as cleanup.
+
+### Fixed
+- `app/routes/tabletop_routes.py::patch_sheet_fields` — broadcasts `character_hp_update` on HP change (not just `character_death_save` on status crossings). Non-GM clients now observe HP-bar movement from GM sheet edits, in-test PATCHes, and anywhere else this endpoint mutates HP within "alive".
+
+### Added
+- `tests/harness/test_sheet_patch_hp_broadcast.py` — 3 tests pinning the new broadcast contract:
+  - `test_hp_drop_within_alive_broadcasts` — HP down without status crossing fires the broadcast with negative delta.
+  - `test_hp_heal_broadcasts_positive_delta` — HP up fires with positive delta.
+  - `test_hp_unchanged_does_not_broadcast` — no-op PATCH (settings-form spam guard) suppresses the broadcast.
+
+### Changed
+- `docs/test-harness-coverage.md` — new catalog entry; total tests 222 → 225.
+
+### Notes
+- **Backward compat.** Pure additive — `character_hp_update` is an existing message type with an existing client handler; this commit just causes it to fire in more places. Clients that don't handle the message continue to work (they did before too).
+- **Settings-form spam.** Verified the no-op suppression with the `test_hp_unchanged_does_not_broadcast` test. Without that guard, every GM settings-page save would broadcast `character_hp_update` to every client — measurable performance impact at scale.
+
+### Filed
+- **Refactor `test_alice_observes_hp_update` to use PATCH /sheet-fields**. Currently uses /attack with a seeded-dice hit retry; PATCH would be simpler + always-deterministic + would exercise this new fix path end-to-end.
+- **Survey OTHER `_apply_hp_change` call sites** for the same missing-broadcast pattern. Most paths (attack, heal) broadcast via their own helpers; double-check that no other "set HP directly" path is silent.
+- **Three bugs surfaced + fixed by the encounter-sim suite so far** (v2.49.40 / v2.49.41 / v2.49.42). The suite is paying for itself.
+
+---
+
 ## [2.49.41] - 2026-05-21
 
 **Schema version:** 56
