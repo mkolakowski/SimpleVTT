@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.31] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit R — action-economy edge case: `test_action_surge_refunds_chip`.** Validates the Fighter's Action Surge feature: when Garrik fires Action Surge, the server flips his ``economy.action`` slot from used → not used (refunding the chip), broadcasts `economy_update` with `slot=action, used=False`, and the client's handler (tabletop.html:5556 — no IS_GM guard) updates the chip + re-renders. Test seeds Garrik with his action slot pre-marked used, opens the tabletop, asserts the pre-condition chip has `.used` class, fires `/use_action_surge`, waits for the WS frame, asserts post-condition chip class no longer contains `used`. New subdirectory `level_3_edge_cases/action_economy/` (commit J's strict-mode test will move here in a future cleanup; for now it stays in `level_2_encounter/` since that's where the plan placed it). PATCH — additive test only; reuses `post_use` from commit F, `long_rest` from commit B. Full encounter-sim suite at 24 tests / ~41.7 s × 5 runs, no flake.
+**Description:** Two new files. **(1)** `tests/encounter_sim/level_3_edge_cases/action_economy/__init__.py` (empty package shell). **(2)** `tests/encounter_sim/level_3_edge_cases/action_economy/test_action_surge_refunds_chip.py` — long-rest Garrik so Action Surge use is refreshed; seed battle with Garrik's `economy.action = True` (uses `make_combatant` + direct economy mutation since the helper's default is all-False); open the GM tabletop + players panel; verify the pre-condition by inspecting `.econ-chip[data-slot="action"]` carries the `.used` class; POST `/use_action_surge`; wait for `economy_update` WS frame filtered by `character_id == garrik.id AND slot == "action"`, assert `used: False`; re-locate the chip after the re-render and assert `"used"` is no longer in the class list. The chip class check uses `class_attr.split()` rather than substring matching to avoid false negatives if `used` appears inside another class name (e.g. `used-but-not-really`).
+**Description (cont):** Why pair this with commit J's strict-mode test. Commit J validated the over-budget GATE (when a non-GM tries to bypass strict mode → 409). This commit validates the over-budget REFUND (when Action Surge legitimately gives the action back). They're the two non-trivial action-economy state transitions the rules support — most other transitions are simple "PC fires action → action.used = True" or "GM clicks next turn → reset all to False" which the existing harness covers. Both tests together pin the multi-direction state machine.
+**Description (cont 2):** Why test the chip class rather than the chip text. The chip text contains "●" or "○" plus a label ("●  Act" vs "○ Act"). Asserting on the bullet character is fragile (font rendering issues) and the text could change ("Act" → "Action"). The `.used` class is the canonical "is this chip flipped" signal — what the CSS uses to style the chip, what the toggle handler reads. Asserting on the class checks the same source of truth.
+**Description (cont 3):** Why no harness test. Test-only addition consuming an existing endpoint with existing harness coverage (`tests/harness/test_use_action_surge.py::test_action_surge_refunds_action_chip`). The UI-layer assertion (chip flips visually) is what the encounter-sim suite adds. Verification: 5 sequential local runs × 24 tests at ~41.7 s/run, no flake.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/action_economy/` — new subdirectory for action-economy edge-case tests.
+- `tests/encounter_sim/level_3_edge_cases/action_economy/test_action_surge_refunds_chip.py` — validates Fighter Action Surge refunds the action economy chip + the GM-page DOM reflects the flip via the `economy_update` WS handler.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 7 / ~40 Level 3 tests landed. Subsystem progress: death-saves 5/5 ✅, concentration 2/6, action-economy 2/8 (commit J strict-mode + this Action Surge), AoE/saves/multi-user untouched.
+- **Runtime:** full encounter-sim suite at 24 tests / ~41.7 s.
+
+### Filed
+- **Move `test_action_economy_strict_mode` from `level_2_encounter/` to `level_3_edge_cases/action_economy/`** — it conceptually belongs with the action-economy edge cases, not with the Level 2 multi-round scenarios. Plan-doc cleanup commit.
+- **Cunning Action test** — Pip's bonus-action Dash / Disengage / Hide. Each fires a different endpoint that flips the `bonus` chip without consuming a feature use.
+- **Reaction-only chip tests** — Shield (Wizard L1 reaction) + Hellish Rebuke (Warlock L1 reaction). Both flip the `reaction` chip, and Shield interestingly fires DURING an attack against the caster.
+- **Over-budget retry test** — non-GM player fires an action, gets 409, retries with `override=true`, asserts the action proceeds + the audit badge fires. Pairs with strict-mode (commit J) which is the same path but with the override bypass disabled.
+
+---
+
 ## [2.49.30] - 2026-05-21
 
 **Schema version:** 56
