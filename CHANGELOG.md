@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.23] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 3 commit J — `test_action_economy_strict_mode`.** Second Level 2 test. Validates the `strict_action_economy` gate that prevents non-GM players from bypassing the over-budget action gate via the `override` flag. GM-as-driver doesn't exercise this gate at all (the `_user_is_gm` short-circuit in `/attack` skips both override AND strict), so this is the suite's first test to drive from a NON-GM player session (Alice, who owns Pip Quickfingers). `helpers/battle.py` gained three additions: `_login_client(email, password)` (generalized from `_gm_client`); `post_attack_as_player(email, password, ...)` (mirrors `post_attack` but logs in as a specific demo player); `set_strict_action_economy(on, *, auto_apply=False)` (settings-form POST, mirrors `set_auto_apply` — the endpoint expects every checkbox so omitted ones clear, hence the `auto_apply=` kwarg to preserve state in the same POST). Test includes a try/finally teardown that disables strict mode — critical because the setting persists in the campaign row and would leak into every subsequent test if left enabled. Full encounter-sim suite at 14 tests now: 12 Level 1 + 2 Level 2, 5 sequential local runs at ~25 s/run, no flake. PATCH — additive test + additive helpers; no schema / runtime change.
+**Description:** Two new files + helper extensions. **(1)** `tests/encounter_sim/level_2_encounter/test_action_economy_strict_mode.py` — Alice POSTs `/attack` for Pip with `override=True` against a battle state where Pip's action slot is pre-marked used. Asserts 409 + `error: "over_budget"` + `strict: true` + `slot: "action"`. Teardown disables strict mode. **(2)** `tests/encounter_sim/helpers/battle.py::_login_client(email, password)` — generalized login helper; `_gm_client()` now delegates to it with the GM creds. **(3)** `tests/encounter_sim/helpers/battle.py::post_attack_as_player(email, password, ...)` — same shape as `post_attack` but auths as a specific player; first non-GM helper in the suite. **(4)** `tests/encounter_sim/helpers/battle.py::set_strict_action_economy(on, *, auto_apply=False)` — toggles the campaign setting via the full settings-form POST. Refactored the common form fields into a module-level `_DEFAULT_SETTINGS_FORM` dict + a `_post_settings(overrides)` helper that both `set_auto_apply` and `set_strict_action_economy` share. The new kwarg patterns (`set_auto_apply(on, *, strict=False)` and `set_strict_action_economy(on, *, auto_apply=False)`) let a caller preserve the OTHER setting in the same POST without ordering the calls.
+**Description (cont):** Why driving from a non-GM player needs its own helper. The GM bypasses both the override gate AND the strict gate via `_user_is_gm` in `tabletop_routes.py:6731` (`if was_used and not user_is_gm and not override`). The encounter-sim test suite has been GM-only through Phases 1 + 2 because every action-resolution code path was reachable from the GM session — the strict-mode gate is the first feature that REQUIRES a player session to validate. Adding `post_attack_as_player` (and the generalized `_login_client`) opens the door to a future commit family of player-driver test variants that exercise layer-6 init-tracker HP DOM updates (the GM-driver caveat the strike PoCs all carry — `force_gm_sync` never fires from `/attack` so the GM's local battle state drifts).
+**Description (cont 2):** Why the teardown matters. `strict_action_economy` is a row on the `campaign` table; it persists across requests AND across tests (no rollback boundary). Without the `try/finally` disabling it, every encounter-sim test after this one would hit the strict gate when their seeded battle states had pre-used economy slots — and the failure mode would be 409s on what look like vanilla GM actions, which would be very confusing. The teardown is mandatory; the test docstring spells out the persistence trap so future authors see it.
+**Description (cont 3):** Why no harness test. Test-only addition exercising existing endpoint behavior with existing harness coverage (`tests/harness/test_use_action_surge.py` and others touch the strict path). Verification: 5 sequential local runs × 14 tests pass at ~25 s/run, no flake. The encounter-sim CI job picks up the new test automatically via its `tests/encounter_sim/level_2_encounter/` glob (which expanded in commit I).
+
+### Added
+- `tests/encounter_sim/level_2_encounter/test_action_economy_strict_mode.py` — strict-mode gate test driven from Alice (non-GM).
+- `tests/encounter_sim/helpers/battle.py::_login_client(email, password)` — generalized login helper.
+- `tests/encounter_sim/helpers/battle.py::post_attack_as_player(email, password, ...)` — first non-GM attack helper.
+- `tests/encounter_sim/helpers/battle.py::set_strict_action_economy(on, *, auto_apply=False)` — campaign setting toggle.
+
+### Changed
+- `tests/encounter_sim/helpers/battle.py::_gm_client()` — now delegates to `_login_client(GM_EMAIL, GM_PASS)`.
+- `tests/encounter_sim/helpers/battle.py::set_auto_apply` — gained an optional `strict=False` kwarg so callers can preserve strict mode in the same POST (the settings endpoint clears omitted checkboxes).
+- `tests/encounter_sim/helpers/battle.py` — extracted `_DEFAULT_SETTINGS_FORM` constant + `_post_settings(overrides)` helper shared by both setting toggles.
+
+### Notes
+- **Backward compat.** Additive; existing helper signatures unchanged.
+- **Phase 3 progress:** 2 / 6 Level 2 scenarios landed. 4 remaining (tavern_brawl_baseline, concentration_lifecycle, aoe_persistent_marker, buff_install_decrement).
+- **Runtime:** full encounter-sim suite at 14 tests / ~25 s. Within Phase 3 budget of ≤4 min for 6 Level 2 tests.
+
+### Filed
+- **Player-driver variants of the 12 Phase 1/2 PoC tests** (now unblocked by `post_attack_as_player` + `_login_client`). Exercise the layer-6 init-tracker HP DOM assertion that the GM-driver caveat blocks today. Lands as a Phase 3 sub-commit or a parallel "Phase 2b" commit family — TBD.
+- **Phase 3 commit K** — `test_buff_install_decrement` (Krieger Rage duration tick-down across turns). Needs a turn-advance helper.
+- **Phase 3 commits L / M / N** — concentration_lifecycle (Hex), aoe_persistent_marker (Spike Growth + canvas), tavern_brawl_baseline (headline multi-PC, multi-round).
+
+---
+
 ## [2.49.22] - 2026-05-21
 
 **Schema version:** 56

@@ -18,16 +18,25 @@ CAMPAIGN_ID = int(os.getenv("HARNESS_TEST_CAMPAIGN", "1"))
 
 
 def _gm_client() -> httpx.Client:
+    """Returns an ALREADY-OPEN logged-in GM client. See ``_login_client``."""
+    return _login_client("demo-gm@example.com", "demopass")
+
+
+def _login_client(email: str, password: str) -> httpx.Client:
     """Returns an ALREADY-OPEN logged-in client. Callers must call
     ``.close()`` (or use a try/finally) — do NOT wrap in ``with`` because
     the login call has already implicitly opened the client and httpx's
     context manager rejects a second open.
+
+    Generalized in v2.49.23 so tests that exercise non-GM gates (e.g.
+    strict_action_economy) can post as Alice without duplicating the
+    login boilerplate. Most helpers default to GM via ``_gm_client``.
     """
     client = httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0)
-    resp = client.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
+    resp = client.post("/login", data={"email": email, "password": password})
     if resp.status_code not in (200, 303):
         client.close()
-        raise AssertionError(f"GM login failed: {resp.status_code}")
+        raise AssertionError(f"{email} login failed: {resp.status_code}")
     return client
 
 
@@ -140,33 +149,32 @@ def seed_battle_into_page(context, combatants: list[dict]) -> None:
     )
 
 
-def set_auto_apply(on: bool) -> None:
-    """Toggle the campaign's ``auto_apply_damage`` setting via the
-    settings-form POST so attacks on hit produce a non-zero
-    ``damage_applied`` and the bandit's HP actually drops in the
-    init tracker.
+_DEFAULT_SETTINGS_FORM = {
+    "name": "Demo Campaign",
+    "description": "demo",
+    "game_system": "dnd5e",
+    "gm_tab_color": "",
+    "font_override": "",
+    "default_encounter_id": "",
+    "hp_threshold_1": "",
+    "hp_threshold_2": "",
+    "hp_threshold_3": "",
+    "hp_threshold_4": "",
+    "auto_play_playlist_id": "",
+    "auto_play_mode": "order",
+    "auto_play_initial_volume": "0.7",
+}
 
-    The settings endpoint expects the full form so a partial POST
-    would null other fields; we send the demo defaults the harness
-    already proved out in ``tests/harness/test_attack_auto_damage.py``.
+
+def _post_settings(form_overrides: dict) -> None:
+    """POST the full settings form with the given overrides. The
+    endpoint expects every field; missing ones null out their column,
+    so this helper always sends the demo defaults plus the test's
+    overrides. Internal helper — tests call ``set_auto_apply`` or
+    ``set_strict_action_economy``.
     """
-    form = {
-        "name": "Demo Campaign",
-        "description": "demo",
-        "game_system": "dnd5e",
-        "gm_tab_color": "",
-        "font_override": "",
-        "default_encounter_id": "",
-        "hp_threshold_1": "",
-        "hp_threshold_2": "",
-        "hp_threshold_3": "",
-        "hp_threshold_4": "",
-        "auto_play_playlist_id": "",
-        "auto_play_mode": "order",
-        "auto_play_initial_volume": "0.7",
-    }
-    if on:
-        form["auto_apply_damage"] = "on"
+    form = dict(_DEFAULT_SETTINGS_FORM)
+    form.update(form_overrides)
     client = _gm_client()
     try:
         resp = client.post(
@@ -174,11 +182,47 @@ def set_auto_apply(on: bool) -> None:
             data=form,
             follow_redirects=False,
         )
-        # 303 on success (form-POST redirect).
         if resp.status_code not in (200, 303):
-            raise AssertionError(f"set_auto_apply failed: {resp.status_code} {resp.text}")
+            raise AssertionError(
+                f"settings POST failed: {resp.status_code} {resp.text}"
+            )
     finally:
         client.close()
+
+
+def set_auto_apply(on: bool, *, strict: bool = False) -> None:
+    """Toggle the campaign's ``auto_apply_damage`` setting via the
+    settings-form POST so attacks on hit produce a non-zero
+    ``damage_applied`` and the bandit's HP actually drops in the
+    init tracker. ``strict`` lets callers preserve the strict-action-
+    economy state in the same POST (the settings endpoint clears
+    omitted checkboxes).
+    """
+    overrides: dict = {}
+    if on:
+        overrides["auto_apply_damage"] = "on"
+    if strict:
+        overrides["strict_action_economy"] = "on"
+    _post_settings(overrides)
+
+
+def set_strict_action_economy(on: bool, *, auto_apply: bool = False) -> None:
+    """Toggle ``strict_action_economy``. When True, non-GM players
+    cannot bypass the over-budget gate even with ``override=True`` —
+    the response is 409 with ``strict: true``. Used by
+    ``test_action_economy_strict_mode`` to validate the gate; tests
+    that don't need it leave the setting OFF (the demo default).
+
+    Pass ``auto_apply=True`` to preserve the auto-apply-damage state
+    in the same POST (since the settings endpoint clears omitted
+    checkboxes).
+    """
+    overrides: dict = {}
+    if on:
+        overrides["strict_action_economy"] = "on"
+    if auto_apply:
+        overrides["auto_apply_damage"] = "on"
+    _post_settings(overrides)
 
 
 def cast_spell(
@@ -250,6 +294,36 @@ def post_attack(
     if spend_spell_slot is not None:
         body["spend_spell_slot"] = spend_spell_slot
     client = _gm_client()
+    try:
+        return client.post(f"/api/campaign/{CAMPAIGN_ID}/attack", json=body)
+    finally:
+        client.close()
+
+
+def post_attack_as_player(
+    email: str,
+    password: str,
+    character_id: int,
+    attack_index: int,
+    *,
+    target_combatant_id: str | None = None,
+    override: bool = True,
+) -> httpx.Response:
+    """POST /attack as a non-GM player. Same shape as ``post_attack``
+    but logged in as a specific demo player (e.g.
+    ``"demo-alice@example.com"``). Used by
+    ``test_action_economy_strict_mode`` to validate the gate: GM
+    actions bypass the over-budget gate entirely, so a strict-mode
+    test must drive from a player session.
+    """
+    body: dict = {
+        "character_id": character_id,
+        "attack_index": attack_index,
+        "override": override,
+    }
+    if target_combatant_id:
+        body["target_combatant_id"] = target_combatant_id
+    client = _login_client(email, password)
     try:
         return client.post(f"/api/campaign/{CAMPAIGN_ID}/attack", json=body)
     finally:
