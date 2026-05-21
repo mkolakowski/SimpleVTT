@@ -3167,6 +3167,33 @@
             const actions = el.querySelector('.death-saves-actions');
             if (actions) actions.style.display = (status === 'dying') ? '' : 'none';
         });
+        // v2.49.46 — sync HP into window.battle.combatants + trigger
+        // a renderBattle pass so the init tracker's mini-header-sub
+        // "HP X / Y" text reflects the new HP. Pre-fix: the GM-only
+        // /death-save/override endpoint at status="alive" bumps a
+        // dying PC's HP from 0 → 1; the broadcast carried the new
+        // hp dict but the init tracker showed "HP 0 / N" until
+        // something else triggered renderBattle. Same bug class as
+        // v2.49.45 (character_hp_update handler) — the broadcast
+        // carries the data, the handler skips the init-tracker
+        // refresh. Skip when d.hp is absent (some death-save events
+        // don't include HP, e.g. rolling a success that doesn't
+        // change HP).
+        if (d.hp) {
+            const battle = window.battle && Array.isArray(window.battle.combatants)
+                ? window.battle.combatants : null;
+            if (battle) {
+                for (const c of battle) {
+                    if (c.char_id === d.character_id) {
+                        if (typeof d.hp.current === 'number') c.hp_current = d.hp.current;
+                        if (typeof d.hp.max === 'number') c.hp_max = d.hp.max;
+                    }
+                }
+            }
+            if (typeof window._renderBattle === 'function') {
+                try { window._renderBattle(); } catch (_) {}
+            }
+        }
         // Sync HP display in the player-drawer mini-sheet (when present)
         if (d.hp && typeof window._updateMiniHpDisplay === 'function') {
             window._updateMiniHpDisplay(d.character_id, d.hp);

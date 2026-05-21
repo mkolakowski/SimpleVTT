@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.46] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Fix bug #5 from encounter-sim audit: `character_death_save` handler also missed `renderBattle()` refresh.** Sibling to v2.49.45 — found via the audit filed in that commit's CHANGELOG. The `_onCharacterDeathSave` handler in tabletop.js updated the death-saves-tracker DOM + the mini-sheet card's HP line via `_updateMiniHpDisplay` — but didn't mutate `window.battle.combatants[…].hp_current` and didn't call `renderBattle()`. Visible manifestation: GM calls `death_save_override(status="alive")` on a dying PC; server bumps HP 0 → 1 (per the special-case at tabletop_routes.py:15171) and broadcasts `character_death_save` with status=alive AND hp.current=1; pre-fix, the death-saves tracker correctly flipped to "ALIVE" but the init-tracker's `.mini-header-sub` still showed "HP 0" until something else triggered renderBattle. Same fix pattern as v2.49.45: when the broadcast includes `d.hp`, sync `window.battle.combatants` HP for the matching char_id + call `window._renderBattle()`. New regression test `test_alice_observes_death_save_hp` pins it from a player-driver perspective. PATCH — client-side bug fix; no schema or API contract change.
+**Description:** Two edits. **(1)** `app/static/tabletop.js::_onCharacterDeathSave` — after the existing death-saves-tracker DOM mutations, added a block that (when `d.hp` is present) walks `window.battle.combatants`, matches on `char_id`, copies `hp_current` + `hp_max` from the broadcast, then calls `window._renderBattle()` if available. Mirrors the v2.49.45 fix in `_onCharacterHpUpdate`. Skips when `d.hp` is absent (some death-save broadcasts don't include HP — e.g. a death-save roll that produces a success without changing HP). **(2)** `tests/encounter_sim/level_3_edge_cases/multi_user/test_alice_observes_death_save_hp.py` (NEW) — regression test. Sets Pip's HP to 0 via the `heal(hp_current=0)` helper (PATCH /sheet-fields with reason="set"), overrides her status to dying, opens Alice's tabletop and verifies the pre-condition "HP 0". Calls `death_save_override(status="alive")` which triggers the 0→1 HP bump server-side. Asserts on (a) the `character_death_save` WS frame's `hp.current=1`, (b) the init-tracker's `.mini-header-sub` text shows "HP 1" via regex extraction.
+**Description (cont):** Why this is its own commit not folded into v2.49.45. The two handlers have similar bugs but live in independent code paths and require independent regression tests. Pre-v2.49.45 the hp_update path was broken; pre-v2.49.46 the death_save path was broken. Either fix in isolation closes its own gap; together they cover both broadcast types that carry HP info. Splitting also keeps git-bisect useful — if a future bug regresses one path, the bisect lands on a narrow commit.
+**Description (cont 2):** Audit follow-up. The v2.49.45 CHANGELOG filed: "character_death_save handler at line 3136 mutates death-save tracker DOM but doesn't call renderBattle either — if a status change shifts HP (e.g. healing word reviving Pip), the init-tracker HP-bar could similarly stale. Worth a defensive renderBattle call." This commit IS that defensive call.
+**Description (cont 3):** Verification. Ran the test PRE-fix: failed at the "init-tracker shows HP 1" assertion (got HP 0). Ran POST-fix: passes. 225 harness tests pass + 33 encounter-sim tests (was 32, +1 new). 5 bugs from encounter-sim surfaced + fixed so far (v2.49.40 / v2.49.41 / v2.49.42 / v2.49.45 / v2.49.46). The suite continues to pay for itself.
+
+### Fixed
+- `app/static/tabletop.js::_onCharacterDeathSave` — when broadcast includes `d.hp`, also syncs `window.battle.combatants` HP + calls `window._renderBattle()`. Init-tracker mini-header-sub now reflects HP changes that ride along with death-save status changes.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/multi_user/test_alice_observes_death_save_hp.py` — regression test for the v2.49.46 fix. Player-driver (Alice owns Pip) so the layer-6 init-tracker DOM assertion fires on rendered HP, not response body.
+
+### Notes
+- **Backward compat.** Pure additive client fix.
+- **Five bugs fixed by encounter-sim so far**: v2.49.40 (force_gm_sync NPC damage), v2.49.41 (DELETE concentration paired-buffs), v2.49.42 (PATCH sheet-fields HP broadcast), v2.49.45 (hp_update handler renderBattle), v2.49.46 (death_save handler renderBattle).
+
+### Filed
+- **Audit other tabletop.js handlers** for similar missing-renderBattle patterns. Specifically: `_onSpellCastTargetUpdated`, `_onHealApplied`. Both can carry HP-changing payloads. Worth a third audit pass.
+
+---
+
 ## [2.49.45] - 2026-05-21
 
 **Schema version:** 56
