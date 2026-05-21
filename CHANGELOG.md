@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.48.2] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Auto-focus the roll-log drawer when the local user takes a roll-log-producing action.** When the user clicks Cast / Attack / Use Feature / Roll, the tabletop now auto-switches the right-side drawer to the Roll Log tab so they immediately see the new card / roll entry. Filters by actor user_id: only switches when the broadcast's `caster_user_id` (or `user_id`) matches `ME.id`, so other players' actions don't yank the local user's view off whatever drawer they had open. Roll requests addressed AT the local user also switch the drawer so the recipient sees the prompt land. Skipped during localStorage replay on page load so the user's last-drawer preference isn't overridden. PATCH — pure UX wiring, no API or schema change.
+**Description:** Two edits. **(1)** `app/templates/tabletop.html` drawer IIFE — exposed the `openPanel(targetId)` function as `window._openDrawerPanel` so the WS message handler in tabletop.js can call it without reaching into the drawer's closure. **(2)** `app/static/tabletop.js` — added `_focusRollLogIfLocal(actorUserId)` helper that early-returns if hydrating from localStorage OR if `actorUserId !== ME.id`, otherwise calls `window._openDrawerPanel('roll-log-drawer')`. Wired into the WS dispatch after every roll-log-producing branch: `roll` (matches on `user_id`), `spell_cast` (matches on `caster_user_id`), `weapon_attack` (`caster_user_id`), `feature_used` (`user_id`), and `roll_request` (when `target_user_ids` contains `ME.id`).
+**Description (cont):** Why filter by actor and not switch on every broadcast. With four players + GM in a session, every player rolling would yank everyone's drawer back to the roll log multiple times per turn — disruptive. Filtering on `actorUserId === ME.id` makes the switch local to the user who took the action, which is what they asked for: "after a button that results in a roll, take the player/GM to the roll log." Other players' broadcasts still add cards to the log (so the roll log stays current in the background); they just don't force-focus.
+**Description (cont 2):** Why include `roll_request` in the switch. The prompt-target user is the one whose UI just gained an actionable item; auto-focusing the roll log surfaces the prompt without them having to look for it. Distinct from "actor === me" since the actor here is the GM who initiated the request — but the SUBJECT is the local user, which is what matters for "show me my pending action."
+**Description (cont 3):** Why not switch on `heal_applied` / `spell_cast_target_updated` / `spell_cast_aoe_resolved`. These all mutate an EXISTING card in the roll log; the user's drawer was already shifted when the original cast / attack landed, so re-switching doesn't add value (and on long sessions would re-focus repeatedly as AoE saves resolve over time).
+
+### Added
+- `app/templates/tabletop.html` — `window._openDrawerPanel(targetId)` exposed from the drawer IIFE.
+- `app/static/tabletop.js` `_focusRollLogIfLocal(actorUserId)` — auto-focus helper, wired into roll / spell_cast / weapon_attack / feature_used / roll_request WS handlers.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Switch to a non-roll-log drawer (e.g. Battle). From any character sheet (mini or iframe drawer), click Cast on Fireball — the right-side drawer should auto-switch to Roll Log and the pending-placement card is visible. Same with Attack buttons, Use Feature buttons, and the /roll dice input. From a second browser session as a player, the GM's drawer view should NOT change when the player rolls (and vice versa). On page refresh, the last-used drawer is restored from localStorage and isn't immediately re-switched.
+- **Backward compat.** Pure client-side behavior; no API change. All 211 harness tests still pass.
+
+---
+
 ## [2.48.1] - 2026-05-20
 
 **Schema version:** 56

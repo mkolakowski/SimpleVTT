@@ -1897,6 +1897,7 @@
                 if (t) { Object.assign(t, msg.data); renderTokenTracker(); refreshPlaceButtons(); render(); }
             } else if (msg.type === 'roll') {
                 appendRoll(msg.data);
+                _focusRollLogIfLocal(msg.data && msg.data.user_id);
             } else if (msg.type === 'member_color_update') {
                 const { user_id, color } = msg.data;
                 if (color) USER_COLORS[user_id] = color;
@@ -1926,10 +1927,19 @@
                 render();
             } else if (msg.type === 'roll_request') {
                 appendRollRequest(msg.data);
+                // Focus the roll log when the prompt is addressed AT
+                // the local user — they're the one being asked to
+                // roll, so seeing the prompt land helps them act.
+                const tgt = msg.data && msg.data.target_user_ids;
+                if (Array.isArray(tgt) && tgt.includes(ME.id)) {
+                    _focusRollLogIfLocal(ME.id);
+                }
             } else if (msg.type === 'spell_cast') {
                 appendSpellCast(msg.data);
+                _focusRollLogIfLocal(msg.data && msg.data.caster_user_id);
             } else if (msg.type === 'weapon_attack') {
                 appendWeaponAttack(msg.data);
+                _focusRollLogIfLocal(msg.data && msg.data.caster_user_id);
             } else if (msg.type === 'spell_slot_update') {
                 // Forwarded as a CustomEvent above; the open mini-sheet listens
                 // for it to update its pip row in place.
@@ -1941,6 +1951,7 @@
                 _onSpellCastAoeResolved(msg.data);
             } else if (msg.type === 'feature_used') {
                 _appendFeatureUsed(msg.data);
+                _focusRollLogIfLocal(msg.data && msg.data.user_id);
             } else if (msg.type === 'presence_update') {
                 _renderPresence(msg.data);
             } else if (msg.type === 'character_death_save') {
@@ -2049,6 +2060,24 @@
         const ul = document.getElementById('roll-list');
         if (ul) ul.innerHTML = '';
     };
+
+    // v2.48.2 — auto-focus the roll log drawer when a broadcast that
+    // ADDS an entry was triggered by the local user (their /roll, their
+    // cast, their feature_used, or a roll_request addressed AT them).
+    // Skipped during localStorage replay (we don't want to fight the
+    // user's last-drawer preference on page load) and on broadcasts
+    // from other users (their actions shouldn't yank this user's view
+    // off whatever drawer they were already using). The roll log was
+    // designed to be a sidebar — the user wants to see the result of
+    // their click without manually switching tabs every time.
+    function _focusRollLogIfLocal(actorUserId) {
+        if (_rollLogHydrating) return;
+        if (actorUserId == null) return;
+        if (actorUserId !== ME.id) return;
+        if (typeof window._openDrawerPanel === 'function') {
+            try { window._openDrawerPanel('roll-log-drawer'); } catch (_) {}
+        }
+    }
 
     function appendRoll(r) {
         // Re-apply visibility filter on the client (server already does this

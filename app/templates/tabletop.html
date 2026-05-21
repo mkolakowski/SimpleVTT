@@ -2889,6 +2889,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     const saved = (() => { try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; } })();
     openPanel(saved || tabs[0]?.dataset.target);
 
+    /* v2.48.2 — expose openPanel so tabletop.js can auto-switch to
+       the roll-log drawer after a local action lands a new entry.
+       The drawer system owns the panels DOM + the localStorage key
+       that persists "last drawer", so routing the switch through
+       this helper keeps both in sync. */
+    window._openDrawerPanel = openPanel;
+
     /* ── GM Tools: keep now-playing label + track highlight + transport
        button glyph in sync with the server-authoritative state ── */
     const gmLabel = document.getElementById('gm-now-playing-label');
