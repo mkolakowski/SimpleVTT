@@ -5516,8 +5516,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     /* ── WebSocket sync ── */
     document.addEventListener('vtt:ws-message', ev => {
         const msg = ev.detail;
-        // Player-side battle sync — GM is the source of truth.
-        if (msg.type === 'battle_update' && !IS_GM) {
+        // Player-side battle sync — GM is the source of truth for
+        // drag/drop edits. v2.48.8 — server-initiated mutations
+        // (notably /place_aoe auto-adding NPC tokens to init when no
+        // battle existed at picker time) set ``force_gm_sync: true``
+        // on the broadcast so the GM ALSO picks up the new state.
+        // Without this the GM saw the cast card resolve damage but
+        // their init tracker stayed empty because their local state
+        // didn't know about the auto-added bandits.
+        if (msg.type === 'battle_update' && (!IS_GM || msg.force_gm_sync)) {
             battle = msg.data;
             saveBattle();
             renderBattle();

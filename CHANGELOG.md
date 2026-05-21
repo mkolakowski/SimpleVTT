@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.48.8] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Pillify Second Wind heal + fix GM-side HP-not-syncing after /place_aoe.** Two changes. **(1)** Second Wind (and other feature_used heals like Lay on Hands) now use the v2.48.7 `_buildPill` helper so the heal pill is click-to-expand — clicking shows the dice breakdown (`1d10+5[8+5]=13`). Mirrors what cast-card pills do. **(2)** GM-side battle-state sync bug: when `/place_aoe` ran, the cast card resolved damage correctly but the GM's init tracker didn't update — bandits stayed at full HP, auto-added NPCs never appeared. Root cause: the `battle_update` WS handler is gated on `!IS_GM` ("GM is source of truth for drag/drop edits"), which is correct for token moves but wrong for server-initiated mutations like /place_aoe's auto-add + per-target damage. Fix: server now sets `force_gm_sync: True` on the post-/place_aoe broadcast; client honors that flag and processes the broadcast even when `IS_GM`. PATCH — sync fix + UX polish; no API contract change.
+**Description:** Three edits. **(1)** `app/static/tabletop.js` `_appendFeatureUsed` — replaced the static heal pill (`<span class="result-pill chip-heal">`) with `_buildPill('chip-heal', header, detail)` where `detail` is `Heal: ${d.dice_breakdown}` (Second Wind sets `dice_breakdown`) or `Heal: ${d.heal_breakdown}` (Lay on Hands and similar). Existing v2.48.6 document-level click delegation toggles the detail span. **(2)** `app/routes/tabletop_routes.py` `/place_aoe` — the post-resolution `battle_update` broadcast (which already existed for auto-add, now fires on EVERY /place_aoe regardless of whether auto-add happened) carries a new `force_gm_sync: True` field. Removes the previous `if auto_added_combatants` gate so existing-combatant HP drops also sync to the GM. **(3)** `app/templates/tabletop.html` WS dispatcher — the `battle_update` gate widens from `(!IS_GM)` to `(!IS_GM || msg.force_gm_sync)` so the GM client processes server-authoritative state updates.
+**Description (cont):** Why a flag instead of always-process. The original gate exists because the GM's local state holds in-flight drag/drop edits that the server doesn't know about — replacing wholesale with the server's state would clobber pending GM work. Most battle_update broadcasts originate from GM-side edits (the GM dragged a token, edited HP manually) where the GM client already has the change and the broadcast is purely for players. The `force_gm_sync` flag is opt-in by the SERVER, set only on broadcasts that originate from server-initiated mutations the GM client doesn't know about. Currently only `/place_aoe` sets it; other endpoints can opt in if they have similar invariants.
+**Description (cont 2):** Why also broadcast on non-auto-add /place_aoe calls. The v2.48.5 code only broadcast post-loop when `auto_added_combatants` was true — assuming the inner `_apply_damage_to_combatant` broadcasts handled the rest. But those inner broadcasts lack `force_gm_sync`, so the GM ignored them. When init was ALREADY started and /place_aoe damaged existing combatants, the GM saw the cast card resolve but their init tracker HP bars stayed full. Now /place_aoe always emits one final force-sync broadcast at the end, so the GM gets the post-resolution state.
+**Description (cont 3):** Why no harness test. The fix exercises the client's WS message dispatcher gating logic — Python harness doesn't model that. A Playwright test could open a GM + player browser, run /place_aoe, assert both clients see the HP drop; that's the right home for this coverage. Filed.
+
+### Fixed
+- `app/routes/tabletop_routes.py` `/place_aoe` — always broadcasts a `force_gm_sync: True` `battle_update` after resolution so the GM's init tracker reflects HP drops + auto-added combatants.
+- `app/templates/tabletop.html` — `battle_update` WS handler now processes broadcasts when `force_gm_sync` is set, even for the GM client.
+
+### Changed
+- `app/static/tabletop.js` `_appendFeatureUsed` — Second Wind / Lay on Hands heal pill is now click-to-expand via `_buildPill`. Shows the heal dice breakdown.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Have Garrik use Second Wind from his sheet — the resulting feature_used card has a green heal pill; click it to see `Heal: 1d10+5[N+5]=M`. For the GM-sync fix: cast Fireball from any sheet over bandits, click Place. The init tracker's bandit HP bars should drop in real time. Refresh — HP stays at the new value (server is the source of truth).
+- **Backward compat.** Existing battle_update broadcasts (GM-side token drag/drop, manual HP edits, etc.) keep the GM-skip semantics — only server-initiated mutations opt into the flag. All 212 harness tests still pass.
+
+### Filed
+- **Playwright coverage for GM-side battle sync.** Future test: GM browser + player browser; one fires /place_aoe; assert both see HP drops in the init tracker.
+- **Apply `force_gm_sync` to other server-initiated battle mutations.** Currently only /place_aoe sets it. Other endpoints that mutate state outside the GM's local knowledge (future automation, scripted encounter loaders, etc.) should opt in.
+
+---
+
 ## [2.48.7] - 2026-05-20
 
 **Schema version:** 56

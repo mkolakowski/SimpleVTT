@@ -3174,15 +3174,24 @@
         // a heal landed (Second Wind, Lay on Hands). Mirrors the
         // spell-cast result-pill row so the eye finds the outcome
         // in the same place across card types.
+        // v2.48.8 — Second Wind / Lay on Hands / any feature_used
+        // heal now uses the shared ``_buildPill`` so click-to-expand
+        // shows the heal dice breakdown (1d10+5[8+5]=13 etc.) just
+        // like the AoE pills.
         let healPill = '';
         if (d.heal_amount && d.heal_amount > 0) {
             const tgt = d.heal_target_name || name;
             const before = d.heal_hp_before;
             const after = d.heal_hp_after;
             const hpDelta = (before != null && after != null) ? ` (${before} → ${after})` : '';
-            healPill = `<div class="result-pills">
-                <span class="result-pill chip-heal">✚ ${escapeHTML(tgt)} +${d.heal_amount} HP${hpDelta}</span>
-            </div>`;
+            const header = `✚ ${escapeHTML(tgt)} +${d.heal_amount} HP${hpDelta}`;
+            // Second Wind broadcasts the breakdown as ``dice_breakdown``;
+            // Lay on Hands uses ``heal_breakdown``. Read whichever is
+            // available so both surfaces light up.
+            const detail = d.dice_breakdown
+                ? `Heal: ${d.dice_breakdown}`
+                : (d.heal_breakdown ? `Heal: ${d.heal_breakdown}` : '');
+            healPill = `<div class="result-pills">${_buildPill('chip-heal', header, detail)}</div>`;
         }
         const targetTagHtml = _targetTagHtml(d);
         const li = document.createElement('li');

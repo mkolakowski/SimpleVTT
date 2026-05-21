@@ -7912,16 +7912,22 @@ async def place_aoe(
             "damage_type": damage_type,
         })
 
-    # v2.48.5 — when /place_aoe auto-added NPC tokens to the battle
-    # state (because no active battle existed at picker time), push
-    # one battle_update so every client's init tracker repaints with
-    # the new combatants. Their HP shows post-damage already because
-    # _apply_damage_to_combatant mutated the entry in-place.
-    if auto_added_combatants:
-        _state = hub.get_battle(campaign_id) or {}
+    # v2.48.5 — push one battle_update so every client's init tracker
+    # repaints with the resolved state: auto-added NPC combatants +
+    # post-damage HP for every target. v2.48.8 — set
+    # ``force_gm_sync: True`` so the GM client picks it up too. The
+    # GM normally ignores battle_update (local state is authoritative
+    # for drag/drop edits), but for /place_aoe the server is the
+    # authority — without the flag, the GM saw damage logged in the
+    # cast card but their init tracker stayed unchanged. Fires on
+    # every /place_aoe (not just auto-add) so HP drops sync for
+    # already-in-init NPCs too.
+    _state = hub.get_battle(campaign_id) or {}
+    if _state:
         await hub.broadcast(campaign_id, {
             "type": "battle_update",
             "data": _state,
+            "force_gm_sync": True,
         })
 
     # Broadcast the resolved AoE so every client's cast card mutates
