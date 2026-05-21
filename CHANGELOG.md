@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.36] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit W — player-driver variant: `test_alice_observes_weapon_attack`.** Second player-driver test (after commit V's HP-update observer). Alice opens her tabletop; GM fires Garrik's Greatsword at Bandit Alpha via httpx; Alice's WS receives the `weapon_attack` broadcast; Alice's roll-log drawer renders a `.weapon-atk-card` with the weapon name + caster name + damage pill. Proves the split-driver pattern (GM acts via HTTP, non-GM observes via WS+DOM) works for weapon attacks too — not just the `character_hp_update` path covered in commit V. PATCH — additive test only; uses existing Alice fixtures + post_attack + set_dice_seed.
+**Description:** One new file. `tests/encounter_sim/level_3_edge_cases/multi_user/test_alice_observes_weapon_attack.py`. Seeds Garrik + Bandit Alpha into battle (state shared via server PUT + Alice's localStorage), auto-apply-damage on, opens Alice's tabletop. GM fires `post_attack(garrik, attack_index=0, target=bandit_cid)` with `set_dice_seed(42)` for determinism. Asserts (1) `weapon_attack` WS frame on Alice's connection, filtered by attack_name + caster_char_name; (2) the spell's target_name + damage_type fields; (3) `.weapon-atk-card` visible in Alice's `#roll-list`; (4) card text contains "Greatsword" + "Garrik Ironside"; (5) `.result-pill.chip-damage` pill inside the card. This is the FIRST test to assert on a non-GM's rendered roll-log card — every prior weapon-attack assertion was from the GM's view.
+**Description (cont):** Why this complements commit V. Commit V proved Alice's `window.battle.combatants[…].hp_current` updates from a `character_hp_update` broadcast (PC target only, since NPCs broadcast `battle_update` instead). This test proves the OTHER common observation path: `weapon_attack` carries the cast data, and Alice's `appendWeaponAttack` renderer (no IS_GM guard) paints the card. Together V + W establish that two of the three big roll-log-card paths (HP update, weapon attack) work for non-GMs; commit X / Y / Z continue to expand into other broadcast types.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/multi_user/test_alice_observes_weapon_attack.py` — Alice observes Garrik's Greatsword attack: WS frame + roll-log card + damage pill.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 12 / ~40 Level 3 tests landed. Multi-user 2/4.
+- **Runtime:** full encounter-sim suite at 29 tests / ~50 s.
+
+---
+
 ## [2.49.35] - 2026-05-21
 
 **Schema version:** 56
