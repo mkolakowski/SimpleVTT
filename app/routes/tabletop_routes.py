@@ -15702,6 +15702,26 @@ def monster_template_sheet_page(
     sheet = _monster_template_to_sheet(tmpl, campaign_id)
     if (tmpl.template or "dnd5e") == "dnd5e":
         normalize_dnd5e_sheet(sheet)
+    # v2.49.3 — overlay live combatant HP onto the template's static
+    # max when the GM opens the sheet for a specific instance in
+    # init. Without this the sheet keeps reading the template's
+    # default HP even after the bandit took 22 fire damage from a
+    # Fireball. The query string ``?combatant_id=tok_xyz`` (or
+    # ``?combatant_id=tok:14``) selects which instance to show; the
+    # init tracker's "📋 Sheet" link sets it automatically.
+    combatant_id_q = (request.query_params.get("combatant_id") or "").strip()
+    if combatant_id_q:
+        battle_state = hub.get_battle(campaign_id)
+        if battle_state:
+            for c in (battle_state.get("combatants") or []):
+                if c.get("id") == combatant_id_q:
+                    hp = dict(sheet.get("hp") or {})
+                    hp_cur = int(c.get("hp_current") or 0)
+                    hp_max_state = int(c.get("hp_max") or hp.get("max") or hp_cur)
+                    hp["current"] = hp_cur
+                    hp["max"] = hp_max_state
+                    sheet["hp"] = hp
+                    break
     sheet_template = (
         "sheet_dnd5e.html"
         if (tmpl.template or "dnd5e") == "dnd5e"

@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.3] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Fix monster sheet HP — overlay live combatant HP onto the template max.** User reported Fireball pills + init tracker showed damage applied, but right-clicking the bandit to open their sheet still showed full HP (`11/11` instead of e.g. `0/11`). Root cause: the monster sheet endpoint (`/campaign/{cid}/monster-template/{tid}/sheet`) reads `_monster_template_to_sheet(tmpl, campaign_id)` which always returns the TEMPLATE's static max HP from the JSON — it doesn't know about per-instance live HP in the battle state. Fix: the init tracker's `📋 Sheet` button now passes `?combatant_id=...`, and the server reads that query param + overlays the matching combatant's `hp_current` onto the sheet's `hp` block before rendering. PATCH — adds an optional query param + a 12-line overlay block; no breaking change.
+**Description:** Two edits. **(1)** `app/templates/tabletop.html` init-tracker rendering — the `📋 Sheet` link for NPC combatants now appends `?combatant_id=${c.id}` to the URL. The combatant id is already in the local battle state (used as the row key for HP bars + buffs), so no extra lookup. **(2)** `app/routes/tabletop_routes.py` `monster_template_sheet_page` — reads `request.query_params.get("combatant_id")`. When set, looks up the matching combatant in `hub.get_battle(campaign_id)`, overlays `hp.current = combatant.hp_current` and `hp.max = combatant.hp_max` onto the sheet dict. Then `normalize_dnd5e_sheet` runs as before. The sheet template doesn't care where the HP came from — it just renders `sheet["hp"]`.
+**Description (cont):** Why the overlay path instead of refactoring `_monster_template_to_sheet`. That helper is called from many places (init tracker mini-sheet builder, AoE auto-add NPC stat lookup, etc.) where the template max is the correct read. Passing a `combatant_id` parameter through the helper would force every caller to either pass it or ignore it; the cleaner shape is "the helper returns the template, the route overlays the live instance when relevant." Mirrors how Pokémon games show base stats vs current HP — the base block is the species, the current value is the instance.
+**Description (cont 2):** Why no harness test. The fix is a template / endpoint change that requires loading the HTML and asserting on rendered HP fields — Playwright territory, not the Python endpoint-shape harness. Filing the assertion as part of the encounter-sim Phase 1 test (task #93): one of the smoke checks for Fireball should be "open Bandit Alpha's sheet, assert HP reads post-damage value." All 212 harness tests still pass.
+
+### Fixed
+- `app/routes/tabletop_routes.py` `monster_template_sheet_page` — accepts `?combatant_id=...` and overlays the matching combatant's `hp_current` / `hp_max` onto the rendered sheet so the GM sees the live HP, not the template max.
+- `app/templates/tabletop.html` init-tracker → `📋 Sheet` link for NPCs now appends `?combatant_id=${c.id}` so the new overlay path fires.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Load the Tavern Brawl encounter so bandits go into init. Cast Fireball from Lyra, place over the bandits — pills show damage + init tracker HP bars drop. Now click the `📋 Sheet` button on Bandit Alpha in the init tracker — the sheet should open in the drawer with the bandit's POST-damage HP (e.g. `0/11` if killed). Before this fix the sheet showed `11/11` regardless.
+- **Backward compat.** Pure additive: the query param is optional, omitting it falls back to template max as before. All 212 harness tests still pass.
+
+### Filed
+- **Apply same overlay to right-click → open sheet flow.** Today the canvas's right-click context menu opens the monster sheet via a generic path that doesn't carry combatant_id. Should match.
+- **Buff list overlay too.** The live combatant has buffs; the template doesn't. Same kind of overlay would surface buffs on the sheet.
+
+---
+
 ## [2.49.2] - 2026-05-20
 
 **Schema version:** 56

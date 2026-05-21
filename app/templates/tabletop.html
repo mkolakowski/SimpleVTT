@@ -5024,8 +5024,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         data-character-name="${c.name}"
                         title="Open ${c.name}'s character sheet">📋 Sheet</a>`;
                 } else if (c.token_template_id) {
+                    // v2.49.3 — pass the combatant id so the server
+                    // can overlay live HP from the battle state onto
+                    // the template's static max HP. Without this the
+                    // sheet shows e.g. 11/11 even after the bandit
+                    // took 22 fire damage in the init tracker.
+                    const cidQ = c.id ? `?combatant_id=${encodeURIComponent(c.id)}` : '';
                     sheetBtn = `<a class="init-sheet-btn monster-sheet-link"
-                        href="/campaign/${CAMPAIGN_ID}/monster-template/${c.token_template_id}/sheet"
+                        href="/campaign/${CAMPAIGN_ID}/monster-template/${c.token_template_id}/sheet${cidQ}"
                         target="_blank" rel="noopener"
                         data-monster-name="${c.name}"
                         title="Open ${c.name}'s stat block">📋 Sheet</a>`;
