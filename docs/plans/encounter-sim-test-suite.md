@@ -1,6 +1,6 @@
 # Encounter-simulation test suite — plan
 
-**Status:** v2.49.17 — Phase 1 complete (commits A v2.49.12, B v2.49.15, C v2.49.16, D v2.49.17). Phase 2 pending — task #94.
+**Status:** v2.49.21 — Phase 1 complete (commits A v2.49.12, B v2.49.15, C v2.49.16, D v2.49.17). **Phase 2 complete** (commits E v2.49.18, F v2.49.19, G v2.49.20, H v2.49.21). 12 / 12 Level 1 tests pass at ~20.7 s/run over 5 sequential local runs, no flake. Phase 3 pending — task #95.
 **Authors:** rolling
 **Last updated:** 2026-05-21
 
@@ -393,12 +393,33 @@ error: true`); flip to `false` once 5 green CI runs land.
   up the seeded state on load — pairs with `seed_battle(combatants)`
   which PUTs the same state to the server for endpoint targeting.
 
-### Phase 2 — Level 1 full coverage (target v2.51.0)
-Expand to all 12 demo PCs. Mostly mechanical — copy the Phase 1
-patterns. Catches: any PC who can't be driven by the page-object
-helpers gets the helper extended.
+### Phase 2 — Level 1 full coverage ✅ COMPLETE (v2.49.18 → v2.49.21)
+All 12 demo PCs covered. Commits E (Pip + Lyra), F (Caelan smite +
+Krieger rage), G (Magnus EB + Mira PF), H (Kael + Zara + Rowan).
 
-**Exit criteria:** 12 tests pass; runtime ≤45s.
+Helpers extended along the way: ``post_attack`` accepts
+``bonus_damage`` / ``bonus_damage_label`` / ``spend_spell_slot``
+uplift kwargs (Caelan's Smite); new generic ``post_use(endpoint,
+character_id, extra=...)`` covers every ``/use_X`` feature endpoint
+(Krieger's Rage today, Action Surge / Lay on Hands / Bardic
+Inspiration / Stunning Strike later).
+
+**Exit criteria:** ✅ 12 tests pass on 5 consecutive local runs at
+~20.7 s/run. Within the ≤45 s budget. CI corroboration of the
+flake-free behavior pending — the encounter-sim job's
+`continue-on-error: true` flag flips to `false` once 5 green CI
+runs land.
+
+**Deferred uplifts** (filed for Phase 3 or later — they exercise
+condition-install / concentration-buff paths that fit better with
+the multi-round encounter tests in Level 2):
+
+- Pip + Sneak Attack uplift (``bonus_damage`` on an attack)
+- Kael + Stunning Strike (save-on-hit condition install)
+- Rowan + Hunter's Mark concentration buff install
+- Magnus + Hex concentration buff install
+- Mira + Spike Growth AoE marker placement
+- Zara + Misty Step bonus-action teleport
 
 ### Phase 3 — Level 2 encounter sim (target v2.52.0)
 Implement the 6 multi-round scenarios. This is where the
