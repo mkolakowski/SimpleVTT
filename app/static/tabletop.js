@@ -1338,6 +1338,29 @@
         } else {
             return false;
         }
+        // v2.49.6 — match the init tracker's "📋 Sheet" button: when
+        // this token has a live combatant in init, append
+        // ``?combatant_id=...`` so the server's v2.49.3 HP overlay
+        // fires and the sheet shows the current HP (not the
+        // template max). Same 3-way lookup the skull pass + AoE
+        // picker use: source_token_id, character_id, or
+        // template+label. Skipped when no battle is active or no
+        // combatant matches — sheet falls back to the v2.49.3
+        // default (template max for monsters; character sheet read
+        // for PCs) without breaking anything.
+        const battleC = (window.battle && window.battle.combatants) || [];
+        let combatantId = null;
+        for (const c of battleC) {
+            if (c.source_token_id != null && c.source_token_id === token.id) { combatantId = c.id; break; }
+            if (token.character_id && c.char_id === token.character_id) { combatantId = c.id; break; }
+            if (token.token_template_id
+                    && c.token_template_id === token.token_template_id
+                    && c.name === token.label) { combatantId = c.id; break; }
+        }
+        if (combatantId) {
+            url += (url.includes('?') ? '&' : '?')
+                + 'combatant_id=' + encodeURIComponent(combatantId);
+        }
         // Synthetic anchor click — the document-level interceptor in
         // tabletop.html picks it up and opens in the iframe drawer for
         // GMs; for non-GMs the anchor's target="_blank" falls through

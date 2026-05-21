@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.6] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Right-click → sheet now passes `combatant_id` so it shows live HP (matches the init "📋 Sheet" button).** User asked the right-click → open-sheet flow to behave the same as clicking "📋 Sheet" in the init tracker. The good news: it already used the same iframe drawer (synthetic anchor click → document-level interceptor in tabletop.html). The gap was that the right-click path built the sheet URL without the `?combatant_id=...` query param that v2.49.3 added to the init-tracker link — so the server's v2.49.3 HP overlay never fired and the monster sheet showed the template max instead of the live combatant HP. Fix: `_openSheetForToken` now does the same 3-way combatant lookup the skull pass (v2.49.4) + AoE picker use, and appends `combatant_id=...` to the URL when a match exists. Closes the "Apply same overlay to right-click → open sheet flow" item filed under v2.49.3. PATCH — purely additive query param + 12-line lookup; falls back to the no-overlay default when no combatant matches.
+**Description:** One edit. `app/static/tabletop.js` `_openSheetForToken` — after building the base URL (character or monster-template), iterates `window.battle.combatants` and tries to find a combatant linked to this token via (a) `source_token_id === token.id`, (b) `char_id === token.character_id`, or (c) `token_template_id` + name match. The same three checks the skull overlay + AoE picker use. When matched, appends `?combatant_id=...` (using `&` if the URL already has a `?`). When no match, leaves the URL alone — falls back to v2.49.3's default behavior (template max for monsters; character sheet read for PCs). The synthetic anchor click + document-level interceptor pattern is unchanged; only the URL the anchor points to changes.
+**Description (cont):** Why this wasn't already wired. The init tracker's "📋 Sheet" link was rebuilt in v2.49.3 with the `combatant_id` query param baked in (the init row already knows the combatant id, so it's a 1-line template change). The right-click → sheet path lives in tabletop.js and builds the URL from the token, which doesn't carry combatant_id natively. The fix needs a runtime lookup against `window.battle.combatants`. That lookup is now reliable because v2.49.5's `window.battle = battle` mirror means the canvas-side IIFE can actually see the battle state.
+**Description (cont 2):** Why no harness test. The fix is a pure client-side URL-building change — the harness drives endpoints + asserts on JSON / WS frames, not anchor href construction. A Playwright test could right-click a token, assert the iframe `src` includes `combatant_id=`, and assert the rendered sheet shows post-damage HP; filing as part of the encounter-sim Phase 1 work (task #93).
+
+### Fixed
+- `app/static/tabletop.js` `_openSheetForToken` — appends `?combatant_id=...` to the sheet URL when the token has a live combatant, so right-click → open-sheet now triggers the v2.49.3 server-side HP overlay (matches the init tracker's "📋 Sheet" button).
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Load Tavern Brawl. Cast Fireball over the bandits. Right-click a damaged bandit token — the sheet drawer should now show the POST-damage HP (e.g. `0/11` if killed). Before this fix the right-click sheet kept showing the template max (`11/11`).
+- **Backward compat.** No-op when no battle is active or no combatant matches the token (e.g. a free-roaming NPC token with no init entry) — the URL has no query param appended and the server's default path runs. All 212 harness tests still pass.
+
+### Filed
+- **Buff list overlay on right-click sheet too.** Same observation as v2.49.3's filed item: the combatant has buffs, the template doesn't. Once the buff overlay is implemented server-side it'll apply to both code paths automatically (init link + right-click) since they now share the same URL shape.
+
+---
+
 ## [2.49.5] - 2026-05-21
 
 **Schema version:** 56
