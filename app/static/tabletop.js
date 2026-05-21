@@ -3117,6 +3117,15 @@
             }
         }
         try { render(); } catch (_) {}
+        // v2.49.45 — also trigger the init-tracker re-render. The
+        // PC-damage path broadcasts character_hp_update (not
+        // battle_update which already calls renderBattle), so without
+        // this the mini-header-sub "HP X / Y" text stays at the
+        // pre-damage value. window._renderBattle is exposed by the
+        // tabletop.html IIFE for exactly this case.
+        if (typeof window._renderBattle === 'function') {
+            try { window._renderBattle(); } catch (_) {}
+        }
         if (typeof window._updateMiniHpDisplay === 'function') {
             try { window._updateMiniHpDisplay(d.character_id, d.hp); } catch (_) {}
         }

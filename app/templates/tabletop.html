@@ -5279,6 +5279,19 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         _updateMovementBreadcrumb();
     }
 
+    /* v2.49.45 — expose renderBattle so tabletop.js (which lives in a
+     * separate <script> file and therefore can't reach IIFE-local
+     * functions) can request an init-tracker re-render after applying
+     * a character_hp_update broadcast. Pre-v2.49.45 the hp_update
+     * handler at tabletop.js:3102 mutated ``window.battle.combatants
+     * […].hp_current`` and called the canvas ``render()``, but never
+     * triggered ``renderBattle()`` — so the init-tracker's
+     * ``.mini-header-sub`` "HP X / Y" text stayed at the pre-damage
+     * value until something else (turn advance, manual edit) caused
+     * a re-render. NPC damage went through battle_update which
+     * already calls renderBattle, so the bug was PC-only. */
+    window._renderBattle = renderBattle;
+
     function sortPreservingTurn() {
         const curId = battle.combatants[battle.turn_index % Math.max(1, battle.combatants.length)]?.id;
         battle.combatants.sort((a, b) => b.initiative - a.initiative);

@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.45] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Fix bug #4 from encounter-sim: `character_hp_update` handler didn't refresh the init tracker — PC HP drops stayed visually stale.** Fourth application-side bug surfaced by the encounter-sim test suite. Pre-fix: when a PC took damage (or was healed), the server broadcast `character_hp_update`; the client's handler in `tabletop.js:3102` mutated `window.battle.combatants[…].hp_current` AND called the canvas `render()` AND called `_updateMiniHpDisplay` (which updates the mini-sheet card's HP line) — but never triggered `renderBattle()` to repaint the init tracker's `.mini-header-sub` "HP X / Y" text. So a PC who took damage showed correct HP everywhere EXCEPT the init tracker's mini-header line, which stayed at the pre-damage value until something else (turn advance, manual edit) caused a renderBattle pass. NPC-damage takes a different broadcast path (`battle_update`) which DOES call renderBattle, so the bug was PC-only. Surfaced by the encounter-sim `test_alice_observes_hp_update` after the v2.49.42 PATCH /sheet-fields broadcast fix landed: with the broadcast finally working, the test could SEE that the DOM didn't update. Fix: expose `renderBattle` on `window._renderBattle` from the tabletop.html IIFE; call it from `_onCharacterHpUpdate` in tabletop.js right after `render()`. Also simplifies the Alice test from the now-obsolete /attack-with-seeded-dice-retry pattern to a direct `apply_damage` PATCH. PATCH — bug fix; no schema or API contract change.
+**Description:** Three edits. **(1)** `app/templates/tabletop.html` — added `window._renderBattle = renderBattle;` right after the `renderBattle` definition (line ~5282). Mirrors the pattern at line 2905 (`window._openDrawerPanel = openPanel`) — the IIFE-local functions that need to be reachable from `tabletop.js` get exposed via `window.*`. Comment cites the v2.49.45 fix context. **(2)** `app/static/tabletop.js::_onCharacterHpUpdate` (line ~3119) — after the existing `render()` call, added `if (typeof window._renderBattle === 'function') { try { window._renderBattle(); } catch (_) {} }`. The try/catch matches the existing pattern (canvas render can throw if there's no active map). **(3)** `tests/encounter_sim/level_3_edge_cases/multi_user/test_alice_observes_hp_update.py` — rewrote from the /attack-with-Krieger-and-seeded-dice pattern to a direct `apply_damage(pip, damage_amount=10, new_hp_current=25)` PATCH. Removed Krieger from the seed, removed set_auto_apply, removed set_dice_seed + retry-on-miss. Test is now 10 lines shorter, fully deterministic, and exercises THE EXACT bug class (PC damage via PATCH → broadcast → DOM update).
+**Description (cont):** Why this bug class is subtle. Three independent code paths fire on damage: the canvas re-render (window.render or local render in tabletop.js), the mini-sheet card update (_updateMiniHpDisplay updates `.mini-stat-row[data-char-id]`), and the init-tracker re-render (renderBattle updates `.init-entry > .mini-header-sub`). The hp_update handler called the first two but not the third. In manual GM testing the GM would either be looking at the canvas (where the skull overlay shows on 0 HP — fixed in v2.49.4) or the mini-sheet card (where HP shows correctly) — both consistent with the bug being invisible. The init tracker mini-header was the one place where stale HP rendered.
+**Description (cont 2):** Why no new harness test. This bug is purely client-side (the broadcast was already correct in shape and content per the v2.49.42 fix). The harness suite tests broadcast contracts; no harness test can verify "the JS handler called renderBattle." The encounter-sim test_alice_observes_hp_update IS the regression test — it observes Alice's DOM, which only updates correctly with the fix in place. Pre-fix, the test would fail at the post-PATCH DOM assertion (verified — the test was failing before the fix).
+**Description (cont 3):** Why this fix completes the encounter-sim feedback loop. The bug class — broadcast correct but DOM render broken — is EXACTLY the regression class that motivated the encounter-sim suite (the v2.49.4 skull overlay). v2.49.42 fixed the broadcast SIDE of HP changes via PATCH; v2.49.45 fixes the RENDER SIDE for the init tracker. The suite caught it. The test simplification is the bonus: now that PATCH broadcasts work, the player-driver observation test doesn't need the dice-retry workaround.
+
+### Fixed
+- `app/templates/tabletop.html` — exposes `window._renderBattle` after the `renderBattle` function definition.
+- `app/static/tabletop.js::_onCharacterHpUpdate` — now calls `window._renderBattle()` after the canvas `render()`. Closes the PC-damage-stale-init-tracker bug.
+
+### Changed
+- `tests/encounter_sim/level_3_edge_cases/multi_user/test_alice_observes_hp_update.py` — simplified from /attack-with-seeded-dice-retry to a direct PATCH `/sheet-fields` flow. ~10 lines shorter, fully deterministic, exercises the exact v2.49.45 bug class. Test history captured in the docstring.
+
+### Notes
+- **Backward compat.** Pure additive client fix — exposing a function on window + adding a call. Existing handlers / tests / clients unaffected.
+- **Bug-pair**: v2.49.42 (broadcast fix) + v2.49.45 (render fix) together close the loop on PC HP changes via PATCH. Either alone is insufficient; together they make the path work end-to-end.
+
+### Filed
+- **Survey other broadcast handlers in `tabletop.js`** for the same missing-renderBattle pattern. character_death_save handler at line 3136 mutates death-save tracker DOM but doesn't call renderBattle either — if a status change shifts HP (e.g. healing word reviving Pip), the init-tracker HP-bar could similarly stale. Worth a defensive renderBattle call.
+
+---
+
 ## [2.49.44] - 2026-05-21
 
 **Schema version:** 56
