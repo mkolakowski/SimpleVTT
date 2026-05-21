@@ -1295,6 +1295,14 @@
 
 <!-- ── Roll log drawer ── -->
 <div id="roll-log-drawer" class="drawer-panel">
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);background:var(--bg-2);">
+        <strong style="flex:1;font-size:12px;color:var(--fg-mute);letter-spacing:.04em;">ROLL LOG</strong>
+        <button type="button" id="roll-log-clear-btn"
+                title="Clear all entries from your local roll log (only affects your view; server history is unchanged)"
+                style="font-size:11px;color:var(--fg-mute);background:none;border:1px solid var(--border);border-radius:3px;padding:3px 8px;cursor:pointer;min-height:28px;">
+            🗑 Clear
+        </button>
+    </div>
     <div class="drawer-body">
         <ul class="roll-list" id="roll-list">
             {% for r in rolls %}
@@ -2895,6 +2903,18 @@ let CONC_DATA = {{ conc_by_char | tojson }};
        that persists "last drawer", so routing the switch through
        this helper keeps both in sync. */
     window._openDrawerPanel = openPanel;
+
+    /* v2.48.4 — Clear button in the roll log drawer. Flushes the
+       client-side localStorage buffer (and the visible DOM list).
+       Useful for clearing stale cast cards from before a feature
+       upgrade (e.g. v2.48.0 AoE placement cards persisted from
+       earlier versions). Server-side roll history is unaffected. */
+    const clearBtn = document.getElementById('roll-log-clear-btn');
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            if (typeof window._clearRollLog === 'function') window._clearRollLog();
+        });
+    }
 
     /* ── GM Tools: keep now-playing label + track highlight + transport
        button glyph in sync with the server-authoritative state ── */

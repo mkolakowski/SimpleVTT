@@ -2332,7 +2332,24 @@
         // still pending. The actual click handler is wired in
         // appendSpellCast below (so it can call _openAoePicker and
         // POST /place_aoe).
-        if (d.pending_aoe_placement) {
+        // v2.48.0 — pending AoE placement. v2.48.4 — also fires for
+        // "legacy" AoE cards (cast in localStorage before the v2.48.0
+        // flow shipped, so the broadcast lacked the pending flag) so
+        // those cards aren't stuck with an empty pill row. The click
+        // handler surfaces a toast if /place_aoe can't find the stash
+        // (the server doesn't know about pre-v2.48.0 casts) so the GM
+        // can clear the log.
+        const _hasResolvedTargets = Array.isArray(d.auto_save_targets) && d.auto_save_targets.length > 0;
+        const _isAoeCard = Boolean(d.area_shape) && Number(d.area_size_ft) > 0;
+        // ``pending_aoe_placement === false`` (server-set after the
+        // /place_aoe broadcast resolves) means the cast WAS placed —
+        // even if it caught 0 targets. ``undefined`` means we don't
+        // know (legacy data); treat that AS pending so the GM can
+        // still place.
+        const _wasPlaced = d.pending_aoe_placement === false;
+        const _isPending = d.pending_aoe_placement === true
+            || (d.pending_aoe_placement === undefined && _isAoeCard && !_hasResolvedTargets);
+        if (_isPending) {
             const isCaster = typeof ME !== 'undefined' && ME && ME.id === d.caster_user_id;
             const canPlace = isCaster || (ME && ME.isGm);
             if (canPlace) {
@@ -2346,6 +2363,11 @@
                 );
             }
             return pills.length ? `<div class="result-pills">${pills.join('')}</div>` : '';
+        }
+        // AoE that was placed but caught no targets in the area —
+        // show an explicit "no targets" pill so the card isn't empty.
+        if (_isAoeCard && _wasPlaced && !_hasResolvedTargets) {
+            return `<div class="result-pills"><span class="result-pill chip-miss">💨 No targets in area</span></div>`;
         }
         // Heal
         if (d.auto_heal_applied > 0) {
@@ -2652,9 +2674,21 @@
                     });
                     if (!resp.ok) {
                         let body; try { body = await resp.json(); } catch { body = null; }
-                        (window.showToast || function(m){ alert(m); })(
-                            `Place AoE failed: ${body ? JSON.stringify(body) : resp.status}`,
-                            'error');
+                        // 404 = stale cast (the server's pending-AoE
+                        // stash doesn't have a matching cast_id, most
+                        // likely because the cast pre-dates v2.48.0
+                        // or the 8-hour TTL elapsed). Surface a
+                        // helpful message + invite the user to clear
+                        // the log.
+                        if (resp.status === 404) {
+                            (window.showToast || function(m){ alert(m); })(
+                                'This cast is stale — server can no longer place it. Click 🗑 Clear in the roll log to remove old entries.',
+                                'error');
+                        } else {
+                            (window.showToast || function(m){ alert(m); })(
+                                `Place AoE failed: ${body ? JSON.stringify(body) : resp.status}`,
+                                'error');
+                        }
                         placeBtn.disabled = false;
                         return;
                     }

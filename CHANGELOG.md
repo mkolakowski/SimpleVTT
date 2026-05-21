@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.48.4] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Fix stale AoE cast cards + add roll-log Clear button.** User reported casting Fireball from Lyra and seeing an empty cast card — no Place button, no resolved pills. Root cause: the v2.48.0 pending-placement flag wasn't set on the broadcast for older cast cards in the localStorage replay buffer, so the renderer fell through to the empty single-target headline branch. Three defensive fixes: (1) the Place button now also renders for "legacy" AoE cards (cards where `pending_aoe_placement === undefined` AND the spell has an `area_shape` AND no resolved targets) so stuck cards aren't dead; (2) added a "💨 No targets in area" pill for AoE casts that resolved with an empty target list (Place clicked but the sphere caught nothing); (3) added a "🗑 Clear" button in the roll log drawer header that flushes the client-side localStorage buffer — clicking it removes stale entries from before a feature upgrade without touching server-side roll history. The Place button click handler now also handles 404 from /place_aoe (stale cast, stash already purged) with a toast pointing at the Clear button. PATCH — pure client recovery for stale data + UX polish.
+**Description:** Three edits. **(1)** `app/static/tabletop.js` `_spellResultPillsHtml` — split the pending check into `_isPending` (true when `pending_aoe_placement === true` OR `undefined` AND it's an AoE card with no resolved targets) vs `_wasPlaced` (`pending_aoe_placement === false`, server explicitly resolved). Pending renders Place button; placed-with-no-targets renders the new "💨 No targets in area" pill; placed-with-targets falls through to the per-target pills as before. The undefined-pending defensive branch recovers legacy cards persisted to localStorage from before v2.48.0. The Place button click handler now also handles a 404 from /place_aoe gracefully — surfaces a toast inviting the user to click Clear instead of a generic error. **(2)** `app/templates/tabletop.html` roll log drawer — added a header bar above the roll-list with the title "ROLL LOG" + a "🗑 Clear" button. Wires the button to call `window._clearRollLog()` which already existed (defined in tabletop.js as the API for the v2.29.1 localStorage buffer). **(3)** No new harness test — the changes are pure client recovery code; no API surface changed. The legacy-card path is reproducible only with hand-crafted localStorage state, which the Python harness doesn't model.
+**Description (cont):** Why `pending_aoe_placement === undefined` is the legacy signal. The server started always emitting the field in v2.48.0 — for non-AoE casts it's `False`, for AoE casts it's `True` (pending) or `False` (after /place_aoe resolves). On a fresh client receiving a v2.48.0+ broadcast, the field is always defined. If the localStorage replay surfaces an entry from before v2.48.0, the field was never set — undefined. The defensive branch catches that case and shows the Place button so the user can move forward (even if /place_aoe ultimately 404s; the toast then directs them to Clear).
+**Description (cont 2):** Why "💨 No targets" instead of leaving the card empty. The previous empty-card-on-no-targets behavior was indistinguishable from "still pending" or "legacy stuck" — three different states with one rendering. Explicit empty-resolved is the cleanest UX: GM sees "the cast happened, hit nothing", can re-place if they misread the radius, can undo, etc.
+**Description (cont 3):** Why a localStorage-only Clear button instead of clearing server-side history. The server's `Roll` table is the campaign's audit log — clearing it would lose data. The localStorage buffer is just a per-client cache for the WS-only entries (spell_cast, weapon_attack, feature_used, heal_applied) that aren't in the Roll table. Flushing just the cache lets the user recover from cache poisoning without losing campaign history. (The server-rendered `{% for r in rolls %}` block re-populates the actual roll history on page reload; this Clear button just flushes the WS-card overlay.)
+
+### Fixed
+- `app/static/tabletop.js` `_spellResultPillsHtml` — legacy AoE cards (no `pending_aoe_placement` flag, persisted in localStorage from before v2.48.0) now render the Place button instead of an empty card.
+- `app/static/tabletop.js` Place button click handler — 404 from /place_aoe (stale cast, stash purged) surfaces a helpful toast pointing at the new Clear button.
+
+### Added
+- `app/static/tabletop.js` `_spellResultPillsHtml` — "💨 No targets in area" pill for AoE casts that resolved with empty target list.
+- `app/templates/tabletop.html` roll log drawer — header bar with "🗑 Clear" button. Flushes the client-side localStorage buffer via the existing `_clearRollLog()` helper.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM after rebuild + hard refresh. If you see an old Fireball card with no Place button, click "🗑 Clear" at the top of the roll log; the buffer empties. Cast Fireball again — fresh card lands with the Place button. Click Place, drop the sphere — pills render. Place a sphere over an empty patch of map — the new "💨 No targets in area" pill appears instead of an empty card.
+- **Backward compat.** All 212 harness tests still pass. The legacy-card recovery only fires when `pending_aoe_placement === undefined`; new server broadcasts always set the field explicitly.
+
+---
+
 ## [2.48.3] - 2026-05-20
 
 **Schema version:** 56
