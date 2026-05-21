@@ -76,13 +76,29 @@ def set_dice_seed():
     (TEST_MODE-only endpoint, v2.49.12) to re-seed the shared dice
     RNG. Pass an int for determinism, ``None`` to return to OS entropy.
 
+    On teardown the fixture re-seeds with ``None`` so the RNG goes
+    back to OS entropy. Without this, a seeded encounter-sim test
+    would leave the SHARED process-global RNG in a deterministic state
+    — any subsequent test (encounter-sim, harness, or harness-ui
+    sharing the same container) would observe predictable rolls and
+    flake assertions that expect statistical variation. See the
+    "DICE_SEED env var leaks into production" risk in the plan's
+    Risks & Mitigations table.
+
     Usage:
         def test_x(set_dice_seed, gm_page, roster):
             set_dice_seed(42)
             # all subsequent rolls deterministic
     """
     from .helpers.dice import set_dice_seed as _set_dice_seed
-    return _set_dice_seed
+    yield _set_dice_seed
+    # Reset the shared RNG so the next test starts from OS entropy.
+    try:
+        _set_dice_seed(None)
+    except Exception:
+        # Don't fail teardown if the stack is unreachable — the test
+        # itself would have already failed louder.
+        pass
 
 
 def sheet_url(char_id: int) -> str:

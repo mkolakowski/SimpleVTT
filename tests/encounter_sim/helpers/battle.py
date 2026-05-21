@@ -59,6 +59,29 @@ def make_combatant(
     return out
 
 
+def bandit_template_id() -> int:
+    """Return the demo's Bandit template ID. NPC targets in save-spell
+    tests need a real ``token_template_id`` so the server can look up
+    the bandit's save modifier from the template; a synthetic combatant
+    with no template_id falls through to ``auto_save_target_kind=""``
+    and the save isn't rolled. Looked up by name (case-insensitive
+    contains 'bandit') so a demo seed reshuffle doesn't break tests.
+    """
+    client = _gm_client()
+    try:
+        resp = client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+        resp.raise_for_status()
+        templates = resp.json()
+        for t in templates:
+            if "bandit" in (t.get("name") or "").lower():
+                return int(t["id"])
+        raise AssertionError(
+            f"No bandit template found in /templates ({len(templates)} entries)"
+        )
+    finally:
+        client.close()
+
+
 def _battle_state_dict(combatants: list[dict]) -> dict:
     return {
         "combatants": combatants,
@@ -154,6 +177,42 @@ def set_auto_apply(on: bool) -> None:
         # 303 on success (form-POST redirect).
         if resp.status_code not in (200, 303):
             raise AssertionError(f"set_auto_apply failed: {resp.status_code} {resp.text}")
+    finally:
+        client.close()
+
+
+def cast_spell(
+    character_id: int,
+    spell_index: int,
+    *,
+    slot_level: int = 0,
+    class_slug: str = "cleric",
+    target_combatant_id: str | None = None,
+    target_combatant_ids: list[str] | None = None,
+    target_name: str | None = None,
+    override: bool = True,
+) -> httpx.Response:
+    """POST ``/cast_spell`` as the GM. Mirrors ``post_attack`` for
+    spells: single-target ``target_combatant_id`` for save cantrips
+    (Sacred Flame), or multi-target ``target_combatant_ids`` for AoE
+    save spells (Fireball).
+    """
+    body: dict = {
+        "character_id": character_id,
+        "spell_index": spell_index,
+        "slot_level": slot_level,
+        "class_slug": class_slug,
+        "override": override,
+    }
+    if target_combatant_id:
+        body["target_combatant_id"] = target_combatant_id
+    if target_combatant_ids:
+        body["target_combatant_ids"] = target_combatant_ids
+    if target_name:
+        body["target_name"] = target_name
+    client = _gm_client()
+    try:
+        return client.post(f"/api/campaign/{CAMPAIGN_ID}/cast_spell", json=body)
     finally:
         client.close()
 

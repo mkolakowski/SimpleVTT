@@ -271,3 +271,136 @@ jobs:
       - name: Tear down
         if: always()
         run: docker compose down -v
+
+  # v2.49.17 — encounter-simulation suite, Level 1 (smoke).
+  # See docs/plans/encounter-sim-test-suite.md. Phase 1 commits A/B/C
+  # landed dice seeding, the directory skeleton, and the 3 PoC tests
+  # (test_garrik_strike / test_tavik_sacred_flame / test_thalindra_
+  # fireball). ``continue-on-error: true`` per the plan's Phase 1 task
+  # 6 — flip to ``false`` once Phase 1 reaches the "5 consecutive runs
+  # without a flake" exit criterion (Garrik already hits this; Tavik
+  # and Thalindra need CI corroboration before locking the gate).
+  #
+  # TEST_MODE=true is mandatory here (the suite calls
+  # ``/api/test/dice/seed`` for deterministic rolls). The harness job
+  # above already sets it; this job mirrors that .env for the same
+  # reason.
+  encounter-sim:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install test deps
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('requirements-dev.txt') }}
+
+      - name: Install Playwright chromium + system deps
+        run: playwright install --with-deps chromium
+
+      - name: Write CI .env
+        run: |
+          cat > .env <<'EOF'
+          APP_PORT=8013
+          APP_SECRET_KEY=ci-deterministic-not-a-real-secret-encsim-${{ github.run_id }}
+          APP_BASE_URL=http://localhost:8013
+          APP_ALLOW_LOCAL_REGISTRATION=true
+          ADMINS=demo-gm@example.com
+          CHARACTER_TEMPLATES=generic,dnd5e
+          APP_DEFAULT_THEME=sepia
+          GOOGLE_SSO_ENABLED=false
+          GOOGLE_SSO_CLIENT_ID=
+          GOOGLE_SSO_CLIENT_SECRET=
+          POSTGRES_USER=simplevtt
+          POSTGRES_PASSWORD=ci-test-password
+          POSTGRES_DB=simplevtt
+          BACKUP_CRON=0 3 * * *
+          KEEP_DAILY=7
+          KEEP_WEEKLY=4
+          DEMO_MODE=true
+          DEMO_RESET_INTERVAL_MINUTES=60
+          DEMO_RESET_ON_BOOT=true
+          DEMO_CREDENTIALS_VISIBLE=true
+          TEST_MODE=true
+          EOF
+
+      - name: Build and start stack
+        run: docker compose up -d --build
+
+      - name: Wait for /healthz
+        run: |
+          for i in {1..45}; do
+            if curl -fs http://localhost:8013/healthz > /dev/null; then
+              echo "Stack healthy after ~$((i*2))s"
+              exit 0
+            fi
+            echo "Waiting for stack... ($i/45)"
+            sleep 2
+          done
+          echo "Stack didn't become healthy in 90s. Dumping logs."
+          docker compose logs app | tail -100
+          exit 1
+
+      - name: Sanity-check demo seed
+        run: |
+          curl -s -c /tmp/cookies.txt -X POST http://localhost:8013/login \
+            -d "email=demo-gm@example.com&password=demopass" -L > /dev/null
+          ROSTER=$(curl -s -b /tmp/cookies.txt http://localhost:8013/api/campaign/1/roster)
+          echo "$ROSTER" | grep -q "Garrik Ironside" || { echo "missing Garrik"; exit 1; }
+          echo "$ROSTER" | grep -q "Brother Tavik Stonebrow" || { echo "missing Tavik"; exit 1; }
+          echo "$ROSTER" | grep -q "Thalindra Moonwhisper" || { echo "missing Thalindra"; exit 1; }
+
+      - name: Sanity-check TEST_MODE endpoint
+        run: |
+          # ``/api/test/dice/seed`` only mounts when TEST_MODE=true. Fail
+          # early if it 404s so a misconfigured .env doesn't cause every
+          # encounter-sim test to fail with a confusing "endpoint missing".
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            http://localhost:8013/api/test/dice/seed \
+            -H "Content-Type: application/json" -d '{"seed":0}')
+          if [ "$STATUS" != "200" ]; then
+            echo "TEST_MODE endpoint returned $STATUS (expected 200) — is TEST_MODE=true in .env?"
+            exit 1
+          fi
+
+      - name: Run encounter-sim Level 1 smoke
+        run: |
+          mkdir -p reports
+          pytest tests/encounter_sim/level_1_smoke/ \
+            --junitxml=reports/encounter-sim.xml \
+            --html=reports/encounter-sim.html \
+            --self-contained-html \
+            -v
+
+      - name: Upload encounter-sim reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: encounter-sim-reports
+          path: reports/
+          retention-days: 14
+
+      - name: Dump server logs on failure
+        if: failure()
+        run: docker compose logs app | tail -200
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

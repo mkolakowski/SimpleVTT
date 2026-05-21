@@ -1,6 +1,6 @@
 # Encounter-simulation test suite — plan
 
-**Status:** v2.49.7 — plan finalized · Phase 1 PoC pending (task #93)
+**Status:** v2.49.17 — Phase 1 complete (commits A v2.49.12, B v2.49.15, C v2.49.16, D v2.49.17). Phase 2 pending — task #94.
 **Authors:** rolling
 **Last updated:** 2026-05-21
 
@@ -336,26 +336,62 @@ Each phase ships as one commit with version bump + CHANGELOG entry,
 following the per-commit rule. Tests added must keep the harness
 passing.
 
-### Phase 1 — Level 1 PoC (target v2.50.0, ~3 PCs)
+### Phase 1 — Level 1 PoC ✅ COMPLETE (v2.49.12 → v2.49.17)
 **Goal:** prove the architecture works. Pick Garrik, Thalindra,
 Tavik (the broadest coverage: weapon attack, AoE save spell, single-
 target save spell).
 
-Tasks:
-1. Add `app/services/dice.py` with `get_dice_random()` + audit all
-   `random.randint` call sites to use it.
-2. Add `DICE_SEED` env var (read at module level, optional).
-3. Create `tests/encounter_sim/conftest.py`, `pages/`, `helpers/`
-   directory structure.
-4. Implement `TabletopPage`, `SheetPage`, `RollLogPage`, `ToastWatcher`
-   skeletons.
-5. Write `test_garrik_strike.py`, `test_thalindra_fireball.py`,
-   `test_tavik_sacred_flame.py` to spec.
-6. Wire into CI as a new step (initially `continue-on-error: true`
-   while we shake out flake).
+Tasks (all complete):
+1. ✅ Add seedable dice RNG to `app/dice.py` (NOT `app/services/dice.py`
+   — extended the existing module instead) + audit all `random.randint`
+   call sites to use it. Shipped v2.49.12.
+2. ✅ Add `DICE_SEED` env var (read at module level, optional).
+   Shipped v2.49.12.
+3. ✅ Create `tests/encounter_sim/conftest.py`, `pages/`, `helpers/`
+   directory structure. Shipped v2.49.15.
+4. ✅ Implement `TabletopPage`, `SheetPage`, `RollLogPage`,
+   `ToastWatcher`, `CanvasReader` skeletons + concrete helpers
+   (`set_dice_seed`, `long_rest`, `assert_pill`, `WSCollector`).
+   Shipped v2.49.15.
+5. ✅ Write `test_garrik_strike.py`, `test_tavik_sacred_flame.py`,
+   `test_thalindra_fireball.py` to spec. Shipped v2.49.16 and
+   v2.49.17.
+6. ✅ Wire into CI as a new step `encounter-sim`
+   (`continue-on-error: true` initially while we shake out flake).
+   Shipped v2.49.17.
 
-**Exit criteria:** 3 tests pass locally + in CI on 5 consecutive
-runs without a flake.
+**Exit criteria:** ✅ 3 tests pass locally on 5 consecutive runs at
+~6.2 s/run with no flake. CI corroboration pending (`continue-on-
+error: true`); flip to `false` once 5 green CI runs land.
+
+**Findings worth carrying forward** (from commits C / D):
+
+- **GM clients ignore `battle_update` broadcasts** without
+  `force_gm_sync` (tabletop.html:5543, v2.5.5 echo-loop guard). Any
+  UI assertion on init-tracker DOM HP updates from server-pushed
+  state MUST be driven by a non-GM. Phase 1 worked around this by
+  asserting against the response body's `auto_save_damage_applied`
+  / `target_hp_after` (the source of truth that drives card text).
+  A player-driver variant of each PoC test is filed for Phase 2.
+- **`/attack` and `/cast_spell` don't broadcast `force_gm_sync`**.
+  Mirror the `/place_aoe` pattern (line ~7986 of tabletop_routes.py)
+  to fix; separate from the suite but surfaced by it.
+- **Sync Playwright + `time.sleep()`** blocks event-loop processing
+  so WS listeners can't fire. `WSCollector.wait_for` uses
+  `page.wait_for_timeout` between polls.
+- **Sync Playwright + pytest-asyncio cross-suite** can't share a
+  process (`Cannot run the event loop while another loop is
+  running`). CI runs `harness` / `harness-ui` / `encounter-sim` as
+  separate jobs; locally, run each suite independently.
+- **`set_dice_seed` MUST clean up to `None` on teardown**, otherwise
+  the shared process-global RNG stays deterministic and the next
+  test (encounter-sim, harness, or harness-ui) flakes against
+  expected randomness. Handled in the conftest fixture.
+- **GM page localStorage is the source of truth** for init tracker
+  state. The `seed_battle_into_page(context, combatants)` helper
+  pre-populates localStorage via `add_init_script` so the IIFE picks
+  up the seeded state on load — pairs with `seed_battle(combatants)`
+  which PUTs the same state to the server for endpoint targeting.
 
 ### Phase 2 — Level 1 full coverage (target v2.51.0)
 Expand to all 12 demo PCs. Mostly mechanical — copy the Phase 1

@@ -25,3 +25,18 @@ class RollLogPage:
         ``card.count()`` first and slice off the new ones.
         """
         return self.page.locator("#roll-list .weapon-atk-card").last
+
+    def latest_spell_cast_card(self) -> Locator:
+        """The newest spell-cast card in the roll-log drawer.
+
+        Rendered by ``tabletop.js::appendSpellCast`` (line ~2780) —
+        an ``<li>`` containing ``<div class="spell-cast-card">``
+        (without the ``.weapon-atk-card`` modifier). The :not(...)
+        filter excludes the weapon-attack cards, which carry both
+        classes; without it, the newest matching element could be a
+        Greatsword card from a co-located test, not the spell card
+        we just cast.
+        """
+        return self.page.locator(
+            "#roll-list .spell-cast-card:not(.weapon-atk-card)"
+        ).last
