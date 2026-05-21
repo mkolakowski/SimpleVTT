@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.33] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit T — concentration: `test_swap_refreshes_buff` validates the refresh semantics on Hex re-cast.** Magnus casts Hex on Pip → 1 hex buff. Magnus casts Hex again on Thalindra → STILL 1 hex buff (refresh, not append) with the target updated. Closes a gap from commit L's lifecycle test (where DELETE concentration was shown to NOT drop paired buffs — the swap path IS what drops them, via `_install_buff` detecting a matching key + calling `_drop_paired_concentration_buffs`). For Hex specifically there are no paired buffs to drop (caster-side install with a `target_character_id` reference, not a target-side install), so the visible effect is "1 chip both before and after re-cast" — but the same broadcast + DOM-render path runs whether or not paired buffs exist. PATCH — additive test only; no helper / runtime change.
+**Description:** One new file. `tests/encounter_sim/level_3_edge_cases/concentration/test_swap_refreshes_buff.py`. Three combatants (Magnus + Pip + Thalindra), all PCs so `target_character_id` works on cast_hex. First cast on Pip; wait for `buff_update` predicate-filtered by `character_id == magnus.id AND hex buff exists`; assert exactly ONE hex buff in the new buff list + `target_character_id == pip.id` + the DOM `.buff-chip` filter for "Hex" has count == 1. Second cast on Thalindra; wait for the NEXT `buff_update` predicate-filtered by `target_character_id == thal.id` so we don't re-match the first install's broadcast; re-assert exactly ONE hex buff, target updated to Thalindra, and the new install's ability override (DEX disadvantage instead of STR) survived through to the broadcast. Final DOM check: chip count still exactly 1 (a regression where install APPENDED instead of REFRESHED would manifest as count == 2 here).
+**Description (cont):** Why this test needed a field-name correction. First write asserted `effects["ability_check_disadvantage_on"] == "DEX"`. Test failed: actual field is `disadvantage_on_ability_check`. The server stores the disadvantage target on the buff's `effects` dict; the field name follows the broader buff-effects schema's convention (subject is what's affected, predicate is the qualifier — `disadvantage_on_*` reads "disadvantage on X"). Fix: align with the schema. Filed: scan all buff effect tests for consistent naming when audit time comes.
+**Description (cont 2):** Why no harness equivalent. The harness's `test_hunters_mark_swap_replaces_first` in `test_concentration_buffs.py` covers the same refresh semantics for a different spell (Hunter's Mark instead of Hex). The UI-layer addition here is the DOM chip-count assertion — a regression that broadcasted "2 buffs" but the renderer correctly de-duplicated wouldn't be caught by the harness; this test catches both the broadcast shape AND the render output. Verification: 5 sequential local runs × 26 tests at ~45 s/run, no flake.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/concentration/test_swap_refreshes_buff.py` — Hex re-cast refresh: WS buff_update + DOM chip count assertions both at 1, target updated.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 9 / ~40 Level 3 tests landed. Subsystems: death-saves 5/5 ✅, concentration 3/6 (L + Q + T), action-economy 3/8.
+- **Runtime:** full encounter-sim suite at 26 tests / ~45 s.
+
+### Filed
+- **Field-name audit** — scan buff effect dict keys for consistency. `disadvantage_on_ability_check` was natural to guess wrong; if other effects have similar naming gotchas, a once-over would prevent the same trip-up in future tests.
+- **Paired-buff-actually-drops test** — Hex has no paired target buff so the swap test here can't prove the cleanup branch fires. Hold Person (Tavik L2) DOES install Paralyzed on the target; swapping while concentrating on Hold Person would PROVE `_drop_paired_concentration_buffs` actually mutates the target's buff list. Filed alongside the broader concentration cleanup family.
+- **Phase 4 — remaining concentration cleanup tests (3)**: PC at 0 HP drops concentration, PC dies (3 failures) drops concentration, paired-buff drop with Hold Person + Paralyzed.
+
+---
+
 ## [2.49.32] - 2026-05-21
 
 **Schema version:** 56
