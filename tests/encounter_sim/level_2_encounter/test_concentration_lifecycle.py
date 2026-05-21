@@ -10,22 +10,18 @@ Validates the **concentration install + manual-end** path:
   3. ``DELETE /concentration/{magnus_id}`` ends the
      ``ConcentrationEffect`` row. Broadcasts ``concentration_update``
      with ``ended: True``.
+  4. v2.49.41: the DELETE endpoint also calls ``_remove_buff`` for
+     every concentration-tagged buff on the caster, which fires a
+     ``buff_update`` AND ``_drop_paired_concentration_buffs`` for
+     any target-side condition buffs (Paralyzed via Hold Person,
+     Frightened via Fear, …). Pre-v2.49.41 the chip stayed on the
+     caster's row until the GM × button cleared it; this test
+     pinned that limitation. With the fix landed, the test now
+     verifies the chip DISAPPEARS after DELETE.
 
-Note: the DELETE endpoint **does not** drop paired buffs. The
-``_drop_paired_concentration_buffs`` helper is only invoked on
-concentration SWAP (a new conc spell replaces the old) — see
-tabletop_routes.py:433. Manually ending via DELETE leaves the Hex
-buff on Magnus's combatant.buffs list; the GM clears it via the
-buff-chip × button if they care. So this test asserts on the
-``concentration_update`` broadcast, not on the chip disappearing.
-
-Filed for separate commits:
-  - Concentration-swap (cast a new conc spell → old drops + paired
-    buffs drop). The harness already covers the back-end shape;
-    a UI variant adds the chip-removed assertion.
-  - Damage-triggered concentration save (Magnus takes damage →
-    /concentration/{cid}/tick fires save → on fail buff drops).
-    Needs HP-change mechanics on Magnus.
+This file is the regression test for the v2.49.41 fix: a DELETE
+that leaves the chip behind would surface here as the
+``to_have_count(0)`` assertion failing.
 """
 from __future__ import annotations
 
@@ -133,3 +129,21 @@ def test_hex_install_and_concentration_end_lifecycle(
         predicate=lambda f: f["data"].get("character_id") == magnus["id"],
     )
     assert cu["data"].get("ended") is True, f"expected ended:True, got {cu['data']}"
+
+    # ── Layer 4 (v2.49.41 fix): buff_update fires with hex removed
+    # AND the chip disappears from Magnus's row. Pre-v2.49.41 these
+    # assertions would fail because end_concentration only deleted
+    # the ConcentrationEffect row without touching the buff list.
+    ws.wait_for(
+        "buff_update", timeout_ms=5000,
+        predicate=lambda f: (
+            f["data"].get("character_id") == magnus["id"]
+            and not any(
+                b.get("key") == "hex" for b in f["data"].get("buffs") or []
+            )
+        ),
+    )
+    hex_chip_after = tabletop.combatant_row("Magnus Hexbinder").locator(
+        ".buff-chip"
+    ).filter(has_text="Hex")
+    expect(hex_chip_after).to_have_count(0, timeout=3000)

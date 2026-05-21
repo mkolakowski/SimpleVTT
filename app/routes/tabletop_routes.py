@@ -12809,6 +12809,34 @@ async def end_concentration(
         "type": "concentration_update",
         "data": {"character_id": char_id, "ended": True},
     })
+
+    # v2.49.41 — also drop the caster's concentration buff(s) AND
+    # any paired target-side condition buffs. Pre-fix: DELETE
+    # /concentration just deleted the ConcentrationEffect row + fired
+    # concentration_update with ended:True, but LEFT the concentration
+    # buff (Hex / Hunter's Mark / etc.) on the caster's combatant.buffs
+    # list AND left paired conditions (Paralyzed via Hold Person,
+    # Frightened via Fear, …) on every target's buff list. The GM had
+    # to manually × out each chip. ``_remove_buff`` already handles
+    # both the broadcast of the post-removal buff list AND the
+    # paired-cleanup branch (via ``_drop_paired_concentration_buffs``),
+    # so we just iterate the caster's concentration-tagged buffs and
+    # call it once per key. Surfaced by the encounter-sim
+    # test_concentration_lifecycle (v2.49.25) which had to document
+    # that the chip stays put after DELETE as a known limitation.
+    state = hub.get_battle(campaign_id)
+    if state:
+        for c in state.get("combatants") or []:
+            if c.get("char_id") == char_id:
+                conc_keys = [
+                    (b or {}).get("key") for b in c.get("buffs") or []
+                    if (b or {}).get("concentration")
+                ]
+                for key in conc_keys:
+                    if key:
+                        await _remove_buff(campaign_id, char_id, key)
+                break
+
     return {"ok": True}
 
 

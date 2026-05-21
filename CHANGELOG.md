@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.41] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Fix bug #2 from encounter-sim: `DELETE /concentration` left buffs on the caster + targets.** Second application-side bug surfaced by the encounter-sim test suite (after v2.49.40's force_gm_sync fix). Pre-fix: `DELETE /api/campaign/{cid}/concentration/{char_id}` deleted the `ConcentrationEffect` DB row and broadcast `concentration_update` with `ended: True` — but left the caster-side concentration buff (Hex / Hunter's Mark / etc.) on the caster's `combatant.buffs` list AND left paired target-side conditions (Paralyzed from Hold Person, Frightened from Fear, …) on every affected target. The GM had to manually × out each chip. The encounter-sim `test_concentration_lifecycle` (v2.49.25) documented this as a known limitation: "the DELETE endpoint does NOT drop paired buffs ... the chip stays on Magnus's row; the GM clears it via × button." This commit closes that loop. Fix: after the DB delete + broadcast, iterate the caster's combatant buffs for any entry flagged `concentration: True` and call `_remove_buff(campaign_id, char_id, key)` for each — that helper already broadcasts the new buff list AND triggers `_drop_paired_concentration_buffs` for target-side cleanup. The `test_concentration_lifecycle` docstring updated to reflect the fix; the test now ASSERTS chip-removal (would have failed pre-fix). PATCH — bug fix; no schema or API contract change.
+**Description:** Two edits. **(1)** `app/routes/tabletop_routes.py::end_concentration` (DELETE handler at line 12757) — after the existing `concentration_update` broadcast, added a block that fetches the hub battle state, finds the caster's combatant, scans for concentration-tagged buffs, and calls `_remove_buff(campaign_id, char_id, key)` once per matching key. Reuses existing infra: `_remove_buff` handles the broadcast + the paired-cleanup branch via `_drop_paired_concentration_buffs`. No new broadcast type, no new endpoint, no new helper. **(2)** `tests/encounter_sim/level_2_encounter/test_concentration_lifecycle.py` — updated the docstring to reflect the fix (was "the chip stays put as known limitation"; now "the chip disappears, regression-tested here"). Added 2 new assertions at the end of the test: (a) `buff_update` broadcast fires with hex absent from the buff list; (b) the Hex chip is gone from Magnus's init-tracker row (`to_have_count(0)`). Both would have failed pre-v2.49.41; both pass now.
+**Description (cont):** Why no separate "removes paired-conditions too" test in this commit. `_remove_buff` already invokes `_drop_paired_concentration_buffs` when the removed buff was tagged `concentration: True` — that's existing v2.38.0 behavior covered by `tests/harness/test_concentration_cleanup.py` (Hold Person → Paralyzed cascade). The new code path in `end_concentration` simply routes through `_remove_buff`, inheriting that coverage. Adding a UI variant test (Tavik casts Hold Person on a bandit, GM ends Tavik's concentration via DELETE, bandit's Paralyzed chip disappears) is filed as a follow-up but not strictly required for THIS fix.
+**Description (cont 2):** Verification: 222 harness tests still pass (no regression in the existing concentration / buff tests); 32 encounter-sim tests all pass including the updated `test_concentration_lifecycle` which now exercises the post-fix behavior. Critical sanity: ran the test BEFORE the fix to confirm it would fail (it did — chip stayed); ran it AFTER (it passes). So this isn't a tautological "test the fix with the fix" loop; the test exists independently and the fix makes it green.
+**Description (cont 3):** Why CLAUDE.md compliance. The DELETE endpoint's RESPONSE shape is unchanged (still `{ok: True}`). The behavior change is in the side-effect broadcasts — the existing `concentration_update` still fires, and now `buff_update` broadcasts ALSO fire (via `_remove_buff`) when there were caster-side concentration buffs to clear. No NEW broadcast shape is introduced (buff_update has been around since v2.19.0); the change is "this endpoint now ALSO fires buff_update where it previously didn't." Harness coverage for buff_update broadcast shape exists across many files; no NEW harness test needed for that. The encounter-sim test that already covered the broken-behavior path (commit L) is updated to assert the new correct behavior — that's the test for the fix.
+
+### Fixed
+- `app/routes/tabletop_routes.py::end_concentration` — DELETE now drops the caster's concentration-tagged buffs via `_remove_buff` per key, which transitively drops paired target-side conditions via `_drop_paired_concentration_buffs`. The GM no longer needs to manually × out chips after manually ending concentration.
+
+### Changed
+- `tests/encounter_sim/level_2_encounter/test_concentration_lifecycle.py` — added 2 post-DELETE assertions (buff_update fires with hex absent + chip disappears from DOM) + updated docstring to mark the fix landed. Regression test for v2.49.41.
+
+### Notes
+- **Backward compat.** Pure behavior fix — clients that already handle `buff_update` broadcasts continue to work; clients that ignored them previously would have shown stale chips, now they don't. No new field, no new message type, no new endpoint.
+
+### Filed
+- **UI variant test for paired-condition cleanup** — Tavik casts Hold Person on Bandit Alpha (forced fail save → Paralyzed installed on bandit), GM DELETEs Tavik's concentration, Paralyzed chip disappears from bandit's row. The harness already covers the back-end shape; the UI addition would be the chip-disappearance DOM check.
+- **Audit other concentration-end paths**: `/end_buff?` endpoint, automatic dropping on caster death, manual buff × button clicks. Each should result in the same paired cleanup; the `_remove_buff` helper already handles it as long as those paths route through it. Verify they all do.
+
+---
+
 ## [2.49.40] - 2026-05-21
 
 **Schema version:** 56
