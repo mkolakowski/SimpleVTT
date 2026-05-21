@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.32] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit S — action-economy: `test_cunning_action_dash` (Rogue bonus-action marks chip).** Validates Pip's Cunning Action: fires the generic `/use_feature` endpoint with `feature_key="cunning-action" + option_key="dash"`, server marks the bonus chip used (the OPPOSITE direction from Action Surge in commit R, which REFUNDS the action chip), broadcasts `feature_used` + `economy_update`. Together commit R + S exercise both directions of the chip-toggle state machine. Only Dash is exercised here; Disengage and Hide are identical paths (`option_key` differs, code path is the same) and don't add coverage. PATCH — additive test only; reuses `post_use` with the `extra` dict. Full encounter-sim suite at 25 tests / ~43.2 s × 5 runs, no flake.
+**Description:** One new file. `tests/encounter_sim/level_3_edge_cases/action_economy/test_cunning_action_dash.py`. Long-rests Pip (defensive; Cunning Action itself has no per-rest limit, but earlier tests may have left state weird), seeds her with default `economy` (all slots False — `bonus` is the pre-condition target). Asserts the bonus chip's class doesn't include `"used"` pre-fire (using `class_attr.split()` so `used` isn't matched as a substring of `near-used` or similar). Fires `post_use("use_feature", pip_id, extra={...})` with the full feature envelope (`feature_key`, `option_key`, `label`, `desc`). Asserts the HTTP body's `slot=="bonus"` + `feature_label` contains "Cunning Action" AND "Dash". Waits for two WS frames: `economy_update` with `slot="bonus"` + `used=True`, and `feature_used` with the feature name containing both "Cunning Action" and "Dash". Re-locates the chip after re-render and asserts `.used` class via `to_have_class(re.compile(r"\bused\b"))`.
+**Description (cont):** Why pair Cunning Action with Action Surge. The action-economy state machine has chips that can flip in either direction: `used→available` (refund — Action Surge) and `available→used` (consume — every other action). Most "available→used" transitions are uninteresting (PC fires Strike → action.used = True; trivially covered by the Phase 1/2 PoC tests). Cunning Action is the cleanest BONUS-slot consume because it lands a dedicated chip flip without also firing damage / saves / buffs. Together R+S pin both directions for both action AND bonus slots: Action Surge refunds action; Cunning Action consumes bonus. The reaction slot is filed (Shield + Hellish Rebuke), and rounds-out the chip strip.
+**Description (cont 2):** Why only Dash. Cunning Action's three options (Dash / Disengage / Hide) all hit the same endpoint with different `option_key` values + slightly different `feature_label` text. Testing all three would add 3× runtime for 0× coverage of new code paths (the only difference is which string appears in `feature_label`). The plan calls for "Cunning Action: Pip's bonus-action Dash/Disengage/Hide" but the regression class is the SAME for all three — pick one and file the others.
+**Description (cont 3):** Why no harness test. Test-only addition consuming the existing `/use_feature` endpoint with existing harness coverage (`tests/harness/test_use_feature.py::test_cunning_action_dash` + sibling Disengage/Hide tests). UI-layer addition: the chip flips visually. Verification: 5 sequential local runs × 25 tests at ~43.2 s/run, no flake.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/action_economy/test_cunning_action_dash.py` — Pip's Cunning Action Dash marks the bonus chip used; companion to commit R's Action Surge refund test.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 8 / ~40 Level 3 tests landed. Subsystems: death-saves 5/5 ✅, concentration 2/6, action-economy 3/8 (J strict-mode + R Action Surge + S Cunning Action).
+- **Runtime:** full encounter-sim suite at 25 tests / ~43.2 s.
+
+### Filed
+- **Cunning Action Disengage + Hide** — identical code path, different option_key. Filed for parametrized expansion if/when a regression in one of the unused options surfaces.
+- **Reaction-slot chip tests** — Shield (Wizard L1 reaction, fired DURING an attack against the caster) + Hellish Rebuke (Warlock L1 reaction, fired in response to damage). Both flip the reaction chip; Shield interestingly inverts the timing (reaction fires WHILE the attack is being resolved).
+- **Over-budget retry test** — non-GM player fires action with `override=false`, gets 409, retries with `override=true`, asserts the action proceeds + the audit badge fires. Pairs with commit J's strict-mode (same path but with override bypass disabled).
+
+---
+
 ## [2.49.31] - 2026-05-21
 
 **Schema version:** 56
