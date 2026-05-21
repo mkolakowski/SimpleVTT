@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.38] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit Y — action-economy: `test_shield_marks_reaction_chip`.** Completes the action-economy chip-slot trifecta. Thalindra casts Shield (Wizard L1, casting_time "1 reaction") which routes through `_casting_time_to_economy` → reaction slot → `economy_update` broadcast with `slot="reaction", used=True`. Combined with commit R (Action Surge refunds **action**) and commit S (Cunning Action consumes **bonus**), the three chip slots are now exercised across both directions of the toggle state machine. PATCH — additive test only.
+**Description:** One new file. `tests/encounter_sim/level_3_edge_cases/action_economy/test_shield_marks_reaction_chip.py`. Long-rests Thalindra to refill the L1 slot Shield consumes, seeds her into battle with default economy (all slots False), opens the GM tabletop + players panel. Asserts the reaction chip's class doesn't include `"used"` pre-fire (via `class_attr.split()` to avoid substring false-positives). Fires `cast_spell(thal, SHIELD_INDEX=4, slot_level=1, class_slug="wizard")` — no target needed, Shield is self-buff. Waits for `economy_update` filtered by `slot="reaction"`, asserts `used=True`. Re-locates the chip + asserts `.used` via `to_have_class(re.compile(r"\bused\b"))`.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/action_economy/test_shield_marks_reaction_chip.py` — Thalindra Shield marks the reaction chip used.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 14 / ~40 Level 3 tests landed. Action-economy 5/8 (with all three chip slots covered).
+
+---
+
 ## [2.49.37] - 2026-05-21
 
 **Schema version:** 56
