@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 225 (as of v2.49.42, 2026-05-21).
+**Total tests:** 227 (as of v2.49.48, 2026-05-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -403,6 +403,14 @@ Phase C concentration handling — Hunter's Mark, Hex, swap, concentration-save 
 | `test_hex_wrong_class` | Non-Warlock → 409. |
 | `test_concentration_swap` | Casting a second concentration spell drops the first (RAW one-at-a-time). |
 | `test_concentration_save_on_damage` | Damage event triggers a concentration CON save; failure drops the buff. |
+
+### `test_concentration_drops_on_zero_hp.py`
+v2.49.48 — RAW PHB p.203: concentration ends automatically when the caster's HP drops to 0, regardless of CON save outcome. Pre-fix the save could pass at 0 HP and leave a dying/dead PC concentrating on Hex / Hunter's Mark.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_concentration_force_drops_at_zero_hp` | Damage that drops Magnus to 0 HP force-drops Hex regardless of d20 outcome. `concentration_save` broadcast carries `forced_drop_on_zero_hp=True` + `passed=False` + `dropped_key="hex"`. |
+| `test_concentration_normal_save_when_not_at_zero` | Damage that doesn't drop to 0 still uses the normal save path. `forced_drop_on_zero_hp=False`, `passed` follows the d20 roll. |
 
 ### `test_concentration_cleanup.py`
 Phase T.3e — concentration drop cascades to paired condition buffs.

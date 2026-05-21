@@ -605,6 +605,19 @@ async def _maybe_concentration_save(
     prof_bonus = pb if saves.get("CON") else 0
     bonus = con_mod + prof_bonus
 
+    # v2.49.48 — RAW: a creature loses concentration AUTOMATICALLY
+    # if its hit points drop to 0 (PHB p.203), independent of the
+    # CON save. Pre-fix the server still rolled the save and could
+    # leave a dying / dead PC concentrating on Hex / Hunter's Mark
+    # / Hold Person if they happened to pass — visible as the chip
+    # staying on the unconscious PC's row, the marked target still
+    # taking +1d6 necrotic, etc. The CON save still happens for
+    # damage that doesn't drop to 0 (the standard branch). When at
+    # 0 HP we still roll for telemetry but force passed=False so
+    # the existing _remove_buff path runs.
+    hp_current_after = int((sheet.get("hp") or {}).get("current") or 0)
+    forced_drop_on_zero_hp = hp_current_after <= 0
+
     try:
         result = dice_mod.roll(f"1d20+{bonus}" if bonus >= 0 else f"1d20{bonus}")
         total = result.total
@@ -613,7 +626,7 @@ async def _maybe_concentration_save(
         raw = 10
         total = 10 + bonus
 
-    passed = total >= dc
+    passed = (total >= dc) and not forced_drop_on_zero_hp
     dropped_key = None
     paired_pre_drop: list[dict] = []
     if not passed:
@@ -660,6 +673,12 @@ async def _maybe_concentration_save(
             "bonus": bonus,
             "total": total,
             "passed": passed,
+            # v2.49.48 — distinguishes the RAW "drops to 0 HP" forced
+            # drop from a regular failed save, so the client roll-log
+            # can render "💀 Concentration broken (0 HP)" instead of
+            # "❌ Concentration save failed". Always present; True
+            # only when the drop was forced regardless of roll outcome.
+            "forced_drop_on_zero_hp": forced_drop_on_zero_hp,
             "dropped_key": dropped_key,
         },
     })

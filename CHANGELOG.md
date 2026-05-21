@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.48] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Fix RAW bug: concentration didn't end automatically at 0 HP.** Seventh application-side bug surfaced by the encounter-sim test suite. PHB p.203: "you also lose concentration on a spell if you are incapacitated or killed." Pre-fix, ``_maybe_concentration_save`` rolled the CON save unconditionally — a PC who took damage dropping to 0 HP could PASS the save and remain concentrating on Hex / Hunter's Mark / Hold Person / Spirit Guardians while dying or dead. The encounter-sim ``test_drops_on_zero_hp`` (v2.49.25) worked around this by inflating ``damage_amount`` to 65 (DC=32, impossible to pass) — the workaround documented the bug but didn't fix it. Fix: in ``_maybe_concentration_save``, snapshot the post-damage ``hp.current``; if it's 0 (or negative), force ``passed=False`` regardless of the d20 + add ``forced_drop_on_zero_hp: True`` to the broadcast for telemetry. The existing ``_remove_buff`` path runs, dropping the buff + cascading paired cleanup. The encounter-sim workaround can also drop the inflated damage back to a normal value — done in this commit. 2 new harness tests + 1 updated encounter-sim test pin both branches. PATCH — bug fix; the broadcast gains a ``forced_drop_on_zero_hp`` field (additive, defaults to False on the normal path).
+**Description:** Three edits + 1 new file. **(1)** `app/routes/tabletop_routes.py::_maybe_concentration_save` — snapshot ``hp.current`` after the existing damage application, compute ``forced_drop_on_zero_hp = hp_current_after <= 0``. Compute ``passed = (total >= dc) and not forced_drop_on_zero_hp``. Add the flag to the broadcast payload. The save is still ROLLED at 0 HP (kept for telemetry parity — the GM sees what the save WOULD have been) but the outcome is overridden. **(2)** `tests/harness/test_concentration_drops_on_zero_hp.py` (NEW) — 2 tests: (a) Magnus drops to 0 HP via damage_amount=15 (DC=10, passable); asserts ``forced_drop_on_zero_hp=True`` + ``passed=False`` + ``dropped_key="hex"``; (b) Magnus takes 13 damage to HP 20 (not 0); asserts ``forced_drop_on_zero_hp=False`` + ``passed`` follows the d20. **(3)** `tests/encounter_sim/level_3_edge_cases/concentration/test_drops_on_zero_hp.py` — damage tuning relaxed from 65 → 33 (full HP to 0) now that the forced-drop rule guarantees Hex drops without DC gymnastics. Comment captures the workaround history. **(4)** `docs/test-harness-coverage.md` — new entry for the test file; total 225 → 227.
+**Description (cont):** Why a new ``forced_drop_on_zero_hp`` field instead of just relying on ``passed=False``. Two reasons. (a) Telemetry / UX. The roll-log card currently renders "❌ Concentration save failed" on a fail. A 0-HP forced drop is conceptually different — the save WAS rolled and may have been a 20, but the rule says concentration ends regardless. Future UI can render "💀 Concentration broken (0 HP)" or similar, distinguished by the flag. (b) Backward compat. Existing client handlers + tests that only look at ``passed`` continue to behave correctly (the chip drops either way); the flag is purely additive metadata.
+**Description (cont 2):** Why we still roll the d20 in the forced case. Could short-circuit and skip the roll, but rolling preserves the broadcast contract (existing tests assert on ``rolled``, ``total``, ``bonus`` fields) AND gives the GM auditable telemetry — "the save would have been a 19, but RAW dropped concentration anyway." Cost is one ``random.randint(1, 20)`` call per drop. Negligible.
+**Description (cont 3):** How the encounter-sim suite surfaced this. ``test_drops_on_zero_hp`` (v2.49.25) was the first test that tried to assert "concentration drops on 0 HP." First write used damage_amount=33 (full HP → 0); the test was flaky because Magnus's CON+2 save sometimes passed against DC=16. The workaround was to inflate damage_amount to 65 (DC=32, unpassable). The CHANGELOG entry at v2.49.25 documented this as a tuning choice; this commit recognizes it as papering over a real RAW gap and fixes the underlying rule. With the fix, damage_amount=33 works deterministically — the test was simplified back to that value.
+**Description (cont 4):** Verification. Ran the new harness tests pre-fix: ``test_concentration_force_drops_at_zero_hp`` failed (concentration was rolled, ``passed`` could be True). Ran post-fix: both pass. 227 harness tests pass (was 225, +2 new); 33 encounter-sim tests pass with the simplified damage value.
+
+### Fixed
+- `app/routes/tabletop_routes.py::_maybe_concentration_save` — force-drops concentration when caster's HP is 0 (RAW PHB p.203). Adds ``forced_drop_on_zero_hp`` field to the ``concentration_save`` broadcast.
+
+### Added
+- `tests/harness/test_concentration_drops_on_zero_hp.py` — 2 tests covering the forced-drop branch + the normal-save branch.
+- `docs/test-harness-coverage.md` — catalog entry; total 225 → 227.
+
+### Changed
+- `tests/encounter_sim/level_3_edge_cases/concentration/test_drops_on_zero_hp.py` — `damage_amount` reduced from 65 (workaround for the bug) to 33 (the actual full-HP-to-0 amount). Comment captures the history.
+
+### Notes
+- **Backward compat.** Pure additive — `forced_drop_on_zero_hp` is a new field, defaults to False on the normal save path. Existing clients that don't read the field continue to work.
+- **Seven bugs fixed by encounter-sim so far**: v2.49.40 (force_gm_sync NPC damage), v2.49.41 (DELETE concentration paired-buffs), v2.49.42 (PATCH sheet-fields HP broadcast), v2.49.45 (hp_update handler renderBattle), v2.49.46 (death_save handler renderBattle), v2.49.47 (heal_applied handler renderBattle), v2.49.48 (this commit — RAW 0-HP concentration drop).
+
+### Filed
+- **UI tag for forced drop** — when the roll-log card renders concentration-save outcomes, distinguish ``forced_drop_on_zero_hp=True`` from a regular failed save (e.g. "💀 Concentration broken (0 HP)" vs "❌ Concentration save failed (DC X)"). Today both render the same; the flag enables the distinction but no UI consumes it yet.
+- **`/death-save` rolled-3-failures path** — when a PC dies from rolling 3 death-save failures (not from instakill), is their concentration also dropped? The RAW "incapacitated" trigger applies at 0 HP regardless of how they got there, so the existing forced-drop fix covers it via the damage_amount > 0 entry condition... but death-saves don't go through ``_maybe_concentration_save`` at all. Worth a follow-up audit + test.
+
+---
+
 ## [2.49.47] - 2026-05-21
 
 **Schema version:** 56

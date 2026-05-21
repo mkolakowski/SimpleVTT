@@ -93,19 +93,14 @@ def test_hex_drops_when_magnus_hits_zero_hp(
         expect(hex_chip).to_be_visible(timeout=3000)
 
         # ── Damage Magnus to 0 HP ─────────────────────────────────
-        # damage_amount=65 with Magnus at hp_cur=33 (post-long_rest):
-        #   - remaining past 0 = 65 - 33 = 32 < max_hp(33) → dying
-        #     (not instakill — see state machine at tabletop_routes
-        #     :10821 for the threshold).
-        #   - DC = max(10, 65/2) = max(10, 32) = 32 — impossible for
-        #     Magnus (CON +2, no proficiency, max d20+2 = 22) → save
-        #     fails deterministically → Hex drops.
-        # The damage_amount tuning is delicate: lower values let the
-        # save sometimes pass (test_save_on_damage covers that branch);
-        # higher values trigger instakill (status=dead instead of
-        # dying); damage_amount=65 hits the sweet spot.
+        # damage_amount=33 drops Magnus from full to 0. Pre-v2.49.48
+        # this damage produced a passable DC=16 save, so the test
+        # had to inflate to damage_amount=65 (DC=32) to force the
+        # save fail and drop concentration. v2.49.48 made
+        # concentration drop AUTOMATICALLY at 0 HP regardless of
+        # save outcome (RAW PHB p.203), so normal damage works.
         resp_dmg = apply_damage(
-            magnus["id"], damage_amount=65, new_hp_current=0,
+            magnus["id"], damage_amount=33, new_hp_current=0,
             damage_type="slashing",
         )
         assert resp_dmg.status_code == 200, resp_dmg.text
