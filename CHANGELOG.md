@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.37] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit X — concentration: `test_drops_on_zero_hp`.** Validates the "PC drops to 0 HP → concentration ends" path. Magnus casts Hex on Pip → Hex installed; PATCH `/sheet-fields` damages Magnus by 65 with `new_hp_current=0` → status transitions alive → dying (or dead — both close concentration, test accepts either); `_maybe_concentration_save` fires with DC=32 (un-passable for Magnus's CON+2), concentration save FAILS, Hex drops; `buff_update` broadcast carries the post-drop buff list without hex; the chip disappears from Magnus's init-tracker row. Damage tuning is delicate: damage_amount=65 with hp_cur=33 gives `remaining=32 < max_hp(33)` → dying (not instakill) AND DC=32 → impossible to pass. The plan called for this as a concentration cleanup test; the implementation IS the same `_maybe_concentration_save` path commit Q already touched, but here the damage is calibrated to force a fail deterministically. PATCH — additive test only.
+**Description:** One new file. `tests/encounter_sim/level_3_edge_cases/concentration/test_drops_on_zero_hp.py`. Defensive resets (`death_save_override(alive)` + `long_rest`) ensure Magnus is at full HP regardless of prior test state. Installs Hex via `post_use("cast_hex", magnus, extra={target_character_id: pip.id, ability: "STR"})`, asserts the chip is visible. Then `apply_damage(magnus, damage_amount=65, new_hp_current=0)` to drop him to 0. Asserts `character_death_save` arrives with status in (dying, dead). Asserts subsequent `buff_update` carries hex-less buff list. Asserts the chip is gone from Magnus's row via `to_have_count(0)`. Teardown restores Magnus to alive.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/concentration/test_drops_on_zero_hp.py` — Hex drops when Magnus hits 0 HP.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 13 / ~40 Level 3 tests landed. Concentration 4/6.
+
+---
+
 ## [2.49.36] - 2026-05-21
 
 **Schema version:** 56
