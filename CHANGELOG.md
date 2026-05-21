@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.48.6] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Per-target pill polish: 🎲 between name and roll, no minus sign on damage, click to expand roll math.** Three changes to the v2.46.3 per-target AoE pill row. **(1)** Pill format reflows from `📋 NAME ROLL/DC ✅ · 🎲 −DMG TYPE` to `📋 NAME 🎲 ROLL/DC ✅ · DMG TYPE` — the dice emoji now sits between the target name and the d20 roll (signalling "rolled-on-their-behalf"), and the damage number drops the leading minus (the chip-damage border color + position already convey "this is damage applied"). **(2)** Pills are now buttons; clicking one toggles a `pt-detail` sibling span that shows the full save + damage dice breakdowns: `Save: 1d20+2[15+2]=17 · Damage: 8d6[3,5,4,6,2,1,5,2]=28 fire`. **(3)** Server-side captures `damage_breakdown` on every per-target entry (in `/place_aoe`'s NPC + PC branches AND the legacy `/cast_spell`-with-targets AoE loop) so the breakdown is available client-side. PATCH — UI polish + additive payload field; the existing 212 harness tests still pass.
+**Description:** Two server edits + two client edits. **(1)** `app/routes/tabletop_routes.py` `/place_aoe` NPC branch — captures `dmg_breakdown = dr.breakdown` when rolling the damage dice, adds it to the `auto_save_targets` entry as `damage_breakdown`. **(2)** Same edit applied to `/place_aoe` PC branch + `/cast_spell` legacy AoE multi-target loop so all three resolution paths emit the breakdown. **(3)** `app/static/tabletop.js` `_spellResultPillsHtml` — rewrote the per-target pill from a `<span>` to a `<button class="result-pill per-target-pill">` containing a `.pt-header` span (visible text) and an optional `.pt-detail` span (hidden by default, shows save + damage breakdowns). New format string is `📋 NAME 🎲 ROLL/DC ✅/❌ · DMG TYPE` (no minus, dice moved). Also dropped the minus on the single-target headline damage pill for consistency. **(4)** Same file — added a delegated document-level click handler on `.per-target-pill` that toggles the detail span's display + bumps the pill font size to 13px while expanded so the math reads better. Re-runs on card mutation (resolve / replay) because event delegation doesn't care when the element was created.
+**Description (cont):** Why click-to-expand on the pill itself instead of a separate "details" button. Pills are already roomy, and a secondary expand control would crowd the row. Toggling the pill's own size — by injecting an inline-rendered detail span — keeps the layout flat and lets the GM peek at the math without leaving the cast card. The 13px expanded font is small enough that even an 8-target Fireball still fits in the drawer width.
+**Description (cont 2):** Why server-side `damage_breakdown` and not derived on the client. The damage dice are rolled per-target on the server (each target's roll is independent — RAW for save-for-half). The client never sees the individual d6 results; only the totalled `damage_applied`. The breakdown string is the only way to surface "this bandit rolled [3,5,4,6,2,1,5,2]". Adding a single string field to the per-target entry is cheaper than another endpoint.
+**Description (cont 3):** Why drop the minus sign on damage. Two reasons. (a) The chip-damage class has a flame-orange border + color that already signals "damage applied" — the minus sign is redundant signage. (b) Consistency with the new pill format which collapses save + damage into one chip (`5/13 ❌ · 28 fire`); the minus disrupted the read flow vs. the clean `5/13 ❌` pass/fail indicator. (c) For testing UX, the GM wants to read "28 fire" as a quantity, not a delta.
+
+### Added
+- `app/routes/tabletop_routes.py` — `damage_breakdown` field on per-target `auto_save_targets` entries (3 resolution paths). Carries the dice-roll breakdown string (e.g. `8d6[3,5,4,6,2,1,5,2]=28`).
+- `app/static/tabletop.js` — `.per-target-pill` button class + click handler that toggles the detail span. Document-level event delegation works across card mutations + replay.
+
+### Changed
+- `app/static/tabletop.js` `_spellResultPillsHtml` — per-target pill format: `📋 NAME 🎲 ROLL/DC ✅/❌ · DMG TYPE` (dice between name and roll, no minus on damage). Single-target headline damage pill also drops the minus sign.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM after rebuild + hard refresh + click "🗑 Clear" on the roll log. Cast Fireball from Lyra/Thalindra; place over bandits. Each per-target pill should read `📋 Bandit 🎲 5/13 ❌ · 28 fire` (no minus). Click a pill — it expands to show the save breakdown + damage breakdown. Click again to collapse. The Σ aggregate pill at the end also drops the minus (`Σ 84 fire`).
+- **Backward compat.** Pill format is a pure visual change; cast cards re-render correctly after the v2.48.5 server response shape gained `damage_breakdown`. Older cards persisted in localStorage that lack the new field still render (the `t.damage_breakdown` check tolerates undefined). All 212 harness tests pass.
+
+---
+
 ## [2.48.5] - 2026-05-20
 
 **Schema version:** 56

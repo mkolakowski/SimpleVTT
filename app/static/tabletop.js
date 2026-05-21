@@ -2065,6 +2065,23 @@
             _rollLogHydrating = false;
         }
     }
+    // v2.48.6 — click any per-target AoE pill to toggle its
+    // breakdown detail. Delegated on document so it survives card
+    // re-renders (initial paint, /place_aoe resolution mutation,
+    // localStorage replay on refresh). Detail is a sibling <span>
+    // inside the pill button that starts ``display: none``.
+    document.addEventListener('click', (ev) => {
+        const pill = ev.target.closest && ev.target.closest('.per-target-pill');
+        if (!pill) return;
+        const detail = pill.querySelector('.pt-detail');
+        if (!detail) return;
+        const expanded = pill.dataset.expanded === '1';
+        pill.dataset.expanded = expanded ? '0' : '1';
+        detail.style.display = expanded ? 'none' : 'inline';
+        // Bump pill font size when expanded so the math is readable.
+        pill.style.fontSize = expanded ? '' : '13px';
+    });
+
     window._clearRollLog = function () {
         try { localStorage.removeItem(_ROLL_LOG_KEY); } catch (_) {}
         const ul = document.getElementById('roll-list');
@@ -2437,18 +2454,36 @@
                 const v = t.passed ? '✅' : '❌';
                 const type = t.damage_type ? ` ${escapeHTML(t.damage_type)}` : '';
                 const tag = t.passed ? ' (½)' : '';
+                // v2.48.6 — pill format:
+                //   📋 NAME 🎲 ROLL/DC ✅/❌ · DMG TYPE
+                // Dice emoji moved between name and roll; minus
+                // sign removed from damage. Click toggles a
+                // detail row showing the save + damage breakdowns
+                // (1d20[15]+2=17 / 8d6[3,5,…]=28). Wrapped in a
+                // container div so the detail can append below the
+                // header without breaking the flex row layout.
                 const dmg = (t.damage_applied || 0) > 0
-                    ? ` · 🎲 −${t.damage_applied}${type}${tag}`
+                    ? ` · ${t.damage_applied}${type}${tag}`
                     : '';
+                const header = `📋 ${escapeHTML(t.target_name || '')} 🎲 ${t.rolled}/${dc} ${v}${dmg}`;
+                const saveBreak = t.breakdown ? `Save: ${escapeHTML(t.breakdown)}` : '';
+                const dmgBreak = t.damage_breakdown ? `Damage: ${escapeHTML(t.damage_breakdown)}${type}` : '';
+                const detailLines = [saveBreak, dmgBreak].filter(Boolean).join(' · ');
                 pills.push(
-                    `<span class="result-pill ${cls}">📋 ${escapeHTML(t.target_name || '')} ${t.rolled}/${dc} ${v}${dmg}</span>`
+                    `<button type="button" class="result-pill ${cls} per-target-pill" data-expanded="0"`
+                    + ` title="Click for roll math">`
+                    + `<span class="pt-header">${header}</span>`
+                    + (detailLines
+                        ? `<span class="pt-detail" style="display:none;font-size:11px;color:var(--fg-mute);margin-left:8px;border-left:1px solid currentColor;padding-left:8px;opacity:.85;">${detailLines}</span>`
+                        : '')
+                    + `</button>`
                 );
                 totalDmg += (t.damage_applied || 0);
                 if (!dmgType && t.damage_type) dmgType = t.damage_type;
             }
             if (totalDmg > 0) {
                 const typeBit = dmgType ? ` ${escapeHTML(dmgType)}` : '';
-                pills.push(`<span class="result-pill chip-damage">Σ −${totalDmg}${typeBit}</span>`);
+                pills.push(`<span class="result-pill chip-damage">Σ ${totalDmg}${typeBit}</span>`);
             }
         } else {
             // Single-target headline view — unchanged from v2.43+.
@@ -2467,7 +2502,7 @@
             if (d.auto_save_damage_applied > 0) {
                 const type = d.auto_save_damage_type ? ` ${escapeHTML(d.auto_save_damage_type)}` : '';
                 const tag = d.auto_save_passed ? ' (half)' : '';
-                pills.push(`<span class="result-pill chip-damage">🎲 −${d.auto_save_damage_applied}${type}${tag}</span>`);
+                pills.push(`<span class="result-pill chip-damage">🎲 ${d.auto_save_damage_applied}${type}${tag}</span>`);
             }
         }
         if (d.auto_save_buff_name) {

@@ -7425,10 +7425,12 @@ async def cast_spell(
             # target). v1 rolls once per target for simplicity —
             # matches the per-beam pattern of Eldritch Blast (v2.40.0).
             _dmg_applied = 0
+            _dmg_breakdown = ""
             if damage_expr and bool(campaign.auto_apply_damage):
                 try:
                     _dr = dice_mod.roll(damage_expr)
                     _dmg_rolled = max(0, int(_dr.total))
+                    _dmg_breakdown = _dr.breakdown
                 except dice_mod.DiceParseError:
                     _dmg_rolled = 0
                 if _dmg_rolled > 0:
@@ -7445,6 +7447,7 @@ async def cast_spell(
                 "target_name": extra_name,
                 "rolled": _rolled,
                 "breakdown": _bd,
+                "damage_breakdown": _dmg_breakdown,
                 "passed": _passed,
                 "damage_applied": _dmg_applied,
                 "damage_type": damage_type,
@@ -7822,10 +7825,12 @@ async def place_aoe(
                 bd = ""
             passed = rolled >= dc
             dmg_applied = 0
+            dmg_breakdown = ""
             if damage_expr and auto_apply_damage:
                 try:
                     dr = dice_mod.roll(damage_expr)
                     dmg_rolled = max(0, int(dr.total))
+                    dmg_breakdown = dr.breakdown
                 except dice_mod.DiceParseError:
                     dmg_rolled = 0
                 if dmg_rolled > 0:
@@ -7850,6 +7855,7 @@ async def place_aoe(
                 "target_name": extra_name,
                 "rolled": rolled,
                 "breakdown": bd,
+                "damage_breakdown": dmg_breakdown,
                 "passed": passed,
                 "damage_applied": dmg_applied,
                 "damage_type": damage_type,
@@ -7878,10 +7884,12 @@ async def place_aoe(
             bd = ""
         passed = rolled >= dc
         dmg_applied = 0
+        dmg_breakdown = ""
         if damage_expr and auto_apply_damage:
             try:
                 dr = dice_mod.roll(damage_expr)
                 dmg_rolled = max(0, int(dr.total))
+                dmg_breakdown = dr.breakdown
             except dice_mod.DiceParseError:
                 dmg_rolled = 0
             if dmg_rolled > 0:
@@ -7898,6 +7906,7 @@ async def place_aoe(
             "target_name": extra_name,
             "rolled": rolled,
             "breakdown": bd,
+            "damage_breakdown": dmg_breakdown,
             "passed": passed,
             "damage_applied": dmg_applied,
             "damage_type": damage_type,
