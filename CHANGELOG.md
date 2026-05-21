@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.47] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Fix bug #6 from encounter-sim audit: `_onHealApplied` handler also missed `renderBattle()` refresh.** Third in the audit trail started by v2.49.45's filed list. Same bug class as v2.49.45 (`_onCharacterHpUpdate`) and v2.49.46 (`_onCharacterDeathSave`). The `_onHealApplied` handler in tabletop.js renders the heal row on the spell-cast card + updates the mini-sheet card's HP line via `_updateMiniHpDisplay`, but never mutates `window.battle.combatants[…].hp_current` or calls `renderBattle()`. Visible symptom: PC receives a heal via item / Lay on Hands / Healing Word; the spell-cast card shows "🩹 Char +N HP" correctly, the mini-sheet card updates, but the init-tracker's `.mini-header-sub` "HP X / Y" stays at the pre-heal value until something else triggers renderBattle. Fix is identical to v2.49.45/v2.49.46: when `d.char_id` and `d.new_hp` are present, sync `window.battle.combatants` HP for the matching char_id + call `window._renderBattle()`. No new regression test (the existing fixes' tests + the audit pattern are sufficient documentation). PATCH — client-side bug fix; no schema or API contract change.
+**Description:** One edit. `app/static/tabletop.js::_onHealApplied` — after the existing `_updateMiniHpDisplay` call, added the same window.battle sync + renderBattle call pattern. Skip when `d.char_id` is null (NPC heals broadcast through `battle_update` instead) or `d.new_hp` is absent (defensive). Mirrors the v2.49.45 / v2.49.46 fixes exactly.
+**Description (cont):** Audit progress. Three handlers in tabletop.js carry HP-updating payloads: `_onCharacterHpUpdate` (v2.49.45 ✅), `_onCharacterDeathSave` (v2.49.46 ✅), `_onHealApplied` (this commit ✅). The full set of HP-updating broadcast types is now covered for init-tracker refresh. `_onSpellCastTargetUpdated` was audited and skipped — it only mutates spell-card save outcomes, doesn't carry HP. Audit closed.
+**Description (cont 2):** Why no new regression test. The v2.49.45 `test_alice_observes_hp_update` and v2.49.46 `test_alice_observes_death_save_hp` together prove the audit pattern: when the broadcast carries HP and the handler skips renderBattle, the test's DOM assertion fails. A third test for heal_applied would replicate the same shape with a different setup (cast Cure Wounds / Lay on Hands). Filed if a regression suggests one specific path drifts.
+**Description (cont 3):** Verification. 225 harness tests pass; 33 encounter-sim tests pass (no regressions). The audit trail in the CHANGELOG (v2.49.45 → v2.49.46 → v2.49.47) shows the iterative process: a fix lands, the CHANGELOG flags an audit follow-up, the next commit picks it up. The encounter-sim suite continues to surface real client-side bugs.
+
+### Fixed
+- `app/static/tabletop.js::_onHealApplied` — when broadcast includes `d.char_id` and `d.new_hp`, also syncs `window.battle.combatants` HP + calls `window._renderBattle()`. Init-tracker mini-header-sub now reflects HP changes from heal broadcasts (Lay on Hands, Cure Wounds, healing potions).
+
+### Notes
+- **Backward compat.** Pure additive client fix.
+- **Six bugs fixed by encounter-sim so far**: v2.49.40, v2.49.41, v2.49.42, v2.49.45, v2.49.46, v2.49.47. The audit trail from v2.49.45 has now closed all 3 handlers that needed the missing-renderBattle fix.
+
+### Filed
+- **Audit complete** — the v2.49.45/46/47 trail has closed all HP-updating tabletop.js handlers. No remaining "missing renderBattle" candidates identified. Watch for new broadcast types in future commits to keep the pattern consistent.
+
+---
+
 ## [2.49.46] - 2026-05-21
 
 **Schema version:** 56

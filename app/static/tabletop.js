@@ -2991,6 +2991,27 @@
         if (typeof window._updateMiniHpDisplay === 'function') {
             window._updateMiniHpDisplay(d.char_id, d.new_hp);
         }
+        // v2.49.47 — also sync window.battle.combatants HP + refresh
+        // the init tracker. Same bug class as v2.49.45 / v2.49.46:
+        // the broadcast carries new_hp but the handler doesn't push
+        // it into the combatants list or trigger renderBattle, so
+        // the init-tracker mini-header-sub "HP X / Y" stays at the
+        // pre-heal value. Skip if char_id or new_hp is absent.
+        if (d.char_id != null && d.new_hp) {
+            const battle = window.battle && Array.isArray(window.battle.combatants)
+                ? window.battle.combatants : null;
+            if (battle) {
+                for (const c of battle) {
+                    if (c.char_id === d.char_id) {
+                        if (typeof d.new_hp.current === 'number') c.hp_current = d.new_hp.current;
+                        if (typeof d.new_hp.max === 'number') c.hp_max = d.new_hp.max;
+                    }
+                }
+            }
+            if (typeof window._renderBattle === 'function') {
+                try { window._renderBattle(); } catch (_) {}
+            }
+        }
         // v2.29.1: persist heal_applied to the roll-log buffer so the
         // "🩹 Krieger Stonefist +N HP" result row survives a refresh.
         // The row is rendered by mutating the existing spell-cast card,
