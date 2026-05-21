@@ -12,7 +12,6 @@ Plan reference: ``docs/plans/encounter-sim-test-suite.md`` —
 from __future__ import annotations
 
 import json
-import time
 from typing import Any, Callable
 
 from playwright.sync_api import Page
@@ -65,19 +64,27 @@ class WSCollector:
         """Block until a frame with ``type == type_name`` arrives
         (optionally also matching ``predicate(frame)``), else raise.
 
+        The poll loop uses ``page.wait_for_timeout`` between checks
+        rather than ``time.sleep`` — the latter blocks Playwright's
+        sync-API event loop, so the ``framereceived`` listener can't
+        fire and frames arrive only after the loop times out. The
+        Playwright wait yields to the event loop so listeners run.
+
         Returns the first matching frame. Does not consume it from
         the buffer — repeat callers see the same frame, so callers
         wanting "next matching frame after this point" should
         snapshot ``len(self.frames)`` before triggering and slice.
         """
-        deadline = time.monotonic() + (timeout_ms / 1000.0)
-        while time.monotonic() < deadline:
+        elapsed = 0
+        step_ms = 50
+        while elapsed < timeout_ms:
             for f in self.frames:
                 if f.get("type") != type_name:
                     continue
                 if predicate is None or predicate(f):
                     return f
-            time.sleep(0.05)
+            self.page.wait_for_timeout(step_ms)
+            elapsed += step_ms
         raise AssertionError(
             f"WS frame type={type_name!r} not seen within {timeout_ms}ms. "
             f"Captured types: {[f.get('type') for f in self.frames]}"

@@ -26,8 +26,11 @@ CAMPAIGN_ID = int(os.getenv("HARNESS_TEST_CAMPAIGN", "1"))
 
 
 def _gm_client() -> httpx.Client:
-    """Logged-in GM client. GM can rest any PC; non-GM clients are
-    restricted to their own character, which complicates fixtures."""
+    """ALREADY-OPEN logged-in GM client. Callers must call ``.close()``
+    in a try/finally — do NOT wrap in ``with`` because the login call
+    has already implicitly opened the client and httpx's context
+    manager rejects a second open.
+    """
     client = httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=10.0)
     resp = client.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"})
     if resp.status_code not in (200, 303):
@@ -41,12 +44,15 @@ def long_rest(char_id: int) -> None:
     handler restores HP to max, refills spell slots, partially
     refills hit dice. Buffs with duration tied to rest expire.
     """
-    with _gm_client() as client:
+    client = _gm_client()
+    try:
         resp = client.post(
             f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/rest",
             json={"type": "long"},
         )
         resp.raise_for_status()
+    finally:
+        client.close()
 
 
 def long_rest_everyone(roster: dict) -> None:
@@ -54,7 +60,8 @@ def long_rest_everyone(roster: dict) -> None:
     used by smoke tests so each test starts from a fully restored
     party. ~200 ms total for the 12 demo PCs at v2.49.x.
     """
-    with _gm_client() as client:
+    client = _gm_client()
+    try:
         for name, char in roster.items():
             resp = client.post(
                 f"/api/campaign/{CAMPAIGN_ID}/character/{char['id']}/rest",
@@ -65,3 +72,5 @@ def long_rest_everyone(roster: dict) -> None:
                     f"long_rest failed for {name} (id={char['id']}): "
                     f"{resp.status_code} {resp.text}"
                 )
+    finally:
+        client.close()
