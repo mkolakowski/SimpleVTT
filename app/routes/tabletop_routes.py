@@ -699,11 +699,30 @@ async def _maybe_concentration_save(
             paired_note = f" — dropped: {paired_summary}"
         else:
             paired_note = ""
-        gm_log_breakdown = (
-            f"1d20[{raw}]{'+' if bonus >= 0 else ''}{bonus} = {total} vs DC {dc} — ✗ Failed"
-            if bonus != 0 else
-            f"1d20[{raw}] = {total} vs DC {dc} — ✗ Failed"
-        )
+        # v2.49.50 — distinguish 💀 forced 0-HP drop from 💔 failed
+        # CON save. The save was still ROLLED for telemetry parity
+        # (existing tests assert on rolled/total/bonus) but a 0-HP
+        # drop is conceptually different — the rule ended the spell,
+        # not the save. The breakdown shows what the save would have
+        # been so the GM can see whether the roll itself was a pass.
+        if forced_drop_on_zero_hp:
+            emoji = "💀"
+            would_have_been = (
+                f"1d20[{raw}]{'+' if bonus >= 0 else ''}{bonus} = {total} vs DC {dc}"
+                if bonus != 0 else
+                f"1d20[{raw}] = {total} vs DC {dc}"
+            )
+            gm_log_breakdown = (
+                f"Concentration ends — incapacitated (0 HP) — "
+                f"save would have been {would_have_been}"
+            )
+        else:
+            emoji = "💔"
+            gm_log_breakdown = (
+                f"1d20[{raw}]{'+' if bonus >= 0 else ''}{bonus} = {total} vs DC {dc} — ✗ Failed"
+                if bonus != 0 else
+                f"1d20[{raw}] = {total} vs DC {dc} — ✗ Failed"
+            )
         await hub.broadcast(campaign_id, {
             "type": "roll",
             "data": {
@@ -711,7 +730,7 @@ async def _maybe_concentration_save(
                 "total": total,
                 "breakdown": gm_log_breakdown,
                 "note": (
-                    f"💔 {char.name} lost concentration on {buff_name}"
+                    f"{emoji} {char.name} lost concentration on {buff_name}"
                     f"{paired_note}"
                 ),
                 "visibility": Visibility.GM_ONLY.value,
@@ -10965,7 +10984,8 @@ def _set_death_save_state(
 
 
 async def _drop_caster_concentration(
-    campaign_id: int, character_id: int,
+    campaign_id: int, character_id: int, *,
+    reason: str = "incapacitated",
 ) -> int:
     """Drop every concentration-tagged buff the character is holding.
     Reuses ``_remove_buff`` which handles the buff_update broadcast +
@@ -10981,6 +11001,12 @@ async def _drop_caster_concentration(
     helper is purely defensive for the rare non-damage transition
     into incapacitation.
 
+    v2.49.50 — also emits a 💀 GM-only roll-log entry for each buff
+    dropped, mirroring the v2.39.0 💔 failed-save log shape. The
+    ``reason`` param flows into the log breakdown so the GM can tell
+    "incapacitated (3 failed death saves)" from "incapacitated (GM
+    override)" at a glance.
+
     Returns the number of buffs removed.
     """
     state = hub.get_battle(campaign_id)
@@ -10993,17 +11019,64 @@ async def _drop_caster_concentration(
             break
     if target is None:
         return 0
-    # Snapshot the keys before calling _remove_buff (it mutates the
-    # buffs list in place, and iterating a mutated list is dicey).
-    conc_keys = [
-        (b or {}).get("key") for b in target.get("buffs") or []
-        if (b or {}).get("concentration")
-    ]
+    caster_name = target.get("name") or "Unknown"
+    # Snapshot (key, name, paired-pre-drop list) for every concentration
+    # buff BEFORE calling _remove_buff — the helper mutates state in
+    # place, and the paired-buff cascade fires during removal so the
+    # paired list would be empty if we read it after.
+    drops: list[tuple[str, str, list[dict]]] = []
+    for b in target.get("buffs") or []:
+        b = b or {}
+        if not b.get("concentration"):
+            continue
+        key = b.get("key")
+        if not key:
+            continue
+        buff_name = b.get("name") or key
+        paired_pre_drop: list[dict] = []
+        for c in state.get("combatants") or []:
+            for pb in c.get("buffs") or []:
+                pb = pb or {}
+                if (
+                    pb.get("source_char_id") == character_id
+                    and bool(pb.get("concentration"))
+                    and pb.get("key") != key
+                ):
+                    paired_pre_drop.append({
+                        "combatant_name": c.get("name") or "Unknown",
+                        "buff_name": pb.get("name") or pb.get("key") or "Effect",
+                    })
+        drops.append((key, buff_name, paired_pre_drop))
+
     removed_count = 0
-    for key in conc_keys:
-        if key:
-            if await _remove_buff(campaign_id, character_id, key):
-                removed_count += 1
+    for key, buff_name, paired in drops:
+        if not await _remove_buff(campaign_id, character_id, key):
+            continue
+        removed_count += 1
+        if paired:
+            paired_summary = " · ".join(
+                f"{p['buff_name']} → {p['combatant_name']}"
+                for p in paired
+            )
+            paired_note = f" — dropped: {paired_summary}"
+        else:
+            paired_note = ""
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": "—",
+                "total": 0,
+                "breakdown": f"Concentration ends — {reason}",
+                "note": (
+                    f"💀 {caster_name} lost concentration on {buff_name}"
+                    f"{paired_note}"
+                ),
+                "visibility": Visibility.GM_ONLY.value,
+                "user_id": None,
+                "user_name": "GM log",
+                "char_name": caster_name,
+            },
+        })
     return removed_count
 
 
@@ -15235,7 +15308,10 @@ async def roll_death_save(
         # path. ``_drop_caster_concentration`` reuses ``_remove_buff``
         # which fires buff_update + cascades target-side cleanup.
         if new_status == "dead":
-            await _drop_caster_concentration(campaign_id, char.id)
+            await _drop_caster_concentration(
+                campaign_id, char.id,
+                reason="3 failed death saves",
+            )
 
     # Persist roll record so the campaign log sees it
     note_label = {
@@ -15377,7 +15453,10 @@ async def override_death_save(
     # path is already covered by v2.49.48; the death-save roll path
     # by the elif above; this is the third / final gap.
     if status_in in ("dying", "stable", "dead"):
-        await _drop_caster_concentration(campaign_id, char.id)
+        await _drop_caster_concentration(
+            campaign_id, char.id,
+            reason=f"GM override → {status_in}",
+        )
 
     return {"ok": True, "death_saves": new_ds, "hp": char.sheet.get("hp")}
 

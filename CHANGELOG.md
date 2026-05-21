@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.50] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Distinguish 💀 incapacitation drops from 💔 failed-save drops in the GM concentration log.** Closes the UI-tag follow-up filed in v2.49.48. Pre-fix, every concentration drop emitted the same `💔 NAME lost concentration on SPELL` log — failed CON save, 0-HP forced drop, death-save → dead, GM override → dead all looked identical to the GM. The 0-HP case was the most misleading: the save was still rolled (may have been a nat-20), but the log claimed it "failed." Fix splits the emoji + breakdown: 💔 = failed CON save (existing path), 💀 = incapacitated (0 HP or death-save-state transition). The broadcast shape is unchanged (still `type=roll` with `visibility=gm_only`); the cause distinction is in the note text + breakdown so existing handlers that filter on type+visibility continue to work. Reason strings carry the source: "incapacitated (0 HP)", "3 failed death saves", "GM override → {dying|stable|dead}". 4 new harness tests pin all four log shapes. PATCH — log text change; no schema or API contract change.
+**Description:** Two file edits + one new test file. **(1)** `app/routes/tabletop_routes.py::_drop_caster_concentration` — accepts a new keyword-only ``reason: str = "incapacitated"`` param. Before calling `_remove_buff`, snapshots each concentration buff's key + name + paired-buff list (the cleanup helper mutates state in place, so reading after-the-fact returns empty paired lists). After successful removal, emits a `type=roll` GM-only log entry: `note=f"💀 {caster_name} lost concentration on {buff_name}{paired_note}"` + `breakdown=f"Concentration ends — {reason}"`. The caster name is read from `target.get("name")` (combatant display name, not character record). **(2)** `app/routes/tabletop_routes.py::_maybe_concentration_save` (the v2.49.48 0-HP forced-drop branch) — when `forced_drop_on_zero_hp=True`, switches emoji to 💀 and rewrites the breakdown to `"Concentration ends — incapacitated (0 HP) — save would have been 1d20[N]+M = X vs DC Y"`. The save text is preserved for telemetry so the GM can audit what the d20 was. **(3)** Both death-save callers now pass distinct reason strings: `roll_death_save` → `"3 failed death saves"`, `override_death_save` → `f"GM override → {status_in}"`. **(4)** `tests/harness/test_concentration_skull_log.py` (NEW, 4 tests).
+**Description (cont):** Why a string ``reason`` param instead of an enum. The reason is purely human-readable log text — nothing downstream branches on it. An enum would force every caller to import + match on the value; a string lets each caller phrase the cause naturally and keeps `_drop_caster_concentration` agnostic to who's calling it. If a future commit needs structured cause data (e.g. for filtering the roll-log), the field can be added to the broadcast separately without rewriting the helper signature.
+**Description (cont 2):** Why preserve the rolled save in the 0-HP breakdown. RAW says concentration ends regardless of the save outcome, but the d20 was still rolled (for parity with the existing broadcast contract — tests assert on `rolled`, `total`, `bonus`). The breakdown now reads "save would have been 1d20[18]+2 = 20 vs DC 10" — a passing roll, but RAW dropped concentration anyway. The GM can see at a glance whether the death was bad luck (failed both) or RAW-driven (would have passed but 0 HP). The 💀 emoji is the "this is RAW, not a dice failure" tell.
+**Description (cont 3):** Why test_failed_con_save_still_emits_heart_log uses a retry loop. The non-0-HP CON save is genuinely random (d20 vs DC); to assert the 💔 log still appears, the test needs at least one failed save in the run. Rowan has no CON-save proficiency so P(fail | DC=15) ≈ 70%; 15 retries gives ~1 - 0.30^15 ≈ 99.999% chance of at least one failure. Same pattern as the existing v2.39.0 `test_concentration_break_emits_gm_only_log`.
+**Description (cont 4):** Why test_roll_3_failures_emits_skull_log uses a retry loop instead of dice seeding. The TEST_MODE `/api/test/dice/seed` endpoint takes a single integer seed, not a forced d20 value. Finding a seed that produces three sub-DC rolls in a row is empirical + brittle to RNG implementation. Retry loop with 15 attempts (each: reset to dying/2-failures + re-hex + roll) has P(roll-fails | no-CON-prof) = 11/20 = 55%; ~99.99% chance of at least one death within 15 attempts. Reset overhead per loop is ~30ms (4 HTTP calls).
+**Description (cont 5):** Verification. Ran the new tests pre-fix: `test_override_to_dead_emits_skull_log` failed (note started with 💔, breakdown said "✗ Failed" not "GM override"). Post-fix: all 4 pass. Full regression: 234 harness tests pass (was 230, +4 new); 33 encounter-sim tests still pass (no broadcast-shape break).
+
+### Fixed
+- `app/routes/tabletop_routes.py::_maybe_concentration_save` — when `forced_drop_on_zero_hp=True`, the GM roll-log entry now uses 💀 instead of 💔 and the breakdown names the cause ("incapacitated, 0 HP") instead of showing "✗ Failed" against a save that might have rolled a nat-20.
+
+### Added
+- `app/routes/tabletop_routes.py::_drop_caster_concentration` — accepts new keyword-only `reason` param; emits a 💀 GM-only roll-log entry per buff dropped, with paired-buff cascade summary mirrored from the v2.39.0 💔 log.
+- `tests/harness/test_concentration_skull_log.py` — 4 tests covering 0-HP 💀 / failed-save 💔 (regression) / override-to-dead 💀 / roll-3-failures 💀 branches.
+- `docs/test-harness-coverage.md` — catalog entry; total 230 → 234.
+
+### Changed
+- `app/routes/tabletop_routes.py::roll_death_save` (death-save → dead branch) and `::override_death_save` (override → dying/stable/dead branches) now pass distinct `reason` strings to `_drop_caster_concentration` so the GM log entry names the cause.
+
+### Notes
+- **Backward compat.** Pure additive — broadcast shape unchanged. Clients that don't render the emoji distinction still receive the same `type=roll` event and can render the existing 💔 fallback path (matches all "lost concentration" notes). The 💀 emoji is a render-only difference today; clients can opt into a different visual style later.
+
+### Filed
+- **Knocked-out via non-damage incapacitation** — still open from v2.49.49. Sleep, hold person on the caster, banishment, etc. also incapacitate without dropping HP or failing a death save. Each condition-applying endpoint needs an audit to find which ones should also call `_drop_caster_concentration` with an appropriate reason string. Out of scope for this commit.
+- **Concentration log emission on voluntary end** — `/end_buff` on a concentration buff currently emits only `buff_update`, no GM log. Voluntary ends are different from incapacitation but the GM still benefits from a one-line audit ("✋ Magnus ended concentration on Hex"). Could add a third emoji + reason variant in a future commit.
+
+---
+
 ## [2.49.49] - 2026-05-21
 
 **Schema version:** 56
