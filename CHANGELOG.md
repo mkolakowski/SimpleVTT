@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.24] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 3 commit K — `test_buff_install_decrement` (Krieger Rage tick-down).** Third Level 2 test. First test in the suite to exercise **turn-advance state** — the GM clicks "Next ▶" to end a combatant's turn and the client-side buff-tick logic (tabletop.html ~line 5311) walks the ending combatant's buffs and decrements `duration_rounds` by 1 (dropping any that hit 0). Test installs Rage on Krieger (10-round duration), advances the turn by clicking `#battle-next-btn`, asserts the buff chip's duration label dropped to "9 rounds" — and defensively confirms the chip does NOT still show "10 rounds" (a regression where renderBattle uses stale state would otherwise sneak through). Test mirrors the Phase 1 Krieger Rage test for the install side but adds the multi-turn lifecycle that Level 2 was designed for. No turn-advance helpers extracted yet (Phase 3 only has this one tick-down test today; if commits L/M/N also click Next, the right move is a `TabletopPage.advance_turn()` method that hides the selector behind a name). PATCH — additive test only; no helper / runtime change.
+**Description:** One new file. `tests/encounter_sim/level_2_encounter/test_buff_install_decrement.py`. Scenario: (1) seed Krieger as `turn_index=0` so his turn is the active one — buffs tick on the OWNER's turn-end (`source_caster_id == cur.id`), and Rage is a self-buff so Krieger owns his own buff. (2) `post_use("use_rage", krieger["id"])` installs the 10-round buff. (3) Wait for the `buff_update` WS frame so the GM page applies the buff locally (the buff_update handler has no IS_GM guard, so the chip renders for the GM driver). (4) Assert the rage chip carries "10". (5) Click `#battle-next-btn` — the Next button handler runs the tick synchronously inside the click handler, then calls `pushBattle()` + `renderBattle()`, so the DOM reflects the new state after the click returns. (6) Re-locate the chip (renderBattle re-creates the DOM) and assert "9", PLUS assert "10 rounds" is no longer in the chip text (defensive regression catch).
+**Description (cont):** Why the test asserts on rendered DOM and not on a WS broadcast. The buff-tick math runs CLIENT-side in the GM's Next button handler. The GM then pushes the new state via `pushBattle()` which the server stores and broadcasts as `battle_update` to other clients — but the GM client IGNORES that broadcast (the v2.5.5 echo-loop guard at tabletop.html:5543). So the only observable signal from a GM-driver test is the GM's own DOM after the click. A player-driver variant of this test would observe via the broadcast (Alice's client accepts battle_update), and the test would naturally split into two layers — filed.
+**Description (cont 2):** Why no `TabletopPage.advance_turn()` helper yet. The plan calls for one ("Page object pattern... methods land here as tests grow into them — first PoC needs ``goto`` + ``combatant_row`` + ``combatant_hp``"). Today only this one test clicks the Next button, so a one-line `click("#battle-next-btn")` is more honest than a method-with-a-name. If commits L/M/N (concentration_lifecycle / aoe_persistent_marker / tavern_brawl_baseline) also click Next, the method lands then.
+**Description (cont 3):** Why no harness test. Test-only addition exercising a client-side feature (the tick math lives in tabletop.html JS, not the server). The server-side flow is just `pushBattle` → `set_battle` → `broadcast battle_update`, all of which already have harness coverage via `tests/harness/test_attack_auto_damage.py::_seed_battle` round-trips. Verification: 5 sequential local runs × 15 tests pass at ~26.5 s/run, no flake.
+
+### Added
+- `tests/encounter_sim/level_2_encounter/test_buff_install_decrement.py` — first multi-turn Level 2 test; validates the GM-side buff-tick-on-turn-end logic.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 3 progress:** 3 / 6 Level 2 scenarios landed. 3 remaining (concentration_lifecycle, aoe_persistent_marker, tavern_brawl_baseline).
+- **Runtime:** full encounter-sim suite at 15 tests / ~26.5 s. Within Phase 3 budget of ≤4 min.
+
+### Filed
+- **`TabletopPage.advance_turn()` helper** — wraps `gm_page.locator("#battle-next-btn").click()`. Lands when a 2nd Level 2 test clicks Next (concentration_lifecycle is the likely trigger).
+- **Player-driver variant of this test** — Alice subscribed to the campaign WS would observe the `battle_update` carrying the post-tick buff list, complementing the GM-driver DOM check. Filed alongside the Phase 1/2 player-driver variants.
+- **Phase 3 commit L** — `test_concentration_lifecycle` (Hex install + concentration save on damage + auto-drop). Exercises the `/concentration/X/tick` endpoint the Next button calls (see tabletop.html:5297).
+- **Phase 3 commits M / N** — aoe_persistent_marker (Spike Growth + canvas, dependency check), tavern_brawl_baseline (headline 3v3 multi-round).
+
+---
+
 ## [2.49.23] - 2026-05-21
 
 **Schema version:** 56
