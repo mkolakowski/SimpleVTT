@@ -1,15 +1,8 @@
 # SimpleVTT wiki
 
-In-repo documentation hub for SimpleVTT — how-to guides, system explainers, and visual references for contributors and operators. New guides land here as `.md` (for prose) or `.html` (for visual mocks). Versioned alongside the code so every guide carries the version it was written for.
+In-repo documentation hub for SimpleVTT — how-to guides, system explainers, design plans, and visual references for contributors and operators. Versioned alongside the code so every guide carries the version it was written for.
 
-This wiki complements the canonical references that live elsewhere in the repo:
-
-- **`README.md`** (repo root) — install + deploy quickstart.
-- **`CHANGELOG.md`** (repo root) — release history + version-bump rules.
-- **`CLAUDE.md`** (repo root) — contributor / agent guidelines.
-- **`docs/roll-log-card-layout.md`** — text/semantic reference for the roll-log card structure (companion to `roll-log-guide.html`).
-- **`docs/test-harness-coverage.md`** — categorized index of every harness test.
-- **`docs/plans/`** — design docs + implementation roadmaps (action-economy, targeting, test-harness, etc.).
+Guides land at `docs/wiki/<slug>.{md,html}`. Plans live at `docs/plans/<slug>.md`. References live at `docs/<slug>.md`. The top-level repo docs (`CHANGELOG.md`, `CLAUDE.md`, `TODO.md`, `CREDITS.md`, `README.md`) stay at the repo root but are surfaced through the wiki nav. Every wiki page carries the same nav strip via `app/templates/_wiki_nav.html` (Jinja includes) or via the server-side injector in `app/routes/wiki_routes.py::_inject_wiki_nav` (standalone HTML guides).
 
 ## Available guides
 
@@ -25,19 +18,44 @@ This wiki complements the canonical references that live elsewhere in the repo:
 | [The character sheet](the-character-sheet.md) | Markdown (how-to) | Players + GMs | ✅ shipped (v2.43.19) |
 | [Demo mode](demo-mode.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.21) |
 
-## Plans
+## Design plans
 
-Design docs + implementation roadmaps for in-flight or shipped subsystems. These live at `docs/plans/*.md` (not in the wiki dir) and are the source of truth for "why was this built this way" + "what's still deferred." Linked here so the wiki is a one-stop index.
+Per-subsystem design docs + implementation roadmaps. Working docs that explain "why was this built this way" and "what's still deferred." Served through the wiki at `/wiki/doc/plan-<slug>`.
 
-| Plan | Status | Summary |
-|------|--------|---------|
-| [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Phase 1 shipped (v2.2.0); Phases 2 + 3 deferred | Tracking adv/dis on rolls — highlight pill on the d20, tri-state UI on the sheet, cross-character rollover handling. |
-| [Class / subclass / feat / race content](../plans/class-content-status.md) | Living inventory | Per-feature implementation status for every D&D 5e SRD entity under `app/data/local/dnd5e/`. 🟢 shipped / 🟠 partial / ⚪ not started. Detailed per-feature plans grow under their sections. |
-| [Death saving throws](../plans/death-saves.md) | Phase 1 shipped (v2.1.0); Phases 2–4 deferred | Death save success/failure counters, auto-die at 3 fails, healing clears dead state, always-on tracker visibility. |
-| [Demo mode](../plans/demo-mode.md) | Shipped (v2.3.0) | Self-contained demo seed (12 PCs + Tavern Brawl) with lifespan auto-reset; the prerequisite for the encounter-sim test suite. |
-| [Encounter-sim test suite](../plans/encounter-sim-test-suite.md) | Plan finalized (v2.49.7) · Phase 1 PoC pending (task #93) | Multi-level Playwright suite that drives the UI end-to-end + asserts at HTTP / WS / DOM / canvas layers. Levels: 1 smoke (12 tests), 2 encounter sim (6 scenarios), 3 edge cases (40 tests), 4 fuzz (manual). |
-| [Autonomous click-through test harness](../plans/test-harness.md) | Phases 1–5 shipped (212 tests as of v2.49.6) | The Python httpx + WS endpoint-contract harness under `tests/harness/`. Catches backend state + broadcast-shape regressions; companion to the encounter-sim suite above (which catches UI-render regressions). |
-| [Wiki expansion](../plans/wiki-expansion.md) | Living TODO companion | Prioritizes the guide-writing roadmap from the TODO section below — sequencing, dependencies, and the pages the README's TODO list doesn't cover. |
+| Plan | Format | Audience | Status |
+|------|--------|----------|--------|
+| [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped · 2 + 3 deferred |
+| [Class / subclass / feat / race content](../plans/class-content-status.md) | Markdown (inventory) | Contributors | 🟢 / 🟠 / ⚪ living inventory |
+| [Death saving throws](../plans/death-saves.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped · 2–4 deferred |
+| [Demo mode](../plans/demo-mode.md) | Markdown (design) | Contributors | ✅ shipped (v2.3.0) |
+| [Encounter-sim test suite](../plans/encounter-sim-test-suite.md) | Markdown (design) | Contributors | ⚪ plan finalized · Phase 1 PoC pending |
+| [Autonomous click-through test harness](../plans/test-harness.md) | Markdown (design) | Contributors | ✅ Phases 1–5 shipped (212 tests) |
+| [Wiki expansion](../plans/wiki-expansion.md) | Markdown (TODO companion) | Contributors | 🟠 living roadmap |
+| [Combat encounters](../encounters-plan.md) | Markdown (proposed) | Contributors | ⚪ proposed · not started |
+| [Multi-system refactor](../multi-system-refactor.md) | Markdown (proposed) | Contributors | ⚪ proposed · not started |
+
+## References
+
+Reference docs at `docs/` that aren't operator/GM guides but are useful to contributors. Served at `/wiki/doc/<slug>`.
+
+| Reference | Format | Audience | Status |
+|-----------|--------|----------|--------|
+| [Roll-log card layout](../roll-log-card-layout.md) | Markdown (semantic ref) | Contributors | ✅ shipped |
+| [Test harness coverage catalog](../test-harness-coverage.md) | Markdown (index) | Contributors | ✅ shipped · living |
+| [Demo image-generation prompts](../demo/image-prompts.md) | Markdown (asset notes) | Contributors | ✅ shipped |
+
+## Repo documentation
+
+Canonical top-level documents at the repo root. Mirrored through the wiki so they're reachable from the same nav as everything else. Served at `/wiki/doc/<slug>`.
+
+| Doc | Format | Audience | Status |
+|-----|--------|----------|--------|
+| [README](../../README.md) | Markdown (install + deploy) | Operators | ✅ shipped |
+| [CHANGELOG](../../CHANGELOG.md) | Markdown (release history) | All | ✅ shipped · living |
+| [CHANGELOG (pre-2.0 archive)](../../CHANGELOG_v1.md) | Markdown (release history) | All | ✅ archived |
+| [CLAUDE — contributor + agent guidelines](../../CLAUDE.md) | Markdown (contributing) | Contributors | ✅ shipped · living |
+| [CREDITS & attribution](../../CREDITS.md) | Markdown (license) | All | ✅ shipped |
+| [TODO — planned features backlog](../../TODO.md) | Markdown (backlog) | Contributors | ✅ shipped · living |
 
 ## TODO — guides to write
 
@@ -82,6 +100,6 @@ A guide entry lives at `docs/wiki/<slug>.{md,html}` and gets a row in the "Avail
 - Open with a one-sentence summary of what it covers + audience.
 - State the version it was written for (so future readers can date the screenshots / examples).
 - Include code-location pointers for anything in the codebase the reader might want to grep.
-- For HTML mocks: be self-contained (inline CSS, no external assets) so it can be opened with `file://` and not break.
+- For HTML mocks: be self-contained (inline CSS, no external assets) so it can be opened with `file://` and not break. The server injects the v2.49.9 wiki nav after `<body>` at request time — don't bake it into the file.
 
-Update this README's table when you add a guide so the index stays in sync.
+When you add a guide, a plan, or a reference doc: update this README's table, the matching table in `app/templates/wiki.html`, and (for plans / refs / repo docs) the allowlist in `app/routes/wiki_routes.py::_DOC_ALLOWLIST` so the new doc is reachable through the wiki nav.

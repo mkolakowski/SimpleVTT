@@ -7,9 +7,9 @@
      and right. Everything inside (text, headings, lists, table) is
      left-justified — the v2.43.9 ``text-align: center`` experiment
      made centered prose hard to read; reverted to the natural
-     left-aligned flow. */
+     left-aligned flow. v2.49.9: nav menu via _wiki_nav.html include. */
   .wiki-wrap {
-      max-width: 820px;
+      max-width: 880px;
       margin: 0 auto;
       padding: 20px 36px 60px;
   }
@@ -48,6 +48,7 @@
       border: 1px solid var(--border);
       padding: 6px 10px;
       text-align: left;
+      vertical-align: top;
   }
   .wiki-wrap th {
       background: var(--bg-2);
@@ -79,33 +80,32 @@
       color: var(--c-heal, #4ade80);
       font-weight: 600;
   }
+  .wiki-wrap .status-partial {
+      color: var(--c-crit, #fbbf24);
+      font-weight: 600;
+  }
+  .wiki-wrap .status-pending {
+      color: var(--fg-mute);
+      font-weight: 600;
+  }
   .wiki-wrap .pointer-list a {
       color: var(--accent);
   }
 </style>
 {% endblock %}
 {% block content %}
+{% include "_wiki_nav.html" %}
 <div class="wiki-wrap">
   <h1>SimpleVTT wiki</h1>
   <p class="lede">
-    In-repo documentation hub for SimpleVTT — how-to guides, system explainers, and visual references
-    for contributors and operators. This page mirrors <code>docs/wiki/README.md</code> in the repo; new
-    guides land as <code>.md</code> or <code>.html</code> files under <code>docs/wiki/</code>.
+    In-repo documentation hub for SimpleVTT — how-to guides, system explainers, design plans, and visual references
+    for contributors and operators. This page mirrors <code>docs/wiki/README.md</code>; guides live as
+    <code>.md</code> or <code>.html</code> under <code>docs/wiki/</code>, plans under <code>docs/plans/</code>,
+    and the root-level repo docs (<code>CHANGELOG</code>, <code>CLAUDE</code>, <code>TODO</code>, <code>CREDITS</code>)
+    are served through the wiki via <code>/wiki/doc/&lt;slug&gt;</code>.
   </p>
 
-  <p>
-    This wiki complements the canonical references that live elsewhere in the repo:
-  </p>
-  <ul class="pointer-list">
-    <li><code>README.md</code> (repo root) — install + deploy quickstart.</li>
-    <li><code>CHANGELOG.md</code> (repo root) — release history + version-bump rules.</li>
-    <li><code>CLAUDE.md</code> (repo root) — contributor / agent guidelines.</li>
-    <li><code>docs/roll-log-card-layout.md</code> — text/semantic reference for the roll-log card structure (companion to the roll-log guide below).</li>
-    <li><code>docs/test-harness-coverage.md</code> — categorized index of every harness test.</li>
-    <li><code>docs/plans/</code> — design docs + implementation roadmaps.</li>
-  </ul>
-
-  <h2>Available guides</h2>
+  <h2 id="guides">Available guides</h2>
   <table>
     <thead>
       <tr><th>Guide</th><th>Format</th><th>Audience</th><th>Status</th></tr>
@@ -168,7 +168,156 @@
     </tbody>
   </table>
 
-  <h2>TODO — guides to write</h2>
+  <h2 id="plans">Design plans</h2>
+  <p>
+    Per-subsystem design docs + implementation roadmaps. These live at <code>docs/plans/*.md</code>; they
+    are working docs that explain "why was this built this way" and "what's still deferred." Served through
+    the wiki via <code>/wiki/doc/plan-&lt;slug&gt;</code>.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Plan</th><th>Format</th><th>Audience</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a href="/wiki/doc/plan-advantage-disadvantage">Advantage &amp; disadvantage</a></td>
+        <td>Markdown (design)</td>
+        <td>Contributors</td>
+        <td><span class="status-partial">🟠 Phase 1 shipped · 2 + 3 deferred</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/plan-class-content-status">Class / subclass / feat / race content</a></td>
+        <td>Markdown (inventory)</td>
+        <td>Contributors</td>
+        <td><span class="status-partial">🟢 / 🟠 / ⚪ living inventory</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/plan-death-saves">Death saving throws</a></td>
+        <td>Markdown (design)</td>
+        <td>Contributors</td>
+        <td><span class="status-partial">🟠 Phase 1 shipped · 2–4 deferred</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/plan-demo-mode">Demo mode</a></td>
+        <td>Markdown (design)</td>
+        <td>Contributors</td>
+        <td><span class="status-shipped">✅ shipped (v2.3.0)</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/plan-encounter-sim-test-suite">Encounter-sim test suite</a></td>
+        <td>Markdown (design)</td>
+        <td>Contributors</td>
+        <td><span class="status-pending">⚪ plan finalized · Phase 1 PoC pending</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/plan-test-harness">Autonomous click-through test harness</a></td>
+        <td>Markdown (design)</td>
+        <td>Contributors</td>
+        <td><span class="status-shipped">✅ Phases 1–5 shipped (212 tests)</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/plan-wiki-expansion">Wiki expansion</a></td>
+        <td>Markdown (TODO companion)</td>
+        <td>Contributors</td>
+        <td><span class="status-partial">🟠 living roadmap</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/plan-encounters">Combat encounters</a></td>
+        <td>Markdown (proposed)</td>
+        <td>Contributors</td>
+        <td><span class="status-pending">⚪ proposed · not started</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/plan-multi-system-refactor">Multi-system refactor</a></td>
+        <td>Markdown (proposed)</td>
+        <td>Contributors</td>
+        <td><span class="status-pending">⚪ proposed · not started</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="references">References</h2>
+  <p>
+    Reference docs at <code>docs/</code> that aren't operator/GM guides but are useful to contributors —
+    layout specs, coverage indexes, asset notes. Served through the wiki via <code>/wiki/doc/&lt;slug&gt;</code>.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Reference</th><th>Format</th><th>Audience</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a href="/wiki/doc/roll-log-card-layout">Roll-log card layout</a></td>
+        <td>Markdown (semantic ref)</td>
+        <td>Contributors</td>
+        <td><span class="status-shipped">✅ shipped</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/test-harness-coverage">Test harness coverage catalog</a></td>
+        <td>Markdown (index)</td>
+        <td>Contributors</td>
+        <td><span class="status-shipped">✅ shipped · living</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/image-prompts">Demo image-generation prompts</a></td>
+        <td>Markdown (asset notes)</td>
+        <td>Contributors</td>
+        <td><span class="status-shipped">✅ shipped</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="repo-docs">Repo documentation</h2>
+  <p>
+    The canonical top-level documents at the repo root. Mirrored through the wiki so they're reachable
+    from the same nav as everything else; the on-disk files at <code>./CHANGELOG.md</code> etc. remain the
+    authoritative source.
+  </p>
+  <table>
+    <thead>
+      <tr><th>Doc</th><th>Format</th><th>Audience</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a href="/wiki/doc/readme">README</a></td>
+        <td>Markdown (install + deploy)</td>
+        <td>Operators</td>
+        <td><span class="status-shipped">✅ shipped</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/changelog">CHANGELOG</a></td>
+        <td>Markdown (release history)</td>
+        <td>All</td>
+        <td><span class="status-shipped">✅ shipped · living</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/changelog-v1">CHANGELOG (pre-2.0 archive)</a></td>
+        <td>Markdown (release history)</td>
+        <td>All</td>
+        <td><span class="status-shipped">✅ archived</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/claude">CLAUDE — contributor + agent guidelines</a></td>
+        <td>Markdown (contributing)</td>
+        <td>Contributors</td>
+        <td><span class="status-shipped">✅ shipped · living</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/credits">CREDITS &amp; attribution</a></td>
+        <td>Markdown (license)</td>
+        <td>All</td>
+        <td><span class="status-shipped">✅ shipped</span></td>
+      </tr>
+      <tr>
+        <td><a href="/wiki/doc/todo">TODO — planned features backlog</a></td>
+        <td>Markdown (backlog)</td>
+        <td>Contributors</td>
+        <td><span class="status-shipped">✅ shipped · living</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 id="todo">TODO — guides to write</h2>
   <p>
     This wiki is a stub. The list below is what we want it to grow into. Each unchecked item is a
     self-contained write-up task; when somebody writes the guide, they tick the box and add a row to
@@ -219,11 +368,13 @@
     <li>Open with a one-sentence summary of what it covers + audience.</li>
     <li>State the version it was written for (so future readers can date the screenshots / examples).</li>
     <li>Include code-location pointers for anything in the codebase the reader might want to grep.</li>
-    <li>For HTML mocks: be self-contained (inline CSS, no external assets) so it opens with <code>file://</code> and survives moves.</li>
+    <li>For HTML mocks: be self-contained (inline CSS, no external assets) so it opens with <code>file://</code> and survives moves. The server injects the v2.49.9 wiki nav after <code>&lt;body&gt;</code> at request time — don't bake it into the file.</li>
   </ul>
   <p>
-    Update <code>docs/wiki/README.md</code> <em>and</em> <code>app/templates/wiki.html</code>'s
-    "Available guides" table when you add a guide so the index stays in sync.
+    When you add a guide, a plan, or a reference doc: update <code>docs/wiki/README.md</code>,
+    <code>app/templates/wiki.html</code> (the table on this page), and (for plans/refs/repo docs)
+    the allowlist in <code>app/routes/wiki_routes.py</code> so the new doc is reachable through
+    the wiki nav.
   </p>
 </div>
 {% endblock %}

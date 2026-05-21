@@ -1,0 +1,59 @@
+{# v2.49.9: shared wiki nav menu. Included from wiki.html + wiki_md.html
+   and injected server-side into the standalone HTML guides (see
+   ``wiki_routes.py``'s ``_inject_wiki_nav`` helper). Anchor links
+   land on sections of the ``/wiki`` landing page. #}
+<style>
+  /* v2.49.9 wiki nav — compact panel, 32px floor per CLAUDE.md's
+     "deliberately compact" exception (this is a single-row nav strip,
+     not a primary touch surface). Themed via root vars so all 8
+     themes render. */
+  .wiki-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 18px;
+    background: var(--bg-2);
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    align-items: center;
+  }
+  .wiki-nav-brand {
+    font-weight: 600;
+    color: var(--fg-mute);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-right: 10px;
+  }
+  .wiki-nav a.wiki-nav-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    min-height: 32px;
+    border-radius: 6px;
+    color: var(--fg);
+    text-decoration: none;
+    border: 1px solid transparent;
+    line-height: 1.2;
+  }
+  .wiki-nav a.wiki-nav-item:hover {
+    background: var(--bg);
+    border-color: var(--border);
+    text-decoration: none;
+  }
+  .wiki-nav a.wiki-nav-item.active {
+    background: var(--bg);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+</style>
+<nav class="wiki-nav" aria-label="Wiki navigation">
+  <span class="wiki-nav-brand">📚 Wiki</span>
+  <a href="/wiki" class="wiki-nav-item">🏠 Home</a>
+  <a href="/wiki#guides" class="wiki-nav-item">📖 Guides</a>
+  <a href="/wiki#plans" class="wiki-nav-item">🗺️ Plans</a>
+  <a href="/wiki#references" class="wiki-nav-item">🛠️ References</a>
+  <a href="/wiki#repo-docs" class="wiki-nav-item">📂 Repo Docs</a>
+  <a href="/wiki#todo" class="wiki-nav-item">✏️ TODO</a>
+</nav>

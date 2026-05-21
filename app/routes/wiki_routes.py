@@ -1,16 +1,25 @@
 """In-repo wiki routes.
 
-Serves the wiki landing page (``/wiki``) and the self-contained HTML
-guides under ``docs/wiki/`` (``/wiki/<slug>``). Read-only, no auth — the
-content is reference documentation, deliberately not gated. Lives in
-its own router so the route list stays organized.
+Serves the wiki landing page (``/wiki``) and the documentation surface:
+  - ``/wiki/<slug>``       — guides under ``docs/wiki/`` (``.md`` or ``.html``).
+  - ``/wiki/doc/<slug>``   — plans / references / repo-root docs via the
+                             v2.49.9 ``_DOC_ALLOWLIST`` mapping.
+
+Read-only, no auth — the content is reference documentation,
+deliberately not gated. Lives in its own router so the route list
+stays organized.
 
 To add a new guide:
-  1. Drop ``docs/wiki/<slug>.html`` into the repo (self-contained HTML).
+  1. Drop ``docs/wiki/<slug>.html`` or ``docs/wiki/<slug>.md`` into the repo.
   2. Add an entry in ``app/templates/wiki.html``'s "Available guides"
      table linking to ``/wiki/<slug>``.
   3. Add the same entry in ``docs/wiki/README.md`` so the on-disk index
      stays in sync.
+
+To surface a new plan / reference / root doc:
+  1. Add a row to ``_DOC_ALLOWLIST`` below mapping a slug to the file
+     path (relative to repo root).
+  2. Add a row to the matching table in ``app/templates/wiki.html``.
 """
 from __future__ import annotations
 
@@ -31,18 +40,108 @@ from ..templates import templates
 
 router = APIRouter()
 
-_WIKI_DIR = Path(__file__).resolve().parent.parent.parent / "docs" / "wiki"
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_WIKI_DIR = _REPO_ROOT / "docs" / "wiki"
+
+# v2.49.9: allowlist of plans / references / repo-root docs reachable
+# through the wiki nav. Slug → path-relative-to-repo-root. Keep the
+# slugs lowercase + hyphenated to match the URL pattern at
+# ``/wiki/doc/<slug>``. ``plan-*`` prefix marks docs/plans/ entries;
+# bare slugs are either docs/ refs or repo root.
+_DOC_ALLOWLIST: dict[str, Path] = {
+    # Repo root
+    "readme": Path("README.md"),
+    "changelog": Path("CHANGELOG.md"),
+    "changelog-v1": Path("CHANGELOG_v1.md"),
+    "claude": Path("CLAUDE.md"),
+    "credits": Path("CREDITS.md"),
+    "todo": Path("TODO.md"),
+    # docs/ references
+    "roll-log-card-layout": Path("docs") / "roll-log-card-layout.md",
+    "test-harness-coverage": Path("docs") / "test-harness-coverage.md",
+    "image-prompts": Path("docs") / "demo" / "image-prompts.md",
+    # docs/plans/ design docs
+    "plan-advantage-disadvantage": Path("docs") / "plans" / "advantage-disadvantage.md",
+    "plan-class-content-status": Path("docs") / "plans" / "class-content-status.md",
+    "plan-death-saves": Path("docs") / "plans" / "death-saves.md",
+    "plan-demo-mode": Path("docs") / "plans" / "demo-mode.md",
+    "plan-encounter-sim-test-suite": Path("docs") / "plans" / "encounter-sim-test-suite.md",
+    "plan-test-harness": Path("docs") / "plans" / "test-harness.md",
+    "plan-wiki-expansion": Path("docs") / "plans" / "wiki-expansion.md",
+    "plan-encounters": Path("docs") / "encounters-plan.md",
+    "plan-multi-system-refactor": Path("docs") / "multi-system-refactor.md",
+}
+
+
+def _render_markdown_page(source: str, request: Request, fallback_title: str) -> HTMLResponse:
+    """Render a markdown source string through the wiki_md.html
+    template. Shared by the .md branch of ``/wiki/<slug>`` and the
+    new ``/wiki/doc/<slug>`` route so both go through the same chrome
+    (topnav + wiki nav menu + base.html footer).
+    """
+    rendered = md_lib.markdown(
+        source,
+        extensions=["tables", "fenced_code", "sane_lists"],
+    )
+    m = re.search(r"<h1[^>]*>(.*?)</h1>", rendered, re.IGNORECASE | re.DOTALL)
+    title = re.sub(r"<[^>]+>", "", m.group(1)).strip() if m else fallback_title
+    return templates.TemplateResponse("wiki_md.html", {
+        "request": request,
+        "title": title,
+        "body": rendered,
+    })
+
+
+def _inject_wiki_nav(html: str, request: Request) -> str:
+    """v2.49.9: inject the shared wiki nav menu after ``<body>`` on
+    the standalone HTML guides under ``docs/wiki/<slug>.html`` so they
+    pick up the same nav strip the Jinja-rendered pages get via
+    ``{% include "_wiki_nav.html" %}``. Renders the partial through
+    the templating engine so the same source is the single source of
+    truth.
+
+    The guides are designed to be self-contained for ``file://``
+    preview, so we don't bake the nav into the file — the server
+    injects it at request time. If the marker isn't present (e.g.
+    a guide author writes ``<body class="...">``), we fall back to
+    inserting after the opening ``<body`` tag broadly.
+    """
+    nav_html = templates.get_template("_wiki_nav.html").render({"request": request})
+    # Try the most common form first.
+    if "<body>" in html:
+        return html.replace("<body>", "<body>\n" + nav_html, 1)
+    # Fall back: insert after the first ``<body...>`` opening tag.
+    return re.sub(r"(<body\b[^>]*>)", r"\1\n" + nav_html, html, count=1)
 
 
 @router.get("/wiki", response_class=HTMLResponse)
 def wiki_home(request: Request):
-    """Render the wiki landing page. Lists the available guides + the
-    TODO roadmap for guides yet to be written. Mirrors
-    ``docs/wiki/README.md`` in content; the Jinja template extends the
-    base shell so the topnav + footer (with the version + wiki link)
-    appear consistently.
+    """Render the wiki landing page. Lists guides, plans, references,
+    and repo-root docs, plus the TODO roadmap for guides yet to be
+    written. Mirrors ``docs/wiki/README.md`` in content; the Jinja
+    template extends the base shell so the topnav + footer + the
+    v2.49.9 wiki nav menu appear consistently.
     """
     return templates.TemplateResponse("wiki.html", {"request": request})
+
+
+@router.get("/wiki/doc/{slug}", response_class=HTMLResponse)
+def wiki_doc(slug: str, request: Request):
+    """v2.49.9: serve a plan / reference / repo-root markdown doc
+    through the wiki chrome. Only slugs present in ``_DOC_ALLOWLIST``
+    resolve — the allowlist guarantees we never traverse out of the
+    repo regardless of the slug guard. Unknown slugs 404.
+    """
+    if not slug.replace("-", "").replace("_", "").isalnum():
+        raise HTTPException(status_code=404, detail="Not found")
+    rel_path = _DOC_ALLOWLIST.get(slug)
+    if rel_path is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    file_path = _REPO_ROOT / rel_path
+    if not file_path.is_file():
+        raise HTTPException(status_code=404, detail="Not found")
+    source = file_path.read_text(encoding="utf-8")
+    return _render_markdown_page(source, request, fallback_title=slug)
 
 
 @router.get("/wiki/{slug}", response_class=HTMLResponse)
@@ -51,7 +150,8 @@ def wiki_guide(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Serve a self-contained HTML guide from ``docs/wiki/<slug>.html``.
+    """Serve a self-contained HTML guide from ``docs/wiki/<slug>.html``
+    or a markdown guide from ``docs/wiki/<slug>.md``.
 
     Slug is restricted to ``[a-zA-Z0-9_-]`` so we never traverse out of
     the wiki directory. Missing slugs return 404 (rather than serving
@@ -66,50 +166,39 @@ def wiki_guide(
     injected attribute. File:// previews (no server) still work
     because the inline ``:root`` fallback in the guide stays in place
     as the dark-theme default.
+
+    v2.49.9: the standalone HTML branch also gets the shared wiki nav
+    menu injected after ``<body>`` so navigation between guides is
+    consistent with the Jinja-rendered pages.
     """
     if not slug.replace("-", "").replace("_", "").isalnum():
         raise HTTPException(status_code=404, detail="Not found")
 
     # v2.43.14: try .md first (text-heavy guides like the broadcasts
     # catalog + endpoint catalog), then .html (visual guides like the
-    # roll-log + toast guides). The .html branch keeps the v2.43.4
-    # behavior — read the file, inject data-theme into the <html>
-    # opener, return raw. The new .md branch renders through the
-    # ``markdown`` package + wraps in the wiki_md.html template so
-    # the same base.html chrome (topnav, footer, theme) wraps every
-    # text guide consistently.
+    # roll-log + toast guides).
     md_path = _WIKI_DIR / f"{slug}.md"
     html_path = _WIKI_DIR / f"{slug}.html"
 
     if md_path.is_file():
         source = md_path.read_text(encoding="utf-8")
-        rendered = md_lib.markdown(
-            source,
-            extensions=["tables", "fenced_code", "sane_lists"],
-        )
-        # Pull the first H1 as the page title, fall back to the slug.
-        m = re.search(r"<h1[^>]*>(.*?)</h1>", rendered, re.IGNORECASE | re.DOTALL)
-        title = re.sub(r"<[^>]+>", "", m.group(1)).strip() if m else slug
-        return templates.TemplateResponse("wiki_md.html", {
-            "request": request,
-            "title": title,
-            "body": rendered,
-        })
+        return _render_markdown_page(source, request, fallback_title=slug)
 
     if not html_path.is_file():
         raise HTTPException(status_code=404, detail="Not found")
 
     user: Optional[User] = get_current_user(request, db)
     theme = (user.theme if user and user.theme else get_settings().default_theme) or "dark"
-    # Read + inject. Keep the rewrite tiny: only the ``<html>`` opener
-    # changes. The guide's existing inline `<link>` to style.css does
-    # the rest of the work via CSS cascade.
+    # Read + inject theme. Keep the rewrite tiny: only the ``<html>``
+    # opener changes. The guide's existing inline `<link>` to style.css
+    # does the rest of the work via CSS cascade.
     html = html_path.read_text(encoding="utf-8")
     html = html.replace(
         '<html lang="en">',
         f'<html lang="en" data-theme="{theme}">',
         1,
     )
+    # v2.49.9: inject the wiki nav menu after <body> so the standalone
+    # guides share the same navigation as the Jinja-rendered pages.
+    html = _inject_wiki_nav(html, request)
     return HTMLResponse(html)
-
-

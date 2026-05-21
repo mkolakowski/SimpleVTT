@@ -23,6 +23,25 @@ COPY app /app/app
 # dashes/underscores so we don't traverse outside this directory.
 COPY docs/wiki /app/docs/wiki
 
+# v2.49.9: also bake the plans + reference docs so /wiki/doc/<slug>
+# can resolve them through the _DOC_ALLOWLIST mapping in
+# app/routes/wiki_routes.py. Same security stance — the allowlist
+# plus the slug guard restrict reachable files to a fixed set.
+COPY docs/plans /app/docs/plans
+COPY docs/demo /app/docs/demo
+COPY docs/encounters-plan.md /app/docs/encounters-plan.md
+COPY docs/multi-system-refactor.md /app/docs/multi-system-refactor.md
+COPY docs/roll-log-card-layout.md /app/docs/roll-log-card-layout.md
+COPY docs/test-harness-coverage.md /app/docs/test-harness-coverage.md
+
+# v2.49.9: repo-root docs surfaced through /wiki/doc/<slug>.
+COPY README.md /app/README.md
+COPY CHANGELOG.md /app/CHANGELOG.md
+COPY CHANGELOG_v1.md /app/CHANGELOG_v1.md
+COPY CLAUDE.md /app/CLAUDE.md
+COPY CREDITS.md /app/CREDITS.md
+COPY TODO.md /app/TODO.md
+
 # Create dirs for uploaded maps and tokens, and the homebrew volume mountpoint
 # (so the volume can mount cleanly on a fresh container before anything is
 # written to it).

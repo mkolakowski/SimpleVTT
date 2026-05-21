@@ -1,14 +1,16 @@
-"""Harness tests for the in-repo wiki routes (v2.43.3).
+"""Harness tests for the in-repo wiki routes.
 
 Endpoint surface:
   GET /wiki              — landing page (Jinja-rendered)
-  GET /wiki/{slug}       — serves docs/wiki/<slug>.html
+  GET /wiki/{slug}       — serves docs/wiki/<slug>.{md,html}
+  GET /wiki/doc/{slug}   — v2.49.9: serves plans / references / repo-root
+                           docs via the _DOC_ALLOWLIST mapping
 
 Happy-path: each route returns 200 with HTML content + a known marker
 string (the page title for the landing, the version stamp for the
-roll-log guide). Error-path: an unknown slug 404s and a slug with
-directory-traversal characters also 404s (never serves a file outside
-docs/wiki/).
+roll-log guide, the H1 for an allowlisted doc). Error-path: an unknown
+slug 404s, a slug with directory-traversal characters 404s, and a slug
+that isn't in the doc allowlist also 404s.
 """
 import httpx
 
@@ -24,6 +26,12 @@ async def test_wiki_home_renders():
     assert "SimpleVTT wiki" in resp.text
     # Available-guides table includes the roll-log guide link.
     assert "/wiki/roll-log-guide" in resp.text
+    # v2.49.9: the wiki nav menu is rendered on the landing too.
+    assert 'class="wiki-nav"' in resp.text
+    # v2.49.9: Plans + References + Repo docs sections all reachable.
+    assert "/wiki/doc/plan-test-harness" in resp.text
+    assert "/wiki/doc/changelog" in resp.text
+    assert "/wiki/doc/roll-log-card-layout" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -34,9 +42,10 @@ async def test_wiki_guide_serves_roll_log():
         resp = await client.get("/wiki/roll-log-guide")
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
-    # The guide HTML's <h1> carries the title text — match a known
-    # substring that won't drift across patch versions.
     assert "roll-log" in resp.text.lower()
+    # v2.49.9: standalone HTML guide gets the wiki nav menu injected
+    # after <body> so navigation is consistent with the Jinja pages.
+    assert 'class="wiki-nav"' in resp.text
 
 
 async def test_wiki_unknown_slug_404():
@@ -50,26 +59,68 @@ async def test_wiki_markdown_guide_renders():
     """v2.43.14: GET /wiki/realtime-broadcasts-catalog — markdown
     source file under docs/wiki/ is rendered through the markdown
     package + wrapped in the wiki_md.html template. 200 + body
-    contains the catalog's title text.
+    contains the catalog's title text + the v2.49.9 wiki nav.
     """
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
         resp = await client.get("/wiki/realtime-broadcasts-catalog")
     assert resp.status_code == 200
     assert "text/html" in resp.headers.get("content-type", "")
     assert "Realtime broadcasts catalog" in resp.text
-    # The markdown renders into proper HTML (h1/table/code etc.).
     assert "<h1" in resp.text
     assert "<table" in resp.text
+    assert 'class="wiki-nav"' in resp.text
 
 
 async def test_wiki_traversal_blocked():
     """Path-traversal characters in the slug are rejected before
-    touching the filesystem. ../something resolves to /wiki/../something
-    in HTTP path-normal form (FastAPI usually collapses this before
-    hitting the route), but the route's slug guard also rejects ``..``
-    characters explicitly.
+    touching the filesystem.
     """
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
-        # Dots in the slug — should be rejected by the slug guard
         resp = await client.get("/wiki/..%2Fpasswd")
+    assert resp.status_code in (404, 400)
+
+
+async def test_wiki_doc_serves_plan():
+    """v2.49.9: GET /wiki/doc/plan-test-harness — 200 + body contains
+    the plan's H1 + the nav menu. The route reads
+    ``docs/plans/test-harness.md`` via the _DOC_ALLOWLIST mapping.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-test-harness")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # The test-harness plan's H1 is "Autonomous click-through test harness — plan"
+    assert "click-through" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_root_doc():
+    """v2.49.9: GET /wiki/doc/claude — 200 + body contains CLAUDE.md's
+    H1 + the nav menu. The route reads ``CLAUDE.md`` from the repo
+    root via the _DOC_ALLOWLIST mapping.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/claude")
+    assert resp.status_code == 200
+    assert "SimpleVTT" in resp.text
+    assert "Claude Code guidelines" in resp.text
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_unknown_slug_404():
+    """v2.49.9: a slug that isn't in _DOC_ALLOWLIST 404s. Important
+    security guarantee — the allowlist is the only way to reach a
+    file outside ``docs/wiki/``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/not-in-allowlist")
+    assert resp.status_code == 404
+
+
+async def test_wiki_doc_traversal_blocked():
+    """v2.49.9: directory-traversal characters in the doc slug are
+    rejected by the slug guard before the allowlist lookup.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/..%2Fconfig")
     assert resp.status_code in (404, 400)

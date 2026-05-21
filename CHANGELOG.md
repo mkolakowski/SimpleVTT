@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.9] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Wiki nav menu + Plans / References / Repo Docs tables + new `/wiki/doc/<slug>` route that surfaces all in-repo docs through the wiki.** User asked for: (1) a Plans table styled like Available Guides (Format / Audience / Status columns), (2) all docs in the project accessible via the wiki using links, and (3) a wiki nav menu applied to all wiki pages. All three landed in one commit. New `_wiki_nav.html` partial is included from `wiki.html` + `wiki_md.html` and injected server-side after `<body>` in the standalone HTML guides. New `/wiki/doc/<slug>` endpoint resolves slugs through a `_DOC_ALLOWLIST` mapping that covers plans (`docs/plans/*.md`), references (`docs/*.md`), and repo-root docs (CHANGELOG, CLAUDE, TODO, CREDITS, README, CHANGELOG_v1). 4 new harness tests (216 total). PATCH — additive route + UI; no schema or behavior change.
+**Description:** Five edits + one new file. **(1)** `app/templates/_wiki_nav.html` (NEW) — shared nav strip with 🏠 Home / 📖 Guides / 🗺️ Plans / 🛠️ References / 📂 Repo Docs / ✏️ TODO. Themed via root vars so all 8 themes render. 32-px min touch target with comment citing CLAUDE.md's compact-panel exception. **(2)** `app/templates/wiki.html` — added anchor IDs (`#guides`, `#plans`, `#references`, `#repo-docs`, `#todo`) so the nav links land correctly; expanded the layout with three new tables (Plans, References, Repo Docs) styled identically to the existing Available Guides table; the old "complements canonical references" bullet list is replaced by the Repo Docs table. **(3)** `app/templates/wiki_md.html` — `{% include "_wiki_nav.html" %}` above the rendered article. **(4)** `app/routes/wiki_routes.py` — added `_DOC_ALLOWLIST` mapping (15 entries), added `_render_markdown_page` helper, added `_inject_wiki_nav` helper that renders the partial through Jinja and string-replaces it in after `<body>` on the standalone HTML guides, and added the new `GET /wiki/doc/<slug>` route. **(5)** `docs/wiki/README.md` — mirrored the four-table layout. **(6)** `tests/harness/test_wiki.py` — 4 new tests cover the new endpoint + nav-injection.
+**Description (cont):** Why an allowlist rather than mounting `docs/` and the repo root as a static dir. Two reasons. (a) Security — the allowlist guarantees we can never accidentally serve a sensitive file (`.env`, `app/**/*.py`) regardless of slug normalization. The existing slug guard (`isalnum` after stripping `-` / `_`) catches traversal at the URL layer; the allowlist is the second line of defense. (b) Intentionality — when a new plan / ref lands, the contributor adds a row to the allowlist + the matching template table in the same commit. Without an allowlist we'd be serving every random doc that lands in `docs/`, including draft scratch files.
+**Description (cont 2):** Why inject the nav into the standalone HTML at request time instead of editing the files. The HTML guides (`roll-log-guide.html`, `toast-notifications-guide.html`) are intentionally self-contained — they open with `file://` and render correctly without a server. Baking a `<nav>` with absolute `/wiki/...` links would break the file:// preview (the links would dead-end). Server-side injection mirrors the existing v2.43.4 pattern that injects `data-theme=...` into the `<html>` opener — keeps the on-disk file pure + lets the server own the chrome.
+**Description (cont 3):** Why no schema change. Pure routing + templates + doc surface. The `_DOC_ALLOWLIST` is hardcoded — there's no DB-backed "registered docs" table, and there shouldn't be: docs are source-controlled artifacts, not user data.
+
+### Added
+- `app/templates/_wiki_nav.html` — shared wiki nav menu with 6 links: 🏠 Home / 📖 Guides / 🗺️ Plans / 🛠️ References / 📂 Repo Docs / ✏️ TODO.
+- `GET /wiki/doc/<slug>` — new route that resolves a slug through `_DOC_ALLOWLIST` and renders the matching markdown file through `wiki_md.html`. Covers all 7 plans (`docs/plans/*.md`), 3 docs/ references (roll-log card layout, test harness coverage, demo image prompts), 6 repo-root docs (README, CHANGELOG, CHANGELOG_v1, CLAUDE, CREDITS, TODO), and the 2 proposed plans (encounters, multi-system-refactor).
+- `app/routes/wiki_routes.py::_inject_wiki_nav` — server-side injector that renders `_wiki_nav.html` through Jinja and string-replaces it after `<body>` on the standalone HTML guides.
+
+### Changed
+- `app/templates/wiki.html` — added anchor IDs for nav targets; added Plans table (9 rows), References table (3 rows), and Repo Docs table (6 rows); replaced the "complements canonical references" bullet list with the new Repo Docs table.
+- `app/templates/wiki_md.html` — includes the wiki nav partial.
+- `docs/wiki/README.md` — mirrors the four-table layout (Available guides + Plans + References + Repo documentation).
+
+### Tests
+- `tests/harness/test_wiki.py` — 4 new tests: `test_wiki_doc_serves_plan` (plan via allowlist), `test_wiki_doc_serves_root_doc` (CLAUDE.md via allowlist), `test_wiki_doc_unknown_slug_404` (security guarantee), `test_wiki_doc_traversal_blocked` (URL-traversal blocked). 5 existing tests updated to also assert on the v2.49.9 `wiki-nav` class. Suite total: 216 tests (was 212).
+- `docs/test-harness-coverage.md` — total-test count bumped + wiki section rewritten with the new test rows.
+
+### Notes
+- **What to test:** open `/wiki` — top of page should show the wiki nav strip; the four tables (Available guides, Design plans, References, Repo documentation) should all render with Format / Audience / Status columns. Click any of the Plans / References / Repo Docs links — should land on a wiki-styled markdown page with the nav strip at top. Click the 🏠 Home button in the nav — returns to `/wiki`. Open `/wiki/roll-log-guide` — the standalone HTML now also carries the nav strip.
+- **Backward compat.** All existing `/wiki/<slug>` URLs unchanged; the new endpoint is purely additive. All 216 harness tests pass.
+
+### Filed
+- **Auto-add docs to allowlist via a `docs.toml` registry.** Today every new plan / ref needs a manual allowlist edit. A registry file scanned at startup would let contributors drop a file + add a registry row in the same commit without touching Python.
+- **Highlight active nav item.** The CSS supports `.wiki-nav-item.active` but no template wires up which nav item is "current" for the page. Add a `current_section` context variable that the template stamps the right item with.
+
+---
+
 ## [2.49.8] - 2026-05-21
 
 **Schema version:** 56
