@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.34] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit U — action-economy: `test_over_budget_retry` completes the gate trilogy.** Validates the v2.6.1 Layer B+C retry path: a non-GM player hits a used action slot, gets 409 over_budget, the client offers a Confirm modal, the player accepts, the client retries with `override=true`, the server proceeds AND broadcasts `over_budget: True` so the roll-log card renders the audit badge visible to the whole table. Alongside commit J (strict block) and commit R (Action Surge refund), this commit pins the three meaningful action-economy state transitions: GATE blocks, REFUND restores, RETRY-WITH-OVERRIDE bypasses-with-audit. Test drives Alice (non-GM owns Pip), pre-marks her action slot used, fires twice (first without override → 409, second with → 200), then asserts on both the WS frame's `over_budget=True` flag and the roll-log card's `.over-budget-badge` DOM element. PATCH — additive test only; no helper / runtime change.
+**Description:** One new file. `tests/encounter_sim/level_3_edge_cases/action_economy/test_over_budget_retry.py`. Defensive `set_strict_action_economy(False)` at entry — strict mode would invert the test's expectations (override is IGNORED under strict, so the retry would also 409); pairing with a try/finally restore ensures a prior strict-on test (commit J) doesn't leak. Seeds Pip's combatant with `economy.action = True` so the gate fires. Two Alice POSTs: first with `override=False` → assert 409 + `error: "over_budget"` + `strict: False`; second with `override=True` → assert 200. Then opens the GM roll-log drawer, finds the latest weapon-attack card, asserts the `.over-budget-badge` element is visible with text "Manual override" + "action".
+**Description (cont):** Why drive from Alice and not the GM. The GM short-circuits both `was_used` AND `strict` checks via `_user_is_gm` in `/attack` (tabletop_routes.py:6731-6740) — the whole gate / override / audit-badge mechanism is invisible from the GM session. The audit badge IS visible to the GM (because everyone sees it) once the broadcast fires, but to TRIGGER the badge you have to be a non-GM going through the gate. Reuses the v2.49.23 `post_attack_as_player(email, password, ...)` helper that the strict-mode test introduced.
+**Description (cont 2):** Why the test cares about the audit badge specifically. The v2.6.1 design lists three layers for over-budget actions: (A) the local action-economy chip flip — the rules-light "I already swung this turn" reminder — covered by Phase 1/2 tests. (B) the modal asking the player to confirm — UI-only, not in the suite's scope. (C) the audit badge on the roll-log card — visible to the whole table including the GM, the table-wide accountability trail. Layer C is the one that's both server-driven (`over_budget` flag in the broadcast) AND user-visible. Asserting it lands closes the loop on the "is this regression observable" question.
+**Description (cont 3):** Why no harness test. Test-only addition exercising existing endpoint behavior with existing harness coverage (`tests/harness/test_attack.py` and others touch `over_budget` shape on the broadcast). The UI-layer addition here is the `.over-budget-badge` DOM element assertion — the harness can verify the WS broadcast carries the flag but can't verify the renderer actually paints the badge. Verification: 5 sequential local runs × 27 tests at ~47 s/run, no flake.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/action_economy/test_over_budget_retry.py` — completes the action-economy gate trilogy: gate-blocks (J) / surge-refunds (R) / retry-with-override-audits (U).
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 10 / ~40 Level 3 tests landed. Subsystems: death-saves 5/5 ✅, concentration 3/6, action-economy 4/8.
+- **Runtime:** full encounter-sim suite at 27 tests / ~47 s.
+
+### Filed
+- **Reaction-slot chip tests** — Shield + Hellish Rebuke. Both flip the reaction chip; Shield interestingly fires DURING an attack against the caster.
+- **Cunning Action Disengage / Hide** — same code path as Dash (commit S), filed as low-value duplication unless a regression surfaces.
+- **Audit-badge variant**: GM-driven (override=true from GM session). The GM bypasses the gate, but the `over_budget` flag still fires in the broadcast for the audit. Confirm the badge renders the same way.
+
+---
+
 ## [2.49.33] - 2026-05-21
 
 **Schema version:** 56
