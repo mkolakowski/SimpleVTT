@@ -15024,8 +15024,9 @@ async def roll_death_save(
     successes = int(ds.get("successes") or 0)
     failures = int(ds.get("failures") or 0)
 
-    import random as _random
-    raw = _random.randint(1, 20)
+    # v2.49.12: route the death-save d20 through the shared seedable
+    # dice RNG so encounter-sim tests can make the result deterministic.
+    raw = dice_mod.get_rng().randint(1, 20)
 
     outcome = ""
     regained = False

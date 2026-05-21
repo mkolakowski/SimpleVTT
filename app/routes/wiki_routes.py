@@ -102,16 +102,25 @@ def _inject_wiki_nav(html: str, request: Request) -> str:
 
     The guides are designed to be self-contained for ``file://``
     preview, so we don't bake the nav into the file — the server
-    injects it at request time. If the marker isn't present (e.g.
-    a guide author writes ``<body class="...">``), we fall back to
-    inserting after the opening ``<body`` tag broadly.
+    injects it at request time.
+
+    v2.49.11 fix: split on ``</head>`` first and only do the inject on
+    the post-head half. A naive ``html.replace("<body>", …, 1)`` matches
+    the FIRST occurrence of the literal string, which can land inside a
+    CSS comment in the document's ``<style>`` block (e.g. "child of
+    <body> (h1, p, …)"). Because ``_wiki_nav.html`` contains its own
+    ``</style>`` tag, injecting it inside an outer ``<style>`` block
+    closes that block prematurely and leaks all the trailing comment
+    text into the visible body. Splitting on ``</head>`` guarantees we
+    only ever match the real opening body tag.
     """
     nav_html = templates.get_template("_wiki_nav.html").render({"request": request})
-    # Try the most common form first.
-    if "<body>" in html:
-        return html.replace("<body>", "<body>\n" + nav_html, 1)
-    # Fall back: insert after the first ``<body...>`` opening tag.
-    return re.sub(r"(<body\b[^>]*>)", r"\1\n" + nav_html, html, count=1)
+    head, sep, rest = html.partition("</head>")
+    if not sep:
+        # Defensive — no </head> found; fall back to a broad match.
+        return re.sub(r"(<body\b[^>]*>)", r"\1\n" + nav_html, html, count=1)
+    rest = re.sub(r"(<body\b[^>]*>)", r"\1\n" + nav_html, rest, count=1)
+    return head + sep + rest
 
 
 @router.get("/wiki", response_class=HTMLResponse)

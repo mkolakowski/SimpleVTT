@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -50,6 +51,16 @@ app.include_router(homebrew_routes.router)
 app.include_router(audio_routes.router)
 app.include_router(user_routes.router)
 app.include_router(wiki_routes.router)
+
+# v2.49.12: TEST_MODE-only routes (e.g. dice-seed for the encounter-sim
+# test suite, see docs/plans/encounter-sim-test-suite.md). Conditionally
+# included so the endpoints don't exist at all in production — they 404
+# before any handler runs because the router was never mounted.
+_TEST_MODE = os.environ.get("TEST_MODE", "").strip().lower() in ("1", "true", "yes", "on")
+if _TEST_MODE:
+    from .routes import test_routes
+    app.include_router(test_routes.router)
+    log.warning("TEST_MODE is ENABLED — /api/test/* endpoints are live. Never set in production.")
 
 
 # v2.3.28: when an expired-session HTML page load hits a route guarded by

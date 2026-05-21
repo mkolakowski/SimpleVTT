@@ -47,6 +47,12 @@ services:
       DEMO_RESET_INTERVAL_MINUTES: ${DEMO_RESET_INTERVAL_MINUTES:-60}
       DEMO_RESET_ON_BOOT: ${DEMO_RESET_ON_BOOT:-true}
       DEMO_CREDENTIALS_VISIBLE: ${DEMO_CREDENTIALS_VISIBLE:-true}
+      # v2.49.12: test-suite knobs (encounter-sim plan, Phase 1).
+      # TEST_MODE conditionally mounts /api/test/* endpoints — leave
+      # OFF in production. DICE_SEED, when an integer, makes every
+      # gameplay roll reproducible. Both default off / unset.
+      TEST_MODE: ${TEST_MODE:-false}
+      DICE_SEED: ${DICE_SEED:-}
     volumes:
       - uploads_data:/app/app/static/uploads
       - homebrew_data:/app/app/data/homebrew

@@ -14,6 +14,7 @@ Returns dict with: total (int), breakdown (str), expression (str).
 """
 from __future__ import annotations
 
+import os
 import random
 import re
 from dataclasses import dataclass
@@ -35,6 +36,47 @@ _TOKEN_RE = re.compile(
 )
 
 MAX_DICE = 100  # safety cap
+
+
+# v2.49.12: dedicated RNG instance for the dice resolver. Two reasons:
+#   1. Determinism for the encounter-sim test suite (docs/plans/
+#      encounter-sim-test-suite.md). Tests POST /api/test/dice/seed
+#      (TEST_MODE-only endpoint) to call ``set_seed`` with a fixed
+#      value; subsequent rolls are reproducible.
+#   2. Isolation from any other module-level ``random`` consumers
+#      (none today, but cheap insurance).
+# Seeded from ``DICE_SEED`` env var on import when set; otherwise
+# seeded from OS entropy via ``Random()`` no-arg constructor, which
+# matches module-level ``random``'s default behavior.
+_DICE_SEED_ENV = os.environ.get("DICE_SEED", "").strip()
+_DICE_RNG: random.Random = (
+    random.Random(int(_DICE_SEED_ENV))
+    if _DICE_SEED_ENV.lstrip("-").isdigit()
+    else random.Random()
+)
+
+
+def get_rng() -> random.Random:
+    """Return the shared RNG instance used by every gameplay roll.
+
+    Call sites that need a randint outside this module (e.g. the
+    death-save d20 in ``tabletop_routes.py``) should use this rather
+    than ``random.randint`` directly so that ``set_seed`` controls
+    them too.
+    """
+    return _DICE_RNG
+
+
+def set_seed(seed: int | None) -> None:
+    """Re-seed the shared RNG. Used by the TEST_MODE-only
+    ``/api/test/dice/seed`` endpoint so the encounter-sim harness
+    can make rolls reproducible. ``None`` re-seeds from OS entropy
+    (i.e. "go back to non-deterministic").
+    """
+    if seed is None:
+        _DICE_RNG.seed()  # OS entropy
+    else:
+        _DICE_RNG.seed(int(seed))
 
 
 @dataclass
@@ -79,7 +121,7 @@ def roll(expression: str) -> RollResult:
                 pair_descs = []
                 subtotal = 0
                 for _ in range(count):
-                    pair = [random.randint(1, sides), random.randint(1, sides)]
+                    pair = [_DICE_RNG.randint(1, sides), _DICE_RNG.randint(1, sides)]
                     kept = max(pair) if mod == "a" else min(pair)
                     pair_descs.append(f"[{','.join(str(r) for r in pair)}]{suffix}")
                     subtotal += kept
@@ -88,13 +130,13 @@ def roll(expression: str) -> RollResult:
                 k = int(mod[2:])
                 if k <= 0 or k > count:
                     raise DiceParseError("Invalid keep count")
-                rolls = [random.randint(1, sides) for _ in range(count)]
+                rolls = [_DICE_RNG.randint(1, sides) for _ in range(count)]
                 ordered = sorted(rolls, reverse=mod.startswith("kh"))
                 kept = ordered[:k]
                 desc = f"[{','.join(str(r) for r in rolls)}]{mod}{k}"
                 subtotal = sum(kept)
             else:
-                rolls = [random.randint(1, sides) for _ in range(count)]
+                rolls = [_DICE_RNG.randint(1, sides) for _ in range(count)]
                 desc = f"[{','.join(str(r) for r in rolls)}]"
                 subtotal = sum(rolls)
             parts.append(f"{sign}{count}d{sides}{mod}{desc}={subtotal}".lstrip("+"))

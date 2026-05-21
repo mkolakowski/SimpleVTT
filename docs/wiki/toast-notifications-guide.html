@@ -162,11 +162,16 @@
 <link rel="stylesheet" href="/static/style.css">
 <link rel="stylesheet" href="/static/style-fantasy-themes.css">
 <style>
-  /* v2.43.6 fix: see roll-log-guide.html — style.css's body-flex layout
-     would collapse our long-form children to zero height. Override
-     back to block flow. */
+  /* Override the global stylesheet's base-shell rules that would
+     otherwise clobber this standalone guide's layout: block flow
+     (not flex) and re-asserted centering margins. */
   html, body { height: auto; min-height: 100%; }
-  body { display: block; }
+  body {
+    display: block;
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 28px 36px 80px;
+  }
 </style>
 </head>
 <body>

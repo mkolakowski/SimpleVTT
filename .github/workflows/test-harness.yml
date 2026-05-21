@@ -63,6 +63,10 @@ jobs:
           DEMO_RESET_INTERVAL_MINUTES=60
           DEMO_RESET_ON_BOOT=true
           DEMO_CREDENTIALS_VISIBLE=true
+          # v2.49.12: TEST_MODE mounts /api/test/dice/seed so the
+          # dice-seeding harness test can flip the RNG deterministic
+          # mid-run. Stays off outside CI.
+          TEST_MODE=true
           EOF
 
       - name: Build and start stack
