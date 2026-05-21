@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.25] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 3 commit L — `test_concentration_lifecycle` (Hex install + manual end).** Fourth Level 2 test. Magnus casts Hex on Pip via `POST /cast_hex` and the test asserts the install side: feature_used + buff_update WS frames, hex buff with `concentration: True` + `target_character_id` pointing at Pip, and a "Hex" chip in Magnus's init-tracker row. Then DELETE `/concentration/{magnus_id}` ends the ConcentrationEffect row and broadcasts `concentration_update` with `ended: True`. **Finding worth carrying forward**: `end_concentration` (DELETE) does NOT call `_drop_paired_concentration_buffs`, so the Hex buff stays on Magnus's combatant.buffs list after the DELETE — the buff drop only happens on concentration SWAP (a new conc spell replaces the old, see tabletop_routes.py:433). The test asserts the broadcast shape that actually fires, not a chip-removed DOM assertion (which would be wrong). New helper `end_concentration(character_id)` in `helpers/battle.py` wraps the DELETE. PATCH — additive test + additive helper; no schema / runtime change.
+**Description:** Two new files. **(1)** `tests/encounter_sim/level_2_encounter/test_concentration_lifecycle.py` — install Hex, wait for `feature_used` (`source: "hex"`, `ability: "STR"`) + `buff_update` (filtered by `character_id == magnus.id`), assert the hex buff dict has `concentration: True` + `target_character_id == pip.id`, assert the Hex chip is visible in Magnus's row, then DELETE concentration + assert `concentration_update` with `ended: True`. **(2)** `tests/encounter_sim/helpers/battle.py::end_concentration(character_id)` — DELETE wrapper, mirrors the `post_use` pattern (logged-in GM client + try/finally close).
+**Description (cont):** What the test is NOT covering, by design (filed for separate commits). (a) **Damage-triggered concentration save** — Magnus takes damage → server fires `/concentration/{cid}/tick` → save roll → on fail buff drops. Needs an HP-change mechanic against Magnus (e.g. a bandit attacking him) which is more setup than this one test should carry. (b) **Concentration swap** — Magnus casts a SECOND concentration spell, the FIRST drops via `_drop_paired_concentration_buffs`. The harness already covers the back-end shape (`test_concentration_swap`); the UI variant adds the chip-removed DOM assertion. Both belong to a separate "concentration cleanup" test family worth its own commit.
+**Description (cont 2):** Why the test caught a real behavior nuance. First write asserted the Hex chip disappears after DELETE. Test failed — the chip stayed because `end_concentration` only broadcasts `concentration_update`, not `buff_update`. Reading the server code revealed that DELETE doesn't call the paired-buff-dropper; only swap does. The fix matches the docstring's "what's actually true" + files the chip-removal expectation for the swap test where it actually applies. This is the kind of integration-layer finding the encounter-sim suite was designed to surface — a contract assumption ("ending concentration drops paired buffs") that the back-end harness wouldn't catch because it tests endpoint contracts in isolation.
+**Description (cont 3):** Why no harness test. Test-only addition exercising existing endpoints (`/cast_hex` covered in `tests/harness/test_concentration_buffs.py::test_hex_happy_path`, DELETE concentration is a thin DB op). Verification: 5 sequential local runs × 16 tests pass at ~28.2 s/run, no flake. CI corroboration pending.
+
+### Added
+- `tests/encounter_sim/level_2_encounter/test_concentration_lifecycle.py` — install + manual-end lifecycle for Hex.
+- `tests/encounter_sim/helpers/battle.py::end_concentration(character_id)` — DELETE wrapper for the concentration endpoint.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 3 progress:** 4 / 6 Level 2 scenarios landed. 2 remaining (aoe_persistent_marker, tavern_brawl_baseline).
+- **Runtime:** full encounter-sim suite at 16 tests / ~28.2 s. Within Phase 3 budget of ≤4 min.
+
+### Filed
+- **Concentration swap test** — cast Hex, then cast a SECOND concentration spell, assert the original Hex buff drops via `_drop_paired_concentration_buffs` AND the chip disappears from Magnus's init-tracker row. Belongs in a separate commit with the "concentration cleanup" family.
+- **Damage-triggered concentration save test** — needs HP-change setup on Magnus. Defer until Level 3 (edge cases) lands.
+- **Phase 3 commit M** — `test_aoe_persistent_marker` (Mira's Spike Growth + canvas + concentration interaction). May depend on the v2.49.0 marker re-trigger feature being implemented.
+- **Phase 3 commit N** — `test_tavern_brawl_baseline` (3 PCs vs 3 NPCs, multi-round headline Phase 3 test).
+
+---
+
 ## [2.49.24] - 2026-05-21
 
 **Schema version:** 56

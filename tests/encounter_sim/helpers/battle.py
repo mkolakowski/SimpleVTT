@@ -330,6 +330,19 @@ def post_attack_as_player(
         client.close()
 
 
+def end_concentration(character_id: int) -> httpx.Response:
+    """DELETE ``/api/campaign/{cid}/concentration/{char_id}``. Drops
+    the caster's concentration effect AND the paired buffs (Hex,
+    Hunter's Mark, etc.). Broadcasts ``concentration_update`` with
+    ``ended: True`` + ``buff_update`` for the dropped buffs.
+    """
+    client = _gm_client()
+    try:
+        return client.delete(f"/api/campaign/{CAMPAIGN_ID}/concentration/{character_id}")
+    finally:
+        client.close()
+
+
 def post_use(
     endpoint: str,
     character_id: int,
