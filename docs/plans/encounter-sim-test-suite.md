@@ -1,6 +1,6 @@
 # Encounter-simulation test suite — plan
 
-**Status:** v2.49.21 — Phase 1 complete (commits A v2.49.12, B v2.49.15, C v2.49.16, D v2.49.17). **Phase 2 complete** (commits E v2.49.18, F v2.49.19, G v2.49.20, H v2.49.21). 12 / 12 Level 1 tests pass at ~20.7 s/run over 5 sequential local runs, no flake. Phase 3 pending — task #95.
+**Status:** v2.49.26 — Phase 1 ✅ (commits A v2.49.12, B v2.49.15, C v2.49.16, D v2.49.17). Phase 2 ✅ (commits E v2.49.18, F v2.49.19, G v2.49.20, H v2.49.21). **Phase 3 substantially complete** (commits I v2.49.22, J v2.49.23, K v2.49.24, L v2.49.25, M v2.49.26 — 5 of 6 Level 2 scenarios). aoe_persistent_marker (the 6th) gated on the v2.49.0 Phase B AoE re-trigger feature — filed for when that work lands. 17 / 17 tests pass at ~29.3 s/run, no flake. Phase 4 (Level 3 edge cases) pending — task #96.
 **Authors:** rolling
 **Last updated:** 2026-05-21
 

@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.26] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 3 commit M — `test_tavern_brawl_baseline` (3 PCs vs 3 NPCs, multi-round). Phase 3 substantially complete.** Final Level 2 test of the headline plan. 6 combatants seeded in explicit initiative-descending order (Garrik 18, Magnus 15, Tavik 12, Bandit Alpha 10, Beta 8, Gamma 6). Test pins three multi-round invariants: (1) `#battle-round-label` reads "Round 1" after seeding with `active: True`; (2) the init-tracker DOM order matches the initiative-descending sequence (`#initiative-list .mini-header-name` text in document order = the seeded sequence); (3) the `.init-entry.active-turn` marker lands on combatant `turn_index=0` (Garrik). Then six clicks of `#battle-next-btn` cycle through a full round and assert (4) the label flips to "Round 2" and (5) the active marker wraps back to Garrik. 5 / 6 Phase 3 scenarios shipped — the 6th (`test_aoe_persistent_marker` for Spike Growth) is gated on the v2.49.0 Phase B AoE re-trigger feature being implemented and is filed for when that work lands. PATCH — additive test only; no helper changes (existing `seed_battle` + page-object methods carried it).
+**Description:** One new file + plan-doc status update. **(1)** `tests/encounter_sim/level_2_encounter/test_tavern_brawl_baseline.py` — seeds 3 PCs + 3 NPCs (bandits via `bandit_template_id()`), opens the GM tabletop + init drawer, asserts the round label / DOM order / active-turn marker, walks a full round via 6 Next clicks, then re-asserts round label / active marker after the wrap. **(2)** `docs/plans/encounter-sim-test-suite.md` — status header updated to "Phase 3 substantially complete (5 of 6 Level 2 scenarios)", noting the aoe_persistent_marker gating.
+**Description (cont):** Why scope down from the plan's full table. The plan lists `test_tavern_brawl_baseline` as covering "initiative order correct, turn chips flip, action-economy chips reset between rounds, movement breadcrumb tracks, all damage applied correctly, no NPCs left standing." Tackling all of that in one commit would conflate five distinct assertion families (init ordering, turn-chip state, economy state, canvas overlay, damage resolution) and be hard to review. This commit pins THE FOUNDATION: round / turn loop wraps correctly and the active marker tracks turn_index. Economy chip resets between rounds, movement breadcrumb, and "no NPCs standing" each belong in their own follow-up tests once their assertion details are pinned down. Filed.
+**Description (cont 2):** Why we don't fire any actions during the round walk. The cleanest test of "the round loop works" is the loop ITSELF — not a loop interleaved with actions whose timing could mask a turn-advance bug. A bug where `turn_index` increments by 2 instead of 1 would manifest in this test as the wrong combatant being active after a Next click, OR in needing 3 clicks instead of 6 to wrap. With actions interleaved, the same bug could mask itself as "weird interaction with battle_update" and take longer to diagnose. Keeping the test minimal makes the failure signal narrow.
+**Description (cont 3):** Why `test_aoe_persistent_marker` was deferred. The plan calls for "Mira casts Spike Growth on round 1, marker visible on canvas. Bandit moves through it, v2.49.0 marker re-trigger fires (when implemented), damage pill appears. Mira's concentration drops on round 4, marker auto-clears." The parenthetical "when implemented" is the blocker — the re-trigger work was filed in v2.49.0 as Phase B but I haven't verified it landed. Without the re-trigger feature, the test can only assert "marker is placed", not the full lifecycle. Filed for when the feature ships. Verification: 5 sequential local runs × 17 tests pass at ~29.3 s/run, no flake.
+
+### Added
+- `tests/encounter_sim/level_2_encounter/test_tavern_brawl_baseline.py` — multi-PC, multi-round invariant test. Pins the round/turn loop foundation.
+
+### Changed
+- `docs/plans/encounter-sim-test-suite.md` — status header reflects Phase 3 substantially complete (5 of 6 Level 2 scenarios) + the aoe_persistent_marker gating note.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 3 progress:** 5 / 6 Level 2 scenarios landed (test_roll_log_replay_survives_refresh, test_action_economy_strict_mode, test_buff_install_decrement, test_concentration_lifecycle, test_tavern_brawl_baseline). 6th (test_aoe_persistent_marker) gated on v2.49.0 Phase B feature landing.
+- **Runtime:** full encounter-sim suite at 17 tests / ~29.3 s. WAY under the Phase 3 budget of ≤4 min (allocated for 6 tests; we're at 5 in <30 s).
+
+### Filed
+- **`test_aoe_persistent_marker`** — gated on the v2.49.0 Phase B AoE re-trigger feature. When that lands, write the Spike Growth lifecycle test (place marker on round 1, walk a bandit through it, assert re-trigger damage pill, drop concentration on round 4, assert marker auto-clears).
+- **Tavern-brawl follow-up tests** (file under Phase 3 or Phase 4 depending on complexity):
+  - **Action-economy chip reset across round boundary** — fire an action on Garrik before round 1 → 2 wrap, assert `economy.action == True` after fire AND `economy.action == False` after round wraps to him.
+  - **Movement breadcrumb tracking** — fire a `/move` request on Garrik, assert the breadcrumb path renders on the canvas. Canvas assertion likely needs a pixel-sample helper in `pages/canvas.py`.
+  - **Multi-round damage resolution + NPC death** — fire 3 rounds of attacks until a bandit reaches 0 HP, assert the 💀 skull overlay (the v2.49.4 regression class the encounter-sim suite was originally created to catch). Canvas pixel-sample.
+- **Phase 4 — Level 3 edge cases (target v2.53.0)** — 40-test grid sharded 4-way. AoE picker variants, save resolution matrix, action-economy edge cases, concentration cleanup, death saves, multi-user. Plan section ready; tasks #96 filed.
+
+---
+
 ## [2.49.25] - 2026-05-21
 
 **Schema version:** 56
