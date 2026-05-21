@@ -25,6 +25,20 @@ This wiki complements the canonical references that live elsewhere in the repo:
 | [The character sheet](the-character-sheet.md) | Markdown (how-to) | Players + GMs | ✅ shipped (v2.43.19) |
 | [Demo mode](demo-mode.md) | Markdown (how-to) | Operators | ✅ shipped (v2.43.21) |
 
+## Plans
+
+Design docs + implementation roadmaps for in-flight or shipped subsystems. These live at `docs/plans/*.md` (not in the wiki dir) and are the source of truth for "why was this built this way" + "what's still deferred." Linked here so the wiki is a one-stop index.
+
+| Plan | Status | Summary |
+|------|--------|---------|
+| [Advantage & disadvantage](../plans/advantage-disadvantage.md) | Phase 1 shipped (v2.2.0); Phases 2 + 3 deferred | Tracking adv/dis on rolls — highlight pill on the d20, tri-state UI on the sheet, cross-character rollover handling. |
+| [Class / subclass / feat / race content](../plans/class-content-status.md) | Living inventory | Per-feature implementation status for every D&D 5e SRD entity under `app/data/local/dnd5e/`. 🟢 shipped / 🟠 partial / ⚪ not started. Detailed per-feature plans grow under their sections. |
+| [Death saving throws](../plans/death-saves.md) | Phase 1 shipped (v2.1.0); Phases 2–4 deferred | Death save success/failure counters, auto-die at 3 fails, healing clears dead state, always-on tracker visibility. |
+| [Demo mode](../plans/demo-mode.md) | Shipped (v2.3.0) | Self-contained demo seed (12 PCs + Tavern Brawl) with lifespan auto-reset; the prerequisite for the encounter-sim test suite. |
+| [Encounter-sim test suite](../plans/encounter-sim-test-suite.md) | Plan finalized (v2.49.7) · Phase 1 PoC pending (task #93) | Multi-level Playwright suite that drives the UI end-to-end + asserts at HTTP / WS / DOM / canvas layers. Levels: 1 smoke (12 tests), 2 encounter sim (6 scenarios), 3 edge cases (40 tests), 4 fuzz (manual). |
+| [Autonomous click-through test harness](../plans/test-harness.md) | Phases 1–5 shipped (212 tests as of v2.49.6) | The Python httpx + WS endpoint-contract harness under `tests/harness/`. Catches backend state + broadcast-shape regressions; companion to the encounter-sim suite above (which catches UI-render regressions). |
+| [Wiki expansion](../plans/wiki-expansion.md) | Living TODO companion | Prioritizes the guide-writing roadmap from the TODO section below — sequencing, dependencies, and the pages the README's TODO list doesn't cover. |
+
 ## TODO — guides to write
 
 This wiki is a stub. The list below is what we want it to grow into.

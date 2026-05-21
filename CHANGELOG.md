@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.8] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Add a "Plans" table to the wiki README so all 7 `docs/plans/*.md` design docs are indexed alongside the guides.** Previously the wiki README only listed the user-facing guides (roll log, toast, endpoint catalog, etc.) and mentioned `docs/plans/` in a single bullet up top — no enumeration. Contributors looking for "where's the design doc for X?" had to `ls docs/plans/`. New section gives a table with status + one-line summary for each plan (advantage-disadvantage, class-content-status, death-saves, demo-mode, encounter-sim-test-suite, test-harness, wiki-expansion), linked relative to the wiki dir. PATCH — wiki content only, no code or schema change.
+**Description:** One edit. `docs/wiki/README.md` — inserts a new `## Plans` section between the existing `## Available guides` table and the `## TODO — guides to write` section. Each row links to the plan (via `../plans/<slug>.md`), summarizes status (shipped vs Phase N pending vs living inventory), and gives a one-line summary of what the plan covers. Cross-refers the encounter-sim suite ↔ test-harness rows so contributors see the two as complementary layers (UI experience vs endpoint contract).
+**Description (cont):** Why the wiki README is the right home. The wiki dir is already the canonical "index of indexes" — operator guides, system explainers, reference cards. Adding the plans table here means a contributor opening `/wiki` sees the full landscape: guides above, plans below, TODO at the bottom. Keeping the plans themselves at `docs/plans/` (not moving them into `docs/wiki/`) preserves the existing convention where plans are working docs and wiki entries are stable explainers.
+**Description (cont 2):** Why no harness test. Doc-only change. All 212 harness tests still pass.
+
+### Added
+- `docs/wiki/README.md` — new `## Plans` section indexing all 7 design docs at `docs/plans/*.md` with status + one-line summary per plan.
+
+### Notes
+- **Backward compat.** Pure doc addition.
+- **Forward.** When a new plan lands at `docs/plans/`, add a row to this table in the same commit (analogous to the "update the table when you add a guide" rule already noted at the bottom of the wiki README).
+
+---
+
 ## [2.49.7] - 2026-05-21
 
 **Schema version:** 56
