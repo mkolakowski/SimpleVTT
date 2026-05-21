@@ -16,6 +16,8 @@
 - Also update the version badge in the first paragraph of `README.md` to match.
 - Do **not** edit version numbers anywhere else — `app/version.py` is the single source of truth.
 
+**Always create the git commit at the end of the change.** A version bump that isn't committed isn't actually a release — it's just an uncommitted working-tree edit that disappears on the next `git reset` or context loss. After finishing the changes for a version bump (code + version + README + CHANGELOG, plus the harness test required by the harness-discipline rule below), `git add` the affected files and `git commit` them as a single commit. The commit message should match the convention seen in `git log --oneline` — short subject line of the form `X.Y.Z — <one-line summary>`, body optional but encouraged for non-trivial changes. Do this even if the user didn't say "please commit" — the per-commit / per-bump rule above already implies a commit happens. If the change is mid-flight (broken tests, half-written feature) say so and don't bump the version yet rather than landing an uncommitted bump. **Never run more than one version bump without committing in between** — if you've bumped to `2.50.0` and want to also ship `2.50.1`, commit `2.50.0` first, then start the next change. The "one bump = one commit" rule is meaningless if multiple bumps stack in the working tree.
+
 **On MAJOR version bumps, archive the prior changelog.**
 
 When `APP_VERSION`'s MAJOR segment increments (e.g. `1.x.x` → `2.0.0`):

@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.13] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Add an explicit commit-discipline rule to CLAUDE.md so future Claude sessions actually create the git commit at the end of a version bump.** User noticed three sequential version bumps (2.49.10, 2.49.11, 2.49.12) had landed in the working tree without any of them being committed — visible as a missing entry in their GitHub Desktop view. The existing rule "every commit ships its own version bump" implies a commit, but doesn't say it explicitly; this commit closes the gap. New paragraph in the "Always update the changelog and version when making changes" section spells out: (a) `git add` + `git commit` always happens at the end of the change, (b) commit message convention follows `X.Y.Z — <one-line summary>` matching `git log --oneline`, (c) never stack two version bumps in one working tree without committing in between (commit the first, then start the second), (d) if work is mid-flight don't bump the version yet. PATCH — doc only; no code or schema change.
+**Description:** One edit. `CLAUDE.md` — adds a single paragraph after the "Do **not** edit version numbers anywhere else" bullet. The placement matters: it sits inside the existing version-bump rules block so contributors reading top-to-bottom hit it before they start a commit, not buried at the end as a separate section. Explicitly names the consequences of skipping the commit (uncommitted bumps disappear on `git reset` or context loss, and stacked bumps break the per-commit rule) so the "why" is captured next to the rule.
+**Description (cont):** Why not also retroactively split the v2.49.12 commit into three separate commits matching the three CHANGELOG entries. The intermediate working-tree states (verbose CSS comments in v2.49.10, untrimmed in v2.49.11) never landed on disk as commits — splitting them now would require reconstructing state that was already edited away. The v2.49.12 commit captures the actual final state of all three changes together; the three CHANGELOG entries remain attached so the rationale + filed follow-ups stay readable. Going forward, the new CLAUDE.md rule prevents this from recurring.
+**Description (cont 2):** Why no harness test. Doc-only change. All 221 harness tests still pass.
+
+### Changed
+- `CLAUDE.md` — new paragraph under "Always update the changelog and version when making changes" requiring `git commit` at the end of every version bump, prohibiting stacked uncommitted bumps, and giving the commit-message format.
+
+### Notes
+- **What to test:** read the new paragraph in CLAUDE.md. The rule is for future Claude sessions to follow; nothing executes from this commit.
+- **Backward compat.** Pure doc addition.
+
+---
+
 ## [2.49.12] - 2026-05-21
 
 **Schema version:** 56
