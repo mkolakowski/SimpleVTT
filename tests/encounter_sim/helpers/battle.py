@@ -355,6 +355,55 @@ def post_attack_as_player(
         client.close()
 
 
+def apply_damage(
+    character_id: int,
+    *,
+    damage_amount: int,
+    new_hp_current: int = 0,
+    damage_type: str = "slashing",
+    is_crit: bool = False,
+) -> httpx.Response:
+    """PATCH ``/character/{cid}/sheet-fields`` with damage semantics.
+    Routes through the death-save state machine: HP dropping to 0
+    → dying, damage_amount ≥ max_hp past 0 → dead (massive-damage
+    rule, see tabletop_routes.py:10821).
+
+    Pass ``damage_amount`` ≥ 2 × character max HP to trigger the
+    instakill branch (Pip's max HP is 35, so 70 instakills her).
+    """
+    client = _gm_client()
+    try:
+        return client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{character_id}/sheet-fields",
+            json={
+                "hp": {"current": new_hp_current},
+                "hp_change_reason": "damage",
+                "damage_amount": damage_amount,
+                "damage_type": damage_type,
+                "is_crit": is_crit,
+            },
+        )
+    finally:
+        client.close()
+
+
+def heal(character_id: int, *, hp_current: int) -> httpx.Response:
+    """PATCH ``/character/{cid}/sheet-fields`` with hp.current set
+    to a positive value (default reason="set"). The state machine
+    auto-flips status to ``alive`` from dying / stable / dead per
+    tabletop_routes.py:10810 ("healing auto-revives"). Used by
+    the Healing Word recovery test.
+    """
+    client = _gm_client()
+    try:
+        return client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{character_id}/sheet-fields",
+            json={"hp": {"current": int(hp_current)}},
+        )
+    finally:
+        client.close()
+
+
 def death_save_override(
     character_id: int,
     *,

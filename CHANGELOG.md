@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.29] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit P — death-saves subsystem complete (massive damage instakill + Healing Word recovery).** Two new tests close out the death-saves family per the plan's Phase 4 catalog (originally 4 tests; this commit lands the final two and combines with commits N + O for 5 total). `test_massive_damage_instakill` validates the 5e RAW massive-damage rule (damage past 0 ≥ max_hp → skips dying, goes straight to dead) by PATCHing `/sheet-fields` with `damage_amount=70` against Pip's 35 max HP; `test_healing_revives_dying` validates the "healing auto-revives" branch at tabletop_routes.py:10810 (any positive HP set from dying / stable / dead flips status back to alive + resets counters). Two new helpers in `helpers/battle.py`: `apply_damage(char_id, damage_amount, ...)` routes damage through the state machine; `heal(char_id, hp_current)` does a plain HP set that triggers the auto-revive branch. Death-saves subsystem now at 5 / 4 plan items (we shipped 1 bonus — the skull-overlay canvas test in commit O wasn't in the original 4-item count). Suite total: 22 tests / ~38.5 s. PATCH — additive tests + additive helpers; no schema / runtime change.
+**Description:** Three new files + two new helpers. **(1)** `tests/encounter_sim/level_3_edge_cases/death_saves/test_massive_damage_instakill.py` — Pip alive at 35/35 takes 70 damage (`damage_amount=70`, `new_hp_current=0`). Remaining past 0 is `70 - 35 = 35 ≥ max_hp`, triggering the instakill branch at tabletop_routes.py:10821. Test asserts `character_death_save` broadcast with `status="dead"` + tracker DOM reflects `data-status="dead"` + counters at 0 (the instakill branch resets `successes`/`failures` to 0). **(2)** `tests/encounter_sim/level_3_edge_cases/death_saves/test_healing_revives_dying.py` — Pip pre-set to `dying` with `successes=1, failures=1` via override (so the recovery is visible — going from "dying with progress" to "alive with reset counters" rather than "dying" → "alive at 0"). PATCH `/sheet-fields` with `hp.current=8` (no `hp_change_reason` → defaults to "set", no damage semantics). State machine flips status to "alive" + clears counters per the line 10810 "healing auto-revives" comment. Test asserts the WS broadcast + the tracker DOM transition. **(3)** `tests/encounter_sim/helpers/battle.py::apply_damage(character_id, *, damage_amount, new_hp_current, damage_type, is_crit)` — PATCH wrapper that sends the full damage envelope including damage_type + is_crit (the latter doubles the failure tick under RAW). **(4)** `tests/encounter_sim/helpers/battle.py::heal(character_id, *, hp_current)` — PATCH wrapper that sets HP to a positive value without damage semantics. Used by the Healing Word test today; future tests can use it for potion / Cure Wounds simulations.
+**Description (cont):** Why the massive-damage threshold is `>= max_hp`, not the often-cited `>= 2× max_hp`. The 5e RAW rule says "if remaining damage past 0 equals or exceeds the creature's hit point maximum" — i.e. `remaining >= max_hp`, where `remaining = damage_amount - current_hp_at_time_of_hit`. So the FORMULA is "total damage roll, minus the HP you had at the moment of impact" — and that REMAINDER (not the raw damage) must hit max_hp. The 2× shorthand only applies when the creature is at full HP: dealing 2×max_hp at full HP yields a remainder of exactly max_hp. The test docstring captures this so a future contributor doesn't tighten the assertion to `damage_amount >= 2 × max_hp` on a creature that wasn't at full HP and break a working scenario.
+**Description (cont 2):** Why pre-set successes/failures in the heal test. A "PC at HP 0 status=alive but with 1 success / 1 failure" is impossible by the state machine's rules (counters only tick in dying state). But the more interesting REGRESSION test is "PC is mid-saves and the healer arrives" — that's the variant a player will hit at the table. Override sets the contrived precondition (dying + 1S + 1F + hp=0), heal arrives, the test verifies BOTH that status flips alive AND that counters reset. A regression where status flips but counters don't would be caught here (and is a real failure mode worth pinning).
+**Description (cont 3):** Why no harness test for `apply_damage` or `heal`. Both consume the existing PATCH `/sheet-fields` endpoint which has harness coverage in `tests/harness/test_death_save.py::_drop_to_zero` (uses the same shape). Verification: 5 sequential local runs × 22 tests pass at ~38.5 s/run, no flake.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/death_saves/test_massive_damage_instakill.py` — RAW massive-damage rule: damage past 0 ≥ max_hp → instant dead.
+- `tests/encounter_sim/level_3_edge_cases/death_saves/test_healing_revives_dying.py` — positive HP set on dying / stable / dead auto-flips to alive + resets counters.
+- `tests/encounter_sim/helpers/battle.py::apply_damage(character_id, *, damage_amount, new_hp_current, damage_type, is_crit)` — PATCH wrapper with damage semantics.
+- `tests/encounter_sim/helpers/battle.py::heal(character_id, *, hp_current)` — PATCH wrapper for positive-HP set (auto-revive path).
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 5 / ~40 Level 3 tests landed. **Death-saves subsystem complete** (5/4 plan items — original 4 + bonus skull-overlay canvas test). Remaining: AoE picker (10), save resolution matrix (12), action economy (8 — 1 done), concentration cleanup (6 — 0 done), multi-user (4).
+- **Runtime:** full encounter-sim suite at 22 tests / ~38.5 s. Well within the Phase 4 plan budget of ~30 min worst case sharded 4-way.
+
+### Filed
+- **Concentration cleanup family** (6 tests per plan): swap drops old marker, failed concentration save, PC at 0 HP drops concentration, PC dies drops concentration, paired-buff drop (Hex + Hexblade's Curse pair), buff-with-paired-concentration drop. Natural next subsystem since the Hex install + manual-end test in commit L paved the ground.
+- **Action-economy edge cases** (8 tests per plan): over-budget retry, strict block, GM override, Action Surge chip refund, Cunning Action bonus-action paths, reaction-only chips. Commit J already shipped 1 of these (`test_action_economy_strict_mode`).
+- **Save resolution matrix** (12 tests per plan): the combinatorial grid (PC×NPC × pass×fail × auto-damage on×off × resist×not × concentration×not). Some combinations are already covered indirectly by Tavik/Lyra/Thalindra in Level 1; the Level 3 versions assert specific resolution-tier behaviors.
+- **AoE picker variants** (10 tests per plan): every shape × position. Needs UI-driven testing through the picker — significant new infrastructure.
+- **Multi-user** (4 tests per plan): 2 players + 1 GM in separate browser contexts. Needs the player-driver fixtures from commit J extended to multi-context.
+
+---
+
 ## [2.49.28] - 2026-05-21
 
 **Schema version:** 56
