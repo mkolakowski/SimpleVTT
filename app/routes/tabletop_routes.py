@@ -540,7 +540,15 @@ async def _install_buff_on_combatant_id(
     new_list.append(dict(buff))
     target["buffs"] = new_list
     hub.set_battle(campaign_id, state)
-    await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+    # v2.49.43 — server-initiated state change, so force_gm_sync (see
+    # v2.49.40 for the broader audit). Without it the GM ignores the
+    # broadcast and a freshly-installed NPC buff (e.g. Paralyzed on a
+    # bandit from Hold Person) only shows up after the next push.
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update",
+        "data": state,
+        "force_gm_sync": True,
+    })
     return True
 
 
@@ -742,7 +750,14 @@ async def _drop_paired_concentration_buffs(
             dirty = True
     if dirty:
         hub.set_battle(campaign_id, state)
-        await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+        # v2.49.43 — server-initiated paired-buff cleanup, force_gm_sync
+        # (see v2.49.40 audit). Without it the GM's view of "concentration
+        # ended → all paired buffs dropped" only updates on the next push.
+        await hub.broadcast(campaign_id, {
+            "type": "battle_update",
+            "data": state,
+            "force_gm_sync": True,
+        })
     # v2.49.0 — also clear any persistent AoE markers this caster
     # placed (Spirit Guardians, Hypnotic Pattern, etc.). The marker
     # is keyed to the caster's concentration; once concentration
@@ -1259,7 +1274,15 @@ async def _apply_heal_to_combatant(
     actual = new_hp - hp_cur
     target["hp_current"] = new_hp
     hub.set_battle(campaign_id, state)
-    await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+    # v2.49.43 — server-initiated NPC heal, force_gm_sync (see v2.49.40
+    # audit). Heal is the mirror of /attack's damage broadcast at
+    # _apply_damage_to_combatant; both need the flag for the GM to see
+    # the HP bar move.
+    await hub.broadcast(campaign_id, {
+        "type": "battle_update",
+        "data": state,
+        "force_gm_sync": True,
+    })
     if cast_id:
         _attack_damage_log[cast_id] = {
             "ts": _time.time(),

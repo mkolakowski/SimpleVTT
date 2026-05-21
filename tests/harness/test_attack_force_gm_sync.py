@@ -88,32 +88,42 @@ async def test_npc_damage_broadcast_carries_force_gm_sync(gm_client, gm_ws, rost
     ])
     gm_ws.mark()
 
-    resp = await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/attack",
-        json={
-            "character_id": krieger["id"],
-            "attack_index": 0,
-            "target_combatant_id": bandit_cid,
-            "override": True,
-        },
-    )
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
+    try:
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": bandit_cid,
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
 
-    # If the attack hit and applied damage, a battle_update broadcast
-    # fires from _apply_damage_to_combatant's NPC branch. Skip the
-    # assertion on miss (no broadcast in that case).
-    if body.get("damage_applied", 0) > 0:
-        msg = await gm_ws.wait_for("battle_update")
-        assert msg.get("force_gm_sync") is True, (
-            f"v2.49.40 regression: battle_update for NPC damage should "
-            f"carry force_gm_sync=True so the GM client applies it. "
-            f"Got: {msg}"
-        )
-        # Sanity: the broadcasted state actually contains the updated
-        # combatant with the post-damage HP.
-        bandit_after = next(
-            (c for c in msg["data"]["combatants"] if c["id"] == bandit_cid), None
-        )
-        assert bandit_after is not None
-        assert bandit_after["hp_current"] == body["target_hp_after"]
+        # If the attack hit and applied damage, a battle_update broadcast
+        # fires from _apply_damage_to_combatant's NPC branch. Skip the
+        # assertion on miss (no broadcast in that case).
+        if body.get("damage_applied", 0) > 0:
+            msg = await gm_ws.wait_for("battle_update")
+            assert msg.get("force_gm_sync") is True, (
+                f"v2.49.40 regression: battle_update for NPC damage should "
+                f"carry force_gm_sync=True so the GM client applies it. "
+                f"Got: {msg}"
+            )
+            # Sanity: the broadcasted state actually contains the updated
+            # combatant with the post-damage HP.
+            bandit_after = next(
+                (c for c in msg["data"]["combatants"] if c["id"] == bandit_cid), None
+            )
+            assert bandit_after is not None
+            assert bandit_after["hp_current"] == body["target_hp_after"]
+    finally:
+        # v2.49.43 — restore auto_apply_damage to OFF (demo default) so
+        # subsequent tests in the same session that ASSUME off don't
+        # flake. The harness's existing tests sometimes assert
+        # "damage_applied == 0 when toggle off"; without this teardown
+        # they could see the on-state from this test leaking through.
+        # Surfaced in the v2.49.40 commit run as a sporadic
+        # test_attack_sneak_attack_uplift failure.
+        await _set_auto_apply(gm_client, on=False)
