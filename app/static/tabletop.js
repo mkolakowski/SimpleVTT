@@ -3097,6 +3097,17 @@
         if (typeof window._updateMiniHpDisplay === 'function') {
             try { window._updateMiniHpDisplay(d.character_id, d.hp); } catch (_) {}
         }
+        // v2.49.5 — push the new HP into the iframe drawer sheet
+        // (sheet_dnd5e.html exposes ``window.updateSheetHp`` for
+        // exactly this case). Without this the open sheet keeps
+        // showing the HP from when the page first rendered.
+        const iframe = document.getElementById('monster-sheet-drawer-iframe');
+        if (iframe && iframe.contentWindow) {
+            try {
+                const fn = iframe.contentWindow.updateSheetHp;
+                if (typeof fn === 'function') fn(d.character_id, d.hp);
+            } catch (_) { /* cross-origin or unloaded — skip */ }
+        }
     }
 
     function _onCharacterDeathSave(d) {

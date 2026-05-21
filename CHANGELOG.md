@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.5] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Fix skull-not-appearing + push HP into the open full sheet.** Two follow-ups to v2.49.4. **(1)** Skulls weren't firing because the canvas IIFE's combatant lookup reads `window.battle.combatants` but the tabletop init IIFE has held the state in a closure-local `battle` variable since v2.1 — `window.battle` was **never set**. The AoE picker's combatant lookup had the same gap and silently fell back to the `tok:` path. Fix: `renderBattle` now mirrors `window.battle = battle` on every render. **(2)** The character sheet open in the iframe drawer kept showing stale HP after Fireball damaged the PC. Added `window.updateSheetHp(characterId, hp)` to sheet_dnd5e.html that updates the `#hp-current-input` (idempotent, skipped when the sheet's `CHAR_ID` doesn't match), and tabletop.js's `_onCharacterHpUpdate` now pokes the iframe's `contentWindow.updateSheetHp` so the open sheet refreshes in lockstep with the broadcast. PATCH — long-standing client-state-sync gap + UI polish.
+**Description:** Three edits. **(1)** `app/templates/tabletop.html` `renderBattle` — added `window.battle = battle;` at function entry. Every renderBattle call (and there are many: init load, battle_update, drag end, manual HP edit, etc.) now exposes the local closure variable on the window so the canvas IIFE + AoE picker can see it. **(2)** `app/templates/sheet_dnd5e.html` — added `window.updateSheetHp(characterId, hp)` that updates `#hp-current-input.value` + dispatches `change`/`input` events. Gates on `CHAR_ID === characterId` so a sheet for character A doesn't react to character B's HP change. **(3)** `app/static/tabletop.js` `_onCharacterHpUpdate` — after the existing in-memory state sync, looks up `monster-sheet-drawer-iframe.contentWindow.updateSheetHp` and calls it. Try/catch wraps the cross-frame call in case the iframe is unloaded or the function is missing (e.g. an older sheet build). Same-origin so the call goes through without permission issues.
+**Description (cont):** Why the `window.battle` gap was invisible for so long. The AoE picker's combatant lookup falls back to the `tok:N` path when no combatant matches, and v2.48.5 made that path auto-create combatant entries in battle state. So the placement flow worked — just always via the fallback, never via the "proper" combatant lookup. The 0-HP skull (v2.49.4) was the first feature that REQUIRED a successful combatant lookup; that's how the gap surfaced.
+**Description (cont 2):** Why a cross-frame function call instead of a postMessage event. Same-origin iframes can call functions on each other's `contentWindow` directly — postMessage is needed only across origins. The drawer iframe loads from `/campaign/{cid}/character/{cid}/sheet` on the same host as the tabletop page, so the direct call is simpler and synchronous. If we ever sandbox the iframe (cross-origin or `srcdoc`), we'll need to switch to postMessage; filed.
+**Description (cont 3):** Why no harness test. Two bugs in one commit, both client-state-sync issues that Python harness doesn't reach. A Playwright test could verify the skull appears after damage AND the iframe sheet shows the updated HP; that's the right home. Will land as part of the encounter-sim Phase 1 work (task #93).
+
+### Fixed
+- `app/templates/tabletop.html` `renderBattle` — exposes `window.battle = battle` so tabletop.js's combatant lookups + the v2.49.4 skull overlay actually find combatants.
+- `app/static/tabletop.js` `_onCharacterHpUpdate` — now also pushes the new HP into the iframe drawer sheet so the open character sheet stays in sync after the PC takes damage.
+
+### Added
+- `app/templates/sheet_dnd5e.html` `window.updateSheetHp(characterId, hp)` — exposed so the tabletop parent window can poke the sheet's HP input from a WS handler. Gated on `CHAR_ID` match.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Load Tavern Brawl. Cast Fireball at the bandits — bandit tokens on the canvas should now show 💀 (the skull pass was hooked but couldn't find combatants). Open Pip's sheet from the init tracker, then have Garrik Strike → Hit Pip — sheet's HP field updates live without refresh.
+- **Backward compat.** Pure client-state-sync bug fix. All 212 harness tests still pass.
+
+### Filed
+- **postMessage fallback for cross-origin iframe.** Today the iframe is same-origin so direct contentWindow calls work. If we sandbox / cross-origin the drawer iframe later, switch to a postMessage-based protocol.
+
+---
+
 ## [2.49.4] - 2026-05-21
 
 **Schema version:** 56

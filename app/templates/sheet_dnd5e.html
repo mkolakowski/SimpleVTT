@@ -6459,6 +6459,30 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
     // Expose so the tabletop's WebSocket handler can call it.
     window.updateDeathSavesTracker = updateTracker;
 
+    // v2.49.5 — expose an HP-sync helper so the tabletop's
+    // ``character_hp_update`` WS handler can push the new HP value
+    // into this sheet's ``#hp-current-input`` when the sheet is
+    // open in the iframe drawer. Without this the sheet shows the
+    // HP as it was at page-load time even after the PC takes
+    // damage from a Fireball / weapon attack while the sheet is
+    // visible. Idempotent — skipped silently when the sheet isn't
+    // for the affected character.
+    window.updateSheetHp = function (characterId, hp) {
+        if (!hp || characterId == null) return;
+        const _sheetCharId = (typeof CHAR_ID !== 'undefined') ? CHAR_ID : null;
+        if (_sheetCharId != null && parseInt(characterId, 10) !== parseInt(_sheetCharId, 10)) return;
+        const cur = document.getElementById('hp-current-input');
+        if (cur && hp.current !== undefined) {
+            cur.value = hp.current;
+            cur.dispatchEvent(new Event('change', { bubbles: true }));
+            cur.dispatchEvent(new Event('input',  { bubbles: true }));
+        }
+        const maxInp = document.querySelector('[name="hp.max"]');
+        if (maxInp && hp.max !== undefined) {
+            maxInp.value = hp.max;
+        }
+    };
+
     // Update local HP input(s) so the +0 (dying) state shows immediately
     // without a refresh.
     function _setLocalHP(newHp) {

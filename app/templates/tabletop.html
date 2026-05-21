@@ -4913,6 +4913,16 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     }
 
     function renderBattle() {
+        // v2.49.5 — expose battle state on window so tabletop.js
+        // (canvas render loop, AoE picker combatant lookup, 0-HP
+        // skull overlay) can read it. The init-IIFE has held the
+        // state in a closure-local ``battle`` var since v2.1; the
+        // canvas IIFE compensated by checking ``window.battle``
+        // which had never actually been set, so every per-token
+        // combatant lookup returned undefined. Mirroring on every
+        // renderBattle call keeps the two in sync without changing
+        // the existing assignment pattern.
+        window.battle = battle;
         const roundEl = document.getElementById('battle-round-label');
         const banner  = document.getElementById('battle-banner');
         const list    = document.getElementById('initiative-list');
