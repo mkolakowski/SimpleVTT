@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.7] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Finalize the encounter-simulation test suite plan — `docs/plans/encounter-sim-test-suite.md` rewrite.** User asked for the plan that updates the testing suite. The skeleton was filed in v2.49.1; this commit replaces it with a fully actionable plan: directory layout under `tests/encounter_sim/`, page-object pattern (`pages/tabletop.py`, `pages/sheet.py`, `pages/roll_log.py`, `pages/toast.py`, `pages/canvas.py`), helpers (`helpers/dice.py` for server-side `DICE_SEED`, `helpers/ws.py`, `helpers/reset.py`, `helpers/assert_pill.py`), per-PC Level 1 test specs (12 tests, ~35s), 6 Level 2 multi-round scenarios (~3-5 min), and a 40-test Level 3 edge case grid (sharded 4-way). Each phase ships as its own commit with version bump. Filed Phase 2–5 follow-ups as tasks #94–#97 alongside the existing Phase 1 PoC task #93. PATCH — doc only; no schema or behavior change.
+**Description:** One edit. `docs/plans/encounter-sim-test-suite.md` rewritten from 135 lines (skeleton) to a fully actionable plan. New sections: **Design principles** (demo-mode as only fixture, deterministic dice, multi-layer assertions, page-object pattern, levels cumulative, headless default); **Directory layout** showing the concrete `tests/encounter_sim/` tree with `pages/`, `helpers/`, and per-level subdirectories; **Output validation strata** numbered 1-8 (HTTP → WS → toast → roll log card → init tracker → mini sheet → full sheet → canvas pixel); **Deterministic dice** with the `app/services/dice.py` + `DICE_SEED` env var design; **Reset strategy** (per-test long_rest, per-file battle clear, per-session lifespan); **Risks & mitigations** table; **Open questions** resolved (visual regression: no for V1; multi-user: multi-context in one test; concurrent dice seeding: re-seed at test start). Existing **Levels** section kept + expanded with explicit per-test asserts and runtime budgets. Existing **Phasing** section rewritten with version targets (v2.50.0 PoC → v2.54.0 CI docs) and exit criteria per phase.
+**Description (cont):** Why server-side dice seeding instead of stubbing on the client. The dice resolver lives in `app/routes/*.py` for each action endpoint; stubbing client-side wouldn't change the rolled values that get broadcast back. Seeding a per-process `random.Random(int(DICE_SEED))` and threading it through every `random.randint` call in roll routes is the only way to make "Fireball 8d6 = 24 fire damage" assert reliably. Caveat noted in the plan: tests that need mid-test determinism must call `set_dice_seed` before each discrete action.
+**Description (cont 2):** Why the page-object pattern. `tests/harness_ui/` has 5 tests; selectors are inline. At 60+ tests inline selectors become a maintenance crater — when the DOM changes one test fails per stale selector. The page-object directory centralizes selectors so a DOM change shows up as one file diff. Pattern was deferred until the suite grew; this plan locks it in before Phase 1.
+**Description (cont 3):** Why no harness test. Doc-only change — harness test contract exempts doc/refactor commits (CLAUDE.md rule). The plan itself defines the harness layer for the encounter-sim suite, which lands in Phase 1 (task #93).
+
+### Changed
+- `docs/plans/encounter-sim-test-suite.md` — rewritten from a 135-line skeleton to a fully actionable plan with directory layout, page-object pattern, deterministic dice design, output validation strata, per-phase version targets + exit criteria, and a risks/mitigations table.
+
+### Added (task list)
+- Task #94 — Phase 2: Level 1 full coverage (12 PCs).
+- Task #95 — Phase 3: Level 2 encounter sim (6 scripted scenarios).
+- Task #96 — Phase 4: Level 3 edge case grid (~40 tests).
+- Task #97 — Phase 5: CI integration + contributor docs.
+
+### Notes
+- **What this enables.** Once Phase 1 lands, every PR can include a Level 1 smoke test for any new spell / feature. Subsequent phases progressively close the experience-coverage gap that motivated this suite (v2.49.4 skull miss is the canonical example — server-side broadcast was correct; client-side render was broken; no test caught it).
+- **Backward compat.** Doc only. All 212 harness tests still pass.
+
+### Filed
+- **Visual regression tests** (screenshot diffs). Plan defers — high maintenance, high flake. Reconsider if theme regressions become a pattern.
+- **AoE re-trigger on token enter** (Phase B from v2.49.0) — prerequisite for the Spike Growth Level 2 scenario.
+
+---
+
 ## [2.49.6] - 2026-05-20
 
 **Schema version:** 56
