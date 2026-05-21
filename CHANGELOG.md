@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.14] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Commit two long-untracked working artifacts from the v2.42–v2.43 roll-log redesign work — a dev helper script + a design-exploration mockup.** Both files were written on 2026-05-19 while the roll-log redesign that shipped in v2.43.0 was in flight, but neither was committed. They've been sitting in the working tree as untracked noise across every `git status` since. `scripts/demo_seed_rolls.py` (10 KB) is a one-shot script that logs in as `demo-gm`, then fires nine endpoints (one `/roll`, two `/attack`, five `/cast_spell`, one `/use_second_wind`) to populate the roll log with one of each card variant — handy when eyeballing the theme-aware layout or screenshotting cards for a guide. `docs/mockups/roll-log-redesign.html` (29 KB) is a self-contained design proposal showing the proposed "oversized pills + outcome row + header chips" layout that became v2.43.0. Keeping the mockup in-repo so the rationale + visual reference for the redesign stays grep-able next to the shipped guides under `docs/wiki/`. PATCH — dev-tooling + doc artifact; no schema or runtime behavior change.
+**Description:** Two new files, plus the standard version + README + CHANGELOG bumps. **(1)** `scripts/demo_seed_rolls.py` — imports `tests/harness/helpers.login_client` so it shares the auth path with the harness suite (single source of truth for "log in as demo user"). Hits the running demo container at `http://localhost:8013`. Looks up the roster by character name so the script keeps working across demo resets (PC IDs autoincrement; names don't). Each posted action is a one-liner so reading the file gives a clear inventory of "what card shapes exist" — a future contributor adding a new card variant adds one line here and re-runs the script. **(2)** `docs/mockups/roll-log-redesign.html` — standalone HTML (self-contained `<style>` so it opens via `file://` without the server). Uses the same dark theme tokens as the active wiki guides. Wider `max-width: 1100px` (vs 880 px in the wiki guides) since the mockup needs side-by-side card comparisons that don't fit in the narrower column.
+**Description (cont):** Why now and not earlier. The files predate this session by two days. They surfaced when the user noticed orphaned uncommitted bumps (the work that landed in v2.49.12 + v2.49.13) and asked what these untracked files were for. Better to land them as a dedicated commit with the rationale captured here than to keep ignoring them or sweep them into an unrelated bump. The "commit summary" + "filed" categorization makes the mockup discoverable from CHANGELOG search ("roll-log redesign") rather than buried in `docs/mockups/` with no breadcrumb.
+**Description (cont 2):** Why no harness test. Neither file is an endpoint, a WS broadcast, or a code path the harness can drive. The script is a developer convenience that *consumes* endpoints the harness already covers (`/roll`, `/attack`, `/cast_spell`, `/use_second_wind` — all have existing harness tests). The mockup is static HTML never served by the app. Per CLAUDE.md the harness-test rule is for *new* endpoints or WS broadcast shapes — this commit adds neither.
+
+### Added
+- `scripts/demo_seed_rolls.py` — dev helper that posts one of each roll-log card variant to a running local stack. Useful for screenshotting + visual QA of the v2.43.0 roll-log layout. Run with `python3 scripts/demo_seed_rolls.py` from the repo root against a `DEMO_MODE=true` stack.
+- `docs/mockups/roll-log-redesign.html` — frozen design proposal for the v2.43.0 roll-log simplification (the "oversized pills + outcome row + header chips" layout that shipped). Standalone HTML; opens via `file://` for offline reference.
+
+### Notes
+- **Backward compat.** Pure file additions; nothing imported or referenced from runtime code paths.
+- **What to test:** `python3 scripts/demo_seed_rolls.py` against a stack with the demo seed + GM credentials — should produce nine roll-log cards on the GM session.
+- **Filed-elsewhere reference.** The script's nine card variants line up with the smoke-test action grid in `docs/plans/encounter-sim-test-suite.md` Phase 1; consider folding it into the encounter-sim suite as a quick "is the demo stack alive" probe in a later phase.
+
+---
+
 ## [2.49.13] - 2026-05-21
 
 **Schema version:** 56

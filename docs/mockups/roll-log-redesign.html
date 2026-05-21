@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SimpleVTT — Roll-log redesign proposals</title>
+<style>
+  :root {
+    --bg: #1a1d23;
+    --panel: #22262e;
+    --border: #2c2f36;
+    --fg: #e6e6e6;
+    --fg-mute: #8a8e94;
+    --muted: #8a8e94;
+    --input-bg: #1a1d23;
+    --surface-hover: #2f343c;
+    --accent: #d4a85e;
+    --accent-soft: rgba(212, 168, 94, 0.18);
+    --crit: #b3263a;
+    --hit-green: #4ade80;
+    --miss-red: #f87171;
+    --paralyzed: #5ec1d6;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 24px;
+    line-height: 1.45;
+  }
+  h1 { font-weight: 700; font-size: 20px; letter-spacing: 0.2px; }
+  h2 {
+    font-size: 16px;
+    margin-top: 32px;
+    margin-bottom: 4px;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+  .proposal-tagline {
+    font-size: 13px;
+    color: var(--fg-mute);
+    margin-bottom: 14px;
+    line-height: 1.55;
+  }
+  .scenario-label {
+    font-size: 11px;
+    color: var(--fg-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 14px 0 6px 0;
+  }
+  /* ───── shared card shell ───── */
+  .roll-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    overflow: hidden;
+  }
+  .roll-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .avatar {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--input-bg); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; flex-shrink: 0;
+  }
+  .roll-card-user { font-weight: 600; color: var(--accent); }
+  .roll-card-slot {
+    background: var(--accent-soft); color: var(--accent);
+    border: 1px solid var(--accent); border-radius: 4px;
+    padding: 1px 6px; font-size: 10px; font-weight: 700;
+  }
+  .roll-card-time { margin-left: auto; color: var(--fg-mute); font-size: 11px; }
+  .roll-card-body { padding: 10px; }
+  .target-tag {
+    background: var(--crit); color: #fff; border-radius: 4px;
+    padding: 1px 6px; font-size: 11px; font-weight: 600;
+  }
+  .meta-bits { font-size: 11px; color: var(--fg-mute); margin-top: 4px; }
+  .spell-name { font-weight: 700; font-size: 14px; }
+  details { margin-top: 6px; }
+  details summary {
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--fg-mute);
+    list-style: none;
+    padding: 2px 0;
+    user-select: none;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details[open] summary { color: var(--fg); }
+  .desc-text { font-size: 11px; color: var(--fg-mute); margin-top: 4px; padding: 6px 8px; border-left: 2px solid var(--border); }
+  /* ───── PROPOSAL 1 — inline chips ───── */
+  .chips-row {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin-top: 8px;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 4px 9px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    font-size: 11px;
+    background: var(--input-bg);
+    cursor: pointer;
+    min-height: 24px;
+  }
+  .chip:hover { background: var(--surface-hover); }
+  .chip-fail   { border-color: var(--miss-red); color: var(--miss-red); }
+  .chip-buff   { border-color: var(--paralyzed); color: var(--paralyzed); }
+  .chip-undo   { border-color: var(--accent); color: var(--accent); }
+  .chip-details { color: var(--fg-mute); }
+  .chip-expanded-detail {
+    margin-left: 12px;
+    font-size: 11px;
+    color: var(--fg-mute);
+    padding: 4px 0 0 12px;
+    border-left: 2px solid var(--accent);
+    font-family: monospace;
+  }
+  /* ───── PROPOSAL 2 — collapsible result block ───── */
+  .result-block {
+    border: 1px solid var(--accent-soft);
+    border-radius: 4px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .result-block-header {
+    background: var(--accent-soft);
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent);
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .result-block-body { padding: 8px 10px; }
+  .result-line {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 8px;
+    font-size: 12px;
+    padding: 3px 0;
+    align-items: baseline;
+  }
+  .result-line-label { font-weight: 600; color: var(--fg-mute); }
+  .result-line-value { color: var(--fg); }
+  .verdict-fail { color: var(--miss-red); font-weight: 700; }
+  .verdict-hit  { color: var(--hit-green); font-weight: 700; }
+  .undo-btn {
+    background: transparent; border: 1px solid var(--border);
+    color: var(--fg); padding: 4px 10px; font-size: 11px;
+    border-radius: 4px; cursor: pointer; margin-top: 4px;
+  }
+  .undo-btn:hover { background: var(--surface-hover); }
+  /* P2 folded variant */
+  .result-block.collapsed .result-block-body { display: none; }
+  .result-block-summary {
+    font-size: 11px; color: var(--fg-mute);
+    margin-left: auto; font-weight: 400;
+  }
+  /* ───── PROPOSAL 3 — minimal card + toast ───── */
+  .minimal-card .roll-card-body {
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .badge-warning {
+    background: rgba(212, 168, 94, 0.18);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 10px;
+    margin-left: 6px;
+  }
+  .toast {
+    display: inline-block;
+    background: var(--panel);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    margin: 4px 8px 4px 0;
+    color: var(--fg);
+  }
+  .toast .toast-icon { font-size: 14px; margin-right: 4px; }
+  .toast-fail { border-color: var(--miss-red); }
+  .toast-buff { border-color: var(--paralyzed); }
+  .toast-row {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  /* Comparison labels above each section */
+  .three-col {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  @media (min-width: 980px) {
+    .three-col { grid-template-columns: 1fr 1fr 1fr; }
+  }
+  .four-col {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  @media (min-width: 1100px) {
+    .four-col { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  }
+  /* ───── CURRENT (v2.41.0) — what ships today ───── */
+  .weapon-atk-line {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 4px 6px;
+    background: rgba(0,0,0,0.18);
+    border-radius: 3px;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .weapon-atk-label { color: var(--fg-mute); font-size: 11px; min-width: 80px; }
+  .weapon-atk-total { font-weight: 700; color: var(--fg); }
+  .weapon-atk-applied { color: var(--fg-mute); font-size: 11px; }
+  .weapon-atk-hit { color: var(--miss-red); font-weight: 700; }
+  .weapon-atk-resist { color: var(--hit-green); font-weight: 700; }
+  .weapon-atk-undo {
+    background: transparent; border: 1px solid var(--accent);
+    color: var(--accent); border-radius: 3px;
+    padding: 2px 8px; font-size: 11px; cursor: pointer; margin-left: auto;
+  }
+  .spell-cast-meta { font-size: 11px; color: var(--fg-mute); margin: 4px 0; }
+  .spell-cast-desc {
+    font-size: 11px; color: var(--fg-mute);
+    padding: 6px 8px; border-left: 2px solid var(--border);
+    margin-top: 4px; line-height: 1.5;
+  }
+  .spell-cast-actions {
+    display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;
+  }
+  .spell-cast-btn {
+    background: var(--input-bg); border: 1px solid var(--border);
+    color: var(--fg); border-radius: 3px;
+    padding: 4px 10px; font-size: 11px; cursor: pointer;
+  }
+  .col-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .footnote {
+    margin-top: 40px;
+    padding: 14px 18px;
+    background: var(--panel);
+    border-left: 3px solid var(--accent);
+    font-size: 12px;
+    color: var(--fg-mute);
+    line-height: 1.6;
+    border-radius: 0 4px 4px 0;
+  }
+</style>
+</head>
+<body>
+
+<h1>Roll-log card redesign — three proposals</h1>
+<p class="proposal-tagline">
+  All four mockups show the same scenario: Tavik casts <strong>Hold Person</strong>
+  (Lv 2 slot, concentration save spell) on <strong>Bandit Alpha</strong>; the bandit
+  fails the WIS save. The full result is: save rolled 8 vs DC 14 (failed), Paralyzed
+  condition installed for 10 rounds, Tavik gains concentration anchor, ↶ Undo
+  available. The first card is what ships today (v2.41.0); the next three are
+  the proposals.
+</p>
+
+<!-- ════════════════════════════════════════════════════════════════════════════ -->
+<h2>Current — v2.41.0 (what ships today)</h2>
+<p class="proposal-tagline">
+  Stacked horizontal effect lines. Spell description tucks behind a
+  <kbd>▾ details</kbd> toggle (v2.41.0 addition); everything else is always
+  visible. The card runs 4–5 rows tall for Hold Person; longer for save-for-half
+  spells with damage and concentration-saving stacks. This is the baseline the
+  three proposals improve on.
+</p>
+
+<p class="scenario-label">Hold Person → Bandit fails save</p>
+<div class="roll-card">
+  <div class="roll-card-header">
+    <div class="avatar">🪄</div>
+    <span class="roll-card-user">Brother Tavik Stonebrow</span>
+    <span class="roll-card-slot">Lv 2 slot</span>
+    <span class="roll-card-time">03:15 PM</span>
+  </div>
+  <div class="roll-card-body">
+    <div><span class="spell-name">🪄 Hold Person</span> <span class="target-tag">→ Bandit Alpha</span></div>
+    <div class="spell-cast-meta">Enchantment · 1 action · 60 feet · Concentration</div>
+    <details>
+      <summary>▾ details</summary>
+      <div class="spell-cast-desc">
+        Choose a humanoid that you can see within range. The target must succeed
+        on a Wisdom saving throw or be paralyzed for the duration. At the end of
+        each of its turns, the target can make another Wisdom saving throw…
+      </div>
+    </details>
+    <div class="weapon-atk-line">
+      <span class="weapon-atk-label">📋 WIS save</span>
+      <span class="weapon-atk-total">Bandit Alpha: 8</span>
+      <span class="weapon-atk-applied">vs DC 14 — <span class="weapon-atk-hit">❌ failed</span></span>
+    </div>
+    <div class="weapon-atk-line">
+      <span class="weapon-atk-label">🥶 Paralyzed</span>
+      <span class="weapon-atk-total">Bandit Alpha</span>
+      <span class="weapon-atk-applied">10 rounds</span>
+    </div>
+    <div class="spell-cast-actions">
+      <button class="spell-cast-btn">🎲 Roll Damage</button>
+      <button class="spell-cast-btn">📋 Prompt Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════ -->
+<h2>Proposal 1 — Inline chips, one consequence row</h2>
+<p class="proposal-tagline">
+  Single horizontal row of pill-shaped chips for every outcome. Tap any chip
+  to expand its sub-detail inline. Densest of the three; best for fast
+  scrolling. Worst for accessibility (tiny tap targets, hard to scan at a glance).
+</p>
+
+<p class="scenario-label">Default (chips collapsed)</p>
+<div class="roll-card">
+  <div class="roll-card-header">
+    <div class="avatar">🪄</div>
+    <span class="roll-card-user">Brother Tavik Stonebrow</span>
+    <span class="roll-card-slot">Lv 2 slot</span>
+    <span class="roll-card-time">03:15 PM</span>
+  </div>
+  <div class="roll-card-body">
+    <div><span class="spell-name">Hold Person</span> <span class="target-tag">→ Bandit Alpha</span></div>
+    <div class="meta-bits">Enchantment · 1 action · 60 feet · Concentration</div>
+    <div class="chips-row">
+      <span class="chip chip-fail">📋 WIS 8 / 14 ❌</span>
+      <span class="chip chip-buff">🥶 Paralyzed · 10r</span>
+      <span class="chip chip-undo">↶ Undo</span>
+      <span class="chip chip-details">▾ details</span>
+    </div>
+  </div>
+</div>
+
+<p class="scenario-label">Save chip tapped — sub-detail expands inline</p>
+<div class="roll-card">
+  <div class="roll-card-header">
+    <div class="avatar">🪄</div>
+    <span class="roll-card-user">Brother Tavik Stonebrow</span>
+    <span class="roll-card-slot">Lv 2 slot</span>
+    <span class="roll-card-time">03:15 PM</span>
+  </div>
+  <div class="roll-card-body">
+    <div><span class="spell-name">Hold Person</span> <span class="target-tag">→ Bandit Alpha</span></div>
+    <div class="meta-bits">Enchantment · 1 action · 60 feet · Concentration</div>
+    <div class="chips-row">
+      <span class="chip chip-fail">📋 WIS 8 / 14 ❌ ▾</span>
+      <span class="chip chip-buff">🥶 Paralyzed · 10r</span>
+      <span class="chip chip-undo">↶ Undo</span>
+      <span class="chip chip-details">▾ details</span>
+    </div>
+    <div class="chip-expanded-detail">1d20[7] + 1 = 8 vs DC 14 · failed</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════ -->
+<h2>Proposal 2 — Headline + collapsible Result block (recommended)</h2>
+<p class="proposal-tagline">
+  Headline collapses caster + spell + target into one line. A nested
+  <strong>▼ Result</strong> accordion opens automatically when the cast fires
+  and holds every consequence in a label / value grid. The GM folds it once
+  read; the badge in the summary keeps the one-liner verdict at a glance.
+  Spell flavor text stays in a separate <strong>▾ Spell details</strong> toggle
+  (v2.41.0 pattern).
+</p>
+
+<p class="scenario-label">Default (result block open)</p>
+<div class="roll-card">
+  <div class="roll-card-header">
+    <div class="avatar">🪄</div>
+    <span class="roll-card-user">Tavik</span>
+    <span>·</span>
+    <span class="spell-name">🪄 Hold Person</span>
+    <span class="target-tag">→ Bandit Alpha</span>
+    <span class="roll-card-slot">Lv 2 slot</span>
+    <span class="roll-card-time">03:15 PM</span>
+  </div>
+  <div class="roll-card-body">
+    <div class="result-block">
+      <div class="result-block-header">
+        ▼ Result <span class="result-block-summary">3 effects</span>
+      </div>
+      <div class="result-block-body">
+        <div class="result-line">
+          <span class="result-line-label">📋 WIS save</span>
+          <span class="result-line-value">Bandit Alpha: <strong>8</strong> vs DC 14 — <span class="verdict-fail">❌ failed</span></span>
+        </div>
+        <div class="result-line">
+          <span class="result-line-label">🥶 Paralyzed</span>
+          <span class="result-line-value">Bandit Alpha · 10 rounds · concentration</span>
+        </div>
+        <div class="result-line">
+          <span class="result-line-label">🌀 Concentrating</span>
+          <span class="result-line-value">Tavik (anchor buff installed)</span>
+        </div>
+        <button class="undo-btn">↶ Undo this cast</button>
+      </div>
+    </div>
+    <details>
+      <summary>▾ Spell details</summary>
+      <div class="desc-text">
+        Enchantment · 1 action · 60 feet · Concentration up to 1 minute
+        <br><br>
+        Choose a humanoid that you can see within range. The target must succeed
+        on a Wisdom saving throw or be paralyzed for the duration. At the end of
+        each of its turns, the target can make another Wisdom saving throw…
+      </div>
+    </details>
+  </div>
+</div>
+
+<p class="scenario-label">Folded — result summary stays in the header chip</p>
+<div class="roll-card">
+  <div class="roll-card-header">
+    <div class="avatar">🪄</div>
+    <span class="roll-card-user">Tavik</span>
+    <span>·</span>
+    <span class="spell-name">🪄 Hold Person</span>
+    <span class="target-tag">→ Bandit Alpha</span>
+    <span class="roll-card-slot">Lv 2 slot</span>
+    <span class="roll-card-time">03:15 PM</span>
+  </div>
+  <div class="roll-card-body">
+    <div class="result-block collapsed">
+      <div class="result-block-header">
+        ▶ Result <span class="result-block-summary">Bandit failed · 🥶 Paralyzed</span>
+      </div>
+    </div>
+    <details>
+      <summary>▾ Spell details</summary>
+      <div class="desc-text">…</div>
+    </details>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════ -->
+<h2>Proposal 3 — Minimal card + toast popups</h2>
+<p class="proposal-tagline">
+  Card collapses to a single audit row: caster + spell + target + override
+  badge. Outcome info moves OUT of the card and into the existing dice-toast
+  system (v2.33.0+), which already pops sequentially for save / damage /
+  heal. HP bar on the mini-sheet + buff chip on the init-tracker row
+  surface the persistent state. Tradeoff: loses scrollback — you can't
+  re-read what happened on turn 3 ten minutes later.
+</p>
+
+<p class="scenario-label">Roll-log card (audit row only)</p>
+<div class="roll-card minimal-card">
+  <div class="roll-card-body">
+    <div class="avatar" style="display:inline-flex; vertical-align:middle; margin-right:6px;">🪄</div>
+    <span class="roll-card-user">Tavik</span>
+    cast <span class="spell-name">🪄 Hold Person</span>
+    <span class="target-tag">→ Bandit Alpha</span>
+    <span class="badge-warning">Lv 2 slot</span>
+    <span class="roll-card-time" style="float:right; margin-top:4px;">03:15 PM</span>
+  </div>
+</div>
+
+<p class="scenario-label">Transient toasts (~5 s lifetime each, stacked bottom-right)</p>
+<div class="toast-row">
+  <span class="toast toast-fail"><span class="toast-icon">📋</span> Bandit Alpha · WIS <strong>8</strong> vs DC 14 — ❌ FAILED</span>
+  <span class="toast toast-buff"><span class="toast-icon">🥶</span> Paralyzed Bandit Alpha · 10 rounds · ↶ Undo</span>
+</div>
+
+<p class="scenario-label" style="margin-top:14px;">Persistent state surfaces elsewhere</p>
+<div style="font-size:12px; color: var(--fg-mute); padding: 8px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px;">
+  • Bandit Alpha's mini-sheet HP bar reflects any damage applied<br>
+  • Bandit Alpha's init-tracker row gains a 🥶 buff chip<br>
+  • Tavik's mini-sheet shows the new "Concentrating: Hold Person" buff<br>
+  • All updates visible in the Battle drawer — the roll log stays a clean audit log
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════ -->
+<h2>Side-by-side comparison (Fire Bolt → bandit)</h2>
+<p class="proposal-tagline">A simpler scenario — attack roll + damage applied. Helps see how each layout reads when the consequence stack is shorter.</p>
+
+<div class="four-col">
+  <div>
+    <div class="col-label">Current (v2.41.0)</div>
+    <div class="roll-card">
+      <div class="roll-card-header">
+        <div class="avatar">🪄</div>
+        <span class="roll-card-user">Thalindra</span>
+        <span class="roll-card-time">3:16</span>
+      </div>
+      <div class="roll-card-body">
+        <div><span class="spell-name">🪄 Fire Bolt</span> <span class="target-tag">→ Bandit Alpha</span></div>
+        <div class="spell-cast-meta">Evocation · 1 action · 120 feet</div>
+        <details>
+          <summary>▾ details</summary>
+          <div class="spell-cast-desc">You hurl a mote of fire at a creature or object within range…</div>
+        </details>
+        <div class="weapon-atk-line">
+          <span class="weapon-atk-label">🎯 Spell attack</span>
+          <span class="weapon-atk-total">Bandit: 18</span>
+          <span class="weapon-atk-applied">vs AC 12 — <span class="weapon-atk-resist">✅ HIT</span></span>
+        </div>
+        <div class="weapon-atk-line">
+          <span class="weapon-atk-label">🎲 Applied</span>
+          <span class="weapon-atk-total">Bandit −7 fire</span>
+          <button class="weapon-atk-undo">↶ Undo</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="col-label">Proposal 1</div>
+    <div class="roll-card">
+      <div class="roll-card-header">
+        <div class="avatar">🪄</div>
+        <span class="roll-card-user">Thalindra</span>
+        <span class="roll-card-time">3:16</span>
+      </div>
+      <div class="roll-card-body">
+        <div><span class="spell-name">Fire Bolt</span> <span class="target-tag">→ Bandit Alpha</span></div>
+        <div class="chips-row">
+          <span class="chip" style="border-color: var(--hit-green); color: var(--hit-green);">🎯 18 vs 12 ✅</span>
+          <span class="chip" style="border-color: var(--crit);">🎲 −7 fire</span>
+          <span class="chip chip-undo">↶ Undo</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="col-label">Proposal 2</div>
+    <div class="roll-card">
+      <div class="roll-card-header">
+        <div class="avatar">🪄</div>
+        <span class="roll-card-user">Thalindra</span>
+        <span class="spell-name">🪄 Fire Bolt</span>
+        <span class="target-tag">→ Bandit Alpha</span>
+        <span class="roll-card-time">3:16</span>
+      </div>
+      <div class="roll-card-body">
+        <div class="result-block">
+          <div class="result-block-header">▼ Result <span class="result-block-summary">−7 fire</span></div>
+          <div class="result-block-body">
+            <div class="result-line"><span class="result-line-label">🎯 Attack</span><span class="result-line-value"><strong>18</strong> vs AC 12 — <span class="verdict-hit">✅ HIT</span></span></div>
+            <div class="result-line"><span class="result-line-label">🎲 Damage</span><span class="result-line-value">−7 fire · 11 → 4 HP</span></div>
+            <button class="undo-btn">↶ Undo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="col-label">Proposal 3</div>
+    <div class="roll-card minimal-card">
+      <div class="roll-card-body">
+        <span class="roll-card-user">Thalindra</span> cast
+        <span class="spell-name">🪄 Fire Bolt</span>
+        <span class="target-tag">→ Bandit Alpha</span>
+        <span class="roll-card-time" style="float:right;">3:16</span>
+      </div>
+    </div>
+    <div class="toast-row" style="margin-top:4px;">
+      <span class="toast" style="border-color: var(--hit-green);">🎯 vs AC 12 · ✅ HIT (18)</span>
+    </div>
+    <div class="toast-row" style="margin-top:-4px;">
+      <span class="toast toast-fail">🎲 −7 fire · 11 → 4 HP · ↶ Undo</span>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════ -->
+<h2>Side-by-side comparison (Eldritch Blast multi-beam at L5)</h2>
+<p class="proposal-tagline">The densest case — two beams, each its own d20 + damage. Worth thinking about because the v2.40.0 multi-beam work made this scenario routine. Note: the current card doesn't yet expand per-beam detail — it shows the headline (best) beam only. The proposals show what per-beam rendering could look like.</p>
+
+<div class="four-col">
+  <div>
+    <div class="col-label">Current (v2.41.0)</div>
+    <div class="roll-card">
+      <div class="roll-card-header">
+        <div class="avatar">🪄</div>
+        <span class="roll-card-user">Magnus</span>
+        <span class="roll-card-time">3:17</span>
+      </div>
+      <div class="roll-card-body">
+        <div><span class="spell-name">🪄 Eldritch Blast</span> <span class="target-tag">→ Bandit</span></div>
+        <div class="spell-cast-meta">Evocation · 1 action · 120 feet · 2 beams</div>
+        <details>
+          <summary>▾ details</summary>
+          <div class="spell-cast-desc">A beam of crackling energy streaks toward a creature within range…</div>
+        </details>
+        <div class="weapon-atk-line">
+          <span class="weapon-atk-label">🎯 Spell attack</span>
+          <span class="weapon-atk-total">Bandit: 19</span>
+          <span class="weapon-atk-applied">vs AC 12 — <span class="weapon-atk-resist">✅ HIT</span></span>
+        </div>
+        <div class="weapon-atk-line">
+          <span class="weapon-atk-label">🎲 Applied</span>
+          <span class="weapon-atk-total">Bandit −8 force</span>
+          <button class="weapon-atk-undo">↶ Undo</button>
+        </div>
+        <div class="spell-cast-meta" style="color: var(--miss-red); font-style: italic;">⚠ Per-beam detail in payload but not yet rendered</div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="col-label">Proposal 1</div>
+    <div class="roll-card">
+      <div class="roll-card-header">
+        <div class="avatar">🪄</div>
+        <span class="roll-card-user">Magnus</span>
+        <span class="roll-card-time">3:17</span>
+      </div>
+      <div class="roll-card-body">
+        <div><span class="spell-name">Eldritch Blast</span> <span class="target-tag">→ Bandit</span></div>
+        <div class="chips-row">
+          <span class="chip" style="border-color: var(--hit-green);">🎯 Beam 1: 19 ✅</span>
+          <span class="chip" style="border-color: var(--miss-red);">🎯 Beam 2: 4 ❌</span>
+          <span class="chip" style="border-color: var(--crit);">🎲 −8 force</span>
+          <span class="chip chip-undo">↶ Undo</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="col-label">Proposal 2</div>
+    <div class="roll-card">
+      <div class="roll-card-header">
+        <div class="avatar">🪄</div>
+        <span class="roll-card-user">Magnus</span>
+        <span class="spell-name">🪄 Eldritch Blast</span>
+        <span class="target-tag">→ Bandit</span>
+        <span class="roll-card-time">3:17</span>
+      </div>
+      <div class="roll-card-body">
+        <div class="result-block">
+          <div class="result-block-header">▼ Result <span class="result-block-summary">1 hit / 1 miss · −8 force</span></div>
+          <div class="result-block-body">
+            <div class="result-line"><span class="result-line-label">🎯 Beam 1</span><span class="result-line-value"><strong>19</strong> vs AC 12 — <span class="verdict-hit">✅</span> · 8 force</span></div>
+            <div class="result-line"><span class="result-line-label">🎯 Beam 2</span><span class="result-line-value"><strong>4</strong> vs AC 12 — <span class="verdict-fail">❌</span></span></div>
+            <div class="result-line"><span class="result-line-label">🎲 Applied</span><span class="result-line-value">−8 force · 11 → 3 HP</span></div>
+            <button class="undo-btn">↶ Undo</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="col-label">Proposal 3</div>
+    <div class="roll-card minimal-card">
+      <div class="roll-card-body">
+        <span class="roll-card-user">Magnus</span> cast
+        <span class="spell-name">🪄 Eldritch Blast</span>
+        <span class="target-tag">→ Bandit</span>
+        <span class="roll-card-time" style="float:right;">3:17</span>
+      </div>
+    </div>
+    <div class="toast-row" style="margin-top:4px;">
+      <span class="toast" style="border-color: var(--hit-green);">🎯 Beam 1 · 19 vs AC 12 ✅</span>
+    </div>
+    <div class="toast-row" style="margin-top:-4px;">
+      <span class="toast toast-fail">🎯 Beam 2 · 4 vs AC 12 ❌</span>
+    </div>
+    <div class="toast-row" style="margin-top:-4px;">
+      <span class="toast toast-fail">🎲 −8 force · 11 → 3 HP · ↶ Undo</span>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════════════════ -->
+<div class="footnote">
+  <strong>How to read these mockups.</strong> Open this file in a browser
+  (works offline, no JS — just static HTML + CSS). The palette and spacing
+  approximate the live tabletop's dark theme but are not pixel-perfect; final
+  styling would adopt the existing CSS variables. The leftmost column in each
+  comparison is what ships today (v2.41.0) — the three columns to its right
+  are the proposals. Tap the <kbd>▾ Spell details</kbd> toggles in Proposal 2
+  (and on the current card) to see the v2.41.0 collapsible pattern in action.
+  <br><br>
+  <strong>My recommendation:</strong> Proposal 2. It scales cleanly from
+  one-effect spells (Magic Missile damage) to four-effect spells (Hold Person
+  with concentration anchor + paired buff + save result), keeps the audit log
+  scrollable, and reuses the v2.41.0 <code>&lt;details&gt;</code> pattern. The
+  cost is one extra layout pass per card (an outer accordion and an inner
+  flavor-text accordion).
+</div>
+
+</body>
+</html>
