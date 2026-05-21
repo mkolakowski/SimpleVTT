@@ -57,6 +57,34 @@ def gm_page(gm_context: BrowserContext) -> Iterator[Page]:
 
 
 @pytest.fixture(scope="session")
+def alice_session_cookie() -> dict:
+    """v2.49.35: Alice (demo player owning Pip Quickfingers) session
+    cookie. Used by player-driver tests that need a non-GM viewpoint —
+    layer-6 init-tracker HP DOM assertions, multi-user concurrency
+    scenarios, strict-mode gate validation.
+    """
+    return _login_get_cookie("demo-alice@example.com", "demopass")
+
+
+@pytest.fixture
+def alice_context(browser: Browser, alice_session_cookie: dict) -> Iterator[BrowserContext]:
+    """Browser context pre-authenticated as Alice. Same shape as
+    ``gm_context`` — page.goto lands on the authenticated view.
+    """
+    context = browser.new_context()
+    context.add_cookies([alice_session_cookie])
+    yield context
+    context.close()
+
+
+@pytest.fixture
+def alice_page(alice_context: BrowserContext) -> Iterator[Page]:
+    page = alice_context.new_page()
+    yield page
+    page.close()
+
+
+@pytest.fixture(scope="session")
 def roster() -> dict:
     """Map character name → roster row dict (id, hp_current, hp_max, …).
     Test code looks up by name so it survives the demo's autoincrement

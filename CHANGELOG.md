@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.35] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit V — first player-driver test (`test_alice_observes_hp_update`).** Closes the GM-driver caveat that every Phase 1 / 2 PoC test has carried: the GM ignores `battle_update` echo-broadcasts so layer 6 ("init-tracker HP reflects damage") never fired on rendered DOM in the strike tests — only on response-body assertions. This test proves the assertion fires when driven by a **non-GM** (Alice, who owns Pip). New Alice fixtures (`alice_session_cookie`, `alice_context`, `alice_page`) added to encounter_sim's conftest, mirroring the harness_ui pattern. Test mechanics: GM (via httpx side client) fires Krieger's Greataxe at Pip; server's `_apply_damage_to_combatant` calls `_apply_hp_change` + broadcasts `character_hp_update`; Alice's client (no IS_GM guard on the hp_update handler at tabletop.js:3102) mutates her local `window.battle.combatants[Pip]` + re-renders; her `.mini-header-sub` text shows the new HP. Also includes a one-shot seed retry for the "did Krieger's d20 hit?" branch — without the seed the test flakes ~30% on a miss because `character_hp_update` only broadcasts on non-zero damage application. New subdirectory `level_3_edge_cases/multi_user/`. PATCH — additive test + 3 new Alice fixtures; no helper / runtime change.
+**Description:** Three changes. **(1)** `tests/encounter_sim/conftest.py` — added `alice_session_cookie` (session-scoped, mirrors gm), `alice_context` (function-scoped, pre-authenticated browser context), `alice_page` (fresh page per test). All three mirror the existing GM fixtures shape. **(2)** `tests/encounter_sim/level_3_edge_cases/multi_user/test_alice_observes_hp_update.py` — the test. Seeds Krieger + Pip into battle (both server-side AND in Alice's localStorage), enables auto-apply-damage, opens Alice's tabletop, asserts Pip's `.mini-header-sub` shows "HP 35" pre-attack. Then fires `post_attack(krieger, attack_index=0, target_combatant_id=pip)` with `set_dice_seed(7)` for determinism; if the d20 misses, retries once with seed=2 (Krieger's +5 vs Pip's AC ~13 — the seed space contains MANY hits, retry catches the unlucky-seed flake). Waits for `character_hp_update` on Alice's WS predicate-filtered by `character_id == pip.id`, then re-locates the row + asserts the parsed-from-text current HP matches the broadcast's `hp.current`. **(3)** `tests/encounter_sim/level_3_edge_cases/multi_user/__init__.py` (empty package shell).
+**Description (cont):** Why drive damage through `/attack` instead of PATCH `/sheet-fields`. The PATCH path goes through `_apply_hp_change` directly (not `_apply_damage_to_combatant`) and broadcasts `character_death_save` ONLY when status changes — going from 35 → 25 leaves status="alive", so NO broadcast fires. The /attack path on a PC target goes through `_apply_damage_to_combatant` which broadcasts `character_hp_update` unconditionally as long as `applied > 0`. The right path for "HP drops, Alice sees it" is /attack with seeded dice. Documented in test comments + the docstring.
+**Description (cont 2):** Why this test unblocks 11+ future tests. Every Phase 1 / 2 PoC test carries the "GM-driver caveat" — the strike PoCs assert layer 6 against the response body's `target_hp_after` because the GM ignores battle_update echoes. With Alice fixtures in place and `character_hp_update` proven to update her DOM, those 11 PoC tests can each have a player-driver variant: Garrik attacks → Alice's bandit DOM updates (this is what the v2.49.4 motivator regression looked like in real play); Tavik save spell → Alice's bandit DOM updates; etc. They're filed but unblocked.
+**Description (cont 3):** Why no harness test. Test-only addition exercising existing endpoint behavior. `character_hp_update` broadcast shape has existing harness coverage in `tests/harness/test_attack_auto_damage.py`. UI-layer addition: Alice's `.mini-header-sub` text reflects the broadcast. Verification: 5 sequential local runs × 28 tests at ~48.8 s/run, no flake.
+
+### Added
+- `tests/encounter_sim/conftest.py::alice_session_cookie / alice_context / alice_page` — Alice (demo player owning Pip) fixtures mirroring the existing GM fixtures.
+- `tests/encounter_sim/level_3_edge_cases/multi_user/__init__.py` — new subdirectory package shell.
+- `tests/encounter_sim/level_3_edge_cases/multi_user/test_alice_observes_hp_update.py` — first player-driver test; proves Alice's DOM updates from a `character_hp_update` broadcast.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 11 / ~40 Level 3 tests landed. Subsystems: death-saves 5/5 ✅, concentration 3/6, action-economy 4/8, multi-user 1/4 (player-driver opener).
+- **Runtime:** full encounter-sim suite at 28 tests / ~48.8 s.
+
+### Filed
+- **Player-driver variants of the 11 Phase 1/2 strike + cast tests** — unblocked by Alice fixtures landing. Each could now assert layer 6 on Alice's DOM instead of the response body. Highest-leverage follow-ups since they fix the documented GM-driver caveat in every PoC docstring.
+- **Multi-user concurrency tests** (3 remaining per plan): 2 players + 1 GM concurrent actions, offline/reconnect presence dots, simultaneous-write race conditions.
+- **Player-view fixture for token coords** — when Alice fires actions via Pip's sheet, her browser doesn't have direct access to `allTokens` either; the same HTTP fallback the GM uses (`find_token_for_character`) works for her.
+
+---
+
 ## [2.49.34] - 2026-05-21
 
 **Schema version:** 56
