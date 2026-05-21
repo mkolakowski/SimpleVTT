@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.27] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit N — first Level 3 edge-case tests (death-save state machine).** Opens Phase 4 (task #96). Plan calls for ~40 edge-case tests across six subsystems (AoE picker, save resolution matrix, action economy, concentration cleanup, death saves, multi-user); this commit lands two from the death-saves subsystem and stands up the `tests/encounter_sim/level_3_edge_cases/death_saves/` directory layout. Tests exercise the **state machine + WS broadcast → DOM update** path: `POST /death-save/override` changes status / successes / failures; server broadcasts `character_death_save`; the client's `_onCharacterDeathSave` handler mutates the `.death-saves-tracker[data-character-id="N"]` element's `data-status` / `data-successes` / `data-failures` attributes in place + flips the status badge text. Both tests verify the dynamic update by reading attribute values rather than visibility (the tracker lives inside `init-card-sheet` which is `display:none` until expanded — attributes are still queryable). New helper `death_save_override(char_id, status, successes, failures)` in `helpers/battle.py`; new directory hierarchy `level_3_edge_cases/death_saves/`; CI workflow's encounter-sim pytest invocation extended to collect from `level_3_edge_cases/` too. PATCH — additive tests + additive helper + additive CI dir; no schema / runtime change. Full encounter-sim suite at 19 tests / ~33 s, 5 sequential local runs no flake.
+**Description:** Five new files + helper + CI tweak. **(1)** `tests/encounter_sim/level_3_edge_cases/__init__.py` (empty package shell). **(2)** `tests/encounter_sim/level_3_edge_cases/death_saves/__init__.py` (same). **(3)** `tests/encounter_sim/level_3_edge_cases/death_saves/test_stabilize_after_3_successes.py` — alive → dying → stable+3. Pre-condition reset to alive (defensive), override to dying, wait for `character_death_save` broadcast filtered by `character_id == pip.id AND status == "dying"`, assert `data-status="dying"`. Then override to stable+3 successes, wait for next broadcast, assert `data-status="stable"` + `data-successes="3"` + `data-failures="0"` + badge text "STABLE". **(4)** `tests/encounter_sim/level_3_edge_cases/death_saves/test_dies_after_3_failures.py` — same skeleton but terminal state "dead" with failures=3 + badge "DEAD". **(5)** `tests/encounter_sim/helpers/battle.py::death_save_override(char_id, *, status, successes, failures)` — POST wrapper, all body fields optional (server treats omitted as "leave alone"). **(6)** `.github/workflows/test-harness.yml::encounter-sim job` — pytest invocation expanded from two dirs to three (now includes `level_3_edge_cases/`).
+**Description (cont):** Why both tests have explicit teardowns. Death-save state persists in the character sheet row (`sheet.death_saves`) — there's no rollback boundary across tests. Without `try/finally` restoring Pip to alive at the end of each test, every subsequent encounter-sim test that uses Pip would see a stable / dead Pip and behave in confusing ways. Both tests reset Pip to alive on entry (defensive against prior aborted runs) AND on exit (clean handover to the next test). The pattern carries forward to every Level 3 death-save test — and to the broader "edge cases mutate persistent state" pattern.
+**Description (cont 2):** Why override-driven instead of roll-driven for the first commit. The plan's full death-save coverage includes a roll-driven path: "Enter dying, roll 3 successes via /death_save endpoint, stabilize." Rolling needs dice seeding to control the 1d20 outcomes (otherwise stable-after-3 is probabilistic). Seeded rolls would absolutely work via the v2.49.12 dice infra, but the override path is mechanically simpler AND validates the broadcast → DOM update layer the encounter-sim suite exists to test. A future commit can add the roll-driven variant that exercises the d20 mechanic itself.
+**Description (cont 3):** Why no canvas assertion yet. The plan's dies-after-3-failures scenario also calls for "Token gets 💀 (v2.49.4)" — the literal skull overlay on the canvas. Asserting on a canvas pixel needs the `pages/canvas.py::CanvasReader` skeleton to grow real methods (today it's an empty class from commit B). Filed as the natural next death-saves commit; tabling now keeps this commit narrow. The behavior is server-side correct (the broadcast carries the dead status; the render-loop reads `combatant.hp_current <= 0` and draws the skull); the gap is purely in the test layer's ability to assert on it.
+**Description (cont 4):** Why no harness test. Test-only addition exercising existing endpoints (`/death-save/override` already covered in `tests/harness/test_death_save.py::test_death_save_override_sets_status`). Verification: 5 sequential local runs × 19 tests pass at ~33 s/run, no flake. CI corroboration pending on the next push.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/` (new package + `death_saves/` subpackage). First Level 3 directory.
+- `tests/encounter_sim/level_3_edge_cases/death_saves/test_stabilize_after_3_successes.py` — alive → dying → stable+3 state machine via override + WS broadcast → DOM update.
+- `tests/encounter_sim/level_3_edge_cases/death_saves/test_dies_after_3_failures.py` — alive → dying → dead+3 terminal state via override.
+- `tests/encounter_sim/helpers/battle.py::death_save_override(char_id, *, status, successes, failures)` — POST wrapper for the GM-only override endpoint.
+
+### Changed
+- `.github/workflows/test-harness.yml::encounter-sim job` — pytest invocation now collects from Level 1 + Level 2 + Level 3 directories. `continue-on-error: true` unchanged.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 2 / ~40 Level 3 tests landed. ~38 remaining across six subsystems (AoE picker, save resolution matrix, action economy, concentration cleanup, death saves, multi-user). Plan budgets ~30 min worst case; current runtime is well within bounds.
+- **Runtime:** full encounter-sim suite at 19 tests / ~33 s.
+
+### Filed
+- **`pages/canvas.py::CanvasReader` actually growing methods** — the empty skeleton from commit B needs `pixel_at(x, y)` + `has_skull_at(token_x, token_y)`. Lands as the next Phase 4 commit, accompanying a `test_skull_overlay_at_zero_hp.py` that asserts the v2.49.4 overlay (the original regression class motivating this suite) on Pip's token after a damage-to-0 application.
+- **Roll-driven death-save tests** — drop to dying, fire `/death-save` 3 times with seeded dice, assert auto-stabilize. Pairs with the seeded `set_dice_seed` fixture already in place.
+- **Death saves — remaining plan items**:
+  - Massive damage instakill (damage ≥ 2×HP max → status = "dead", skipping dying).
+  - Healing Word on a dying PC restores them above 0 + clears death-save tracker.
+- **Other Phase 4 subsystems** — AoE picker variants (10 tests), save resolution matrix (12 tests), action-economy edge cases (8 tests including Action Surge / Cunning Action), concentration cleanup (6 tests including damage-triggered save + swap), multi-user (4 tests including offline/reconnect presence dots).
+
+---
+
 ## [2.49.26] - 2026-05-21
 
 **Schema version:** 56

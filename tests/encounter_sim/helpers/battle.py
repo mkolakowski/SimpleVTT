@@ -330,6 +330,36 @@ def post_attack_as_player(
         client.close()
 
 
+def death_save_override(
+    character_id: int,
+    *,
+    status: str | None = None,
+    successes: int | None = None,
+    failures: int | None = None,
+) -> httpx.Response:
+    """POST ``/character/{cid}/death-save/override`` as the GM —
+    force-sets the death-save state without rolling. ``status`` is one
+    of "alive" / "dying" / "stable" / "dead". Omitted fields are left
+    alone. Broadcasts ``character_death_save`` so connected clients
+    update their trackers in place.
+    """
+    body: dict = {}
+    if status is not None:
+        body["status"] = status
+    if successes is not None:
+        body["successes"] = successes
+    if failures is not None:
+        body["failures"] = failures
+    client = _gm_client()
+    try:
+        return client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{character_id}/death-save/override",
+            json=body,
+        )
+    finally:
+        client.close()
+
+
 def end_concentration(character_id: int) -> httpx.Response:
     """DELETE ``/api/campaign/{cid}/concentration/{char_id}``. Drops
     the caster's concentration effect AND the paired buffs (Hex,
