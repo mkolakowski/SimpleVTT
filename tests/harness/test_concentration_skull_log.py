@@ -259,14 +259,18 @@ async def test_roll_3_failures_emits_skull_log(gm_client, gm_ws, roster):
     """
     magnus = roster["Magnus Hexbinder"]
     pip = roster["Pip Quickfingers"]
-    await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
-        json={"type": "long"},
-    )
     await _seed_battle_with(gm_client, [magnus, pip])
 
     saw_log = False
     for _ in range(15):
+        # Long-rest each iteration so Hex slots refill — without this
+        # the suite-order context can exhaust Magnus's warlock slots
+        # after a few cast_hex iterations (cast_hex consumes a slot
+        # even when override=True per current /cast_hex semantics).
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+            json={"type": "long"},
+        )
         # Reset Magnus: HP 0 + dying + 2 failures + Hex installed.
         await gm_client.patch(
             f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/sheet-fields",

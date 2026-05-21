@@ -396,6 +396,31 @@ async def _install_buff(
         target["buffs"] = buffs
     key = str(buff["key"])
     is_concentration = bool(buff.get("concentration"))
+    # v2.49.51: if the incoming buff incapacitates the target (and
+    # it's not self-cast — rare edge case), snapshot the target's
+    # OWN concentration anchors BEFORE the replacement loop chews
+    # through them. The 💀 log emission below names the incapacitating
+    # buff as the cause, distinct from the concentration-swap mechanic
+    # which the existing replacement logic also exercises.
+    src_of_new = buff.get("source_char_id")
+    incapacitates_target = (
+        key in _INCAPACITATING_BUFF_KEYS
+        and (src_of_new is None or src_of_new != character_id)
+    )
+    preexisting_own_anchors: list[tuple[str, str]] = []
+    if incapacitates_target:
+        for b in buffs:
+            b = b or {}
+            if not b.get("concentration"):
+                continue
+            src = b.get("source_char_id")
+            if src is not None and src != character_id:
+                continue
+            anchor_key = b.get("key")
+            if anchor_key:
+                preexisting_own_anchors.append(
+                    (anchor_key, b.get("name") or anchor_key)
+                )
     # Build new list: drop the same-key entry (refresh), AND if this is
     # a concentration buff drop any OTHER concentration buff on the
     # combatant (RAW "you can only concentrate on one thing"). The
@@ -431,6 +456,39 @@ async def _install_buff(
     # drop in lock-step.
     if is_concentration and replaced_concentration_keys:
         await _drop_paired_concentration_buffs(campaign_id, character_id)
+    # v2.49.51: RAW PHB p.203 — "you also lose concentration on a
+    # spell if you are incapacitated." Drop the target's pre-existing
+    # OWN concentration anchors AND emit a 💀 log naming the cause.
+    # When the incapacitating buff is concentration=True (Paralyzed
+    # via Hold Person, Incapacitated via Hideous Laughter), the
+    # replacement loop above has already removed the anchor — we
+    # only need to emit the log. When the incapacitating buff is
+    # concentration=False (e.g. Sleep), the anchor is still in
+    # new_list and we explicitly remove it here.
+    if incapacitates_target and preexisting_own_anchors:
+        buff_label = buff.get("name") or key
+        caster_name = target.get("name") or "Unknown"
+        current_keys = {(b or {}).get("key") for b in new_list}
+        for anchor_key, anchor_name in preexisting_own_anchors:
+            # If the anchor survived the replacement (incapacitating
+            # buff was concentration=False), remove it now via the
+            # full _remove_buff path so paired cleanup + buff_update
+            # broadcast both fire.
+            if anchor_key in current_keys:
+                await _remove_buff(campaign_id, character_id, anchor_key)
+            await hub.broadcast(campaign_id, {
+                "type": "roll",
+                "data": {
+                    "expression": "—",
+                    "total": 0,
+                    "breakdown": f"Concentration ends — incapacitated ({buff_label})",
+                    "note": f"💀 {caster_name} lost concentration on {anchor_name}",
+                    "visibility": Visibility.GM_ONLY.value,
+                    "user_id": None,
+                    "user_name": "GM log",
+                    "char_name": caster_name,
+                },
+            })
     return True
 
 
@@ -507,6 +565,23 @@ _SPELL_CONDITION_MAP = {
         ],
     },
 }
+
+
+# v2.49.51 — RAW (PHB p.290 condition definitions): these condition
+# buff keys all imply the "incapacitated" state, which RAW (PHB p.203
+# concentration rules) ends any concentration the affected creature
+# is sustaining. Used by ``_install_buff`` to call
+# ``_drop_caster_concentration`` on the TARGET when the buff lands.
+# Charmed and Frightened are NOT in this set — those conditions
+# constrain action choice but don't incapacitate.
+_INCAPACITATING_BUFF_KEYS = frozenset({
+    "paralyzed",      # Hold Person, Hold Monster
+    "incapacitated",  # Hideous Laughter (and the generic state)
+    "stunned",        # Stunning Strike, Power Word Stun
+    "petrified",      # Flesh to Stone
+    "unconscious",    # Sleep, knockout
+    "asleep",         # alt key surface for Sleep
+})
 
 
 async def _install_buff_on_combatant_id(
@@ -11007,6 +11082,18 @@ async def _drop_caster_concentration(
     "incapacitated (3 failed death saves)" from "incapacitated (GM
     override)" at a glance.
 
+    v2.49.51 — filters concentration buffs by ``source_char_id``. A
+    buff with ``concentration: True`` on a combatant might be (a)
+    the combatant's own concentration anchor (e.g. Hex on the caster
+    — source is self or absent) or (b) a paired condition sustained
+    by ANOTHER caster's concentration (e.g. Paralyzed on a Hold
+    Person victim — source is the enemy caster). Only (a) should
+    drop when THIS character is incapacitated; (b) is the source
+    caster's concern and drops when THEY lose concentration via
+    ``_drop_paired_concentration_buffs``. Without this filter the
+    new v2.49.51 incapacitation hook would drop the just-installed
+    Paralyzed buff right back off.
+
     Returns the number of buffs removed.
     """
     state = hub.get_battle(campaign_id)
@@ -11028,6 +11115,12 @@ async def _drop_caster_concentration(
     for b in target.get("buffs") or []:
         b = b or {}
         if not b.get("concentration"):
+            continue
+        # v2.49.51: skip paired condition buffs sustained by another
+        # caster. The combatant isn't concentrating on those; their
+        # source caster is.
+        src = b.get("source_char_id")
+        if src is not None and src != character_id:
             continue
         key = b.get("key")
         if not key:
