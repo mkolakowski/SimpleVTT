@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.0] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Phase A — persistent AoE map markers for concentration spells.** When `/place_aoe` resolves a concentration AoE (Spirit Guardians, Hypnotic Pattern, Sleet Storm, Stinking Cloud, Web, Moonbeam, Cloudkill, etc.), the placement is now persisted server-side as a "map marker" + broadcast to every client. The canvas renders the shape with a teal-cyan dashed border (distinct from the flame-orange picker preview) plus a floating `🌀 SpellName` label. Self-anchored shapes (Spirit Guardians = `self_sphere`) follow the caster's token in real time. The marker is automatically cleared when the caster's concentration ends — hooked into the existing `_drop_paired_concentration_buffs` path so failed con saves, manual buff drops, and replaced-by-another-concentration-cast all clean up the marker in lock-step with the condition buffs. MINOR — new broadcast type (`concentration_aoe_update`) + new in-memory server state. Phase B (re-trigger on enter) is filed.
+**Description:** Server-side: added `_concentration_aoes: dict[campaign_id, list[dict]]` keyed by campaign_id; `_clear_caster_concentration_aoes(campaign_id, caster_char_id)` drops every marker for a caster + broadcasts; `_broadcast_concentration_aoes` helper that emits `concentration_aoe_update` with the full marker list. Hooked into `_drop_paired_concentration_buffs` so concentration breakage clears the markers too. `/cast_spell`'s pending-AoE stash gains an `is_concentration` flag (set from `spell.concentration === True` OR `duration.startswith("up to")`). `/place_aoe` reads the flag; for concentration spells, appends a marker dict carrying every field needed by the client renderer AND the future Phase B re-trigger handler (shape, size_ft, secondary_ft, center_x/y, is_self_anchored, save_ability, dc, damage_expr, damage_type, caster_char_id, spell_name). The body of `/place_aoe` now reads `center: {x, y}` from the request so the persistent marker knows where the picker dropped the shape. Client-side: tabletop.js gains `_concentrationAoes` array + a `concentration_aoe_update` WS handler that replaces the array and re-renders. The render loop draws each marker between targeting rings and the picker preview — sphere/self_sphere as a filled circle (caster token's center for self-anchored, marker center_x/y otherwise), cube as an axis-aligned square. Floating `🌀 SpellName` label above the marker.
+**Description (cont):** Why teal-cyan instead of flame-orange. The picker preview uses flame-orange (`#dc2626`) for "currently placing this." Targeting rings use crimson for "currently selected target." The persistent marker is a third visual state ("this area is under sustained effect") so it needs a distinct color. Cyan (`#5eead4`) reads as "lingering aura" without competing with the active states. Dashed border + 13% opacity fill keeps it legible without overwhelming tokens underneath.
+**Description (cont 2):** Why follow the caster for self-anchored shapes. Spirit Guardians' 15 ft emanation moves with the caster RAW — they walk forward, the aura walks with them. The client looks up the caster's current token position each render frame (cheap — array find by character_id), so as the caster moves, the marker shifts in real time. For placed shapes (Hypnotic Pattern's 30 ft cube at a chosen point), `center_x` and `center_y` are fixed at placement time.
+**Description (cont 3):** Why Phase A (visual only) before Phase B (re-trigger). Two concerns. (a) Phase A is self-contained: the marker is purely a visual cue + lifecycle hook into existing concentration cleanup. No new orchestration. (b) Phase B (token enters area → auto-roll save + apply damage) needs significant new state: per-token per-marker "already triggered this round" tracking, round-advance hook to clear it, dual handling for static vs caster-anchored areas, and careful interaction with the existing token_move handler. Better to ship the visible part first, exercise it, then add the re-trigger pass when the API surface settles.
+**Description (cont 4):** What ISN'T persisted across page refresh. The marker list lives in `_concentration_aoes` in-memory on the server. WS broadcasts deliver the list to connected clients. On refresh, the WebSocket reconnects but doesn't replay existing state — the client starts with an empty marker list until something triggers a re-broadcast. That's a known limitation. Filed: add a `concentration_aoe_state` block to the tabletop.html template context so the markers survive refresh.
+
+### Added
+- `app/routes/tabletop_routes.py` — `_concentration_aoes` stash + `_clear_caster_concentration_aoes` + `_broadcast_concentration_aoes` helpers.
+- `app/routes/tabletop_routes.py` `/place_aoe` — persists concentration AoE placements as map markers; reads `center: {x,y}` from the request body.
+- `app/routes/tabletop_routes.py` `/cast_spell` pending-AoE stash — gains `is_concentration` flag for `/place_aoe` to read.
+- `app/routes/tabletop_routes.py` `_drop_paired_concentration_buffs` — also clears persistent AoE markers for the caster (lock-step with paired condition buff cleanup).
+- `concentration_aoe_update` WS broadcast — carries `{markers: [...]}` array of active concentration AoE markers.
+- `app/static/tabletop.js` `_concentrationAoes` state + WS handler + render loop integration. Self-anchored shapes follow the caster's token.
+- `app/static/tabletop.js` Place button click handler — now passes `center: {x,y}` to `/place_aoe`.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Cast Spirit Guardians from Tavik — a teal dashed circle should anchor at his token with a `🌀 Spirit Guardians` label above. Move Tavik's token; the marker follows. Cast Hypnotic Pattern from Lyra over the bandits — a teal dashed square appears at the placement point with the label. Drop Tavik's concentration (right-click → end buff, or kill him); the marker vanishes. Cast a non-concentration AoE like Fireball — no persistent marker (it's instantaneous).
+- **Backward compat.** Pure additive: new broadcast type + new state. The 212 harness tests still pass; no test touches the new code path yet.
+
+### Filed
+- **Phase B — re-trigger on enter.** When a token moves into a persistent AoE area for the first time on a turn, auto-roll the save + apply save-for-half damage (or apply the effect for save-or-suck spells like Hypnotic Pattern). Needs per-token per-marker "already triggered this round" tracking and a hook into the token-move broadcast.
+- **Refresh-survival for markers.** Today markers live in server in-memory state and are pushed via WS broadcast on /place_aoe. A page refresh disconnects + reconnects but doesn't replay existing state. Adding markers to the tabletop.html template context would seed the client on initial render.
+- **Cone/line concentration markers.** Today only sphere/cube/self_sphere render markers. Concentration cone/line spells are rare in SRD but a future commit could persist the aim direction at placement time so the cone/line marker renders correctly.
+
+---
+
 ## [2.48.8] - 2026-05-20
 
 **Schema version:** 56

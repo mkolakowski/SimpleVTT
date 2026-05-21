@@ -278,6 +278,15 @@
     };
     window._targetingState = _targeting;
 
+    // v2.49.0 — persistent AoE markers for concentration spells.
+    // Server populates this list via ``concentration_aoe_update``
+    // broadcasts on /place_aoe for concentration AoEs, and clears
+    // it when the caster's concentration ends. The canvas render
+    // loop iterates this list and draws each marker on top of the
+    // tokens with a translucent teal fill + dashed border to
+    // distinguish from the bright-orange picker preview.
+    let _concentrationAoes = [];
+
     // v2.44.1 Phase T.5b → v2.45.0 Phase T.6: AoE placement picker.
     // The sheet's ``.sp-cast`` handler calls ``window._openAoePicker(
     // {shape, size_ft, name, char_id})`` for spells whose action
@@ -786,6 +795,66 @@
             ctx.stroke();
             ctx.restore();
         });
+        // v2.49.0 — persistent concentration AoE markers. Drawn after
+        // tokens + targeting rings but before the picker preview, so
+        // a fresh placement's preview circle is still visible on top.
+        // Teal/cyan palette + dashed border distinguishes from the
+        // flame-orange picker preview ("currently placing") and the
+        // crimson targeting rings ("currently selected").
+        if (_concentrationAoes.length) {
+            for (const m of _concentrationAoes) {
+                const lenPx = (m.size_ft / 5) * gridSize;
+                let cx, cy;
+                if (m.is_self_anchored && m.caster_char_id) {
+                    const t = tokens.find(t => t.character_id === m.caster_char_id);
+                    if (!t) continue;
+                    cx = t.x + gridSize / 2;
+                    cy = t.y + gridSize / 2;
+                } else {
+                    cx = m.center_x;
+                    cy = m.center_y;
+                }
+                ctx.save();
+                ctx.fillStyle = 'rgba(94,234,212,0.13)';   // teal — concentration aura
+                ctx.strokeStyle = '#5eead4';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 4]);
+                if (m.shape === 'sphere' || m.shape === 'self_sphere') {
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, lenPx, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                } else if (m.shape === 'cube') {
+                    const half = lenPx / 2;
+                    ctx.beginPath();
+                    ctx.rect(cx - half, cy - half, lenPx, lenPx);
+                    ctx.fill();
+                    ctx.stroke();
+                }
+                // Floating label so the GM knows which spell.
+                if (m.spell_name) {
+                    ctx.setLineDash([]);
+                    ctx.font = 'bold 11px system-ui, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const label = `🌀 ${m.spell_name}`;
+                    const metrics = ctx.measureText(label);
+                    const padX = 5;
+                    const w = metrics.width + padX * 2;
+                    const h = 16;
+                    const ly = cy - lenPx - 12;
+                    ctx.fillStyle = 'rgba(15,23,42,0.85)';
+                    ctx.beginPath();
+                    if (ctx.roundRect) ctx.roundRect(cx - w/2, ly - h/2, w, h, 4);
+                    else ctx.rect(cx - w/2, ly - h/2, w, h);
+                    ctx.fill();
+                    ctx.fillStyle = '#5eead4';
+                    ctx.fillText(label, cx, ly);
+                }
+                ctx.restore();
+            }
+        }
+
         // T.5b → T.6: AoE picker preview. Drawn last so it sits on
         // top of tokens and targeting rings. Translucent flame-orange
         // fill + dashed crimson stroke so it reads as "damage zone".
@@ -1959,6 +2028,10 @@
                 _onSpellCastTargetUpdated(msg.data);
             } else if (msg.type === 'spell_cast_aoe_resolved') {
                 _onSpellCastAoeResolved(msg.data);
+            } else if (msg.type === 'concentration_aoe_update') {
+                _concentrationAoes = (msg.data && Array.isArray(msg.data.markers))
+                    ? msg.data.markers : [];
+                try { render(); } catch (_) {}
             } else if (msg.type === 'feature_used') {
                 _appendFeatureUsed(msg.data);
                 _focusRollLogIfLocal(msg.data && msg.data.user_id);
@@ -2741,6 +2814,11 @@
                         body: JSON.stringify({
                             cast_id: d.id,
                             target_combatant_ids: placed.target_combatant_ids || [],
+                            // v2.49.0 — pass the placement center so
+                            // the server can persist concentration-
+                            // based AoEs as map markers (Spirit
+                            // Guardians, Hypnotic Pattern, etc.).
+                            center: placed.center || null,
                         }),
                     });
                     if (!resp.ok) {

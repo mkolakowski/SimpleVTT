@@ -743,6 +743,11 @@ async def _drop_paired_concentration_buffs(
     if dirty:
         hub.set_battle(campaign_id, state)
         await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+    # v2.49.0 — also clear any persistent AoE markers this caster
+    # placed (Spirit Guardians, Hypnotic Pattern, etc.). The marker
+    # is keyed to the caster's concentration; once concentration
+    # breaks, the marker should vanish from the map.
+    await _clear_caster_concentration_aoes(campaign_id, caster_char_id)
     return removed
 
 
@@ -973,6 +978,45 @@ def _purge_pending_aoe_casts() -> None:
     stale = [k for k, v in _pending_aoe_casts.items() if v.get("ts", 0) < cutoff]
     for k in stale:
         _pending_aoe_casts.pop(k, None)
+
+
+# v2.49.0 — persistent AoE markers for concentration spells. When a
+# concentration AoE (Spirit Guardians, Hypnotic Pattern, Sleet Storm,
+# etc.) is placed, the marker stays on the map until the caster's
+# concentration breaks. Cleared via ``_clear_caster_concentration_aoes``
+# from the existing concentration-cleanup helpers
+# (``_drop_paired_concentration_buffs``, the concentration save
+# failure path). Keyed by campaign_id; value is a list of marker
+# dicts. Each marker carries everything the client needs to render
+# the shape (shape, size, center, caster_char_id for self-anchored
+# shapes) AND everything the future re-trigger-on-enter follow-up
+# will need (dc, damage_expr, damage_type, save_ability).
+_concentration_aoes: dict[int, list[dict]] = {}
+
+
+async def _broadcast_concentration_aoes(campaign_id: int) -> None:
+    await hub.broadcast(campaign_id, {
+        "type": "concentration_aoe_update",
+        "data": {
+            "markers": list(_concentration_aoes.get(campaign_id, [])),
+        },
+    })
+
+
+async def _clear_caster_concentration_aoes(
+    campaign_id: int, caster_char_id: int,
+) -> bool:
+    """Drop every persistent AoE marker placed by this caster + tell
+    every client. Called from the concentration-cleanup paths when
+    the caster's concentration ends (manually dropped, failed con
+    save, dead, dual-cast another concentration spell)."""
+    markers = _concentration_aoes.get(campaign_id) or []
+    kept = [m for m in markers if int(m.get("caster_char_id") or 0) != int(caster_char_id)]
+    if len(kept) == len(markers):
+        return False
+    _concentration_aoes[campaign_id] = kept
+    await _broadcast_concentration_aoes(campaign_id)
+    return True
 
 
 # Shape names from app/data/local/dnd5e/spells/*.json that trigger
@@ -7580,6 +7624,12 @@ async def cast_spell(
             (a.get("save_ability") for a in (spell.get("actions") or []) if a.get("save_ability")),
             "",
         ) or "").strip().upper()[:3]
+        # v2.49.0 — concentration detection. Spells with the explicit
+        # ``concentration: true`` flag OR a duration starting with
+        # "Up to" (Open5e convention) are concentration-tracked, so
+        # /place_aoe persists the placement as a map marker.
+        _dur = (spell.get("duration") or "").strip().lower()
+        _is_concentration = bool(spell.get("concentration")) or _dur.startswith("up to")
         _pending_aoe_casts[cast_id] = {
             "ts": _time.time(),
             "campaign_id": campaign_id,
@@ -7594,6 +7644,7 @@ async def cast_spell(
             "damage_type": _pending_dmg_type,
             "auto_apply_damage": bool(campaign.auto_apply_damage),
             "area": _aoe_area_info or {},
+            "is_concentration": _is_concentration,
         }
 
     await hub.broadcast(campaign_id, {"type": "spell_cast", "data": payload})
@@ -7701,6 +7752,11 @@ async def place_aoe(
     body = await request.json()
     cast_id = (body.get("cast_id") or "").strip()
     target_combatant_ids = body.get("target_combatant_ids") or []
+    # v2.49.0 — center coords from the picker, used to persist the
+    # placement as a map marker for concentration AoEs.
+    center_body = body.get("center") or {}
+    center_x = float(center_body.get("x") or 0) if isinstance(center_body, dict) else 0.0
+    center_y = float(center_body.get("y") or 0) if isinstance(center_body, dict) else 0.0
     if not cast_id:
         raise HTTPException(400, "cast_id is required")
     if not isinstance(target_combatant_ids, list):
@@ -7929,6 +7985,47 @@ async def place_aoe(
             "data": _state,
             "force_gm_sync": True,
         })
+
+    # v2.49.0 — concentration AoE persistence. For spells flagged as
+    # concentration (Spirit Guardians, Hypnotic Pattern, Sleet Storm,
+    # Stinking Cloud, Web, Moonbeam, etc.), persist the placement as
+    # a map marker. The marker renders on the canvas with a dashed
+    # translucent fill and stays put until the caster's concentration
+    # ends — at which point ``_drop_paired_concentration_buffs``
+    # (called from the concentration-save-failure path + manual buff
+    # removal) calls ``_clear_caster_concentration_aoes`` to drop it.
+    # Self-anchored shapes (self_sphere = Spirit Guardians) carry the
+    # caster's char_id so the client can look up the caster's CURRENT
+    # token position at render time and the marker moves with them.
+    if ctx.get("is_concentration"):
+        area = ctx.get("area") or {}
+        shape = (area.get("shape") or "").strip()
+        is_self_anchored = shape in ("self_sphere", "self_cube")
+        marker = {
+            "id": uuid.uuid4().hex[:12],
+            "cast_id": cast_id,
+            "caster_char_id": int(ctx.get("caster_char_id") or 0),
+            "caster_char_name": ctx.get("caster_char_name") or "",
+            "spell_name": ctx.get("spell_name") or "",
+            "spell_slug": ctx.get("spell_slug") or "",
+            "shape": shape,
+            "size_ft": int(area.get("size_ft") or 0),
+            "secondary_ft": int(area.get("secondary_ft") or 0),
+            "center_x": center_x,
+            "center_y": center_y,
+            "is_self_anchored": is_self_anchored,
+            "save_ability": save_ability,
+            "dc": dc,
+            # Re-trigger fields (Phase B follow-up — store now so the
+            # marker is self-contained when the re-trigger handler
+            # consumes them later).
+            "damage_expr": damage_expr,
+            "damage_type": damage_type,
+            "auto_apply_damage": auto_apply_damage,
+            "placed_at": _time.time(),
+        }
+        _concentration_aoes.setdefault(campaign_id, []).append(marker)
+        await _broadcast_concentration_aoes(campaign_id)
 
     # Broadcast the resolved AoE so every client's cast card mutates
     # in place: pending button → per-target pill row.
