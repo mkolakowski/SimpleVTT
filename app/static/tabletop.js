@@ -2350,8 +2350,15 @@
         // at 4 mooks, etc.), render one pill per target instead of
         // collapsing to the headline view — the GM needs to see who
         // saved, who failed, and how much damage each took.
+        // v2.48.1 — gate on ``length > 0`` instead of ``> 1``. The new
+        // T.5e pending-then-place flow always uses ``auto_save_targets``
+        // even for a single-target placement (the headline auto_save_*
+        // fields were never populated because resolution was deferred).
+        // The 1-target case in this branch renders the same pill the
+        // multi-target case would — without it, single-target Fireball
+        // placements have an empty pill row.
         const saveTargets = Array.isArray(d.auto_save_targets) ? d.auto_save_targets : [];
-        const multiSave = saveTargets.length > 1;
+        const multiSave = saveTargets.length > 0;
         if (multiSave) {
             const dc = d.auto_save_dc;
             const ability = d.auto_save_ability || '';

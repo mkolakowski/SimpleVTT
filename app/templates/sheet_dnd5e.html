@@ -2501,6 +2501,31 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         const rmBtn = isReadonly ? '' :
             `<button type="button" class="sp-rm" data-idx="${idx}" title="Remove" style="background:none;border:none;color:var(--s-danger);cursor:pointer;font-size:16px;line-height:1;padding:0 2px;flex-shrink:0;">×</button>`;
         const icons = (s.concentration ? ' ⏱' : '') + (s.ritual ? ' ®' : '');
+        // v2.48.1 — AoE shape badge so the GM can spot which spells
+        // trigger the v2.48.0 caster-gated AoE placement flow at a
+        // glance during testing. Area info is populated post-render
+        // by ``_backfillAoeAreaInfo`` (fetches from /api/open5e/spells
+        // → first action's area block), so on first paint the badge
+        // is absent and shows up on the next render.
+        const _AOE_SHAPE_LABELS = {
+            sphere: 'sphere', self_sphere: 'sphere (you)',
+            cube: 'cube', self_cube: 'cube (you)',
+            cone: 'cone', line: 'line',
+        };
+        const _aoeShape = (s.area_shape || '').trim();
+        const _aoeSize = Number(s.area_size_ft) || 0;
+        const _aoeSecondary = Number(s.area_secondary_ft) || 0;
+        const _aoeLabel = _AOE_SHAPE_LABELS[_aoeShape] || '';
+        const _aoeSizeText = _aoeShape === 'line' && _aoeSecondary
+            ? `${_aoeSize}×${_aoeSecondary}ft`
+            : `${_aoeSize}ft`;
+        const aoeBadge = (_aoeShape && _aoeSize && _aoeLabel)
+            ? `<span title="AoE: ${_aoeSizeText} ${_aoeLabel} — uses the v2.48.0 placement flow on cast"
+                     style="flex-shrink:0;font-size:10px;font-weight:700;padding:1px 6px;border-radius:10px;
+                            color:var(--c-damage);background:color-mix(in srgb, var(--c-damage) 14%, transparent);
+                            border:1px solid color-mix(in srgb, var(--c-damage) 38%, transparent);
+                            letter-spacing:.04em;">💥 ${_aoeSizeText} ${_aoeLabel}</span>`
+            : '';
         return `
         <div class="sp-row" style="border:1px solid var(--s-border);border-radius:4px;margin-bottom:3px;background:${rowPos % 2 === 0 ? 'var(--s-input)' : 'var(--s-card)'};">
             <div class="sp-header" data-idx="${idx}"
@@ -2519,6 +2544,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 ${s.range        ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.range)}</span>` : ''}
                 ${s.damage ? `<span style="font-size:11px;color:#e8a;flex-shrink:0;font-weight:500;">${_esc(s.damage)}</span>` : ''}
                 ${s.save_ability ? `<span style="font-size:11px;color:#8cf;flex-shrink:0;font-weight:500;">${_esc(s.save_ability)} save</span>` : ''}
+                ${aoeBadge}
                 <button type="button" class="sp-cast" data-idx="${idx}"
                         data-casting-time="${_esc(s.casting_time || '')}"
                         title="Cast ${_esc(s.name)}${s.level > 0 ? ' (uses a Lv ' + s.level + ' slot)' : ''}"
@@ -3020,6 +3046,36 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         // Fan out in parallel; _enrichGrantedSpell is internally idempotent
         // and the save call is debounced so we won't spam the server.
         missing.forEach(s => { _enrichGrantedSpell(s.name, s.class); });
+    })();
+
+    // v2.48.1 — backfill AoE area info onto every spell so the spell
+    // row badge ("💥 20ft sphere") can render. The area lives in the
+    // spell's curated JSON action[0].area, exposed via Open5e proxy.
+    // Each spell takes one fetch (cached by name in _spellDetailCache,
+    // so repeat lookups are free). Runs once per page load; re-renders
+    // the spell list once all fetches resolve so all badges appear in
+    // one paint instead of N flickers.
+    (function _backfillAoeAreaInfo() {
+        const candidates = spells.filter(s =>
+            !s.area_shape && (s.name || '').trim()
+        );
+        if (!candidates.length) return;
+        let changed = false;
+        Promise.all(candidates.map(async s => {
+            try {
+                const detail = await _fetchSpellDetail(s.name);
+                if (!detail || !Array.isArray(detail.actions)) return;
+                const action = detail.actions.find(a =>
+                    a && a.area && a.area.shape && (Number(a.area.size_ft) || 0) > 0);
+                if (!action) return;
+                s.area_shape = action.area.shape;
+                s.area_size_ft = Number(action.area.size_ft) || 0;
+                s.area_secondary_ft = Number(action.area.secondary_ft) || 0;
+                changed = true;
+            } catch (_) { /* network / missing detail — skip silently */ }
+        })).then(() => {
+            if (changed) renderSpells();
+        });
     })();
 
     // ── Subclass-granted spell helpers ───────────────────────────────────

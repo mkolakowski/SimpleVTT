@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.48.1] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Two AoE follow-ups: per-target pill rendering for single-target placements + AoE shape badge on spell rows.** Two fixes from v2.48.0 testing. **(1) Single-target placement bug:** the v2.46.3 multi-target pill renderer gates on `auto_save_targets.length > 1`, falling back to a single-target headline view that reads `auto_save_target_kind` / `auto_save_rolled` / etc. The v2.48.0 pending-then-place flow doesn't populate those headline fields (resolution is deferred to `/place_aoe`), so a Fireball placed over exactly one bandit rendered an empty pill row. Fix: gate on `length > 0`. The 1-target case in the per-target branch renders the same info the headline branch would have (target name + roll/DC + verdict + damage). **(2) Spell-row AoE badge:** added a flame-orange "💥 20ft sphere" badge to the spell row when the spell has an AoE area block, so GMs running through the placement flow can spot which spells trigger it. Area info is backfilled async via the existing Open5e detail endpoint (one fetch per spell, cached); re-renders once when all fetches resolve so all badges appear in one paint.
+**Description:** Three edits. **(1)** `app/static/tabletop.js` `_spellResultPillsHtml` — changed `const multiSave = saveTargets.length > 1` to `> 0`. Existing single-target NPC saves still render correctly (the per-target branch renders one pill with same info as the headline branch's two pills, just collapsed). PC single-target prompted saves still fall to the headline branch because `auto_save_targets` is empty for that path (only NPC outcomes seed it). **(2)** `app/templates/sheet_dnd5e.html` `spellRowHtml` — added an `_AOE_SHAPE_LABELS` map (sphere → "sphere", self_sphere → "sphere (you)", etc.) and computed an `aoeBadge` HTML snippet when `s.area_shape` + `s.area_size_ft` are present. Inserted between the existing `save_ability` span and the Cast button. **(3)** `app/templates/sheet_dnd5e.html` `_backfillAoeAreaInfo` IIFE — iterates every spell without `s.area_shape`, fetches detail via the cached `_fetchSpellDetail`, pulls `actions[0].area.{shape, size_ft, secondary_ft}` if present, and re-renders once when all fetches resolve. Persistence: in-memory only — area is derived from the spell JSON, not character-customisable, so no save-to-server.
+**Description (cont):** Why a separate backfill instead of including area in the spell row data at sheet-render time. The character sheet template renders from `char.sheet.spells`, which is a list of {name, level, prepared, _slug, casting_time, ...} entries. The curated `area` block lives in `app/data/local/dnd5e/spells/<slug>.json`, NOT in the character row. Joining the two at template-render time would require a server-side spell-detail join — feasible but spreads the spell-data fetch across two layers. Reusing the existing client-side Open5e cache keeps the join in one place. The first-paint latency is a few hundred ms (one fetch per spell, parallel); subsequent re-renders are instant.
+**Description (cont 2):** Why no harness test. The single-target rendering fix is a UI gating change that the Python harness doesn't reach (the resolved `auto_save_targets` field is the contract, and the existing tests still assert against it). The badge is a pure visual addition — no contract change. The Playwright smoke harness could in principle assert the badge appears after backfill resolves; filed.
+**Description (cont 3):** About "auto-roll all targets selected by the AoE picker": this already happens server-side for NPC targets — `/place_aoe` iterates every combatant id in the picker's resolved list and rolls a save + applies save-for-half damage for each (no manual rolling needed). PC targets get a `roll_request` per the v2.47.0 T.5d design (the PC's player rolls in their own UI, then the server applies damage on response). The fix above makes the resolved pill row actually render for the single-target case so the GM can SEE the auto-rolled outcomes. The behaviour itself was correct; only the rendering was missing.
+
+### Fixed
+- `app/static/tabletop.js` `_spellResultPillsHtml` — gate on `auto_save_targets.length > 0` so single-target AoE placements render their pill instead of falling to an unpopulated headline branch.
+
+### Added
+- `app/templates/sheet_dnd5e.html` — `💥 20ft sphere` AoE shape badge on spell rows for spells with `area_shape` populated. Async backfill via existing Open5e detail endpoint.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Open Thalindra's sheet drawer, expand Spells — Fireball, Lightning Bolt, and (after a moment) other AoE spells should show a "💥 20ft sphere" / "💥 100×5ft line" badge. Cast Fireball; the cast card lands with the 📍 Place button. Click it, place over one bandit — the card mutates to show ONE pill ("📋 Bandit Alpha 5/13 ❌ · 🎲 −28 fire") + Σ aggregate. Place over multiple bandits — multiple pills + aggregate. Repeat with Burning Hands (cone) / Lightning Bolt (line) / Faerie Fire (cube) / Spirit Guardians (self_sphere — anchored to caster) / Thunderwave (self_cube — aim from caster).
+- **Backward compat.** Pure rendering + display fixes; no API change. All 211 harness tests still pass.
+
+### Filed
+- **Playwright assertion for the AoE badge.** No harness coverage today; future Playwright check could assert the badge appears for Fireball after the backfill resolves.
+- **Cancel pending placement / refund slot.** Still filed from v2.48.0.
+
+---
+
 ## [2.48.0] - 2026-05-20
 
 **Schema version:** 56
