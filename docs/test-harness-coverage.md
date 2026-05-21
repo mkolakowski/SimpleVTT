@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 221 (as of v2.49.12, 2026-05-21).
+**Total tests:** 222 (as of v2.49.40, 2026-05-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -115,6 +115,13 @@ T.2 hit determination + auto-applied damage + Undo. Gated by `Campaign.auto_appl
 | `test_undo_attack_damage` | `POST /undo_attack_damage` reverses the HP change for the cast id. |
 | `test_undo_unknown_attack_id` | Unknown id → 404. |
 | `test_undo_missing_attack_id_field` | Empty body → 400. |
+
+### `test_attack_force_gm_sync.py`
+v2.49.40 — `/attack` against an NPC broadcasts `battle_update` with `force_gm_sync: True` so the GM client (whose `battle_update` handler ignores broadcasts without the flag per the v2.5.5 echo-loop guard) actually applies the HP change. Pre-fix the GM's local state stayed at pre-attack HP until something else triggered `pushBattle`, then the GM's stale local state overwrote the server's new HP — the bandit visually "came back to life."
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_npc_damage_broadcast_carries_force_gm_sync` | Krieger attacks Bandit Alpha; `battle_update` broadcast carries `force_gm_sync=True`; broadcasted state contains the updated combatant HP. Skips assertion gracefully on miss (no broadcast in that case). |
 
 ### `test_attack_buff_intercepts.py`
 Phase B damage-flow intercepts — Rage / Hunter's Mark / Colossus Slayer / resistance.

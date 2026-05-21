@@ -1143,9 +1143,21 @@ async def _apply_damage_to_combatant(
     new_hp = max(0, hp_cur - applied)
     target["hp_current"] = new_hp
     hub.set_battle(campaign_id, state)
+    # v2.49.40 — ``force_gm_sync: True`` so the GM client picks up the
+    # NPC HP change. Without this flag the GM ignores the broadcast
+    # (the v2.5.5 echo-loop guard at tabletop.html:5543) and their
+    # local ``battle.combatants[…].hp_current`` stays at the pre-
+    # damage value. A subsequent ``pushBattle()`` (any drag / init
+    # edit) then overwrites the server-authoritative new HP with the
+    # GM's stale local value — the bandit visually "comes back to
+    # life" the moment the GM moves a token. Encounter-sim Phase 1's
+    # test_garrik_strike docstring documented this as the GM-driver
+    # caveat; now resolved.
+    # Mirrors the v2.48.8 /place_aoe pattern (tabletop_routes.py:7986).
     await hub.broadcast(campaign_id, {
         "type": "battle_update",
         "data": state,
+        "force_gm_sync": True,
     })
     if attack_id:
         _attack_damage_log[attack_id] = {
@@ -12609,7 +12621,16 @@ async def undo_attack_damage(
             new_hp = max(0, hp_cur - applied)
         target["hp_current"] = new_hp
         hub.set_battle(campaign_id, state)
-        await hub.broadcast(campaign_id, {"type": "battle_update", "data": state})
+        # v2.49.40 — see the _apply_damage_to_combatant fix for the
+        # same reasoning. NPC HP changes need force_gm_sync so the
+        # GM's local battle state stays in sync; otherwise the undo
+        # appears to "not work" in the GM's view until they push
+        # something else.
+        await hub.broadcast(campaign_id, {
+            "type": "battle_update",
+            "data": state,
+            "force_gm_sync": True,
+        })
         _attack_damage_log.pop(attack_id, None)
         return {"ok": True, "reverted": applied, "hp_after": new_hp,
                 "was_heal": is_heal_entry}
