@@ -3236,9 +3236,13 @@
         const name  = d.character_name || 'Player';
         const feat  = d.feature_name || 'feature';
         const tagLabel = _featureSourceLabel(d.source);
-        const remaining = (d.max && d.max > 0)
-            ? `<span class="feature-used-counter">(${d.remaining}/${d.max} left)</span>`
-            : '';
+        // v2.49.2 — charges/remaining now render as a chip-buff pill
+        // in the .result-pills row alongside heal/damage/dice pills.
+        // The old inline ``feature-used-counter`` span next to the
+        // feature name is gone. When remaining hits 0, the pill
+        // turns red (chip-miss) so the GM sees "Garrik just spent
+        // his last Second Wind use" at a glance.
+        const remaining = '';
         // v2.43.0: feature_desc is now an inline tail next to the
         // feature name (it was a collapsible ▾ details block in
         // v2.41.0). Most descs are short ("Bonus action", "Spent
@@ -3262,7 +3266,12 @@
         // "(at max)" indicator). Server still computes heal_amount
         // as the applied delta — pill just reads dice_total for
         // header display.
-        let healPill = '';
+        // v2.49.2 — every feature_used card now gets a unified pill
+        // row (heal + dice + charges + future buff/damage pills).
+        // The row replaces the v2.49.1 single heal pill block + the
+        // inline charges counter. Each pill independently clickable
+        // via _buildPill where roll math is available.
+        const featurePills = [];
         const hasHealEvent = (d.heal_amount && d.heal_amount > 0)
             || (d.dice_total && d.dice_total > 0 && (d.heal_target_name || (d.dice_note || '').includes('Heal') || (d.source || '').match(/wind|hands|heal/i)));
         if (hasHealEvent) {
@@ -3271,9 +3280,6 @@
             const after = d.heal_hp_after;
             const applied = d.heal_amount || 0;
             const rolled = d.dice_total || applied;
-            // Headline format:
-            //   "+13 HP (40 → 53)" when heal was applied
-            //   "+0 HP (at max — rolled 13)" when capped
             let headerTail;
             if (applied > 0 && before != null && after != null) {
                 headerTail = `+${applied} HP (${before} → ${after})`;
@@ -3283,14 +3289,39 @@
                 headerTail = `+${applied} HP`;
             }
             const header = `✚ ${escapeHTML(tgt)} ${headerTail}`;
-            // Second Wind broadcasts the breakdown as ``dice_breakdown``;
-            // Lay on Hands uses ``heal_breakdown``. Read whichever is
-            // available so both surfaces light up.
             const detail = d.dice_breakdown
                 ? `Heal: ${d.dice_breakdown}`
                 : (d.heal_breakdown ? `Heal: ${d.heal_breakdown}` : '');
-            healPill = `<div class="result-pills">${_buildPill('chip-heal', header, detail)}</div>`;
+            featurePills.push(_buildPill('chip-heal', header, detail));
         }
+        // Generic dice-roll pill — features that rolled dice without
+        // auto-applying a heal (Bardic Inspiration's d-die isn't a
+        // roll yet, but Arcane Recovery + Healing Hands racial +
+        // anything else broadcasting ``dice_total`` lands here).
+        // Suppressed when hasHealEvent is true to avoid double-
+        // rendering the same dice as both a heal pill and a die pill.
+        if (!hasHealEvent && d.dice_total && d.dice_total > 0) {
+            const diceHeader = d.dice_expression
+                ? `🎲 ${escapeHTML(d.dice_expression)} → ${d.dice_total}`
+                : `🎲 ${d.dice_total}`;
+            const diceDetail = d.dice_breakdown ? `Roll: ${d.dice_breakdown}` : '';
+            featurePills.push(_buildPill('chip-prompt', diceHeader, diceDetail));
+        }
+        // Charges pill — every feature with remaining/max. The pill's
+        // ``chip-buff`` color signals "this resource is still
+        // available"; switches to ``chip-miss`` when remaining hits
+        // 0 so the GM sees the depleted state at a glance.
+        if (d.max && d.max > 0) {
+            const rem = Number(d.remaining || 0);
+            const mx  = Number(d.max);
+            const isLast = rem === 0;
+            const cls = isLast ? 'chip-miss' : 'chip-buff';
+            const icon = isLast ? '⚪' : '🔋';
+            featurePills.push(`<span class="result-pill ${cls}">${icon} ${rem}/${mx} uses left</span>`);
+        }
+        const healPill = featurePills.length
+            ? `<div class="result-pills">${featurePills.join('')}</div>`
+            : '';
         const targetTagHtml = _targetTagHtml(d);
         const li = document.createElement('li');
         li.innerHTML = `

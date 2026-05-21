@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.2] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Pillify every feature_used card — charges + dice rolls now render as pills.** All class / subclass / racial feature use broadcasts (Second Wind, Lay on Hands, Bardic Inspiration, Cutting Words, Action Surge, Rage, Cunning Action, Channel Divinity, Arcane Recovery, Wild Shape, etc.) now produce a unified pill row on their feature_used cards. The v2.43.0 inline `(4/4 left)` counter span is gone, replaced by a `🔋 4/4 uses left` pill in the same `.result-pills` row as the heal pill. When the resource hits 0 the pill flips to `chip-miss` red `⚪ 0/4 uses left` so depleted features stand out. Features that broadcast `dice_total` without applying a heal (Arcane Recovery's slot-level allowance, Healing Hands racial, future dice-rolling features) get an expandable `🎲 1d10+5 → 13` pill with the breakdown on click. Heal pill (Second Wind / Lay on Hands) keeps its v2.49.1 behavior including the at-max edge case. PATCH — UI polish; existing broadcast payloads unchanged.
+**Description:** One edit. `app/static/tabletop.js` `_appendFeatureUsed` — replaced the inline `feature-used-counter` span with a unified `.result-pills` row containing three pill types: (a) heal pill (existing, click-to-expand via `_buildPill`); (b) generic dice pill when `dice_total > 0` AND not already covered by the heal pill, suppressed for heal events so dice aren't double-rendered; (c) charges pill rendered for every feature with `remaining/max`, color-switching from chip-buff teal (`🔋 4/4 uses left`) to chip-miss red (`⚪ 0/4 uses left`) on depletion. All three pills go through the same flex row, so a Second Wind card now reads: `[✚ +13 HP (40→53)] [🔋 3/3 uses left]` in one tidy line.
+**Description (cont):** Why the charges pill at the END of the row. Reading order: outcome first (the heal that just happened), state second (how many uses I have left). Putting charges last mirrors how a player thinks: "I cast Second Wind, healed +13, now I have 3 left." The chip-miss red on depletion is a defense against the GM not noticing a player used their last resource — bright red pill is hard to miss.
+**Description (cont 2):** Why the generic dice pill is suppressed when hasHealEvent is true. Second Wind broadcasts BOTH `dice_total: 13` and `heal_amount: 13`. The heal pill already shows the dice breakdown via its click-to-expand detail (`Heal: 1d10+5[8+5]=13`). Rendering a separate dice pill would double the visual real estate for the same data. The dice pill fires only when a feature rolled dice but didn't apply a heal — Arcane Recovery's "restored 3 slot levels" comes to mind (no HP affected, but the d6/d8/etc. computation could land here in a future iteration).
+**Description (cont 3):** Why no buff-installed pill yet. Features like Rage / Hunter's Mark / Hex install buffs and broadcast `feature_used` plus a separate `buff_update`. To surface "Rage installed (10 rounds)" as a pill on the feature_used card, the broadcast would need to carry `buff_installed_name` / `buff_duration_rounds` fields. Server change is straightforward but spreads across 5+ endpoints; filed for a separate commit.
+
+### Changed
+- `app/static/tabletop.js` `_appendFeatureUsed` — unified pill row replaces the inline charges counter; adds generic dice pill for features that roll without healing; charges pill flips chip-miss red on depletion.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Long-rest Garrik then use Second Wind — card now shows `[✚ +N HP (40→M)] [🔋 2/2 uses left]`. Use it again — `[🔋 1/2]`. Twice more — `[🔋 0/2]` red. Same pattern for Lay on Hands, Bardic Inspiration, Cutting Words, Action Surge, Rage, Channel Divinity, Arcane Recovery, Wild Shape — every feature broadcast carries `remaining/max` and now renders the charges pill.
+- **Backward compat.** Pure rendering change; broadcast payloads unchanged. All 212 harness tests still pass.
+
+### Filed
+- **Buff-installed pill on feature_used cards.** Add `buff_installed_*` fields to use_rage / use_hunters_mark / use_channel_divinity / etc. broadcasts so the feature_used card can render "🐻 Rage (10 rounds)" alongside charges. Multi-endpoint server change.
+- **Damage pill on feature_used.** Features that deal damage directly (currently rare — most damage comes via /attack or /cast_spell) would render a damage pill via the same row.
+
+---
+
 ## [2.49.1] - 2026-05-20
 
 **Schema version:** 56
