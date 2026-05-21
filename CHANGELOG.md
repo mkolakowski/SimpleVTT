@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.52] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Voluntary `/end_buff` on a concentration anchor emits a ✋ GM audit log.** Closes the third concentration-log cause filed in v2.49.50. The audit set is now complete: 💔 = failed CON save (v2.39.0), 💀 = incapacitated (v2.49.48 / .49 / .51), ✋ = voluntary end (this commit). Pre-fix, the GM had no roll-log breadcrumb when a caster manually dropped their own Hex / Hunter's Mark / Hold Person — the buff just vanished via `buff_update`. Fix snapshots the buff BEFORE `_remove_buff` runs, then emits a `type=roll` GM-only entry naming the spell + `breakdown=Concentration ends — voluntary` when the removed buff was (a) `concentration: True` AND (b) owned by the character (`source_char_id` is None or == self). Paired conditions on victims (e.g. Magnus has Paralyzed sourced by Tavik) get NO ✋ log when removed — the victim isn't ending concentration; the source caster is still concentrating. 3 new harness tests pin the happy-path, the non-concentration-buff negative, and the paired-condition negative. PATCH — additive log; existing /end_buff response shape unchanged.
+**Description:** Two edits + one new test file. **(1)** `app/routes/tabletop_routes.py::end_buff` — before calling `_remove_buff`, snapshots `pre_remove_buff` via `_get_buffs(...)`. After the removal + sheet-mirror sync, if the snapshot's `concentration` flag is True AND its `source_char_id` is None or == char.id, broadcasts a `type=roll` GM-only event with note `f"✋ {char.name} ended concentration on {buff_name}"` and breakdown `"Concentration ends — voluntary"`. Same envelope as the v2.39.0 💔 + v2.49.50 💀 logs so existing clients that filter on `visibility=gm_only` + `type=roll` continue to work. **(2)** `tests/harness/test_voluntary_end_concentration_log.py` (NEW, 3 tests).
+**Description (cont):** Why the snapshot happens BEFORE `_remove_buff`. The helper mutates the live buffs list and returns only a bool — it doesn't surface the buff dict that was removed. Reading the buff after removal would always return None. Reading before is cheap (single list scan) and gives the snapshot we need for the log payload.
+**Description (cont 2):** Why the source filter matters. A player can `/end_buff` ANY buff on their own character — including paired conditions (Paralyzed sourced by an enemy Hold Person caster) that happen to be flagged `concentration: True`. If the ✋ log fired on every concentration=True buff removal, the GM would see "✋ Magnus ended concentration on Paralyzed" — semantically wrong (Magnus didn't choose to concentrate on Paralyzed; he was suffering it). The filter `source_char_id is None or == char.id` scopes the log to anchors the character actually owns. This is the same filter pattern v2.49.51 introduced in `_drop_caster_concentration`.
+**Description (cont 3):** Tests. `test_voluntary_end_concentration_emits_palm_log` is the happy path: Hex installed, /end_buff hex, assert ✋ log fires naming Hex + breakdown "voluntary." Deterministic — no dice retries needed. `test_voluntary_end_non_concentration_buff_no_log` is the scope guard: Rage isn't concentration; /end_buff rage emits no ✋ log even though the path is the same. `test_voluntary_end_paired_condition_no_log` is the source-filter guard: Tavik installs Paralyzed on Magnus (concentration=True, source=Tavik), Magnus /end_buff paralyzed, assert no ✋ log (Magnus isn't ending concentration; Tavik still is). Uses a retry loop on Hold Person because the WIS save outcome is random.
+**Description (cont 4):** Verification. Ran the new tests pre-fix: all 3 failed (no ✋ broadcast at all). Post-fix: all 3 pass. Full regression: 240 harness tests pass (was 237, +3 new); 33 encounter-sim tests still pass.
+
+### Fixed
+- (None — purely additive feature.)
+
+### Added
+- `app/routes/tabletop_routes.py::end_buff` — emits a `type=roll` GM-only log entry (`✋ NAME ended concentration on SPELL` / `Concentration ends — voluntary`) when the removed buff is a concentration anchor owned by the character.
+- `tests/harness/test_voluntary_end_concentration_log.py` — 3 tests (happy-path / non-concentration scope guard / paired-condition source guard).
+- `docs/test-harness-coverage.md` — catalog entry; total 237 → 240.
+
+### Notes
+- **Backward compat.** Purely additive. The `/end_buff` HTTP response shape is unchanged; the new broadcast goes through the existing `type=roll` envelope.
+- **Three-emoji audit set complete**: 💔 failed CON save (v2.39.0) · 💀 incapacitated (v2.49.48 0-HP / v2.49.49 death-save / v2.49.51 buff) · ✋ voluntary end (this commit). A GM scanning the roll log can now tell exactly why concentration broke.
+
+### Filed
+- **Roll-log filter UI** — three distinct emoji prefixes exist; the GM-only filter dropdown could surface "concentration events" as a category. Out of scope here.
+- **Replaced-by-new-cast log** — when a caster casts a NEW concentration spell, the existing one drops via `_install_buff`'s swap logic. Today that emits no log either (just `replaced_concentration` in the `buff_update` data). Could add a 🔁 or 💨 variant for "swap" so the GM sees the full lifecycle. Filed separately.
+
+---
+
 ## [2.49.51] - 2026-05-21
 
 **Schema version:** 56

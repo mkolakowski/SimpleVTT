@@ -10266,12 +10266,49 @@ async def end_buff(
     if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
         raise HTTPException(403, "Not your character")
 
+    # v2.49.52: snapshot the buff BEFORE removal so we can detect
+    # voluntary concentration end + emit a ✋ GM log naming the
+    # spell. _remove_buff itself only broadcasts buff_update; the
+    # log is a separate audit entry parallel to the v2.49.50 💀
+    # incapacitation log and the v2.39.0 💔 failed-save log.
+    pre_remove_buff = next(
+        (b for b in _get_buffs(campaign_id, char.id)
+         if (b or {}).get("key") == key),
+        None,
+    )
+
     removed = await _remove_buff(campaign_id, char.id, key)
     if not removed:
         raise HTTPException(404, f"No '{key}' buff on this character")
 
     # v2.19.2 Phase C.3: sync sheet mirror.
     _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
+    # v2.49.52: ✋ GM-only log for voluntary concentration end. Only
+    # fires when the removed buff was an anchor the character owned
+    # (source_char_id absent or == self). Paired conditions removed
+    # via /end_buff (e.g. a player clearing their own Paralyzed) DON'T
+    # get the ✋ log because that's not the caster ending concentration
+    # — the source caster is still concentrating on the spell.
+    if pre_remove_buff and pre_remove_buff.get("concentration"):
+        src = pre_remove_buff.get("source_char_id")
+        if src is None or src == char.id:
+            buff_name = pre_remove_buff.get("name") or key
+            await hub.broadcast(campaign_id, {
+                "type": "roll",
+                "data": {
+                    "expression": "—",
+                    "total": 0,
+                    "breakdown": "Concentration ends — voluntary",
+                    "note": (
+                        f"✋ {char.name} ended concentration on {buff_name}"
+                    ),
+                    "visibility": Visibility.GM_ONLY.value,
+                    "user_id": None,
+                    "user_name": "GM log",
+                    "char_name": char.name,
+                },
+            })
 
     return {"ok": True, "removed_key": key}
 
