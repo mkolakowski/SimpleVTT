@@ -222,11 +222,19 @@ def post_attack(
     attack_index: int,
     *,
     target_combatant_id: str | None = None,
+    bonus_damage: str | None = None,
+    bonus_damage_label: str | None = None,
+    spend_spell_slot: dict | None = None,
     override: bool = True,
 ) -> httpx.Response:
     """POST ``/attack`` as the GM. Wraps the call so tests don't
     re-create a logged-in client each time. ``override=True`` bypasses
     the Phase 4 action-economy gate (per CLAUDE.md harness-test rules).
+
+    Uplift parameters (all optional, pass together):
+      ``bonus_damage`` + ``bonus_damage_label`` + ``spend_spell_slot``
+      drive the Divine Smite / Hex / Sneak Attack / etc. uplifts.
+      ``spend_spell_slot`` shape: ``{"class_slug": "paladin", "level": 1}``.
     """
     body: dict = {
         "character_id": character_id,
@@ -235,8 +243,37 @@ def post_attack(
     }
     if target_combatant_id:
         body["target_combatant_id"] = target_combatant_id
+    if bonus_damage is not None:
+        body["bonus_damage"] = bonus_damage
+    if bonus_damage_label is not None:
+        body["bonus_damage_label"] = bonus_damage_label
+    if spend_spell_slot is not None:
+        body["spend_spell_slot"] = spend_spell_slot
     client = _gm_client()
     try:
         return client.post(f"/api/campaign/{CAMPAIGN_ID}/attack", json=body)
+    finally:
+        client.close()
+
+
+def post_use(
+    endpoint: str,
+    character_id: int,
+    *,
+    override: bool = True,
+    extra: dict | None = None,
+) -> httpx.Response:
+    """POST a ``/use_X`` feature endpoint (use_rage, use_action_surge,
+    use_arcane_recovery, use_lay_on_hands, etc.) as the GM. ``endpoint``
+    is the suffix after ``/api/campaign/{cid}/`` (e.g. ``"use_rage"``).
+    ``extra`` merges additional body fields when the endpoint needs them
+    (e.g. ``{"target_character_id": x}`` for Lay on Hands).
+    """
+    body: dict = {"character_id": character_id, "override": override}
+    if extra:
+        body.update(extra)
+    client = _gm_client()
+    try:
+        return client.post(f"/api/campaign/{CAMPAIGN_ID}/{endpoint}", json=body)
     finally:
         client.close()

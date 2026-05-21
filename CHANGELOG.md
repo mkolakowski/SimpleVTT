@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.19] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 2 commit F — Sir Caelan (Divine Smite uplift) + Krieger (Rage feature use) PoC tests.** Second commit of Phase 2. Both PCs exercise NEW code paths the earlier PoCs didn't touch: Smite drives the ``bonus_damage`` + ``spend_spell_slot`` uplift on ``/attack`` (paladin L1 slot → 2d8 radiant on the same swing), and Rage hits a generic ``/use_X`` feature endpoint that broadcasts three frames (``feature_used``, ``resource_update``, ``buff_update``) and installs a buff visible in the GM init-tracker DOM. The Krieger test is also the FIRST Phase 1/2 test whose layer-7 assertion (buff list in init tracker) fires on actual rendered DOM rather than the response body, because the ``buff_update`` WS handler in tabletop.html has no IS_GM guard (unlike ``battle_update`` which gated layers 6 of the strike PoCs). `helpers/battle.py` gained two extensions: ``post_attack`` now accepts ``bonus_damage`` / ``bonus_damage_label`` / ``spend_spell_slot`` uplift params, and a new generic ``post_use(endpoint, character_id, ...)`` covers every ``/use_X`` feature endpoint with no per-feature helpers needed (the helper is shape-agnostic; tests pass ``extra={"target_character_id": ...}`` for endpoints that need it like Lay on Hands). Phase 2 progress: 7 / 12 Level 1 tests, runtime ~12.4 s, well under the ≤45 s budget. PATCH — additive tests + additive helpers; no schema / runtime change.
+**Description:** Two new test files + two helper extensions. **(1)** `tests/encounter_sim/level_1_smoke/test_caelan_smite.py` — Sir Caelan's Longsword + Divine Smite via ``bonus_damage="2d8" + spend_spell_slot={"class_slug":"paladin","level":1}``. Asserts on ``slot_spent_class``/``slot_spent_level``/``bonus_damage_total`` in [2,16], the ``chip-buff`` pill labeled "Divine Smite +N" in the roll-log card, plus the standard 6-layer chain. Includes a per-test ``long_rest(caelan["id"])`` so the L1 slot pool refills regardless of run order. **(2)** `tests/encounter_sim/level_1_smoke/test_krieger_rage.py` — Krieger's Rage via ``POST /use_rage``. Asserts on the three WS broadcasts (``feature_used``, ``resource_update``, ``buff_update``) and on the rendered buff chip in Krieger's init-tracker row with the "Rage" name + duration text. This test exercises layer 7 of the plan's chain for the first time. **(3)** `tests/encounter_sim/helpers/battle.py::post_attack` — extended signature with ``bonus_damage`` / ``bonus_damage_label`` / ``spend_spell_slot`` uplift params, all optional. Backward-compatible with the Phase 1 Garrik / Pip test calls (kwargs only). **(4)** `tests/encounter_sim/helpers/battle.py::post_use` — new generic helper that wraps ``POST /api/campaign/{cid}/{endpoint}`` for any ``/use_X`` feature (rage, action_surge, lay_on_hands, arcane_recovery, second_wind, bardic_inspiration, etc.). Takes an ``extra`` dict for endpoints that need additional body fields beyond ``character_id``.
+**Description (cont):** Why a generic ``post_use`` instead of per-feature helpers. Phase 2 will exercise at least 4 more ``/use_X`` endpoints (Action Surge, Bardic Inspiration, Lay on Hands, Stunning Strike); writing one helper per feature would explode the helper surface for no payoff. The endpoint shape is uniform — ``{character_id, override, ...rest}`` — so a single helper with an ``extra`` dict is the right abstraction. Per-feature wrappers can land if a specific test needs custom validation, but the default is to use ``post_use(endpoint, character_id, extra={...})``.
+**Description (cont 2):** Why the Krieger test pre-asserts the buff chip is absent before firing. Catches a sneaky state-leak failure mode where a prior test left Krieger raging and the chip was already there — without the pre-check the post-fire ``expect(rage_chip).to_be_visible`` would pass even if ``/use_rage`` did nothing. The pre-check forces the test to fail loudly on state-leak instead of passing on a confused positive.
+**Description (cont 3):** Why no harness test for ``post_attack``'s uplift params or ``post_use``. Both consume existing endpoints (`/attack` already has uplift coverage in `tests/harness/test_attack.py::test_attack_divine_smite_spends_slot`, `/use_rage` in `tests/harness/test_use_rage.py`). The encounter-sim tests ARE the deliverable. Verification: 5 sequential local runs × 7 tests pass at ~12.4 s/run; CI corroboration pending (the new tests will get exercised by the next push to the `encounter-sim` job).
+
+### Added
+- `tests/encounter_sim/level_1_smoke/test_caelan_smite.py` — Paladin Strike + Divine Smite uplift PoC.
+- `tests/encounter_sim/level_1_smoke/test_krieger_rage.py` — Barbarian Rage feature-use PoC; first test to exercise layer 7 (buff chip in DOM) on rendered output.
+- `tests/encounter_sim/helpers/battle.py::post_use` — generic wrapper for ``POST /api/campaign/{cid}/{endpoint}`` covering any ``/use_X`` feature.
+
+### Changed
+- `tests/encounter_sim/helpers/battle.py::post_attack` — accepts optional ``bonus_damage`` / ``bonus_damage_label`` / ``spend_spell_slot`` uplift kwargs. Backward-compatible.
+
+### Notes
+- **Backward compat.** Additive only — existing tests pass kwargs at the call sites that don't use the uplifts.
+- **Phase 2 progress:** 7 / 12 Level 1 tests landed (Garrik, Tavik, Thalindra, Pip, Lyra, Caelan, Krieger). 5 remaining: Magnus, Mira, Kael, Zara, Rowan.
+- **Runtime check:** 5 sequential level_1_smoke runs at ~12.4 s; linear projection to 12 tests is ~21 s, well under the Phase 2 budget of ≤45 s.
+
+### Filed
+- **Phase 2 commit G** — Magnus (Warlock Eldritch Blast multi-beam + Hex install via cast_spell) + Mira (Druid Produce Flame attack cantrip OR Spike Growth AoE marker). Both touch concentration buff lifecycles; commit may also need a ``concentration_aoe_update`` WS frame handler in the WSCollector if Spike Growth proves to be the cleaner choice.
+- **Phase 2 commits H + I** — final 3 PCs (Kael Stunning Strike uplift on attack, Zara Fire Bolt attack-roll cantrip + Misty Step bonus action, Rowan Hunter's Mark install + Strike with Hunter's Mark uplift). Plus the "flip encounter-sim CI to continue-on-error: false" gate.
+- **Per-test ``long_rest`` is becoming boilerplate.** Six tests now call it explicitly. Investigate a pytest fixture parameterized by the PC name (e.g. ``def krieger_rested(roster) -> dict: long_rest(...); return roster["..."]``) — mirrors the existing harness's ``tavik_rested`` / ``thalindra_rested`` / ``krieger_full`` patterns. Lands in commit G or H.
+
+---
+
 ## [2.49.18] - 2026-05-21
 
 **Schema version:** 56
