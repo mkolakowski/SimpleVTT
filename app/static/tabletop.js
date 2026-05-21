@@ -3254,15 +3254,35 @@
         // in the same place across card types.
         // v2.48.8 — Second Wind / Lay on Hands / any feature_used
         // heal now uses the shared ``_buildPill`` so click-to-expand
-        // shows the heal dice breakdown (1d10+5[8+5]=13 etc.) just
-        // like the AoE pills.
+        // shows the heal dice breakdown (1d10+5[8+5]=13 etc.).
+        // v2.49.1 — gate on ``dice_total > 0 || heal_amount > 0`` so
+        // the pill renders even when the caster was already at full
+        // HP (heal_amount caps at 0 in that case but the dice still
+        // rolled; the rendered pill shows the rolled value + a
+        // "(at max)" indicator). Server still computes heal_amount
+        // as the applied delta — pill just reads dice_total for
+        // header display.
         let healPill = '';
-        if (d.heal_amount && d.heal_amount > 0) {
+        const hasHealEvent = (d.heal_amount && d.heal_amount > 0)
+            || (d.dice_total && d.dice_total > 0 && (d.heal_target_name || (d.dice_note || '').includes('Heal') || (d.source || '').match(/wind|hands|heal/i)));
+        if (hasHealEvent) {
             const tgt = d.heal_target_name || name;
             const before = d.heal_hp_before;
             const after = d.heal_hp_after;
-            const hpDelta = (before != null && after != null) ? ` (${before} → ${after})` : '';
-            const header = `✚ ${escapeHTML(tgt)} +${d.heal_amount} HP${hpDelta}`;
+            const applied = d.heal_amount || 0;
+            const rolled = d.dice_total || applied;
+            // Headline format:
+            //   "+13 HP (40 → 53)" when heal was applied
+            //   "+0 HP (at max — rolled 13)" when capped
+            let headerTail;
+            if (applied > 0 && before != null && after != null) {
+                headerTail = `+${applied} HP (${before} → ${after})`;
+            } else if (applied === 0 && rolled > 0) {
+                headerTail = `+0 HP (at max — rolled ${rolled})`;
+            } else {
+                headerTail = `+${applied} HP`;
+            }
+            const header = `✚ ${escapeHTML(tgt)} ${headerTail}`;
             // Second Wind broadcasts the breakdown as ``dice_breakdown``;
             // Lay on Hands uses ``heal_breakdown``. Read whichever is
             // available so both surfaces light up.

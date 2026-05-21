@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.1] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Fix Second Wind pill at full HP + file encounter-sim test suite plan.** Two related changes. **(1)** Second Wind pill was missing when Garrik was already at max HP — the renderer gated on `heal_amount > 0`, but `heal_amount` is the APPLIED delta (capped at max HP). When the caster's at full HP, the dice roll happens but the applied amount is 0, so no pill rendered. Fix: gate on `dice_total > 0 || heal_amount > 0` and detect heal-event intent via `heal_target_name` / `source` slug / `dice_note` so the pill renders with a `+0 HP (at max — rolled 13)` indicator. The click-to-expand detail still shows the breakdown. Generalizes to Lay on Hands + any other future feature_used heal where the broadcast carries dice info. **(2)** Filed `docs/plans/encounter-sim-test-suite.md` per user request: a multi-level Playwright test suite that simulates full encounters end-to-end and validates roll log entries, toasts, HP changes, init tracker state, buffs, slot decrements, action-economy chips, AoE picker placements, persistent markers — every observable side effect that the existing endpoint harness can't reach. Four levels: Level 1 smoke (~30s, 12 demo PCs each fires their signature ability), Level 2 encounter sim (~3-5min, scripted multi-round Tavern Brawl), Level 3 edge cases (~15-30min, branch coverage for every save/damage combination), Level 4 fuzz (manual). PATCH — bug fix + planning doc; no API change.
+**Description:** Two edits. **(1)** `app/static/tabletop.js` `_appendFeatureUsed` — replaced the `heal_amount > 0` gate with a `hasHealEvent` predicate that fires when `heal_amount > 0` OR `dice_total > 0 && (heal_target_name set OR source matches heal/wind/hands pattern OR dice_note contains "Heal")`. The header text branches on whether the heal actually landed: `+13 HP (40 → 53)` when applied, `+0 HP (at max — rolled 13)` when capped, `+N HP` as fallback. The click-to-expand detail shows the breakdown either way. **(2)** Added `docs/plans/encounter-sim-test-suite.md` — full spec for the test suite the user asked to file. Covers level structure, architecture (Playwright + demo mode + deterministic dice via `DICE_SEED` env), output validation strata (HTTP / WS / toast / roll-log DOM / init tracker / sheet / map), phasing (5 phases starting with Level 1 + 3 PCs as PoC), open questions (visual regression? init tie-breaks? multi-user concurrency?), and related-docs cross-links.
+**Description (cont):** Why the heal-event detection uses three signals (heal_target_name OR source slug OR dice_note). Robustness — feature_used broadcasts aren't standardized across endpoints. Lay on Hands sets `heal_target_name` + `source: "lay-on-hands"`. Second Wind sets `heal_target_name` + `source: "second-wind"` + `dice_note: "💨 Second Wind"`. A future feature might set only one of those. Detecting on any signal that suggests a heal lets the pill render correctly without each new heal feature having to remember to set all three.
+**Description (cont 2):** Why no damage pill for feature_used. The existing `feature_used` broadcasts in the codebase don't apply damage server-side — damage features go through `/attack` (weapon_attack broadcast) or `/cast_spell` (spell_cast broadcast). The use_X endpoints are for action-economy state changes + heals + buffs. If a future feature adds a damage-dealing use_X endpoint, the same `_buildPill` helper extends trivially.
+**Description (cont 3):** Why the test-suite plan is filed-not-built. The user's ask is intentionally broad ("test all systems and rules… classes, sub classes, race, item, spell, etc.") and the right way to write it is incrementally. The plan doc sets the architecture so future commits can ship Phase 1 (PoC with 3 PCs), Phase 2 (all 12 PCs), etc. without re-litigating the design.
+
+### Fixed
+- `app/static/tabletop.js` `_appendFeatureUsed` — Second Wind / Lay on Hands heal pill now renders even when the caster was at full HP (shows `+0 HP (at max — rolled N)` and the dice breakdown stays expandable).
+
+### Added
+- `docs/plans/encounter-sim-test-suite.md` — multi-level Playwright-based encounter-simulation test suite plan. Files Phase 1 (proof-of-concept smoke runner) through Phase 5 (CI integration).
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Long-rest Garrik so he's at full HP (53/53). Use Second Wind from his sheet — the cast card now shows a heal pill reading `✚ Garrik Ironside +0 HP (at max — rolled N)` with click-to-expand showing `Heal: 1d10+5[N+5]=N`. Reduce his HP via manual edit, Second Wind again — pill reads `+M HP (40 → 53)` as before.
+- **Backward compat.** Pure rendering fix; no API change. All 212 harness tests still pass.
+
+### Filed
+- **Phase 1 of the encounter-sim suite.** Smoke runner with 3 PCs (Garrik, Thalindra, Tavik) as proof-of-concept. See `docs/plans/encounter-sim-test-suite.md`.
+- **Deterministic dice via `DICE_SEED`.** Needed before encounter-sim tests can assert on exact rolled values. Server-side change.
+
+---
+
 ## [2.49.0] - 2026-05-20
 
 **Schema version:** 56
