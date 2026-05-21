@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.30] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 4 commit Q — concentration cleanup subsystem opener: `test_save_on_damage`.** Opens the concentration-cleanup test family (6 plan items). Validates the **damage-triggered concentration save** path: a concentrating caster takes damage → server fires CON save at `DC = max(10, damage/2)` → on fail, the concentration buff drops + a `buff_update` follows; on pass, concentration holds. Complementary to commit L's `test_concentration_lifecycle` (install + manual DELETE end): there the end was caller-driven, here it's automatic on damage. Test uses Magnus's Hex with 10 damage (DC=10, Magnus rolls CON save). The pass / fail branch is selected by the WS frame's `passed` field rather than hardcoded — the test asserts self-consistent behavior regardless of which roll outcome the dice produce. New subdirectory `level_3_edge_cases/concentration/`. PATCH — additive test only; reuses `apply_damage` + `post_use` helpers from commits J/P. Full encounter-sim suite at 23 tests / ~40 s × 5 runs, no flake.
+**Description:** Two new files. **(1)** `tests/encounter_sim/level_3_edge_cases/concentration/__init__.py` (empty package shell). **(2)** `tests/encounter_sim/level_3_edge_cases/concentration/test_save_on_damage.py` — the test. Long-rests Magnus (Hex consumes a Pact slot; refill so the slot is available), installs Hex on Pip via `post_use("cast_hex", ...)`, waits for `buff_update` carrying the hex buff, asserts the chip is visible. Then applies 10 damage to Magnus via `apply_damage(magnus_id, damage_amount=10, new_hp_current=23)`. Waits for `concentration_save` broadcast filtered by `character_id == magnus.id`, asserts `buff_key=="hex"`, `damage_amount==10`, `dc==10`, `passed` is a bool. Branches on `passed`: if False, waits for the `buff_update` carrying either `removed_key=="hex"` OR a buffs list without hex (server has both broadcast shapes for this path; accept either), then asserts the chip is gone via `expect(...).to_have_count(0)`. If True, asserts the chip is still visible. Either branch is a valid outcome — the test exercises the concentration-save BROADCAST shape regardless and the DOM-update CONSEQUENCE conditional on outcome.
+**Description (cont):** Why both broadcast shapes are accepted on the fail branch. The server has two paths that fire buff_update after a failed concentration save: (a) the full new buff list with hex removed, (b) a diff-style frame with `removed_key`. Different code paths in `tabletop_routes.py` use different shapes depending on whether other buffs needed to be touched simultaneously. The test accepts EITHER signal because both convey the same semantic — "hex is no longer installed on Magnus." Tightening to one specific shape would create a regression sensitivity to refactors that aren't user-visible. The DOM-level assertion (chip gone) is the user-visible contract; the WS shape is implementation detail.
+**Description (cont 2):** Why the test doesn't seed dice for a known outcome. Could force a fail branch by seeding `set_dice_seed(2)` (likely produces a low roll that fails the DC 10 save). But then the test only ever exercises ONE branch — the OTHER branch's behavior would silently regress without coverage. By running unseeded, the test will see PASS sometimes and FAIL sometimes across the CI run history, exercising both branches over time. The branches are short enough that running both each test would be cheap, but they need slightly different state setup; the conditional-branching approach lets one test cover both with no setup cost.
+**Description (cont 3):** Why no harness test. Test-only addition exercising existing endpoint + broadcast behavior (covered by `tests/harness/test_concentration_buffs.py::test_concentration_save_on_damage`). The UI-layer addition here is the chip-removal DOM assertion which the harness doesn't reach. Verification: 5 sequential local runs × 23 tests pass at ~40 s/run, no flake.
+
+### Added
+- `tests/encounter_sim/level_3_edge_cases/concentration/` — new subdirectory for concentration-cleanup family.
+- `tests/encounter_sim/level_3_edge_cases/concentration/test_save_on_damage.py` — damage-triggered concentration save with branch-on-WS-outcome DOM assertion.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 4 progress:** 6 / ~40 Level 3 tests landed. Subsystem progress: death-saves complete (5/5 including bonus skull); concentration 2/6 (commit L install/end + this commit save-on-damage); action-economy 1/8 (commit J strict mode).
+- **Runtime:** full encounter-sim suite at 23 tests / ~40 s.
+
+### Filed
+- **Concentration cleanup family — remaining 4 tests**: (a) swap drops old buff via `_drop_paired_concentration_buffs`, (b) PC at 0 HP drops concentration, (c) PC dies drops concentration + paired buffs, (d) paired-buff drop (Hex + Hexblade's Curse — needs a multi-buff caster). Natural follow-up commits.
+- **Force-fail variant** of the concentration save test using `set_dice_seed` to lock the roll outcome. Would let the test always-exercise the fail branch and catch a regression where the pass branch happens to mask a real issue.
+
+---
+
 ## [2.49.29] - 2026-05-21
 
 **Schema version:** 56
