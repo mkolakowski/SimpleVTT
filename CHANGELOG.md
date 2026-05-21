@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.20] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 2 commit G — Magnus (Eldritch Blast multi-beam) + Mira (Produce Flame) PoC tests.** Third commit of Phase 2. Both PCs cast **attack-roll cantrips** — the third major cast code path after save-cantrips (Tavik / Lyra) and AoE save spells (Thalindra). Mira's Produce Flame is the single-beam form (flat `auto_attack_*` fields). Magnus's Eldritch Blast at L5 fires 2 beams (1 base + 1 extra from the scaling tier) — each beam rolls its own d20 attack + d10 damage independently; the response carries `auto_attack_beams: [{beam, total, hit, crit, damage_rolled}, ...]` and the headline `auto_attack_*` fields are aggregates (`auto_attack_hit = any_hit`, `auto_attack_total = max(beam.total)`, `auto_attack_damage_rolled = sum(beam.damage_rolled)`). Phase 2 progress: 9 / 12 Level 1 tests, runtime ~16.2 s, well under the ≤45 s budget. PATCH — additive tests; no helper / runtime change.
+**Description:** Two new test files. **(1)** `tests/encounter_sim/level_1_smoke/test_magnus_eldritch_blast.py` — Magnus's Eldritch Blast (spell_index 0, class_slug "warlock") at Bandit Alpha. Asserts `auto_attack_beams.length == 2`, each beam carries `total`/`hit`/`crit`/`damage_rolled`, and the layer-2 WS frame mirrors. Layer 5 was initially written assuming per-beam pills (`.per-target-pill × 2`) — that turned out to be wrong: `appendSpellCast` collapses multi-beam to ONE headline pill driven by `any_hit`/`any_crit` (per-beam detail lives only in the JSON, not visualized). Test fixed to assert the aggregate headline pill. **(2)** `tests/encounter_sim/level_1_smoke/test_mira_produce_flame.py` — Mira's Produce Flame (spell_index 1, class_slug "druid") at Bandit Alpha. Standard single-beam attack-roll cantrip — flat `auto_attack_*` fields, one attack pill in the card (chip-hit/chip-miss/chip-crit driven by the WS frame's `auto_attack_hit`/`auto_attack_crit`).
+**Description (cont):** Multi-beam-vs-card finding worth carrying forward. The server differentiates beam-by-beam in `auto_attack_beams` (which is what enables per-beam rolling for hit/crit/damage) but the CLIENT's `appendSpellCast` renders one summary pill. This is a UX choice (the user reads "Eldritch Blast hit for 12 damage", not "beam 1 hit for 7, beam 2 hit for 5"). Tests should assert layer 5 on the SUMMARY pill (one chip-hit / chip-miss / chip-crit element), not on per-beam pill counts. The per-beam shape lives in layer 2 (WS frame) only.
+**Description (cont 2):** Why no harness test. Test-only additions exercising existing endpoints with existing harness coverage (`test_cast_spell_attack.py::test_eldritch_blast_multibeam_at_l5`, `::test_fire_bolt_at_bandit`). Verification: 5 sequential local runs × 9 tests pass at ~16.2 s/run, no flake. CI corroboration pending.
+
+### Added
+- `tests/encounter_sim/level_1_smoke/test_magnus_eldritch_blast.py` — Warlock multi-beam attack cantrip PoC. Exercises `auto_attack_beams` multi-target broadcast shape.
+- `tests/encounter_sim/level_1_smoke/test_mira_produce_flame.py` — Druid single-beam attack cantrip PoC.
+
+### Notes
+- **Backward compat.** Additive only.
+- **Phase 2 progress:** 9 / 12 Level 1 tests landed (Garrik, Tavik, Thalindra, Pip, Lyra, Caelan, Krieger, Magnus, Mira). 3 remaining: Kael, Zara, Rowan.
+- **Runtime check:** 9 tests in ~16.2 s; projected 12 tests ~21.5 s, well under ≤45 s.
+
+### Filed
+- **`appendSpellCast` collapses multi-beam casts to one headline pill.** Documented in the test docstring. Per-beam pill rendering would require a client-side change; not in scope for the encounter-sim suite.
+- **Phase 2 commit H (target final)** — Kael Stunning Strike + Zara Fire Bolt + Rowan (Ranger) Hunter's Mark / Strike. Three remaining PCs in one commit OR split across two commits if Hunter's Mark concentration-buff complexity warrants its own.
+
+---
+
 ## [2.49.19] - 2026-05-21
 
 **Schema version:** 56
