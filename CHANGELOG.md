@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.15] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Encounter-sim Phase 1 commit B — `tests/encounter_sim/` directory skeleton + page-object stubs + concrete helpers.** Second commit of the encounter-simulation test suite plan (docs/plans/encounter-sim-test-suite.md, Phase 1, task #93). Commit A landed the dice-seeding infrastructure in v2.49.12; this commit lays out the directory + class scaffolding that the first PoC test (commit C) will fill in. No tests yet — the skeleton is the artifact. Two sub-deliverables: (1) page-object class **stubs** with `__init__(page)` and an intent docstring listing the surface commit C/D will grow into — no speculative method bodies per CLAUDE.md's "no half-finished implementations" rule. (2) **Concrete** helper implementations where the contract is crisp today: `set_dice_seed` (wraps the v2.49.12 `POST /api/test/dice/seed` endpoint), `long_rest` / `long_rest_everyone` (POST the existing `/rest` endpoint per PC), `assert_pill` (Locator-based pill-shape assertion against `.result-pill.chip-X` selectors documented in `docs/wiki/roll-log-guide.html`), `WSCollector` (hooks `page.on("websocket")` so WS assertions observe the same broadcasts the browser does — no separate connection). conftest re-uses `harness_ui/conftest._login_get_cookie` so the two suites can't drift on auth. PATCH — test-only infrastructure; no runtime / schema / API change.
+**Description:** 12 new files. Directory + package shells: `tests/encounter_sim/__init__.py`, `pages/__init__.py`, `helpers/__init__.py`, `level_1_smoke/__init__.py` (Phase 3/4 dirs intentionally NOT created — they land when those phases start). Conftest: `tests/encounter_sim/conftest.py` — re-uses harness_ui's session-cookie login, adds `gm_page` / `roster` / `set_dice_seed` fixtures + `sheet_url()` / `tabletop_url()` helpers. Page-object stubs (~25 LOC each): `pages/tabletop.py` (TabletopPage), `pages/sheet.py` (SheetPage), `pages/roll_log.py` (RollLogPage), `pages/toast.py` (ToastWatcher), `pages/canvas.py` (CanvasReader). Each carries a docstring naming the intended method surface from the plan (so commit C knows the contract) but ships only `__init__(page)`. Helpers (concrete): `helpers/dice.py::set_dice_seed`, `helpers/reset.py::long_rest` + `long_rest_everyone`, `helpers/assert_pill.py::assert_pill`, `helpers/ws.py::WSCollector` with `start()` / `wait_for(type, timeout_ms)` / `buffered(type)`.
+**Description (cont):** Why concrete helpers but stub pages. The helpers have a clear contract right now — `set_dice_seed(42)` always means "POST {seed:42} to /api/test/dice/seed", `long_rest(char_id)` always means "POST {type:long} to /rest". Writing them once and reusing them across every future test is the whole reason the helpers/ dir exists. The page objects are different: their method surface depends on what each test does ("does this test drag a token? open a sheet? read a pill?"). Speculating method bodies now would either over-build (writing methods nothing uses) or under-build (writing the wrong abstraction). Commit C's `test_garrik_strike.py` will reveal the right surface; methods land alongside.
+**Description (cont 2):** Why hook `page.on("websocket")` for WS instead of opening a parallel `websockets.connect(...)` from the test. Two reasons. (a) Parity — the browser receives WS frames in a specific order relative to its own DOM updates. A side-channel connection would race against the browser's; assertions like "WS arrived BEFORE the toast DOM mutation" would be incoherent. Listening on the SAME socket the browser holds gives ordered observation. (b) Sync API compatibility — Playwright sync API + `websockets` async-only would force the test to bridge with `asyncio.run`, complicating fixtures. `page.on()` is sync-friendly.
+**Description (cont 3):** Why no harness test. This is a test-infrastructure-only commit. Per CLAUDE.md the harness rule is for new HTTP endpoints or WS broadcast shapes — neither lands here. The skeleton's self-tests are: (a) `python3 -m pytest tests/encounter_sim/ --collect-only -q` returns "no tests collected in 0.00s" with no import errors (verified), (b) every page + helper module imports cleanly (verified), (c) the full 221-test harness suite still passes (verified). Commit C's PoC test is the first thing that actually exercises the skeleton end-to-end.
+
+### Added
+- `tests/encounter_sim/__init__.py`, `pages/__init__.py`, `helpers/__init__.py`, `level_1_smoke/__init__.py` — package shells.
+- `tests/encounter_sim/conftest.py` — pytest fixtures (`gm_session_cookie`, `gm_context`, `gm_page`, `roster`, `set_dice_seed`) + URL helpers (`sheet_url`, `tabletop_url`). Re-uses `harness_ui.conftest._login_get_cookie`.
+- `tests/encounter_sim/pages/{tabletop,sheet,roll_log,toast,canvas}.py` — 5 page-object class skeletons with `__init__(page)` only + a docstring naming the intended method surface.
+- `tests/encounter_sim/helpers/dice.py::set_dice_seed` — wraps the v2.49.12 `POST /api/test/dice/seed` endpoint with a clearer error message when the endpoint 404s (almost always means TEST_MODE is off).
+- `tests/encounter_sim/helpers/reset.py::long_rest`, `::long_rest_everyone` — per-PC and party-wide long-rest hooks for per-test cleanup.
+- `tests/encounter_sim/helpers/assert_pill.py::assert_pill` — Locator-based pill assertion (`.result-pill.chip-X` + optional substring match).
+- `tests/encounter_sim/helpers/ws.py::WSCollector` — hooks `page.on("websocket")`; offers `start()`, `wait_for(type, timeout_ms, predicate=None)`, `buffered(type)`.
+
+### Notes
+- **Backward compat.** Pure additive — no existing code touched. All 221 harness tests pass.
+- **What to test:** `python3 -m pytest tests/encounter_sim/ --collect-only -q` should report "no tests collected" with no import errors. Commit C will land the first executable test.
+- **Forward.** The Phase 2 (Level 2) + Phase 3 (Level 3) subdirectories are deliberately NOT created here — they land when those phases start so the layout matches reality at every commit.
+
+### Filed
+- **Commit C** — `level_1_smoke/test_garrik_strike.py`. Drives Garrik through one Longsword strike on Bandit Alpha; asserts on HTTP 200, the `weapon_attack` WS frame, the roll-log card + damage pill, the `.roll-toast` text, and the bandit's HP bar drop in the init tracker. Page-object methods on `SheetPage` + `RollLogPage` + `TabletopPage` grow as that test discovers what it needs.
+- **Commit D** — `test_tavik_sacred_flame.py` + `test_thalindra_fireball.py` + new `encounter-sim` CI job (initially `continue-on-error: true` per the plan's Phase 1 task 6). Phase 1 exit criteria: 3 tests pass + 5 consecutive CI runs without flake.
+
+---
+
 ## [2.49.14] - 2026-05-21
 
 **Schema version:** 56
