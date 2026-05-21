@@ -113,12 +113,18 @@ def test_pip_shortsword_strike_full_chain(
     # Layer 5: damage pill
     assert_pill(card, chip_class="chip-damage")
 
-    # Layer 6: server-side HP delta
+    # Layer 6: init-tracker DOM HP reflects damage (v2.49.40 fix —
+    # NPC damage broadcasts now carry force_gm_sync, so the GM
+    # client applies the new HP). Pre-fix this assertion was on
+    # response.target_hp_after only; see test_garrik_strike for the
+    # full context.
     hit = frame["data"]["hit"]
+    gm_page.evaluate("window._openDrawerPanel('players-drawer')")
     if hit:
         applied = body["damage_applied"]
         assert applied > 0
-        assert body["target_hp_after"] == hp_before - applied
+        gm_page.wait_for_timeout(200)
+        assert tabletop.combatant_hp("Bandit Alpha") == hp_before - applied
     else:
         assert body["damage_applied"] == 0
-        assert body["target_hp_after"] == hp_before
+        assert tabletop.combatant_hp("Bandit Alpha") == hp_before

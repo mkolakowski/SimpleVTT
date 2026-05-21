@@ -95,9 +95,12 @@ def test_kael_unarmed_strike_full_chain(
     # Layer 5
     assert_pill(card, chip_class="chip-damage")
 
-    # Layer 6
+    # Layer 6 — init-tracker DOM HP (v2.49.40 fix; see test_garrik_strike).
+    gm_page.evaluate("window._openDrawerPanel('players-drawer')")
     if frame["data"]["hit"]:
         assert body["damage_applied"] > 0
-        assert body["target_hp_after"] == hp_before - body["damage_applied"]
+        gm_page.wait_for_timeout(200)
+        assert tabletop.combatant_hp("Bandit Alpha") == hp_before - body["damage_applied"]
     else:
         assert body["damage_applied"] == 0
+        assert tabletop.combatant_hp("Bandit Alpha") == hp_before

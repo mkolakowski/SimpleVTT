@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.44] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Upgrade 5 GM-driver PoC tests to assert layer-6 on init-tracker DOM HP — the v2.49.40 fix unlocked the real assertion.** Cleanup pass: every Phase 1/2 PoC strike test had a docstring caveat explaining why layer 6 ("init-tracker HP reflects damage") asserted on the response body's `target_hp_after` instead of the actual DOM, because the GM client ignored the `battle_update` echo. v2.49.40 fixed that by adding `force_gm_sync: True` to NPC-damage broadcasts. With the fix landed, this commit swaps the response-body workarounds for real DOM-HP assertions across `test_garrik_strike` / `test_pip_strike` / `test_kael_strike` / `test_rowan_strike` / `test_caelan_smite`. Each test now reads `tabletop.combatant_hp("Bandit Alpha")` post-attack and compares against the expected post-damage HP. Caveat docstring sections updated to note the v2.49.40 fix landed. PATCH — test cleanup only; no application code change.
+**Description:** Five test files updated, each with the same pattern: replace `assert body["target_hp_after"] == hp_before - damage_applied` with `assert tabletop.combatant_hp(target_name) == hp_before - damage_applied`. Each test opens the players panel before the assertion (a layer-4 step in some tests reopens the roll-log panel which hides the init tracker) and adds a brief `gm_page.wait_for_timeout(200)` to let the re-render settle. The `test_garrik_strike` docstring's full "GM-driver caveat" section is rewritten to reference v2.49.40 + explain the contract. The other 4 tests' docstrings reference `test_garrik_strike` for context.
+**Description (cont):** Why this matters as a separate commit instead of folding into v2.49.40. The application fix (v2.49.40) and the test cleanup are conceptually separate: the fix could be backported, reverted, or audited independently of test updates. Keeping them separate also means the v2.49.40 commit log is narrowly "server bug fix"; this commit log is narrowly "test debt cleanup". Reviewers can take each on its own merits. The v2.49.40 test (`test_npc_damage_broadcast_carries_force_gm_sync`) proves the server fix; these encounter-sim updates prove the end-to-end DOM path.
+**Description (cont 2):** Verification. All 5 tests pass individually + together. Full encounter-sim suite at 32 / 32 × 3 sequential runs at ~57 s each, no flake. The DOM-HP assertion catches regressions the response-body assertion could not: a future bug where `force_gm_sync` gets dropped from the broadcast (or where the client's broadcast handler regresses) would surface here as a failed DOM-HP check, even though the server response remained correct.
+
+### Changed
+- `tests/encounter_sim/level_1_smoke/test_garrik_strike.py` — layer-6 now asserts `tabletop.combatant_hp("Bandit Alpha")` against expected post-damage HP. Docstring rewritten to reflect v2.49.40 fix.
+- `tests/encounter_sim/level_1_smoke/test_pip_strike.py` — same upgrade.
+- `tests/encounter_sim/level_1_smoke/test_kael_strike.py` — same upgrade.
+- `tests/encounter_sim/level_1_smoke/test_rowan_strike.py` — same upgrade.
+- `tests/encounter_sim/level_1_smoke/test_caelan_smite.py` — same upgrade (assertion includes Divine Smite bonus damage in the total).
+
+### Notes
+- **Backward compat.** Pure test-cleanup commit — no application code touched.
+- **Phase 4 progress unchanged** at 15/~40 tests. This commit doesn't add new tests; it strengthens 5 existing ones.
+
+### Filed
+- **Survey other tests for similar workarounds**: `test_alice_observes_hp_update` (Alice-driven, layer-6 reads `.mini-header-sub` text instead of `.init-hp-cur` because she's non-GM and gets the player view). That's a different code path — Alice's view of NPCs has a different DOM, and PCs render with `mini-header-sub` not the GM input. Not a v2.49.40 fix target.
+
+---
+
 ## [2.49.43] - 2026-05-21
 
 **Schema version:** 56

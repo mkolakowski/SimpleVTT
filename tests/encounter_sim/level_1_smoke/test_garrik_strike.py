@@ -11,28 +11,30 @@ suite.md`` § "Per-test assertion chain"):
   3. Toast .roll-toast    → contains "Greatsword"
   4. Roll-log .roll-card  → newest is .weapon-atk-card
   5. Damage pill          → .result-pill.chip-damage in the card
-  6. Server-side HP drop → response body's ``target_hp_after``
-     reflects the damage applied
+  6. Init-tracker DOM HP reflects the damage applied (v2.49.40 fix
+     enables this — the bandit's row HP input shows the post-damage
+     value, not just the response body)
 
 Layer 7 (buff list) isn't applicable to a vanilla weapon strike;
 asserted on by buff-installing tests later in Phase 1/2.
 
-Why layer 6 reads the server response instead of the init-tracker
-DOM
----------------------------------------------------------------
-The plan calls for "Target's HP bar in #init-tracker reflects
-damage." With the GM as the driver, that assertion *can't* pass:
-``/attack`` broadcasts ``weapon_attack`` + ``economy_update`` but
-NOT a ``force_gm_sync battle_update``. The GM client treats
-localStorage as authoritative and ignores plain ``battle_update``
-broadcasts (tabletop.html:5543, a v2.5.5 echo-loop guard for the GM
-pushing its own edits). The bandit's row HP therefore stays at 30
-even though the card text shows "30 → 19 HP" and the server applied
-damage. A player-driven variant of this test would see the HP drop
-because non-GM clients DO accept ``battle_update``. Filed for
-commit D / Phase 2 as a follow-up — for now we verify the server
-state via the response body's ``target_hp_after``, which is the
-source of truth that drives the card text in layer 4.
+v2.49.40 closes the GM-driver caveat
+-------------------------------------
+Pre-v2.49.40, ``/attack`` broadcast ``battle_update`` for NPC damage
+WITHOUT the ``force_gm_sync: True`` flag. The GM client (per the
+v2.5.5 echo-loop guard at tabletop.html:5543) ignored those
+broadcasts, so the bandit's HP in the init tracker stayed at the
+pre-damage value even though the server applied damage and the
+card text showed "30 → 19 HP". The original v2.49.16 version of
+this test had to assert layer 6 against the response body's
+``target_hp_after``, with a docstring caveat explaining why the
+real DOM assertion couldn't run.
+
+v2.49.40 added the missing ``force_gm_sync`` flag, so the GM
+client now receives + applies the NPC-damage broadcast — the
+DOM-HP assertion works. This test now asserts directly on the
+init-tracker's ``.init-hp-cur`` input value, the proper layer-6
+contract from the plan.
 
 Driving mechanism
 -----------------
@@ -196,22 +198,37 @@ def test_garrik_greatsword_strike_full_chain(
     # exact text since the seed can change.
     assert_pill(card, chip_class="chip-damage")
 
-    # ── Layer 6: server-side HP (see docstring caveat) ────────────
-    # The init tracker DOM HP wouldn't update under the GM driver
-    # because /attack doesn't broadcast force_gm_sync battle_update.
-    # The card's "X → Y HP" text in layer 4 is rendered from the same
-    # ``target_hp_after`` field we're asserting here, so this still
-    # exercises the server-side damage path end-to-end.
+    # ── Layer 6: init-tracker DOM HP reflects the damage ──────────
+    # v2.49.40 fix: /attack's NPC-damage broadcast now carries
+    # force_gm_sync: True, so the GM client applies the new HP to
+    # its local battle state and re-renders. The init-tracker HP
+    # input picks up the new value.
+    #
+    # Pre-v2.49.40: this assertion was impossible because the GM
+    # client ignored the battle_update broadcast under the v2.5.5
+    # echo-loop guard. The fallback was asserting on the response
+    # body's ``target_hp_after``; that's been removed now that the
+    # DOM path actually works.
     hit = frame["data"]["hit"]
+    # Flip back to the players panel so the init tracker is visible.
+    gm_page.evaluate("window._openDrawerPanel('players-drawer')")
     if hit:
         damage_applied = body["damage_applied"]
         assert damage_applied > 0, f"hit but damage_applied={damage_applied}"
-        assert body["target_hp_after"] == hp_before - damage_applied, (
-            f"server target_hp_after={body['target_hp_after']} doesn't match "
-            f"hp_before({hp_before}) - damage_applied({damage_applied})"
+        # Wait for the GM's local state + re-render to settle. The
+        # echo-loop-bypass + render is synchronous after the WS
+        # event but Playwright's frame lifecycle needs a tick.
+        gm_page.wait_for_timeout(200)
+        hp_after_dom = tabletop.combatant_hp("Bandit Alpha")
+        assert hp_after_dom == hp_before - damage_applied, (
+            f"init-tracker DOM HP {hp_after_dom} doesn't match expected "
+            f"{hp_before - damage_applied} (hp_before={hp_before}, "
+            f"damage_applied={damage_applied}). v2.49.40 fix may have "
+            f"regressed — verify force_gm_sync still on the NPC-damage "
+            f"battle_update broadcast."
         )
     else:
-        assert body["damage_applied"] == 0, (
-            f"miss should not apply damage: damage_applied={body['damage_applied']}"
-        )
-        assert body["target_hp_after"] == hp_before
+        assert body["damage_applied"] == 0
+        # No damage → no broadcast → DOM unchanged.
+        hp_after_dom = tabletop.combatant_hp("Bandit Alpha")
+        assert hp_after_dom == hp_before

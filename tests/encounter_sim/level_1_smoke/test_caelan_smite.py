@@ -126,12 +126,16 @@ def test_caelan_longsword_smite_full_chain(
     smite_pill = card.locator(".result-pill.chip-buff").filter(has_text="Divine Smite").first
     expect(smite_pill).to_be_visible(timeout=3000)
 
-    # Layer 6: server-side HP delta (base + smite damage on hit)
+    # Layer 6: init-tracker DOM HP reflects damage (v2.49.40 fix; see
+    # test_garrik_strike). damage_applied carries the combined base +
+    # smite damage on hit.
     hit = frame["data"]["hit"]
+    gm_page.evaluate("window._openDrawerPanel('players-drawer')")
     if hit:
         assert body["damage_applied"] > 0
-        # damage_applied carries the combined total (base + smite).
-        assert body["target_hp_after"] == hp_before - body["damage_applied"]
+        gm_page.wait_for_timeout(200)
+        assert tabletop.combatant_hp("Bandit Alpha") == hp_before - body["damage_applied"]
     else:
         # On miss: smite slot is STILL spent (5e RAW), but damage is 0.
         assert body["damage_applied"] == 0
+        assert tabletop.combatant_hp("Bandit Alpha") == hp_before
