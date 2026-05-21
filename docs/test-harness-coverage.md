@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 245 (as of v2.49.54, 2026-05-21).
+**Total tests:** 248 (as of v2.49.55, 2026-05-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -411,6 +411,15 @@ v2.49.48 — RAW PHB p.203: concentration ends automatically when the caster's H
 |------|-----------------|
 | `test_concentration_force_drops_at_zero_hp` | Damage that drops Magnus to 0 HP force-drops Hex regardless of d20 outcome. `concentration_save` broadcast carries `forced_drop_on_zero_hp=True` + `passed=False` + `dropped_key="hex"`. |
 | `test_concentration_normal_save_when_not_at_zero` | Damage that doesn't drop to 0 still uses the normal save path. `forced_drop_on_zero_hp=False`, `passed` follows the d20 roll. |
+
+### `test_use_stunning_strike.py`
+v2.49.55 — Monk class feature `POST /use_stunning_strike`. Lv 5+ + ki >= 1 + a target. Server rolls a CON save for NPC targets (or creates a roll_request for PCs); on fail, installs Stunned (concentration=False, 1-turn duration) via the existing save-or-suck pipeline. First endpoint to install a `concentration: False` incapacitating buff — validates the v2.49.51 hook's non-concentration branch (for PC targets via the roll_request path; NPC validation here verifies the install + buff shape).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_stunning_strike_happy_path_npc` | Kael (Monk Lv 5) hits a bandit until the save fails; assert `auto_save_buff_installed=Stunned`, `concentration=False` on the broadcast buff, `source_char_id=Kael`. Retry loop because the d20 is random. |
+| `test_stunning_strike_wrong_class` | Krieger (Barbarian) → 409 `wrong_class` with `expected=monk`. |
+| `test_stunning_strike_no_ki` | Drain Kael's ki via repeated calls (response carries `ki_remaining`); when 0, next call → 409 `no_ki` with `available=0`. |
 
 ### `test_swap_preserves_paired_buffs.py`
 v2.49.54 — closes the bug filed in v2.49.53. The swap loop in `_install_buff` no longer drops `concentration: True` buffs sourced by another caster. RAW: the one-concentration-at-a-time rule applies only to the combatant's OWN concentration spells; a paired condition (e.g. Paralyzed on a Hold Person victim) is sustained by the SOURCE caster and must persist independently.

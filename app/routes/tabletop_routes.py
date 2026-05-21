@@ -625,6 +625,26 @@ _SPELL_CONDITION_MAP = {
             "saves again at end of each turn",
         ],
     },
+    # v2.49.55: Monk Stunning Strike (class feature). Used by the
+    # /use_stunning_strike endpoint via the same save-or-suck pipeline
+    # as Hold Person etc. The Stunned condition is NOT a concentration
+    # effect (1-turn duration, RAW), so this entry exercises the v2.49.51
+    # "incapacitating buff with concentration=False" branch — installing
+    # Stunned on a PC drops their own concentration anchors via the
+    # _install_buff incapacitation hook.
+    "stunning-strike": {
+        "key": "stunned",
+        "name": "Stunned",
+        "icon": "✨",
+        "duration_rounds": 1,
+        "concentration": False,
+        "effects": [
+            "incapacitated — no actions or reactions",
+            "can't move, speaks falteringly",
+            "auto-fail STR / DEX saves",
+            "attacks vs target have advantage",
+        ],
+    },
 }
 
 
@@ -10284,6 +10304,260 @@ async def use_rage(
         "damage_bonus": damage_bonus,
         "duration_rounds": 10,
         "buff_installed": installed,
+    }
+
+
+# ----------- API: Stunning Strike (Monk Lv5+) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_stunning_strike")
+async def use_stunning_strike(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Monk class feature (Lv 5+): spend 1 ki on a hit to force the
+    target to make a CON save or be Stunned until the end of the
+    monk's next turn.
+
+    Body: ``{character_id, target_combatant_id?, target_character_id?,
+            target_name?}``. RAW Stunning Strike piggybacks on a melee
+    weapon hit; it's a free interrupt (no action / bonus / reaction
+    slot consumed) but costs 1 ki. Save DC = 8 + monk prof + monk WIS
+    mod.
+
+    Routes through the same save-or-suck pipeline as ``cast_spell``:
+    NPC targets get a server-rolled save and immediate buff install
+    on fail; PC targets get a ``roll_request`` prompt and the
+    ``/roll_request/{id}/respond`` handler installs Stunned on fail
+    via the ``_SPELL_CONDITION_MAP[stunning-strike]`` entry. The
+    Stunned buff is concentration=False — exercises the v2.49.51
+    incapacitation hook for non-concentration incapacitating buffs.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (body.get("target_combatant_id") or "").strip()
+    target_character_id_in = body.get("target_character_id")
+    if target_character_id_in is not None:
+        target_character_id_in = int(target_character_id_in)
+    target_name_in = (body.get("target_name") or "").strip()
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id and not target_character_id_in:
+        raise HTTPException(400, "target_combatant_id or target_character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    # Class + level validation.
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class",
+            "expected": "monk",
+            "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 5:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low",
+            "required": 5,
+            "got": level,
+        })
+
+    # Ki resource lookup.
+    resources = list(sheet.get("resources") or [])
+    ki_row = None
+    ki_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "ki":
+            ki_row = dict(r)
+            ki_idx = i
+            break
+    if ki_row is None:
+        raise HTTPException(404, "No Ki resource on this sheet")
+    ki_cur = int(ki_row.get("current") or 0)
+    ki_max = int(ki_row.get("max") or 0)
+    if ki_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_ki",
+            "available": ki_cur,
+        })
+
+    # Resolve target.
+    target_combatant = (
+        _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant_id else None
+    )
+    if not target_combatant and target_character_id_in:
+        target_combatant = {
+            "char_id": target_character_id_in,
+            "id": target_combatant_id or "",
+            "name": target_name_in or "",
+        }
+    if not target_combatant:
+        raise HTTPException(404, "Target combatant not found")
+
+    # Save DC = 8 + monk prof + WIS mod.
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    wis = int((sheet.get("abilities") or {}).get("WIS", 10))
+    wis_mod = (wis - 10) // 2
+    save_dc = 8 + prof + wis_mod
+
+    # Spend the ki BEFORE rolling so it's consumed regardless of outcome.
+    ki_row["current"] = ki_cur - 1
+    resources[ki_idx] = ki_row
+    sheet["resources"] = resources
+    char.sheet = sheet
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "ki",
+            "current": ki_cur - 1,
+            "max": ki_max,
+        },
+    })
+
+    tgt_char_id = target_combatant.get("char_id")
+    note_label = "Stunning Strike — CON save"
+    stat_key = "con_save"
+    auto_save_target_kind = ""
+    auto_save_prompted = False
+    auto_save_prompt_id = 0
+    auto_save_rolled = None
+    auto_save_passed: Optional[bool] = None
+    auto_save_breakdown = ""
+    auto_save_buff_installed = ""
+
+    tgt_char = None
+    if tgt_char_id:
+        tgt_char = db.query(Character).filter(
+            Character.id == int(tgt_char_id),
+            Character.campaign_id == campaign_id,
+        ).first()
+
+    if tgt_char and tgt_char.owner_user_id:
+        # PC target: roll_request flow. The /respond handler will
+        # install Stunned on save fail via _SPELL_CONDITION_MAP lookup.
+        auto_save_target_kind = "pc"
+        req = RollRequest(
+            campaign_id=campaign_id,
+            created_by_user_id=user.id,
+            label=note_label,
+            base_expression="1d20",
+            stat_key=stat_key,
+            dc=save_dc,
+            visibility=Visibility.PUBLIC,
+        )
+        db.add(req)
+        db.commit()
+        db.refresh(req)
+        await hub.broadcast(campaign_id, {
+            "type": "roll_request",
+            "data": {
+                "id": req.id,
+                "label": req.label,
+                "stat_key": req.stat_key,
+                "base_expression": req.base_expression,
+                "dc": req.dc,
+                "visibility": req.visibility.value,
+                "created_by_name": user.display_name,
+                "created_by_user_id": user.id,
+                "target_user_ids": [tgt_char.owner_user_id],
+                "target_user_names": [tgt_char.name],
+            },
+        })
+        auto_save_prompted = True
+        auto_save_prompt_id = req.id
+        _purge_save_request_context()
+        _save_request_context[req.id] = {
+            "ts": _time.time(),
+            "campaign_id": campaign_id,
+            "spell_slug": "stunning-strike",
+            "spell_name": "Stunning Strike",
+            "target_character_id": int(tgt_char.id),
+            "target_name": tgt_char.name,
+            "dc": int(save_dc),
+            "save_ability": "CON",
+            "caster_char_id": int(char.id),
+            "caster_char_name": char.name,
+        }
+    elif target_combatant.get("token_template_id"):
+        # NPC target: server rolls the save inline.
+        auto_save_target_kind = "npc"
+        tmpl = db.query(TokenTemplate).filter(
+            TokenTemplate.id == int(target_combatant["token_template_id"]),
+        ).first()
+        if tmpl:
+            npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
+            npc_mod, _ = _resolve_stat_modifier(npc_sheet, "dnd5e", stat_key)
+            expr = f"1d20{npc_mod:+d}"
+            try:
+                _r = dice_mod.roll(expr)
+                auto_save_rolled = int(_r.total)
+                auto_save_breakdown = _r.breakdown
+            except dice_mod.DiceParseError:
+                auto_save_rolled = 0
+                auto_save_breakdown = ""
+            auto_save_passed = auto_save_rolled >= save_dc
+            await hub.broadcast(campaign_id, {
+                "type": "roll",
+                "data": {
+                    "expression": expr,
+                    "total": auto_save_rolled,
+                    "breakdown": auto_save_breakdown,
+                    "note": note_label,
+                    "user_name": target_combatant.get("name", ""),
+                    "char_name": target_combatant.get("name", ""),
+                    "visibility": Visibility.PUBLIC.value,
+                    "dc": save_dc,
+                },
+            })
+            if not auto_save_passed:
+                cond = _SPELL_CONDITION_MAP["stunning-strike"]
+                buff = {
+                    "key": cond["key"],
+                    "name": cond["name"],
+                    "icon": cond.get("icon", "✨"),
+                    "source_char_id": char.id,
+                    "source_char_name": char.name,
+                    "source_spell": "Stunning Strike",
+                    "duration_rounds": int(cond.get("duration_rounds", 1)),
+                    "duration_max": int(cond.get("duration_rounds", 1)),
+                    "concentration": bool(cond.get("concentration", False)),
+                    "effects": list(cond.get("effects", [])),
+                }
+                installed = await _install_buff_on_combatant_id(
+                    campaign_id, target_combatant.get("id"), buff,
+                )
+                if installed:
+                    auto_save_buff_installed = cond["name"]
+
+    return {
+        "ok": True,
+        "ki_remaining": ki_cur - 1,
+        "save_dc": save_dc,
+        "auto_save_target_kind": auto_save_target_kind,
+        "auto_save_prompted": auto_save_prompted,
+        "auto_save_prompt_id": auto_save_prompt_id,
+        "auto_save_rolled": auto_save_rolled,
+        "auto_save_passed": auto_save_passed,
+        "auto_save_breakdown": auto_save_breakdown,
+        "auto_save_buff_installed": auto_save_buff_installed,
     }
 
 
