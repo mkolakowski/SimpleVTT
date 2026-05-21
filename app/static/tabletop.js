@@ -774,6 +774,53 @@
             else if (gridType === 'hex') drawHexGrid();
         }
         tokens.forEach(drawToken);
+        // v2.49.4 — skull overlay for any token whose linked
+        // combatant is at 0 HP. Iterates window.battle.combatants for
+        // matching entries (PCs via char_id, NPCs via source_token_id
+        // or template+label). Drawn after drawToken so the skull sits
+        // on top of the portrait, but before targeting rings + AoE
+        // markers so it doesn't compete with the active-target
+        // outline. Hidden tokens skipped for non-GMs. Skull is
+        // drawn over a dim-down overlay so a dead bandit reads as
+        // "still on the map but not a threat" instead of vanishing
+        // entirely (the GM may want to keep the body visible for
+        // narrative reasons).
+        const battleC = (window.battle && window.battle.combatants) || [];
+        tokens.forEach(t => {
+            if (t.is_hidden && !ME.isGm) return;
+            let combatant = null;
+            for (const c of battleC) {
+                if (c.source_token_id != null && c.source_token_id === t.id) { combatant = c; break; }
+                if (t.character_id && c.char_id === t.character_id) { combatant = c; break; }
+                if (t.token_template_id
+                        && c.token_template_id === t.token_template_id
+                        && c.name === t.label) { combatant = c; break; }
+            }
+            if (!combatant) return;
+            const hpCur = Number(combatant.hp_current);
+            const hpMax = Number(combatant.hp_max);
+            if (!(hpMax > 0 && hpCur <= 0)) return;
+            const cx = t.x + gridSize / 2;
+            const cy = t.y + gridSize / 2;
+            const r = (gridSize * t.size) / 2;
+            ctx.save();
+            // Dim the token portrait so the skull reads as the
+            // primary visual signal.
+            ctx.fillStyle = 'rgba(0,0,0,0.55)';
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fill();
+            // Skull emoji on top — sized to fill ~60% of the token.
+            ctx.font = `bold ${Math.round(r * 1.2)}px system-ui, sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#fff';
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 3;
+            ctx.strokeText('💀', cx, cy);
+            ctx.fillText('💀', cx, cy);
+            ctx.restore();
+        });
         drawSpawnMarkers();
         drawMovementBreadcrumb();
         // v2.21.0 Phase T.0: targeting rings drawn on top of tokens so
@@ -2037,6 +2084,8 @@
                 _focusRollLogIfLocal(msg.data && msg.data.user_id);
             } else if (msg.type === 'presence_update') {
                 _renderPresence(msg.data);
+            } else if (msg.type === 'character_hp_update') {
+                _onCharacterHpUpdate(msg.data);
             } else if (msg.type === 'character_death_save') {
                 _onCharacterDeathSave(msg.data);
             } else if (msg.type === 'character_roll_state') {
@@ -3019,6 +3068,37 @@
     }
 
     // ---------- Death save broadcast handler (v2.1.0) ----------
+    // v2.49.4 — sync PC HP from the server-authoritative broadcast.
+    // ``_apply_hp_change`` mutates ``Character.sheet.hp`` server-side
+    // and emits ``character_hp_update``; clients need the handler to
+    // keep ``window.battle.combatants`` + the in-memory ``characters``
+    // array in step (their hp_current was stale otherwise). Triggers
+    // a canvas re-render so the v2.49.4 skull overlay fires on the
+    // moment a PC drops to 0 HP, and refreshes the mini-sheet HP bar
+    // if one's visible.
+    function _onCharacterHpUpdate(d) {
+        if (!d || !d.character_id || !d.hp) return;
+        const ch = charById[d.character_id];
+        if (ch) {
+            ch.hp_current = d.hp.current;
+            ch.hp_max     = d.hp.max;
+        }
+        const battle = window.battle && Array.isArray(window.battle.combatants)
+            ? window.battle.combatants : null;
+        if (battle) {
+            for (const c of battle) {
+                if (c.char_id === d.character_id) {
+                    c.hp_current = d.hp.current;
+                    c.hp_max     = d.hp.max;
+                }
+            }
+        }
+        try { render(); } catch (_) {}
+        if (typeof window._updateMiniHpDisplay === 'function') {
+            try { window._updateMiniHpDisplay(d.character_id, d.hp); } catch (_) {}
+        }
+    }
+
     function _onCharacterDeathSave(d) {
         if (!d || !d.character_id) return;
         // Update every tracker on the page for this character

@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.4] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **💀 skull overlay on tokens at 0 HP + missing character_hp_update WS handler.** Tokens whose linked combatant is at 0 HP (NPCs killed by Fireball, PCs dropped to 0) now render with a dimming overlay + a centered 💀 emoji so the GM can see at a glance which mooks are out of the fight. Plus a long-standing gap: the server's `character_hp_update` broadcast had no client handler, so PC HP changes never synced into `window.battle.combatants` (init tracker showed stale HP for PCs after AoE damage, and the skull check wouldn't fire). Added the handler — updates both the in-memory `characters` map AND the battle state combatant, then re-renders so the skull lands the moment a PC drops. PATCH — visual polish + bug fix.
+**Description:** Two edits. **(1)** `app/static/tabletop.js` `render()` — after `tokens.forEach(drawToken)` and before targeting rings, iterate every token and find its linked combatant (via the existing 3-way lookup: source_token_id / character_id / template+label). If the combatant has `hp_max > 0 && hp_current <= 0`, draw a translucent black circle over the token portrait + a centered 💀 emoji (size = 1.2 × token radius, white fill with black stroke for legibility on light backgrounds). Hidden tokens skipped for non-GMs. Drawn before targeting rings so the active-target outline still reads on top. **(2)** Same file — new `_onCharacterHpUpdate(d)` WS handler wired into the dispatcher. Updates `charById[character_id].hp_current/hp_max` AND finds the matching combatant in `window.battle.combatants` and updates its `hp_current/hp_max`. Calls `render()` so the skull overlay re-evaluates immediately. Also calls `window._updateMiniHpDisplay(d.character_id, d.hp)` so an open mini-sheet HP bar refreshes too.
+**Description (cont):** Why the skull doesn't replace the token. Two reasons. (a) Combat continues around the body — the GM may want to keep the corpse visible for narrative reasons ("the bandit slumps; his buddy steps over him to engage"). The dim overlay + skull reads as "this is a body" without removing the token altogether. (b) Restoration (Revivify, Healing Word on a dying PC) returns the token to full visibility cleanly when HP > 0 fires render again.
+**Description (cont 2):** Why a separate ``character_hp_update`` handler rather than piggybacking on ``battle_update``. The two broadcasts have different scopes: ``battle_update`` carries the full battle state and is gated on `!IS_GM || force_gm_sync`. ``character_hp_update`` carries a single character's HP + delta + source, fires on every PC HP change, and has no GM-skip semantics — it's purely informational. Mixing the two would obscure the contract. The handler keeping the data sources in sync is a per-PC update, which matches the broadcast's shape.
+**Description (cont 3):** Why no harness test. The bug is a client-side state-sync gap — the Python harness only drives endpoints + reads WS frames, never instantiates the JS handlers. A Playwright test could open the page, fire damage, assert the skull is visible on the canvas (via DOM inspection or screenshot); that's the right home. Filing as part of the encounter-sim Phase 1 suite (task #93): "place Fireball, assert canvas has skull overlay on killed bandits".
+
+### Fixed
+- `app/static/tabletop.js` — added `character_hp_update` WS handler. PC HP changes now sync into `charById` + `window.battle.combatants` so the init tracker reflects them AND the new skull overlay fires.
+
+### Added
+- `app/static/tabletop.js` `render()` — 💀 skull overlay on any token whose linked combatant is at 0 HP. NPCs killed by Fireball / weapon attacks / etc. show the skull immediately; PCs at 0 HP (dying / dead) do too. Dim overlay + skull keeps the token visible for narrative continuity.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM. Load Tavern Brawl. Cast Fireball from Lyra over the bandits. Pills resolve, init tracker HP bars drop to 0, AND the bandit tokens on the canvas now show 💀 over their portraits. Heal one (Cure Wounds, Lay on Hands) — the skull disappears. Drop a PC to 0 HP (manual edit or take damage from Strike) — same skull treatment.
+- **Backward compat.** Pure visual addition + a missing-handler bug fix. All 212 harness tests still pass.
+
+### Filed
+- **Differentiate dying vs dead on PCs.** Today both 0-HP states get 💀. RAW 5e: a PC at 0 HP is "dying" until they fail 3 death saves (then "dead"). Could use 💤 for dying and 💀 for confirmed dead; needs the death-save state from the broadcast.
+
+---
+
 ## [2.49.3] - 2026-05-21
 
 **Schema version:** 56
