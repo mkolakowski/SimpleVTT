@@ -10964,6 +10964,49 @@ def _set_death_save_state(
     return ds
 
 
+async def _drop_caster_concentration(
+    campaign_id: int, character_id: int,
+) -> int:
+    """Drop every concentration-tagged buff the character is holding.
+    Reuses ``_remove_buff`` which handles the buff_update broadcast +
+    ``_drop_paired_concentration_buffs`` cascade for target-side
+    condition cleanup.
+
+    v2.49.49 — used by the death-save endpoints to enforce the RAW
+    "incapacitated → lose concentration" rule on paths that DON'T go
+    through ``_maybe_concentration_save`` (which the v2.49.48 fix
+    covered). Specifically: rolling 3 death-save failures → dead,
+    or GM override to a non-alive status. The damage-event path
+    already drops concentration via the v2.49.48 fix, so this
+    helper is purely defensive for the rare non-damage transition
+    into incapacitation.
+
+    Returns the number of buffs removed.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return 0
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == character_id:
+            target = c
+            break
+    if target is None:
+        return 0
+    # Snapshot the keys before calling _remove_buff (it mutates the
+    # buffs list in place, and iterating a mutated list is dicey).
+    conc_keys = [
+        (b or {}).get("key") for b in target.get("buffs") or []
+        if (b or {}).get("concentration")
+    ]
+    removed_count = 0
+    for key in conc_keys:
+        if key:
+            if await _remove_buff(campaign_id, character_id, key):
+                removed_count += 1
+    return removed_count
+
+
 # ----------- Roll-state (advantage/disadvantage) — v2.2.0 -----------
 #
 # Per-character "roll state" toggled via the tri-state pill on the
@@ -15184,6 +15227,15 @@ async def roll_death_save(
         _set_death_save_state(char, status=new_status, successes=successes, failures=failures)
         new_ds = dict(char.sheet.get("death_saves") or {})
         new_hp = dict(char.sheet.get("hp") or {})
+        # v2.49.49 — when a death save flips status to "dead", drop
+        # the caster's concentration. RAW "incapacitated → lose
+        # concentration" applies here even though no damage was
+        # dealt by the roll itself. The v2.49.48 fix covered the
+        # damage-event path; this covers the death-save 3-failures
+        # path. ``_drop_caster_concentration`` reuses ``_remove_buff``
+        # which fires buff_update + cascades target-side cleanup.
+        if new_status == "dead":
+            await _drop_caster_concentration(campaign_id, char.id)
 
     # Persist roll record so the campaign log sees it
     note_label = {
@@ -15316,6 +15368,17 @@ async def override_death_save(
             "source": "gm_override",
         },
     })
+
+    # v2.49.49 — drop the caster's concentration when GM overrides
+    # the status to a non-alive state. RAW "incapacitated → lose
+    # concentration" applies regardless of how the PC got there.
+    # Override paths covered: dying / stable / dead. Override to
+    # "alive" doesn't drop (the PC just woke up). The damage-event
+    # path is already covered by v2.49.48; the death-save roll path
+    # by the elif above; this is the third / final gap.
+    if status_in in ("dying", "stable", "dead"):
+        await _drop_caster_concentration(campaign_id, char.id)
+
     return {"ok": True, "death_saves": new_ds, "hp": char.sheet.get("hp")}
 
 
