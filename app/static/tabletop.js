@@ -379,7 +379,17 @@
                 }
                 if (!this._tokenInShape(t, canvasX, canvasY)) continue;
                 const combatant = _resolveCombatant(t);
-                if (combatant && combatant.id) target_combatant_ids.push(combatant.id);
+                if (combatant && combatant.id) {
+                    target_combatant_ids.push(combatant.id);
+                } else {
+                    // v2.48.5 — no matching combatant (no active
+                    // battle yet, or token added after init started).
+                    // Pass the token id with a ``tok:`` prefix; the
+                    // server's /place_aoe handler resolves it from
+                    // the Token table and auto-adds an init entry so
+                    // damage tracking works going forward.
+                    target_combatant_ids.push(`tok:${t.id}`);
+                }
             }
             this._cleanup();
             if (resolve) resolve({

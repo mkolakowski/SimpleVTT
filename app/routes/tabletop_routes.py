@@ -7723,8 +7723,70 @@ async def place_aoe(
     auto_apply_damage = bool(ctx.get("auto_apply_damage"))
 
     auto_save_targets: list[dict] = []
+    # v2.48.5 — track whether we auto-added any NPCs to the battle
+    # state so we can broadcast one battle_update at the end.
+    auto_added_combatants = False
     for tid in target_combatant_ids:
         extra = _lookup_combatant(campaign_id, tid)
+        if not extra and isinstance(tid, str) and tid.startswith("tok:"):
+            # v2.48.5 — token-id fallback. The picker passed this id
+            # because no combatant matched the token at picker time
+            # (no active battle, or token added later). Look up the
+            # Token row, synthesize a combatant dict; for NPCs, also
+            # auto-add the combatant to the campaign's battle state
+            # so the init tracker reflects who got swept up and HP
+            # tracking works for follow-up attacks.
+            try:
+                token_id_int = int(tid[4:])
+            except ValueError:
+                continue
+            token = db.query(Token).filter(Token.id == token_id_int).first()
+            if not token:
+                continue
+            if token.character_id:
+                # PC token — synthesize a combatant dict; damage
+                # routes through the character sheet (no battle
+                # entry required for HP tracking).
+                extra = {
+                    "id": tid,
+                    "char_id": int(token.character_id),
+                    "name": token.label or "",
+                    "source_token_id": token.id,
+                }
+            elif token.token_template_id:
+                # NPC token — auto-add to battle state with default
+                # HP from the template so subsequent attacks track
+                # HP, then use the new entry as ``extra``.
+                _state = hub.get_battle(campaign_id) or {
+                    "combatants": [], "turn_index": 0,
+                    "round": 1, "active": False,
+                }
+                _tmpl = db.query(TokenTemplate).filter(
+                    TokenTemplate.id == int(token.token_template_id),
+                ).first()
+                if not _tmpl:
+                    continue
+                _tmpl_sheet = _monster_template_to_sheet(_tmpl, campaign_id)
+                _hp = (_tmpl_sheet.get("hp") or {})
+                _hp_max = int(_hp.get("max") or _hp.get("current") or 10)
+                new_combatant = {
+                    "id": tid,
+                    "name": token.label or _tmpl.name or "NPC",
+                    "token_template_id": int(token.token_template_id),
+                    "source_token_id": token.id,
+                    "initiative": 0,
+                    "hp_current": _hp_max,
+                    "hp_max": _hp_max,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False,
+                                "reaction": False, "movement": 0},
+                }
+                _state.setdefault("combatants", []).append(new_combatant)
+                hub.set_battle(campaign_id, _state)
+                auto_added_combatants = True
+                extra = new_combatant
+            else:
+                continue
         if not extra:
             continue
         extra_name = extra.get("name") or ""
@@ -7839,6 +7901,18 @@ async def place_aoe(
             "passed": passed,
             "damage_applied": dmg_applied,
             "damage_type": damage_type,
+        })
+
+    # v2.48.5 — when /place_aoe auto-added NPC tokens to the battle
+    # state (because no active battle existed at picker time), push
+    # one battle_update so every client's init tracker repaints with
+    # the new combatants. Their HP shows post-damage already because
+    # _apply_damage_to_combatant mutated the entry in-place.
+    if auto_added_combatants:
+        _state = hub.get_battle(campaign_id) or {}
+        await hub.broadcast(campaign_id, {
+            "type": "battle_update",
+            "data": _state,
         })
 
     # Broadcast the resolved AoE so every client's cast card mutates

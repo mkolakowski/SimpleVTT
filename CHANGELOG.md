@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.48.5] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Fix Fireball "no targets in area" — picker falls back to token IDs, /place_aoe auto-creates combatant entries.** User reported placing Fireball over bandits and getting the "💨 No targets in area" pill. Root cause: the demo map has 6 NPC tokens (Vex, bandits, Thug, etc.) but no active battle — the picker's per-token combatant lookup needed `hub.get_battle()` to return something, found nothing, and emitted an empty `target_combatant_ids` list. Fix: the picker now pushes a `tok:<token_id>` ID when no combatant matches; `/place_aoe` resolves the prefix from the Token table and auto-adds a combatant entry to the battle state for NPCs (with HP read from the template), or wraps PCs as a synthetic combatant (no battle entry needed — PC HP lives on the character sheet). One `battle_update` broadcast at the end refreshes the init tracker with the newly-tracked NPCs. PATCH — additive fallback, no API change for existing callers.
+**Description:** Three edits. **(1)** `app/static/tabletop.js` `_aoePicker.commit()` — when `_resolveCombatant(t)` returns null (no matching combatant), push `tok:${t.id}` instead of skipping the token. The picker's hit-test still uses the same shape math; the only change is what it sends to the server. **(2)** `app/routes/tabletop_routes.py` `/place_aoe` — when `_lookup_combatant(tid)` returns None AND `tid` starts with `tok:`, parse the token id, fetch the `Token` row from the database, and resolve to the correct combatant shape: PCs get a `{id: tid, char_id, name, source_token_id}` dict (no battle entry needed); NPCs get a full combatant dict with HP from the template, added to `hub.get_battle(campaign_id)` (creating the battle dict if missing). Tracks `auto_added_combatants` so a single `battle_update` broadcast goes out after the loop. **(3)** No new harness test — the fix exercises the existing /place_aoe flow with a different target_combatant_ids shape; the same code path (save roll + damage application) covers both combatant and token paths.
+**Description (cont):** Why auto-add NPCs to battle state instead of just rolling save + tracking nothing. The damage path requires HP somewhere — `_apply_damage_to_combatant`'s NPC branch mutates the battle combatant's `hp_current` and broadcasts `battle_update`. If the combatant doesn't exist, damage has nowhere to land. Auto-adding gives a place for HP, makes the NPCs visible in the init tracker for follow-up attacks, and matches what most groups do anyway ("you just hit them with Fireball, they're definitely in combat now").
+**Description (cont 2):** Why default initiative 0 on auto-added NPCs. Picker-fired AoEs typically happen BEFORE init is rolled — a surprise round opening with Fireball. Initiative 0 puts them in the right phase semantically (the GM will roll proper init later if needed). The init tracker shows them with hp_current/hp_max already set so the GM can see post-Fireball HP at a glance.
+**Description (cont 3):** Why no harness test. The harness tests for /place_aoe (`test_aoe_cast_without_targets_lands_pending_then_place_aoe_resolves`, `test_place_aoe_auto_rolls_pc_save_and_applies_damage`) pre-seed a battle via `_seed_battle` and pass combatant IDs directly — the v2.48.5 fallback path doesn't fire for them. A new test would need to NOT seed a battle and pass `tok:N` IDs; that's a different test shape and the code path is straightforward enough that the harness gap is acceptable for now (filed as follow-up).
+
+### Fixed
+- `app/static/tabletop.js` `_aoePicker.commit()` — picker now falls back to `tok:<token_id>` IDs when no combatant matches a token caught in the AoE.
+- `app/routes/tabletop_routes.py` `/place_aoe` — resolves `tok:` prefixed IDs by looking up the Token row + auto-adding NPCs to the battle state (with HP from the template). PCs route through the existing character-sheet HP path. Broadcasts one `battle_update` if any NPCs were auto-added so the init tracker repaints.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM after rebuild + hard refresh. Without loading an encounter (no init started), cast Fireball from Lyra/Thalindra. Place the sphere over the bandits + thug on the tavern map. The cast card should resolve with per-target pills (rolled saves + damage applied), AND the init tracker should now show Vex, Bandit Alpha, etc. with their post-Fireball HP. Subsequent attacks on those bandits use the existing /attack flow as normal.
+- **Backward compat.** All 212 harness tests still pass. The fallback only fires when `_lookup_combatant` returns None AND the ID starts with `tok:` — existing combatant-id callers (harness tests, the legacy /cast_spell-with-targets path) are unaffected.
+
+### Filed
+- **Harness coverage for the tok: fallback.** Future test: cast Fireball without a seeded battle + with `tok:` ids, assert the battle state gains the new entries + damage applied.
+- **Initiative roll prompt after auto-add.** Today NPCs auto-added by an AoE land at initiative 0. A follow-up could prompt the GM to roll init for them, or auto-roll using the template's DEX mod.
+
+---
+
 ## [2.48.4] - 2026-05-20
 
 **Schema version:** 56
