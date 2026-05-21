@@ -2348,6 +2348,24 @@
     // buff / prompt / undo). Returns '' when the cast produced no
     // auto-effects so utility-only spells (Mage Armor, Misty Step)
     // render without an empty pill row.
+    // v2.48.7 — every cast-card pill that has roll math is now click-
+    // to-expand. Builds a ``<button class="result-pill chip-X
+    // per-target-pill">`` so the existing v2.48.6 delegated click
+    // handler toggles the detail span. When ``detail`` is empty the
+    // pill renders as a non-expandable ``<span>`` (no click target).
+    function _buildPill(cls, headerHtml, detailText) {
+        if (detailText) {
+            return (
+                `<button type="button" class="result-pill ${cls} per-target-pill" data-expanded="0"`
+                + ` title="Click for roll math">`
+                + `<span class="pt-header">${headerHtml}</span>`
+                + `<span class="pt-detail" style="display:none;font-size:11px;color:var(--fg-mute);margin-left:8px;border-left:1px solid currentColor;padding-left:8px;opacity:.85;">${escapeHTML(detailText)}</span>`
+                + `</button>`
+            );
+        }
+        return `<span class="result-pill ${cls}">${headerHtml}</span>`;
+    }
+
     function _spellResultPillsHtml(d) {
         if (!d) return '';
         const pills = [];
@@ -2396,30 +2414,35 @@
         if (_isAoeCard && _wasPlaced && !_hasResolvedTargets) {
             return `<div class="result-pills"><span class="result-pill chip-miss">💨 No targets in area</span></div>`;
         }
-        // Heal
+        // Heal — click to expand shows the rolled dice breakdown.
         if (d.auto_heal_applied > 0) {
             const tgt = d.auto_heal_target_name || d.target_name || '';
             const before = d.auto_heal_hp_before;
             const after = d.auto_heal_hp_after;
             const hpDelta = (before != null && after != null)
                 ? ` (${before} → ${after})` : '';
-            pills.push(`<span class="result-pill chip-heal">✚ ${escapeHTML(tgt)} +${d.auto_heal_applied} HP${hpDelta}</span>`);
+            const header = `✚ ${escapeHTML(tgt)} +${d.auto_heal_applied} HP${hpDelta}`;
+            const detail = d.auto_heal_breakdown ? `Heal: ${d.auto_heal_breakdown}` : '';
+            pills.push(_buildPill('chip-heal', header, detail));
             if (d.auto_heal_revived) {
                 pills.push('<span class="result-pill chip-buff">💚 revived</span>');
             }
         }
-        // Attack
+        // Attack — click for attack-roll breakdown; damage pill click
+        // for damage-roll breakdown.
         if (d.auto_attack_hit != null) {
             const verdict = d.auto_attack_crit ? '💥 CRIT' : d.auto_attack_hit ? '✅ HIT' : '❌ MISS';
             const cls = d.auto_attack_crit ? 'chip-crit' : d.auto_attack_hit ? 'chip-hit' : 'chip-miss';
             const tgt = d.auto_attack_target_name || d.target_name || '';
             const ac = d.auto_attack_target_ac != null ? `/${d.auto_attack_target_ac}` : '';
-            pills.push(
-                `<span class="result-pill ${cls}">🎯 ${escapeHTML(tgt)}: ${d.auto_attack_total}${ac} ${verdict}</span>`
-            );
+            const header = `🎯 ${escapeHTML(tgt)} 🎲 ${d.auto_attack_total}${ac} ${verdict}`;
+            const detail = d.auto_attack_breakdown ? `Attack: ${d.auto_attack_breakdown}` : '';
+            pills.push(_buildPill(cls, header, detail));
             if (d.auto_attack_damage_applied > 0) {
                 const type = d.auto_attack_damage_type ? ` ${escapeHTML(d.auto_attack_damage_type)}` : '';
-                pills.push(`<span class="result-pill chip-damage">🎲 −${d.auto_attack_damage_applied}${type}</span>`);
+                const dmgHeader = `🎲 ${d.auto_attack_damage_applied}${type}`;
+                const dmgDetail = d.auto_attack_damage_breakdown ? `Damage: ${d.auto_attack_damage_breakdown}` : '';
+                pills.push(_buildPill('chip-damage', dmgHeader, dmgDetail));
             }
         }
         // Save: multi-target AoE (T.5c) takes precedence over the
@@ -2486,7 +2509,8 @@
                 pills.push(`<span class="result-pill chip-damage">Σ ${totalDmg}${typeBit}</span>`);
             }
         } else {
-            // Single-target headline view — unchanged from v2.43+.
+            // Single-target headline view — v2.48.7: click to expand
+            // shows the save roll breakdown + damage roll breakdown.
             if (d.auto_save_target_kind === 'pc' && d.auto_save_prompted) {
                 pills.push(
                     `<span class="result-pill chip-prompt">📋 ${escapeHTML(d.auto_save_target_name || '')} ${escapeHTML(d.auto_save_ability || '')} save · DC ${d.auto_save_dc}</span>`
@@ -2495,14 +2519,16 @@
             if (d.auto_save_target_kind === 'npc' && d.auto_save_rolled != null) {
                 const cls = d.auto_save_passed ? 'chip-hit' : 'chip-miss';
                 const v = d.auto_save_passed ? '✅ saved' : '❌ failed';
-                pills.push(
-                    `<span class="result-pill ${cls}">📋 ${escapeHTML(d.auto_save_target_name || '')}: ${d.auto_save_rolled}/${d.auto_save_dc} ${v}</span>`
-                );
+                const header = `📋 ${escapeHTML(d.auto_save_target_name || '')} 🎲 ${d.auto_save_rolled}/${d.auto_save_dc} ${v}`;
+                const detail = d.auto_save_breakdown ? `Save: ${d.auto_save_breakdown}` : '';
+                pills.push(_buildPill(cls, header, detail));
             }
             if (d.auto_save_damage_applied > 0) {
                 const type = d.auto_save_damage_type ? ` ${escapeHTML(d.auto_save_damage_type)}` : '';
                 const tag = d.auto_save_passed ? ' (half)' : '';
-                pills.push(`<span class="result-pill chip-damage">🎲 ${d.auto_save_damage_applied}${type}${tag}</span>`);
+                const dmgHeader = `🎲 ${d.auto_save_damage_applied}${type}${tag}`;
+                const dmgDetail = d.auto_save_damage_breakdown ? `Damage: ${d.auto_save_damage_breakdown}` : '';
+                pills.push(_buildPill('chip-damage', dmgHeader, dmgDetail));
             }
         }
         if (d.auto_save_buff_name) {
@@ -3216,7 +3242,10 @@
             const verdict = d.is_crit ? '💥 CRIT' : (d.hit === false ? '❌ MISS' : (d.hit === true ? '✅ HIT' : ''));
             const ac = d.target_ac != null ? `/${d.target_ac}` : '';
             const verdictTail = verdict ? ` ${verdict}` : '';
-            pills.push(`<span class="result-pill ${cls}">🎯 ${d.attack_total}${ac}${verdictTail}</span>`);
+            // v2.48.7 — click to expand shows the attack roll breakdown.
+            const header = `🎯 🎲 ${d.attack_total}${ac}${verdictTail}`;
+            const detail = d.attack_breakdown ? `Attack: ${d.attack_breakdown}` : '';
+            pills.push(_buildPill(cls, header, detail));
         }
         if (d.damage_total != null) {
             const type = d.damage_type ? ` ${escapeHTML(d.damage_type)}` : '';
@@ -3225,7 +3254,9 @@
                 : '';
             const resist = d.target_resistance_applied ? ' 🛡' : '';
             const status = d.target_dead ? ' 💀' : (d.target_dying ? ' 💤' : '');
-            pills.push(`<span class="result-pill chip-damage">💥 ${d.damage_total}${type}${applied}${resist}${status}</span>`);
+            const header = `💥 ${d.damage_total}${type}${applied}${resist}${status}`;
+            const detail = d.damage_breakdown ? `Damage: ${d.damage_breakdown}` : '';
+            pills.push(_buildPill('chip-damage', header, detail));
         }
         if (d.bonus_damage_total != null && d.bonus_damage_total > 0) {
             const bonusLabel = d.bonus_damage_label || 'Bonus';

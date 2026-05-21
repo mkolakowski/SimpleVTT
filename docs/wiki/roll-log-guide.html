@@ -387,6 +387,16 @@
   fired. A collapsible <code>▾ details</code> toggle tucks long flavor / dice breakdown out of the
   way; the headline + pill row alone carry the at-a-glance read.
 </p>
+<p class="lede" style="margin-top:6px;">
+  <strong>v2.48.7 — click any outcome pill</strong> to expand it inline and see the dice breakdown:
+  the save roll (<code>1d20+2[15+2]=17</code>), the damage roll
+  (<code>8d6[3,5,4,6,2,1,5,2]=28 fire</code>), the attack roll, the heal roll. The pill grows
+  slightly + reveals a subdued detail row to the right of the headline text. Click again to
+  collapse. Wired via document-level event delegation, so it works across card mutations
+  (AoE placement resolution, replay on refresh) without extra plumbing. Applies to: per-target
+  AoE pills, single-target save / damage pills, attack + damage pills, heal pills, weapon-attack
+  pills.
+</p>
 <div class="roll-card">
   <div class="roll-card-total-col"><span class="roll-card-total">17</span></div>
   <div class="roll-card-right">

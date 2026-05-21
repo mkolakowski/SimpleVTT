@@ -66,7 +66,11 @@ Two interaction patterns to know:
 
 Mobile / iPad players who can't double-tap reliably have a 🎯 button on each Token Tracker row (added v2.38.0 T.9).
 
-The targeting system + the AoE picker (filed for T.5+) get their own wiki guide. Design at `docs/plans/targeting.md`.
+3. **AoE spells (Fireball, Burning Hands, Lightning Bolt, etc.)**: the cast button does NOT open the picker. Instead the cast lands a "pending placement" card in the roll log with a `📍 Place sphere` / `📍 Place cone` / etc button. Only the caster (or the GM) can press it — other players see `⏳ Awaiting placement…`. Pressing the button opens the canvas placement picker; click to drop the sphere over the desired tokens. The server auto-rolls every swept-up target's save (NPCs AND PCs, server-side, using their save modifier) and applies save-for-half damage. The card mutates in place to show one pill per target plus a Σ aggregate. v2.48.0–v2.48.6.
+4. **AoE shape badges on spell rows**: spells with a populated `area` block show a flame-orange badge in the spell list (`💥 20ft sphere`, `💥 15ft cone (you)`, `💥 100×5ft line`) so the GM knows at a glance which spells use the placement flow. v2.48.1.
+5. **No active battle? The picker still works.** If init isn't started, the picker passes token IDs to `/place_aoe` which auto-adds swept-up NPC tokens to the battle state with HP from their template — they appear in the init tracker post-Fireball. v2.48.5.
+
+Design notes at `docs/plans/targeting.md`.
 
 ## Auto-resolution outcomes
 
@@ -76,13 +80,17 @@ When **auto-apply damage** is on and a target is set, server-side resolution fir
 |---------|------|--------|
 | Heal | `chip-heal` (green) | T.4 — auto-applied on Healing Word + Cure Wounds + Mass Healing Word + heal-class features |
 | Spell attack | `chip-hit` / `chip-miss` / `chip-crit` | T.4b — Fire Bolt + Eldritch Blast + Inflict Wounds + Guiding Bolt + Scorching Ray + Ray of Frost + Vampiric Touch |
-| Save (PC) | `chip-prompt` (accent) | T.3d — roll-request sent to player; they roll on their own UI |
+| Save (PC) | `chip-prompt` (accent) | T.3d — roll-request sent to player; T.5d AoE saves auto-roll server-side instead |
 | Save (NPC) | `chip-hit` / `chip-miss` | T.3 — server rolls 1d20+ability_mod against DC |
 | Damage applied | `chip-damage` (orange) | T.2 attack / T.4b spell attack / T.3b save-for-half |
 | Condition installed | `chip-buff` (cyan) | T.3c — Paralyzed / Charmed / Frightened / etc. with duration in rounds |
+| Σ AoE total | `chip-damage` | T.5c — sum across per-target AoE entries |
+| 💨 No targets | `chip-miss` | T.5e — AoE placed in empty patch of map |
 | ↶ Undo | `chip-undo` button | Reverses HP changes within 8 hours of the cast |
 
-Full anatomy + the verbose vs. compact mode design is in the [roll-log guide](roll-log-guide.html). Click any token-card pill to expand the ▾ details for the dice breakdown.
+**Click any pill** to expand it and see the dice breakdown (save roll, damage roll, attack roll). The pill grows slightly + reveals a `· Save: 1d20+2[15+2]=17 · Damage: 8d6[3,5,4,6,2,1,5,2]=28` detail row. Click again to collapse. Applies to single-target attack / save / damage / heal pills AND per-target AoE pills (v2.48.6 / v2.48.7).
+
+Full anatomy + the verbose vs. compact mode design is in the [roll-log guide](roll-log-guide.html). The cast card's ▾ details element separately holds the spell description + higher-level upcast text.
 
 ## Cycling turns
 

@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.48.7] - 2026-05-20
+
+**Schema version:** 56
+**Commit summary:** **Backfill 9 more AoE spells + click-to-expand on every cast-card pill.** Two related changes asked together. **(1)** Filled the empty `area` blocks on 9 SRD damage-AoE spells the v2.46.5 sweep missed: Circle of Death (60 ft sphere), Flame Strike (10 ft sphere — cylinder approximated), Freezing Sphere (60 ft sphere), Ice Storm (20 ft sphere), Incendiary Cloud (20 ft sphere), Insect Plague (20 ft sphere), Moonbeam (5 ft sphere), Prismatic Spray (60 ft cone, self), Weird (30 ft sphere). All trigger the v2.48.0 placement flow now. **(2)** Extended the v2.48.6 click-to-expand pill behavior to ALL outcome pills on cast cards + weapon-attack cards: heal pill (shows the heal dice breakdown), single-target attack pill (attack roll math), attack damage pill (damage dice), single-target NPC save pill (save roll math), single-target save damage pill (damage dice), weapon-attack attack + damage pills (same). Per-target AoE pills already had it (v2.48.6). Wiki docs updated to call out the new behavior. PATCH — data backfill + UI polish, no API change.
+**Description:** Four edits. **(1)** `app/data/local/dnd5e/spells/{circle-of-death,flame-strike,freezing-sphere,ice-storm,incendiary-cloud,insect-plague,moonbeam,prismatic-spray,weird}.json` — populated `actions[0].area` with `shape` + `size_ft` per PHB rules text. Flame Strike, Ice Storm, Moonbeam, Insect Plague are technically cylinders in 5e but the picker has no cylinder shape today (filed in v2.46.5); treated as spheres of matching radius since the 2D-projected hit-test is indistinguishable. **(2)** `app/static/tabletop.js` — added `_buildPill(cls, headerHtml, detailText)` helper. When `detailText` is provided, returns a `<button class="result-pill ${cls} per-target-pill">` with the existing `.pt-header` / `.pt-detail` structure so the v2.48.6 document-level click delegation toggles expansion. When `detailText` is empty (no breakdown available), returns a non-expandable `<span>` so the pill still renders consistently. **(3)** Same file — refactored every cast-card pill through `_buildPill`: heal (`Heal: <auto_heal_breakdown>`), spell attack (`Attack: <auto_attack_breakdown>`), spell attack damage (`Damage: <auto_attack_damage_breakdown>`), single-target NPC save (`Save: <auto_save_breakdown>`), single-target save damage (`Damage: <auto_save_damage_breakdown>`). `appendWeaponAttack` also refactored — Strike attack + damage pills now use `_buildPill` with their `attack_breakdown` + `damage_breakdown` fields. **(4)** Wiki docs (`docs/wiki/running-a-session-as-gm.md`, `docs/wiki/roll-log-guide.html`) updated to mention the AoE placement flow + the click-to-expand pills. The GM guide adds three new bullets under "Two interaction patterns": AoE placement flow, spell-row AoE badges, and the "no active battle? picker still works" path. The roll log guide adds a v2.48.7 callout above the card anatomy diagram.
+**Description (cont):** Why use `_buildPill` for non-expandable pills too. Keeps the rendering path consistent — the same function emits all pills, just with two variants based on whether breakdown text is available. Future additions (more pill types, alternate detail sources) plug in without each caller re-implementing the button vs span branching. The non-expandable variant is still a `<span>` so the existing `.result-pill` styling applies without the button-specific resets.
+**Description (cont 2):** Why include the cylinder-as-sphere approximation. The 5e cylinder shape (Sleet Storm, Ice Storm, Flame Strike, Moonbeam, Insect Plague) only differs from a sphere in vertical play — when a creature is flying or at multiple elevations. SimpleVTT's map is 2D-projected (no Z-axis token positions), so a 20-ft-radius cylinder is visually identical to a 20-ft-radius sphere. Filing the cylinder shape proper for when vertical play lands — until then, sphere is the right approximation.
+**Description (cont 3):** What "all AoE spells and effects" doesn't yet cover. Monster breath weapons / recharge abilities (dragon breath cone, beholder eye ray cone, mind flayer mind blast cone) live in monster templates and are fired from the monster sheet's `.atk-feature` handler — different code path from the PC `.sp-cast` handler. They don't trigger the placement picker today. Adding parity would mean either porting the v2.48.0 sheet wiring into the monster sheet handler OR factoring the AoE-cast logic into a shared module. Filed as a follow-up.
+
+### Added
+- `app/static/tabletop.js` `_buildPill(cls, headerHtml, detailText)` — shared expandable-pill builder. Used for all cast-card outcome pills + weapon-attack pills.
+
+### Changed
+- `app/data/local/dnd5e/spells/circle-of-death.json` — `area.shape = "sphere"`, `area.size_ft = 60`.
+- `app/data/local/dnd5e/spells/flame-strike.json` — `sphere`, 10 ft.
+- `app/data/local/dnd5e/spells/freezing-sphere.json` — `sphere`, 60 ft.
+- `app/data/local/dnd5e/spells/ice-storm.json` — `sphere`, 20 ft.
+- `app/data/local/dnd5e/spells/incendiary-cloud.json` — `sphere`, 20 ft.
+- `app/data/local/dnd5e/spells/insect-plague.json` — `sphere`, 20 ft.
+- `app/data/local/dnd5e/spells/moonbeam.json` — `sphere`, 5 ft.
+- `app/data/local/dnd5e/spells/prismatic-spray.json` — `cone`, 60 ft (self).
+- `app/data/local/dnd5e/spells/weird.json` — `sphere`, 30 ft.
+- `app/static/tabletop.js` — all cast-card outcome pills routed through `_buildPill`; weapon-attack pills the same.
+- `docs/wiki/running-a-session-as-gm.md` — added AoE placement flow + spell-row badge + click-to-expand callouts.
+- `docs/wiki/roll-log-guide.html` — added v2.48.7 click-to-expand note in the card anatomy section.
+
+### Notes
+- **What to test:** open `/campaign/1` as GM after rebuild + hard refresh + Clear roll log. Cast any of the newly-backfilled AoE spells (e.g. Cone of Cold from a high-level wizard if you can; Moonbeam from Mira) and verify the Place button appears + the placement flow runs. For click-to-expand: cast any single-target save spell (Sacred Flame on a bandit), Strike with Caelan's longsword (attack pill), cast Healing Word (heal pill) — click any pill and watch it expand with the dice math.
+- **Backward compat.** All 212 harness tests still pass. The pill format change is purely visual; non-expandable variants (no breakdown available) render the same as before via `<span>`.
+
+### Filed
+- **Monster AoE effects** (dragon breath, beholder eye ray, etc.). Currently fire through the monster sheet's `.atk-feature` handler, not the PC `.sp-cast` handler. Porting the v2.48.0 placement flow to the monster path is a separate piece of work — refactor or duplicate, the design hasn't decided.
+- **Cylinder shape proper.** Ice Storm / Moonbeam / Insect Plague are technically cylinders, treated as spheres in 2D today.
+
+---
+
 ## [2.48.6] - 2026-05-20
 
 **Schema version:** 56
