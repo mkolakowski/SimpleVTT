@@ -11638,6 +11638,53 @@ async def cast_hex(
 
 # ----------- API: cast Sleep (HP-pool targeting) -----------
 
+# v2.49.64 — RAW Sleep exclusion ("Undead and creatures immune to
+# being charmed aren't affected by this spell"). Inspects the
+# target combatant's stat block + condition immunities. NPCs route
+# through their monster template (slug → SRD JSON via local_content);
+# PCs route through their character sheet. Returns ``(is_immune,
+# reason)`` where reason is one of ``"undead"`` / ``"charm_immune"``
+# / ``""``. Undead trumps charm-immune in reporting (most undead are
+# also charm-immune; "undead" is the more specific cause).
+def _is_sleep_immune(
+    combatant: dict, db: Session, campaign_id: int,
+) -> tuple[bool, str]:
+    def _check_sheet(sheet: dict) -> tuple[bool, str]:
+        race = (sheet.get("race") or "").lower()
+        if "undead" in race:
+            return True, "undead"
+        cond_imm = sheet.get("condition_immunities") or []
+        if isinstance(cond_imm, str):
+            cond_imm = [p.strip() for p in cond_imm.split(",")]
+        cond_imm_l = [str(c).lower() for c in cond_imm]
+        if any("charm" in c for c in cond_imm_l):
+            return True, "charm_immune"
+        return False, ""
+
+    # NPC: resolve via monster template's SRD-overlaid sheet.
+    tmpl_id = combatant.get("token_template_id")
+    if tmpl_id:
+        tmpl = db.query(TokenTemplate).filter(
+            TokenTemplate.id == int(tmpl_id),
+        ).first()
+        if tmpl:
+            sheet = _monster_template_to_sheet(tmpl, campaign_id)
+            immune, reason = _check_sheet(sheet)
+            if immune:
+                return True, reason
+    # PC: check the character sheet directly.
+    char_id = combatant.get("char_id")
+    if char_id:
+        char = db.query(Character).filter(
+            Character.id == int(char_id),
+        ).first()
+        if char:
+            immune, reason = _check_sheet(char.sheet or {})
+            if immune:
+                return True, reason
+    return False, ""
+
+
 @router.post("/api/campaign/{campaign_id}/cast_sleep")
 async def cast_sleep(
     campaign_id: int,
@@ -11792,8 +11839,11 @@ async def cast_sleep(
         pool_breakdown = pool_expr
 
     # Resolve targets + capture current HP. Skip already-unconscious
-    # combatants (RAW: ignored when ordering).
+    # combatants (RAW: ignored when ordering). Surface RAW-immune
+    # creatures (undead / charm-immune) in the `unaffected` list with
+    # a `reason` so the cast card can show "X was immune".
     resolved_targets: list[dict] = []
+    immune_unaffected: list[dict] = []
     for tid in target_combatant_ids:
         if not isinstance(tid, str) or not tid:
             continue
@@ -11810,6 +11860,19 @@ async def cast_sleep(
         )
         if already_unc:
             continue
+        # v2.49.64: RAW Sleep — "Undead and creatures immune to being
+        # charmed aren't affected by this spell." Surfaced in
+        # ``unaffected`` with a reason so the cast card can display
+        # the exclusion to the caster rather than silently filtering.
+        immune, immune_reason = _is_sleep_immune(c, db, campaign_id)
+        if immune:
+            immune_unaffected.append({
+                "combatant_id": tid,
+                "name": c.get("name") or "",
+                "hp": hp_cur,
+                "reason": immune_reason,
+            })
+            continue
         resolved_targets.append({
             "combatant_id": tid,
             "name": c.get("name") or "",
@@ -11822,7 +11885,7 @@ async def cast_sleep(
     resolved_targets.sort(key=lambda t: t["hp_current"])
 
     affected: list[dict] = []
-    unaffected: list[dict] = []
+    unaffected: list[dict] = list(immune_unaffected)
     pool_remaining = pool_total
     sleep_duration_rounds = 10  # 1 min = 10 rounds at 6 s/round
     for t in resolved_targets:

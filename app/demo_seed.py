@@ -2147,6 +2147,13 @@ def seed_token_templates(db: Session, camp: Campaign) -> dict[str, TokenTemplate
         ("bandit", "Bandit"),
         ("thug", "Thug"),
         ("goblin-captain", "Goblin Captain"),
+        # v2.49.64 — undead + charm-immune templates so Sleep can
+        # demo its RAW exclusion rule. Skeleton is undead (Sleep
+        # skips it entirely); Doppelganger is Monstrosity + charm-
+        # immune (Sleep skips on the second exclusion branch). Both
+        # resolve via the shipped SRD JSONs.
+        ("skeleton", "Skeleton"),
+        ("doppelganger", "Doppelganger"),
     ]
     out: dict[str, TokenTemplate] = {}
     for slug, label in specs:
