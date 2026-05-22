@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.69] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Add "every doc must be surfaced through the wiki" rule to CLAUDE.md.** User-requested. Codifies the three-step checklist (allowlist + landing-page table row + on-disk README row + per-slug harness test) that v2.49.66 retro-fixed for the ruler plan and that v2.49.68 followed atomically for the simulacrum plan. Without the rule, future plan-write commits risk repeating the v2.49.59 → v2.49.66 discovery gap where a plan sits on disk for multiple releases before anyone notices it isn't reachable through `/wiki`. Rule includes a 4-row applicability table (split by doc-type: `docs/wiki/` guides vs `docs/plans/` vs `docs/` references vs repo-root docs — each has different surfacing requirements), a decision-tree, status-vocabulary guidance, and an explicit "when NOT to apply" list (tests / code / config / asset files / the changelog archive). Doc-only; PATCH.
+**Description:** One edit. **(1)** `CLAUDE.md` — new "Every doc must be surfaced through the wiki" section inserted between "Every new endpoint commit lands a harness test" and "Third-party APIs must be Docker Compose services". Locates the three relevant code touch-points (`_DOC_ALLOWLIST` mapping, `wiki.html` template tables, `docs/wiki/README.md` tables) + the harness test pattern + the landing-page assertion update. Names the v2.49.59 → v2.49.66 incident as the motivating failure mode so future readers understand why the rule exists.
+**Description (cont):** Why the per-doc-type 4-row table. The wiki has three different surfacing mechanisms: (a) `docs/wiki/<slug>.{md,html}` is served directly by `/wiki/<slug>` (no allowlist needed; the filename IS the route), (b) `docs/plans/` and `docs/` references both route through `/wiki/doc/<slug>` via `_DOC_ALLOWLIST` and need slugs registered there, (c) repo-root docs are already allowlisted and rarely need new entries. A single "always add the doc to the allowlist" rule would be wrong for case (a). The table makes the three branches explicit.
+**Description (cont 2):** Why a per-slug harness test is required for the allowlist entries but not for the `docs/wiki/<slug>.{md,html}` guides. The allowlist is the security boundary — it's the only way to reach a file outside `docs/wiki/` through the wiki router. A test_wiki_doc_serves_X test confirms the new slug renders + injects the nav, which is exactly the regression a malformed allowlist entry would surface (404 / 500). The wiki guides under `docs/wiki/` are auto-discovered by the bare-slug route, so a missing test is much less likely to mask a regression — the broader `test_wiki_guide_serves_roll_log` test already pins the pattern. Adding per-guide tests on top would mean N tests for N guides; the allowlist case is fixed-N because every new slug needs explicit code in `_DOC_ALLOWLIST`.
+**Description (cont 3):** Why the "when NOT to apply" list. Without it, a literal reading of "every doc must be on the wiki" would force a wiki entry for every test file, every config file, every asset. The list names the major exclusions (tests, code, config, homebrew content, assets, the archived changelog) so a contributor with a literal-rule mindset doesn't churn the wiki with non-doc files. The decision rule is "would a contributor want to find this from the wiki landing page?" — that's the test for what counts as a doc.
+**Description (cont 4):** Verification. CLAUDE.md is already in `_DOC_ALLOWLIST` (slug `claude`) per v2.49.9, so the rule applies to itself — and the rule says "check if the doc is already reachable; if yes, ship the edit alone." It is reachable. The edit ships alone without any other wiki touches. Self-consistent. Full regression: harness suite unchanged (280 tests still pass). Doc-only commit.
+
+### Added
+- `CLAUDE.md` — new "Every doc must be surfaced through the wiki" section.
+
+### Notes
+- **Backward compat.** Doc-only.
+- **Self-applying.** CLAUDE.md is itself a wiki-surfaced doc (slug `claude`) — already reachable, no new wiki entries needed for this commit.
+- **Naming convention codified.** Plan slugs follow `plan-<kebab>`, reference doc slugs are bare (`endpoint-catalog`, `test-harness-coverage`), guide slugs match their filename (`first-run-setup`, `running-a-session-as-gm`).
+
+---
+
 ## [2.49.68] - 2026-05-22
 
 **Schema version:** 56

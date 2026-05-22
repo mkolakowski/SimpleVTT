@@ -101,6 +101,45 @@ asserts; it's expected to stay in sync with the suite. Bump the
 total-test-count line at the top after running
 `python3 -m pytest tests/harness/ -q` so the header tracks reality.
 
+## Every doc must be surfaced through the wiki
+
+The in-repo wiki at `/wiki` is the single discovery surface for every reader-facing document — operator guides, GM how-tos, design plans, reference cards, repo-root docs. When you **create or edit a document** under `docs/`, `docs/plans/`, `docs/wiki/`, or the repo-root doc set (`README.md` / `CHANGELOG.md` / `CLAUDE.md` / `CREDITS.md` / `TODO.md` / `CHANGELOG_v*.md`), check that the doc is reachable through the wiki nav. If it isn't, **add it in the same commit.**
+
+This rule exists because v2.49.59 shipped a ruler/range plan that lived on disk for seven commits before anyone noticed it wasn't reachable via `/wiki` (retro-fixed in v2.49.66). The fix is structural: tie the wiki-surfacing edits to the doc-write commit itself so no doc ever lands invisible.
+
+**The three places that need updates depend on doc type:**
+
+| Doc location | Allowlist (`app/routes/wiki_routes.py::_DOC_ALLOWLIST`) | Landing-page table (`app/templates/wiki.html`) | On-disk index (`docs/wiki/README.md`) |
+|---|---|---|---|
+| `docs/wiki/<slug>.{md,html}` | **Not required** — served by `/wiki/<slug>` directly, no allowlist needed. | Required — "Available guides" table. | Required — "Available guides" table. |
+| `docs/plans/<slug>.md` | Required — slug pattern `plan-<slug>` → `Path("docs") / "plans" / "<slug>.md"`. | Required — "Design plans" table. | Required — "Design plans" table. |
+| `docs/<slug>.md` (references) | Required — bare slug → `Path("docs") / "<slug>.md"`. | Required — "References" table. | Required — "References" table. |
+| Repo-root docs | Already in the allowlist (`readme`, `changelog`, `claude`, `credits`, `todo`, `changelog-v1`). | Already in "Repo documentation". | Already in "Repo documentation". | 
+
+**Plus the per-slug harness test:**
+
+Every entry added to `_DOC_ALLOWLIST` (the bottom three rows above) needs a smoke test in `tests/harness/test_wiki.py` modeled on `test_wiki_doc_serves_plan` / `test_wiki_doc_serves_ruler_plan` — asserts the slug returns 200, the body contains a recognizable substring from the doc's H1, and the wiki nav menu is injected. Plus add the new slug to `test_wiki_home_renders`'s landing-page assertion list so a future regression that removes the table row gets caught.
+
+**Quick decision tree:**
+
+```
+Am I editing a doc under docs/ or a repo-root doc?
+├── No  → rule doesn't apply.
+└── Yes → Is the doc already reachable via /wiki/...?
+          ├── Yes → ship the doc edit alone.
+          └── No  → in the SAME commit:
+                     1. Add the allowlist row (if applicable per the table above).
+                     2. Add the wiki.html landing-page table row.
+                     3. Add the docs/wiki/README.md table row.
+                     4. Add a per-slug test_wiki_doc_serves_<name> harness test
+                        (if applicable per the table above).
+                     5. Update the test_wiki_home_renders landing-page assertion.
+```
+
+**Status text for new entries.** The landing-page table and `docs/wiki/README.md` both have a Status column. Use the same vocabulary as the existing rows — `✅ shipped`, `🟠 partial`, `⚪ proposed`, `⚪ design only · Phase N unstarted` — so the index reads consistently. Update the status as the underlying work moves through phases.
+
+**When NOT to apply.** Files that aren't reader-facing documents: test files (`tests/`), code (`app/`), config (`docker-compose.yml`, `pytest.ini`, `.env.example`), the homebrew JSON content layer, asset files (images, fonts, demo media), the changelog archive (`CHANGELOG_v1.md` is already surfaced). If you're not sure whether a file is a "doc," ask — the rule of thumb is "would a contributor want to find this from the wiki landing page?" If yes, surface it. If no, skip it.
+
 ## Third-party APIs must be Docker Compose services
 
 When integrating any external API or data service, add it as a named service in
