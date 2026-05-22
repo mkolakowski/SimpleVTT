@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 335 (as of v2.49.84, 2026-05-22).
+**Total tests:** 339 (as of v2.49.85, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -251,6 +251,16 @@ v2.49.61 — closes the "wake-on-damage" filed item from v2.49.58. RAW Sleep wak
 | `test_wake_on_damage_npc` | Bandit pre-seeded with Sleep-Unconscious buff; Krieger attacks (auto_apply_damage on) → latest `battle_update` shows bandit's Unconscious dropped + 🌅 wake log fires. |
 | `test_wake_on_damage_pc` | Magnus pre-seeded with Sleep-Unconscious buff; Krieger attacks → Unconscious dropped from BOTH hub and sheet mirror + 🌅 wake log names Magnus. |
 | `test_non_sleep_unconscious_preserved` | Bandit pre-seeded with a generic Unconscious buff (no `source_spell == "Sleep"`); Krieger attacks → buff preserved (regression guard against over-broad clearing). |
+
+### `test_attack_multi_target.py`
+v2.49.85 — `/attack` accepts `target_combatant_ids: list` in addition to `target_combatant_id`. Each list entry gets its own fresh attack + damage roll (RAW weapon attacks per-target). Per-target outcomes return in `auto_attack_targets`. Closes the v2.49.79 TODO's server side.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_attack_legacy_single_target_emits_one_entry` | Legacy `target_combatant_id` still works; `auto_attack_targets` has 1 entry mirroring the legacy fields. |
+| `test_attack_multi_target_fresh_rolls` | 3-entry list → 3 fresh per-target attack rolls + damage rolls. |
+| `test_attack_multi_target_auto_apply_damage` | With `auto_apply_damage` on, each hit target's HP drops by its per-target damage_applied. |
+| `test_attack_no_target_yields_empty_list` | Untargeted attack → `auto_attack_targets: []`. |
 
 ### `test_ruler_broadcast.py`
 v2.49.84 — Phase 3E of the ruler/range plan. `POST /api/campaign/{cid}/ruler_broadcast` fans out the requester's ruler measurement to every connected campaign client. Auth: any campaign member. Server does no persistence; broadcast-only.

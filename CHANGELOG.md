@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.85] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **`/attack` accepts a multi-target list — server side of the v2.49.79 targeting-button TODO.** New body field `target_combatant_ids: list` in addition to the existing `target_combatant_id` singular. The PRIMARY target (first entry) rides through the existing single-target code path so the legacy response/broadcast fields carry its outcome for backward compat. Each additional target gets its own fresh attack roll + damage roll (RAW: weapon attacks are per-target, not single-roll-spread-N-ways). Per-target outcomes return in a new `auto_attack_targets: list[dict]` array on both the HTTP response and the `weapon_attack` WS broadcast. Auto-uplifts (Hex / Hunter's Mark / Colossus Slayer) intentionally apply only to the primary target — those are target-bound mechanics; spreading their +1d6 across unrelated enemies would be RAW-wrong (filed for follow-up). 4 new harness tests + 31 existing attack tests unchanged. PATCH.
+**Description:** Three edits. **(1)** `app/routes/tabletop_routes.py::use_attack` — body parsing now extracts `target_combatant_ids` list in addition to the singular. If the list is non-empty, its first entry populates `target_combatant_id` for the existing code path; if only the singular is set, the list becomes `[singular]` for the new code path. Either way the two stay in sync. **(2)** Multi-target loop inserted right after the existing primary-target damage-application block: collects the primary target's outcome (mirroring the legacy fields exactly), then iterates `target_combatant_ids_in[1:]` for additional targets. Per iteration: fresh d20 attack roll using the same to-hit expression (same bonus, same roll_state, same Rage advantage — those are caster + weapon properties, not target properties), fresh damage roll with crit-doubling if applicable, hit determination via `_read_target_ac`, auto-apply if campaign flag is on. Per-target outcome dict captures attack_total + breakdown + is_crit + hit + target_ac + damage_total + breakdown + damage_applied + hp_before/after + resistance/dying/dead flags. **(3)** Broadcast payload + HTTP response both get the new `auto_attack_targets` field; existing fields unchanged. **(4)** `tests/harness/test_attack_multi_target.py` (NEW, 4 tests).
+**Description (cont):** Why per-target fresh rolls rather than one roll spread N ways. RAW: D&D 5e weapon attacks are per-target. The Fighter with Extra Attack who swings at two enemies rolls two d20s + two damage dice — not one roll applied to both. Reusing the same attack_total across multiple targets would be RAW-wrong and would mean a high d20 either always hits all targets or always misses all — too binary. Per-target rolls match Magic Missile-style "spread" mechanics ONLY when each missile gets its own roll; SimpleVTT's existing /cast_spell handles that case for spells. /attack is for weapons; fresh rolls are correct.
+**Description (cont 2):** Why the primary-target outcome rides the legacy fields. Backward compat. The existing chat-card rendering (in `tabletop.js::renderSpellCast` and friends) reads `attack_total`, `hit`, `damage_applied`, etc. directly from the broadcast. If we'd moved those to live ONLY in `auto_attack_targets[0]`, every single-target attack rendered today would suddenly stop working until the client was updated. The dual-write keeps existing clients happy + lets new clients consume the structured list. Same pattern as `/cast_spell`'s `auto_save_targets` introduction in v2.44.0.
+**Description (cont 3):** Why auto-uplifts (Hex / Hunter's Mark / Colossus Slayer) only apply to the primary target. Those mechanics are TARGET-BOUND. Hex is "the marked creature" — a single creature the caster designated. Hunter's Mark is similar. Colossus Slayer fires once per turn on a creature below max HP. None of them have a "applies to all attacks against all targets this turn" semantic in RAW. For multi-target attacks the safe behavior is to apply the uplift only to the target the buff was bound to (the primary one in our model). Per-target uplift detection would require checking each target's buffs vs the attacker's marks — possible but invasive (the v2.20.0 helper assumes a single target). Filed for follow-up.
+**Description (cont 4):** Why the multi-target loop uses `attack_id` from the primary attack for damage logging. The `_apply_damage_to_combatant` helper stamps `_attack_damage_log[attack_id]` so the chat card's Undo button can revert damage. With multi-target, all per-target applications share the same `attack_id`. That means Undo currently reverts the LAST applied target's damage only (the log is keyed by attack_id, not (attack_id, target_id)). For v1 of multi-target attacks, "Undo" works for single-target and is best-effort for multi-target. Filed: multi-target Undo with per-target log keys.
+**Description (cont 5):** Why no range check on the additional targets. The Phase 2D range check fires once with the PRIMARY target. For multi-target, each subsequent target might be at a different distance — but the range check would need to fire per-target. Not implemented in this commit since the range check is opt-out via `override_range` anyway + the GM/strict gates already handle the common case. Filed: per-target range check for multi-target weapon attacks.
+**Description (cont 6):** Verification. Pre-commit ran the new test against the pre-loop code: 1 failed (multi-target returned only the primary outcome, no list). Post-loop: all 4 new + 31 existing attack tests pass. Full regression: 339 harness tests pass (was 335, +4 new). Container rebuilt to v2.49.85.
+
+### Added
+- `app/routes/tabletop_routes.py::use_attack` — `target_combatant_ids` body parameter + per-target attack/damage loop + `auto_attack_targets` response/broadcast field.
+- `tests/harness/test_attack_multi_target.py` — 4 tests.
+- `docs/test-harness-coverage.md` — catalog entry; total 335 → 339.
+
+### Notes
+- **Backward compat.** Single-target attacks unchanged: legacy fields populated, new `auto_attack_targets` carries 1 entry mirroring those.
+- **Server side of TODO done.** Client wiring (`_targeting.tokenIds.size > 1` → pass list) + mobile picker modal are the next two commits.
+
+### Filed
+- **Per-target uplift detection for multi-target attacks** — extend `_compute_attack_auto_uplifts` to consider each target's buffs.
+- **Multi-target Undo with per-target log keys** — currently the Undo button reverts only the last target's damage.
+- **Per-target range check** — Phase 2D range check fires only on the primary target; multi-target should check each one.
+
+---
+
 ## [2.49.84] - 2026-05-22
 
 **Schema version:** 56

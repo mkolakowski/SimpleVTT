@@ -14092,6 +14092,23 @@ async def use_attack(
     # uplifts that need to know the target (Hunter's Mark / Hex match,
     # Colossus Slayer below-max-HP check).
     target_combatant_id = (body.get("target_combatant_id") or "").strip() or None
+    # v2.49.85 — multi-target attack list. Each entry gets its own
+    # fresh attack roll + damage roll (RAW weapon attacks per-target),
+    # and per-target outcomes are returned in ``auto_attack_targets``.
+    # The first entry rides through the existing single-target path
+    # (so the legacy ``target_combatant_id``, ``hit``, ``damage_applied``
+    # fields carry the primary target's outcome for backward compat).
+    # Empty / single-entry list = unchanged behavior.
+    target_combatant_ids_in = body.get("target_combatant_ids") or []
+    if not isinstance(target_combatant_ids_in, list):
+        target_combatant_ids_in = []
+    target_combatant_ids_in = [
+        str(x).strip() for x in target_combatant_ids_in if str(x).strip()
+    ]
+    if target_combatant_ids_in and not target_combatant_id:
+        target_combatant_id = target_combatant_ids_in[0]
+    elif target_combatant_id and not target_combatant_ids_in:
+        target_combatant_ids_in = [target_combatant_id]
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -14403,6 +14420,143 @@ async def use_attack(
             target_dying = apply_result["is_dying"]
             target_dead = apply_result["is_dead"]
 
+    # v2.49.85 — multi-target loop. The PRIMARY target (target #0) was
+    # just resolved above; collect its outcome here, then iterate the
+    # remaining targets with FRESH attack + damage rolls per RAW (each
+    # weapon attack is a separate to-hit + damage roll, not a single
+    # roll spread across multiple enemies). Auto-uplifts (Hex /
+    # Hunter's Mark / Colossus Slayer) intentionally apply only to the
+    # primary target — those are target-bound mechanics; spreading a
+    # Hexed-target's +1d6 across unrelated enemies would be RAW-wrong.
+    # Filed: per-target uplift detection for multi-target attacks.
+    auto_attack_targets: list[dict] = []
+    if not is_save and target_combatant_ids_in:
+        # Primary target entry.
+        if target_combatant:
+            auto_attack_targets.append({
+                "combatant_id": target_combatant_id or "",
+                "target_name": _lookup_combatant_name(campaign_id, target_combatant_id) if target_combatant_id else "",
+                "attack_total": attack_total,
+                "attack_breakdown": attack_breakdown,
+                "is_crit": is_crit,
+                "hit": hit,
+                "target_ac": target_ac,
+                "damage_total": damage_total,
+                "damage_breakdown": damage_breakdown,
+                "damage_applied": damage_applied,
+                "damage_type": damage_type,
+                "target_hp_before": target_hp_before,
+                "target_hp_after": target_hp_after,
+                "target_resistance_applied": target_resistance_applied,
+                "target_dying": target_dying,
+                "target_dead": target_dead,
+            })
+        # Additional targets — fresh rolls + damage application each.
+        for extra_tid in target_combatant_ids_in[1:]:
+            extra_combatant = _lookup_combatant(campaign_id, extra_tid)
+            if not extra_combatant:
+                continue
+            # Fresh attack roll using the same to-hit expression as the
+            # primary attack (same bonus, same roll_state, same Rage
+            # advantage — those are properties of the attacker + weapon,
+            # not the target).
+            extra_atk_total: int | None = None
+            extra_atk_breakdown = ""
+            if attack_bonus_raw:
+                _bonus = attack_bonus_raw if attack_bonus_raw.startswith(("+", "-"))\
+                    or any(c.isalpha() for c in attack_bonus_raw)\
+                    else "+" + attack_bonus_raw
+                _atk_expr = "1d20" + (_bonus if _bonus.startswith(("+", "-")) else "+" + _bonus)
+                _atk_expr, _ = _apply_roll_state(
+                    _atk_expr, (char.sheet or {}).get("roll_state"),
+                )
+                if rage_advantage and "kh1" not in _atk_expr and "kl1" not in _atk_expr:
+                    _atk_expr = _atk_expr.replace("1d20", "2d20kh1", 1)
+                try:
+                    _r = dice_mod.roll(_atk_expr)
+                    extra_atk_total = _r.total
+                    extra_atk_breakdown = _r.breakdown
+                except dice_mod.DiceParseError:
+                    extra_atk_total = None
+            else:
+                _atk_expr, _ = _apply_roll_state(
+                    "1d20", (char.sheet or {}).get("roll_state"),
+                )
+                if rage_advantage and "kh1" not in _atk_expr and "kl1" not in _atk_expr:
+                    _atk_expr = _atk_expr.replace("1d20", "2d20kh1", 1)
+                try:
+                    _r = dice_mod.roll(_atk_expr)
+                    extra_atk_total = _r.total
+                    extra_atk_breakdown = _r.breakdown
+                except dice_mod.DiceParseError:
+                    extra_atk_total = None
+            # Crit detection from this attack's d20.
+            extra_is_crit = False
+            if extra_atk_breakdown:
+                import re as _re_crit_extra
+                _m = _re_crit_extra.search(
+                    r"\d*d20[^d=+ ]*=(\d+)", extra_atk_breakdown, _re_crit_extra.IGNORECASE,
+                )
+                if _m and int(_m.group(1)) == 20:
+                    extra_is_crit = True
+            # Fresh damage roll (with crit-doubling if applicable).
+            extra_dmg_total: int | None = None
+            extra_dmg_breakdown = ""
+            if damage_expr_raw:
+                _dmg_expr = (
+                    _double_dice_for_crit(damage_expr_raw) if extra_is_crit
+                    else damage_expr_raw
+                )
+                try:
+                    _dr = dice_mod.roll(_dmg_expr)
+                    extra_dmg_total = _dr.total
+                    extra_dmg_breakdown = _dr.breakdown
+                except dice_mod.DiceParseError:
+                    extra_dmg_total = None
+            # Hit determination + auto-apply damage.
+            extra_ac = _read_target_ac(db, campaign_id, extra_combatant)
+            extra_hit = bool(extra_is_crit or (extra_atk_total is not None and extra_atk_total >= extra_ac))
+            extra_applied = 0
+            extra_hp_before = None
+            extra_hp_after = None
+            extra_resistance = False
+            extra_dying = False
+            extra_dead = False
+            if (
+                extra_hit
+                and bool(campaign.auto_apply_damage)
+                and (extra_dmg_total or 0) > 0
+            ):
+                _ar = await _apply_damage_to_combatant(
+                    db, campaign_id, extra_combatant,
+                    int(extra_dmg_total or 0), damage_type,
+                    is_crit=extra_is_crit, attack_id=attack_id,
+                )
+                extra_applied = _ar["applied"]
+                extra_hp_before = _ar["hp_before"]
+                extra_hp_after = _ar["hp_after"]
+                extra_resistance = _ar["resistance_applied"]
+                extra_dying = _ar["is_dying"]
+                extra_dead = _ar["is_dead"]
+            auto_attack_targets.append({
+                "combatant_id": extra_combatant.get("id") or extra_tid,
+                "target_name": extra_combatant.get("name") or "",
+                "attack_total": extra_atk_total,
+                "attack_breakdown": extra_atk_breakdown,
+                "is_crit": extra_is_crit,
+                "hit": extra_hit,
+                "target_ac": extra_ac,
+                "damage_total": extra_dmg_total,
+                "damage_breakdown": extra_dmg_breakdown,
+                "damage_applied": extra_applied,
+                "damage_type": damage_type,
+                "target_hp_before": extra_hp_before,
+                "target_hp_after": extra_hp_after,
+                "target_resistance_applied": extra_resistance,
+                "target_dying": extra_dying,
+                "target_dead": extra_dead,
+            })
+
     # Resolve caster display info
     membership = (
         db.query(CampaignMembership)
@@ -14485,6 +14639,12 @@ async def use_attack(
         "roll_state_applied": attack_roll_state_applied or None,
         "over_budget": was_used,
         "over_budget_slot": "action" if was_used else "",
+        # v2.49.85 — per-target outcomes for multi-target attacks.
+        # Empty list for single-target attacks (the legacy fields above
+        # carry the only target's outcome). For 2+ targets, the first
+        # entry mirrors the legacy fields and additional entries
+        # describe each subsequent target's fresh attack + damage roll.
+        "auto_attack_targets": auto_attack_targets,
     }
     await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
     # v2.5.5: full-sheet → init chip sync. Weapon attacks always burn the
@@ -14529,6 +14689,9 @@ async def use_attack(
         "save_dc": save_dc if is_save else 0,
         "roll_state_applied": attack_roll_state_applied or None,
         "over_budget": was_used,
+        # v2.49.85 — echo the per-target outcomes so the rolling player's
+        # local toast can render the multi-target summary without WS lag.
+        "auto_attack_targets": auto_attack_targets,
     }
 
 
