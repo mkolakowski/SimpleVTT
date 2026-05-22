@@ -1641,18 +1641,18 @@
         </div>
         {% endif %}
 
-        <!-- ── Initiative Tracker ── -->
-        <details id="initiative-panel" class="gm-panel" open>
-            <summary>
-                <span class="init-panel-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
-                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚔ Initiative</h4>
-                <span id="battle-round-label" style="margin-left:auto;font-size:10px;color:var(--fg-mute);flex-shrink:0;">Not started</span>
-            </summary>
-            <div class="gm-panel-body">
-                <div id="battle-banner" class="battle-banner" style="display:none;"></div>
-                <div id="initiative-list"></div>
-            </div>
-        </details>
+        {# v2.49.102 — Initiative summary + details wrapper removed
+           per user request. The battle banner + init list now sit
+           directly in the drawer-body as siblings of the GM Controls
+           card, so they share the same width (no .gm-panel-body
+           side-padding subtraction). The renderBattle JS still
+           updates ``#battle-round-label`` if found via getElementById
+           (line :5106 region) — the element is gone now, but the
+           ``if (roundEl)`` guard makes the missing lookup harmless.
+           Dead CSS for #initiative-panel + .init-panel-chevron kept
+           in place for easy restore. #}
+        <div id="battle-banner" class="battle-banner" style="display:none;"></div>
+        <div id="initiative-list"></div>
 
         {# Standalone #player-dice-panel removed in 2.1.6 — the Dice Roller #}
         {# card attached to the roll log (#roll-form) is the single dice UI. #}

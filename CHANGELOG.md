@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.102] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **"⚔ Initiative" summary header removed and the entire `<details>` wrapper dropped — battle banner + init list now sit directly in the drawer-body, matching the GM Controls card's width.** Two coupled user-requested tweaks. (1) The init entries used to live inside `.gm-panel-body { padding: 8px 8px 12px }` which made them ~16 px narrower than the GM Controls card above; the user wants both to be the same width. (2) The "⚔ Initiative" header section (chevron + label + "Round N" badge) was redundant — the contents below are obviously the initiative list, the GM Controls card directly above makes the Battle context clear, and there's no longer a meaningful collapse use case once the wrapper card was flattened in v2.49.97. Removing the `<details>` element entirely fixes both at once: the inner `<div id="battle-banner">` and `<div id="initiative-list">` become direct children of `.drawer-body`, same width as the GM Controls card. The renderBattle JS still tries to update `#battle-round-label` (the element that was inside the summary) via `getElementById` — that returns null now and the `if (roundEl)` guard at `tabletop.html:5123` makes the missing lookup harmless. The dead CSS for `#initiative-panel` / `.init-panel-chevron` at `:1119–1196` is intentionally left in place so a future commit can restore the wrapper with no CSS re-add.
+**Description:** One file edit in `app/templates/tabletop.html`. Replaced the `<details id="initiative-panel" class="gm-panel" open>` block (including the `<summary>` with the chevron + ⚔ Initiative h4 + round label, plus the wrapping `<div class="gm-panel-body">`) with just the two inner divs — `<div id="battle-banner" class="battle-banner" style="display:none;"></div>` and `<div id="initiative-list"></div>`. Both are now sibling children of `.drawer-body`, sitting below the v2.49.98-hoisted GM Controls card.
+**Description (cont):** Why the round label removal is fine. The renderBattle JS at `tabletop.html:5106` reads `document.getElementById('battle-round-label')` and updates it to `"Round N"` / `"Not started"` based on `battle.active`. With the summary gone, `getElementById` returns null. The very next line (`:5123`) guards the update with `if (roundEl) { ... }` so the null-lookup branch is silently skipped. The same combat state is conveyed via the v2.4.31 `#battle-banner` ("▶ {name}'s turn" when active) which still renders above the init list; the explicit round count was nice-to-have, not load-bearing. If a future commit wants the round count back, it can append `· Round ${round}` to the banner text — small change.
+**Description (cont 2):** Why init entries now align with GM Controls. Pre-v2.49.102 layout was: `.drawer-body > <details id="initiative-panel"> > .gm-panel-body > .init-entry`, with `.gm-panel-body` adding 8 px side padding. The GM Controls card was: `.drawer-body > <div ...GM Controls...>`, with the card's left/right edges flush against the drawer-body's inner edge. Result: init entries were 16 px narrower than GM Controls. Post-v2.49.102: `.drawer-body > .init-entry` (no wrapper, no padding subtraction), so init entries fill the same width.
+**Description (cont 3):** Why the dead CSS rules stay. Lines 1119, 1124, 1133–1148, 1193–1196 reference `#initiative-panel` / `.init-panel-chevron` selectors that no longer match anything. Removing them would be hygiene, but the cost is risk: if a future commit re-adds the details wrapper (e.g. to bring back the collapsible header), those rules need to come back too. Leaving them in keeps the diff small + reversible.
+**Description (cont 4):** What stays unchanged. The .init-entry's own styling (border, background, shadow, margin-bottom — all matched to .roll-card in v2.49.99) is untouched. The .mini-header inline-chips layout (v2.49.96 → v2.49.101) is untouched. The .init-row simple player-view card is untouched. The GM Controls card above the init list is untouched. The renderBattle full-rebuild path is unchanged except for the silently-skipped roundEl update.
+**Description (cont 5):** Test coverage. Pure HTML + Jinja edit; the 5 Playwright tests in `tests/harness_ui/` (canvas pan / drag / chat multi-target) still pass — none touched the initiative wrapper. Manual verification path: open the Battle tab, confirm the GM Controls card sits above and the init entries below are the same horizontal width; spawn an encounter, confirm the battle banner shows "▶ {name}'s turn" but no separate "⚔ Initiative" header card.
+**Description (cont 6):** Verification. Curl `/version` confirms v2.49.102 live. Existing harness tests green.
+
+### Changed
+- `app/templates/tabletop.html` — removed the `<details id="initiative-panel" class="gm-panel" open><summary>...</summary><div class="gm-panel-body">...</div></details>` wrapper. The inner `<div id="battle-banner">` and `<div id="initiative-list">` are now direct children of `.drawer-body`.
+
+### Notes
+- **Backward compat.** No data shape, endpoint, broadcast, or schema change. renderBattle's `roundEl` lookup is harmlessly null now.
+- **Round indicator gone.** The "Not started" / "Round N" text that lived in the removed summary is no longer rendered. The `#battle-banner` "▶ {name}'s turn" message still conveys active combat state.
+- **Visual change.** Init entries now align horizontally with the GM Controls card; the "⚔ Initiative" header card is gone.
+
+### Filed
+- **Restore round indicator if needed.** If the round count is missed, append `· Round ${round}` to the `#battle-banner` text in renderBattle (line ~5131). Trivial change.
+- **`#initiative-panel` / `.init-panel-chevron` CSS cleanup.** Dead rules at lines 1119, 1124, 1133–1148, 1193–1196 are now orphaned. Safe to delete in a future hygiene pass.
+
+---
+
 ## [2.49.101] - 2026-05-22
 
 **Schema version:** 56
