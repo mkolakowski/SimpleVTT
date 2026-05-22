@@ -5112,6 +5112,15 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // Phase B will read its effects to apply damage /
                     // advantage / resistance at roll time.
                     const isRage = featureKey === 'rage';
+                    // v2.49.113: Monk Ki spend-options route to their
+                    // dedicated endpoints introduced in v2.49.112. Both
+                    // install a self-buff via `_install_buff`, decrement
+                    // the Ki counter, and mark the bonus slot. Step of
+                    // the Wind needs an extra mode parameter (disengage
+                    // vs dash); the picker is a simple confirm dialog
+                    // since the two modes are exclusive RAW.
+                    const isPatientDefense = featureKey === 'patient-defense';
+                    const isStepOfTheWind = featureKey === 'step-of-the-wind';
 
                     // Resolve the cutting-words target via the picker
                     // BEFORE building the fetch closure. Awaiting the
@@ -5157,10 +5166,28 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         }
                     }
 
+                    // v2.49.113: Step of the Wind needs a Disengage /
+                    // Dash mode pick. ``confirm()`` returns true for
+                    // Disengage (the more common pick — avoid OAs) and
+                    // false for Dash. A future commit can replace the
+                    // native confirm with a styled modal picker.
+                    let sotwMode = null;
+                    if (isStepOfTheWind) {
+                        const pickDisengage = window.confirm(
+                            '💨 Step of the Wind — pick a mode\n\n' +
+                            'OK = Disengage (no opportunity attacks this turn)\n' +
+                            'Cancel = Dash (movement doubled this turn)\n\n' +
+                            '(Both: jump distance doubled; costs 1 ki; bonus action.)'
+                        );
+                        sotwMode = pickDisengage ? 'disengage' : 'dash';
+                    }
+
                     const endpoint = isCuttingWords ? 'use_cutting_words'
                                    : isSecondWind ? 'use_second_wind'
                                    : isActionSurge ? 'use_action_surge'
                                    : isRage ? 'use_rage'
+                                   : isPatientDefense ? 'use_patient_defense'
+                                   : isStepOfTheWind ? 'use_step_of_the_wind'
                                    : 'use_feature';
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
                         method: 'POST',
@@ -5178,6 +5205,13 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 character_id: MY_CHAR_ID,
                             } : isRage ? {
                                 character_id: MY_CHAR_ID,
+                                override: !!override,
+                            } : isPatientDefense ? {
+                                character_id: MY_CHAR_ID,
+                                override: !!override,
+                            } : isStepOfTheWind ? {
+                                character_id: MY_CHAR_ID,
+                                mode: sotwMode,
                                 override: !!override,
                             } : {
                                 character_id: MY_CHAR_ID,

@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.113] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Sheet-side action buttons for Patient Defense + Step of the Wind route to the v2.49.112 endpoints.** Closes the first filed follow-up from v2.49.112. Kael's class-features block was already rendering buttons for both Ki spend-options (the feature entries have lived in his demo sheet since v2.18.0); pre-v2.49.113 those buttons routed through the generic `/use_feature` endpoint which decremented Ki + announced but did NOT install the new buffs the v2.49.112 endpoints add. v2.49.113 wires the click handler in `sheet_dnd5e.html` to dispatch to `/use_patient_defense` and `/use_step_of_the_wind` based on the feature key, with a `confirm()` dialog for Step of the Wind's Disengage-vs-Dash mode pick. Mirrors the existing Cutting Words / Second Wind / Action Surge / Rage dispatch pattern in the same handler. Pure client-side wiring — no endpoint, broadcast, or schema change.
+**Description:** One file edit in `app/templates/sheet_dnd5e.html::_bindUseButtons`. (1) Two new boolean dispatch flags — `isPatientDefense = featureKey === 'patient-defense'` and `isStepOfTheWind = featureKey === 'step-of-the-wind'`. (2) Before the fetch closure, when `isStepOfTheWind` a native `window.confirm()` prompts the player to pick Disengage (OK) or Dash (Cancel); the chosen mode is captured into `sotwMode` and passed in the body. (3) The `endpoint` ternary gains two new branches routing to `use_patient_defense` and `use_step_of_the_wind`. (4) The body-builder ternary mirrors the dispatch — both endpoints take `{character_id, override?}` plus `mode` for SotW.
+**Description (cont):** Why a native `confirm()` for the mode pick. The existing target-picker (`window.showTargetPicker`) modal in this template is for combatant-selection — overkill for a binary RAW-choice. A future commit could replace the `confirm()` with a styled inline button-pair on the feature row ("[💨 Disengage] [💨 Dash]") if user feedback wants a nicer UI. The `confirm()` works on every platform (desktop / iPad / iPhone) without additional CSS or focus-management code.
+**Description (cont 2):** What changes in-play. Before v2.49.113, clicking Patient Defense on Kael's sheet fired `/use_feature` → decremented Ki, announced "Patient Defense" in the roll log, marked the bonus slot. NO buff was installed — the v2.49.112 buff machinery (`patient-defense` buff with `effects.dodging` / `advantage_on: ["dex_save"]`) was unreachable from the sheet. After v2.49.113, clicking the same button fires `/use_patient_defense` → all of the above PLUS installs the Dodging buff on Kael's init-tracker combatant for 1 round. Same shape for Step of the Wind with the mode pick.
+**Description (cont 3):** Why the existing `_FEATURE_ECONOMY` entries kept working before this commit. The `_FEATURE_ECONOMY` dict at `tabletop_routes.py:185` + `dnd5e_feature_economy.js:197` had curated entries for `patient-defense` and `step-of-the-wind` (slot: "bonus", desc strings) since the original demo seed shipped them in v2.18.0. The generic `/use_feature` endpoint reads those entries for the slot validation + the roll-log card text. v2.49.112 added the new dedicated endpoints alongside; v2.49.113 finally wires the sheet click to ROUTE to them. The pattern matches Rage (curated since v2.6.0, dedicated `/use_rage` endpoint added v2.19.0, sheet dispatch added v2.19.0 in the same commit).
+**Description (cont 4):** Test coverage. No new tests in this commit. The existing 7 harness tests in `test_use_patient_defense.py` + `test_use_step_of_the_wind.py` already exercise the endpoints end-to-end. A Playwright UI test that opens Kael's sheet + clicks the Patient Defense button + asserts the buff lands would be ideal but adds another async/sync mix that the existing harness setup doesn't love (see the wiki / harness-ui split documented in v2.49.103). Filed as a separate UI smoke test for a future commit. Manual verification path: open Kael's sheet, click Patient Defense → counter ticks Ki -1, init tracker shows the 🛡 buff chip; click Step of the Wind → confirm dialog appears, pick Disengage, observe 💨 disengage buff on the chip strip.
+**Description (cont 5):** Verification. (a) `pytest tests/harness/test_use_patient_defense.py tests/harness/test_use_step_of_the_wind.py -v` — 7/7 pass (verifies the endpoints still respond correctly after the rebuild). (b) `pytest tests/harness_ui/test_smoke.py -v` — 2/2 pass (verifies Pip + Tavik sheets still load without JS errors after the sheet-template edit). (c) Curl `/version` confirms v2.49.113 live.
+
+### Added
+- `app/templates/sheet_dnd5e.html::_bindUseButtons` — dispatch branches for `patient-defense` and `step-of-the-wind` feature keys; native `confirm()` mode pick for Step of the Wind.
+
+### Notes
+- **Backward compat.** Sheet-side only; no endpoint or broadcast change. Other class-feature buttons (Rage, Stunning Strike, Open Hand Technique, Cutting Words, etc.) keep their existing dispatch unchanged.
+- **Native confirm() for SotW mode.** Works on every platform; styled inline picker filed for a future commit if user feedback wants a nicer UI.
+
+### Filed
+- **Styled inline SotW mode picker** — replace `confirm()` with a "[💨 Disengage] [💨 Dash]" button pair on the feature row.
+- **Playwright UI smoke test** — open Kael's sheet, click Patient Defense, assert the buff lands. Defers until the wiki / harness-ui async-sync split is resolved.
+- **Phase B effect integration** (still filed from v2.49.112) — attack-roll path reads `dodging` on target's buffs to grant disadvantage; movement tracker reads `disengage` to suppress OAs + `dash` to double the per-turn budget.
+
+---
+
 ## [2.49.112] - 2026-05-22
 
 **Schema version:** 56
