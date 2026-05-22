@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.89] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Revert v2.49.88 — the iPad text-select fix broke map panning on both iPadOS and desktop.** User-reported regression: after v2.49.88 added `-webkit-user-select: none` / `user-select: none` / `-webkit-touch-callout: none` to `#vtt-canvas` + `.map-pane`, the original iPad text-select callout was NOT resolved AND a new bug surfaced: the map couldn't be panned on iPadOS OR desktop. Best guess: one of the new properties is interfering with the pan-related mousedown / pointerdown event delivery on the canvas — `user-select: none` shouldn't suppress click/pointer events per the spec, but Safari and some Chromium versions have known quirks where it interacts with pointer-events when stacked alongside `touch-action: none`. Revert restores the panning. Investigation deferred — the iPad text-select issue needs a different approach (likely a JS-level event handler intercepting the gesturestart / pointerdown events rather than CSS). Doc-only revert; PATCH.
+**Description:** Two edits — exact inverse of v2.49.88. **(1)** `app/templates/tabletop.html::.map-pane` — restored to the v2.49.87 state (only `touch-action: none`; dropped the three new properties). **(2)** `app/templates/tabletop.html::#vtt-canvas` — same, restored to v2.49.87.
+**Description (cont):** Why a revert instead of a patch-on-patch. The user is blocked from using the app on the v2.49.88 codepath; a quick revert restores function while we figure out the right fix. v2.49.88 was a 6-line addition; reverting is the smallest-blast-radius option. The iPad text-select issue stays open — it didn't actually get fixed by v2.49.88, so there's nothing to lose by reverting.
+**Description (cont 2):** What probably went wrong. Three plausible causes for the pan regression: (a) `-webkit-touch-callout: none` on the canvas blocks iOS's secondary-tap gesture (two-finger tap on trackpad → contextmenu event), which the pan handler depends on for right-click pan. (b) `user-select: none` on the map-pane disables pointer-capture in some browser versions when combined with `touch-action: none`. (c) Some interaction with the existing draggable-token event handlers that's masked at the OS level. Without an iPad in hand or a reproducible desktop case I can investigate, the revert is the conservative move.
+**Description (cont 3):** Filed for follow-up: iPad text-select on canvas drag is still open. Re-investigation should start by reading the actual mousedown / pointerdown / contextmenu event sequence on the iPad with the Magic Keyboard trackpad (use Safari Web Inspector → Events) to see what fires first when the player does a "click-drag" gesture, then write a JS event handler that calls `.preventDefault()` on the right event(s) rather than trying to suppress via CSS.
+
+### Fixed
+- Reverted v2.49.88's text-select CSS from `.map-pane` + `#vtt-canvas`. Map panning works again.
+
+### Notes
+- **Backward compat.** Restores v2.49.87 behavior exactly. iPad text-select issue is back open.
+
+### Filed
+- **iPad Magic Keyboard text-select on canvas drag** — re-open after v2.49.88's CSS approach broke panning. Next attempt should use JS event interception (preventDefault on the relevant pointerdown / touchstart) rather than CSS user-select rules.
+
+---
+
 ## [2.49.88] - 2026-05-22
 
 **Schema version:** 56
