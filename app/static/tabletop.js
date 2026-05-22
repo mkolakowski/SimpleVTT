@@ -2186,6 +2186,18 @@
     canvas.addEventListener('pointerdown', _handleRightClickPointer);
     mapPane.addEventListener('pointerdown', _handleRightClickPointer);
 
+    // v2.49.90 — block the iPadOS Magic Keyboard trackpad's text-
+    // selection / Live Text gesture on the canvas. CSS ``user-select:
+    // none`` was tried in v2.49.88 and reverted in v2.49.89 because it
+    // broke map panning on both iPad and desktop. ``selectstart`` is
+    // narrower: the browser fires it just before starting a text
+    // selection, and ``preventDefault()`` aborts that gesture only —
+    // pointer/touch/mouse events still deliver normally, so pan, drag,
+    // and right-click pan are unaffected.
+    function _blockSelectStart(ev) { ev.preventDefault(); }
+    mapPane.addEventListener('selectstart', _blockSelectStart);
+    canvas.addEventListener('selectstart', _blockSelectStart);
+
     // ---------- Drag handling ----------
     let dragging = null;     // { token, offsetX, offsetY }
     let panning = null;      // { startX, startY }

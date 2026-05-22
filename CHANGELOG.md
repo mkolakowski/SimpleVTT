@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.90] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Block the iPadOS Magic Keyboard text-select gesture via a JS `selectstart` handler.** Second attempt at the v2.49.88 issue. v2.49.88 tried CSS (`user-select: none` + `-webkit-touch-callout: none` on `#vtt-canvas` + `.map-pane`) and was reverted in v2.49.89 because it broke map panning on both iPad and desktop. This commit takes a more surgical approach: a JS `selectstart` event listener on `#vtt-canvas` and `.map-pane` that calls `preventDefault()`. The browser fires `selectstart` immediately before it starts a text-selection drag; preventing it cancels only the selection gesture, leaving every other event (mousedown, pointerdown, touchstart, contextmenu, wheel) to deliver normally. Pure JS, no CSS — so the v2.49.88 regression cannot recur. The token labels iOS Live Text was latching onto stay canvas-drawn (no DOM change); the gesture is simply aborted before iOS escalates it into a selection rect. Doc-only edit (one helper function + two `addEventListener` calls); no harness coverage because iPad-trackpad behavior can't be simulated by the HTTP+WS suite.
+**Description:** One file edit, in `app/static/tabletop.js` just after the existing right-click `pointerdown` listeners. Added a `_blockSelectStart(ev)` helper that calls `ev.preventDefault()`, then registered it on `selectstart` for both `mapPane` and `canvas`. Placed near the v2.21.2 / v2.47.2 iPad-trackpad block so future maintainers can see the full iPad-quirk handling cluster in one place.
+**Description (cont):** Why `selectstart` and not `user-select: none`. v2.49.88 demonstrated that the CSS approach has bad interactions with the existing `touch-action: none` + pan-handler stack — exactly which property is the culprit isn't pinned down (best guess from the v2.49.89 post-mortem: `-webkit-touch-callout: none` blocks iOS's secondary-tap → contextmenu pipeline that desktop right-click-pan depends on). The `selectstart` JS handler avoids ALL of that: it doesn't change layout, doesn't change pointer-events delivery, doesn't change touch-action semantics, doesn't change focus behavior. The browser fires `selectstart` synchronously before it commits to a selection; `preventDefault()` aborts that single gesture and only that gesture.
+**Description (cont 2):** Why on BOTH `mapPane` AND `canvas`. The selectstart event bubbles from the deepest target up to `document`. Registering on both adds belt + suspenders: even if the user's drag begins outside the canvas (e.g. on the gif-token-overlay, the presence-pill area, the map-bg-layer img) but inside `.map-pane`, the parent listener catches it. The two listeners are redundant in the common case but cheap (one function ref, two registrations).
+**Description (cont 3):** Why no harness test. The behavior is iOS-only and depends on actual hardware (Magic Keyboard trackpad on iPad Pro). The HTTP+WS harness can't simulate iPadOS gesture pipelines. Per CLAUDE.md the every-endpoint-needs-a-test rule covers HTTP endpoints / WS broadcast shapes — this commit adds neither, only changes client-side gesture handling. Manual verification is the validation path: user to confirm on their iPad Pro + Magic Keyboard that (a) the text-select callout no longer activates on token drag AND (b) map panning still works on both iPad and desktop.
+**Description (cont 4):** Verification. Static review: the change is a 10-line addition in a well-isolated region of `tabletop.js`. No other behaviors share the selectstart event path in this file. Existing harness suite (~339 tests) is unaffected because it's a pure-frontend change. User to verify the iPad behavior on hardware; if it still leaks through, the next attempt would intercept `dragstart` / `gesturestart` in similar fashion.
+
+### Fixed
+- `app/static/tabletop.js` — new `_blockSelectStart` helper + two `selectstart` listeners on `#vtt-canvas` + `.map-pane`. Blocks the iPad Magic Keyboard trackpad's text-selection / Live Text gesture without touching CSS or other event handlers.
+
+### Notes
+- **Backward compat.** Pure-additive client JS. Other browsers either don't fire `selectstart` (Firefox) or fire it harmlessly (Chrome / Safari desktop where there's no text to select on the canvas anyway). No CSS changes — the v2.49.88 regression that v2.49.89 reverted cannot recur.
+- **User-reported.** Magic Keyboard trackpad text-select activation on token drag, second attempt after v2.49.88 failed + v2.49.89 reverted.
+
+### Filed
+- **`dragstart` / `gesturestart` interception** — if `selectstart` alone doesn't fully suppress the iPad Live Text gesture on this hardware/iOS combo, the next attempt would call `preventDefault` on `dragstart` (HTML5 drag-and-drop) and `gesturestart` (iOS pinch/rotate). Both are non-overlapping with the existing mousedown / touchstart / pointerdown handlers. Defer until user confirms whether this commit closes the issue.
+
+---
+
 ## [2.49.89] - 2026-05-22
 
 **Schema version:** 56
