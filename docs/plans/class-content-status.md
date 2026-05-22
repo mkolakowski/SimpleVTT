@@ -32,6 +32,53 @@ its plan section here.
 > documents the specific commit(s) so future readers can trace the
 > work back to the changelog.
 
+> **Recent shipped work (v2.15.11 → v2.49.109):** Spans 34 patch
+> versions of incremental class-feature + system work. Highlights
+> material to this doc's status markers:
+> **Monk** — Stunning Strike endpoint + Lv5+ harness coverage
+> (v2.49.55: `/api/campaign/{cid}/use_stunning_strike`, paired CON
+> save broadcast, applies "stunned" condition buff via the Phase C
+> condition slot); Way of the Open Hand — Open Hand Technique
+> endpoint (v2.49.57: three picker modes — prone / disengage / lose
+> reaction — driven by a per-Flurry-of-Blows action button). Both
+> ship with harness tests + are mechanically wired end-to-end.
+> **Concentration system** — auto-save on damage (v2.49.48 corrected
+> the timing so concentration drops BEFORE the save when HP hits 0,
+> preventing lingering Hex / Hunter's Mark on unconscious casters);
+> incapacitating-buff caster drops their own concentration (v2.49.51);
+> GM audit-log entries for voluntary end-buff + swap-conc (v2.49.52,
+> v2.49.53, v2.49.54). **Sleep spell** — full mechanical
+> implementation (v2.49.58 HP-pool targeting + 20-ft radius sweep;
+> v2.49.61 wake-on-damage; v2.49.62 `/shake_awake` voluntary wake
+> action; v2.49.63 added to Bard/Sorcerer/Warlock spell lists;
+> v2.49.64 undead + charm-immune exclusion). Not a class feature but
+> material to the Wizard / Bard / Sorcerer / Warlock spell catalogs.
+> **Ruler / range enforcement** — Phases 1-3E all shipped (v2.49.71
+> through v2.49.84): client-side ruler tool, server-side range parser
+> + enforcement on `/cast_spell` and `/place_aoe`, hover rangefinder,
+> cast-button hover rings, multi-segment measuring, broadcast mode.
+> **Multi-target attacks** — `/attack` accepts `target_combatant_ids`
+> with per-target fresh rolls (v2.49.85-86); chat card fans out one
+> attack+damage toast chain per target (v2.49.93). Per-target uplift
+> detection (Hex / Hunter's Mark only on primary) is filed — needs
+> the v2.49.85 multi-target loop to call `_compute_attack_auto_uplifts`
+> per-target instead of once. **NPC resistance halving** — closed the
+> v2.49.107 damage-review finding that template `damage_resistances`
+> + combatant `buffs` were silently no-op'd (v2.49.109).
+> **Spell-validation suite** — plan landed v2.49.103 at
+> `docs/plans/spell-validation-suite.md`; Phase 2A v1 v2.49.108 with
+> `spell_catalog.py` loader + `spell_assert.py` damage range
+> assertion + Fire Bolt as the seed row. Save / multi-beam /
+> auto-hit follow-up commits will iterate the catalog.
+> **Player simulacrum** — plan landed v2.49.68 at
+> `docs/plans/player-simulacrum.md` (private per-player testing
+> tabletop); no code yet.
+> The test harness grew from 72 tests at v2.15.10 to **351 tests** in
+> `tests/harness/` + 7 in `tests/harness_ui/` at v2.49.109 — see
+> `docs/test-harness-coverage.md`. Status markers in the per-class
+> tables below have been spot-updated for the highlights above; a
+> comprehensive sweep across every class/subclass/feat row is filed.
+
 ## Status legend
 
 | Symbol | Meaning |
@@ -131,12 +178,12 @@ The `### Header` names below come from the `features` field of each JSON.
 | 1 | Martial Arts | 🟡 | |
 | 2 | Ki | 🟢 | Resource counter (`key: 'ki'`); spend-Ki options (Flurry / Patient / Step) not wired |
 | 2 | Unarmored Movement | ⚪ | |
-| 3 | Monastic Tradition | ✅ | Subclass system shipped — see Subclasses table. Way of the Open Hand has features JSON (Open Hand Technique / Wholeness of Body waiting on Ki spend-picker). |
+| 3 | Monastic Tradition | ✅ | Subclass system shipped — see Subclasses table. Way of the Open Hand: Open Hand Technique now mechanically wired (v2.49.57); Wholeness of Body still waiting on Ki spend-picker. |
 | 3 | Deflect Missiles | ⚪ | |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 4 | Slow Fall | ⚪ | |
 | 5 | Extra Attack | ✅ | RAW supported — click the attack button twice within your action; the action-economy chip is per-action so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed for the future. |
-| 5 | Stunning Strike | ⚪ | (Tied to Ki) |
+| 5 | Stunning Strike | ✅ | v2.49.55 — `/api/campaign/{cid}/use_stunning_strike` endpoint. After a hit with a melee weapon attack, spend 1 ki → target makes CON save against the monk's spell save DC (`8 + prof + WIS mod`); on fail, "stunned" condition applied via the Phase C condition slot until end of monk's next turn. First non-concentration incapacitating-condition buff. Harness coverage in `test_use_stunning_strike.py` including a PC integration case. |
 | 6 | Ki-Empowered Strikes | ⚪ | |
 | 7 | Evasion | ⚪ | |
 | 7 | Stillness of Mind | ⚪ | |
@@ -263,7 +310,7 @@ have features JSON.
 | Fighter | **Champion** | ✅ | n/a | 🟡 | Improved Critical / Remarkable Athlete — needs attack-roll intercept |
 | Fighter | Battle Master | ❌ | n/a | 🟢 | Superiority Dice counter exists |
 | Fighter | Eldritch Knight | ❌ | n/a | ⚪ | |
-| Monk | **Way of the Open Hand** | ✅ | n/a | 🟡 | Open Hand Technique / Wholeness of Body — needs Ki integration |
+| Monk | **Way of the Open Hand** | ✅ | n/a | 🟢 | Open Hand Technique shipped (v2.49.57: three picker modes — prone / disengage / lose reaction — per Flurry-of-Blows action). Wholeness of Body still waiting on the Ki spend-picker. |
 | Paladin | **Oath of Devotion** | ✅ | ✅ | 🟢 | **Sacred Weapon ✅** + **Turn the Unholy ✅** (v2.14.3 — both Channel Divinity options live under `channel-divinity.options` with `class:"paladin", subclass:"devotion"` tags; Caelan at Lv 5 is the demo test bed). Aura of Devotion (Lv 7) + Purity of Spirit (Lv 15) + Holy Nimbus (Lv 20) still descriptive. |
 | Paladin | Ancients / Vengeance / Conquest / Redemption / Glory / Watchers / Oathbreaker | ❌ | ✅ | 🟡 | Spell grants only |
 | Ranger | **Hunter** | ✅ | n/a | 🟡 | Hunter's Prey / Defensive Tactics / Multiattack descriptive |
@@ -1298,11 +1345,15 @@ as historical context — your call).
 - **Slow Fall (Lv 4)** — S. Reaction; reduce falling damage by 5 ×
   monk level. Same shape as Deflect Missiles' damage-intake intercept.
   Deps: (B), damage-take hook.
-- **Stunning Strike (Lv 5)** — M. After a hit with a melee weapon
-  attack, spend 1 ki; target makes CON save or stunned until end of
-  monk's next turn. Implementation: post-damage hook that prompts a
-  save broadcast + a "stunned" condition on the target. Deps: (B) for
-  the post-attack hook; (C) for the stunned condition tracking.
+- **Stunning Strike (Lv 5)** — ✅ **shipped v2.49.55**. After a hit
+  with a melee weapon attack, spend 1 ki; target makes CON save
+  against the monk's spell-save DC (`8 + prof + WIS mod`); on fail,
+  stunned until end of monk's next turn. Endpoint:
+  `/api/campaign/{cid}/use_stunning_strike`. Stunned condition applied
+  via the Phase C condition slot — the first non-concentration
+  incapacitating-condition buff to land. Harness:
+  `tests/harness/test_use_stunning_strike.py` including a PC
+  integration case.
 - **Ki-Empowered Strikes (Lv 6)** — S. Unarmed strikes count as magical
   for the purposes of bypassing resistance. Pure damage-type tag —
   attach `magical: true` to monk unarmed strikes at level 6. Deps: a
@@ -1602,9 +1653,14 @@ already shipped.
   Attack: prone on hit; Disarm: save vs disarm; etc.). Largest single
   subclass effort. Deps: (B), (C).
 - **Way of the Open Hand (Open Hand Technique / Wholeness of Body /
-  Tranquility / Quivering Palm)** — M. Open Hand Technique: per-Flurry
-  picker (prone / knockback / lose reaction). Wholeness of Body:
-  self-heal action. Tranquility: long-rest aura.
+  Tranquility / Quivering Palm)** — Open Hand Technique ✅ **shipped
+  v2.49.57** with three picker modes (prone / disengage / lose
+  reaction) driven by a per-Flurry-of-Blows action button at the
+  `/api/campaign/{cid}/use_open_hand_technique` endpoint. Wholeness
+  of Body / Tranquility / Quivering Palm still pending — Wholeness
+  of Body needs the Ki spend-picker (filed); Tranquility is a
+  long-rest aura buff; Quivering Palm is a high-level action with
+  delayed damage trigger.
 - **Oath of Devotion (Sacred Weapon / Turn the Unholy)** — S. Both are
   Channel Divinity options; add them to `_FEATURE_ECONOMY` under a
   `channel-divinity-paladin` key. Sacred Weapon adds CHA mod to attack
