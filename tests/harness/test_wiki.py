@@ -36,6 +36,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-ruler-and-range" in resp.text
     # v2.49.68: player simulacrum plan listed too.
     assert "/wiki/doc/plan-player-simulacrum" in resp.text
+    # v2.49.103: spell-validation suite plan listed too.
+    assert "/wiki/doc/plan-spell-validation-suite" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -123,6 +125,21 @@ async def test_wiki_doc_serves_ruler_plan():
     # The plan's H1 is "Ruler & Range Enforcement — Design Plan".
     assert "ruler" in resp.text.lower()
     assert "range" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_spell_validation_plan():
+    """v2.49.103: GET /wiki/doc/plan-spell-validation-suite — 200 +
+    body contains the plan's H1 + the nav menu. The route reads
+    ``docs/plans/spell-validation-suite.md`` via the _DOC_ALLOWLIST
+    mapping.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-spell-validation-suite")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # The plan's H1 contains "Spell-validation test suite".
+    assert "spell-validation" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

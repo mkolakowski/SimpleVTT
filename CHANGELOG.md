@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.103] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Plan for a spell-validation test suite + wiki surfacing per CLAUDE.md.** User-requested. Proposes a CI-gated test layer that iterates every spell JSON under `app/data/local/dnd5e/spells/` (319 SRD entries as of v2.49.102, plus future homebrew) and asserts a behavioural contract per mechanic: slot consumed at the right level, save DC matches the caster's spell save DC, damage matches the dice expression, applied buffs install with the right key + duration + effect, etc. Existing per-spell deep-dive tests (Sleep, Cure Wounds, Fireball, etc.) stay; the new layer is the catalog-iterating safety net for the ~294 spells without dedicated coverage today. Plan-only commit — no test code yet; the plan ships first so reviewers can poke at the phasing before the work lands. Surfaced through the wiki per CLAUDE.md: `_DOC_ALLOWLIST` entry, landing-page table row, on-disk index row, per-slug harness smoke test, and `test_wiki_home_renders` assertion update — all in this commit.
+**Description:** Six file edits. **(1)** `docs/plans/spell-validation-suite.md` (NEW, ~330 lines) — five-phase plan (Phase 0 inventory; Phase 1 smoke catalog; Phase 2 per-mechanic groups A–H damage/save/attack/heal/concentration/buff-install/AoE/range; Phase 3 buff-effect validation; Phase 4 bespoke complex-spell tests; Phase 5 CI integration + coverage gating). Mechanics + infrastructure list (`spell_catalog.py` + `spell_assert.py` helpers, conftest extensions, CI workflow job). Open questions (homebrew, multi-system, runtime, content-vs-engine debugging). Risk register. (2) `app/routes/wiki_routes.py::_DOC_ALLOWLIST` — new entry `plan-spell-validation-suite → docs/plans/spell-validation-suite.md`. (3) `app/templates/wiki.html` — new row in the "Design plans" table linking to `/wiki/doc/plan-spell-validation-suite` with `⚪ proposed · Phase 0–5 unstarted` status. (4) `docs/wiki/README.md` — same row in the on-disk index. (5) `tests/harness/test_wiki.py::test_wiki_home_renders` — new assertion that the landing page contains the new slug. (6) `tests/harness/test_wiki.py::test_wiki_doc_serves_spell_validation_plan` (NEW) — modelled on `test_wiki_doc_serves_ruler_plan`; asserts the slug returns 200, body contains "spell-validation", nav menu injected.
+**Description (cont):** Why a plan-only commit. The catalog suite implementation will be substantial (Phase 1 alone touches ~300 spells + needs fixtures + a catalog loader + CI workflow changes). Shipping the plan first lets reviewers redirect the design before the implementation work locks in — the existing ruler/range + simulacrum plans followed the same pattern. The status line at the top tracks "⚪ proposed" until Phase 0 commits land.
+**Description (cont 2):** Why catalog iteration is the right architecture. The existing per-spell test files (test_cast_sleep.py, etc.) are great for edge-case stories but don't scale — 319 spells × ~5 mechanics each would be 1,500+ bespoke files. The plan uses pytest's parameterize-over-fixture pattern to iterate the JSON catalog and apply mechanic-specific assertions only where applicable. New spell JSON files automatically get covered without test edits. Spells with not-yet-implemented mechanics are `pytest.mark.skip(reason=...)` rather than silently passing — they show up in the report as known gaps.
+**Description (cont 3):** Why surface through the wiki now. The CLAUDE.md "every doc must be reachable via the wiki" rule is the trigger. The plan is a proposed-future-work doc; gating wiki visibility behind "must be implemented first" would mean readers can't see the proposed direction. Following the rule strictly here keeps the doc index navigable + lets the user (or any contributor) review + comment on the proposal.
+**Description (cont 4):** Test coverage for the plan doc itself. Per CLAUDE.md, each new `_DOC_ALLOWLIST` entry needs a per-slug smoke test. `test_wiki_doc_serves_spell_validation_plan` is the new test, modelled on the ruler-plan precedent. `test_wiki_home_renders` also gets a new assertion line for the landing-page link, so a future commit that accidentally removes the table row fails CI immediately.
+**Description (cont 5):** Verification. Curl `/version` confirms v2.49.103 live. The new wiki tests + existing wiki tests + the 5 UI Playwright tests all run as part of CI. Local verification: `pytest tests/harness/test_wiki.py -v` confirms the new doc serves; opening `/wiki` shows the new row in the design-plans table.
+
+### Added
+- `docs/plans/spell-validation-suite.md` (NEW) — five-phase plan for iterating + validating every spell JSON in the catalog.
+- `app/routes/wiki_routes.py::_DOC_ALLOWLIST` — new `plan-spell-validation-suite` slug mapping.
+- `app/templates/wiki.html` — new design-plans table row.
+- `docs/wiki/README.md` — same row in the on-disk index.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_spell_validation_plan` (NEW) — per-slug smoke test.
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — new assertion line for the landing-page link.
+
+### Notes
+- **Plan-only commit.** No test code added under `tests/harness/test_spell_catalog_*.py` yet — those land in Phase 0 → Phase 5 follow-ups.
+- **Status line.** "⚪ proposed · Phase 0–5 unstarted" — flips green per-phase as commits land.
+- **Wiki surfacing.** Per CLAUDE.md's "every doc must be reachable via the wiki" rule. Per-slug smoke test + landing-page assertion update gate the wiki integration.
+
+### Filed
+- **Phase 0 inventory** — sister doc `docs/plans/spell-validation-suite-inventory.md` tabulating each spell × mechanic flag. Lands as the Phase 0 commit.
+- **`spell_catalog.py` + `spell_assert.py` helpers** — the test infrastructure named in the plan's Mechanics section. Land before Phase 1.
+- **CI `spell-catalog` job** — workflow extension to run the catalog suite in parallel. Phase 5.
+
+---
+
 ## [2.49.102] - 2026-05-22
 
 **Schema version:** 56
