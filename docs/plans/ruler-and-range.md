@@ -19,6 +19,26 @@ The two features share the same underlying primitive: a **distance-between-two-c
 
 ---
 
+## Interface changes — at a glance
+
+Every UI delta this plan introduces, gathered in one place so a reviewer can scan what's new without reading the per-phase detail. Per-feature mockups live in the phase sections below.
+
+| # | Surface | Phase | Where | Change | State (default → active) |
+|---|---|---|---|---|---|
+| 1 | **📏 Ruler button** | 1 | New "canvas-tool" row above the existing drawer tab bar (`tabletop.html:~1216`) | Toggle button. Click → enter ruler mode. Shift-click → broadcast mode (GM demo). `R` hotkey duplicates the click. | Outlined ghost → filled `var(--accent)` + `aria-pressed="true"` |
+| 2 | **Ruler hint banner** | 1 | Top-center of the canvas viewport, ~24 px below the top edge | Translucent pill: "Click two points. Esc to cancel." Updates to "Click second point — Esc to cancel" after the first click. | Hidden → visible (300 ms fade) while `_rulerPicker.active` |
+| 3 | **Body cursor + click suspension** | 1 | `<body>` element via `.ruler-picker-active` CSS class | Crosshair cursor; map-drag + token-drag suppressed; AoE-picker mutex (only one mode active at a time). | None → crosshair |
+| 4 | **Ruler measurement overlay** | 1 | Canvas (new draw pass in `render()` after AoE preview) | Dashed line A → B + filled circle at A + open circle at B (or cursor before second click) + "45 ft" chip at the midpoint. | Hidden → drawn during measurement + 3 s after commit |
+| 5 | **Out-of-range cast-card banner** | 2 | Cast-card error pane (rendered when server returns 409 `out_of_range`) | Red banner: "Out of range. Counterspell reaches 60 ft. Bandit Captain is 95 ft away." with `[Cancel]` and `[⚠ Cast anyway (GM)]` buttons. The GM-override button is hidden for players in strict mode. | Hidden → visible only on 409 response |
+| 6 | **Range ring around caster** | 2 (D) | Canvas — new draw pass during cast-card hover OR while a spell button is hovered on the spell list | Translucent ring at the spell's range (e.g., 120 ft Fire Bolt = 24 grid cells radius) anchored at the caster's token center. Targets inside ring keep normal opacity; targets outside dimmed to 50 %. | Hidden → drawn on hover; removed on hover-out |
+| 7 | **Hover rangefinder line** | 3 (C, optional) | Canvas — only when a token is selected AND no other tool mode is active | Thin solid line from selected token to cursor + distance chip. Updates on every `mousemove`. | Hidden → drawn while a token is selected and cursor moves |
+| 8 | **Multi-segment ruler waypoints** | 3 (B/extension, optional) | Same overlay as #4 | Shift + R activates a mode where each click adds a waypoint; total distance updates at the midpoint of the last segment. Enter commits; Esc cancels. | Hidden → drawn while in multi-segment ruler mode |
+| 9 | **Broadcast-mode ruler ghost** | 3 (extension, optional) | Canvas (all clients) | Same overlay as #4 but rendered semi-transparent + tagged with the broadcaster's name. Lives until the broadcaster releases or 5 s after commit. | Hidden → drawn on every client when the broadcaster shift-clicks the button |
+
+> **Touch / mobile.** Every new surface has a no-keyboard equivalent: button taps replace the `R` hotkey, two finger taps replace the two clicks, long-press cancels (replacing Esc). The hint banner doubles as the discoverability vector for users who don't see the cursor change.
+
+---
+
 ## Constraints surfaced by the codebase survey
 
 The plan has to fit the existing system, not invent new infrastructure:
@@ -204,7 +224,68 @@ Each button is `min-width: 44px; min-height: 44px` per the touch-target rule. Th
 
 Body cursor: crosshair
 Body class: .ruler-picker-active (overrides hover-token-cursor)
-Hint banner: "Click second point — Esc to cancel"
+Hint banner: see mockup below
+```
+
+#### Mockup — hint banner
+
+```
+   Canvas top edge
+   ╔════════════════════════════════════════════════════════════╗
+   ║                                                            ║
+   ║      ┌─────────────────────────────────────────────────┐  ║
+   ║      │  📏 Click second point — Esc to cancel          │  ║  ← floating pill,
+   ║      └─────────────────────────────────────────────────┘  ║     centered, ~24 px from top
+   ║                                                            ║
+   ║                                                            ║
+   ║       (map content)                                        ║
+   ║                                                            ║
+
+   Background:   var(--bg-2) at 90 % alpha
+   Border:       1 px solid var(--accent)
+   Text:         var(--fg) — 14 px
+   Padding:      8px 16px
+   Border-radius: 999px (pill)
+   Position:     fixed, top: 24px, left: 50% transform: translateX(-50%)
+   Z-index:      2000 (above canvas overlays, below modals)
+   Fade-in:      300 ms ease on activate; 200 ms fade-out on cleanup.
+
+   Text variants by ruler state:
+     - 0 points clicked: "📏 Click two points. Esc to cancel."
+     - 1 point clicked:  "📏 Click second point — Esc to cancel."
+     - 2 points (committed, 3 s ghost): hint hides early.
+
+   Mobile: identical visual; long-press anywhere on the canvas to dismiss
+   if the player wants to cancel without finding a keyboard.
+```
+
+#### Mockup — toolbar button states
+
+```
+   Default (inactive):
+   ┌──────────────┐
+   │  📏 Ruler    │   border: 1 px solid var(--border)
+   └──────────────┘   bg: transparent, color: var(--fg)
+
+   Hover:
+   ┌──────────────┐
+   │  📏 Ruler    │   bg: var(--bg-2), color: var(--fg)
+   └──────────────┘
+
+   Active (ruler mode on):
+   ┌──────────────┐
+   │  📏 Ruler ◉  │   bg: var(--accent), color: var(--accent-fg)
+   └──────────────┘   aria-pressed="true"
+
+   Broadcasting (Shift-click activated):
+   ┌──────────────┐
+   │  📏 Ruler 📡 │   bg: var(--accent), badge: 📡 (cyan)
+   └──────────────┘   aria-pressed="true", title="Broadcasting to all clients"
+
+   Disabled (e.g. no active map):
+   ┌──────────────┐
+   │  📏 Ruler    │   opacity: 0.5, cursor: not-allowed
+   └──────────────┘   title="Ruler needs an active map"
 ```
 
 #### Hotkeys
@@ -326,6 +407,91 @@ These are per-endpoint, so one for `/cast_spell`, one for `/use_attack`, etc. Re
 - **Range rings on cast-button hover** (option D). When the player mouses over a spell button in the cast list, render a translucent ring around the caster's token at the spell's range. Requires the spell-range parser from Phase 2.
 - **Multi-segment ruler** (Shift + R). Same `_rulerPicker.addPoint()` but doesn't auto-commit after 2 points; commit on Enter. Useful for "what's the total path length around the corner?"
 - **Broadcast mode toggle** for GM-led range demos (Shift-click the Ruler button).
+
+#### Mockup — hover rangefinder
+
+When a token is selected (highlighted blue) AND the cursor is anywhere else on the map AND no other tool mode is active, draw a thin distance line from the selected token's center to the cursor:
+
+```
+   ┌──────────────────────────────────────┐
+   │                                      │
+   │   ┌─ selected token (blue ring)      │
+   │   ●                                  │
+   │    \                                 │
+   │     \─ ─ ─ ─ ┐                       │
+   │              │  35 ft                │
+   │              ●  ← cursor             │
+   │                                      │
+   └──────────────────────────────────────┘
+
+   Stroke:    1 px solid var(--fg-mute)   (thinner than the ruler tool's dashed line — passive cue, not a measurement commit)
+   Chip:      "35 ft" floating 12 px from cursor, anchored to mouse position
+   Suspended: while _rulerPicker.active OR _aoePicker.active (don't double-draw distance lines)
+   Suspended: while the player is dragging the token (movement breadcrumb already shows distance)
+```
+
+#### Mockup — range ring on cast-button hover
+
+When the cast-card or the inline spell list is open AND the player hovers a spell button, render a translucent ring around the caster's token at the spell's range. Out-of-range tokens dim to 50 %:
+
+```
+  Spell list panel              Map canvas
+
+  ┌─────────────────────┐       ┌────────────────────────────────────────┐
+  │ Spells              │       │                                        │
+  │                     │       │     ┌─ caster token                    │
+  │ [Fire Bolt]  ▶ hov  │ ────► │     ●                                  │
+  │   120 ft            │       │   ╱╱│╲╲                                │
+  │                     │       │ ╱╱  │  ╲╲                              │
+  │ [Magic Missile]     │       │╱    │    ╲                             │
+  │   120 ft            │       │     │     │ ← translucent ring, 24-cell│
+  │                     │       │     │     │   radius (= 120 ft / 5 ft) │
+  │ [Healing Word]      │       │╲    │    ╱                             │
+  │   60 ft             │       │ ╲╲  │  ╱╱                              │
+  │                     │       │   ╲╲│╱╱                                │
+  │                     │       │     ●           ●←dimmed (out of range)│
+  │                     │       │  bandit-1                              │
+  │                     │       │  (in range)         bandit-2           │
+  └─────────────────────┘       └────────────────────────────────────────┘
+
+  Ring fill:    rgba(74, 222, 128, 0.08)  (theme accent green @ 8 % alpha)
+  Ring stroke:  1 px dashed var(--accent)
+  Dimmed tokens: filter: brightness(0.5) opacity(0.5) — same effect as the
+                 out-of-init token style; non-confusable from "selectable but currently invalid"
+```
+
+#### Mockup — multi-segment ruler (Shift + R)
+
+```
+   Shift+R → cursor: crosshair, hint: "Click waypoints — Enter to commit, Esc to cancel"
+
+   ●─ ─ ─ ─ ●─ ─ ─ ─ ─ ─ ─ ●─ ─ ─ ─ ┐
+   A        wp1             wp2     │  ← live cursor with running total "85 ft"
+                                    ●
+
+   Segments rendered as separate dashed lines.
+   Each segment's length displayed at its midpoint.
+   Total at the end-of-path cursor chip.
+   Enter → freeze for 3 s then clear (matches single-segment behavior).
+```
+
+#### Mockup — broadcast mode (Shift-click the Ruler button)
+
+```
+   Toolbar:  [📏 Ruler ◉]   ← active + broadcasting (filled accent + 📡 satellite badge)
+
+   All connected clients see:
+
+   ●─ ─ ─ ─ ─ ─ ─ ─ ●  "45 ft (Demo GM)"
+   A                B
+
+   Same overlay as #4, but rendered semi-transparent (alpha 0.6) and tagged
+   with the broadcaster's display name in the chip.
+   Server emits a `ruler_active` WS broadcast on every addPoint() + a
+   `ruler_cleared` on cleanup. Clients render via a new `_remoteRulers`
+   map keyed by user_id; expired entries (5 s after the broadcaster's
+   commit) auto-drop.
+```
 
 ---
 

@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.67] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Beef up the ruler/range plan's UI mockups.** Closes the gap where the v2.49.59 plan called out interface changes per-phase but didn't gather them in one place a reviewer could scan, AND had no visuals for the Phase 3 options (hover rangefinder, range rings, multi-segment, broadcast mode). This commit adds a top-level "Interface changes — at a glance" 9-row summary table near the top of the plan, mockups for the hint banner + the toolbar button's five visual states (default / hover / active / broadcasting / disabled), and four new Phase 3 mockups (hover rangefinder line, range ring on cast-button hover, multi-segment ruler, broadcast-mode ghost). Plus an explicit touch/mobile note. Doc-only; no code or schema change. PATCH.
+**Description:** One file edited. **(1)** `docs/plans/ruler-and-range.md` — three additions: (a) new "Interface changes — at a glance" section right after Goal and before Constraints, listing all nine UI surfaces in a single table with Phase + State columns + a touch/mobile callout. (b) Two new Phase-1 mockups: the hint banner (positioning + theme tokens + text variants by ruler state) and the toolbar button's five visual states. (c) Four new Phase-3 mockups: hover rangefinder (line + chip stroke spec), range ring on cast-button hover (with dim-out-of-range-targets behavior), multi-segment ruler (waypoint + running total), broadcast-mode ghost (semi-transparent overlay + broadcaster name chip).
+**Description (cont):** Why a top-level summary table rather than relying on the per-phase mockups. The plan is ~400 lines now; a reviewer asking "what changes visually?" had to thread through three phases to assemble the picture. The summary table is the cheat sheet — every surface, every state transition, every phase in one scan. The per-phase mockups stay for the implementation-time reader who needs the pixel spec.
+**Description (cont 2):** Why mockups for the Phase 3 options even though they're explicitly optional. The user asked to "show the interface changes, if any" — meaning every potential surface should be illustrated so the reviewer can choose what to ship vs. defer with full context. Without the mockups, "range ring on cast-button hover" reads as a one-line abstract feature; with the mockup, the reviewer sees the specific behavior (translucent fill at 8 % alpha, dim out-of-range tokens to 50 %, anchor at caster center) and can decide whether the UX is worth Phase 3's complexity.
+**Description (cont 3):** Why the toolbar button has 5 states documented (default / hover / active / broadcasting / disabled). Each state carries different theme tokens + aria semantics + tooltip text. A "what does the button look like" answer that names one or two states would leave the implementer guessing at the rest. The states correspond to real interaction paths: default (page load) → hover (mouseover) → active (click) → broadcasting (shift-click) → disabled (no active map). Documenting all five protects against drift between the plan and the eventual CSS.
+**Description (cont 4):** Verification. Markdown rendered cleanly through the wiki at `GET /wiki/doc/plan-ruler-and-range` (re-verified via curl). No production code touched, no harness tests change. Full regression: 279 harness tests unchanged.
+
+### Changed
+- `docs/plans/ruler-and-range.md` — added "Interface changes — at a glance" summary table (9 rows + touch/mobile note), 2 new Phase-1 mockups (hint banner, toolbar button states), 4 new Phase-3 mockups (hover rangefinder, range ring, multi-segment ruler, broadcast-mode ghost).
+
+### Notes
+- **No code change.** Doc-only.
+- **Wiki entry untouched.** The plan is already surfaced at `/wiki/doc/plan-ruler-and-range` per v2.49.66 — only the file content updated.
+
+---
+
 ## [2.49.66] - 2026-05-22
 
 **Schema version:** 56
