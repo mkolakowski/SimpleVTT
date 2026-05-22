@@ -1026,6 +1026,103 @@ async def _remove_buff(
     return True
 
 
+# v2.49.61 — Sleep wake-on-damage hook. RAW (PHB Sleep): "each creature
+# affected by this spell falls unconscious until the spell ends, THE
+# SLEEPER TAKES DAMAGE, or someone uses an action to shake or slap the
+# sleeper awake." The damage pipeline calls this helper after applying
+# damage; if the target has an Unconscious buff with `source_spell ==
+# "Sleep"`, the buff is removed and a public 🌅 roll-log entry fires.
+# Scoped tightly to `source_spell == "Sleep"` so other Unconscious
+# sources (a future Power Word Knockout, etc.) aren't accidentally
+# cleared by stray damage. The dying-at-0-HP state lives on
+# `Character.sheet.death_saves`, NOT in a buff, so it's untouched.
+async def _wake_sleeping_on_damage(
+    campaign_id: int,
+    character_id: int | None,
+    combatant_id: str | None,
+    damage_applied: int,
+    *,
+    db: Session | None = None,
+) -> None:
+    """If damage > 0 lands on a target carrying a Sleep-sourced
+    Unconscious buff, remove the buff + emit a wake log.
+
+    No-op when ``damage_applied <= 0`` (resistance reduced to 0 → no
+    damage taken → no wake, RAW). No-op when the target has no
+    Unconscious buff or the buff was sourced by something other than
+    Sleep. Either ``character_id`` (PC) or ``combatant_id`` (NPC) is
+    required; PC takes precedence when both are set.
+    """
+    if damage_applied <= 0:
+        return
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return
+    target = None
+    for c in state.get("combatants") or []:
+        if character_id and c.get("char_id") == character_id:
+            target = c
+            break
+        if combatant_id and c.get("id") == combatant_id and not character_id:
+            target = c
+            break
+    if target is None:
+        return
+    buffs = list(target.get("buffs") or [])
+    sleep_keys = [
+        b.get("key") for b in buffs
+        if (b or {}).get("key") in ("unconscious", "asleep")
+        and (b or {}).get("source_spell") == "Sleep"
+    ]
+    if not sleep_keys:
+        return
+    if character_id:
+        # PC path: route through _remove_buff so the buff_update
+        # broadcast + paired-cleanup hook (no-op for concentration=
+        # False Sleep buffs) fire consistently.
+        for key in sleep_keys:
+            await _remove_buff(campaign_id, int(character_id), key)
+        # Keep the sheet mirror in sync — cast_sleep's install path
+        # mirrors via _mirror_buffs_to_sheet, so the removal should too.
+        if db is not None:
+            _mirror_buffs_to_sheet(
+                db, int(character_id),
+                _get_buffs(campaign_id, int(character_id)),
+            )
+    else:
+        # NPC path: mutate the combatant's buff list + broadcast
+        # battle_update with force_gm_sync (mirrors the v2.49.40 NPC
+        # HP-damage pattern in _apply_damage_to_combatant).
+        new_list = [
+            b for b in buffs
+            if not (
+                (b or {}).get("key") in ("unconscious", "asleep")
+                and (b or {}).get("source_spell") == "Sleep"
+            )
+        ]
+        target["buffs"] = new_list
+        hub.set_battle(campaign_id, state)
+        await hub.broadcast(campaign_id, {
+            "type": "battle_update",
+            "data": state,
+            "force_gm_sync": True,
+        })
+    # Public wake log.
+    target_name = target.get("name") or "Unknown"
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "—",
+            "total": 0,
+            "breakdown": "Damage wakes the sleeper — Sleep ends (RAW PHB Sleep)",
+            "note": f"🌅 {target_name} wakes — damaged",
+            "user_name": "GM log",
+            "char_name": target_name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+
 def _get_buffs(campaign_id: int, character_id: int) -> list[dict]:
     """Read helper: return the current buff list for a character (or
     empty list if no battle / not in init). Read-only — never mutates.
@@ -1336,6 +1433,8 @@ async def _apply_damage_to_combatant(
                 "source": "attack",
             },
         })
+        # v2.49.61: RAW Sleep — taking damage wakes the sleeper.
+        await _wake_sleeping_on_damage(campaign_id, char.id, None, applied, db=db)
         if attack_id:
             _attack_damage_log[attack_id] = {
                 "ts": _time.time(),
@@ -1388,6 +1487,8 @@ async def _apply_damage_to_combatant(
         "data": state,
         "force_gm_sync": True,
     })
+    # v2.49.61: RAW Sleep — taking damage wakes the sleeper.
+    await _wake_sleeping_on_damage(campaign_id, None, target.get("id"), applied)
     if attack_id:
         _attack_damage_log[attack_id] = {
             "ts": _time.time(),
@@ -9579,7 +9680,16 @@ def _resistance_halve(
     for b in (target_sheet or {}).get("_buffs_active") or []:
         if not isinstance(b, dict):
             continue
-        effects = b.get("effects") or {}
+        # v2.49.61: condition buffs (Paralyzed, Stunned, Unconscious-from-
+        # Sleep, etc.) carry `effects` as a STRING LIST describing the
+        # mechanical riders for UI display. Mechanical-effect buffs (Rage,
+        # Hex, Hunter's Mark) carry `effects` as a DICT with structured
+        # keys including `resistance_to`. The resistance check only
+        # applies to dict-shaped effects — string-list effects don't
+        # advertise damage resistance, so skip them.
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
         resists = [str(r).strip().lower() for r in (effects.get("resistance_to") or [])]
         if damage_type_l in resists:
             return damage_amount // 2, True
