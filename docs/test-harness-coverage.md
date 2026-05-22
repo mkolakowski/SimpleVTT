@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 351 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.109, 2026-05-22).
+**Total tests:** 358 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.112, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -536,6 +536,25 @@ v2.49.55 — Monk class feature `POST /use_stunning_strike`. Lv 5+ + ki >= 1 + a
 | `test_stunning_strike_wrong_class` | Krieger (Barbarian) → 409 `wrong_class` with `expected=monk`. |
 | `test_stunning_strike_no_ki` | Drain Kael's ki via repeated calls (response carries `ki_remaining`); when 0, next call → 409 `no_ki` with `available=0`. |
 | `test_stunning_strike_pc_drops_own_concentration` | v2.49.56 — closes the v2.49.55 filed item. Magnus casts Hex (concentration); Kael uses Stunning Strike on Magnus → roll_request; GM-as-Magnus /responds; on save fail assert (a) Stunned lands on Magnus, (b) Magnus's Hex drops via the v2.49.51 hook's `concentration: False` branch, (c) 💀 GM log naming "stunned" + "incapacitated" fires. Retry loop because the CON save is random. |
+
+### `test_use_patient_defense.py`
+v2.49.112 — Monk class feature `POST /use_patient_defense` (Lv 2+). Spend 1 ki as a bonus action to install Dodging (advantage on DEX saves; attackers have disadvantage). Self-buff, no target. Duration 1 round (until start of next turn).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_patient_defense_happy_path` | Kael at full ki → POST → 200, `remaining=4` (was 5), `buff_installed=True`. `buff_update` broadcast carries the `patient-defense` key with `concentration=False`, `effects.dodging=True`, `dex_save` in `advantage_on`. |
+| `test_patient_defense_wrong_class` | Krieger (Barbarian) → 409 `wrong_class` with `expected=monk`. |
+| `test_patient_defense_no_ki` | Drain Kael's ki to 0 via 5 successive override-bypassed calls; 6th call → 409 `no_ki` with `available=0`. |
+
+### `test_use_step_of_the_wind.py`
+v2.49.112 — Monk class feature `POST /use_step_of_the_wind` (Lv 2+). Spend 1 ki as a bonus action; takes `mode: "disengage" | "dash"`. Both install a 1-round self-buff with `jump_distance_doubled`; the disengage variant adds `effects.disengage=True`, the dash variant adds `effects.dash=True`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_step_of_the_wind_disengage_mode` | Kael, mode=disengage → 200, `remaining=4`, `buff_installed=True`. `buff_update` broadcast has `step-of-the-wind-disengage` key with `effects.disengage=True` + `effects.jump_distance_doubled=True`, `concentration=False`. |
+| `test_step_of_the_wind_dash_mode` | Kael, mode=dash → 200, `mode=dash` in response. `buff_update` broadcast has `step-of-the-wind-dash` key with `effects.dash=True` + `effects.jump_distance_doubled=True`. |
+| `test_step_of_the_wind_wrong_class` | Krieger → 409 `wrong_class`. |
+| `test_step_of_the_wind_invalid_mode` | mode="fly" → 400 with "mode" in the error body. |
 
 ### `test_use_open_hand_technique.py`
 v2.49.57 — Monk subclass feature `POST /use_open_hand_technique` (Way of the Open Hand, Lv 3+). Three modes: `prone` (DEX save → Prone via new `open-hand-prone` map entry), `push` (STR save → response carries `push_authorized` for the GM to drag the token; no buff), `no_reactions` (no save → inline install of `reaction-denied` buff). No ki cost — RAW the Flurry of Blows already paid. Same trust-the-caller convention as Stunning Strike for the "must follow a Flurry hit" gate.

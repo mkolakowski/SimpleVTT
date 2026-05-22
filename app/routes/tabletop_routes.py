@@ -11418,6 +11418,332 @@ async def use_open_hand_technique(
     }
 
 
+# ----------- API: Patient Defense (Monk Lv 2+ Ki spend-option) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_patient_defense")
+async def use_patient_defense(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Monk class feature (Lv 2+): spend 1 ki point as a bonus action
+    to take the Dodge action. Until the start of the monk's next turn,
+    any attack roll made against the monk with an attacker the monk
+    can see has disadvantage, and the monk makes DEX saves with
+    advantage.
+
+    Body: ``{character_id, override?}``. No target — self-buff.
+
+    Validates Monk Lv 2+ (409 ``level_too_low`` / ``wrong_class``),
+    ki resource has at least 1 use (409 ``no_ki``). Phase 4 over-budget
+    gate on the bonus slot per the Rage pattern (v2.49.112 follows
+    the Rage / Action Surge precedent for bonus-action validation).
+
+    Broadcasts:
+    - ``resource_update`` (ki counter decremented)
+    - ``buff_update`` (Dodging buff installed on the monk's combatant)
+    - ``feature_used`` (roll-log card with name + remaining ki)
+    - ``economy_update`` (bonus chip flipped) via _mark_battle_economy
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    # Class + level validation. Patient Defense unlocks at Monk Lv 2
+    # alongside Ki itself.
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "monk", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 2:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 2, "got": level,
+        })
+
+    # Ki resource lookup + spend.
+    resources = list(sheet.get("resources") or [])
+    ki_row = None
+    ki_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "ki":
+            ki_row = dict(r); ki_idx = i; break
+    if ki_row is None:
+        raise HTTPException(404, "No Ki resource on this sheet")
+    ki_cur = int(ki_row.get("current") or 0)
+    ki_max = int(ki_row.get("max") or 0)
+    if ki_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_ki", "available": ki_cur,
+        })
+
+    # Phase 4 over-budget gate (bonus slot).
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget", "slot": "bonus",
+            "char_name": char.name, "source": "patient-defense",
+            "label": "Patient Defense", "strict": strict,
+        })
+
+    # Spend the ki.
+    ki_row["current"] = ki_cur - 1
+    resources[ki_idx] = ki_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Install the Dodging buff on the monk's combatant. RAW lasts
+    # "until the start of your next turn" → 1 round. The (B) roll-time
+    # intercept reads ``dodging`` to grant disadvantage on attacks
+    # against this combatant + advantage on the combatant's DEX saves.
+    buff = {
+        "key": "patient-defense",
+        "name": "Patient Defense (Dodging)",
+        "icon": "🛡",
+        "source_caster_id": None,
+        "target_combatant_id": None,
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "effects": {
+            "dodging": True,
+            "advantage_on": ["dex_save"],
+            "incoming_attacks_have_disadvantage": True,
+        },
+        "desc": (
+            "Attackers have disadvantage against you (if you can see them); "
+            "advantage on DEX saves. Lasts until the start of your next turn."
+        ),
+    }
+    installed = await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    # Broadcasts.
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🛡 Patient Defense — Dodging",
+            "feature_desc": (
+                "Bonus action, 1 ki. Attackers have disadvantage; DEX saves "
+                "with advantage. Lasts until start of next turn."
+            ),
+            "source": "patient-defense",
+            "remaining": ki_cur - 1,
+            "max": ki_max,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "ki",
+            "current": ki_cur - 1, "max": ki_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "remaining": ki_cur - 1,
+        "max": ki_max,
+        "duration_rounds": 1,
+        "buff_installed": installed,
+    }
+
+
+# ----------- API: Step of the Wind (Monk Lv 2+ Ki spend-option) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_step_of_the_wind")
+async def use_step_of_the_wind(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Monk class feature (Lv 2+): spend 1 ki point as a bonus action
+    to take the Disengage OR Dash action; jump distance is doubled
+    for the turn.
+
+    Body: ``{character_id, mode: "disengage" | "dash", override?}``.
+    No target — self-buff. ``mode`` defaults to "disengage" if absent.
+
+    The two modes install differently-shaped buffs so the (B) roll-
+    time intercept + the movement-tracker code path can read the
+    right effect. Both share the same Ki cost + bonus-action slot.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    mode = (body.get("mode") or "disengage").strip().lower()
+    override = bool(body.get("override"))
+    if mode not in ("disengage", "dash"):
+        raise HTTPException(400, "mode must be 'disengage' or 'dash'")
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "monk", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 2:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 2, "got": level,
+        })
+
+    # Ki resource lookup + spend.
+    resources = list(sheet.get("resources") or [])
+    ki_row = None
+    ki_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "ki":
+            ki_row = dict(r); ki_idx = i; break
+    if ki_row is None:
+        raise HTTPException(404, "No Ki resource on this sheet")
+    ki_cur = int(ki_row.get("current") or 0)
+    ki_max = int(ki_row.get("max") or 0)
+    if ki_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_ki", "available": ki_cur,
+        })
+
+    # Phase 4 over-budget gate (bonus slot).
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget", "slot": "bonus",
+            "char_name": char.name, "source": "step-of-the-wind",
+            "label": "Step of the Wind", "strict": strict,
+        })
+
+    ki_row["current"] = ki_cur - 1
+    resources[ki_idx] = ki_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Mode-specific buff. Both share the doubled-jump rider; the
+    # action-equivalent (disengage vs dash) drives the (B) intercept
+    # + the movement-tracker code path. Duration is "rest of turn"
+    # which we encode as 1 round (auto-expires at next turn end).
+    if mode == "disengage":
+        buff_key = "step-of-the-wind-disengage"
+        buff_name = "Step of the Wind (Disengage)"
+        icon = "💨"
+        effects = {
+            "disengage": True,
+            "jump_distance_doubled": True,
+        }
+        desc = (
+            "Bonus action, 1 ki. Movement does not provoke opportunity "
+            "attacks this turn; jump distance is doubled."
+        )
+    else:  # dash
+        buff_key = "step-of-the-wind-dash"
+        buff_name = "Step of the Wind (Dash)"
+        icon = "💨"
+        effects = {
+            "dash": True,
+            "jump_distance_doubled": True,
+        }
+        desc = (
+            "Bonus action, 1 ki. Speed is doubled this turn; jump distance "
+            "is also doubled."
+        )
+
+    buff = {
+        "key": buff_key,
+        "name": buff_name,
+        "icon": icon,
+        "source_caster_id": None,
+        "target_combatant_id": None,
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "effects": effects,
+        "desc": desc,
+    }
+    installed = await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": f"{icon} Step of the Wind — {mode.capitalize()}",
+            "feature_desc": desc,
+            "source": "step-of-the-wind",
+            "remaining": ki_cur - 1,
+            "max": ki_max,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "ki",
+            "current": ki_cur - 1, "max": ki_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "mode": mode,
+        "remaining": ki_cur - 1,
+        "max": ki_max,
+        "duration_rounds": 1,
+        "buff_installed": installed,
+    }
+
+
 # ----------- API: End a buff manually (Phase C.1 manual removal) -----------
 
 @router.post("/api/campaign/{campaign_id}/end_buff")

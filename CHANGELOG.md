@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.112] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Two new Monk class-feature endpoints: Patient Defense + Step of the Wind, both Lv 2+ Ki spend-options.** First proposed-class-feature implementation kicked off after the v2.49.111 audit. Both endpoints extend the v2.49.55 (Stunning Strike) / v2.49.57 (Open Hand Technique) pattern: validate class+level, validate Ki resource, Phase 4 over-budget gate on the bonus slot, decrement Ki, install a self-buff via `_install_buff`, broadcast `feature_used` + `resource_update` + `buff_update`, return JSON with `remaining` / `max` / `buff_installed`. The Monk class table's "Ki" row advances from 🟢 (counter wired, spend-options not) to 🟢 (counter wired, 2 of 3 spend-options now functional; Flurry of Blows filed). 7 new harness tests, all passing.
+**Description:** Three new files + supporting edits. **(1)** `app/routes/tabletop_routes.py::use_patient_defense` (NEW endpoint, ~150 lines) — body `{character_id, override?}`. Validates Monk Lv 2+, ki ≥ 1, Phase 4 bonus-slot over-budget gate. Decrements ki. Installs the `patient-defense` buff (key=patient-defense, name="Patient Defense (Dodging)", icon=🛡, duration=1 round, concentration=False) on the monk's combatant. The buff's `effects` dict carries `dodging: True` + `advantage_on: ["dex_save"]` + `incoming_attacks_have_disadvantage: True` — read by the Phase B roll-time intercept on attack rolls against the monk (filed for full integration). Broadcasts `feature_used` (roll-log card with name + remaining ki + over-budget flag) + `resource_update` (ki counter) + `buff_update` (via `_install_buff`). (2) `app/routes/tabletop_routes.py::use_step_of_the_wind` (NEW endpoint, ~160 lines) — body `{character_id, mode: "disengage" | "dash", override?}`. Same gate stack as Patient Defense. The mode parameter dispatches to one of two buff shapes: `step-of-the-wind-disengage` (effects.disengage=True) or `step-of-the-wind-dash` (effects.dash=True), both with `jump_distance_doubled: True` per RAW. Same broadcast set as Patient Defense; response carries `mode` so the chat-card client can label the right variant. Mode defaults to "disengage" if absent; "fly" or any other string returns 400.
+**Description (cont):** Two new test files. (3) `tests/harness/test_use_patient_defense.py` (NEW, 3 tests) — happy path (200 + ki -1 + buff installed via `buff_update` broadcast), wrong_class (Krieger → 409 wrong_class), no_ki (drain ki to 0 → 409 no_ki). (4) `tests/harness/test_use_step_of_the_wind.py` (NEW, 4 tests) — disengage happy path, dash happy path, wrong_class, invalid mode → 400. Both files use Kael Brightleaf (the demo Monk Lv 5) as the test subject; `gm_ws.mark()` is called before each POST to flush the seed-battle broadcast so the `buff_update` we assert on is the post-POST one.
+**Description (cont 2):** Why these two together. Patient Defense + Step of the Wind are the two simplest Ki spend-options in RAW — both bonus-action, both 1 ki, both self-buff with no target, no save, no damage roll. The endpoint scaffolding is essentially the same shape; shipping them paired keeps the diff focused on the spend-Ki pattern + reuses the v2.49.55 / v2.49.57 Phase C condition-slot infrastructure without inventing new buff machinery. Flurry of Blows is the third spend-Ki option (filed) — it's bigger because it grants two unarmed attacks (extends the attack-economy chip logic) and is the trigger for Open Hand Technique (the existing v2.49.57 endpoint).
+**Description (cont 3):** Why the bonus-action over-budget test was deferred. The over-budget gate (`_is_slot_used` + the user_is_gm bypass) is a known-good pattern from Rage / Action Surge / Stunning Strike. Testing it requires a NON-GM-owned Monk so the gm-bypass doesn't auto-pass. The demo's only Monk (Kael Brightleaf) is GM-owned. Filed under "harness Phase 1.5 test-fixture characters" so a future commit can add a non-GM Monk fixture and pin the gate exhaustively. Inline comment in `test_use_patient_defense.py` documents the deferred test + the rationale.
+**Description (cont 4):** Phase B roll-time intercept follow-up. The `effects.dodging` flag is read by a future Phase B integration: when an attack roll targets a combatant whose `_buffs_active` includes a dodging-tagged buff, the attacker rolls with disadvantage. That integration is a separate commit — Patient Defense's buff installs correctly and renders on the init-tracker chip strip, but the actual attack-roll-flow modifier needs the `_compute_attack_auto_uplifts` helper at line 9809 to read the `dodging` flag on the target's buffs. Same applies to `effects.disengage` (which would suppress opportunity attacks via a movement-tracker hook) and `effects.dash` (which would double the per-turn movement budget). Filed as separate Phase B follow-ups.
+**Description (cont 5):** Doc updates. `docs/plans/class-content-status.md` — the Monk Ki row (Lv 2) notes now name both new endpoints with their commit ref. The class table's status marker stays 🟢 because Flurry of Blows is still un-wired; flipping to ✅ waits for that work. `docs/test-harness-coverage.md` — new "test_use_patient_defense.py" and "test_use_step_of_the_wind.py" subsections under Class Features with per-test assertion summaries. Total harness count: 351 → 358 (7 new tests).
+**Description (cont 6):** Verification. (a) `pytest tests/harness/test_use_patient_defense.py tests/harness/test_use_step_of_the_wind.py -v` — 7/7 pass. (b) Regression check: `pytest tests/harness/test_use_stunning_strike.py test_use_open_hand_technique.py test_attack_buff_intercepts.py test_use_rage.py -q` — 29/29 pass, no regression in the existing buff-install + Monk-feature endpoints. (c) `curl /version` confirms v2.49.112 live. (d) Manual verification: open Kael's sheet, click the Ki resource +/- pill, observe two new action buttons would appear (filed for the sheet-side wiring — the endpoints are live but the sheet's Resources block doesn't yet have UI to call them).
+
+### Added
+- `app/routes/tabletop_routes.py::use_patient_defense` (NEW endpoint) — Monk Lv 2+ Ki spend-option: bonus action, 1 ki, install Dodging self-buff for 1 round.
+- `app/routes/tabletop_routes.py::use_step_of_the_wind` (NEW endpoint) — Monk Lv 2+ Ki spend-option: bonus action, 1 ki, install Disengage OR Dash self-buff (mode-dispatched).
+- `tests/harness/test_use_patient_defense.py` (NEW, 3 tests).
+- `tests/harness/test_use_step_of_the_wind.py` (NEW, 4 tests).
+- `docs/test-harness-coverage.md` — new test-file subsections under Class Features; total bumped 351 → 358.
+- `docs/plans/class-content-status.md` — Monk Ki row note updated with both endpoint refs.
+
+### Notes
+- **Backward compat.** Two new endpoints, no shape changes to existing routes. No schema / broadcast contract changes.
+- **Sheet UI wiring deferred.** The endpoints work end-to-end via direct POST; the character sheet's Resources block needs new action buttons to invoke them. Filed.
+- **Phase B effect integration deferred.** `effects.dodging` / `disengage` / `dash` install correctly on the buff list but aren't yet consumed by attack-roll / movement-tracker code paths. Filed.
+
+### Filed
+- **Sheet-side action buttons** for Patient Defense + Step of the Wind. Add a "🛡 Patient Defense" + "💨 Step of the Wind (Disengage/Dash picker)" pair to the Monk's Ki resource block, calling the new endpoints. Small commit.
+- **Phase B integration for Dodging.** Attack-roll path reads `dodging` flag on target's buffs → grants disadvantage. Mirrors the v2.31.0+ Hex / Hunter's Mark rider pattern.
+- **Phase B integration for Disengage / Dash.** Movement tracker reads `disengage` to suppress opportunity attacks, `dash` to double the per-turn budget. Both are read-only flag reads on the buff.
+- **Over-budget gate test for Patient Defense.** Needs a non-GM-owned Monk fixture (harness Phase 1.5).
+- **Flurry of Blows endpoint.** Third Ki spend-option; bigger scope (extra attacks + Open Hand Technique trigger).
+
+---
+
 ## [2.49.111] - 2026-05-22
 
 **Schema version:** 56

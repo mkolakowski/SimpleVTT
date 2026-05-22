@@ -198,7 +198,7 @@ The `### Header` names below come from the `features` field of each JSON.
 |---|---|---|---|
 | 1 | Unarmored Defense | 🟡 | |
 | 1 | Martial Arts | 🟡 | |
-| 2 | Ki | 🟢 | Resource counter (`key: 'ki'`); spend-Ki options (Flurry / Patient / Step) not wired |
+| 2 | Ki | 🟢 | Resource counter (`key: 'ki'`); Patient Defense ✅ + Step of the Wind ✅ shipped v2.49.112 (endpoints `/use_patient_defense` + `/use_step_of_the_wind`, both install short-duration self-buffs via the Phase C condition slot); Flurry of Blows is the third spend-option still unwired — filed. |
 | 2 | Unarmored Movement | ⚪ | |
 | 3 | Monastic Tradition | ✅ | Subclass system shipped — see Subclasses table. Way of the Open Hand: Open Hand Technique now mechanically wired (v2.49.57); Wholeness of Body still waiting on Ki spend-picker. |
 | 3 | Deflect Missiles | ⚪ | |
