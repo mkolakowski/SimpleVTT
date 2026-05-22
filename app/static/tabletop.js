@@ -1241,6 +1241,26 @@
         });
     }
 
+    // v2.49.81 — Phase 3B hover rangefinder. Tracks the canvas-space
+    // cursor whenever no tool mode (AoE picker, ruler picker) is
+    // active so the render-pass can draw a distance line from the
+    // currently-targeted token to the cursor. Set to null when the
+    // cursor leaves the canvas; cleared when a tool mode activates.
+    //
+    // v2.49.92 — MUST be declared BEFORE render() is defined (let
+    // hoisting doesn't apply to declarations BELOW the function body
+    // that closes over them). render() runs at IIFE startup
+    // (`render()` call further down) and reads ``_hoverCursor`` —
+    // putting the `let` declaration after that read trips the
+    // temporal-dead-zone "Cannot access '_hoverCursor' before
+    // initialization" ReferenceError and aborts the entire IIFE,
+    // which silently leaves the mousedown / mouseup / mousemove
+    // listeners + every ``window.vtt*`` global UNATTACHED. The
+    // user-reported pan/drag breakage from v2.49.81 onward was this
+    // bug; the new tests in tests/harness_ui/test_tabletop_canvas.py
+    // catch it.
+    let _hoverCursor = null;
+
     function render() {
         ctx.clearRect(0, 0, MAP_W, MAP_H);
         if (showGrid) {
@@ -2189,12 +2209,6 @@
     // ---------- Drag handling ----------
     let dragging = null;     // { token, offsetX, offsetY }
     let panning = null;      // { startX, startY }
-    // v2.49.81 — Phase 3B hover rangefinder. Tracks the canvas-space
-    // cursor whenever no tool mode (AoE picker, ruler picker) is
-    // active so the render-pass can draw a distance line from the
-    // currently-targeted token to the cursor. Set to null when the
-    // cursor leaves the canvas; cleared when a tool mode activates.
-    let _hoverCursor = null;
 
     function pointInToken(x, y, t) {
         const cx = t.x + gridSize / 2, cy = t.y + gridSize / 2;

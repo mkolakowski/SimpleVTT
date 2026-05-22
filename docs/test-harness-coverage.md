@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 339 (as of v2.49.85, 2026-05-22).
+**Total tests:** 339 in `tests/harness/` + 5 in `tests/harness_ui/` (as of v2.49.92, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -738,6 +738,30 @@ Field-presence assertions on the WS broadcasts that drive the roll-log cards + t
 | `test_feature_used_simple_broadcast_carries_all_required_fields` | Cunning Action: Dash; broadcast has header + `feature_desc` (server-side fallback). |
 | `test_second_wind_broadcast_carries_dice_and_heal_fields` | `/use_second_wind` broadcast has both the v2.35.0 `dice_*` fields (for the dice toast) AND the v2.43.0 `heal_*` fields (for the card's heal pill), and v2.43.12's `feature_desc` contains "rolled". |
 | `test_lay_on_hands_broadcast_carries_heal_fields` | `/use_lay_on_hands` broadcast has the heal pill fields. |
+
+---
+
+## Browser-level UI harness (`tests/harness_ui/`)
+
+The HTTP+WS suite at `tests/harness/` can't reach canvas event handlers, modal dialogs, or other DOM-level behavior. The Playwright suite at `tests/harness_ui/` covers those — it boots a real Chromium, navigates the demo as a logged-in user, and asserts on observable DOM / network state. Runs in CI under the `harness-ui` job.
+
+### `test_smoke.py`
+| Test | What it asserts |
+|------|-----------------|
+| `test_sheet_loads_for_pip` | Pip's standalone character sheet renders without console errors; `#attacks-fieldset` is visible. |
+| `test_sheet_loads_for_tavik` | Same smoke check for Tavik; `#resources-fieldset` also visible. |
+
+### `test_attack_toast.py`
+v2.7.3 regression catcher — the broadcast was correct but the toast never appeared in the DOM. See file for exact assertions.
+
+### `test_tabletop_canvas.py`
+v2.49.92 — canvas pan + drag regression suite. Built when the v2.49.81 `_hoverCursor` TDZ bug silently broke every canvas listener for 11 versions and no existing test could detect it. The suite is the gate for any future change that touches canvas event handlers, CSS on `.map-pane` / `#vtt-canvas`, or the tabletop's IIFE structure.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_tabletop_loads_without_js_errors` | `page.on("pageerror", ...)` collects exceptions during navigation to `/campaign/1`; assert list is empty after `window.vttGetCharacters` is defined. Would catch a TDZ / undeclared-variable / syntax error in tabletop.js. |
+| `test_right_click_drag_pans_canvas` | Drives a right-mouse drag inside the visible `.map-pane`; asserts `#vtt-canvas`'s `style.transform`'s translate(...) component shifted by > 20 px horizontally + > 10 px vertically. Would catch v2.49.88-class CSS regressions, v2.49.90-class JS event-pipeline regressions, OR the v2.49.81 IIFE-crash regression that broke pan silently. |
+| `test_left_click_drag_moves_token` | Resets a known token (Pip) to a fixed on-screen position via the `/token/{id}/move?override=true` REST API; drives a left-mouse drag on the canvas; asserts the token's persisted x/y mutated by at least one grid cell in the dragged direction. Would catch any regression that prevents the mousedown → POST `/token/{id}/move` chain from firing end-to-end. |
 
 ---
 
