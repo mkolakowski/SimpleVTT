@@ -11216,6 +11216,38 @@ async def use_open_hand_technique(
             "got": level,
         })
 
+    # v2.49.116 trigger gate. RAW: OHT must follow "a creature you hit
+    # with one of the attacks granted by your Flurry of Blows." The
+    # v2.49.114 ``flurry-of-blows-active`` buff carries the signal.
+    # If the caster doesn't have it active, reject — pre-v2.49.116 the
+    # endpoint trusted the caller and relied on the UI to only show
+    # the button after a Flurry hit, but that left the API open to
+    # direct callers (a future bot, an over-eager macro, a hostile
+    # client) using OHT without spending Ki on Flurry first.
+    # GM caster (owner of the Monk is the GM) and ``override`` body
+    # flag both bypass — the GM may legitimately need to drive an OHT
+    # for an NPC monk in a future content drop, and the override flag
+    # lets a player force the call if their Flurry buff was stripped
+    # by some interaction the engine doesn't yet model.
+    user_is_gm = _user_is_gm(user, campaign, db)
+    override_trigger = bool(body.get("override_trigger"))
+    if not user_is_gm and not override_trigger:
+        flurry_active = False
+        for b in _get_buffs(campaign_id, char.id):
+            if not isinstance(b, dict):
+                continue
+            if b.get("key") == "flurry-of-blows-active":
+                eff = b.get("effects") or {}
+                if eff.get("is_flurry") is True:
+                    flurry_active = True
+                    break
+        if not flurry_active:
+            return JSONResponse(status_code=409, content={
+                "error": "needs_flurry",
+                "label": "Open Hand Technique",
+                "hint": "RAW requires a Flurry of Blows hit first.",
+            })
+
     # Resolve target.
     target_combatant = (
         _lookup_combatant(campaign_id, target_combatant_id)

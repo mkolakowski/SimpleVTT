@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.116] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **OHT trigger gate — `/use_open_hand_technique` now requires the `flurry-of-blows-active` buff on the caster.** Closes the v2.49.114 filed item. RAW: "Whenever you hit a creature with one of the attacks granted by your Flurry of Blows, you can impose one of the following effects on that target." Pre-v2.49.116 the endpoint trusted the caller (same convention as `/use_stunning_strike`) and relied on the UI to only surface the OHT options after a Flurry hit. v2.49.116 adds a server-side check: scan the caster's buffs for a `flurry-of-blows-active` entry with `effects.is_flurry: True`. If absent, reject with 409 `needs_flurry`. Two escape hatches: (1) GM caster bypasses unconditionally (so future content drops where GM drives an NPC monk's OHT work), and (2) `override_trigger: True` in the body bypasses for players in edge cases where the buff was stripped by some unmodelled interaction. Existing 8 OHT harness tests still pass via the GM bypass — Kael (the demo Monk) is GM-owned. The fail-case test (non-GM Monk POSTs OHT without Flurry → 409) needs a non-GM Monk fixture from harness Phase 1.5; filed.
+**Description:** One file edit in `app/routes/tabletop_routes.py::use_open_hand_technique`. After the existing class / subclass / level validation block, added the trigger gate: walk `_get_buffs(campaign_id, char.id)` looking for any buff with `key == "flurry-of-blows-active"` and `effects.is_flurry is True`. If `not user_is_gm and not override_trigger and not flurry_active`, return 409 with `{"error": "needs_flurry", "label": "Open Hand Technique", "hint": "RAW requires a Flurry of Blows hit first."}`. Comment block explains the gm-bypass + override_trigger rationale.
+**Description (cont):** Why both escape hatches. (a) GM bypass is the same pattern as the v2.49.112/v2.49.114 Phase 4 over-budget gate — the GM driving an NPC monk needs to invoke OHT for an NPC turn, but NPC combatants don't have a sheet to install the Flurry buff onto. The buff machinery is char-id-keyed; NPC OHT would need its own path. Filed. (b) `override_trigger` lets a player force the call if their Flurry buff was stripped between the Flurry cast and the OHT call by some interaction the engine doesn't yet model (a buff-stripping spell, a future v2.49.51-style incapacitation hook expansion, etc.). Same pattern as the v2.49.55 `override_range` flag on Stunning Strike.
+**Description (cont 2):** Why `effects.is_flurry: True` and not just `key == "flurry-of-blows-active"`. Defensive: a future commit might add `flurry-of-blows-spent` (filed in v2.49.114 as the double-spend guard) which would share the prefix. Checking the `is_flurry` flag ensures we match only the ACTIVE-window buff, not a spent marker. Same prefix-vs-flag discipline used in `_target_has_dodging` (v2.49.115).
+**Description (cont 3):** Test coverage. No new tests in this commit. The existing 8 tests in `test_use_open_hand_technique.py` all use the GM client (Kael is GM-owned) and so bypass the gate unconditionally — they all still pass, proving the gate doesn't break the existing happy paths. The fail-case test ("non-GM Monk POSTs OHT without Flurry → 409 needs_flurry") requires a non-GM-owned Monk fixture, which the demo doesn't have (Kael is GM-only). Filed under the same Phase 1.5 harness item that gates Patient Defense's over-budget test (v2.49.112), Step of the Wind's over-budget test (v2.49.112), Flurry of Blows's over-budget test (v2.49.114), and now this. A future commit can add a Phase 1.5 non-GM Monk fixture and land all four gate fail-case tests at once.
+**Description (cont 4):** Verification. (a) `pytest tests/harness/test_use_open_hand_technique.py -q` — 8/8 pass via the GM bypass. (b) `curl /version` confirms v2.49.116 live. (c) Manual: as a non-GM player on a hypothetical non-GM Monk, click OHT without first hitting with Flurry → 409 toast surfaces.
+
+### Added
+- `app/routes/tabletop_routes.py::use_open_hand_technique` — trigger gate that requires `flurry-of-blows-active` (with `effects.is_flurry: True`) on the caster's buff list. GM caster + `override_trigger: True` body flag both bypass.
+
+### Notes
+- **Backward compat.** Existing 8 OHT harness tests pass via the GM bypass; the gate adds a new failure mode for non-GM callers who haven't first installed Flurry.
+- **No new tests.** The gate's fail-case path needs a non-GM Monk fixture (filed).
+
+### Filed
+- **Non-GM Monk fixture (harness Phase 1.5).** Required for the gate fail-case test for OHT v2.49.116 + the over-budget tests for Patient Defense (v2.49.112), Step of the Wind (v2.49.112), and Flurry of Blows (v2.49.114). One Phase 1.5 commit can land the fixture + all four tests.
+- **NPC OHT path.** GM bypass covers this today by routing all OHT calls through the override. A dedicated NPC OHT flow would install a `flurry-of-blows-active`-equivalent buff on the NPC combatant.
+
+---
+
 ## [2.49.115] - 2026-05-22
 
 **Schema version:** 56
