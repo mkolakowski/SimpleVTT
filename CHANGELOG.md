@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.66] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Surface the ruler/range design plan through the wiki.** The v2.49.59 plan doc at `docs/plans/ruler-and-range.md` has been on disk but invisible to anyone browsing `/wiki` — the design-plans table didn't list it, and the `_DOC_ALLOWLIST` mapping didn't expose its slug. This commit wires it through all three places per the wiki's "to surface a new plan" checklist: the allowlist gets a `plan-ruler-and-range → docs/plans/ruler-and-range.md` row, the wiki landing page's design-plans table gets a `⚪ design only · Phases 1 + 2 unstarted` row, and the on-disk `docs/wiki/README.md` index gets the same row. Plus a per-slug harness smoke test (`test_wiki_doc_serves_ruler_plan`) + an assertion in the landing-page test that the new slug appears. PATCH — additive doc-surfacing.
+**Description:** Five edits. **(1)** `app/routes/wiki_routes.py::_DOC_ALLOWLIST` — added `"plan-ruler-and-range": Path("docs") / "plans" / "ruler-and-range.md"`. **(2)** `app/templates/wiki.html` — added a row in the design-plans table between Encounter-sim and Autonomous click-through (alpha-ish ordering preserved). **(3)** `docs/wiki/README.md` — same row in the markdown design-plans table. **(4)** `tests/harness/test_wiki.py::test_wiki_doc_serves_ruler_plan` — new per-slug test asserting the slug renders 200, contains "ruler" + "range", and gets the nav menu injected (mirrors `test_wiki_doc_serves_plan` for the test-harness slug). **(5)** `tests/harness/test_wiki.py::test_wiki_home_renders` — added an assertion that `/wiki/doc/plan-ruler-and-range` appears in the landing-page HTML (catches a future regression where someone removes the table row).
+**Description (cont):** Why surface it now and not when the plan first landed in v2.49.59. The original commit shipped the plan file with the intent that the wiki would be the discovery surface — but the three-step "add to wiki" checklist (codified in `docs/wiki/README.md`) was missed because the plan-write task was scoped to writing the plan, not surfacing it. Closes the discovery gap without changing any plan content. Future plans should follow the same checklist as part of the plan-write commit.
+**Description (cont 2):** Why the status is "⚪ design only · Phases 1 + 2 unstarted" rather than something more granular. The status column is single-line tooltip-style text. The plan defines three phases (1: client ruler tool · 2: server range enforcement · 3: optional follow-ups). Phase 3 is explicitly marked optional in the plan so the status string only names Phases 1 + 2 as the load-bearing unstarted work. When either Phase ships, the row updates to e.g. "🟠 Phase 1 shipped · Phase 2 deferred".
+**Description (cont 3):** Verification. Pre-commit: GET /wiki/doc/plan-ruler-and-range returned 404 (slug not in allowlist). Post-commit + rebuild: the slug returns 200 + the rendered plan HTML + the wiki nav. All 10 existing wiki tests still pass; the new per-slug test passes. Full regression: 279 harness tests pass (was 278, +1 new test in test_wiki.py).
+
+### Added
+- `app/routes/wiki_routes.py::_DOC_ALLOWLIST` — new `plan-ruler-and-range` entry.
+- `app/templates/wiki.html` — new row in the design-plans table.
+- `docs/wiki/README.md` — new row in the design-plans table.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_ruler_plan` — per-slug smoke test.
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — added landing-page assertion for the new slug.
+- `docs/test-harness-coverage.md` — new row under `## Wiki`; total 278 → 279.
+
+### Notes
+- **Backward compat.** Pure additive. Existing wiki entries + routes untouched.
+- **Three-step checklist now followed in full.** Future plan-write commits should land all three updates atomically (allowlist + landing-table + README + nav-test) rather than splitting the write from the surfacing.
+
+---
+
 ## [2.49.65] - 2026-05-22
 
 **Schema version:** 56

@@ -32,6 +32,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-test-harness" in resp.text
     assert "/wiki/doc/changelog" in resp.text
     assert "/wiki/doc/roll-log-card-layout" in resp.text
+    # v2.49.66: ruler/range plan listed in the design-plans table.
+    assert "/wiki/doc/plan-ruler-and-range" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -91,6 +93,21 @@ async def test_wiki_doc_serves_plan():
     assert "text/html" in resp.headers.get("content-type", "")
     # The test-harness plan's H1 is "Autonomous click-through test harness — plan"
     assert "click-through" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_ruler_plan():
+    """v2.49.66: GET /wiki/doc/plan-ruler-and-range — 200 + body
+    contains the plan's H1 + the nav menu. The route reads
+    ``docs/plans/ruler-and-range.md`` via the _DOC_ALLOWLIST mapping.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-ruler-and-range")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # The plan's H1 is "Ruler & Range Enforcement — Design Plan".
+    assert "ruler" in resp.text.lower()
+    assert "range" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 
