@@ -18,6 +18,21 @@
 
 **Always create the git commit at the end of the change.** A version bump that isn't committed isn't actually a release — it's just an uncommitted working-tree edit that disappears on the next `git reset` or context loss. After finishing the changes for a version bump (code + version + README + CHANGELOG, plus the harness test required by the harness-discipline rule below), `git add` the affected files and `git commit` them as a single commit. The commit message should match the convention seen in `git log --oneline` — short subject line of the form `X.Y.Z — <one-line summary>`, body optional but encouraged for non-trivial changes. Do this even if the user didn't say "please commit" — the per-commit / per-bump rule above already implies a commit happens. If the change is mid-flight (broken tests, half-written feature) say so and don't bump the version yet rather than landing an uncommitted bump. **Never run more than one version bump without committing in between** — if you've bumped to `2.50.0` and want to also ship `2.50.1`, commit `2.50.0` first, then start the next change. The "one bump = one commit" rule is meaningless if multiple bumps stack in the working tree.
 
+**Restart the app container after every version bump.** The dev image bakes the code at build time (no live-reload mount on the `app` service in `docker-compose.yml`) — so a `git commit` that bumps `APP_VERSION` does **not** propagate to the running container automatically. After committing a version bump, run:
+
+```bash
+docker compose up -d --build app
+```
+
+and then poll `curl -s http://localhost:8013/version` until the response reports the new `APP_VERSION` (usually 5–15 s on Apple Silicon, longer on first build). This applies to **every** version bump — including doc-only commits where the source code didn't change, because `version.py` itself did and `/version` / `/healthz` would otherwise return a stale value to the harness and to any browser client polling for updates.
+
+Why this matters:
+- The harness tests at `tests/harness/` talk to `http://localhost:8013` (the docker app) over HTTP + WS, not to in-process code. A new endpoint added in this commit returns **404** until the container is rebuilt, so post-bump test runs against stale containers can mask real test failures or surface spurious ones.
+- Manual click-through verification ("does the new button work?") needs the new code in the container too.
+- The migration runner (`_apply_inline_migrations` at boot) only fires on container start. A `SCHEMA_VERSION` bump that isn't restarted leaves the DB schema un-migrated even though the code thinks it's been applied.
+
+If the rebuild fails (port in use, db not healthy, image build error), investigate before retrying. Never reach for destructive workarounds like `docker compose down -v` — that wipes the postgres volume and the demo seed has known bugs on partial-state replays. Stop the container with `docker compose stop app`, fix the root cause, then re-run `docker compose up -d --build app`.
+
 **On MAJOR version bumps, archive the prior changelog.**
 
 When `APP_VERSION`'s MAJOR segment increments (e.g. `1.x.x` → `2.0.0`):

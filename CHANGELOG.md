@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.60] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Add a "restart the app container after every version bump" rule to CLAUDE.md.** Doc-only. The docker dev image bakes the code at build time (no live-reload mount on the `app` service in `docker-compose.yml`), which means a committed version bump doesn't propagate to the running container until `docker compose up -d --build app` runs. Surfaced during this session when the v2.49.55 Stunning Strike endpoint worked but `/version` reported v2.49.54 — the container had been built between commits, leaving the visible version stale. Documenting the rebuild as an explicit step in the per-commit workflow makes it impossible to forget AND surfaces the rationale (harness tests at `http://localhost:8013` talk to the container, not in-process code; a stale container masks new-endpoint regressions and inline-migration runs). Rule lives next to the existing "Always create the git commit at the end of the change" rule because both describe the per-commit deploy cadence. PATCH — docs-only.
+**Description:** One edit. **(1)** `CLAUDE.md` — new paragraph "Restart the app container after every version bump" appended to the "Always update the changelog and version when making changes" section. Names the rebuild command (`docker compose up -d --build app`), the verification command (`curl -s http://localhost:8013/version`), and the expected timing (5–15 s on Apple Silicon). Calls out three failure modes the rebuild prevents: (a) harness tests against stale code returning 404 for new endpoints, (b) manual click-through verification on stale code, (c) `SCHEMA_VERSION` bumps that leave the DB un-migrated because `_apply_inline_migrations` only fires on container boot. Warns against `docker compose down -v` as a destructive workaround (would wipe the postgres volume + the demo seed has known FK-ordering bugs on partial-state replays).
+**Description (cont):** Why CLAUDE.md rather than a settings.json hook. The user explicitly requested adding the rule to "your claude file" — they want this as a behavioral guideline I read at the start of every session, not a harness-executed automation. A pre/post-commit hook would be more reliable (no chance of me forgetting) but adds complexity: the hook would have to detect a version bump (parse `version.py`), then run a 30-second docker rebuild as part of the commit cycle, blocking the next prompt. CLAUDE.md keeps the rule visible without coupling the rebuild to the commit lifecycle — I run it explicitly after each commit instead.
+**Description (cont 2):** Why the rule applies to doc-only commits too. The temptation is to skip the rebuild when "no code changed" — but `version.py` IS code (`APP_VERSION` is imported by `/version`, `/healthz`, and the runtime banner). A doc-only commit that bumps `APP_VERSION` leaves the running container reporting the OLD version, which is wrong for any observer (browser client polling for updates, harness asserting on `/version`, GM looking at the banner). The rule is universal — "every version bump = rebuild" — to avoid carving out exceptions that drift.
+**Description (cont 3):** Verification. Pre-fix: CLAUDE.md had no rebuild guidance; the docker container could (and did) lag the source repo by several commits without warning. Post-fix: the rule lives in CLAUDE.md and is the second-to-last paragraph in the version-management section — the natural reading order is "bump → CHANGELOG → README → commit → restart." Doc-only; no functional change. Container restart performed as part of this commit per the new rule.
+
+### Added
+- `CLAUDE.md` — new "Restart the app container after every version bump" paragraph in the version-management section. Names the rebuild command + verification command + three failure modes the rule prevents.
+
+### Notes
+- **Backward compat.** Doc-only. No code changes.
+- **Self-applying.** This commit itself bumps the version, so the rule kicks in immediately — the container is rebuilt as part of landing this commit.
+
+---
+
 ## [2.49.59] - 2026-05-21
 
 **Schema version:** 56
