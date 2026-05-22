@@ -528,6 +528,172 @@
         return _aoePicker.start(opts);
     };
 
+    // ──────────────────────────────────────────────────────────────────
+    // v2.49.71 — Ruler tool (Phase 1 of docs/plans/ruler-and-range.md)
+    //
+    // Mirrors _aoePicker's "suspend map control, prompt for clicks,
+    // resume" pattern but for distance measurement. Local-only — no
+    // WS broadcast (broadcast mode is Phase 3). The committed measurement
+    // freezes on-screen for 3 s then auto-clears.
+    //
+    // Distance math matches the server's token_move formula: Chebyshev
+    // (square grids) or Euclidean (hex grids), 5 ft per cell. Same
+    // numbers a player sees in the movement breadcrumb.
+    //
+    // The picker is mutually exclusive with _aoePicker and with
+    // token-drag / pan / spawn-arming — see the mousedown / mousemove
+    // / contextmenu hooks below for the gating.
+    // ──────────────────────────────────────────────────────────────────
+    const _rulerPicker = {
+        active: false,
+        points: [],            // up to 2 {x, y} canvas-space points
+        cursor: null,          // {x, y} canvas-space mouse position
+        _clearTimer: null,     // setTimeout handle for the 3 s ghost
+
+        start() {
+            if (this.active) return false;
+            // Mutex with the AoE picker — only one tool mode at a time.
+            if (_aoePicker.active) _aoePicker.cancel();
+            this.active = true;
+            this.points = [];
+            this.cursor = null;
+            if (this._clearTimer) {
+                clearTimeout(this._clearTimer);
+                this._clearTimer = null;
+            }
+            document.body.classList.add('ruler-picker-active');
+            _showRulerHint(0);
+            _setRulerButtonState(true);
+            try { render(); } catch (_) {}
+            return true;
+        },
+
+        cancel() {
+            if (!this.active) return;
+            this._cleanup(/*keepGhost=*/false);
+        },
+
+        addPoint(x, y) {
+            if (!this.active) return;
+            this.points.push({ x, y });
+            if (this.points.length === 1) {
+                _showRulerHint(1);
+                try { render(); } catch (_) {}
+                return;
+            }
+            // Second click — commit. Show the measurement in the hint
+            // banner briefly, then auto-clear after 3 s.
+            const a = this.points[0], b = this.points[1];
+            const distance_ft = _computeRulerDistanceFt(a, b);
+            _showRulerResult(distance_ft);
+            // Move out of "active" so the next click doesn't re-add a
+            // point; keep the points array so render() draws the ghost.
+            this.active = false;
+            document.body.classList.remove('ruler-picker-active');
+            _setRulerButtonState(false);
+            try { render(); } catch (_) {}
+            this._clearTimer = setTimeout(() => {
+                this.points = [];
+                this.cursor = null;
+                this._clearTimer = null;
+                _hideRulerHint();
+                try { render(); } catch (_) {}
+            }, 3000);
+        },
+
+        _cleanup(keepGhost) {
+            this.active = false;
+            if (!keepGhost) this.points = [];
+            this.cursor = null;
+            if (this._clearTimer) {
+                clearTimeout(this._clearTimer);
+                this._clearTimer = null;
+            }
+            document.body.classList.remove('ruler-picker-active');
+            _hideRulerHint();
+            _setRulerButtonState(false);
+            try { render(); } catch (_) {}
+        },
+    };
+
+    // Distance helper — mirrors the server's _distance_ft_between_tokens
+    // (tabletop_routes.py:~1640). Chebyshev on square grids (the "5-5-5"
+    // 5e diagonals rule), Euclidean on hex. 5 ft per cell. Result rounded
+    // to nearest 0.1 ft to match the movement breadcrumb's chip text.
+    function _computeRulerDistanceFt(a, b) {
+        if (!a || !b || gridSize <= 0) return 0;
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        let cells;
+        if (gridType === 'square') {
+            cells = Math.max(Math.abs(dx), Math.abs(dy)) / gridSize;
+        } else {
+            cells = Math.hypot(dx, dy) / gridSize;
+        }
+        return Math.round(cells * 5 * 10) / 10;
+    }
+
+    function _showRulerHint(pointsClicked) {
+        _hideRulerHint();
+        const el = document.createElement('div');
+        el.id = 'ruler-picker-hint';
+        el.className = 'ruler-picker-hint';
+        const msg = pointsClicked === 0
+            ? '📏 Click two points — Esc to cancel'
+            : '📏 Click second point — Esc to cancel';
+        el.textContent = msg;
+        const host = document.getElementById('map-pane') || document.body;
+        host.appendChild(el);
+    }
+    function _showRulerResult(distance_ft) {
+        _hideRulerHint();
+        const el = document.createElement('div');
+        el.id = 'ruler-picker-hint';
+        el.className = 'ruler-picker-hint';
+        el.textContent = `📏 ${distance_ft} ft`;
+        const host = document.getElementById('map-pane') || document.body;
+        host.appendChild(el);
+    }
+    function _hideRulerHint() {
+        const el = document.getElementById('ruler-picker-hint');
+        if (el) el.remove();
+    }
+
+    function _setRulerButtonState(active) {
+        const btn = document.getElementById('ruler-btn');
+        if (!btn) return;
+        btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    }
+
+    // Toolbar-button click + R hotkey wiring. The button toggles the
+    // picker — clicking again while active cancels.
+    (function _wireRulerControls() {
+        const btn = document.getElementById('ruler-btn');
+        if (btn && !btn.hasAttribute('disabled')) {
+            btn.addEventListener('click', () => {
+                if (_rulerPicker.active) _rulerPicker.cancel();
+                else _rulerPicker.start();
+            });
+        }
+        // R hotkey — only when no input has focus + no other modal /
+        // picker is consuming the keystroke. Esc handling already lives
+        // in the existing global keydown handler below; we extend it.
+        document.addEventListener('keydown', (ev) => {
+            if (ev.key !== 'r' && ev.key !== 'R') return;
+            // Skip if the user is typing in an input / textarea / contenteditable.
+            const ae = document.activeElement;
+            if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA'
+                    || ae.isContentEditable)) return;
+            if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
+            if (_aoePicker.active) return;
+            const ruleButton = document.getElementById('ruler-btn');
+            if (ruleButton && ruleButton.hasAttribute('disabled')) return;
+            ev.preventDefault();
+            if (_rulerPicker.active) _rulerPicker.cancel();
+            else _rulerPicker.start();
+        });
+    })();
+
     // Floating hint chip for the AoE placement mode. Mirrors the
     // existing targeting chip's positioning but uses the damage tint
     // so the user knows they're in a different mode. Label text varies
@@ -1041,6 +1207,79 @@
                 ctx.restore();
             });
         }
+
+        // v2.49.71 — Ruler tool overlay (Phase 1 of docs/plans/ruler-and-range.md).
+        // Drawn last so it sits on top of every other canvas overlay.
+        // Renders when EITHER (a) the picker is active and has at least
+        // one committed point (the cursor or the second committed point
+        // is the line's other end) OR (b) the picker just committed and
+        // the 3 s freeze-ghost is still up (`points.length === 2` after
+        // active flipped false).
+        if (_rulerPicker.points.length >= 1) {
+            const a = _rulerPicker.points[0];
+            let b = null;
+            if (_rulerPicker.points.length >= 2) {
+                b = _rulerPicker.points[1];
+            } else if (_rulerPicker.cursor) {
+                b = _rulerPicker.cursor;
+            }
+            ctx.save();
+            // Point A — solid filled circle, var(--accent)-ish.
+            ctx.fillStyle = '#4ade80';
+            ctx.beginPath();
+            ctx.arc(a.x, a.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+            if (b) {
+                // Dashed line A → B / cursor.
+                ctx.strokeStyle = '#4ade80';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([8, 5]);
+                ctx.beginPath();
+                ctx.moveTo(a.x, a.y);
+                ctx.lineTo(b.x, b.y);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                // Point B — open circle (cursor preview) or filled
+                // (after second click commits).
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, 5, 0, Math.PI * 2);
+                if (_rulerPicker.points.length >= 2) {
+                    ctx.fillStyle = '#4ade80';
+                    ctx.fill();
+                } else {
+                    ctx.stroke();
+                }
+                // Distance chip at the midpoint.
+                const distance_ft = _computeRulerDistanceFt(a, b);
+                const midX = (a.x + b.x) / 2;
+                const midY = (a.y + b.y) / 2;
+                const label = `${distance_ft} ft`;
+                ctx.font = '12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                const metrics = ctx.measureText(label);
+                const padX = 8, padY = 4;
+                const chipW = metrics.width + padX * 2;
+                const chipH = 18;
+                ctx.fillStyle = 'rgba(20, 24, 28, 0.92)';
+                ctx.strokeStyle = '#4ade80';
+                ctx.lineWidth = 1.5;
+                if (ctx.roundRect) {
+                    ctx.beginPath();
+                    ctx.roundRect(midX - chipW / 2, midY - chipH / 2, chipW, chipH, 6);
+                    ctx.fill();
+                    ctx.stroke();
+                } else {
+                    ctx.fillRect(midX - chipW / 2, midY - chipH / 2, chipW, chipH);
+                    ctx.strokeRect(midX - chipW / 2, midY - chipH / 2, chipW, chipH);
+                }
+                ctx.fillStyle = '#4ade80';
+                ctx.fillText(label, midX, midY);
+            }
+            ctx.restore();
+        }
+
         _updateGifOverlay();
     }
 
@@ -1391,6 +1630,11 @@
             _aoePicker.cancel();
             return;
         }
+        // v2.49.71: right-click in ruler mode cancels the measurement.
+        if (_rulerPicker.active) {
+            _rulerPicker.cancel();
+            return;
+        }
         if (Date.now() - _lastSheetOpenAt < 300) return;
         const [x, y] = clientToCanvas(ev);
         for (let i = tokens.length - 1; i >= 0; i--) {
@@ -1475,6 +1719,15 @@
     window.vttViewportCenterWorld = viewportCenterWorld;
 
     canvas.addEventListener('mousedown', (ev) => {
+        // v2.49.71: ruler tool intercepts left-click mousedown so the
+        // click-to-set-point gesture doesn't start a token drag or pan.
+        // Mutually exclusive with the AoE picker per _rulerPicker.start().
+        if (_rulerPicker.active && ev.button === 0) {
+            const [wx, wy] = clientToCanvas(ev);
+            _rulerPicker.addPoint(wx, wy);
+            ev.preventDefault();
+            return;
+        }
         // T.5b: AoE picker intercepts left-click mousedown so the
         // commit-on-click gesture doesn't start a token drag. Right-
         // click is deliberately NOT intercepted here — it falls
@@ -1592,12 +1845,27 @@
             _aoePicker.cancel();
             return;
         }
+        // v2.49.71: Esc cancels an active ruler measurement too.
+        if (ev.key === 'Escape' && _rulerPicker.active) {
+            _rulerPicker.cancel();
+            return;
+        }
         if (ev.key === 'Escape' && spawnArmingCharId != null) {
             window.vttCancelSpawnArming();
         }
     });
 
     canvas.addEventListener('mousemove', (ev) => {
+        // v2.49.71: when the ruler picker is live AND we have one
+        // committed point, follow the cursor for the live-distance
+        // preview to the would-be second point. Same render-loop
+        // re-entry pattern as the AoE picker below.
+        if (_rulerPicker.active && _rulerPicker.points.length === 1) {
+            const [wx, wy] = clientToCanvas(ev);
+            _rulerPicker.cursor = { x: wx, y: wy };
+            render();
+            return;
+        }
         // T.5b: when the AoE picker is live, follow the cursor with
         // a preview circle by stashing the canvas-space pointer pos
         // and re-rendering. Re-enters the same render() path as the
