@@ -32,6 +32,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Player simulacrum](../plans/player-simulacrum.md) | Markdown (design) | Contributors | ⚪ design only · all phases unstarted |
 | [Ruler & range enforcement](../plans/ruler-and-range.md) | Markdown (design) | Contributors | ✅ All phases shipped (1, 2, 3A–E) |
 | [Spell-validation test suite](../plans/spell-validation-suite.md) | Markdown (design) | Contributors | ⚪ proposed · Phase 0–5 unstarted |
+| [Sorcery Points + Metamagic](../plans/sorcery-points-and-metamagic.md) | Markdown (design) | Contributors | ⚪ proposed · Phase 0–5 unstarted |
 | [Autonomous click-through test harness](../plans/test-harness.md) | Markdown (design) | Contributors | ✅ Phases 1–5 shipped (212 tests) |
 | [Wiki expansion](../plans/wiki-expansion.md) | Markdown (TODO companion) | Contributors | 🟠 living roadmap |
 | [Combat encounters](../encounters-plan.md) | Markdown (proposed) | Contributors | ⚪ proposed · not started |

@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.118] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Plan: Sorcery Points + Metamagic — Sorcerer L2/L3 features.** New design plan at `docs/plans/sorcery-points-and-metamagic.md` covering Font of Magic (slot ↔ Sorcery Points conversion, Lv 2) + Metamagic (eight RAW options, Lv 3+). Five-phase rollout: Phase 0 Font of Magic; Phase 1 picker infrastructure + Empowered Spell walking-skeleton; Phase 2 Quickened + Twinned; Phase 3 the remaining five options (Subtle, Distant, Heightened, Extended, Careful) one per commit; Phase 4 picker polish; Phase 5 CI integration. Demo subject: Zara Emberfire (Sorcerer L5, Draconic Bloodline / Red Dragon — already in the demo seed since v2.18.1). Plan-only commit; no code beyond the wiki surfacing. Per CLAUDE.md the new doc gets the standard wiki treatment: `_DOC_ALLOWLIST` entry, landing-page row, on-disk index row, per-slug harness smoke test, `test_wiki_home_renders` assertion.
+**Description:** Six file edits. **(1)** `docs/plans/sorcery-points-and-metamagic.md` (NEW, ~310 lines) — full plan with design principles, phase breakdown, per-endpoint API contracts (e.g. `POST /use_font_of_magic_to_points`, `POST /use_metamagic_empowered_spell`, etc.), buff schema for the pending-Metamagic-state buffs, picker UI design notes, edge cases per option (Quickened double-spell restriction, Twinned eligibility filter, Subtle's V/S no-op for v1, etc.), open questions, risks. (2) `app/routes/wiki_routes.py::_DOC_ALLOWLIST` — new entry `plan-sorcery-points-and-metamagic → docs/plans/sorcery-points-and-metamagic.md`. (3) `app/templates/wiki.html` — new row in the "Design plans" table. (4) `docs/wiki/README.md` — same row in the on-disk index. (5) `tests/harness/test_wiki.py::test_wiki_home_renders` — new assertion that the landing page contains the new slug. (6) `tests/harness/test_wiki.py::test_wiki_doc_serves_sorcery_metamagic_plan` (NEW) — per-slug smoke test.
+**Description (cont):** Why a plan-only commit. The Sorcerer/Metamagic work is large enough that a single implementation commit would be unreviewable. The plan defines: which Metamagic options ship first (Empowered Spell — simplest), the buff naming convention (`metamagic-{slug}-pending`), the picker UI position (modal-before-cast, mirroring the v2.16.0 uplift modal pattern), and the per-option edge cases. Reviewers can sanity-check the design before the code lands; future commits each implement one phase.
+**Description (cont 2):** Why the demo Sorcerer (Zara) is already in place. v2.18.1 shipped Zara as the demo Sorcerer with the Sorcery Points counter (`key: 'sorcery-points'` in her sheet, with a `font-of-magic` row in `class_features`). The counter exists but the spend-options don't — the v2.18.1 commit message explicitly filed Font of Magic SP↔slot conversion + Metamagic as separate follow-ups. v2.49.118 picks up that thread.
+**Description (cont 3):** Wiki surfacing per CLAUDE.md. The "every doc must be surfaced through the wiki" rule from v2.49.69 requires: (a) `_DOC_ALLOWLIST` entry for slug → file path mapping, (b) landing-page table row in `wiki.html`, (c) on-disk index row in `docs/wiki/README.md`, (d) per-slug harness smoke test, (e) `test_wiki_home_renders` assertion update. All five land in this commit so the doc is reachable + the wiki surfacing has its own test gate.
+**Description (cont 4):** Verification. (a) `pytest tests/harness/test_wiki.py -q` — 13/13 pass (12 previous + 1 new sorcery-metamagic per-slug test). (b) Curl `/version` confirms v2.49.118 live. (c) Manual: open `/wiki` in the browser → see Sorcery Points + Metamagic row in the Design plans table → click → land on the plan with the wiki nav menu injected.
+
+### Added
+- `docs/plans/sorcery-points-and-metamagic.md` (NEW) — full plan, 5 phases.
+- `app/routes/wiki_routes.py::_DOC_ALLOWLIST` — new `plan-sorcery-points-and-metamagic` slug.
+- `app/templates/wiki.html` — new Design plans table row.
+- `docs/wiki/README.md` — same row in the on-disk index.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_sorcery_metamagic_plan` (NEW per-slug test).
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — new landing-page assertion.
+
+### Notes
+- **Plan-only.** No endpoint, broadcast, or schema change. Implementation follows in Phase 0+ commits.
+- **Demo subject ready.** Zara Emberfire (Sorcerer L5, Draconic Bloodline) is in the demo seed since v2.18.1 with the Sorcery Points counter; spend-options not wired today.
+
+### Filed
+- **Phase 0 implementation** — Font of Magic SP↔slot conversion endpoints + harness tests. First-up.
+- **Phase 1 walking skeleton** — picker modal + Empowered Spell. Follows Phase 0.
+- **Phases 2–5** — Quickened/Twinned, the remaining 5 options, picker polish, CI integration. Listed in the plan's status-tracking section.
+
+---
+
 ## [2.49.117] - 2026-05-22
 
 **Schema version:** 56
