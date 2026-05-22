@@ -1605,9 +1605,13 @@
            even when the GM collapses the init tracker. Standalone
            card, own border + gradient header. The button ids
            (battle-from-map-btn, battle-next-btn, etc.) are unchanged
-           so the controllers in tabletop.html keep binding. #}
+           so the controllers in tabletop.html keep binding.
+           v2.49.104 — `position: sticky; top: 0; z-index: 10` pins the
+           card to the top of the scrolling `.drawer-body` so the init
+           list scrolls UNDERNEATH the controls. The opaque `var(--bg-2)`
+           backdrop is what makes the scroll-under read cleanly. #}
         {% if is_gm %}
-        <div style="margin:0 0 8px;border:1px solid rgba(167,139,250,.25);border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.14);background:var(--bg-2);">
+        <div style="position:sticky;top:0;z-index:10;margin:0 0 8px;border:1px solid rgba(167,139,250,.25);border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.14);background:var(--bg-2);">
             <div style="background:linear-gradient(135deg,rgba(167,139,250,.13),rgba(108,180,255,.08));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚙ GM Controls</div>
             <div style="padding:8px;">
                 <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">

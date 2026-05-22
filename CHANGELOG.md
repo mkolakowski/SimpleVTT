@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.104] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **GM Controls in the Battle drawer is now `position: sticky; top: 0` so the init list scrolls underneath it.** User-requested. v2.49.98 hoisted the GM Controls card out of the initiative-panel so it stayed visible across the panel's collapsed state; v2.49.104 takes that one step further — even when the GM scrolls through a long init list (many combatants, expanded sheet bodies), the controls remain pinned to the top of the drawer. The init entries scroll under the card, with the card's opaque `var(--bg-2)` background reading cleanly above the scrolling content. Pure CSS / inline-style change; no behavior, endpoint, broadcast, or schema impact.
+**Description:** One inline-style edit in `app/templates/tabletop.html` on the GM Controls `<div>` (line 1609 region). Added `position: sticky; top: 0; z-index: 10;` to the existing `margin:0 0 8px; border:...; background:var(--bg-2)` style. The `.drawer-body` (the scroll container) already has `overflow-y: auto` and `padding: 10px 14px` so `position: sticky` honors the drawer-body as its scroll context. `z-index: 10` keeps the controls above any scrolling init-entry shadow.
+**Description (cont):** Why `position: sticky` works here. Sticky positioning pins an element to its specified offset (`top: 0`) once the parent scroll container has scrolled past the element's natural document position. Inside `.drawer-body` (which has `overflow-y: auto`), the GM Controls card sits at scroll-offset 0 initially; as the GM scrolls the init list down, the card's natural position scrolls up — and at exactly the moment its top edge would scroll above the drawer-body's top edge, sticky locks it there. The init entries continue to scroll under it, hidden by the card's opaque backdrop.
+**Description (cont 2):** Why `z-index: 10`. The init entries below the sticky card have their own shadows (`box-shadow: 0 3px 14px rgba(0,0,0,.22)` from v2.49.99). Without z-index those shadows can paint over the bottom edge of the sticky card during scroll. Setting `z-index: 10` puts the sticky card above any positioned descendant of `.drawer-body`; 10 is high enough to clear init-entry shadows + low enough to stay under the drawer-tab-bar (no z-index conflict because the tab bar is in the topbar, a different stacking context).
+**Description (cont 3):** Why the existing `var(--bg-2)` background is essential. Sticky elements with transparent backgrounds let scrolling content show through underneath — which would look like an overlap glitch. The opaque card background from v2.49.98 already covers this; the v2.49.104 edit just enables the sticky behavior on top of it. If a future commit makes the GM Controls translucent, the scroll-under effect breaks visually.
+**Description (cont 4):** What stays unchanged. The card's margin, border, shadow, padding, and inner content (the 🗺 / + Character / + Manual / 🎲 / ◀ / Next ▶ / ↺ Start / 🗑 buttons and the inline char-add + manual-add panels) are all unchanged. The init-list scroll behavior is unchanged — `.drawer-body { overflow-y: auto }` was already in place. The Characters drawer + Roll Log drawer + GM Tools drawer are unaffected (the sticky rule is scoped to the GM Controls card inline style only).
+**Description (cont 5):** Test coverage. Pure CSS visual change; the 5 Playwright tests in `tests/harness_ui/` (canvas pan / drag / chat-card multi-target) all still pass — none of them scroll the Battle drawer to a position where the sticky behavior would observably differ. Manual verification path: open the Battle tab as GM, spawn a many-combatant encounter (Tavern Brawl + extra manual adds), scroll the init list, confirm the GM Controls card stays pinned to the top while combatants scroll underneath.
+**Description (cont 6):** Verification. Curl `/version` confirms v2.49.104 live. Existing 5 Playwright tests green.
+
+### Changed
+- `app/templates/tabletop.html` — GM Controls `<div>` gets `position: sticky; top: 0; z-index: 10;` added to its inline style.
+
+### Notes
+- **Backward compat.** Pure CSS one-liner; no behavior change.
+- **Scroll context.** `.drawer-body { overflow-y: auto }` provides the scroll context that sticky honors. Confirmed at `tabletop.html:207`.
+
+---
+
 ## [2.49.103] - 2026-05-22
 
 **Schema version:** 56
