@@ -10,6 +10,52 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.59] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Add a design plan for the ruler + range-enforcement tabletop feature.** Doc-only. New file `docs/plans/ruler-and-range.md` covers the requested ruler-button workflow (suspend map control + two left-clicks), evaluates four alternative approaches (drag-mode, hover rangefinder, attached-range overlays, click-drag with modifier), and lays out a three-phase plan: Phase 1 ruler tool client-only, Phase 2 server-side distance helper + spell-range parser + range enforcement with 409 + override on cast/attack endpoints, Phase 3 optional follow-ups (hover rangefinder, range rings, multi-segment, broadcast mode). Includes ASCII mockups of the toolbar insertion, the ruler-active overlay, and the out-of-range cast card. Pulls integration-point file paths + line numbers from a fresh survey of `tabletop.js`, `tabletop_routes.py`, and the spell JSON content layer. NOT IMPLEMENTED — this commit ships only the plan. PATCH — docs-only.
+**Description:** One new file. **(1)** `docs/plans/ruler-and-range.md` (NEW). Eight sections: Goal, Constraints surfaced by codebase survey, Approaches considered (A/B/C/D w/ pros/cons), Chosen approach detailed design (client state + mouse integration + rendering + toolbar + hotkeys + visibility broadcast), Range enforcement design (server distance helper + spell-range parser + endpoint integration + 409 shape + when-not-to-enforce + harness tests), Phase 3 follow-ups, Open questions (5 items with recommendations), Implementation phases summary table, File-path index for the implementation agent, Decision log.
+**Description (cont):** Why the ruler-button workflow as the primary primitive. The codebase already has an established "suspend map control, prompt for clicks, resume" pattern via the v2.48.0 AoE picker (`tabletop.js:314–527`). The ruler tool is a direct analog — same `start() → Promise → cleanup()` shape, same body-class CSS trick for cursor changes, same Esc/right-click cancel idiom. Two clicks (vs. one drag) gives explicit cancel-after-first-point semantics, and works identically on touch devices where Shift-drag (option B) has no equivalent. Drag-mode is filed for Phase 3 as a power-user shortcut, not the primary UX.
+**Description (cont 2):** Why coupling ruler + range enforcement in one plan doc rather than two. They share the same primitive: a "distance between two canvas points" function. The current `token_move` endpoint at `tabletop_routes.py:4929` already has this math (Chebyshev for square, Euclidean for hex, 5 ft / cell). Phase 2 extracts it into `_distance_ft_between_tokens` so both the ruler render AND the cast-endpoint range check use one source of truth. Splitting into two plans would either duplicate the helper design or force a "see the other plan for distance math" cross-reference. Combined plan keeps the rationale in one place.
+**Description (cont 3):** Why the plan includes mockups even though markdown can't render real UI images. The "interface changes with mockups" requirement is real — the agent reviewing the plan needs to see the proposed toolbar layout, the ruler overlay, and the out-of-range cast card. ASCII mockups are crude but unambiguous (no rendering dependency), and the file-path index at the end gives the implementation agent exact pixel coordinates (e.g. "insert above the drawer tab bar at `tabletop.html:1216`"). A Figma mockup would be richer but adds an external dependency for what should be a self-contained design doc.
+**Description (cont 4):** Decisions captured in the plan (with rationale):
+- Picker pattern over drag-mode (discoverability + touch parity).
+- Local-only ruler by default; Shift-click broadcasts to all clients (privacy by default).
+- Center-to-center distance (matches existing `token_move`; new rules would be a separate decision).
+- Range check fires BEFORE slot consumption (mirrors the existing `no_slot` gate ordering).
+- One ruler button visible to GM + players (measuring is a player concern, not GM-only).
+- `override_range: true` body field for the cast-anyway path (mirrors the existing Phase 4 `override`).
+- Spell-range parser as a separate file `app/content/range_parser.py` (isolates content concern from the route file).
+**Description (cont 5):** Open questions deliberately surfaced for review:
+- 5-5-5 vs. 5-10-5 diagonals (recommend: match token_move = 5-5-5; defer setting unless asked).
+- Token edge vs. token center (recommend: center, add edge mode in Phase 3 if asked).
+- Cover / line-of-sight (out of scope — separate massive feature).
+- Should range-check fire before or after slot consumption (recommend: before; matches existing 409 gate ordering).
+- Should the demo seed include a range-demo encounter (recommend: yes, in Phase 2's implementation commit).
+**Description (cont 6):** What's NOT covered (filed for follow-up plans):
+- Spell line-of-sight (walls / cover).
+- Movement-range enforcement (today `token_move` reports distance via WS but doesn't BLOCK; could add per-turn movement budget enforcement).
+- Reach-weapon advantage (5 ft melee vs. 10 ft polearm reach gradient).
+- Spell save DC = caster's stat-driven DC: orthogonal feature, not range-related.
+**Description (cont 7):** Verification. Plan reviewed for consistency with CLAUDE.md harness rule (Phase 2 endpoint commits will ship their own harness tests per the rule; Phase 1 is client-only so no endpoint tests required). Verified against the touch-target rule (44×44 px minimum). Cross-referenced file paths against current code line numbers via codebase survey. Doc-only commit — no functional change; full harness suite unchanged (262 passing).
+
+### Added
+- `docs/plans/ruler-and-range.md` — design plan for a ruler tool + server-side range enforcement on cast/attack endpoints. Three implementation phases; recommended approach; alternatives evaluated; ASCII mockups; file-path index for the implementation agent.
+
+### Notes
+- **Backward compat.** Doc-only. No code changes; no API surface change.
+- **Connects to several filed items.** Specifically: v2.49.58 Sleep's "20-ft radius enforcement" filed item, v2.49.57 Open Hand Technique's "push_authorized cast-card UI" (the drag-target-15-ft prompt benefits from a range visualization), v2.49.55 Stunning Strike's "must follow a hit" (the melee-hit gate is related to range — both are pre-click validation).
+- **No implementation in this commit.** Phases 1 and 2 are separate commits with their own version bumps, code, and harness tests per CLAUDE.md.
+
+### Filed
+- **Phase 1 implementation** — ruler tool: `_rulerPicker` + toolbar button + render pass + hotkey. Client-only commit, no endpoint changes. See plan for the exact insertion points.
+- **Phase 2 implementation** — `_distance_ft_between_tokens` helper + `app/content/range_parser.py` + range enforcement on `/cast_spell`, `/use_attack`, `/cast_hex`, `/cast_sleep`, `/use_stunning_strike`, `/use_open_hand_technique`. Each endpoint commit ships its own version bump.
+- **Phase 3 follow-ups** — hover rangefinder, range rings on cast hover, multi-segment ruler (Shift+R), GM-broadcast mode (Shift-click the button). All optional; ship if user demand surfaces.
+- **Movement-range enforcement** — orthogonal to range-on-cast; today `token_move` reports distance via WS but doesn't BLOCK. Future plan; not in this doc.
+- **Cover / line-of-sight** — massive separate feature; out of scope for this plan.
+
+---
+
 ## [2.49.58] - 2026-05-21
 
 **Schema version:** 56
