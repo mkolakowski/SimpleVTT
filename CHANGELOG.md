@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.100] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Action-economy chips actually stay inline with Init/HP — shortened "Act"/"Bns"/"Rxn" labels to single letters A/B/R + tightened chip padding so the strip fits on the same line in a 480 px drawer.** v2.49.96 inlined the chip strip with the Init/HP line via a wrap-flex container, but the chip widths plus the Init/HP text overflowed the available ~266 px of mini-header-info, so `flex-wrap: wrap` correctly bumped the chips to a second row anyway. v2.49.100 fixes the overflow at the source — chip body text drops from "○ Act" / "● Bns" / "○ Rxn" to "○ A" / "● B" / "○ R", and chip padding tightens from `3px 6px` to `3px 5px`. Estimated chip-strip width drops from ~232 px to ~130 px, which combined with the ~110 px Init/HP text + 8 px gap fits comfortably under the 266 px wrap threshold. The full meaning ("Action", "Bonus action", "Reaction") moves to the title tooltip so hover + long-press still surface the long name + state.
+**Description:** Three edits in `app/templates/tabletop.html::renderBattle`. **(1)** `econChip` helper signature changed from `(slot, label, used)` to `(slot, letter, fullName, used)` — the chip body now renders `${used ? '●' : '○'} ${letter}` while the `title` attribute reads `${fullName}: …`. (2) Call sites updated: `econChip('action', 'A', 'Action', ...)`, `('bonus', 'B', 'Bonus action', ...)`, `('reaction', 'R', 'Reaction', ...)`. The movement chip is unchanged (it always rendered "X/Y ft" with no label letter). (3) `.econ-chip` CSS — padding tightened from `3px 6px` to `3px 5px`. Font-size + min-height unchanged so the chips remain readable + maintain the 24 px dense-panel floor.
+**Description (cont):** Why single letters not full words. The single-character body text plus the state dot ("●" used, "○" available) carries the meaning at a glance: the dot tells you whether it's spent; the letter labels which slot. Mouse hover surfaces the full name via `title=`, and the state-dependent text after the colon ("used this turn" / "available") tells you what the chip will do on click. Touch users get the same tooltip via iOS long-press. Lost screen-reader-from-DOM context is offset by the `title` attribute, which most AT software reads on focus.
+**Description (cont 2):** Why not just `flex-wrap: nowrap` with horizontal scroll. Tried mentally + rejected. Horizontal scroll inside a card is unfamiliar in a tabletop sidebar — users would have to discover the scroll, and touch users on iPad lose the gesture entirely (vertical scroll on the drawer body would compete with horizontal scroll on the chip strip). Shrinking the chip content is the cleaner fix.
+**Description (cont 3):** What about even wider screens. On a viewport where the sidebar is wider than 480 px (which doesn't currently happen — the sidebar is hard-coded to 480 px in `.drawer-sidebar`), the original three-letter labels would still fit. If a future commit makes the sidebar resizable, the letters could grow back to "Act" / "Bns" / "Rxn" via a media query — defer until that change lands.
+**Description (cont 4):** Test coverage. Pure CSS + Jinja-template change with no observable behavior shift — same buttons, same click handlers, same data-slot attributes, same toggle-on-click semantics. The 5 Playwright tests in `tests/harness_ui/` continue to pass. Manual verification path: open the Battle tab, confirm Init/HP + Act/Bns/Rxn/Movement chips all sit on the same row inside each init entry's mini-header.
+**Description (cont 5):** Verification. Curl `/version` confirms v2.49.100 live. Existing 5 Playwright tests green.
+
+### Changed
+- `app/templates/tabletop.html::renderBattle::econChip` — helper signature gains a fullName param; body renders the single letter, title renders the long name.
+- `app/templates/tabletop.html::renderBattle::economyChips` — call sites pass `('A', 'Action')`, `('B', 'Bonus action')`, `('R', 'Reaction')`.
+- `app/templates/tabletop.html::.econ-chip` — padding `3px 6px` → `3px 5px`.
+
+### Notes
+- **Backward compat.** No data shape, endpoint, broadcast, or schema change. Tooltips still surface the full action / bonus action / reaction names.
+- **Visual change.** Chip body text drops from "○ Act" to "○ A" etc.; chips become ~10 px narrower each. Total strip width drops by ~100 px, fitting inline with Init/HP without wrapping.
+
+### Filed
+- **Wider-sidebar variant.** If a future commit makes the drawer width configurable, restore the full-word labels at sidebar widths above ~520 px via a media query.
+
+---
+
 ## [2.49.99] - 2026-05-22
 
 **Schema version:** 56

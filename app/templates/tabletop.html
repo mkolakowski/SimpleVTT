@@ -798,11 +798,13 @@
     }
     .mini-header-stats .mini-header-sub { margin-top: 0; }
     .mini-header-stats .econ-chips { margin-top: 0; }
+    /* v2.49.100 — tighter padding to keep the single-letter chips
+       compact enough to ride alongside the Init/HP line. */
     .econ-chip {
         font-size: 10px;
         font-weight: 600;
         line-height: 1;
-        padding: 3px 6px;
+        padding: 3px 5px;
         min-height: 24px;
         border: 1px solid var(--border);
         border-radius: 3px;
@@ -5227,11 +5229,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // turn in ``nextTurn``. Phase 1 = manual only; future
                 // Phase 2 will auto-advance from strike / cast buttons.
                 const econ = c.economy || { action: false, bonus: false, reaction: false, movement: 0 };
-                const econChip = (slot, label, used) =>
+                // v2.49.100 — chip body shows a single letter (A/B/R)
+                // so the strip fits inline with Init/HP. Full name
+                // moves to the title tooltip so hover/long-press
+                // still surfaces "Action: used this turn" etc.
+                const econChip = (slot, letter, fullName, used) =>
                     `<button type="button" class="econ-chip${used ? ' used' : ''}"
                         data-idx="${i}" data-slot="${slot}"
-                        title="${label}: ${used ? 'used this turn' : 'available'} — click to toggle">
-                        ${used ? '●' : '○'} ${label}
+                        title="${fullName}: ${used ? 'used this turn' : 'available'} — click to toggle">
+                        ${used ? '●' : '○'} ${letter}
                     </button>`;
                 // v2.6.2: Phase 5 movement chip. ``feetUsed`` is the running
                 // total accumulated by the token_move WS handler each time
@@ -5253,10 +5259,16 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     title="Movement used this turn — click to reset to 0">
                     ${feetUsed % 1 === 0 ? feetUsed : feetUsed.toFixed(1)}/${speedMax} ft
                 </button>`;
+                // v2.49.100 — single-letter chip labels (A / B / R)
+                // instead of "Act" / "Bns" / "Rxn" so the chip strip
+                // actually fits inline with the Init/HP line without
+                // wrapping at the default 480 px drawer width. Full
+                // meaning still lives in the title tooltip. The state
+                // dot ("●" used, "○" available) carries the meaning.
                 const economyChips = `<div class="econ-chips">
-                    ${econChip('action', 'Act', !!econ.action)}
-                    ${econChip('bonus', 'Bns', !!econ.bonus)}
-                    ${econChip('reaction', 'Rxn', !!econ.reaction)}
+                    ${econChip('action',   'A', 'Action',         !!econ.action)}
+                    ${econChip('bonus',    'B', 'Bonus action',   !!econ.bonus)}
+                    ${econChip('reaction', 'R', 'Reaction',       !!econ.reaction)}
                     ${movChip}
                 </div>`;
                 // v2.19.0 Phase C.1: buff badges row. Renders one chip
