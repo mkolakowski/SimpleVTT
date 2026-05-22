@@ -10,6 +10,18 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.70] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Smoke-test the `git push` pipeline from the Claude Code worktree.** User-requested. Verifies that the GitHub Desktop credential helper on this machine lets `git push origin main` from a non-Desktop git invocation reach the remote. Doc-only no-op commit — bumps the version + CHANGELOG row so the rule "every commit ships its own version bump" stays satisfied. PATCH.
+**Description:** No functional change. Two lines edited (`app/version.py` + `README.md` version badge); this CHANGELOG row added. Confirms the credential-helper path on macOS routes `https://github.com/mkolakowski/SimpleVTT.git` pushes through the Keychain-cached GitHub token Desktop set up. No code, no schema, no harness change.
+
+### Notes
+- **Backward compat.** No-op.
+- **Provenance.** If this row looks odd in a future scan, it's the receipt for the v2.49.70 push-pipeline test, not a real feature.
+
+---
+
 ## [2.49.69] - 2026-05-22
 
 **Schema version:** 56
