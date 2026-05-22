@@ -8,10 +8,10 @@ turn. Save DC = 8 + monk prof + monk WIS mod.
 The Stunned condition is concentration=False (1-turn duration, RAW)
 — this commit exercises the v2.49.51 "incapacitating buff with
 concentration=False" branch for NPCs via ``_install_buff_on_combatant_id``.
-The PC roll_request path is wired the same way as Hold Person but
-not exhaustively tested here (the v2.49.51 hook fires from
-``_install_buff`` regardless of caller, and the Hold Person path
-already pins that).
+The PC roll_request path (added later, see PC integration test below)
+exercises the same hook via ``_install_buff`` — concentration=False
+incapacitating buff installed on a PC who is currently concentrating
+on a spell of their own drops their anchor + emits the 💀 GM log.
 
 Tests:
   - Happy path (NPC): Kael (Monk Lv 5) uses Stunning Strike on a
@@ -19,6 +19,12 @@ Tests:
     bandit + ki decremented by 1 + 200 response.
   - 409 wrong_class: Krieger (Barbarian) → 409 wrong_class.
   - 409 no_ki: drain Kael's ki to 0; → 409 no_ki + ki not consumed.
+  - PC integration (v2.49.56): Magnus has Hex up. Kael uses Stunning
+    Strike on Magnus → roll_request created. GM responds on Magnus's
+    behalf; loop until save fails. Assert (a) Stunned installed on
+    Magnus, (b) Magnus's Hex dropped (v2.49.51 hook on a
+    concentration=False incapacitating buff via the PC /respond path),
+    (c) 💀 GM log fired.
 """
 import pytest_asyncio
 
@@ -196,3 +202,160 @@ async def test_stunning_strike_no_ki(gm_client, kael_rested):
     err = r.json()
     assert err["error"] == "no_ki"
     assert err["available"] == 0
+
+
+async def _buff_keys(gm_client, char_id: int) -> list[str]:
+    r = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/buffs"
+    )
+    if r.status_code != 200:
+        return []
+    return [(b or {}).get("key") for b in r.json().get("buffs", [])]
+
+
+async def _install_hex(gm_client, magnus_id: int, target_id: int):
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_hex",
+        json={
+            "character_id": magnus_id,
+            "target_character_id": target_id,
+            "ability": "STR",
+            "override": True,
+        },
+    )
+    assert r.status_code == 200, r.text
+
+
+async def test_stunning_strike_pc_drops_own_concentration(
+    gm_client, gm_ws, kael_rested, roster,
+):
+    """v2.49.56 — closes the v2.49.55 filed item.
+
+    Magnus is Hex'd (concentrating). Kael (Monk Lv 5) uses Stunning
+    Strike on Magnus → roll_request prompts Magnus's CON save → on
+    fail, /respond installs Stunned via ``_install_buff`` which fires
+    the v2.49.51 incapacitation hook. Because Stunned is
+    ``concentration: False``, the hook's "anchor still in new_list"
+    branch runs — explicitly removes Magnus's Hex via ``_remove_buff``
+    and emits a 💀 GM log naming the cause.
+
+    This pins both (a) the PC roll_request → /respond → install path
+    for a non-spell class-feature entry in ``_SPELL_CONDITION_MAP``
+    and (b) the v2.49.51 concentration=False incapacitation branch
+    end-to-end through the PC pipeline.
+
+    Retry loop because Magnus's CON save outcome is random.
+    """
+    import asyncio
+    import time
+
+    kael = kael_rested
+    magnus = roster["Magnus Hexbinder"]
+    pip = roster["Pip Quickfingers"]
+
+    saw_fix = False
+    for _ in range(15):
+        # Refill Kael's ki + reset Magnus's leftover state every loop.
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+            json={"type": "long"},
+        )
+        for k in ("stunned", "hex"):
+            await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+                json={"character_id": magnus["id"], "key": k},
+            )
+        await _seed_battle(gm_client, [
+            {"id": f"tok_stun_{kael['id']}", "char_id": kael["id"],
+             "name": kael["name"], "initiative": 10,
+             "hp_current": 38, "hp_max": 38, "buffs": [],
+             "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+            {"id": f"tok_stun_{magnus['id']}", "char_id": magnus["id"],
+             "name": magnus["name"], "initiative": 9,
+             "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+            {"id": f"tok_stun_{pip['id']}", "char_id": pip["id"],
+             "name": pip["name"], "initiative": 8,
+             "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        ])
+
+        # Magnus casts Hex on Pip → Magnus is now concentrating.
+        await _install_hex(gm_client, magnus["id"], pip["id"])
+        pre_keys = await _buff_keys(gm_client, magnus["id"])
+        assert "hex" in pre_keys, f"pre-cond: hex should be on magnus; got {pre_keys}"
+
+        # Kael uses Stunning Strike on Magnus → roll_request flow.
+        gm_ws.mark()
+        cast_resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_stunning_strike",
+            json={
+                "character_id": kael["id"],
+                "target_combatant_id": f"tok_stun_{magnus['id']}",
+            },
+        )
+        assert cast_resp.status_code == 200, cast_resp.text
+        body = cast_resp.json()
+        assert body["auto_save_target_kind"] == "pc"
+        assert body["auto_save_prompted"] is True
+        prompt_id = body["auto_save_prompt_id"]
+        assert isinstance(prompt_id, int) and prompt_id > 0
+
+        # GM-as-Magnus responds.
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/roll_request/{prompt_id}/respond",
+            json={"character_id": magnus["id"]},
+        )
+        assert r.status_code == 200, r.text
+        if r.json().get("auto_buff_installed") != "Stunned":
+            continue  # CON save passed; retry
+
+        # Save failed: Stunned should land AND Hex should drop.
+        post_keys = await _buff_keys(gm_client, magnus["id"])
+        assert "stunned" in post_keys, (
+            f"Stunned should land on Magnus; got {post_keys}"
+        )
+        assert "hex" not in post_keys, (
+            f"Magnus's Hex should drop when stunned (v2.49.51 hook on a "
+            f"concentration=False incapacitating buff); got {post_keys}"
+        )
+
+        # 💀 GM log entry should fire naming Hex as the dropped anchor.
+        # Broadcast is async vs the HTTP return, so poll up to 2 s.
+        deadline = time.monotonic() + 2.0
+        skull_logs: list = []
+        while time.monotonic() < deadline:
+            skull_logs = [
+                m for m in gm_ws.buffered("roll")
+                if (m.get("data") or {}).get("visibility") == "gm_only"
+                and "💀" in ((m.get("data") or {}).get("note") or "")
+                and "hex" in ((m.get("data") or {}).get("note") or "").lower()
+            ]
+            if skull_logs:
+                break
+            await asyncio.sleep(0.02)
+        assert skull_logs, (
+            f"expected 💀 GM log for Magnus's Hex drop; got "
+            f"{[(m.get('data') or {}).get('note') for m in gm_ws.buffered('roll')]}"
+        )
+        breakdown = (skull_logs[0].get("data") or {}).get("breakdown") or ""
+        assert "incapacitated" in breakdown.lower(), (
+            f"breakdown should name incapacitation cause; got {breakdown!r}"
+        )
+        assert "stunned" in breakdown.lower(), (
+            f"breakdown should name the incapacitating buff; got {breakdown!r}"
+        )
+        saw_fix = True
+        break
+
+    assert saw_fix, "no save failure in 15 attempts — flaky env?"
+
+    # Cleanup so subsequent tests start fresh.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+        json={"character_id": magnus["id"], "key": "stunned"},
+    )

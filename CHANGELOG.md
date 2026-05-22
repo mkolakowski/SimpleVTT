@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.56] - 2026-05-21
+
+**Schema version:** 56
+**Commit summary:** **Wire the Stunning Strike PC integration test filed in v2.49.55.** Closes the "PC roll_request integration test" filed item. Pins the PC end-to-end pipeline for `POST /use_stunning_strike` AND the v2.49.51 incapacitation hook's `concentration: False` branch through the PC `_install_buff` path. Magnus casts Hex (concentration), Kael uses Stunning Strike on Magnus, GM-as-Magnus responds to the auto-generated roll_request; on save fail assert (a) Stunned lands on Magnus via `_install_buff` (PC-keyed sibling of the NPC path the v2.49.55 happy-path test exercises), (b) Magnus's Hex drops (v2.49.51 hook removes the surviving anchor via `_remove_buff` because Stunned is concentration=False and the swap loop doesn't touch non-concentration buffs), (c) 💀 GM log naming "stunned" + "incapacitated" fires through the existing `type=roll` envelope. Retry loop because the CON save is random. 1 new harness test, no production-code edits. PATCH — test-only.
+**Description:** Two edits. **(1)** `tests/harness/test_use_stunning_strike.py::test_stunning_strike_pc_drops_own_concentration` (NEW). Adds the PC integration test alongside the existing NPC + 409 tests so all four Stunning Strike paths live in one file. Reuses the file's `_seed_battle` helper + new local `_buff_keys` / `_install_hex` helpers (mirrors of the ones in `test_incapacitation_drops_concentration.py` — kept local to this file for readability rather than refactoring into `conftest.py` for a single cross-file use). **(2)** `docs/test-harness-coverage.md` — catalog entry under `test_use_stunning_strike.py`; total 248 → 249.
+**Description (cont):** Why this is the right test, not "happy path PC + separate hook test." The v2.49.55 commit pinned the NPC install path (via the WS `battle_update` broadcast) and the wrong_class + no_ki error paths. The remaining surface is the PC pipeline: prompt creation → /respond → `_install_buff` → v2.49.51 hook. Splitting into "happy-path PC install (without prior concentration)" + "incapacitation hook (with concentration to drop)" would mean two retry-loop tests with the same setup minus one cast call. The combined test exercises both invariants for one CON-save retry budget; the hook can't fire without the install landing, so a failure in either path produces a clear assertion message. (Compare `test_paralyzed_pc_drops_own_concentration` in `test_incapacitation_drops_concentration.py` — same combined-test choice for Hold Person.)
+**Description (cont 2):** Why this also pins the v2.49.51 hook's non-concentration branch end-to-end. The existing `test_paralyzed_pc_drops_own_concentration` exercises Hold Person, which installs Paralyzed (`concentration: True`). On Paralyzed install, the swap loop in `_install_buff` already drops Magnus's Hex (because Hex was the only `concentration: True` anchor on Magnus and a new concentration buff is landing) — the v2.49.51 hook just emits the 💀 log. With Stunned (`concentration: False`), the swap loop has no swap-trigger (the new buff is concentration=False), so the hook's "anchor still in new_list → call `_remove_buff` explicitly" branch is the one being exercised. The two tests now cover both v2.49.51 branches: concentration=True via Hold Person (log-only emission), concentration=False via Stunning Strike (explicit remove + log). Without this commit, the `concentration: False` branch was only exercised for NPC targets via the NPC happy-path test, which doesn't go through `_install_buff` at all (uses `_install_buff_on_combatant_id` — the NPC sibling that doesn't have the v2.49.51 hook because NPCs don't carry PC-anchored concentration state in SimpleVTT's model).
+**Description (cont 3):** Why no production-code edits. The PC pipeline was already wired in v2.49.55 (the `_save_request_context` stash with `spell_slug: "stunning-strike"` at the prompt-creation site + the `_SPELL_CONDITION_MAP["stunning-strike"]` entry). The filed item was an explicit assertion gap — the wiring was identical to Hold Person's PC path and was assumed correct without an end-to-end test. This commit confirms the assumption.
+**Description (cont 4):** Verification. Ran the new test pre-commit: PASS first iteration (Magnus's CON mod is +2, save DC is 8 + 3 + 2 = 13 against Kael's WIS mod, so failure odds are ~55% — typically lands a fail in 1–3 iterations of the 15-iter retry budget). Full regression: 249 harness tests pass (was 248, +1 new); 33 encounter-sim tests still pass. Other tests in `test_use_stunning_strike.py` (NPC happy path / wrong_class / no_ki) unchanged.
+
+### Added
+- `tests/harness/test_use_stunning_strike.py::test_stunning_strike_pc_drops_own_concentration` — PC integration test pinning the roll_request → /respond → `_install_buff` → v2.49.51 hook chain for the concentration=False incapacitating buff case.
+- `docs/test-harness-coverage.md` — catalog entry under `test_use_stunning_strike.py`; total 248 → 249.
+
+### Notes
+- **Backward compat.** Test-only addition. Production code untouched.
+- **Both v2.49.51 hook branches now pinned end-to-end.** `concentration: True` via Hold Person (existing test); `concentration: False` via Stunning Strike (this commit).
+
+### Filed
+- **"Must follow a hit" enforcement** — still open from v2.49.55. RAW requires a successful melee hit before Stunning Strike can be invoked. The endpoint trusts the caller; a chat-card / mini-sheet flow could gate the UI button on the most-recent attack outcome.
+- **Sleep** — still absent. Custom HP-pool targeting; up next.
+- **Open Hand Technique** (Monk Lv 3) — on-hit prone/push/no-reactions rider via Flurry of Blows. Similar shape to Stunning Strike; up next.
+
+---
+
 ## [2.49.55] - 2026-05-21
 
 **Schema version:** 56
