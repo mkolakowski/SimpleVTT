@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.88] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Block iPadOS Magic Keyboard text-select gesture on the tabletop canvas.** User-reported. When dragging tokens on the canvas with the Magic Keyboard trackpad, iPadOS was activating the system text-selection callout (lookup / share / copy) instead of starting the token drag. Cause: `#vtt-canvas` + `.map-pane` had `touch-action: none` (which only blocks scroll/zoom) but didn't opt out of the separate text-selection / touch-callout gestures that the trackpad pipeline routes through. Fix: add `-webkit-user-select: none`, `user-select: none`, and `-webkit-touch-callout: none` to both elements. Three properties, applied symmetrically. Mirrors the existing pattern on `.presence-pill` / `.mini-header` / other interactive bits that already opt out. Doc-only CSS edit; no behavior change on non-iOS browsers (those rules already evaluate to a no-op when there's no text content to select).
+**Description:** Two CSS edits in `app/templates/tabletop.html`. **(1)** `.map-pane` — added the three properties alongside the existing `touch-action: none`. (2) `#vtt-canvas` — same three properties. Mac and Linux browsers ignore `-webkit-touch-callout` (vendor prefix only applies on iOS WebKit), so the change is iOS-targeted in effect even though the CSS ships universally. The `user-select: none` pair (un-prefixed + `-webkit-` prefix) also suppresses accidental text-selection on desktop browsers that interpret a long-drag as a selection — net-positive there too.
+**Description (cont):** Why all three properties. `-webkit-touch-callout: none` is iOS-only and specifically blocks the long-press / force-touch lookup callout. `user-select: none` (W3C standard) blocks text-selection drags in modern browsers. `-webkit-user-select: none` is the legacy prefix Safari + older iOS WebKit still respect (current iOS Safari is mostly W3C-compliant but older Magic Keyboard firmware + older iPadOS versions accept only the prefixed form). Belt + suspenders + back-compat-belt.
+**Description (cont 2):** Why `touch-action: none` alone wasn't enough. The CSS `touch-action` property specifically governs the GESTURES the browser allows to act on an element (scroll, zoom, pinch). It does NOT cover iOS's separate text-selection pipeline (which is treated as a UI-level system gesture, not a browser-level touch action). The Magic Keyboard trackpad routes click-drag through that text-selection pipeline by default when the underlying element is plausibly "text-containing" — which a canvas with default `user-select: text` (the user-agent default) qualifies as.
+**Description (cont 3):** Why no harness coverage. The behavior is iOS-only and depends on actual hardware (Magic Keyboard trackpad). The HTTP+WS harness can't simulate iPadOS gesture pipelines; even Playwright can't drive the iPad's Magic Keyboard trackpad meaningfully. Manual verification on the affected device is the validation path.
+**Description (cont 4):** Verification. The user reported the regression; CSS change pushed to v2.49.88. User to verify on their iPad Pro + Magic Keyboard combo (should now drag tokens cleanly without the text-select callout interrupting).
+
+### Fixed
+- `app/templates/tabletop.html::.map-pane` — added `-webkit-user-select: none`, `user-select: none`, `-webkit-touch-callout: none`.
+- `app/templates/tabletop.html::#vtt-canvas` — same three properties.
+
+### Notes
+- **Backward compat.** Pure CSS additions. Other browsers (Mac/Linux/Windows) ignore the `-webkit-` prefixed rules; the unprefixed `user-select: none` is widely supported + harmless on non-touch devices (canvas + map-pane don't host selectable text anyway).
+- **User-reported.** Magic Keyboard trackpad text-select activation on token drag.
+
+---
+
 ## [2.49.87] - 2026-05-22
 
 **Schema version:** 56
