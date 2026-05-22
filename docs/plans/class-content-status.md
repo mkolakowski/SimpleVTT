@@ -75,9 +75,31 @@ its plan section here.
 > tabletop); no code yet.
 > The test harness grew from 72 tests at v2.15.10 to **351 tests** in
 > `tests/harness/` + 7 in `tests/harness_ui/` at v2.49.109 — see
-> `docs/test-harness-coverage.md`. Status markers in the per-class
-> tables below have been spot-updated for the highlights above; a
-> comprehensive sweep across every class/subclass/feat row is filed.
+> `docs/test-harness-coverage.md`.
+>
+> **Comprehensive audit (v2.49.111, 2026-05-22):** walked all 105
+> commits in the v2.15.11 → v2.49.109 range. The audit confirmed that
+> only TWO entries needed a status flip — Monk Stunning Strike (Lv 5,
+> ⚪ → ✅, v2.49.55) and Way of the Open Hand subclass (🟡 → 🟢,
+> Open Hand Technique wired v2.49.57). Both were updated in v2.49.110.
+> The remaining ~50 ⚪ / 🟡 / 🟢 rows across the 12 classes stayed at
+> the v2.15.10 baseline: the v2.16 → v2.49 work was dominated by
+> SPELL ENGINE INFRASTRUCTURE (Phase T.3 save-spell auto-resolution
+> in v2.30.0; T.3b auto-damage on save-for-half v2.31.0; T.3c NPC
+> condition auto-install v2.32.0; T.3d PC save-or-suck v2.37.0; T.3e
+> concentration cleanup v2.38.0; T.4 heal flows v2.26.0; T.4b spell
+> attack rolls v2.34.0; T.4c cantrip scaling v2.36.0; T.4c-follow-up
+> Eldritch Blast multi-beam v2.40.0; T.5 / T.5b / T.5d / T.5e AoE
+> placement v2.44.x → v2.48.x) — none of which add new class-feature
+> rows but ALL of which materially improve every spellcasting class's
+> in-play experience. These spell-engine improvements should be read
+> as "the existing 🟢 / 🟡 spell-related rows now work better"
+> rather than triggering row-by-row status flips.
+
+**Audit conclusion.** The doc as of v2.49.111 accurately reflects
+shipped class-feature work. New row flips will happen when concrete
+class features ship — e.g. the next Monk picker (Patient Defense /
+Step of the Wind), Sorcerer Metamagic, Warlock Pact Boon, etc.
 
 ## Status legend
 
