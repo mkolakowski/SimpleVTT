@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.74] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Add `app/content/range_parser.py` — Phase 2B of the ruler/range plan.** Pure-Python parser that projects plain-text "range" strings from the SRD spell JSON + the demo weapon entries into a feet projection. Surfaces two functions: `parse_range_ft(str) -> Optional[int | tuple[int, int]]` and `max_range_ft(parsed) -> Optional[int]`. Handles "Self" → 0, "Touch" → 5, "60 feet" → 60, "30/120 ft" → (30, 120), "Self (30-foot radius)" → 0, "1 mile" → 5280, "Special" / "Unlimited" / "Sight" → None (skip the check). 33 new unit tests cover every case + a parametrized "every unique SRD spell range" matrix that fails fast if a future content refresh drifts. Hosted under `tests/harness/` so the existing CI workflow runs them without a new job. Phase 2C will consume this from `/cast_spell`. PATCH — additive module + additive tests.
+**Description:** Three new files. **(1)** `app/content/__init__.py` (NEW) — content-helper sub-package marker. (2) `app/content/range_parser.py` (NEW, ~100 lines including doc comment). Single-band ("60 feet"), thrown-band ("30/120 ft"), and mile-scale ("1 mile" = 5280 ft) regexes; explicit allow-lists for "Self" / "Touch" / "Self (radius...)" / the skip-keywords ("Special" / "Unlimited" / "Sight"). Returns None for unparseable content so the caller treats unknown ranges as "skip the check" — the conservative default. `max_range_ft` collapses a parsed range to a single int (long-band for thrown weapons), since the range check only cares "is the target reachable at all" — disadvantage at long range is a separate concern. (3) `tests/harness/test_range_parser.py` (NEW, 33 tests).
+**Description (cont):** Why the parser sits under `app/content/` rather than next to the route file. The shipped SRD JSON is a content layer; projections from it (parsers, lookups, shape converters) belong with the content code, not with the HTTP route handlers. Today there's no other content parser, but the `_monster_template_to_sheet` projection in `tabletop_routes.py` is the spiritual sibling — when a refactor finally moves that out of the route file, it'll join `app/content/` too. The directory makes that future move trivial.
+**Description (cont 2):** Why None for "Special" / "Unlimited" / "Sight" rather than ∞. Two reasons. (a) The skip-the-check semantic is RAW-compatible: a spell with range "Special" doesn't have a measurable cast range; gating it on distance would be wrong. (b) The 409 response in Phase 2C should NOT fire for these — they're effectively "trust the GM." None signals "don't even attempt the check"; that's stronger than a large number that would coincidentally also bypass.
+**Description (cont 3):** Why a SRD-content parametrized test. The 17 unique range strings surveyed from `app/data/local/dnd5e/spells/*.json` are pinned individually. If a future SRD-content refresh changes a string ("60 feet" → "60 ft" say), the parser's regex still matches both — but if the refresh introduces a NEW format ("60-foot" hyphenated, or "60'" with a foot mark), the test fails fast and surfaces the drift. Same regression-guard pattern as the v2.49.51 condition-buff key set.
+**Description (cont 4):** Why `max_range_ft` uses the LONG range for thrown weapons. The cast/attack endpoint's range check only answers "is the target reachable at all" — a 409 only fires if the target is BEYOND the absolute reach. RAW disadvantage at long range is a separate gate that the attack roll itself enforces (via the existing advantage / disadvantage flags); the range endpoint doesn't need to know about it. Collapsing to the long band keeps the 409 contract simple.
+**Description (cont 5):** Why the tests live under `tests/harness/` despite being pure unit tests. The CI workflow runs `pytest tests/harness/` and doesn't have a separate unit-test job. Putting the file there means CI picks it up automatically. The conftest's expensive fixtures (httpx clients, WS collectors) are no-ops for tests that don't request them. A future commit could create a `tests/unit/` directory + add a CI job, but that's incremental work that doesn't gate Phase 2C.
+**Description (cont 6):** Verification. Ran the new file in isolation: `pytest tests/harness/test_range_parser.py` — 33 passed in 0.05 s. Full harness regression unchanged. Container rebuilt to v2.49.74 (the parser module isn't imported by any route yet — Phase 2C does that — but the version bump still ships per the per-commit rule).
+
+### Added
+- `app/content/__init__.py` — new content-helper sub-package.
+- `app/content/range_parser.py` — Phase 2B spell-range parser.
+- `tests/harness/test_range_parser.py` — 33 unit tests covering the parser + an SRD-content regression matrix.
+- `docs/test-harness-coverage.md` — new "Content parsers (unit tests)" section + catalog row; total 280 → 313.
+
+### Notes
+- **Backward compat.** Pure additive module + additive tests. No existing route, content, or test changed.
+- **Phase 2B complete.** Phase 2C will wire this into `/cast_spell` next.
+
+---
+
 ## [2.49.73] - 2026-05-22
 
 **Schema version:** 56

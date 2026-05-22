@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 280 (as of v2.49.68, 2026-05-22).
+**Total tests:** 313 (as of v2.49.74, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -615,6 +615,35 @@ Druid Wild Shape / Polymorph form transitions.
 | `test_transform_already_transformed` | Cannot transform while transformed (409). |
 | `test_revert_when_not_transformed` | Reverting a base-form character → 409. |
 | `test_transform_over_budget_flag` | Carries `over_budget: true` when action chip already used. |
+
+---
+
+## Content parsers (unit tests)
+
+Pure-Python unit tests that don't need the docker stack or any HTTP / WS fixture. Hosted under `tests/harness/` so the CI workflow picks them up alongside the harness tests; the parser modules live under `app/content/`.
+
+### `test_range_parser.py`
+v2.49.74 — Phase 2B of the ruler/range plan. Tests `app/content/range_parser.py`'s `parse_range_ft` + `max_range_ft`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_self_returns_zero` | `"Self"` (in any casing / whitespace) → 0. Self-range spells skip the range check. |
+| `test_self_with_radius_returns_zero` | `"Self (30-foot radius)"` etc. → 0 (radius is an AoE concern, not the cast-range gate). |
+| `test_touch_returns_five` | `"Touch"` → 5 (RAW melee reach). |
+| `test_single_feet_band` | `"5 feet"` / `"30 feet"` … `"500 feet"` → int. |
+| `test_feet_abbreviation` | `"5 ft"` / `"60 ft"` / `"120 ft"` → int (weapons use the abbreviation). |
+| `test_feet_alt_spellings` | `"5 foot"` / `"5 feet."` / `"60 ft."` → int. |
+| `test_thrown_weapon_range` | `"20/60 feet"` → `(20, 60)` etc. |
+| `test_thrown_abbreviated` | `"30/120 ft"` → `(30, 120)` (the demo's javelin / hand-crossbow shape). |
+| `test_mile_scale` | `"1 mile"` → 5280, `"5 miles"` → 26400, `"500 miles"` → 2640000. |
+| `test_skip_strings_return_none` | `"Special"` / `"Unlimited"` / `"Sight"` → None — caller skips the range check. |
+| `test_empty_inputs_return_none` | `""` / `"   "` / `None` → None. |
+| `test_garbage_returns_none` | `"not a range"` / `"60"` (no unit) / `"60 leagues"` → None. Robust to unparseable content. |
+| `test_max_range_passthrough_int` | `max_range_ft(60)` → 60. |
+| `test_max_range_collapses_thrown` | `max_range_ft((20, 60))` → 60 (uses long range for "is target reachable at all"). |
+| `test_max_range_none_passthrough` | `max_range_ft(None)` → None. |
+| `test_combined_pipeline` | End-to-end: parse a string then collapse to a single int. |
+| `test_srd_spell_ranges` (parametrized, 17 cases) | Pins every unique range string surveyed from `app/data/local/dnd5e/spells/*.json` against its expected ft. SRD content drift fails this test rather than silently breaking range enforcement. |
 
 ---
 
