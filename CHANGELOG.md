@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.62] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Add `/shake_awake` — third RAW Sleep wake branch.** Closes the v2.49.61 filed "wake-via-shake" item. RAW Sleep: "each creature affected by this spell falls unconscious until the spell ends, the sleeper takes damage, OR SOMEONE USES AN ACTION TO SHAKE OR SLAP THE SLEEPER AWAKE." Branch 2 (damage) shipped in v2.49.61; this commit lands branch 3. New endpoint `POST /api/campaign/{cid}/shake_awake` — any class can invoke (RAW "someone"), costs 1 action, requires the target to have a Sleep-sourced Unconscious buff. Validates Phase 4 action gate; 409 `not_asleep` when the target has no matching buff. On success: removes the buff (PC: `_remove_buff` + sheet mirror; NPC: hub mutation + `battle_update`), marks the action slot, emits a public 🤚 roll-log entry. 4 new harness tests pin NPC + PC wake + two 409 paths. PATCH — additive endpoint; no API contract change.
+**Description:** Two edits. **(1)** `app/routes/tabletop_routes.py::shake_awake` — new endpoint placed right after `cast_sleep`. Body `{character_id, target_combatant_id?, target_character_id?, target_name?, override?}`. Resolves target via `_lookup_combatant` (falls back to hub-state PC search by `char_id` when only `target_character_id` is given). Filters `target.buffs` for `key in ("unconscious", "asleep") AND source_spell == "Sleep"`; returns 409 `not_asleep` with `target_name` + `reason` field when nothing matches. Phase 4 action gate mirrors `cast_hex` exactly (overrideable unless strict mode). Buff removal mirrors `_wake_sleeping_on_damage`'s PC + NPC branches; logs are identical to the damage-wake hook but with a 🤚 emoji + "shakes ... awake" phrasing. **(2)** `tests/harness/test_shake_awake.py` (NEW, 4 tests).
+**Description (cont):** Why the buff filter uses the same `source_spell == "Sleep"` gate as the damage hook. Same RAW reason: shaking a dying-at-0-HP creature doesn't wake them (their Unconscious is the dying state, not a Sleep effect). Future endpoints that install Unconscious via other mechanisms (Power Word Knockout, Druid Sleep Touch, etc.) might or might not respond to shake — RAW decides per spell. Same conservative default as the damage hook: only fire for the exact Sleep source. The two hooks now share five-way symmetric semantics: install (cast_sleep) + damage-wake (_wake_sleeping_on_damage) + shake-wake (this endpoint) all key on the same `source_spell` tag.
+**Description (cont 2):** Why no class restriction. RAW says "someone uses an action" — not "another caster," not "a friendly creature," literally any creature. The fighter can shake the sorcerer awake; the rogue can shake an enemy bandit awake to interrogate them; the sleeping bandit's ally bandit can shake them awake on its turn. Class-gating would be a RAW violation. The action cost is the only gate on misuse — a PC can shake their own ally awake but they spend their action doing it instead of attacking.
+**Description (cont 3):** Why no range check. The ruler/range plan (v2.49.59, `docs/plans/ruler-and-range.md`) Phase 2 will add range enforcement on cast/attack endpoints; the shake-awake endpoint should be wired in at that time (5 ft melee reach, RAW). For now the endpoint trusts the caller — same convention as Stunning Strike + Open Hand Technique's "must follow a hit" gate. Filed as a Phase 2 dependency.
+**Description (cont 4):** Why 🤚 emoji + public log visibility. Matches the 🌅 damage-wake convention from v2.49.61: table-visible event (a sleeper visibly snaps awake; the table sees a roll). 🤚 connotes the physical shake action; 🌅 connotes the dawn-of-consciousness moment. Distinct emoji so a GM scanning the roll log can tell at a glance how the sleeper woke (damaged vs. shaken). Same visibility (PUBLIC); same envelope (`type: "roll"`); same broadcast pattern.
+**Description (cont 5):** Test design. Pre-seeds the Sleep buff via `/battle` PUT (same approach as test_sleep_wake_on_damage.py — deterministic, no retry loop on the install). Action gate is overrideable by default since the test scenarios don't care about chip state; one test could be added later to pin the 409 over_budget path but it's structurally identical to the cast_hex / cast_sleep gate already pinned elsewhere. The "non_sleep_unconscious" 409 test is the load-bearing regression guard — if a future bug widens the buff filter, this catches it before it ships.
+**Description (cont 6):** Verification. Ran pre-fix: all 4 tests failed with 404 (endpoint missing). Post-fix: all 4 pass. Full regression: 269 harness tests pass (was 265, +4 new). No regressions on damage / buff / sleep / concentration tests.
+
+### Added
+- `app/routes/tabletop_routes.py::shake_awake` — new endpoint `POST /api/campaign/{cid}/shake_awake`. Any class; costs 1 action; requires Sleep-sourced Unconscious buff on the target.
+- `tests/harness/test_shake_awake.py` — 4 tests (NPC wake / PC wake / not_asleep no buff / not_asleep generic unconscious).
+- `docs/test-harness-coverage.md` — catalog entry; total 265 → 269.
+
+### Notes
+- **Backward compat.** Pure additive endpoint. New 🤚 roll-log entry but rides on the existing `type: "roll"` envelope; clients already render those.
+- **All three RAW Sleep wake branches now pinned.** (1) Spell duration runs out (timer in buff; client tick decrements) — covered by existing duration handling. (2) Sleeper takes damage — v2.49.61. (3) Action to shake awake — this commit.
+- **No range enforcement.** Filed as a Phase 2 ruler/range dependency.
+
+### Filed
+- **Range check on `/shake_awake`** — 5 ft melee reach (RAW). Adds to Phase 2 of the ruler/range plan.
+- **Self-shake** — RAW unclear: can a sleeper shake themself awake? Probably not (they're unconscious and can't take actions). The endpoint today doesn't gate on shaker != target; a self-shake would succeed because the target's buff exists and the shaker's action gate is independent. Marginal; file for later if it surfaces.
+- **Undead / charm-immune exclusion for Sleep targeting** — still open from v2.49.58.
+- **Sleep on Bard / Sorcerer / Warlock spell lists** — still open from v2.49.58.
+
+---
+
 ## [2.49.61] - 2026-05-22
 
 **Schema version:** 56

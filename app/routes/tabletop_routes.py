@@ -11927,6 +11927,193 @@ async def cast_sleep(
     }
 
 
+# ----------- API: shake a sleeping creature awake (RAW Sleep wake action) -----------
+
+@router.post("/api/campaign/{campaign_id}/shake_awake")
+async def shake_awake(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Use an action to shake a Sleep'd creature awake.
+
+    Body: ``{character_id, target_combatant_id?, target_character_id?,
+    target_name?, override?}``.
+
+    RAW (PHB Sleep): "each creature affected by this spell falls
+    unconscious until the spell ends, the sleeper takes damage, OR
+    SOMEONE USES AN ACTION TO SHAKE OR SLAP THE SLEEPER AWAKE." This
+    endpoint covers the third branch. No class restriction — RAW
+    "someone" means any creature can do it. Costs 1 action.
+
+    Validates:
+      - target has a Sleep-sourced Unconscious buff (key=`unconscious`
+        AND source_spell=`Sleep`). Other Unconscious sources (a
+        dying-at-0-HP creature, a future Knockout feature, etc.) are
+        not in scope — shaking a dying character doesn't wake them
+        RAW. 409 ``not_asleep`` otherwise.
+      - Phase 4 action gate. 409 ``over_budget`` when the shaker's
+        action chip is already burnt + they're not the GM + ``override``
+        is False (or strict_action_economy is on).
+
+    On success:
+      - Removes the Unconscious buff (PC: ``_remove_buff`` + sheet
+        mirror; NPC: hub-state mutation + ``battle_update``).
+      - Marks the shaker's action slot.
+      - Emits a public 🤚 roll-log entry so the table sees the wake.
+      - Returns ``{ok, target_name, action_used: True}``.
+
+    No range check today — SimpleVTT doesn't enforce spatial range
+    yet (see docs/plans/ruler-and-range.md). The future range-
+    enforcement Phase 2 will add a 5-ft melee check here.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (body.get("target_combatant_id") or "").strip()
+    target_character_id_in = body.get("target_character_id")
+    if target_character_id_in is not None:
+        target_character_id_in = int(target_character_id_in)
+    target_name_in = (body.get("target_name") or "").strip()
+    override = bool(body.get("override"))
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not target_combatant_id and not target_character_id_in:
+        raise HTTPException(400, "target_combatant_id or target_character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Shaker character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    # Resolve target.
+    target_combatant = (
+        _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant_id else None
+    )
+    if not target_combatant and target_character_id_in:
+        # PC fallback — synthesize a combatant dict so the buff check
+        # can run via the hub state (PC buffs live there, not on the
+        # character sheet during combat).
+        state = hub.get_battle(campaign_id) or {}
+        for c in state.get("combatants") or []:
+            if c.get("char_id") == target_character_id_in:
+                target_combatant = c
+                break
+        if not target_combatant:
+            target_combatant = {
+                "char_id": target_character_id_in,
+                "id": target_combatant_id or "",
+                "name": target_name_in or "",
+                "buffs": [],
+            }
+    if not target_combatant:
+        raise HTTPException(404, "Target combatant not found")
+
+    # Verify the target has a Sleep-sourced Unconscious buff.
+    target_buffs = list(target_combatant.get("buffs") or [])
+    sleep_buff_keys = [
+        b.get("key") for b in target_buffs
+        if (b or {}).get("key") in ("unconscious", "asleep")
+        and (b or {}).get("source_spell") == "Sleep"
+    ]
+    if not sleep_buff_keys:
+        return JSONResponse(status_code=409, content={
+            "error": "not_asleep",
+            "target_name": target_combatant.get("name") or "",
+            "reason": "target has no Sleep-sourced Unconscious buff",
+        })
+
+    # Phase 4 over-budget gate (action slot).
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "shake_awake",
+            "label": "Shake Awake",
+            "strict": strict,
+        })
+
+    # Remove the Sleep-Unconscious buff(s).
+    target_char_id = target_combatant.get("char_id")
+    removed_count = 0
+    if target_char_id:
+        # PC path.
+        for key in sleep_buff_keys:
+            if await _remove_buff(campaign_id, int(target_char_id), key):
+                removed_count += 1
+        if removed_count:
+            _mirror_buffs_to_sheet(
+                db, int(target_char_id),
+                _get_buffs(campaign_id, int(target_char_id)),
+            )
+    else:
+        # NPC path — mutate hub combatant buff list directly.
+        state = hub.get_battle(campaign_id)
+        if state:
+            for c in state.get("combatants") or []:
+                if c.get("id") != target_combatant.get("id"):
+                    continue
+                new_list = [
+                    b for b in (c.get("buffs") or [])
+                    if not (
+                        (b or {}).get("key") in ("unconscious", "asleep")
+                        and (b or {}).get("source_spell") == "Sleep"
+                    )
+                ]
+                if len(new_list) != len(c.get("buffs") or []):
+                    removed_count = len(c.get("buffs") or []) - len(new_list)
+                    c["buffs"] = new_list
+                    hub.set_battle(campaign_id, state)
+                    await hub.broadcast(campaign_id, {
+                        "type": "battle_update",
+                        "data": state,
+                        "force_gm_sync": True,
+                    })
+                break
+
+    # Mark the action slot.
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    # Public wake log.
+    target_name = target_combatant.get("name") or "Unknown"
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": "—",
+            "total": 0,
+            "breakdown": (
+                f"Action: shake {target_name} awake — Sleep ends "
+                f"(RAW PHB Sleep)"
+            ),
+            "note": f"🤚 {char.name} shakes {target_name} awake",
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    return {
+        "ok": True,
+        "target_name": target_name,
+        "action_used": True,
+        "buffs_removed": removed_count,
+    }
+
+
 # ----------- API: get a character's current action-economy state -----------
 #
 # Phase 4a (v2.7.2) Layer A dimming: the full character sheet polls

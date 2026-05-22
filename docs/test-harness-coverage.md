@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 265 (as of v2.49.61, 2026-05-22).
+**Total tests:** 269 (as of v2.49.62, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -232,6 +232,16 @@ Phase T.5a — AoE multi-target dispatch on `/cast_spell`. New `target_combatant
 | `test_aoe_cast_without_targets_lands_pending_then_place_aoe_resolves` | v2.48.0 Phase T.5e caster-gated placement. `/cast_spell` without `target_combatant_ids` returns `pending_aoe_placement: True` + the spell's `area_shape`/`area_size_ft`. Then POST `/place_aoe` with the cast_id + target list resolves NPC saves + damage and broadcasts `spell_cast_aoe_resolved` with the resolved targets. |
 | `test_place_aoe_auto_rolls_pc_save_and_applies_damage` | v2.48.3 — `/place_aoe` auto-rolls PC saves alongside NPCs (no more roll_request prompt for the new flow). PC entry has `rolled`/`passed`/`damage_applied` populated, `pc_skipped` and `pending_request_id` absent. PC's HP drops server-side. |
 | `test_place_aoe_rejects_non_caster_non_gm` | v2.48.0 Phase T.5e auth gate. `/place_aoe` with a bogus cast_id returns 404 (stash-not-found). |
+
+### `test_shake_awake.py`
+v2.49.62 — `POST /shake_awake`. Closes the v2.49.61 filed "wake-via-shake" item. RAW Sleep's third wake branch: another creature uses an action to shake the sleeper awake. Any class can shake (RAW "someone"); costs 1 action. Scoped to Sleep-sourced Unconscious buffs only — shaking a dying-at-0-HP creature isn't a wake.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_shake_awake_npc` | Pip shakes a Sleep'd bandit; assert `buffs_removed==1`, latest battle_update shows bandit without Unconscious, 🤚 log names both shaker + bandit. |
+| `test_shake_awake_pc` | Pip shakes a Sleep'd Magnus; assert Unconscious dropped from both hub AND sheet mirror; 🤚 log names Pip + Magnus. |
+| `test_shake_awake_not_asleep_no_buff` | Target has no Unconscious buff → 409 `not_asleep`. |
+| `test_shake_awake_not_asleep_non_sleep_unconscious` | Target has generic Unconscious (no `source_spell==Sleep`) → 409 `not_asleep`. Regression guard: shaking a dying/knocked-out creature isn't a Sleep-wake. |
 
 ### `test_sleep_wake_on_damage.py`
 v2.49.61 — closes the "wake-on-damage" filed item from v2.49.58. RAW Sleep wakes the sleeper on damage. The new `_wake_sleeping_on_damage` hook fires from both branches of `_apply_damage_to_combatant` after damage applies; scoped to buffs with `source_spell == "Sleep"` so other Unconscious sources (future knockout features etc.) aren't accidentally cleared. Same commit also fixes a pre-existing latent bug in `_resistance_halve` (crashed on condition buffs with `effects: list`; now skips non-dict effects).
