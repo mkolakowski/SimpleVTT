@@ -1647,6 +1647,13 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
         opts = opts || {};
         const title = opts.title || 'Choose a target';
         const subtitle = opts.subtitle || '';
+        // v2.49.87: when allowMulti is true (default), rows act as
+        // checkboxes — first tap selects, second tap deselects, and
+        // the player must explicitly Confirm to dismiss with the
+        // picks. When allowMulti is false, the old single-tap-to-pick
+        // behavior is preserved (callers that need that explicit
+        // contract can opt out).
+        const allowMulti = opts.allowMulti !== false;
         let combatants = [];
         try {
             const raw = localStorage.getItem(`simplevtt_battle_${CAMPAIGN_ID}`);
@@ -1665,7 +1672,8 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             overlay.className = 'target-picker-overlay';
             const rows = combatants.length
                 ? combatants.map((c) => `
-                    <button type="button" class="target-picker-row" data-cid="${_escTP(c.id || '')}">
+                    <button type="button" class="target-picker-row${allowMulti ? ' is-multi' : ''}" data-cid="${_escTP(c.id || '')}" aria-pressed="false">
+                        ${allowMulti ? '<span class="target-picker-check" aria-hidden="true"></span>' : ''}
                         <span class="target-picker-name">${_escTP(c.name || '?')}</span>
                         <span class="target-picker-hp">${c.hp_current ?? '?'} / ${c.hp_max ?? '?'} HP</span>
                     </button>`).join('')
@@ -1675,9 +1683,11 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     <div class="target-picker-header">
                         <div class="target-picker-title">${_escTP(title)}</div>
                         ${subtitle ? `<div class="target-picker-subtitle">${_escTP(subtitle)}</div>` : ''}
+                        ${allowMulti && combatants.length ? '<div class="target-picker-subtitle">Tap rows to select one or more targets. Confirm when ready.</div>' : ''}
                     </div>
                     <div class="target-picker-list">${rows}</div>
                     <div class="target-picker-actions">
+                        ${allowMulti && combatants.length ? '<button type="button" class="target-picker-confirm" disabled>Confirm (0)</button>' : ''}
                         <button type="button" class="target-picker-skip">Skip (no target)</button>
                         <button type="button" class="target-picker-cancel">Cancel</button>
                     </div>
@@ -1691,10 +1701,31 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
             const escHandler = (e) => { if (e.key === 'Escape') close(null); };
             document.addEventListener('keydown', escHandler);
             overlay.addEventListener('click', (e) => { if (e.target === overlay) close(null); });
+            const picked = new Set();   // multi-select picks (combatant ids)
+            const confirmBtn = overlay.querySelector('.target-picker-confirm');
+            function _refreshConfirm() {
+                if (!confirmBtn) return;
+                confirmBtn.textContent = `Confirm (${picked.size})`;
+                confirmBtn.disabled = picked.size === 0;
+            }
             overlay.querySelectorAll('.target-picker-row').forEach((btn) => {
                 btn.addEventListener('click', () => {
                     const c = combatants.find(x => x.id === btn.dataset.cid);
                     if (!c) { close(null); return; }
+                    if (allowMulti) {
+                        // Toggle this row's selection. Confirm button
+                        // commits all picks at once.
+                        if (picked.has(c.id)) {
+                            picked.delete(c.id);
+                            btn.setAttribute('aria-pressed', 'false');
+                        } else {
+                            picked.add(c.id);
+                            btn.setAttribute('aria-pressed', 'true');
+                        }
+                        _refreshConfirm();
+                        return;
+                    }
+                    // Legacy single-tap-to-pick path.
                     close({
                         target_combatant_id: c.id || '',
                         target_character_id: c.char_id || null,
@@ -1702,6 +1733,28 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     });
                 });
             });
+            if (confirmBtn) {
+                confirmBtn.addEventListener('click', () => {
+                    if (!picked.size) return;
+                    // Build the multi-target body. The FIRST picked
+                    // combatant rides through the legacy singular
+                    // fields so server's single-target path is happy
+                    // when picked.size === 1; for picked.size > 1 the
+                    // target_combatant_ids list drives the v2.49.85
+                    // multi-target loop.
+                    const items = combatants.filter(c => picked.has(c.id));
+                    const head = items[0];
+                    const body = {
+                        target_combatant_id: head.id || '',
+                        target_character_id: head.char_id || null,
+                        target_name: head.name || '',
+                    };
+                    if (items.length > 1) {
+                        body.target_combatant_ids = items.map(c => c.id);
+                    }
+                    close(body);
+                });
+            }
             overlay.querySelector('.target-picker-skip').addEventListener('click', () => close({}));
             overlay.querySelector('.target-picker-cancel').addEventListener('click', () => close(null));
         });
@@ -1736,15 +1789,40 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
     cursor: pointer; font-size: 14px;
 }
 .target-picker-row:hover { background: rgba(255,200,100,0.08); border-color: var(--accent, #d4a85e); }
-.target-picker-name { font-weight: 600; }
+.target-picker-row.is-multi { gap: 12px; }
+.target-picker-row.is-multi .target-picker-check {
+    display: inline-block; width: 18px; height: 18px;
+    border: 2px solid var(--border, #2c2f36); border-radius: 4px;
+    flex-shrink: 0; position: relative;
+    background: transparent;
+}
+.target-picker-row.is-multi[aria-pressed="true"] {
+    background: rgba(74,222,128,0.10);
+    border-color: rgba(74,222,128,0.5);
+}
+.target-picker-row.is-multi[aria-pressed="true"] .target-picker-check {
+    background: #4ade80; border-color: #4ade80;
+}
+.target-picker-row.is-multi[aria-pressed="true"] .target-picker-check::after {
+    content: '✓'; position: absolute;
+    inset: 0; color: #fff; font-size: 14px; line-height: 14px;
+    text-align: center; font-weight: 700;
+}
+.target-picker-name { font-weight: 600; flex: 1 1 auto; }
 .target-picker-hp { font-size: 12px; color: var(--fg-mute, #888); }
 .target-picker-empty { padding: 24px; text-align: center; color: var(--fg-mute, #888); font-size: 13px; line-height: 1.5; }
-.target-picker-actions { padding: 10px 14px; border-top: 1px solid var(--border, #2c2f36); display: flex; gap: 8px; justify-content: flex-end; }
-.target-picker-skip, .target-picker-cancel {
+.target-picker-actions { padding: 10px 14px; border-top: 1px solid var(--border, #2c2f36); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.target-picker-confirm, .target-picker-skip, .target-picker-cancel {
     min-height: 36px; padding: 8px 14px; border-radius: 6px;
     border: 1px solid var(--border, #2c2f36); background: transparent;
     color: var(--fg, #ddd); cursor: pointer; font-size: 13px;
 }
+.target-picker-confirm:not([disabled]) {
+    background: rgba(74,222,128,0.15); color: #4ade80;
+    border-color: rgba(74,222,128,0.5); font-weight: 600;
+}
+.target-picker-confirm:not([disabled]):hover { background: rgba(74,222,128,0.25); }
+.target-picker-confirm[disabled] { opacity: 0.5; cursor: not-allowed; }
 .target-picker-skip:hover { background: rgba(255,200,100,0.08); }
 .target-picker-cancel:hover { background: rgba(255,100,100,0.08); }
 </style>

@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.87] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **`_promptTargetPicker` gets multi-select via checkbox rows — closes the v2.49.79 targeting-button TODO.** When the picker opens (when no targets are pre-set on the canvas + the player clicks an attack), rows now render with a green checkbox on the left. Tapping a row toggles it; the new "Confirm (N)" button at the bottom commits all picks at once. The first picked combatant rides through the legacy singular fields (so single-pick still works server-side); 2+ picks add `target_combatant_ids` for the v2.49.85 multi-target loop. Skip / Cancel unchanged. The flow is identical on desktop + touch — no canvas double-click required to multi-target, which closes the mobile UX gap. Opt-out via `_promptTargetPicker({allowMulti: false})` for callers that need the legacy single-tap-to-pick contract. Doc-only on the server side (no endpoint changes); existing 339 harness tests pass + the v2.49.85 multi-target test already covers the server contract this client uses.
+**Description:** Two edits. **(1)** `app/templates/sheet_dnd5e.html::_promptTargetPicker` — new `allowMulti` opt (default true). When true, each row gets a `.target-picker-check` span (the visual checkbox), `aria-pressed` toggles on click, the picked set accumulates in JS, and the new `.target-picker-confirm` button commits all picks. When false (legacy callers can opt out), the old single-tap-to-pick path runs. (2) CSS additions for `.target-picker-row.is-multi`, the green-checked `:where([aria-pressed="true"])` state, the checkbox spec (18px square, green when checked, ✓ glyph), and the Confirm button's prominent-when-enabled / dim-when-empty style. All theme-token-friendly (uses `var(--accent)` / `var(--border)` / `var(--fg)`).
+**Description (cont):** Why default `allowMulti: true`. The TODO described multi-select as the primary use case. Existing callers that expected single-tap behavior would break in principle, but in practice EVERY existing caller in the codebase invokes `_promptTargetPicker` from the attack-flow where multi-target is the right semantic. The opt-out parameter handles future single-tap needs (e.g. a "set the Hex target" flow where exactly one target is required). Trading one default-flip for cleaner mobile UX.
+**Description (cont 2):** Why the checkbox visual rather than just `aria-pressed`-with-color. Accessibility + glanceability. A checkbox is a universal "select me" affordance; users instantly know what tapping a row does. Color-only state (green-tinted row) reads as "highlighted" but doesn't communicate "this is going into the multi-select bag." The 18-px square with a `✓` when checked is a textbook list-pick UI; no learning curve.
+**Description (cont 3):** Why the Confirm button is dim until at least one pick. A "Confirm (0)" button that fires on tap would be ambiguous — does it mean "skip" or "submit empty selection"? The dim+disabled state is clearer: "you haven't picked anything yet, this button doesn't do anything." Skip + Cancel are still available for the empty-set + abort intents.
+**Description (cont 4):** Why ride the first picked combatant through the legacy singular fields when picked.size === 1. Server's v2.49.85 multi-target loop reconciles either form (singular OR list) into the same internal state. But the CHAT CARD on the front end reads the singular fields for the headline "Pip → Bandit Alpha" rendering. Until that learns about `auto_attack_targets`, sending only the list would leave the chat card showing "no target" for a single-pick. Belt + suspenders: legacy fields populated AND the list when 2+ picks.
+**Description (cont 5):** Verification. Manual: opened Pip's character sheet on a mobile-sized viewport, clicked an attack button while no targets were set → modal opened with checkbox rows + the dim Confirm button. Tapped two rows → Confirm became "Confirm (2)" + active-green. Tapped Confirm → modal closed + attack fired against both bandits (server logs showed two `weapon_attack` broadcasts with fresh per-target rolls in `auto_attack_targets`). Skip still works (returns empty body); Cancel still works (returns null + aborts attack). Smoke + attack regression: 17 tests pass.
+
+### Changed
+- `app/templates/sheet_dnd5e.html::_promptTargetPicker` — gains `allowMulti` opt (default true) + checkbox rows + Confirm button.
+- `app/templates/sheet_dnd5e.html` CSS — new `.target-picker-row.is-multi`, `.target-picker-check`, `.target-picker-confirm` rules.
+
+### Notes
+- **Backward compat.** Existing callers that need single-tap behavior can pass `{allowMulti: false}`. Server-side single-target contract unchanged. Existing 339 harness tests + v2.49.85 multi-target tests pass.
+- **TODO closed.** The v2.49.79 "Targeting Button on the Attack Flow" item is done end-to-end: server (v2.49.85) + canvas client (v2.49.86) + modal picker (this commit).
+
+### Filed
+- **Chat card multi-target rendering** — `auto_attack_targets` is on the broadcast but the chat card doesn't render per-target outcomes yet. Filed for follow-up.
+- **Per-target uplift detection** — Hex / Hunter's Mark / Colossus Slayer only apply to the primary target today. Filed from v2.49.85.
+- **Per-target range check** — multi-target attacks only range-check the primary. Filed from v2.49.85.
+
+---
+
 ## [2.49.86] - 2026-05-22
 
 **Schema version:** 56
