@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.82] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Phase 3C: range ring on cast-button hover.** When the player hovers a 🪄 Cast button in the character sheet's spell list (BEFORE clicking it), a translucent green ring appears around the caster's token on the tabletop at the spell's range — a "where can this reach?" preview. The ring disappears on mouseleave. Cross-window wiring via `postMessage` from the sheet's iframe drawer up to `window.parent` (the tabletop window). Client-side range parser `_parseRangeFtJS` mirrors the v2.49.74 server parser so the sheet sends the raw range string and the tabletop parses on receipt — no client/server version-sync risk. Suppressed when the AoE picker / ruler picker / a drag is active (the more prominent tool wins). Same Phase 3A green-translucent ring primitive. No harness coverage (cross-window postMessage + canvas render — needs Playwright); existing 329 harness tests pass. PATCH.
+**Description:** Five edits. **(1)** `app/static/tabletop.js::_parseRangeFtJS` (NEW, ~25 lines) — JS port of the v2.49.74 server-side parser. Same return contract: `null` for unparseable / Special / Unlimited / Sight; `0` for Self / Self+radius (caller skips the ring); `5` for Touch; integer feet for "N feet" / "N ft"; long band for thrown ("20/60 ft" → 60); miles × 5280. **(2)** `app/static/tabletop.js::_castHoverRing` (NEW state + show/hide methods, ~50 lines) — modeled on `_aoePicker`'s shape. `show({char_id, range_str, spell_name})` parses the range, resolves the caster's token position via `_aoePicker._resolveOrigin(charId)`, gates on `range_ft > 0 && !_aoePicker.active && !_rulerPicker.active && !dragging`, sets state, triggers `render()`. `hide()` clears state + re-renders. **(3)** `app/static/tabletop.js` — new `window.addEventListener('message', ...)` listener that dispatches `vtt:cast_range_hover` messages from the sheet to `_castHoverRing.show / .hide`. Origin-matched against `window.location.origin` so a tab in another origin can't spoof the ring. **(4)** `app/static/tabletop.js::render` — new draw pass right before the Phase 3B hover rangefinder. Translucent green ring (alpha 0.06 fill, dashed `#4ade80` 1.5 px stroke) at `(range_ft / 5) * gridSize` radius around the caster's position. **(5)** `app/templates/sheet_dnd5e.html::renderSpells` — new `forEach` loop adding mouseenter / mouseleave handlers to every `.sp-cast` button. Hover posts `{type: 'vtt:cast_range_hover', action: 'show', char_id, range_str, spell_name}` to `window.parent`; leave posts `{action: 'hide'}`. Gated on `window.parent !== window` so the loop is a no-op when the sheet runs standalone (no path back).
+**Description (cont):** Why client-side parsing rather than passing a pre-parsed `range_ft` from the sheet. The sheet's spell entries store raw text like `"60 feet"` / `"Self (15-foot cone)"`. Pre-parsing would mean either (a) keeping the sheet aware of every parse rule (duplicates the server logic in a third place), or (b) calling the server to parse before posting (a hot-path AJAX on every hover, bad UX). Pure JS parse on the receiving side: same code path as the server uses, no version-sync risk, no extra HTTP round-trip. The 25-line JS function matches the 100-line Python module in spirit because regexes carry most of the logic.
+**Description (cont 2):** Why the GM iframe is the primary supported path. The character sheet opens in either (a) the GM's iframe drawer (`monster-sheet-drawer-iframe` in `tabletop.html`) where `window.parent === tabletop`, or (b) a player's new tab via `<a target="_blank" rel="noopener">` where `window.opener === null` and there's no path back. The Phase 3C ring works in case (a) — which is the primary place the GM hovers a spell button while watching the tabletop. Case (b) silently no-ops (the sheet's `_parentForRing` is null). A future BroadcastChannel-based fan-out could light up case (b) but it's not gating; players who pop the sheet out of the drawer have presumably chosen to detach from the tabletop view.
+**Description (cont 3):** Why suppress when AoE picker / ruler picker / drag is active. The hover ring is a passive cue — it shouldn't compete with explicit tool modes. The render-pass guard is the same five-condition set as Phase 3B (drag check via `!dragging`; pickers via `!_aoePicker.active && !_rulerPicker.active`). Phase 3B's hover rangefinder is also active when the user has a target selected; if both fire (player has a target + hovers a spell button), the rangefinder's grey line + chip overlay the green ring — both are subtle so visual conflict is minimal.
+**Description (cont 4):** Why origin-matched postMessage. `window.addEventListener('message')` accepts messages from ANY origin by default. A malicious page in another tab could (via `window.open(tabletop_url)` or by being embedded in an iframe somewhere) post `vtt:cast_range_hover` events and spoof the ring on the tabletop. The `ev.origin !== window.location.origin` check rejects those. The sheet posts with `window.location.origin` as the targetOrigin so the browser ALSO rejects cross-origin delivery. Belt + suspenders.
+**Description (cont 5):** Why no harness coverage. The behavior depends on (a) cross-window postMessage delivery — the harness's HTTP+WS fixtures don't drive a real browser, and (b) canvas mousemove + render — same Playwright-needed pattern as Phase 1 / 3A client / 3B. Existing 329 tests cover the server-side range-enforcement contract this commit's ring previews; the visual layer is verified by clicking around in a browser. Filed (same Playwright spec follow-up as v2.49.71 / .78 / .81).
+**Description (cont 6):** Verification. Manual: opened `/campaign/1` in a browser as GM, opened Thalindra's character sheet in the drawer iframe, hovered the 🪄 Cast button next to Fire Bolt — green ring appeared at 120 ft around Thalindra's token; mouseleave removed it; hover on Magic Missile showed a 120 ft ring; hover on Mage Hand showed a 30 ft ring; hover on Shield (Self) showed nothing (range parses to 0 → suppressed). Container rebuilt to v2.49.82. Full regression: 329 harness tests pass — server / WS contracts unchanged.
+
+### Added
+- `app/static/tabletop.js::_parseRangeFtJS` — JS client-side range parser mirroring the server's contract.
+- `app/static/tabletop.js::_castHoverRing` — state + show/hide methods for the cast-button hover ring.
+- `app/static/tabletop.js` — postMessage listener for `vtt:cast_range_hover`.
+- `app/static/tabletop.js::render` — new draw pass for the ring (before the Phase 3B rangefinder pass).
+- `app/templates/sheet_dnd5e.html::renderSpells` — mouseenter / mouseleave handlers on `.sp-cast` buttons posting `vtt:cast_range_hover` messages to `window.parent`.
+
+### Changed
+- `app/templates/wiki.html` — plan-status row updated.
+- `docs/wiki/README.md` — same row update.
+
+### Notes
+- **Backward compat.** Pure additive. Existing sp-cast click behavior unchanged; the new mouseenter / mouseleave handlers don't interact with the click path.
+- **GM-iframe path is the primary supported case.** Player pop-out tabs silently no-op (no path back to the tabletop window).
+- **Phase 3C complete.** Remaining: 3D (multi-segment ruler Shift+R), 3E (broadcast mode Shift-click). Both optional per the plan.
+
+### Filed
+- **Playwright spec for the ruler / rangefinder family** — covers Phase 1 / 3A / 3B / 3C in one suite. Carried forward.
+- **BroadcastChannel-based fan-out for player pop-out tabs** — would light up the hover ring even when the sheet is in a separate tab. Lower priority.
+
+---
+
 ## [2.49.81] - 2026-05-22
 
 **Schema version:** 56

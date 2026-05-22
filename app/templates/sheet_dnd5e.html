@@ -2957,6 +2957,43 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     btn.disabled = false;
                 }
             }));
+
+        // v2.49.82 — Phase 3C cast-button hover ring. When the player
+        // hovers a .sp-cast button (BEFORE clicking Cast), post a
+        // message to the parent tabletop window so it can render a
+        // translucent range ring around the caster's token. mouseleave
+        // hides the ring. Posts go to ``window.parent``; only fires
+        // when the sheet is loaded in the GM's iframe drawer (player
+        // pop-out tabs have no path back due to ``rel=noopener`` on
+        // the synthetic anchor).
+        const _parentForRing = (typeof window !== 'undefined'
+            && window.parent && window.parent !== window) ? window.parent : null;
+        if (_parentForRing) {
+            container.querySelectorAll('.sp-cast').forEach(btn => {
+                const idx = parseInt(btn.dataset.idx, 10);
+                btn.addEventListener('mouseenter', () => {
+                    const s = spells[idx];
+                    if (!s || !s.range) return;
+                    try {
+                        _parentForRing.postMessage({
+                            type: 'vtt:cast_range_hover',
+                            action: 'show',
+                            char_id: {{ char.id }},
+                            range_str: s.range,
+                            spell_name: s.name || '',
+                        }, window.location.origin);
+                    } catch (_) { /* postMessage rejected — silent */ }
+                });
+                btn.addEventListener('mouseleave', () => {
+                    try {
+                        _parentForRing.postMessage({
+                            type: 'vtt:cast_range_hover',
+                            action: 'hide',
+                        }, window.location.origin);
+                    } catch (_) { /* silent */ }
+                });
+            });
+        }
     }
 
     // Expose so the multiclass module can re-render when the roster changes

@@ -662,6 +662,98 @@
         return Math.round(cells * 5 * 10) / 10;
     }
 
+    // v2.49.82 — Phase 3C client-side range parser. Mirrors the server's
+    // app/content/range_parser.py::parse_range_ft for the cast-button
+    // hover preview path. Returns:
+    //   - null for "Special" / "Unlimited" / "Sight" / unparseable
+    //   - 0   for "Self" / "Self (X-foot radius)" (caller skips the ring)
+    //   - 5   for "Touch"
+    //   - int for "N feet" / "N ft" / "N mile(s)" (× 5280)
+    //   - long band int for thrown weapons ("20/60 feet" → 60)
+    //
+    // The receiver is the cross-window postMessage handler from the
+    // sheet's spell-button hover events. Parsing on the tabletop side
+    // means the sheet only sends raw strings — no client/server
+    // version-sync risk.
+    function _parseRangeFtJS(rangeStr) {
+        if (!rangeStr) return null;
+        const s = String(rangeStr).trim();
+        if (!s) return null;
+        const lower = s.toLowerCase();
+        if (lower === 'special' || lower === 'unlimited' || lower === 'sight') return null;
+        if (lower === 'self') return 0;
+        if (lower === 'touch') return 5;
+        if (/^\s*self\s*\(/i.test(s)) return 0;
+        let m = s.match(/^\s*(\d+)\s*\/\s*(\d+)\s*(?:ft|foot|feet)\.?\s*$/i);
+        if (m) return parseInt(m[2], 10);
+        m = s.match(/^\s*(\d+)\s*(?:ft|foot|feet)\.?\s*$/i);
+        if (m) return parseInt(m[1], 10);
+        m = s.match(/^\s*(\d+)\s*miles?\.?\s*$/i);
+        if (m) return parseInt(m[1], 10) * 5280;
+        return null;
+    }
+
+    // v2.49.82 — Phase 3C cast-button hover ring. Renders a translucent
+    // ring around the caster's token at the spell's range while the
+    // player hovers a spell-cast button in the character sheet (BEFORE
+    // they click Cast). Same green-translucent style as the Phase 3A
+    // AoE picker ring. State driven by postMessage from the sheet's
+    // .sp-cast mouseenter / mouseleave handlers (see Phase 3C client
+    // wiring in app/templates/sheet_dnd5e.html). Suppressed when the
+    // AoE picker / ruler picker / a drag is active — the more
+    // prominent tool wins.
+    const _castHoverRing = {
+        active: false,
+        casterPos: null,
+        range_ft: 0,
+        spellName: '',
+
+        show(opts) {
+            if (_aoePicker.active || _rulerPicker.active || dragging) return;
+            const rangeFt = _parseRangeFtJS(opts.range_str);
+            if (!rangeFt || rangeFt <= 0) return;
+            const charId = parseInt(opts.char_id, 10);
+            if (!charId) return;
+            const casterPos = _aoePicker._resolveOrigin(charId);
+            if (!casterPos) return;
+            this.active = true;
+            this.casterPos = casterPos;
+            this.range_ft = rangeFt;
+            this.spellName = String(opts.spell_name || '');
+            try { render(); } catch (_) {}
+        },
+
+        hide() {
+            if (!this.active) return;
+            this.active = false;
+            this.casterPos = null;
+            this.range_ft = 0;
+            this.spellName = '';
+            try { render(); } catch (_) {}
+        },
+    };
+
+    // Listen for cross-window postMessages from the sheet drawer's
+    // iframe. The sheet posts `{type: 'vtt:cast_range_hover', action:
+    // 'show'|'hide', ...}` on .sp-cast mouseenter / mouseleave.
+    // Origin-matched against window.location.origin so a malicious
+    // page in another tab can't spoof the picker.
+    window.addEventListener('message', (ev) => {
+        if (!ev || !ev.data) return;
+        if (ev.origin && ev.origin !== window.location.origin) return;
+        const d = ev.data;
+        if (!d || d.type !== 'vtt:cast_range_hover') return;
+        if (d.action === 'show') {
+            _castHoverRing.show({
+                char_id: d.char_id,
+                range_str: d.range_str,
+                spell_name: d.spell_name,
+            });
+        } else if (d.action === 'hide') {
+            _castHoverRing.hide();
+        }
+    });
+
     function _showRulerHint(pointsClicked) {
         _hideRulerHint();
         const el = document.createElement('div');
@@ -1348,6 +1440,35 @@
                 ctx.fillStyle = '#4ade80';
                 ctx.fillText(label, midX, midY);
             }
+            ctx.restore();
+        }
+
+        // v2.49.82 — Phase 3C cast-button hover ring. Drawn just
+        // before the hover rangefinder so the ring sits as
+        // "background context" under the rangefinder's line if both
+        // happen to be visible. Suppressed by the same mutex set as
+        // Phase 3B (drag / picker active).
+        if (
+            _castHoverRing.active &&
+            _castHoverRing.casterPos &&
+            _castHoverRing.range_ft > 0 &&
+            !_aoePicker.active &&
+            !_rulerPicker.active &&
+            !dragging
+        ) {
+            const _radius_px = (_castHoverRing.range_ft / 5) * gridSize;
+            ctx.save();
+            ctx.fillStyle = 'rgba(74, 222, 128, 0.06)';
+            ctx.strokeStyle = '#4ade80';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.arc(
+                _castHoverRing.casterPos.x, _castHoverRing.casterPos.y,
+                _radius_px, 0, Math.PI * 2,
+            );
+            ctx.fill();
+            ctx.stroke();
             ctx.restore();
         }
 
