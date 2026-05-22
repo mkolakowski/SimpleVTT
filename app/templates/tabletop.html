@@ -116,10 +116,17 @@
         display: flex; flex-direction: row; align-items: center; flex-wrap: wrap;
         gap: 4px; margin-left: auto; flex-shrink: 0;
     }
+    /* v2.49.96: visual parity with the .canvas-tool-btn (📏 Ruler) so
+       the topbar reads as one consistent tool/tab row. Same 36 px tap
+       target, same border + radius, same hover (bg-2 surface + accent
+       border), same active treatment (accent fill). */
     .drawer-tab-btn {
-        padding: 5px 11px; background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px;
-        cursor: pointer; color: var(--fg-mute); font-size: 11px;
-        font-weight: 500; letter-spacing: 0.4px; transition: background 0.15s, color 0.15s;
+        min-height: 36px; padding: 6px 12px;
+        background: var(--input-bg); border: 1px solid var(--border); border-radius: 4px;
+        cursor: pointer; color: var(--fg); font-size: 12px;
+        font-weight: 500; letter-spacing: 0.3px;
+        display: inline-flex; align-items: center; gap: 6px;
+        transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
     /* v2.49.71 Ruler tool — small canvas-tools cluster sitting next to
        the drawer-tab-bar in the topbar. The 36 px min-height honors the
@@ -181,8 +188,8 @@
        reads as "you're in measurement mode." */
     body.ruler-picker-active #vtt-canvas { cursor: crosshair; }
     body.ruler-picker-active .map-pane { cursor: crosshair; }
-    .drawer-tab-btn:hover { background: var(--surface-hover); color: var(--fg); }
-    .drawer-tab-btn.active { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-border); }
+    .drawer-tab-btn:hover { background: var(--bg-2); border-color: var(--accent); }
+    .drawer-tab-btn.active { background: var(--accent); color: var(--accent-fg, #fff); border-color: var(--accent); }
     .drawer-panels-wrapper { position: relative; flex: 1; overflow: hidden; display: block; min-width: 480px; }
     /* v2.49.94: transparent so the map shows through gaps between
        the cards inside each panel. Individual cards keep their own
@@ -777,6 +784,20 @@
         margin-top: 3px;
         flex-wrap: wrap;
     }
+    /* v2.49.96 — Init/HP + action-economy chips share a single wrap-
+       flex row, replacing the previous "stat line above, chip strip
+       below" stack. Saves ~24 px per combatant in the init tracker.
+       The nested chips drop their margin-top since the parent row
+       handles spacing. Buffs still live on their own row underneath. */
+    .mini-header-stats {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 2px;
+    }
+    .mini-header-stats .mini-header-sub { margin-top: 0; }
+    .mini-header-stats .econ-chips { margin-top: 0; }
     .econ-chip {
         font-size: 10px;
         font-weight: 600;
@@ -1315,6 +1336,10 @@
     <div class="drawer-tab-bar">
         <button class="drawer-tab-btn" data-target="roll-log-drawer">Roll Log</button>
         <button class="drawer-tab-btn player-tab" data-target="players-drawer">Battle</button>
+        {# v2.49.96 — Characters peeled out of the Battle drawer into
+           its own tab so the Battle drawer is purely "init tracker +
+           GM combat controls" and Characters get full vertical room. #}
+        <button class="drawer-tab-btn" data-target="characters-drawer">Characters</button>
         {% if is_gm %}
         <button class="drawer-tab-btn gm-tools-tab" data-target="gm-tools-drawer">⚙ GM Tools</button>
         {% endif %}
@@ -1613,7 +1638,16 @@
         </details>
         {% endif %}{# end {% if not is_gm %} sound panel #}
 
-        <!-- ── Characters ── -->
+    </div>
+</div>
+
+{# v2.49.96 — Characters moved out of the Battle drawer into its own
+   tab. Same #player-chars-panel + #player-char-list ids so the JS at
+   tabletop.html:3119 (renderPlayerCharList) + the WS hp_update handler
+   at :3892 keep binding correctly. Wrapped in #characters-drawer to
+   match the drawer-system tab/panel contract. #}
+<div id="characters-drawer" class="drawer-panel">
+    <div class="drawer-body">
         <details id="player-chars-panel" open
                  style="margin-bottom:4px;">
             <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:8px;">
@@ -5209,13 +5243,20 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const buffChips = buffs.length
                     ? `<div class="buff-chips">${buffs.map(buffChip).join('')}</div>`
                     : '';
+                // v2.49.96 — Init/HP text + action-economy chips share
+                // one wrapping flex row so the chip strip sits inline with
+                // the stat line instead of stacking below it. Saves ~24 px
+                // of vertical real-estate per combatant on the init
+                // tracker. Buff chips stay on their own row beneath.
                 return `<div class="init-entry${isActive ? ' active-turn' : ''}" data-idx="${i}" data-char-id="${slotId}">
                     <div class="mini-header" data-idx="${i}" data-char-id="${slotId}">
                         ${tokenImg}
                         <div class="mini-header-info">
                             <div class="mini-header-name">${c.name}</div>
-                            <div class="mini-header-sub">Init <strong>${c.initiative}</strong> &nbsp;·&nbsp; HP <strong style="color:${col};">${c.hp_current}</strong> / ${c.hp_max}</div>
-                            ${economyChips}
+                            <div class="mini-header-stats">
+                                <span class="mini-header-sub">Init <strong>${c.initiative}</strong> &nbsp;·&nbsp; HP <strong style="color:${col};">${c.hp_current}</strong> / ${c.hp_max}</span>
+                                ${economyChips}
+                            </div>
                             ${buffChips}
                         </div>
                         ${sheetBtn}
