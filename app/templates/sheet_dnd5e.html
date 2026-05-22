@@ -4276,23 +4276,44 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
     // so we can't see ``window._targetingState`` directly. The mirror
     // is written by tabletop.js's ``_targeting._publish()`` on every
     // change. Returns the first target descriptor or null.
+    // v2.49.86 — also expose the full list via _readSharedTargets so
+    // the attack flow can pass target_combatant_ids when the player
+    // has multi-targeted (shift+dblclick).
     function _readSharedTarget() {
+        const arr = _readSharedTargets();
+        return arr && arr.length ? arr[0] : null;
+    }
+    function _readSharedTargets() {
         try {
             const key = `simplevtt:targeting:${CAMPAIGN_ID}`;
             const raw = localStorage.getItem(key);
-            if (!raw) return null;
+            if (!raw) return [];
             const arr = JSON.parse(raw);
-            return Array.isArray(arr) && arr.length ? arr[0] : null;
-        } catch (_) { return null; }
+            return Array.isArray(arr) ? arr : [];
+        } catch (_) { return []; }
     }
     function _targetBodyFields() {
-        const t = _readSharedTarget();
-        if (!t) return {};
-        return {
-            target_combatant_id: t.combatant_id || '',
-            target_character_id: t.character_id || null,
-            target_name: t.name || '',
+        // v2.49.86: multi-target awareness. When the player has
+        // shift-dblclicked 2+ tokens, pass the full list of combatant
+        // ids as ``target_combatant_ids``; the server's per-target
+        // attack loop (v2.49.85) fires fresh rolls per entry.
+        // Single-target callers continue to receive only the legacy
+        // singular fields — those fall through to the existing
+        // single-target code path unchanged.
+        const arr = _readSharedTargets();
+        if (!arr.length) return {};
+        const head = arr[0];
+        const body = {
+            target_combatant_id: head.combatant_id || '',
+            target_character_id: head.character_id || null,
+            target_name: head.name || '',
         };
+        if (arr.length > 1) {
+            body.target_combatant_ids = arr
+                .map(t => t && t.combatant_id)
+                .filter(Boolean);
+        }
+        return body;
     }
 
     // ── Load attacks (handle legacy {name, bonus, damage} list) ──

@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.86] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Attack button passes `target_combatant_ids` list when the player has multi-targeted.** Client-side wiring of the v2.49.85 server multi-target support. The sheet's `_targetBodyFields` helper now reads the FULL localStorage targeting mirror (was reading only the first entry) and emits a `target_combatant_ids` list when 2+ tokens are currently targeted. Single-target callers continue to receive only the legacy singular fields. New `_readSharedTargets` helper exposes the full array for callers that need it; `_readSharedTarget` keeps its legacy "first-entry" contract for backward compat. The desktop multi-target flow now works end-to-end: shift+dblclick 2+ tokens on the canvas → click any attack button → server fresh-rolls per target → broadcast carries `auto_attack_targets` for the chat card. Mobile users still get single-target only until v2.49.87's modal extension. Doc/PATCH on the client (no harness coverage — single-target client behavior unchanged + multi-target was already pinned server-side by v2.49.85 tests).
+**Description:** Two edits. **(1)** `app/templates/sheet_dnd5e.html::_readSharedTargets` (NEW helper) — returns the full Array from `localStorage["simplevtt:targeting:${CAMPAIGN_ID}"]` (was only available as `_readSharedTarget`'s first-entry projection). **(2)** `app/templates/sheet_dnd5e.html::_targetBodyFields` — when `_readSharedTargets()` returns 2+ entries, the body gains a `target_combatant_ids` field containing every entry's `combatant_id`. Legacy singular fields (`target_combatant_id`, `target_character_id`, `target_name`) continue to mirror the FIRST entry so existing single-target server paths AND existing chat-card rendering keep working unchanged.
+**Description (cont):** Why the legacy singular fields still ride alongside the new list. Server-side back-compat is handled in v2.49.85 (the loop reconciles the two forms), but CLIENT-SIDE chat-card rendering also reads the singular fields for the Hit/Miss badge + the headline target name. Until those renderers learn to read `auto_attack_targets`, the singular fields anchor the existing UI. Belt + suspenders.
+**Description (cont 2):** Why no harness coverage. The harness can already POST `target_combatant_ids` directly (v2.49.85's `test_attack_multi_target.py` does so). This commit only changes how the sheet PRODUCES that body field; the server contract is unchanged. Behavioral verification: manually shift-dblclicked two bandit tokens on the canvas, hit Pip's Shortsword button, observed the chat card render the attack against the primary bandit + the WS broadcast carries `auto_attack_targets` with 2 entries (the second target was rolled fresh + hit independently).
+**Description (cont 3):** Why this commit doesn't also tackle the mobile picker. Three reasons. (a) The existing `_promptTargetPicker` is single-select; extending it to multi-select means new modal UI (checkboxes, Confirm button). That's its own conceptually-distinct change. (b) The desktop multi-target flow is fully functional with this commit alone — shift+dblclick works on touch screens too (long-press + tap) for users who want it. (c) Per CLAUDE.md the per-commit rule asks each commit to be a single coherent change. Splitting keeps both commits focused.
+
+### Changed
+- `app/templates/sheet_dnd5e.html::_readSharedTarget` — refactored to delegate to the new `_readSharedTargets` helper.
+- `app/templates/sheet_dnd5e.html::_readSharedTargets` (NEW) — returns the full target list from the localStorage mirror.
+- `app/templates/sheet_dnd5e.html::_targetBodyFields` — multi-target awareness; emits `target_combatant_ids` when 2+ targets are set.
+
+### Notes
+- **Backward compat.** Single-target client behavior unchanged. Multi-target now flows through end-to-end via shift+dblclick on the canvas.
+- **Mobile picker still single-select.** The next commit extends `_promptTargetPicker` to optional multi-select with a checkbox flow.
+
+### Filed
+- **`_promptTargetPicker` multi-select mode** — checkbox rows + Confirm button. Next commit.
+
+---
+
 ## [2.49.85] - 2026-05-22
 
 **Schema version:** 56
