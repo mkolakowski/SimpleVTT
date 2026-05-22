@@ -29,6 +29,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Death saving throws](../plans/death-saves.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped · 2–4 deferred |
 | [Demo mode](../plans/demo-mode.md) | Markdown (design) | Contributors | ✅ shipped (v2.3.0) |
 | [Encounter-sim test suite](../plans/encounter-sim-test-suite.md) | Markdown (design) | Contributors | ⚪ plan finalized · Phase 1 PoC pending |
+| [Player simulacrum](../plans/player-simulacrum.md) | Markdown (design) | Contributors | ⚪ design only · all phases unstarted |
 | [Ruler & range enforcement](../plans/ruler-and-range.md) | Markdown (design) | Contributors | ⚪ design only · Phases 1 + 2 unstarted |
 | [Autonomous click-through test harness](../plans/test-harness.md) | Markdown (design) | Contributors | ✅ Phases 1–5 shipped (212 tests) |
 | [Wiki expansion](../plans/wiki-expansion.md) | Markdown (TODO companion) | Contributors | 🟠 living roadmap |

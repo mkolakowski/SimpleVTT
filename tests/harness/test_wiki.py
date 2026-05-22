@@ -34,6 +34,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/roll-log-card-layout" in resp.text
     # v2.49.66: ruler/range plan listed in the design-plans table.
     assert "/wiki/doc/plan-ruler-and-range" in resp.text
+    # v2.49.68: player simulacrum plan listed too.
+    assert "/wiki/doc/plan-player-simulacrum" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -93,6 +95,19 @@ async def test_wiki_doc_serves_plan():
     assert "text/html" in resp.headers.get("content-type", "")
     # The test-harness plan's H1 is "Autonomous click-through test harness — plan"
     assert "click-through" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_simulacrum_plan():
+    """v2.49.68: GET /wiki/doc/plan-player-simulacrum — 200 + body
+    contains the plan's title + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/player-simulacrum.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-player-simulacrum")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "simulacrum" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.68] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Add a design plan for the Player Simulacrum feature.** Doc-only. New plan at `docs/plans/player-simulacrum.md`: a private per-player tabletop where a player takes their character into a sandbox to test how abilities work, with the existing demo map + demo NPC templates available for placement. Concept came from the user's "let players test abilities without disrupting the table" use case. Plan covers four approach options (rejects three, recommends one), the data model (one `is_simulacrum` boolean + two provenance pointer columns on `Campaign`), the lifecycle (enter → clone → play → refresh / reset / delete), endpoint surface (5 new endpoints; every existing endpoint works unchanged because the sim is a real campaign), and 7-row "Interface changes — at a glance" summary table + 4 visual mockups. Includes file-path index for the implementation agent. The plan is surfaced through the wiki at `/wiki/doc/plan-player-simulacrum` in the same commit (per the v2.49.66 three-step checklist) — allowlist + landing-page table + on-disk README + per-slug harness smoke test. PATCH — additive doc + additive wiki entry + 1 additive harness test; no production code change.
+**Description:** Five edits + one new file. **(1)** `docs/plans/player-simulacrum.md` (NEW, ~390 lines). Eight sections: Goal, Interface changes summary, Constraints, Approaches considered (A in-memory rejected · B forked-campaign chosen · C sandbox-mode rejected · D action-preview rejected), Chosen approach detailed design (data model + lifecycle diagram + cloning spec + endpoint signatures), Mockups (Enter button + persistent banner + Enemies palette tab + flow modals), Implementation phases (3 phases with LOC + test estimates), Open questions (7 items), Filed follow-ups, File-path index, Decision log. **(2)** `app/routes/wiki_routes.py::_DOC_ALLOWLIST` — new `plan-player-simulacrum` row. **(3)** `app/templates/wiki.html` — design-plans table row. **(4)** `docs/wiki/README.md` — design-plans table row. **(5)** `tests/harness/test_wiki.py` — new per-slug test + landing-page assertion. **(6)** `docs/test-harness-coverage.md` — catalog row; total 279 → 280.
+**Description (cont):** Why "forked campaign per (character, user)" is the load-bearing decision. The alternatives all duplicate code. In-memory shadow state means every endpoint that mutates anything (attack / cast / use_feature / move / use_item — 12+ endpoints) needs a sim-mode branch and a parallel WS channel model. Sandbox-mode toggle on the character is the same trap with a different label. The chosen approach creates a NEW Campaign row + clones the character into it + reuses every existing endpoint because the auth model is already campaign-scoped. Result: ~600 server LOC for the entry / clone / refresh helpers + 5 new endpoints, vs. 1500+ for the alternatives. Plus persistence comes free (state survives container restart since the sim is real DB rows).
+**Description (cont 2):** Why a separate Campaign row rather than an in-place sandbox flag on the source character. The campaign model is where the auth + WS + roll-log + battle state isolation already lives. Cloning into a new campaign borrows all of that. Putting the simulacrum "on" the existing character would require teaching every endpoint that "when in sandbox mode, spell slots / HP / buffs go to `_sandbox_slots`, `_sandbox_hp`, etc." — and the same for the roll log, the battle state, the buffs list. Massive code duplication for what the campaign model already provides for free.
+**Description (cont 3):** Why one sim per (character, user) and not unlimited. A user could spawn 100 simulacrums of the same character to spam DB rows. The unique partial index `(simulacrum_source_character_id, gm_user_id) WHERE is_simulacrum=true` makes that impossible at the DB level. Players who want multiple simultaneous experiments can create multiple characters in their main campaign first (already allowed) and get one sim per character.
+**Description (cont 4):** Why no GM peek in v1. Privacy is the load-bearing UX feature. If the GM can see what the player is testing, the player is back in the same "I don't want to embarrass myself" position the simulacrum exists to fix. A future "invite GM as member" path covers the explicit-consent case without baking peek into the auth model.
+**Description (cont 5):** Why ALL three wiki-surfacing edits land in the same commit as the plan write. Closes the discovery gap that v2.49.59's ruler plan tripped (plan written + on disk but not surfaced through the wiki until v2.49.66 retro-fixed it). Future plan-write commits should follow the same pattern — plan + allowlist + landing-page + on-disk index + harness test in one atomic commit. This is exactly the rule the next commit (v2.49.69) codifies in CLAUDE.md.
+**Description (cont 6):** Verification. Pre-commit: GET `/wiki/doc/plan-player-simulacrum` returned 404 (slug not in allowlist). Post-commit + rebuild: returns 200 + the rendered plan + the wiki nav. The new per-slug harness test passes; the landing-page test still passes with the new assertion. Full regression: 280 harness tests pass (was 279, +1 new wiki test). No production code touched.
+
+### Added
+- `docs/plans/player-simulacrum.md` — design plan for the per-player private testing sandbox.
+- `app/routes/wiki_routes.py::_DOC_ALLOWLIST` — new `plan-player-simulacrum` entry.
+- `app/templates/wiki.html` — new design-plans table row.
+- `docs/wiki/README.md` — new design-plans table row.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_simulacrum_plan` — per-slug smoke test.
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — added landing-page assertion for the new slug.
+- `docs/test-harness-coverage.md` — catalog row; total 279 → 280.
+
+### Notes
+- **Backward compat.** Doc-only on the production side; new harness test is additive.
+- **All four wiki-surfacing steps landed atomically.** First commit since v2.49.66's retro-fix to follow the full checklist on the plan-write commit itself.
+- **Three-phase implementation roadmap.** Phase 1 (entry + character clone + banner) is shippable alone — players can already mess around with their cloned character. Phase 2 unlocks the Enemies palette. Phase 3 polishes (reset, cleanup, campaign-list grouping).
+
+### Filed
+- **Phase 1 implementation** — schema migration + `/enter` + `/refresh_character` endpoints + cloning helpers + sheet button + banner partial.
+- **Phase 2 implementation** — Enemies palette tab + drag-to-place wiring + `GET /simulacrum/enemies` endpoint.
+- **Phase 3 implementation** — `/reset_map` + `DELETE` cleanup + campaign-list grouping + switch-existing-sim modal.
+- **GM peek toggle** — opt-in flag for GMs to view player sims (privacy-by-default in v1; this is the explicit-consent escape hatch).
+- **Multi-character sims** — currently one sim per character; future could allow N characters in one sim for party-vs-party testing.
+
+---
+
 ## [2.49.67] - 2026-05-22
 
 **Schema version:** 56
