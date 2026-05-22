@@ -1639,7 +1639,16 @@ async def _apply_damage_to_combatant(
                 "resistance_applied": False, "is_dying": False, "is_dead": False}
     hp_cur = int(target.get("hp_current") or 0)
     hp_max = int(target.get("hp_max") or 0)
-    applied = damage_amount  # NPCs don't have resistance buffs yet
+    # v2.49.109: NPCs now get resistance halving via the template's
+    # ``damage_resistances`` list + the combatant's own ``buffs``.
+    # Pre-v2.49.109 this branch hardcoded ``applied = damage_amount``
+    # so a bandit with template-listed fire resistance still took
+    # full Fireball damage. See ``_resistance_halve_npc`` for the
+    # contract; damage immunity + vulnerability are not yet applied
+    # (filed for follow-up).
+    applied, resistance_applied = _resistance_halve_npc(
+        damage_amount, damage_type, target, db,
+    )
     new_hp = max(0, hp_cur - applied)
     target["hp_current"] = new_hp
     hub.set_battle(campaign_id, state)
@@ -1667,13 +1676,13 @@ async def _apply_damage_to_combatant(
             "campaign_id": campaign_id,
             "target_combatant_id": target.get("id"),
             "applied": applied,
-            "was_resistance": False,
+            "was_resistance": resistance_applied,
         }
     return {
         "applied": applied,
         "hp_before": hp_cur,
         "hp_after": new_hp,
-        "resistance_applied": False,
+        "resistance_applied": resistance_applied,
         "is_dying": False,
         "is_dead": new_hp == 0 and hp_max > 0,
     }
@@ -9992,6 +10001,60 @@ def _resistance_halve(
         # keys including `resistance_to`. The resistance check only
         # applies to dict-shaped effects — string-list effects don't
         # advertise damage resistance, so skip them.
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        resists = [str(r).strip().lower() for r in (effects.get("resistance_to") or [])]
+        if damage_type_l in resists:
+            return damage_amount // 2, True
+    return damage_amount, False
+
+
+def _resistance_halve_npc(
+    damage_amount: int, damage_type: str, combatant: dict, db: Session,
+) -> tuple[int, bool]:
+    """NPC-side resistance halving. Mirror of ``_resistance_halve``
+    for non-PC combatants. The PC path reads ``_buffs_active`` off
+    the character sheet; NPCs don't have a sheet — their resistances
+    live on their TokenTemplate's ``sheet.damage_resistances`` list
+    (parsed by ``_split_defense`` from the SRD stat-block string at
+    tabletop_routes.py:16756). Buffs installed on the NPC via the
+    hub combatant's ``buffs`` list also count (Stoneskin cast on a
+    bandit, Rage'd ogre, etc.) — same dict-shaped ``effects.resistance_to``
+    structure as PCs.
+
+    Pre-v2.49.109 this code path silently no-op'd (the NPC branch of
+    ``_apply_damage_to_combatant`` hardcoded ``applied = damage_amount``
+    with the comment "NPCs don't have resistance buffs yet"). A bandit
+    with template-listed fire resistance still took full damage from a
+    Fireball — the v2.49.107 damage review flagged this as the highest-
+    impact in-play gameplay bug. This helper closes that gap.
+
+    Returns ``(halved, True)`` if matched, else ``(damage_amount, False)``.
+    Floor division per RAW. Immunity (sets to 0) and vulnerability
+    (doubles) are NOT applied here — filed for a follow-up commit.
+    """
+    if damage_amount <= 0 or not damage_type:
+        return damage_amount, False
+    damage_type_l = damage_type.strip().lower()
+    # (1) Permanent template-listed resistances.
+    tmpl_id = combatant.get("token_template_id")
+    if tmpl_id:
+        tmpl = db.query(TokenTemplate).filter(TokenTemplate.id == tmpl_id).first()
+        if tmpl:
+            tmpl_sheet = tmpl.sheet or {}
+            perm = [
+                str(r).strip().lower()
+                for r in (tmpl_sheet.get("damage_resistances") or [])
+                if isinstance(r, str)
+            ]
+            if damage_type_l in perm:
+                return damage_amount // 2, True
+    # (2) Combatant-level buff resistances. Same dict-shaped
+    # ``effects.resistance_to`` contract as PC ``_buffs_active`` buffs.
+    for b in (combatant.get("buffs") or []):
+        if not isinstance(b, dict):
+            continue
         effects = b.get("effects")
         if not isinstance(effects, dict):
             continue

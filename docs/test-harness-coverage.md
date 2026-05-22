@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 349 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.108, 2026-05-22).
+**Total tests:** 351 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.109, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -147,6 +147,14 @@ Phase B damage-flow intercepts — Rage / Hunter's Mark / Colossus Slayer / resi
 | `test_resistance_halves_damage` | Krieger's slashing attack on a slashing-resistant NPC → halved. |
 | `test_resistance_does_not_halve_unrelated_type` | Different damage type → no halving. |
 | `test_attack_broadcast_includes_target_name` | Broadcast `target_name` populated when init-tracker combatant resolves. |
+
+### `test_npc_resistance.py`
+v2.49.109 — closes the v2.49.107 damage-review finding that the NPC branch of `_apply_damage_to_combatant` silently no-op'd resistance. The new `_resistance_halve_npc` helper resolves resistances from (1) the combatant's TokenTemplate's `sheet.damage_resistances` list and (2) the combatant's own `buffs` list.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_npc_template_fire_resistance_halves_fireball` | NPC with `damage_resistances: ["fire"]` on its template takes ≤ 24 HP from Fireball (resistance halved from max 48). |
+| `test_npc_no_resistance_takes_full_fireball` | Control: NPC with empty `damage_resistances` takes normal damage — confirms the halving is conditional, not unconditional. |
 
 ---
 

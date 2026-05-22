@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.109] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **NPC resistance halving — closes the v2.49.107 damage-review finding.** The NPC branch of `_apply_damage_to_combatant` hardcoded `applied = damage_amount` with the comment "NPCs don't have resistance buffs yet" since v2.19.2. Result: a bandit with template-listed fire resistance took FULL Fireball damage; an air elemental ignored its thunder/lightning resistance; etc. The PC path's `_resistance_halve` reads `_buffs_active` off the character sheet — NPCs don't have a sheet, so the halving was silently skipped. v2.49.109 adds `_resistance_halve_npc(damage_amount, damage_type, combatant, db)` which resolves resistances from two sources: (1) the combatant's TokenTemplate's `sheet.damage_resistances` list (the parsed SRD stat-block field via `_split_defense`), and (2) the combatant's own `buffs` list — same dict-shaped `effects.resistance_to` contract as PC `_buffs_active` buffs. Wired into the NPC damage branch so RAW resistance halving now applies to monsters in play. Two new harness tests validate the fix; all 27 existing damage tests still pass.
+**Description:** Three file edits + one new test file. **(1)** `app/routes/tabletop_routes.py::_resistance_halve_npc` (NEW helper, ~50 lines) — mirrors `_resistance_halve` for combatant-shaped inputs. Queries TokenTemplate by `combatant.token_template_id` to read permanent template resistances, then iterates `combatant.buffs` for buff-derived resistances. Returns `(halved, True)` on match, `(damage, False)` otherwise. Floor division per RAW. (2) `app/routes/tabletop_routes.py::_apply_damage_to_combatant` NPC branch — replaced `applied = damage_amount  # NPCs don't have resistance buffs yet` with a call to `_resistance_halve_npc`, capturing the new `resistance_applied` flag. (3) Same function — return dict's `resistance_applied` field + the `was_resistance` field on the attack-damage log entry now reflect the real value instead of hardcoded `False`. (4) `tests/harness/test_npc_resistance.py` (NEW, 2 tests) — creates a custom token template with fire resistance via `/api/campaign/{cid}/templates`, casts Fireball with `auto_apply_damage=on`, asserts the NPC's `damage_applied` is at most 24 (8d6/2). Sister control test confirms a non-resistant NPC can take more than 24 damage on a full-roll save fail.
+**Description (cont):** Why both template + combatant buffs. Monsters get their persistent resistance from the stat block: a Fire Elemental has fire immunity AND damage_resistances includes nonmagical bludgeoning/piercing/slashing. That data lives in `template.sheet.damage_resistances` (a list parsed by `_split_defense` from the SRD JSON's "fire, cold" string at tabletop_routes.py:16756). Separately, monsters can become temporarily resistant during play — a wizard might cast Stoneskin on a bandit ally, or the GM might rage a hostile barbarian. Those buffs live on the hub combatant's `buffs` list with the same dict-shaped `effects.resistance_to` contract PC buffs use. The NPC helper checks both sources to mirror the PC's combined-resistance behavior.
+**Description (cont 2):** Why immunity + vulnerability aren't included. The v2.49.107 damage review flagged both as separate gaps; the user's request was specifically NPC resistance (the most common case). Damage immunity (sets damage to 0) and vulnerability (doubles damage) are sibling mechanics that need their own helpers and call-site wiring + their own tests. Filed for follow-up so this commit stays a single conceptual change per CLAUDE.md.
+**Description (cont 3):** Why PC permanent resistance from `damage_resistances` isn't fixed here. The PC path's `_resistance_halve` only reads buff-derived resistance from `_buffs_active`; it doesn't read the sheet's permanent `damage_resistances` array (which some PC races + class features populate, e.g. Dwarven poison resistance). The damage review flagged this too. Same scope reasoning as above — the user asked for NPCs first; PC permanent resistance is the natural next commit if it matters to live play. Filed below.
+**Description (cont 4):** Why no broadcast shape change. The NPC damage branch already had a `resistance_applied` field in its return dict (hardcoded `False`). v2.49.109 only changes what value goes there. Downstream consumers (chat-card pill rendering, attack-undo log) read this field and benefit immediately — no client change needed.
+**Description (cont 5):** Test design. The custom template path (`/api/campaign/{cid}/templates` POST) lets the test own its fixture data without depending on demo content — the demo's bandit has no resistances, and adding a fixture monster to the demo would expand demo state. Two paired tests (with resistance, without resistance) confirm the halving is CONDITIONAL — pre-v2.49.109 the resistance branch was never entered, so both paths returned the same full damage; post-fix the resistance path halves but the no-resistance path doesn't. The `damage_applied <= 24` ceiling on the resistance case catches the regression because 8d6 can roll up to 48 — pre-fix the NPC could take up to 48; post-fix the cap is 24.
+**Description (cont 6):** Verification. (a) The 2 new tests in `test_npc_resistance.py` pass. (b) All 27 existing damage tests pass (`test_attack_auto_damage.py`, `test_cast_spell_aoe.py`, `test_attack_multi_target.py`, `test_attack_buff_intercepts.py`). (c) Curl `/version` confirms v2.49.109 live. (d) Manual verification path: spawn a custom fire-resistant template in the demo, cast Fireball, observe HP delta is half what it would be without resistance.
+
+### Fixed
+- `app/routes/tabletop_routes.py::_apply_damage_to_combatant` NPC branch — resistance halving now applies via the new `_resistance_halve_npc` helper. Closes the v2.49.107 damage-review finding that NPC resistance was a silent no-op.
+
+### Added
+- `app/routes/tabletop_routes.py::_resistance_halve_npc` (NEW) — resolves NPC resistance from template's `damage_resistances` list + combatant's `buffs` list. Returns `(halved, True)` on match.
+- `tests/harness/test_npc_resistance.py` (NEW, 2 tests) — paired test cases (with / without template fire resistance) that gate the fix in CI.
+
+### Notes
+- **Backward compat.** No broadcast / endpoint / schema change. The `resistance_applied` field on the result dict was already there with hardcoded `False`; now it reflects the real value.
+- **Immunity + vulnerability not yet implemented.** Filed; these are sibling mechanics needing their own helpers.
+
+### Filed
+- **PC permanent damage_resistances.** Same data shape on the character sheet but the current `_resistance_halve` only reads buff-derived resistance. A Dwarf with racial poison resistance currently takes full poison damage. Filed for the next commit.
+- **Damage immunity.** Sets damage to 0. Read from `template.sheet.damage_immunities` (same `_split_defense` shape).
+- **Damage vulnerability.** Doubles damage. Read from `template.sheet.damage_vulnerabilities`.
+
+---
+
 ## [2.49.108] - 2026-05-22
 
 **Schema version:** 56
