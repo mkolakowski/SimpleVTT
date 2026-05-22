@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.106] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **New "⚙ Settings" drawer tab for players — sound controls moved out of the Battle drawer into it; the sound panel is no longer collapsible.** Three coupled user-requested tweaks. (1) Add a Settings tab to the drawer-tab-bar, player-only via `{% if not is_gm %}` (GMs already have their music controls in GM Tools). (2) Move the existing sound panel out of the Battle drawer (`#players-drawer`) into the new `#settings-drawer`. (3) Replace the `<details>` + `<summary>` + chevron wrapper around the sound panel with a plain `<div>` + header row, so it's always expanded — no collapse toggle. All audio-related ids (`#audio-now-playing`, `#audio-mute`, `#audio-volume`, `.audio-progress*`, `#audio-enable`) are unchanged, so `audio.js` continues to bind without code edits. The `#player-sound-panel` wrapper id is preserved (the dead chevron-rotation CSS rules at lines 1199–1202 are now orphaned but harmless).
+**Description:** Three HTML edits in `app/templates/tabletop.html`. **(1)** `.drawer-tab-bar` — added a new `{% if not is_gm %}` branch with `<button class="drawer-tab-btn" data-target="settings-drawer">⚙ Settings</button>` between the Characters tab and the GM-Tools `{% if is_gm %}` branch. The two `{% if %}` branches are mutually exclusive, so players see Roll Log / Battle / Characters / Settings and GMs see Roll Log / Battle / Characters / GM Tools. (2) `#players-drawer` body — the old `{% if not is_gm %}<details id="player-sound-panel">...</details>{% endif %}` block (lines 1673–1697) is removed; replaced with a comment pointing to the new home. (3) Added a sibling `<div id="settings-drawer" class="drawer-panel">` after `#players-drawer` (alongside `#characters-drawer`), gated `{% if not is_gm %}`. Inside it, a `.drawer-body` wraps the sound panel — now a plain `<div id="player-sound-panel">` with a header row (`<h4>🎵 Sound</h4>` + `<span id="audio-now-playing">`) and the existing progress / mute / volume controls. No chevron, no `<summary>`.
+**Description (cont):** Why a Settings tab now. The user is building toward more per-player preferences (sound was the first; future commits might add theme toggle, font size, ambient-volume floor, etc.). Cramming them into the Battle drawer fights the v2.49.95 → v2.49.102 simplification work that made Battle "init tracker + GM controls only." A dedicated Settings tab keeps Battle focused and gives preferences a home that scales.
+**Description (cont 2):** Why uncollapsible. The user explicitly asked. The `<details>` + chevron had ergonomic cost: a tap is needed to open it on first load (it was `open` by default but a player who closed it once would have it stay closed on next session via the browser's native state restoration). With a plain `<div>` the controls are always visible — the volume slider + mute button are one tap away every time.
+**Description (cont 3):** Why preserve the `#player-sound-panel` id even after dropping the `<details>`. The CSS at lines 1199–1202 targets `#player-sound-panel summary::-webkit-details-marker`, `:not([open]) .sound-chevron`, etc. The `<summary>` and `<span class="sound-chevron">` are gone now, so those selectors match nothing — but the rules are harmless. Removing them would be hygiene but would also make a future "let's bring back the collapsible sound panel" commit need to re-add the CSS. Same trade-off as the v2.49.97 / v2.49.101 / v2.49.102 dead-CSS-rule decisions; keep dead rules in place when the structure they reference may legitimately return.
+**Description (cont 4):** What stays unchanged. `audio.js` binds to `#audio-volume`, `#audio-mute`, `#audio-now-playing`, `.audio-progress-elapsed`, `.audio-progress-fill`, `.audio-progress-total`, `#audio-enable` — all inner elements of the sound panel, all unchanged. The audio playback / WebSocket / volume persistence are 100 % untouched. The Battle drawer keeps its init tracker + GM controls + (for the now-rare-but-non-zero case of a player viewing the Battle drawer) literally no other content. The drawer-system JS at `:2974` picks up the new tab via `querySelectorAll('.drawer-tab-btn')`.
+**Description (cont 5):** Why player-only. GMs have their music + sound controls inside the GM Tools drawer (the v2.0+ music panel that lets the GM pick + play tracks). If GMs ALSO see a "Settings" tab housing the same sound controls in a second place, it's confusing. The `{% if not is_gm %}` gate on both the tab AND the panel keeps the Settings tab tightly scoped to non-GM users. A future commit could add a GM-specific Settings tab (theme toggle, font size, etc.) if user demand warrants it.
+**Description (cont 6):** Tab order matters for default landing. The drawer system at `:2998` reads `localStorage[STORAGE_KEY]` to restore the last-active tab; on a fresh session it defaults to `tabs[0]?.dataset.target` which is `"roll-log-drawer"`. Players who actively select Settings will see it persist via localStorage; new players land on Roll Log as before. No JS change needed.
+**Description (cont 7):** Verification. Existing 5 Playwright tests (canvas pan / drag / chat multi-target) all still pass — none touch the sound panel or settings tab. The wiki harness tests still pass. Curl `/version` confirms v2.49.106 live. Manual verification path: log in as a player (Alice / Bob), confirm the drawer tab row reads Roll Log / Battle / Characters / Settings; click Settings → see the sound panel always-expanded with the volume slider visible immediately, no chevron to click. Log in as GM, confirm Settings tab is absent (only the existing Roll Log / Battle / Characters / GM Tools).
+
+### Added
+- `app/templates/tabletop.html::.drawer-tab-bar` — new player-only `⚙ Settings` tab button.
+- `app/templates/tabletop.html::#settings-drawer` (NEW) — player-only drawer-panel wrapping the sound controls. Sibling of `#players-drawer` and `#characters-drawer`.
+
+### Changed
+- `app/templates/tabletop.html` — sound panel moved out of `#players-drawer` into `#settings-drawer`. Wrapping `<details>` + `<summary>` + chevron stripped; now a plain `<div>` with a header row.
+
+### Notes
+- **Backward compat.** No endpoint, broadcast, schema, or audio.js change. All inner audio ids preserved.
+- **GM-side music.** GMs keep their existing music panel inside GM Tools. Settings tab is player-only.
+- **Dead CSS preserved.** The chevron-rotation rules for `#player-sound-panel` (lines 1199–1202) target removed structure; they're harmless and left in place for easy restoration.
+
+### Filed
+- **GM-side Settings tab** — if GM-only preferences ever warrant it (theme, font, etc.), add a parallel `{% if is_gm %}` Settings tab. Defer until requested.
+
+---
+
 ## [2.49.105] - 2026-05-22
 
 **Schema version:** 56

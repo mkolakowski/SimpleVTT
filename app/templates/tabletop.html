@@ -1387,6 +1387,13 @@
            its own tab so the Battle drawer is purely "init tracker +
            GM combat controls" and Characters get full vertical room. #}
         <button class="drawer-tab-btn" data-target="characters-drawer">Characters</button>
+        {# v2.49.106 — Settings tab houses player-side preferences
+           (sound controls today, future per-player options later).
+           Player-only; GMs have the music + GM-tools controls in
+           their own GM Tools drawer. #}
+        {% if not is_gm %}
+        <button class="drawer-tab-btn" data-target="settings-drawer">⚙ Settings</button>
+        {% endif %}
         {% if is_gm %}
         <button class="drawer-tab-btn gm-tools-tab" data-target="gm-tools-drawer">⚙ GM Tools</button>
         {% endif %}
@@ -1670,15 +1677,31 @@
         {# Standalone #player-dice-panel removed in 2.1.6 — the Dice Roller #}
         {# card attached to the roll log (#roll-form) is the single dice UI. #}
 
-        <!-- ── Sound (players only — GMs use the GM Tools music panel) ── -->
-        {% if not is_gm %}
-        <details id="player-sound-panel" open
-                 style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
-            <summary style="cursor:pointer;display:flex;align-items:center;gap:8px;list-style:none;margin-bottom:6px;">
-                <span class="sound-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+        {# v2.49.106 — Sound panel moved out of the Battle drawer into
+           the new player-only Settings drawer below. Same #audio-*
+           ids so audio.js continues to bind. #}
+
+    </div>
+</div>
+
+{# v2.49.106 — Settings drawer (player-only). Houses sound controls
+   today; future per-player preferences (theme, font, volume floors,
+   etc.) would land here. Sound panel uncollapsible per user request
+   — was a <details> with a chevron summary, now a plain div with a
+   header row. The #player-sound-panel id is preserved so the CSS
+   at :1199–:1202 stays valid (the chevron-rotation rules become
+   dead now but are harmless). All audio.js bindings (#audio-now-
+   playing, #audio-mute, #audio-volume, .audio-progress*, #audio-
+   enable) target inner elements which are unchanged. #}
+{% if not is_gm %}
+<div id="settings-drawer" class="drawer-panel">
+    <div class="drawer-body">
+        <div id="player-sound-panel"
+             style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
                 <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">🎵 Sound</h4>
                 <span id="audio-now-playing" class="muted" style="margin-left:auto;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;">{% if now_playing %}▶ {{ now_playing.name }}{% else %}Nothing playing{% endif %}</span>
-            </summary>
+            </div>
             <div class="audio-progress" hidden
                  style="display:flex;align-items:center;gap:6px;margin:0 0 6px;font-size:10px;color:var(--fg-mute);">
                 <span class="audio-progress-elapsed" style="width:34px;text-align:right;font-variant-numeric:tabular-nums;">0:00</span>
@@ -1693,11 +1716,10 @@
                         style="flex-shrink:0;background:none;border:none;padding:0 2px;font-size:14px;cursor:pointer;line-height:1;">🔊</button>
                 <input type="range" id="audio-volume" min="0" max="1" step="0.01" value="0.6" style="flex:1;">
             </div>
-        </details>
-        {% endif %}{# end {% if not is_gm %} sound panel #}
-
+        </div>
     </div>
 </div>
+{% endif %}
 
 {# v2.49.96 — Characters moved out of the Battle drawer into its own
    tab. Same #player-chars-panel + #player-char-list ids so the JS at
