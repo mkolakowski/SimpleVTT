@@ -1351,6 +1351,78 @@
             ctx.restore();
         }
 
+        // v2.49.81 — Phase 3B hover rangefinder. Thin distance line
+        // from the currently-targeted token's center to the cursor +
+        // a "X ft" chip floating next to the cursor. Suppressed when
+        // ANY tool / drag is active so it doesn't overlap with the
+        // AoE picker preview, the ruler measurement, or a token
+        // drag's movement breadcrumb. Activates only with EXACTLY
+        // one target — multi-target selections don't have a single
+        // anchor point.
+        if (
+            _hoverCursor &&
+            _targeting.tokenIds.size === 1 &&
+            !_aoePicker.active &&
+            !_rulerPicker.active &&
+            !dragging
+        ) {
+            const onlyTargetId = [..._targeting.tokenIds][0];
+            const tok = tokens.find(t => t.id === onlyTargetId);
+            if (tok) {
+                const fromX = tok.x + gridSize / 2;
+                const fromY = tok.y + gridSize / 2;
+                const toX = _hoverCursor.x;
+                const toY = _hoverCursor.y;
+                // Only render when the cursor has moved off the token
+                // itself — a line of zero length is visual noise.
+                if (Math.hypot(toX - fromX, toY - fromY) > 8) {
+                    ctx.save();
+                    // Thin solid line — passive cue, not a committed
+                    // measurement. Uses fg-mute equivalent so it sits
+                    // quietly compared to the ruler tool's brighter
+                    // dashed green.
+                    ctx.strokeStyle = 'rgba(180, 180, 180, 0.75)';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([]);
+                    ctx.beginPath();
+                    ctx.moveTo(fromX, fromY);
+                    ctx.lineTo(toX, toY);
+                    ctx.stroke();
+                    // Distance chip — floats ~12 px below + 12 px
+                    // right of the cursor so it doesn't sit on the
+                    // hot spot where the player wants to see what
+                    // they're hovering.
+                    const distance_ft = _computeRulerDistanceFt(
+                        { x: fromX, y: fromY }, { x: toX, y: toY },
+                    );
+                    const label = `${distance_ft} ft`;
+                    ctx.font = '11px sans-serif';
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    const metrics = ctx.measureText(label);
+                    const padX = 6, chipH = 16;
+                    const chipW = metrics.width + padX * 2;
+                    const chipX = toX + 12;
+                    const chipY = toY + 12;
+                    ctx.fillStyle = 'rgba(20, 24, 28, 0.88)';
+                    ctx.strokeStyle = 'rgba(180, 180, 180, 0.6)';
+                    ctx.lineWidth = 1;
+                    if (ctx.roundRect) {
+                        ctx.beginPath();
+                        ctx.roundRect(chipX, chipY, chipW, chipH, 4);
+                        ctx.fill();
+                        ctx.stroke();
+                    } else {
+                        ctx.fillRect(chipX, chipY, chipW, chipH);
+                        ctx.strokeRect(chipX, chipY, chipW, chipH);
+                    }
+                    ctx.fillStyle = '#dcdcdc';
+                    ctx.fillText(label, chipX + padX, chipY + chipH / 2);
+                    ctx.restore();
+                }
+            }
+        }
+
         _updateGifOverlay();
     }
 
@@ -1749,6 +1821,12 @@
     // ---------- Drag handling ----------
     let dragging = null;     // { token, offsetX, offsetY }
     let panning = null;      // { startX, startY }
+    // v2.49.81 — Phase 3B hover rangefinder. Tracks the canvas-space
+    // cursor whenever no tool mode (AoE picker, ruler picker) is
+    // active so the render-pass can draw a distance line from the
+    // currently-targeted token to the cursor. Set to null when the
+    // cursor leaves the canvas; cleared when a tool mode activates.
+    let _hoverCursor = null;
 
     function pointInToken(x, y, t) {
         const cx = t.x + gridSize / 2, cy = t.y + gridSize / 2;
@@ -1960,12 +2038,42 @@
             applyTransform();
             return;
         }
-        if (!dragging) return;
+        if (!dragging) {
+            // v2.49.81 — Phase 3B hover rangefinder. When no tool /
+            // drag is active AND exactly one token is currently
+            // targeted, track the cursor + re-render so the distance
+            // line + chip stay live. Only fires the render when the
+            // rangefinder would actually draw (otherwise it's pure
+            // overhead on every mousemove).
+            if (_targeting.tokenIds.size === 1) {
+                const [wx, wy] = clientToCanvas(ev);
+                _hoverCursor = { x: wx, y: wy };
+                render();
+            } else if (_hoverCursor) {
+                _hoverCursor = null;
+                render();
+            }
+            return;
+        }
         const [x, y] = clientToCanvas(ev);
         dragging.token.x = x - dragging.offsetX;
         dragging.token.y = y - dragging.offsetY;
         render();
     });
+
+    // v2.49.81 — Phase 3B: clear the hover cursor when the mouse
+    // leaves the canvas so the distance line doesn't stay stale at a
+    // stale position. mapPane is the closest ancestor that contains
+    // the canvas; mouseleave on it fires when the cursor exits the
+    // entire map viewport.
+    if (mapPane) {
+        mapPane.addEventListener('mouseleave', () => {
+            if (_hoverCursor) {
+                _hoverCursor = null;
+                try { render(); } catch (_) {}
+            }
+        });
+    }
 
     canvas.addEventListener('mouseup', (ev) => {
         if (ev.button === 2) {

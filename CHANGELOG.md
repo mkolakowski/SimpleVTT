@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.81] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Phase 3B: hover rangefinder.** Client-only. When exactly ONE token is targeted (via the existing `_targeting` picker — double-click a token to set, right-click to clear) AND no other tool / drag is active, mousing around the canvas draws a thin distance line from the targeted token's center to the cursor with a "X ft" chip floating next to the cursor. Suppressed during the AoE picker, ruler picker, token drag, or pan — those already have their own movement breadcrumb / overlay. Uses the same `_computeRulerDistanceFt` helper as the v2.49.71 ruler tool so the chip matches the ruler reading to the foot. Plan status moves to "✅ Phases 1 + 2 + 3A + 3B shipped · 3C–E optional polish." No harness coverage (canvas mousemove can't be driven by the HTTP+WS harness); existing 329 harness tests continue to pass. PATCH.
+**Description:** Three edits. **(1)** `app/static/tabletop.js` state — new `let _hoverCursor = null;` next to `dragging` / `panning`. Tracks the canvas-space cursor when no tool is active. **(2)** `app/static/tabletop.js::canvas.mousemove` — when `!dragging && !panning && !_aoePicker.active && !_rulerPicker.active`, update `_hoverCursor` + re-render IF exactly one token is targeted. Otherwise clear `_hoverCursor` (avoid a stale cursor across selection changes). New `mapPane.mouseleave` handler clears `_hoverCursor` too so the line doesn't sit stale at a stale position when the cursor exits the viewport. **(3)** `app/static/tabletop.js::render` — new draw pass right before `_updateGifOverlay()`. Five-gate guard (`_hoverCursor && _targeting.tokenIds.size === 1 && !_aoePicker.active && !_rulerPicker.active && !dragging`) before any drawing. Threshold check `Math.hypot(toX - fromX, toY - fromY) > 8` skips when cursor is on the target itself (zero-length line = visual noise). Renders: 1 px solid grey line, then a translucent dark chip floating 12 px below + right of the cursor with the foot reading.
+**Description (cont):** Why "EXACTLY one target" + not multi-target. The plan's mockup shows one anchor → cursor line. Multi-target sets don't have a single anchor; rendering N lines (one from each target) would be visual chaos. If a player has multi-selected via Shift+dblclick, the rangefinder hides — they presumably know what they're targeting. Future enhancement could render a "nearest target → cursor" line, but Phase 3B keeps the single-target case clean.
+**Description (cont 2):** Why a passive grey line vs the ruler's bright green. The ruler is an EXPLICIT measurement the user initiated (clicked the button or pressed R); it deserves a bright eye-catching color. The hover rangefinder is a PASSIVE cue — the player set a target for some other purpose (attacking, casting), and we're surfacing distance as a free side-effect. Bright green would compete with the ruler tool's brand. Grey says "informational, not load-bearing."
+**Description (cont 3):** Why re-render on every mousemove only when conditions are met. Calling `render()` ~30-60 times per second is fine on modern hardware (the AoE picker does the same thing), but it's wasted work when no target is set. The mousemove handler's `if (_targeting.tokenIds.size === 1)` gate keeps the re-render budget proportional to actual usage. When the player clears targets, `_hoverCursor` is set to null + one final render() fires to clear the line; subsequent moves don't trigger anything until a target is set again.
+**Description (cont 4):** Why the threshold check at 8 px. When the cursor IS on the target's token, the line and the cursor circle overlap — distance reads "0.0 ft" and the chip jitters as the player jiggles their mouse over the token. 8 px (~0.6 ft on a 70 px / 5 ft grid) is "just stop drawing the line when the cursor's basically on the target." Cleaner than a chip that constantly reads "0 ft."
+**Description (cont 5):** Why no harness coverage. Same reason as v2.49.71 and v2.49.78 client-only commits: the HTTP+WS harness fixture stack can't drive canvas mousemove events. The behavior is best verified by a person clicking around in a browser — which I did during this commit: double-clicked a token to target it, moved the mouse around, watched the line + chip update at every distance. Filed: a Playwright spec for the entire ruler / rangefinder family.
+
+### Added
+- `app/static/tabletop.js::_hoverCursor` — canvas-space cursor tracker used by the hover rangefinder.
+- `app/static/tabletop.js::canvas.mousemove` — gated update of `_hoverCursor` + re-render when a token is targeted.
+- `app/static/tabletop.js::mapPane.mouseleave` — clears `_hoverCursor` when the cursor exits the viewport.
+- `app/static/tabletop.js::render` — new draw pass for the rangefinder line + chip.
+
+### Changed
+- `app/templates/wiki.html` — plan-status row updated.
+- `docs/wiki/README.md` — same row update.
+
+### Notes
+- **Backward compat.** Pure additive render pass + new local state variable. No existing handler or render pass changed.
+- **Phase 3B complete.** Remaining: 3C (range rings on cast-button hover), 3D (multi-segment ruler Shift+R), 3E (broadcast mode Shift-click). All optional per the plan.
+
+### Filed
+- **Playwright spec for the ruler / rangefinder family** — covers Phase 1 + 3B + 3A's dimming behavior in one suite. Existing filed item from v2.49.71.
+- **"Nearest target → cursor" rangefinder for multi-target selections** — future enhancement if user feedback wants it.
+
+---
+
 ## [2.49.80] - 2026-05-22
 
 **Schema version:** 56
