@@ -1112,6 +1112,32 @@
     .gm-panel:not([open]) .init-panel-chevron { transform: rotate(-90deg); }
     /* GM init entry header is fully clickable; .mini-header already sets cursor:pointer */
 
+    /* v2.49.97: flatten the initiative panel — drop the wrapper card
+       so its contents (summary, GM Controls box, init entries) read
+       as independent cards floating on the map, like the roll log.
+       The summary inherits the wrapper's card treatment so it stays
+       a visually anchored section header; everything below it has
+       its own background + border + shadow already. */
+    #initiative-panel {
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        border-radius: 0;
+        overflow: visible;
+    }
+    #initiative-panel > summary {
+        border: 1px solid rgba(167,139,250,.35);
+        border-radius: 8px;
+        box-shadow: 0 3px 14px rgba(0,0,0,.22);
+    }
+    /* When open: drop the gm-panel accent-bottom-border (would orphan
+       a connector into nothing) + add a small gap above the GM
+       Controls / battle banner / init list cards below. */
+    #initiative-panel[open] > summary {
+        border-bottom-color: rgba(167,139,250,.35);
+        margin-bottom: 8px;
+    }
+
     /* ── GM Tools / sidebar panel cards ── */
     /* v2.49.94: explicit background so cards stay opaque against the
        drawer's new transparent backdrop. Was relying on the drawer's
