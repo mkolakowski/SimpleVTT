@@ -15296,7 +15296,40 @@ async def use_attack(
     # action slot; bonus-action attacks (e.g. off-hand light weapon) come
     # through a separate row whose action.economy override is followed
     # in Phase 3, not here.
-    await _mark_battle_economy(campaign_id, char.id, "action")
+    # v2.49.117 Phase B v2 — Flurry of Blows chip refund. If the
+    # attacker has ``flurry-of-blows-active`` active AND this attack
+    # is an unarmed strike (name prefix "unarmed"), the action chip
+    # is NOT marked — Flurry's two follow-up strikes are RAW-free in
+    # action-economy terms (the bonus action already paid via the
+    # Ki spend at v2.49.114). Decrement ``effects.unarmed_strikes_available``;
+    # when it reaches 0, drop the buff. Non-unarmed attacks
+    # (Quarterstaff, weapons) while Flurry is active still mark the
+    # action chip — RAW says Flurry grants UNARMED strikes only.
+    _attack_name_lc = (name or "").strip().lower()
+    _is_unarmed_strike = _attack_name_lc.startswith("unarmed")
+    _flurry_buff = None
+    _strikes_available = 0
+    if _is_unarmed_strike:
+        for b in _get_buffs(campaign_id, char.id):
+            if (b or {}).get("key") == "flurry-of-blows-active":
+                effects = (b or {}).get("effects") or {}
+                if effects.get("is_flurry") is True:
+                    _flurry_buff = dict(b)
+                    _strikes_available = int(effects.get("unarmed_strikes_available") or 0)
+                break
+    if _flurry_buff and _strikes_available > 0:
+        _remaining = _strikes_available - 1
+        if _remaining <= 0:
+            await _remove_buff(campaign_id, char.id, "flurry-of-blows-active")
+        else:
+            _new_buff = dict(_flurry_buff)
+            _new_effects = dict(_flurry_buff.get("effects") or {})
+            _new_effects["unarmed_strikes_available"] = _remaining
+            _new_buff["effects"] = _new_effects
+            await _install_buff(campaign_id, char.id, _new_buff)
+        _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    else:
+        await _mark_battle_economy(campaign_id, char.id, "action")
     # Return the attack + damage totals so the sheet's .atk-strike handler can
     # fire the shared roll-toast immediately. The broadcast still drives the
     # tabletop's roll-card path; this echo gives the rolling player a popup

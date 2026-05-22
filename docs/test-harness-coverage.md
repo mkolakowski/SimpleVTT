@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 364 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.115, 2026-05-22).
+**Total tests:** 368 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.117, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -536,6 +536,16 @@ v2.49.55 — Monk class feature `POST /use_stunning_strike`. Lv 5+ + ki >= 1 + a
 | `test_stunning_strike_wrong_class` | Krieger (Barbarian) → 409 `wrong_class` with `expected=monk`. |
 | `test_stunning_strike_no_ki` | Drain Kael's ki via repeated calls (response carries `ki_remaining`); when 0, next call → 409 `no_ki` with `available=0`. |
 | `test_stunning_strike_pc_drops_own_concentration` | v2.49.56 — closes the v2.49.55 filed item. Magnus casts Hex (concentration); Kael uses Stunning Strike on Magnus → roll_request; GM-as-Magnus /responds; on save fail assert (a) Stunned lands on Magnus, (b) Magnus's Hex drops via the v2.49.51 hook's `concentration: False` branch, (c) 💀 GM log naming "stunned" + "incapacitated" fires. Retry loop because the CON save is random. |
+
+### `test_flurry_chip_refund.py`
+v2.49.117 — Phase B v2. While `flurry-of-blows-active` is on the attacker, the next two unarmed-strike attacks DON'T burn the action chip; `effects.unarmed_strikes_available` decrements per strike. When it hits 0, the buff drops. Non-unarmed attacks while Flurry active still mark the chip — RAW Flurry grants unarmed strikes only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_unarmed_strike_with_flurry_active_refunds_chip` | Activate Flurry → unarmed strike → action chip stays clear; buff counter ticks 2 → 1. |
+| `test_second_unarmed_strike_consumes_flurry` | Two unarmed strikes in succession → buff DROPS after the second (counter hit 0). |
+| `test_non_unarmed_attack_with_flurry_active_still_marks_chip` | Quarterstaff attack with Flurry active → chip marked normally; buff counter unchanged. |
+| `test_unarmed_strike_without_flurry_marks_chip` | Control / regression guard: unarmed strike WITHOUT Flurry → action chip marked normally. |
 
 ### `test_dodging_disadvantage.py`
 v2.49.115 — first Phase B effect integration. When a weapon attack targets a combatant with the `patient-defense` buff (`effects.dodging: True`), the d20 attack roll uses disadvantage (`2d20kl1`). Handles the Rage-attacker-vs-Dodging-target cancellation per RAW PHB p.173 (advantage + disadvantage = neither = straight 1d20).

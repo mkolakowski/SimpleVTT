@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.117] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Phase B v2 — Flurry of Blows action-chip refund for unarmed strikes.** Closes the second Phase B mechanical integration after Dodging in v2.49.115. While `flurry-of-blows-active` is on the attacker, the next two unarmed-strike attacks DON'T burn the action chip + decrement `effects.unarmed_strikes_available` per strike. When the counter hits 0, the buff drops. Non-unarmed attacks (Quarterstaff, weapons) while Flurry active still mark the chip — RAW Flurry grants unarmed strikes only. The classifier is a `name.lower().startswith("unarmed")` check on the attack name, which matches Kael's demo "Unarmed Strike" attack at index 0 without matching his "Quarterstaff (Martial Arts)" at index 1. 4 new harness tests; 33 existing attack-suite tests still pass.
+**Description:** Two file edits. **(1)** `app/routes/tabletop_routes.py::use_attack` — after the existing `_mark_battle_economy(campaign_id, char.id, "action")` was unconditional, the call now sits inside an `else` branch. The new branch: if attack name prefix is "unarmed" AND the attacker has `flurry-of-blows-active` with `effects.is_flurry: True` AND `effects.unarmed_strikes_available > 0`, the action chip is NOT marked. The buff is re-installed with `unarmed_strikes_available - 1`, OR dropped via `_remove_buff` when the counter hits 0. `_mirror_buffs_to_sheet` keeps the sheet's `_buffs_active` mirror in sync. (2) `tests/harness/test_flurry_chip_refund.py` (NEW, 4 tests) — happy path (unarmed strike with Flurry refunds + decrements), buff-consumption path (two strikes drop the buff), Quarterstaff exception (non-unarmed attack with Flurry active still marks the chip + leaves the buff alone), no-Flurry control (regression guard).
+**Description (cont):** Why a name-prefix classifier instead of a structured attack-type field. The attack rows on the character sheet don't carry an "is_unarmed" flag today; the canonical signal is the attack's name string. "Unarmed Strike" (Kael's), "Unarmed Strike (Tavern Brawler)" (a future Feat variant), "Improvised Unarmed Strike" — all match the prefix. False positives are limited to ad-hoc GM-typed attack names starting with "unarmed" but not actually unarmed-strike (a contrived edge case). A future commit can add an explicit `is_unarmed: True` flag on the attack row if classifier robustness becomes a problem.
+**Description (cont 2):** Interaction with v2.49.116's OHT trigger gate. Flurry of Blows activates → buff present → first unarmed-strike attack is treated as the "Flurry hit" under RAW. OHT can fire after that hit per the v2.49.116 gate, since the buff IS active. The second unarmed-strike attack consumes the second slot and drops the buff. If OHT fires after the second strike (i.e. after the buff drops), the v2.49.116 gate rejects — RAW correct (OHT specifically requires "one of the attacks GRANTED BY your Flurry of Blows," so once Flurry is over, OHT can't piggyback). Tested via the v2.49.116 gate test in test_use_open_hand_technique.py implicitly (those tests trust the buff state set up by the harness).
+**Description (cont 3):** Why decrement-then-drop instead of letting the v2.49.114 1-round duration auto-expire. The 1-round duration would expire the buff at end-of-turn regardless of how many strikes the player took — RAW correct for the "two free strikes within a turn" rule. But if the player makes the two unarmed strikes AND then a third unarmed strike (whether by Extra Attack, an Action Surge, or some weird interaction), the third should NOT refund. Decrementing the counter and dropping on 0 lets a future commit interact correctly with extra-attack chains; the duration-based fallback just catches the "player didn't use both strikes" case.
+**Description (cont 4):** What about the FIRST attack of the turn (the one BEFORE Flurry activates). RAW Flurry sequence: take Attack action (one weapon attack, normal action-chip cost) → activate Flurry (bonus action, 1 ki, install buff) → make two free unarmed strikes (chip refund per this commit). The first attack happens BEFORE the buff is installed, so the chip refund condition is false → action chip marked normally. Tested implicitly by `test_unarmed_strike_without_flurry_marks_chip`.
+**Description (cont 5):** Verification. (a) 4 new tests in `test_flurry_chip_refund.py` pass. (b) Regression check: 33 tests across `test_attack.py`, `test_attack_auto_damage.py`, `test_attack_multi_target.py`, `test_attack_buff_intercepts.py`, `test_attack_force_gm_sync.py`, `test_dodging_disadvantage.py` — 33/33 pass. (c) Curl `/version` confirms v2.49.117 live. (d) Manual: open Kael's sheet, activate Flurry of Blows, click his Unarmed Strike attack — observe the action chip stays clear; click again — observe the buff disappears.
+
+### Added
+- `app/routes/tabletop_routes.py::use_attack` — Flurry of Blows chip-refund branch + buff decrement / drop.
+- `tests/harness/test_flurry_chip_refund.py` (NEW, 4 tests).
+- `docs/test-harness-coverage.md` — new subsection.
+
+### Notes
+- **Backward compat.** Existing attack flow unchanged for any attack that's NOT an unarmed strike + the attacker doesn't have the Flurry buff. New code path only fires when both conditions match.
+- **Classifier robustness.** `name.lower().startswith("unarmed")` is the simplest classifier that works for the demo and for typical SRD content. A future explicit `is_unarmed: True` flag on the attack row would be more robust.
+
+### Filed
+- **Explicit is_unarmed flag.** Add `is_unarmed: True` to the attack-row schema so the classifier doesn't depend on the attack name string. Migration commit; not blocking today.
+- **Extra-attack + Flurry interaction.** A Monk with Extra Attack (Lv 5+) + Action Surge multiclass + Flurry could in principle make 5+ unarmed strikes in a single turn. The current counter-based decrement handles the first two correctly; the 3rd+ would mark the chip normally. Worth a follow-up test once a Lv 5 multiclass Monk exists in the demo.
+
+---
+
 ## [2.49.116] - 2026-05-22
 
 **Schema version:** 56
