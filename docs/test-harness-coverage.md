@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 329 (as of v2.49.77, 2026-05-22).
+**Total tests:** 335 (as of v2.49.84, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -251,6 +251,18 @@ v2.49.61 — closes the "wake-on-damage" filed item from v2.49.58. RAW Sleep wak
 | `test_wake_on_damage_npc` | Bandit pre-seeded with Sleep-Unconscious buff; Krieger attacks (auto_apply_damage on) → latest `battle_update` shows bandit's Unconscious dropped + 🌅 wake log fires. |
 | `test_wake_on_damage_pc` | Magnus pre-seeded with Sleep-Unconscious buff; Krieger attacks → Unconscious dropped from BOTH hub and sheet mirror + 🌅 wake log names Magnus. |
 | `test_non_sleep_unconscious_preserved` | Bandit pre-seeded with a generic Unconscious buff (no `source_spell == "Sleep"`); Krieger attacks → buff preserved (regression guard against over-broad clearing). |
+
+### `test_ruler_broadcast.py`
+v2.49.84 — Phase 3E of the ruler/range plan. `POST /api/campaign/{cid}/ruler_broadcast` fans out the requester's ruler measurement to every connected campaign client. Auth: any campaign member. Server does no persistence; broadcast-only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_ruler_broadcast_show` | `{action: "show", points: [...], multi_segment: false}` → 200 + WS `ruler_broadcast` with `user_id`, `user_name`, `action="show"`, `points`, `multi_segment=false`. |
+| `test_ruler_broadcast_show_multi_segment` | 4-point path + `multi_segment: true` → WS broadcast carries all 4 points + flag. |
+| `test_ruler_broadcast_hide` | `{action: "hide"}` → 200 + WS broadcast with `action="hide"` and no points/multi_segment fields. |
+| `test_ruler_broadcast_invalid_action` | Action other than `show` / `hide` → 400. |
+| `test_ruler_broadcast_invalid_points_type` | Non-list `points` → 400. |
+| `test_ruler_broadcast_non_member_403` | Non-existent campaign id → 403 (membership check fails). |
 
 ### `test_place_aoe_range.py`
 v2.49.77 — Phase 3A of the ruler/range plan: server-side range enforcement on AoE casts via `/place_aoe`. The picker's chosen `center: {x, y}` is compared to the caster's token position vs the parsed spell range. Same three-tier override as Phase 2C (GM auto-bypass, player override + not strict, otherwise enforced). Tests use Bob (Thalindra's owner, non-GM) so the non-GM enforcement fires.

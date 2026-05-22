@@ -133,6 +133,13 @@
     .canvas-tool-btn[aria-disabled="true"] {
         opacity: 0.5; cursor: not-allowed; pointer-events: none;
     }
+    /* v2.49.84 Phase 3E — broadcasting state. Appends a 📡 satellite
+       glyph after the button's existing label so the broadcaster + the
+       table both see "this is going out to everyone." */
+    .canvas-tool-btn[data-broadcasting="true"]::after {
+        content: " 📡";
+        font-size: 11px;
+    }
     /* Hint banner — centered floating pill at the top of the map viewport.
        Sits above the canvas overlays (AoE picker uses z-index 200; ruler
        picks 210 so a ruler banner shown DURING an AoE picker is on top —

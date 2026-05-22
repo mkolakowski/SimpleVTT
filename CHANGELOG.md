@@ -10,6 +10,43 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.84] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Phase 3E: ruler broadcast mode — closes the ruler/range plan.** Shift-click on the 📏 Ruler button (or `Shift+R` hotkey) activates broadcast mode along with the multi-segment toggle. Each waypoint placed + the eventual cleanup posts to a new `POST /api/campaign/{cid}/ruler_broadcast` endpoint, which fans out a `ruler_broadcast` WS message to every connected client. Remote clients render the broadcaster's measurement as a semi-transparent green overlay (alpha 0.6) tagged with the broadcaster's display name. Auto-expiry 8 s after the most recent update covers dropped hide messages from disconnected clients. Toolbar button gains a 📡 satellite badge when broadcasting. 6 new harness tests pin the endpoint contract; full plan now reads "✅ All phases shipped (1, 2, 3A–E)." PATCH.
+**Description:** Seven edits. **(1)** `app/routes/tabletop_routes.py::ruler_broadcast` (NEW endpoint, ~50 lines). POST takes `{action: "show" | "hide", points?: [...], multi_segment?: bool}`. Auth: any campaign member (the ruler is a transient visual cue; no state mutation). 400 for invalid action or non-list points; 403 for non-members. Server side does NO persistence — pure fan-out. **(2)** `app/static/tabletop.js::_rulerPicker` — new `broadcasting: bool` state field; `start({broadcasting})` accepts the flag; `_cleanup` resets it. `addPoint` and `commitMulti` and the single-segment auto-commit each post to the endpoint when broadcasting is true. **(3)** `app/static/tabletop.js::_postRulerBroadcast` (NEW helper) — fire-and-forget POST with the same shape across all three callers. **(4)** `app/static/tabletop.js::_remoteRulers` (NEW Map<user_id, entry>) + `_onRulerBroadcast` handler that the WS dispatcher invokes on `ruler_broadcast` messages. Drops echoes from our own user_id (we already render locally). Sets `expires_at = now + 8000ms` on each show. **(5)** `app/static/tabletop.js::_setRulerButtonState(active, broadcasting)` — updates the button's `aria-pressed` AND `data-broadcasting` attributes; tooltip text adapts to the broadcasting state. **(6)** `app/static/tabletop.js` render pass — new draw block walks `_remoteRulers`, drops expired entries lazily, renders semi-transparent green segments + filled circles + a single chip at the path's midpoint with `${totalFt} ft (${user_name})`. **(7)** `app/templates/tabletop.html` CSS — new `.canvas-tool-btn[data-broadcasting="true"]::after` rule appends a 📡 glyph to the button label. **(8)** `tests/harness/test_ruler_broadcast.py` (NEW, 6 tests).
+**Description (cont):** Why the toolbar Shift-click toggles BOTH multi-segment AND broadcast. The GM-led demo use case the plan describes ("show everyone how far my Fire Bolt reaches" / "trace the path the goblin will take") almost always wants the multi-segment + broadcast combination. Two independent toggles would be one click each — three clicks (button + Shift modifier × 2) for the same setup. Binding them at the toolbar level keeps the one-click ergonomic. The endpoint + state flags remain independent so future UX work (e.g. a context menu) can split them.
+**Description (cont 2):** Why broadcaster name appears in the chip, not in a sidebar banner. The chip is where the player's attention already is (the line they're being shown). A sidebar / toolbar indicator means looking elsewhere to figure out who's measuring. The chip becomes "X ft (Demo GM)" — context + attribution in one glance. If multiple broadcasters fire at once, each gets their own chip on their own path.
+**Description (cont 3):** Why 8 s expiry on the receiving side, not on the broadcasting side. The broadcaster's 3 s ghost (from Phase 1 / 3D) clears the local line + fires a `hide` post. If that POST gets dropped (browser closed, network hiccup, server restart), remote clients would render the ghost forever. The 8 s expiry on receipt = broadcaster's 3 s freeze + 5 s buffer for network jitter — covers the dropped-hide failure mode without dragging out the cleanup beyond what makes sense.
+**Description (cont 4):** Why drop our own echoes (`d.user_id === ME.id`). The WS hub fans out to everyone INCLUDING the sender. If we rendered our own echo as a "remote" ruler, it would overlap with the local active picker (we'd see double lines + double chips). Filtering on user_id is the standard hub convention; same pattern as the v2.49.0 concentration AoE update.
+**Description (cont 5):** Why server-side does no persistence. The ruler isn't game state — it's a transient communication channel. If a player joins the campaign mid-broadcast, they see the next update (3-second cadence in active mode); they don't need to see history. No DB rows, no in-memory map on the server, no replay logic. Fan-out and done. Mirrors the existing chat-flavor broadcasts (presence, roll) that are likewise fire-and-forget.
+**Description (cont 6):** Verification. Manual: opened two browsers (GM + Bob as Thalindra's player). GM Shift-clicked the Ruler button; toolbar showed 📏 Ruler 📡; GM clicked four waypoints — Bob's tabletop showed the green dashed line + circles + "85 ft (Demo GM)" chip in real time as each click landed. GM pressed Enter — the line froze on both browsers for 3 s then cleared. GM hit Esc mid-measurement on a different attempt — Bob's overlay cleared immediately. Bob tried to Shift-click his own button — broadcasts went out, GM saw "X ft (Bob (Demo Wizard))" overlays. Full regression: 335 harness tests pass (was 329, +6 new). Plan status moves to "✅ All phases shipped."
+
+### Added
+- `app/routes/tabletop_routes.py::ruler_broadcast` — new POST endpoint that fans out a `ruler_broadcast` WS message.
+- `app/static/tabletop.js::_rulerPicker.broadcasting` + `_postRulerBroadcast` helper.
+- `app/static/tabletop.js::_remoteRulers` Map + `_onRulerBroadcast` handler + WS dispatch case.
+- `app/static/tabletop.js::_setRulerButtonState` — extended to render the 📡 badge state.
+- `app/static/tabletop.js` render pass — remote rulers drawn as semi-transparent overlays with broadcaster name in the chip.
+- `app/templates/tabletop.html` — `.canvas-tool-btn[data-broadcasting="true"]::after` CSS for the 📡 badge.
+- `tests/harness/test_ruler_broadcast.py` — 6 tests.
+- `docs/test-harness-coverage.md` — catalog entry; total 329 → 335.
+
+### Changed
+- `app/templates/wiki.html` — plan-status row → "✅ All phases shipped (1, 2, 3A–E)."
+- `docs/wiki/README.md` — same row update.
+
+### Notes
+- **Backward compat.** Pure additive endpoint + additive client state + additive CSS. No existing handler or render pass changed shape.
+- **Phase 3 complete; plan complete.** The ruler/range plan is now fully shipped end-to-end. Any future work files as new plans or as TODOs.
+- **Server has no ruler state.** Fan-out only; clients own expiry.
+
+### Filed
+- **Playwright spec for the ruler family** — covers Phase 1 / 3A / 3B / 3C / 3D / 3E in one suite. Carries forward.
+- **Per-broadcaster color** — if multiple players broadcast at once, each green line + chip looks identical. Color by user_color_map would disambiguate. Filed for follow-up if needed.
+
+---
+
 ## [2.49.83] - 2026-05-22
 
 **Schema version:** 56

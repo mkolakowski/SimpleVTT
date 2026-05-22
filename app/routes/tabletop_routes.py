@@ -8280,6 +8280,64 @@ async def cast_spell(
     }
 
 
+# ----------- API: ruler broadcast (Phase 3E — GM-led range demos) -----------
+
+@router.post("/api/campaign/{campaign_id}/ruler_broadcast")
+async def ruler_broadcast(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.49.84 Phase 3E — fan out the requester's ruler measurement
+    to every connected client in the campaign.
+
+    Body: ``{action: "show" | "hide", points?: [{x, y}, ...],
+    multi_segment?: bool}``.
+
+    Auth: any campaign member. The ruler is a transient visual cue, not
+    a state mutation; sharing it is no more sensitive than chatting.
+
+    Server side does NO ruler-state persistence — it's purely a fan-
+    out path. Clients render via the broadcast; expiry / cleanup
+    happens on the receiving side (default 8 s after the most recent
+    update, see ``_remoteRulers`` in ``tabletop.js``).
+    """
+    body = await request.json()
+    action = (body.get("action") or "").strip()
+    if action not in ("show", "hide"):
+        raise HTTPException(400, "action must be 'show' or 'hide'")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    payload: dict = {
+        "user_id": user.id,
+        "user_name": user.display_name,
+        "action": action,
+    }
+    if action == "show":
+        pts_raw = body.get("points") or []
+        if not isinstance(pts_raw, list):
+            raise HTTPException(400, "points must be a list")
+        pts: list[dict] = []
+        for p in pts_raw:
+            if isinstance(p, dict):
+                pts.append({
+                    "x": float(p.get("x", 0) or 0),
+                    "y": float(p.get("y", 0) or 0),
+                })
+        payload["points"] = pts
+        payload["multi_segment"] = bool(body.get("multi_segment"))
+
+    await hub.broadcast(campaign_id, {
+        "type": "ruler_broadcast",
+        "data": payload,
+    })
+    return {"ok": True}
+
+
 # ----------- API: place AoE (Phase T.5e — caster-gated placement) -----------
 
 @router.post("/api/campaign/{campaign_id}/place_aoe")

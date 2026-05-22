@@ -578,6 +578,7 @@
         points: [],            // canvas-space {x, y} points; 2 in single-segment, 2+ in multi-segment
         cursor: null,          // {x, y} canvas-space mouse position
         multiSegment: false,   // v2.49.83 Phase 3D — Shift+R toggles
+        broadcasting: false,   // v2.49.84 Phase 3E — Shift-click toggles broadcast
         _clearTimer: null,     // setTimeout handle for the 3 s ghost
 
         start(opts) {
@@ -588,13 +589,14 @@
             this.points = [];
             this.cursor = null;
             this.multiSegment = !!(opts && opts.multiSegment);
+            this.broadcasting = !!(opts && opts.broadcasting);
             if (this._clearTimer) {
                 clearTimeout(this._clearTimer);
                 this._clearTimer = null;
             }
             document.body.classList.add('ruler-picker-active');
             _showRulerHint(0, this.multiSegment);
-            _setRulerButtonState(true);
+            _setRulerButtonState(true, this.broadcasting);
             try { render(); } catch (_) {}
             return true;
         },
@@ -607,6 +609,9 @@
         addPoint(x, y) {
             if (!this.active) return;
             this.points.push({ x, y });
+            // v2.49.84 Phase 3E — broadcast each waypoint so remote
+            // clients see the line draw in real time.
+            if (this.broadcasting) _postRulerBroadcast('show', this.points, this.multiSegment);
             // v2.49.83 Phase 3D — multi-segment mode keeps accumulating
             // waypoints. Each click bumps the hint to "Click next
             // waypoint — Enter to commit." Enter calls commit(); Esc
@@ -633,13 +638,19 @@
             // point; keep the points array so render() draws the ghost.
             this.active = false;
             document.body.classList.remove('ruler-picker-active');
-            _setRulerButtonState(false);
+            _setRulerButtonState(false, false);
             try { render(); } catch (_) {}
+            // v2.49.84 — schedule the broadcast cleanup along with the
+            // local ghost-clear so remote clients keep the line for the
+            // same 3 s window.
+            const wasBroadcasting = this.broadcasting;
             this._clearTimer = setTimeout(() => {
                 this.points = [];
                 this.cursor = null;
+                this.broadcasting = false;
                 this._clearTimer = null;
                 _hideRulerHint();
+                if (wasBroadcasting) _postRulerBroadcast('hide');
                 try { render(); } catch (_) {}
             }, 3000);
         },
@@ -661,30 +672,37 @@
             _showRulerResult(total_ft);
             this.active = false;
             document.body.classList.remove('ruler-picker-active');
-            _setRulerButtonState(false);
+            _setRulerButtonState(false, false);
             try { render(); } catch (_) {}
+            const wasBroadcasting = this.broadcasting;
             this._clearTimer = setTimeout(() => {
                 this.points = [];
                 this.cursor = null;
                 this.multiSegment = false;
+                this.broadcasting = false;
                 this._clearTimer = null;
                 _hideRulerHint();
+                if (wasBroadcasting) _postRulerBroadcast('hide');
                 try { render(); } catch (_) {}
             }, 3000);
         },
 
         _cleanup(keepGhost) {
+            const wasBroadcasting = this.broadcasting;
             this.active = false;
             if (!keepGhost) this.points = [];
             this.cursor = null;
             this.multiSegment = false;
+            this.broadcasting = false;
             if (this._clearTimer) {
                 clearTimeout(this._clearTimer);
                 this._clearTimer = null;
             }
             document.body.classList.remove('ruler-picker-active');
             _hideRulerHint();
-            _setRulerButtonState(false);
+            _setRulerButtonState(false, false);
+            // v2.49.84 Phase 3E — tell remote clients to drop the ghost.
+            if (wasBroadcasting) _postRulerBroadcast('hide');
             try { render(); } catch (_) {}
         },
     };
@@ -858,10 +876,74 @@
         if (el) el.remove();
     }
 
-    function _setRulerButtonState(active) {
+    function _setRulerButtonState(active, broadcasting) {
         const btn = document.getElementById('ruler-btn');
         if (!btn) return;
         btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+        if (broadcasting) {
+            btn.setAttribute('data-broadcasting', 'true');
+            btn.setAttribute('title', 'Measure distance on the map (R) — Broadcasting 📡');
+        } else {
+            btn.removeAttribute('data-broadcasting');
+            btn.setAttribute('title', 'Measure distance on the map (R) · Shift = multi-segment · Shift-click = broadcast');
+        }
+    }
+
+    // v2.49.84 Phase 3E — broadcast helpers + remote-rulers map.
+    //
+    // POST to /api/campaign/{cid}/ruler_broadcast on each addPoint /
+    // commit / cancel when the local picker is in broadcasting mode.
+    // The server fan-outs a ``ruler_broadcast`` WS message to all
+    // other campaign clients. The fire-and-forget pattern matches
+    // the existing token-move broadcast cadence.
+    function _postRulerBroadcast(action, points, multiSegment) {
+        if (typeof CAMPAIGN_ID === 'undefined') return;
+        const body = { action };
+        if (action === 'show') {
+            body.points = (points || []).map(p => ({ x: p.x, y: p.y }));
+            body.multi_segment = !!multiSegment;
+        }
+        try {
+            fetch(`/api/campaign/${CAMPAIGN_ID}/ruler_broadcast`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            }).catch(() => { /* fire-and-forget */ });
+        } catch (_) { /* network / CSP — silent */ }
+    }
+
+    // Remote rulers map keyed by broadcaster user_id. Each entry:
+    // { points: [{x,y}, ...], multi_segment: bool, user_name: str,
+    //   expires_at: ms }. Render pass walks the map; entries past
+    //   expires_at are skipped + lazily removed.
+    const _remoteRulers = new Map();
+
+    function _onRulerBroadcast(d) {
+        if (!d || typeof d.user_id !== 'number') return;
+        // Drop our own echoes — local render is already up to date.
+        if (typeof ME !== 'undefined' && ME && d.user_id === ME.id) return;
+        if (d.action === 'hide') {
+            _remoteRulers.delete(d.user_id);
+            try { render(); } catch (_) {}
+            return;
+        }
+        // action === 'show'.
+        const pts = Array.isArray(d.points) ? d.points : [];
+        if (!pts.length) {
+            _remoteRulers.delete(d.user_id);
+            try { render(); } catch (_) {}
+            return;
+        }
+        _remoteRulers.set(d.user_id, {
+            points: pts.map(p => ({ x: Number(p.x) || 0, y: Number(p.y) || 0 })),
+            multi_segment: !!d.multi_segment,
+            user_name: d.user_name || 'Player',
+            // Auto-drop 8 s after the last update (covers the
+            // broadcaster's 3 s freeze + network jitter + dropped
+            // hides from disconnected clients).
+            expires_at: Date.now() + 8000,
+        });
+        try { render(); } catch (_) {}
     }
 
     // Toolbar-button click + R hotkey wiring. The button toggles the
@@ -870,8 +952,21 @@
         const btn = document.getElementById('ruler-btn');
         if (btn && !btn.hasAttribute('disabled')) {
             btn.addEventListener('click', (ev) => {
-                if (_rulerPicker.active) _rulerPicker.cancel();
-                else _rulerPicker.start({ multiSegment: !!ev.shiftKey });
+                if (_rulerPicker.active) {
+                    _rulerPicker.cancel();
+                    return;
+                }
+                // v2.49.83 / v2.49.84 — Shift toggles BOTH multi-segment
+                // AND broadcast mode (GM-led demos typically use both
+                // together to walk the table through a measurement).
+                // Two flags are independent in the API, but the
+                // toolbar binds them together for one-click ergonomics.
+                // The hotkey path is the same: R = single + local;
+                // Shift+R = multi + broadcast.
+                _rulerPicker.start({
+                    multiSegment: !!ev.shiftKey,
+                    broadcasting: !!ev.shiftKey,
+                });
             });
         }
         // R hotkey — only when no input has focus + no other modal /
@@ -900,7 +995,10 @@
             if (ruleButton && ruleButton.hasAttribute('disabled')) return;
             ev.preventDefault();
             if (_rulerPicker.active) _rulerPicker.cancel();
-            else _rulerPicker.start({ multiSegment: !!ev.shiftKey });
+            else _rulerPicker.start({
+                multiSegment: !!ev.shiftKey,
+                broadcasting: !!ev.shiftKey,
+            });
         });
     })();
 
@@ -1639,6 +1737,57 @@
                     ctx.fillText(label, chipX + padX, chipY + chipH / 2);
                     ctx.restore();
                 }
+            }
+        }
+
+        // v2.49.84 Phase 3E — remote ruler broadcasts. Render each
+        // foreign measurement as a semi-transparent green overlay with
+        // the broadcaster's name on the chip. Drawn AFTER local
+        // overlays so a local active ruler sits on top of any remote
+        // ghost. Drops expired entries (broadcaster commits froze for
+        // 3 s + we keep showing for ~5 s after; expires_at is set to
+        // 8 s past the most recent update).
+        if (_remoteRulers.size) {
+            const _now = Date.now();
+            for (const [user_id, entry] of _remoteRulers) {
+                if (entry.expires_at <= _now) {
+                    _remoteRulers.delete(user_id);
+                    continue;
+                }
+                if (!entry.points || entry.points.length < 1) continue;
+                const pts = entry.points;
+                ctx.save();
+                ctx.globalAlpha = 0.6;
+                ctx.strokeStyle = '#4ade80';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([8, 5]);
+                for (let i = 0; i < pts.length - 1; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(pts[i].x, pts[i].y);
+                    ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+                    ctx.stroke();
+                }
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#4ade80';
+                for (const p of pts) {
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                // Single chip at midpoint with total distance + name.
+                if (pts.length >= 2) {
+                    let totalFt = 0;
+                    for (let i = 0; i < pts.length - 1; i++) {
+                        totalFt += _computeRulerDistanceFt(pts[i], pts[i + 1]);
+                    }
+                    totalFt = Math.round(totalFt * 10) / 10;
+                    const mid = pts[Math.floor(pts.length / 2)];
+                    ctx.font = '12px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    _drawRulerChip(ctx, `${totalFt} ft (${entry.user_name})`, mid.x, mid.y - 14);
+                }
+                ctx.restore();
             }
         }
 
@@ -2789,6 +2938,11 @@
                 _onCharacterDeathSave(msg.data);
             } else if (msg.type === 'character_roll_state') {
                 _onCharacterRollState(msg.data);
+            } else if (msg.type === 'ruler_broadcast') {
+                // v2.49.84 Phase 3E — remote ruler broadcasts. Drop
+                // our own broadcasts since we already render them
+                // locally; only foreign rulers populate _remoteRulers.
+                _onRulerBroadcast(msg.data);
             }
         };
         ws.onclose = () => setTimeout(connectWs, 2000);
