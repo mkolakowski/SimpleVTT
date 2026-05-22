@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 249 (as of v2.49.56, 2026-05-21).
+**Total tests:** 254 (as of v2.49.57, 2026-05-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -421,6 +421,17 @@ v2.49.55 — Monk class feature `POST /use_stunning_strike`. Lv 5+ + ki >= 1 + a
 | `test_stunning_strike_wrong_class` | Krieger (Barbarian) → 409 `wrong_class` with `expected=monk`. |
 | `test_stunning_strike_no_ki` | Drain Kael's ki via repeated calls (response carries `ki_remaining`); when 0, next call → 409 `no_ki` with `available=0`. |
 | `test_stunning_strike_pc_drops_own_concentration` | v2.49.56 — closes the v2.49.55 filed item. Magnus casts Hex (concentration); Kael uses Stunning Strike on Magnus → roll_request; GM-as-Magnus /responds; on save fail assert (a) Stunned lands on Magnus, (b) Magnus's Hex drops via the v2.49.51 hook's `concentration: False` branch, (c) 💀 GM log naming "stunned" + "incapacitated" fires. Retry loop because the CON save is random. |
+
+### `test_use_open_hand_technique.py`
+v2.49.57 — Monk subclass feature `POST /use_open_hand_technique` (Way of the Open Hand, Lv 3+). Three modes: `prone` (DEX save → Prone via new `open-hand-prone` map entry), `push` (STR save → response carries `push_authorized` for the GM to drag the token; no buff), `no_reactions` (no save → inline install of `reaction-denied` buff). No ki cost — RAW the Flurry of Blows already paid. Same trust-the-caller convention as Stunning Strike for the "must follow a Flurry hit" gate.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_open_hand_prone_happy_path_npc` | Kael uses prone on a bandit; retry until DEX save fails; assert `auto_save_buff_installed=Prone`, `concentration=False` on the broadcast buff, `source_char_id=Kael`. |
+| `test_open_hand_push_npc` | Kael uses push on a bandit; assert `push_authorized` is the boolean inverse of `auto_save_passed`. No buff installed either way. |
+| `test_open_hand_no_reactions_npc` | Kael uses no_reactions on a bandit; assert `buff_installed=No Reactions (Open Hand)`, `reaction-denied` key on the bandit's buff list, `duration_rounds=1`, no `auto_save_prompted`. |
+| `test_open_hand_wrong_class` | Krieger (Barbarian) → 409 `wrong_class` with `expected=monk`. |
+| `test_open_hand_bad_mode` | Invalid `mode` string → 400. |
 
 ### `test_swap_preserves_paired_buffs.py`
 v2.49.54 — closes the bug filed in v2.49.53. The swap loop in `_install_buff` no longer drops `concentration: True` buffs sourced by another caster. RAW: the one-concentration-at-a-time rule applies only to the combatant's OWN concentration spells; a paired condition (e.g. Paralyzed on a Hold Person victim) is sustained by the SOURCE caster and must persist independently.

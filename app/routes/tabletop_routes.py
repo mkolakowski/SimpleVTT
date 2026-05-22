@@ -645,6 +645,26 @@ _SPELL_CONDITION_MAP = {
             "attacks vs target have advantage",
         ],
     },
+    # v2.49.57: Monk Open Hand Technique — "prone" mode. Used by the
+    # /use_open_hand_technique endpoint, which routes the DEX-save
+    # rider through the same save-or-suck pipeline as Stunning Strike.
+    # Prone has no RAW timer (ends when target spends half movement
+    # to stand); 10 rounds is a generous default and the GM ends it
+    # via /end_buff when the target stands. NOT in _INCAPACITATING_BUFF_KEYS
+    # — Prone constrains movement / grants advantage-disadvantage to
+    # nearby attackers, but doesn't incapacitate.
+    "open-hand-prone": {
+        "key": "prone",
+        "name": "Prone",
+        "icon": "🫳",
+        "duration_rounds": 10,
+        "concentration": False,
+        "effects": [
+            "movement costs double to crawl; rising costs half speed",
+            "disadvantage on attack rolls while prone",
+            "attacks against prone target: advantage within 5 ft, disadvantage at range",
+        ],
+    },
 }
 
 
@@ -10558,6 +10578,331 @@ async def use_stunning_strike(
         "auto_save_passed": auto_save_passed,
         "auto_save_breakdown": auto_save_breakdown,
         "auto_save_buff_installed": auto_save_buff_installed,
+    }
+
+
+# ----------- API: Open Hand Technique (Monk Way of the Open Hand Lv3+) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_open_hand_technique")
+async def use_open_hand_technique(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Monk subclass feature (Way of the Open Hand, Lv 3+).
+
+    RAW: "Whenever you hit a creature with one of the attacks granted
+    by your Flurry of Blows, you can impose one of the following
+    effects on that target:
+
+      - It must succeed on a Dexterity saving throw or be knocked prone.
+      - It must make a Strength saving throw. If it fails, you can push
+        it up to 15 feet away from you.
+      - It can't take reactions until the end of your next turn."
+
+    Body: ``{character_id, target_combatant_id?, target_character_id?,
+            target_name?, mode}`` where ``mode`` is one of ``prone``,
+    ``push``, ``no_reactions``.
+
+    No additional cost — the Flurry of Blows ki already paid. RAW
+    requires this to follow a Flurry hit; the endpoint trusts the
+    caller (same convention as ``/use_stunning_strike``), and the UI
+    is expected to surface the button only after a Flurry hit lands.
+
+    Three flows:
+      - ``no_reactions``: no save, install ``reaction-denied`` buff on
+        the target inline (concentration=False, 1 turn). Mirrors the
+        no-save inline-install path in ``/use_rage`` / ``/use_bardic_inspiration``.
+      - ``prone``: DEX save vs DC 8 + monk prof + WIS mod. On fail
+        install Prone via ``_SPELL_CONDITION_MAP['open-hand-prone']``.
+        Routes through the same save-or-suck pipeline as
+        ``/use_stunning_strike`` — PC target gets a roll_request,
+        NPC target gets a server-rolled save inline.
+      - ``push``: STR save vs the same DC. No buff to install — the
+        response carries ``push_authorized`` (True on save fail, False
+        on pass) so the GM UI can prompt to drag the token up to 15 ft
+        away. PC target gets the roll_request and the GM observes the
+        save result in the roll log; NPC target gets server-rolled
+        and the response carries the verdict immediately.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    target_combatant_id = (body.get("target_combatant_id") or "").strip()
+    target_character_id_in = body.get("target_character_id")
+    if target_character_id_in is not None:
+        target_character_id_in = int(target_character_id_in)
+    target_name_in = (body.get("target_name") or "").strip()
+    mode = (body.get("mode") or "").strip().lower()
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if mode not in ("prone", "push", "no_reactions"):
+        raise HTTPException(400, "mode must be one of prone, push, no_reactions")
+    if not target_combatant_id and not target_character_id_in:
+        raise HTTPException(400, "target_combatant_id or target_character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    # Class + subclass + level validation.
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class",
+            "expected": "monk",
+            "got": cls or "",
+        })
+    subclass = (sheet.get("subclass") or "").lower()
+    if "open hand" not in subclass:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass",
+            "expected": "way of the open hand",
+            "got": sheet.get("subclass") or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low",
+            "required": 3,
+            "got": level,
+        })
+
+    # Resolve target.
+    target_combatant = (
+        _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant_id else None
+    )
+    if not target_combatant and target_character_id_in:
+        target_combatant = {
+            "char_id": target_character_id_in,
+            "id": target_combatant_id or "",
+            "name": target_name_in or "",
+        }
+    if not target_combatant:
+        raise HTTPException(404, "Target combatant not found")
+
+    # ---- no_reactions: no save, install inline. ----
+    if mode == "no_reactions":
+        buff = {
+            "key": "reaction-denied",
+            "name": "No Reactions (Open Hand)",
+            "icon": "🚫",
+            "source_char_id": char.id,
+            "source_char_name": char.name,
+            "source_spell": "Open Hand Technique",
+            "duration_rounds": 1,
+            "duration_max": 1,
+            "concentration": False,
+            "effects": [
+                "can't take reactions until end of monk's next turn",
+            ],
+        }
+        installed_name = ""
+        tgt_char_id = target_combatant.get("char_id")
+        tgt_char = None
+        if tgt_char_id:
+            tgt_char = db.query(Character).filter(
+                Character.id == int(tgt_char_id),
+                Character.campaign_id == campaign_id,
+            ).first()
+        if tgt_char and tgt_char.owner_user_id:
+            ok = await _install_buff(campaign_id, int(tgt_char.id), buff)
+            if ok:
+                installed_name = buff["name"]
+                _mirror_buffs_to_sheet(
+                    db, int(tgt_char.id),
+                    _get_buffs(campaign_id, int(tgt_char.id)),
+                )
+        else:
+            ok = await _install_buff_on_combatant_id(
+                campaign_id, target_combatant.get("id"), buff,
+            )
+            if ok:
+                installed_name = buff["name"]
+        # Public roll-log entry so everyone sees the rider land.
+        await hub.broadcast(campaign_id, {
+            "type": "roll",
+            "data": {
+                "expression": "—",
+                "total": 0,
+                "breakdown": "Open Hand Technique: no reactions until end of monk's next turn",
+                "note": f"🫷 {char.name} → {target_combatant.get('name') or 'target'}: No Reactions",
+                "user_name": char.name,
+                "char_name": char.name,
+                "visibility": Visibility.PUBLIC.value,
+            },
+        })
+        return {
+            "ok": True,
+            "mode": "no_reactions",
+            "auto_save_target_kind": "pc" if (tgt_char and tgt_char.owner_user_id) else "npc",
+            "auto_save_prompted": False,
+            "buff_installed": installed_name,
+        }
+
+    # ---- prone / push: save vs DC 8 + prof + WIS mod. ----
+    prof = int(sheet.get("proficiency_bonus") or 2)
+    wis = int((sheet.get("abilities") or {}).get("WIS", 10))
+    wis_mod = (wis - 10) // 2
+    save_dc = 8 + prof + wis_mod
+
+    if mode == "prone":
+        stat_key = "dex_save"
+        note_label = "Open Hand Technique — DEX save (prone)"
+        spell_slug = "open-hand-prone"
+        spell_name = "Open Hand Technique (Prone)"
+    else:  # push
+        stat_key = "str_save"
+        note_label = "Open Hand Technique — STR save (push 15 ft)"
+        spell_slug = "open-hand-push"  # NOT in _SPELL_CONDITION_MAP — no buff installs
+        spell_name = "Open Hand Technique (Push)"
+
+    tgt_char_id = target_combatant.get("char_id")
+    auto_save_target_kind = ""
+    auto_save_prompted = False
+    auto_save_prompt_id = 0
+    auto_save_rolled: Optional[int] = None
+    auto_save_passed: Optional[bool] = None
+    auto_save_breakdown = ""
+    auto_save_buff_installed = ""
+    push_authorized: Optional[bool] = None
+
+    tgt_char = None
+    if tgt_char_id:
+        tgt_char = db.query(Character).filter(
+            Character.id == int(tgt_char_id),
+            Character.campaign_id == campaign_id,
+        ).first()
+
+    if tgt_char and tgt_char.owner_user_id:
+        # PC target: roll_request. /respond installs the Prone buff
+        # (prone mode) via _SPELL_CONDITION_MAP; push mode has no map
+        # entry so /respond's install branch is a no-op and the GM
+        # observes the save result in the log.
+        auto_save_target_kind = "pc"
+        req = RollRequest(
+            campaign_id=campaign_id,
+            created_by_user_id=user.id,
+            label=note_label,
+            base_expression="1d20",
+            stat_key=stat_key,
+            dc=save_dc,
+            visibility=Visibility.PUBLIC,
+        )
+        db.add(req)
+        db.commit()
+        db.refresh(req)
+        await hub.broadcast(campaign_id, {
+            "type": "roll_request",
+            "data": {
+                "id": req.id,
+                "label": req.label,
+                "stat_key": req.stat_key,
+                "base_expression": req.base_expression,
+                "dc": req.dc,
+                "visibility": req.visibility.value,
+                "created_by_name": user.display_name,
+                "created_by_user_id": user.id,
+                "target_user_ids": [tgt_char.owner_user_id],
+                "target_user_names": [tgt_char.name],
+            },
+        })
+        auto_save_prompted = True
+        auto_save_prompt_id = req.id
+        _purge_save_request_context()
+        _save_request_context[req.id] = {
+            "ts": _time.time(),
+            "campaign_id": campaign_id,
+            "spell_slug": spell_slug,
+            "spell_name": spell_name,
+            "target_character_id": int(tgt_char.id),
+            "target_name": tgt_char.name,
+            "dc": int(save_dc),
+            "save_ability": "DEX" if mode == "prone" else "STR",
+            "caster_char_id": int(char.id),
+            "caster_char_name": char.name,
+        }
+    elif target_combatant.get("token_template_id"):
+        # NPC target: server rolls inline.
+        auto_save_target_kind = "npc"
+        tmpl = db.query(TokenTemplate).filter(
+            TokenTemplate.id == int(target_combatant["token_template_id"]),
+        ).first()
+        if tmpl:
+            npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
+            npc_mod, _ = _resolve_stat_modifier(npc_sheet, "dnd5e", stat_key)
+            expr = f"1d20{npc_mod:+d}"
+            try:
+                _r = dice_mod.roll(expr)
+                auto_save_rolled = int(_r.total)
+                auto_save_breakdown = _r.breakdown
+            except dice_mod.DiceParseError:
+                auto_save_rolled = 0
+                auto_save_breakdown = ""
+            auto_save_passed = auto_save_rolled >= save_dc
+            await hub.broadcast(campaign_id, {
+                "type": "roll",
+                "data": {
+                    "expression": expr,
+                    "total": auto_save_rolled,
+                    "breakdown": auto_save_breakdown,
+                    "note": note_label,
+                    "user_name": target_combatant.get("name", ""),
+                    "char_name": target_combatant.get("name", ""),
+                    "visibility": Visibility.PUBLIC.value,
+                    "dc": save_dc,
+                },
+            })
+            if not auto_save_passed:
+                if mode == "prone":
+                    cond = _SPELL_CONDITION_MAP["open-hand-prone"]
+                    buff = {
+                        "key": cond["key"],
+                        "name": cond["name"],
+                        "icon": cond.get("icon", "🫳"),
+                        "source_char_id": char.id,
+                        "source_char_name": char.name,
+                        "source_spell": "Open Hand Technique",
+                        "duration_rounds": int(cond.get("duration_rounds", 10)),
+                        "duration_max": int(cond.get("duration_rounds", 10)),
+                        "concentration": bool(cond.get("concentration", False)),
+                        "effects": list(cond.get("effects", [])),
+                    }
+                    installed = await _install_buff_on_combatant_id(
+                        campaign_id, target_combatant.get("id"), buff,
+                    )
+                    if installed:
+                        auto_save_buff_installed = cond["name"]
+                else:  # push
+                    push_authorized = True
+            else:
+                if mode == "push":
+                    push_authorized = False
+
+    return {
+        "ok": True,
+        "mode": mode,
+        "save_dc": save_dc,
+        "auto_save_target_kind": auto_save_target_kind,
+        "auto_save_prompted": auto_save_prompted,
+        "auto_save_prompt_id": auto_save_prompt_id,
+        "auto_save_rolled": auto_save_rolled,
+        "auto_save_passed": auto_save_passed,
+        "auto_save_breakdown": auto_save_breakdown,
+        "auto_save_buff_installed": auto_save_buff_installed,
+        "push_authorized": push_authorized,
     }
 
 
