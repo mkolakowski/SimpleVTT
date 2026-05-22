@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.79] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **File a TODO for "targeting button on the attack flow."** User-requested. Adds an entry under TODO.md's Combat section describing an opt-in "use targeting" mode on the attack button: route through the existing 🎯 targeting picker first, accept one or multiple selections, then thread the selected target(s) through to `/attack` as `target_combatant_ids`. Names the desktop UX (canvas picker, existing) AND a mobile UX (modal list with checkbox rows for multi-select — the canvas-drag flow is hard on touch). No code; pure backlog entry. Doc-only PATCH.
+**Description:** One edit. **(1)** `TODO.md::Combat` — new "Targeting Button on the Attack Flow" subsection inserted between "Death Saving Throws" and "Combat 2.0 — Action Economy Tracking" since the new feature sits at the same level of granularity as the existing combat-flow items. Wiki entry already exists (TODO.md was surfaced via `_DOC_ALLOWLIST["todo"]` in v2.49.9); no allowlist / wiki.html / docs/wiki/README.md changes needed per the v2.49.69 rule.
+
+### Added
+- `TODO.md::Combat::Targeting Button on the Attack Flow` — opt-in routing of the attack button through the existing 🎯 targeting picker, with desktop (canvas) + mobile (list modal) UX paths described.
+
+### Notes
+- **Backward compat.** Doc-only.
+- **Wiki entry already exists.** TODO.md is in `_DOC_ALLOWLIST` as `todo` (v2.49.9); no new wiki surfacing needed.
+
+---
+
 ## [2.49.78] - 2026-05-22
 
 **Schema version:** 56

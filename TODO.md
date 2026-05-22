@@ -140,6 +140,9 @@ Per-character roll-state toggle (adv / normal / dis) that the server applies to 
 ### Death Saving Throws
 Triggered automatically when a character hits 0 HP. Mini-sheet + full sheet show success/failure pips; "Roll Death Save" button rolls a 1d20 through the regular roll pipeline (so it honors the adv/dis roll-state toggle). Healing wakes the character up; damage at 0 HP ticks failures (with crit and massive-damage rules per 5e RAW). GM gets override + stabilize controls. See [`docs/plans/death-saves.md`](docs/plans/death-saves.md) for the full design.
 
+### Targeting Button on the Attack Flow
+The existing `🎯 Targeting` system (double-click a token to set it as the current target; right-click to clear) is decoupled from the attack flow today — a player picks a target then clicks Attack with no enforced connection between the two. Add an opt-in "use targeting" mode on the attack button: clicking it routes through the targeting picker first, the picker accepts ONE or MULTIPLE selections (multi-attack / cleave / Action Surge sequences), and on confirm the selected target(s) ride through to `/attack` as `target_combatant_ids`. Desktop UX: canvas-targeting (the existing picker). Mobile UX: a list-based picker — when the targeting button is tapped on a touch device, a modal lists every combatant in initiative with a checkbox row each so the player can multi-select without dragging on the canvas. Filed v2.49.79.
+
 ### Combat 2.0 — Action Economy Tracking
 Full per-turn action economy tracker surfaced in the initiative tracker and each player's mini-sheet. Tracks the four action types defined by D&D 5e:
 
