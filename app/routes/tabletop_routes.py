@@ -11744,6 +11744,162 @@ async def use_step_of_the_wind(
     }
 
 
+# ----------- API: Flurry of Blows (Monk Lv 2+ Ki spend-option) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_flurry_of_blows")
+async def use_flurry_of_blows(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Monk class feature (Lv 2+): immediately after the Attack action,
+    spend 1 ki as a bonus action to grant yourself two unarmed strikes.
+
+    Body: ``{character_id, override?}``. No target — self-buff. The
+    actual unarmed-strike rolls happen via the player's regular
+    weapon-attack click on their Unarmed Strike attack; this endpoint
+    installs the `flurry-of-blows-active` buff that signals "you have
+    two extra unarmed strikes available this turn" + decrements ki +
+    marks the bonus slot.
+
+    The buff's ``effects.unarmed_strikes_available: 2`` is informational
+    for v1 — the v2.49.57 Open Hand Technique endpoint (which RAW
+    requires a Flurry hit as its trigger) can read this flag in a
+    future commit to gate the prone/push/no-reactions options.
+
+    Mirrors v2.49.112's Patient Defense + Step of the Wind: same
+    Phase 4 over-budget gate on the bonus slot, same broadcast set
+    (feature_used + resource_update + buff_update), same one-round
+    duration.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "monk", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 2:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 2, "got": level,
+        })
+
+    # Ki resource lookup + spend.
+    resources = list(sheet.get("resources") or [])
+    ki_row = None
+    ki_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "ki":
+            ki_row = dict(r); ki_idx = i; break
+    if ki_row is None:
+        raise HTTPException(404, "No Ki resource on this sheet")
+    ki_cur = int(ki_row.get("current") or 0)
+    ki_max = int(ki_row.get("max") or 0)
+    if ki_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_ki", "available": ki_cur,
+        })
+
+    # Phase 4 over-budget gate (bonus slot).
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget", "slot": "bonus",
+            "char_name": char.name, "source": "flurry-of-blows",
+            "label": "Flurry of Blows", "strict": strict,
+        })
+
+    ki_row["current"] = ki_cur - 1
+    resources[ki_idx] = ki_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Install the Flurry buff. ``unarmed_strikes_available: 2`` is the
+    # signal a future commit will read to (a) refund the attack chip
+    # for the next two unarmed strikes, and (b) gate the v2.49.57 Open
+    # Hand Technique trigger ("after Flurry hit").
+    buff = {
+        "key": "flurry-of-blows-active",
+        "name": "Flurry of Blows",
+        "icon": "🥊",
+        "source_caster_id": None,
+        "target_combatant_id": None,
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "effects": {
+            "unarmed_strikes_available": 2,
+            "is_flurry": True,
+        },
+        "desc": (
+            "Bonus action, 1 ki. Two unarmed strikes available this turn. "
+            "Open Hand Technique (Lv 3+ Way of the Open Hand) can chain off "
+            "a Flurry hit."
+        ),
+    }
+    installed = await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🥊 Flurry of Blows",
+            "feature_desc": (
+                "Bonus action, 1 ki. Two unarmed strikes available this turn."
+            ),
+            "source": "flurry-of-blows",
+            "remaining": ki_cur - 1,
+            "max": ki_max,
+            "over_budget": was_used,
+            "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "ki",
+            "current": ki_cur - 1, "max": ki_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "remaining": ki_cur - 1,
+        "max": ki_max,
+        "duration_rounds": 1,
+        "buff_installed": installed,
+        "unarmed_strikes_available": 2,
+    }
+
+
 # ----------- API: End a buff manually (Phase C.1 manual removal) -----------
 
 @router.post("/api/campaign/{campaign_id}/end_buff")

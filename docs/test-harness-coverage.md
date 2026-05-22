@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 358 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.112, 2026-05-22).
+**Total tests:** 361 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.114, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -536,6 +536,15 @@ v2.49.55 — Monk class feature `POST /use_stunning_strike`. Lv 5+ + ki >= 1 + a
 | `test_stunning_strike_wrong_class` | Krieger (Barbarian) → 409 `wrong_class` with `expected=monk`. |
 | `test_stunning_strike_no_ki` | Drain Kael's ki via repeated calls (response carries `ki_remaining`); when 0, next call → 409 `no_ki` with `available=0`. |
 | `test_stunning_strike_pc_drops_own_concentration` | v2.49.56 — closes the v2.49.55 filed item. Magnus casts Hex (concentration); Kael uses Stunning Strike on Magnus → roll_request; GM-as-Magnus /responds; on save fail assert (a) Stunned lands on Magnus, (b) Magnus's Hex drops via the v2.49.51 hook's `concentration: False` branch, (c) 💀 GM log naming "stunned" + "incapacitated" fires. Retry loop because the CON save is random. |
+
+### `test_use_flurry_of_blows.py`
+v2.49.114 — Monk class feature `POST /use_flurry_of_blows` (Lv 2+). Spend 1 ki as a bonus action to install the `flurry-of-blows-active` buff (1 round, `effects.unarmed_strikes_available: 2` + `effects.is_flurry: True`). Signals "two unarmed strikes available" for a future Phase B attack-flow integration and the v2.49.57 Open Hand Technique trigger.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_flurry_of_blows_happy_path` | Kael → 200, `remaining=4` (was 5), `unarmed_strikes_available=2`. `buff_update` broadcast carries `flurry-of-blows-active` key, `effects.unarmed_strikes_available=2`, `effects.is_flurry=True`, `concentration=False`, `duration_rounds=1`. |
+| `test_flurry_of_blows_wrong_class` | Krieger (Barbarian) → 409 `wrong_class` with `expected=monk`. |
+| `test_flurry_of_blows_no_ki` | Drain ki via 5 override calls; 6th → 409 `no_ki`. |
 
 ### `test_use_patient_defense.py`
 v2.49.112 — Monk class feature `POST /use_patient_defense` (Lv 2+). Spend 1 ki as a bonus action to install Dodging (advantage on DEX saves; attackers have disadvantage). Self-buff, no target. Duration 1 round (until start of next turn).

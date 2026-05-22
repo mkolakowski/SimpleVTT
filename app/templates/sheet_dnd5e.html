@@ -5121,6 +5121,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // since the two modes are exclusive RAW.
                     const isPatientDefense = featureKey === 'patient-defense';
                     const isStepOfTheWind = featureKey === 'step-of-the-wind';
+                    const isFlurryOfBlows = featureKey === 'flurry-of-blows';
 
                     // Resolve the cutting-words target via the picker
                     // BEFORE building the fetch closure. Awaiting the
@@ -5188,6 +5189,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                    : isRage ? 'use_rage'
                                    : isPatientDefense ? 'use_patient_defense'
                                    : isStepOfTheWind ? 'use_step_of_the_wind'
+                                   : isFlurryOfBlows ? 'use_flurry_of_blows'
                                    : 'use_feature';
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
                         method: 'POST',
@@ -5212,6 +5214,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             } : isStepOfTheWind ? {
                                 character_id: MY_CHAR_ID,
                                 mode: sotwMode,
+                                override: !!override,
+                            } : isFlurryOfBlows ? {
+                                character_id: MY_CHAR_ID,
                                 override: !!override,
                             } : {
                                 character_id: MY_CHAR_ID,

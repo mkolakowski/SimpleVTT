@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.114] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Flurry of Blows — third (and last) Monk Lv 2 Ki spend-option. Monk Ki row now ✅.** Closes the v2.49.112 filed item for the third spend-option. New `POST /api/campaign/{cid}/use_flurry_of_blows` endpoint mirrors v2.49.112's Patient Defense + Step of the Wind: validate Monk Lv 2+, validate Ki ≥ 1, Phase 4 over-budget gate on bonus slot, decrement Ki, install the `flurry-of-blows-active` self-buff (1 round, `effects.unarmed_strikes_available: 2` + `effects.is_flurry: True`), broadcast feature_used + resource_update + buff_update. Sheet dispatch in `_bindUseButtons` adds the `isFlurryOfBlows` branch alongside PD/SotW. Effects field is informational for v1 — the unarmed-strikes-available signal is read by a future Phase B integration to refund the attack chip for the next two unarmed strikes; the `is_flurry` flag is the trigger gate that the v2.49.57 Open Hand Technique endpoint will check in a future commit (currently OHT trusts the caller). 3 new harness tests; all 22 Monk-feature tests pass.
+**Description:** Three file edits + one new test file. **(1)** `app/routes/tabletop_routes.py::use_flurry_of_blows` (NEW endpoint, ~140 lines) — same scaffolding as PD/SotW: class+level gate, Ki gate, Phase 4 over-budget gate, ki decrement, buff install, broadcast set. Buff shape: `key: "flurry-of-blows-active"`, `icon: "🥊"`, `duration_rounds: 1`, `concentration: False`, `effects: {unarmed_strikes_available: 2, is_flurry: True}`. (2) `app/templates/sheet_dnd5e.html::_bindUseButtons` — new `isFlurryOfBlows = featureKey === 'flurry-of-blows'` flag; endpoint ternary routes to `use_flurry_of_blows`; body-builder ternary adds the FoB branch (`{character_id, override?}`, no mode parameter). (3) `tests/harness/test_use_flurry_of_blows.py` (NEW, 3 tests) — happy path (200 + ki -1 + buff installed via `buff_update` broadcast with the right effects), wrong_class (Krieger → 409), no_ki (drain via override loop → 409 on 6th call). (4) `docs/plans/class-content-status.md` — Monk Ki row status flipped 🟢 → ✅ with all three spend-options listed.
+**Description (cont):** Why the Monk Ki row goes ✅. The row was 🟢 because the v2.18.0 demo seed had the resource counter wired but the spend-options weren't (`Notes: spend-Ki options (Flurry / Patient / Step) not wired`). v2.49.112 + v2.49.114 close all three, so the row reflects "every documented Lv 2 Ki spend-option works end-to-end (endpoint + sheet button + buff install + harness coverage)." Higher-level Ki spends (Lv 5+ Stunning Strike, subclass-specific options) are tracked in their own rows.
+**Description (cont 2):** Why effects.unarmed_strikes_available is informational. The v2.49.114 buff installs correctly + renders in the init-tracker chip strip, but the actual ATTACK FLOW doesn't yet read the flag to grant two extra unarmed strikes without consuming additional action/bonus chips. That integration sits in the `/attack` endpoint + the attack-economy chip logic — touching `_mark_battle_economy` to grant a per-buff exemption for unarmed-strike attacks. Same scope as the Phase B effect integration filed in v2.49.112 for `effects.dodging` / `disengage` / `dash`. All four are read-only flag reads on the buff dict; a single Phase B commit could land them together.
+**Description (cont 3):** Why the buff key is `flurry-of-blows-active` not `flurry-of-blows`. Following the convention from PD/SotW where the buff key includes a state suffix (`patient-defense`, `step-of-the-wind-disengage`, `step-of-the-wind-dash`) to distinguish the BUFF from the FEATURE name. The `-active` suffix here is consistent — a future commit could add a `flurry-of-blows-spent` buff that marks "you already used your Flurry this turn" to prevent double-spending, separate from the active-window buff. The bare `flurry-of-blows` key stays free for either purpose.
+**Description (cont 4):** Verification. (a) 3 new tests in `test_use_flurry_of_blows.py` pass. (b) Regression check: full Monk suite (PD/SotW v2.49.112, Stunning Strike v2.49.55, Open Hand Technique v2.49.57) — 22/22 pass, no regression. (c) Curl `/version` confirms v2.49.114 live.
+
+### Added
+- `app/routes/tabletop_routes.py::use_flurry_of_blows` (NEW endpoint).
+- `app/templates/sheet_dnd5e.html::_bindUseButtons` — `isFlurryOfBlows` dispatch branch.
+- `tests/harness/test_use_flurry_of_blows.py` (NEW, 3 tests).
+
+### Changed
+- `docs/plans/class-content-status.md` Monk Ki row — 🟢 → ✅; notes list all three spend-options with commit refs.
+- `docs/test-harness-coverage.md` — new `test_use_flurry_of_blows.py` subsection; total bumped 358 → 361.
+
+### Notes
+- **Backward compat.** New endpoint + new sheet branch only; no other behavior changes.
+- **Phase B effect integration still filed.** Three buffs (`dodging`, `disengage`/`dash`, `flurry-of-blows-active`) install correctly but their effects aren't yet read by the attack-flow / movement-tracker / chip-economy code paths. One Phase B commit can land them together.
+
+### Filed
+- **Phase B effect integration** for `effects.dodging`, `effects.disengage`, `effects.dash`, `effects.is_flurry` + `effects.unarmed_strikes_available`. All read-only flag reads on combatant buff dicts.
+- **Open Hand Technique trigger gate** — currently OHT (v2.49.57) trusts the caller "you must call after a Flurry hit." A future commit can check for the `is_flurry` buff on the caster before authorizing OHT options.
+- **Flurry double-spend guard** — add a `flurry-of-blows-spent` buff once the active window ends, preventing the player from using Flurry twice in one turn via the bonus-action chip alone (RAW: once per Attack action).
+
+---
+
 ## [2.49.113] - 2026-05-22
 
 **Schema version:** 56
