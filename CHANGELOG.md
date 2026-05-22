@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.73] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Extract `_distance_ft_between_points` helper — Phase 2A prep for the ruler/range plan.** Refactor with no behavior change. Pulls the inline distance math out of `token_move` (lines ~5040 of `tabletop_routes.py`) into a shared primitive that the Phase 2B+ range-enforcement sites will reuse. The helper takes `(grid_size_px, grid_type, ax, ay, bx, by)` and returns ft, mirroring the JS `_computeRulerDistanceFt` formula exactly so server-side range checks agree with client-side ruler readings to the foot. Chebyshev (RAW 5-5-5 diagonals) on square grids; Euclidean on hex / no-grid; 5 ft per cell; rounded to 0.1 ft; returns 0.0 when `grid_size_px <= 0`. `token_move` now calls the helper. PATCH — pure refactor.
+**Description:** Two edits. **(1)** `app/routes/tabletop_routes.py::_distance_ft_between_points` (NEW helper, ~25 lines including doc comment). Placed right after `_lookup_combatant` in the small-read-only-helpers cluster so the Phase 2C/D range-check call sites can import it from any cast / attack endpoint. **(2)** `app/routes/tabletop_routes.py::token_move` — replaced the inline 9-line `if grid_size_px > 0 / cells = / distance_ft = round(...)` block with a single `_distance_ft_between_points(...)` call. Kept the surrounding grid-type-normalisation logic (`token.map.grid_type.value if token.map.grid_type else "square"`) inline because it's specific to the ORM enum.
+**Description (cont):** Why a primitive that takes raw `grid_size_px` + `grid_type` rather than a token-pair helper that does its own lookup. Two reasons. (a) `token_move`'s caller doesn't have two tokens — it has one token + a target position. A token-pair signature wouldn't fit. (b) The Phase 2C/D range-check sites will need to thread the grid config through anyway (they look up tokens, then need the math). One primitive + however-many wrappers is cleaner than a polymorphic helper that branches on argument shape. If a token-pair wrapper helps later, it's a 5-line function on top of this primitive.
+**Description (cont 2):** Why the rounding stays at 0.1 ft. Matches the client-side ruler's chip text + the existing `token_move` broadcast field + the movement-breadcrumb chip. Tight invariant: a player moving a token a known distance should see the same number in (a) the move broadcast, (b) the ruler if they measure the same path, (c) the future range-enforcement banner. All three now go through one rounding rule.
+**Description (cont 3):** Why no_grid maps return 0.0 rather than the raw Euclidean. Same behavior as the pre-refactor `token_move` — a no-grid map has no scale concept, so reporting "47 ft" for a 100-px shift would be misleading. The fallback preserves the existing semantics; a future commit could expose a "feet-per-pixel" override for no-grid maps but it's out of scope here.
+**Description (cont 4):** Verification. Pre-commit + post-commit: `pytest tests/harness/test_move.py` all 4 tests pass (Chebyshev diagonal, one-cell move, tokens-list, unknown-token 404). Container rebuilt to v2.49.73. No behavior change — the refactor is byte-for-byte equivalent math, just relocated.
+
+### Changed
+- `app/routes/tabletop_routes.py::token_move` — distance math replaced by a call to `_distance_ft_between_points`.
+
+### Added
+- `app/routes/tabletop_routes.py::_distance_ft_between_points` — new helper.
+
+### Notes
+- **Backward compat.** Pure refactor. Identical math + identical broadcast payload + identical rounding. No API change.
+- **Phase 2A complete.** Phase 2B (spell-range parser) and Phase 2C (range check on `/cast_spell`) will land in follow-up commits.
+
+---
+
 ## [2.49.72] - 2026-05-22
 
 **Schema version:** 56

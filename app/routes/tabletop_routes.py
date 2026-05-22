@@ -1167,6 +1167,30 @@ def _lookup_combatant(campaign_id: int, combatant_id: str | None) -> dict | None
     return None
 
 
+# v2.49.73 — distance-on-grid primitive. Extracted from token_move
+# (line ~5040, formerly inline). Matches the JS _computeRulerDistanceFt
+# math exactly so server-side range checks and client-side ruler
+# readings agree to the foot. Chebyshev (RAW 5e "5-5-5" diagonals) on
+# square grids; Euclidean on hex / no-grid. 5 ft per cell, rounded to
+# 0.1 ft. Returns 0.0 when grid_size_px <= 0 (no-grid maps have no
+# meaningful distance concept — same fallback as token_move had).
+# Phase 2A of docs/plans/ruler-and-range.md. Phase 2B/C/D will call
+# this from the range-enforcement check sites.
+def _distance_ft_between_points(
+    grid_size_px: int, grid_type: str,
+    ax: float, ay: float, bx: float, by: float,
+) -> float:
+    if grid_size_px <= 0:
+        return 0.0
+    dx = bx - ax
+    dy = by - ay
+    if (grid_type or "square").lower() == "square":
+        cells = max(abs(dx), abs(dy)) / grid_size_px
+    else:
+        cells = (dx * dx + dy * dy) ** 0.5 / grid_size_px
+    return round(cells * 5, 1)
+
+
 def _read_target_ac(
     db: Session, campaign_id: int, combatant: dict | None,
 ) -> int:
@@ -5028,23 +5052,15 @@ async def move_token(
     from_x = float(token.x or 0)
     from_y = float(token.y or 0)
     grid_size_px = int(token.map.grid_size_px or 0)
-    # 5e standard: 5 ft per square. Chebyshev distance (max of dx, dy
-    # cells) reflects RAW "diagonal = 5 ft" rule for square grids.
-    # Hex / no-grid fall back to Euclidean so a player who shifts a
-    # token by 100 px on a no-grid map still sees a sensible feet
-    # figure rather than zero or NaN. Grid type is normalised by the
-    # ORM enum; SQUARE / HEX_FLAT / HEX_POINTY / NONE all map here.
+    # v2.49.73 — distance math moved to ``_distance_ft_between_points``
+    # so the ruler / range-check call sites use the same primitive.
+    # Chebyshev (RAW 5-5-5 diagonals) on square; Euclidean on hex /
+    # no-grid; 5 ft per cell. Grid type enum normalised by the ORM
+    # (SQUARE / HEX_FLAT / HEX_POINTY / NONE all map here).
     grid_type = (token.map.grid_type.value if token.map.grid_type else "square").lower()
-    dx = x - from_x
-    dy = y - from_y
-    if grid_size_px > 0:
-        if grid_type == "square":
-            cells = max(abs(dx), abs(dy)) / grid_size_px
-        else:
-            cells = (dx * dx + dy * dy) ** 0.5 / grid_size_px
-        distance_ft = round(cells * 5, 1)
-    else:
-        distance_ft = 0.0
+    distance_ft = _distance_ft_between_points(
+        grid_size_px, grid_type, from_x, from_y, x, y,
+    )
 
     token.x = x
     token.y = y
