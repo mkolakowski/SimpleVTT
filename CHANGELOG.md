@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.91] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Revert v2.49.90 — JS `selectstart` listener didn't fix the iPad text-select issue and map manipulation is still broken on both desktop and iPad.** Second revert of an iPad text-select attempt. User-reported: pan + token drag still broken at v2.49.90. The selectstart listener was meant to be event-narrower than v2.49.88's CSS approach (which blocked all kinds of gestures); turns out something about it ALSO interacts badly with the canvas event pipeline. Rather than keep guessing at the right minimal fix, revert to the v2.49.89 baseline (== v2.49.87 behavior) and shift focus to building the test infrastructure user explicitly requested: a Playwright-style browser harness that can simulate canvas pan / drag and catch this class of regression BEFORE it ships. The iPad text-select issue remains open until a future commit can verify the fix in that harness.
+**Description:** One edit — removed the v2.49.90 `_blockSelectStart` helper + the two `addEventListener('selectstart', …)` registrations in `app/static/tabletop.js`. The code block sat between the right-click-pointer handlers and the "Drag handling" comment block; that whole block is now gone, restoring the exact v2.49.89 / v2.49.87 state of the file at that location.
+**Description (cont):** Why a clean revert rather than patching. Two attempts (CSS v2.49.88, JS selectstart v2.49.90) have failed to fix the iPad issue AND both ended up breaking pan / drag in ways that weren't predicted from the spec. The right move is to stop guessing, restore the working baseline, build the test harness that would have caught both regressions instantly, and then attempt the fix again with that safety net in place.
+**Description (cont 2):** What probably went wrong with v2.49.90's selectstart. Best guess from the post-mortem: `selectstart` fires synchronously DURING `mousedown` event dispatch on canvas elements. In Safari (and possibly some Chromium versions), calling `preventDefault()` on the synchronous selectstart can interact with the `mousedown`'s internal "begin pointer capture" routine — which is what pan / drag rely on for the subsequent mousemove deliveries to land on the right element. The spec doesn't require this coupling, but real-world browser implementations have it. Per CLAUDE.md the conservative path on a user-blocking regression is "revert first, theorize later."
+**Description (cont 3):** Why the user-requested test harness comes next. The user explicitly asked "please create tests to identify these kinds of issues during devlopment." The HTTP+WS pytest suite can't reach canvas event handlers — these are pure-frontend gestures that need a real browser to drive. The next commit adds a Playwright-based browser test that loads the tabletop page, simulates right-click drag (pan) + left-click drag (token drag), and asserts that pan/drag observably mutate the page state. Once that test exists and passes on the v2.49.91 baseline, it becomes the gate for any future iPad text-select attempt — if the test fails, the change doesn't ship.
+**Description (cont 4):** Verification. The edit is an exact inverse of v2.49.90's tabletop.js diff. Diff against v2.49.89 should show only the version + changelog edits, not any tabletop.js change. Manual: open tabletop in desktop browser, confirm pan (right-drag) + token drag (left-drag on owned token) work.
+
+### Fixed
+- Reverted v2.49.90's `selectstart` listener from `app/static/tabletop.js`. Restores v2.49.89 baseline so the user is unblocked.
+
+### Notes
+- **Backward compat.** Two pure-additive lines + a 3-line helper removed; no other behaviors share the selectstart path in this file. Suite-wide tests unaffected (the pure-frontend gesture handling was never harness-covered to begin with).
+- **iPad text-select still open.** Won't be re-attempted until the next commit lands the test harness that can verify a fix doesn't re-break pan / drag.
+
+### Filed
+- **Build a browser-level test harness (Playwright)** for canvas gestures — next commit. The harness must minimally cover: (a) right-click pan changes the `panX` / `panY` globals, (b) left-click drag on an owned token mutates token coords and emits `token_move`, (c) the page loads without console errors. Future iPad-fix commits gate their merge on this harness passing.
+
+---
+
 ## [2.49.90] - 2026-05-22
 
 **Schema version:** 56
