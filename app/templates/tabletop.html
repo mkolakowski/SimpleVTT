@@ -98,6 +98,13 @@
         width: 480px;
         position: absolute; top: 0; right: 0; bottom: 0;
         background: transparent;
+        /* v2.49.95: sit above the canvas + gif-token-overlay +
+           presence-bubbles (z-index 1/2/3) so tokens and player
+           portraits render BEHIND the drawer cards. Ruler hint
+           (210) + AoE picker (200) stay on top — those are
+           cursor-following overlays that center on the map and
+           don't visually compete with the sidebar's right edge. */
+        z-index: 50;
     }
     /* v2.4.22: drawer tabs now live inline with the campaign title in the
        ``.tt-topbar`` (was a dedicated bar above the sidebar panels). No

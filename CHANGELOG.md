@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.95] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Push tokens, portraits, and presence pills BEHIND the drawer sidebar via `z-index: 50` on `.drawer-sidebar`.** User-reported regression from v2.49.94's transparent-sidebar overlay. With the sidebar absolute-positioned and no z-index, the map-pane's positioned children (`#vtt-canvas` z-index:1, `#gif-token-overlay` z-index:2, `#presence-bubbles` z-index:3) escaped their parent's stacking context and rendered ON TOP of the sidebar. Cards in the drawer were visually layered behind the tokens, which made character portraits cover roll-log entries and looked like the cards were "behind" the map. Fix is one line: set `.drawer-sidebar { z-index: 50 }` so the whole sidebar (and its children — drawer-panel, gm-panel cards, roll-log entries) renders above the canvas + every token overlay. The ruler-picker hint (z-index 210) and AoE picker preview (z-index 200) stay on top of the sidebar — those are cursor-following overlays that center on the map and don't visually conflict with the sidebar's right edge.
+**Description:** One CSS edit in `app/templates/tabletop.html::.drawer-sidebar`. Added `z-index: 50` to the existing block (which already had `position: absolute; top: 0; right: 0; bottom: 0; width: 480px; background: transparent`). Inline comment explains why 50 — above the canvas/overlay z-stack (1–3) but below the ruler/AoE banners that intentionally float over everything. Pure visual fix; no behavior, endpoint, broadcast, or schema change.
+**Description (cont):** Why z-index 50 specifically. The map-pane's children use z-index 1, 2, and 3. The ruler hint uses 210 (defensive against the AoE picker's 200). Picking 50 leaves comfortable headroom above the token stack (so a future Phase-3F token overlay at z-index 4 still stays behind the sidebar) without touching the deliberately-elevated cursor-follow overlays. Below 4 would risk a token overlay climbing back over the sidebar; above 200 would mean the sidebar covers the ruler hint, which is wrong because the hint is meant to confirm a measurement in progress.
+**Description (cont 2):** Why this didn't show up in the v2.49.94 Playwright canvas tests. The tests assert that the canvas transform mutates on right-click drag — they don't probe paint order or visual layering. Visual regressions like z-index conflicts are exactly the class that requires either pixel-diff screenshot testing or human eyeballs; the v2.49.94 commit didn't catch it because the canvas pan + drag mechanics still work fine (the user can still pan + drag through the gaps between cards). Filed below: a Playwright pixel-snapshot test for the drawer overlay would catch this class of regression, but the current suite intentionally avoids pixel-diff because it's notoriously brittle across font/AA differences between local + CI.
+**Description (cont 3):** Verification. (a) Existing `test_tabletop_canvas.py` still green — pan + drag unaffected by the new z-index. (b) Existing `test_attack_toast_multi_target.py` still green — the .roll-toast container floats outside the sidebar entirely. (c) Manual: open the demo tabletop with bandits + PC tokens spawned, swap to the Roll Log drawer, fire a multi-target attack — tokens visible in the gaps between roll-log cards, no tokens overlapping the cards themselves.
+
+### Fixed
+- `app/templates/tabletop.html::.drawer-sidebar` — added `z-index: 50` so tokens / gif overlay / presence pills render behind the sidebar's cards. Closes the v2.49.94 visual regression.
+
+### Notes
+- **Backward compat.** Pure CSS one-liner; no behavior change.
+- **What still sits on top of the sidebar.** The ruler picker hint (centered floating pill, z-index 210) + the AoE picker preview (z-index 200). Both are cursor-anchored to the map's interior and shouldn't visually overlap the right-edge sidebar in practice, but if they DO they correctly draw on top.
+
+### Filed
+- **Playwright pixel-snapshot test for the drawer layout** — would catch z-index regressions like the v2.49.94 → v2.49.95 cycle. Skipped today because pixel-diff tests are notoriously flaky across font + AA differences between local + CI environments; revisit if the cycle repeats.
+
+---
+
 ## [2.49.94] - 2026-05-22
 
 **Schema version:** 56
