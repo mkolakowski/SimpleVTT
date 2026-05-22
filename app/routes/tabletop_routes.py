@@ -10727,6 +10727,23 @@ async def use_stunning_strike(
     if not target_combatant:
         raise HTTPException(404, "Target combatant not found")
 
+    # v2.49.76 — Phase 2D range-enforcement gate. Stunning Strike is
+    # melee (RAW: "When you hit another creature with a melee weapon
+    # attack"); 5 ft reach. Fires before ki is consumed.
+    _override_range = bool(body.get("override_range"))
+    _user_is_gm_for_range = _user_is_gm(user, campaign, db)
+    _strict_for_range = bool(campaign.strict_action_economy)
+    _range_err = _check_cast_range(
+        db, campaign, char,
+        "5 feet", "Stunning Strike",
+        target_combatant_id, target_character_id_in, target_name_in,
+        override_range=_override_range,
+        user_is_gm=_user_is_gm_for_range,
+        strict=_strict_for_range,
+    )
+    if _range_err:
+        return JSONResponse(status_code=409, content=_range_err)
+
     # Save DC = 8 + monk prof + WIS mod.
     prof = int(sheet.get("proficiency_bonus") or 2)
     wis = int((sheet.get("abilities") or {}).get("WIS", 10))
@@ -10989,6 +11006,23 @@ async def use_open_hand_technique(
         }
     if not target_combatant:
         raise HTTPException(404, "Target combatant not found")
+
+    # v2.49.76 — Phase 2D range-enforcement gate. Open Hand Technique
+    # rides on a Flurry of Blows attack (RAW melee), so 5 ft reach.
+    # Fires before any state mutation.
+    _override_range_oht = bool(body.get("override_range"))
+    _user_is_gm_for_range_oht = _user_is_gm(user, campaign, db)
+    _strict_for_range_oht = bool(campaign.strict_action_economy)
+    _range_err_oht = _check_cast_range(
+        db, campaign, char,
+        "5 feet", "Open Hand Technique",
+        target_combatant_id, target_character_id_in, target_name_in,
+        override_range=_override_range_oht,
+        user_is_gm=_user_is_gm_for_range_oht,
+        strict=_strict_for_range_oht,
+    )
+    if _range_err_oht:
+        return JSONResponse(status_code=409, content=_range_err_oht)
 
     # ---- no_reactions: no save, install inline. ----
     if mode == "no_reactions":
@@ -11661,6 +11695,23 @@ async def cast_hex(
     if not has_hex:
         raise HTTPException(409, "Hex is not on this character's spell list")
 
+    # v2.49.76 — Phase 2D range-enforcement gate. Hex's RAW range is
+    # 90 feet. Fires before slot consumption (same contract as
+    # cast_spell's range check).
+    _override_range = bool(body.get("override_range"))
+    _user_is_gm_for_range = _user_is_gm(user, campaign, db)
+    _strict_for_range = bool(campaign.strict_action_economy)
+    _range_err = _check_cast_range(
+        db, campaign, char,
+        "90 feet", "Hex",
+        None, target_character_id, target_name,
+        override_range=_override_range,
+        user_is_gm=_user_is_gm_for_range,
+        strict=_strict_for_range,
+    )
+    if _range_err:
+        return JSONResponse(status_code=409, content=_range_err)
+
     # Find a usable Warlock slot. For Warlock Lv 5 the table only has
     # L3 slots; if the caller asked for L1 we upgrade to whatever's
     # actually available (Pact Magic).
@@ -11932,6 +11983,18 @@ async def cast_sleep(
         raise HTTPException(400, "slot_level must be >= 1")
     if not isinstance(target_combatant_ids, list) or not target_combatant_ids:
         raise HTTPException(400, "target_combatant_ids must be a non-empty list")
+
+    # v2.49.76 — Phase 2D range-enforcement: /cast_sleep is intentionally
+    # SKIPPED from the range check. RAW Sleep's range is 90 ft to the
+    # cast point + a 20 ft radius extending from that point; individual
+    # targets in the radius can be up to 110 ft from the caster. Today
+    # the endpoint receives pre-resolved targets without a cast-point
+    # coordinate, so a strict server-side check would either under-enforce
+    # (compare to the closest target only) or over-enforce (reject a
+    # valid 110-ft target). Same convention as /cast_spell with AoE
+    # multi-target lists (see Phase 2C "When NOT to enforce"). A future
+    # commit could add a `cast_point: {x, y}` body field + an AoE-aware
+    # range check; filed.
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_can_view_campaign(db, user, campaign):
@@ -13958,6 +14021,27 @@ async def use_attack(
     desc = (attack.get("desc") or "").strip()
 
     is_save = save_dc > 0 and save_ability
+
+    # v2.49.76 — Phase 2D range-enforcement gate. The attack's
+    # ``range`` field (e.g. "5 ft" / "30/120 ft") is parsed against
+    # the caster's + target's token positions. Same override semantics
+    # as /cast_spell: GM auto-bypass, player override + not strict,
+    # otherwise enforced. Skipped when no target_combatant_id is
+    # supplied (the caller didn't pick a target — the existing
+    # untargeted attack flow stays unchanged for "I rolled an attack
+    # for the GM to assign").
+    if target_combatant_id:
+        _override_range = bool(body.get("override_range"))
+        _range_err = _check_cast_range(
+            db, campaign, char,
+            range_str, name,
+            target_combatant_id, None, None,
+            override_range=_override_range,
+            user_is_gm=user_is_gm,
+            strict=strict,
+        )
+        if _range_err:
+            return JSONResponse(status_code=409, content=_range_err)
 
     # v2.20.0 Phase B: detect Rage-driven advantage on STR-based
     # attacks. RAW heuristic: physical damage type + barbarian's Rage

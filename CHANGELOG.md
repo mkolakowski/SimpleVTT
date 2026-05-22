@@ -10,6 +10,43 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.76] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Extend range enforcement to the sibling cast / attack endpoints — Phase 2D, closes Phase 2.** Wires `_check_cast_range` into `/attack`, `/cast_hex`, `/use_stunning_strike`, `/use_open_hand_technique` using the same contract Phase 2C established: GM auto-bypass, player override + not strict bypass, otherwise enforced. Range strings: `/attack` reads the attack entry's `range` field (e.g. "5 ft", "30/120 ft"); `/cast_hex` hardcodes "90 feet" (RAW); the two monk-feature endpoints hardcode "5 feet" (melee reach). `/cast_sleep` is intentionally SKIPPED with a documenting comment — AoE multi-target casts don't fit single-target distance checks; filed for a future cast-point-aware AoE range check. Plan status moves to "✅ Phases 1 + 2 shipped · Phase 3 optional." 6 new harness tests pin the integrations. PATCH.
+**Description:** Six edits. **(1)** `app/routes/tabletop_routes.py::use_attack` — range check inserted after over_budget gate using the attack entry's `range` field. Skipped when no `target_combatant_id` is supplied (untargeted attack-roll flow unchanged). **(2)** `app/routes/tabletop_routes.py::cast_hex` — range check inserted after the spell-list-membership 409, before slot consumption. Hardcoded "90 feet" range. **(3)** `app/routes/tabletop_routes.py::use_stunning_strike` — range check inserted after target resolution, before ki consumption. Hardcoded "5 feet". **(4)** `app/routes/tabletop_routes.py::use_open_hand_technique` — range check inserted after target resolution, before mode-branching. Hardcoded "5 feet". **(5)** `app/routes/tabletop_routes.py::cast_sleep` — added documenting comment explaining the deliberate skip (AoE multi-target, RAW range to cast-point not individual targets). **(6)** `tests/harness/test_cast_attack_range.py` (NEW, 6 tests).
+**Description (cont):** Why hardcode "90 feet" for Hex instead of looking it up from the SRD JSON. Hex's range is a known constant per RAW. Looking it up via `local_content.resolve("hex")` would add a DB-tier read per cast for no behavioral benefit — the JSON's range hasn't changed in 5e SRD history. The hardcoded string also documents the RAW range in-line so a reader doesn't need to chase the JSON. Same reasoning applies to the two monk-feature endpoints (Stunning Strike + Open Hand Technique both have RAW melee reach = 5 ft). The `/cast_spell` path already pulls range from the spell JSON because that endpoint is generic across all spells; the class-feature endpoints are spell-specific so the constant lives at the call site.
+**Description (cont 2):** Why /cast_sleep skips. RAW Sleep's range is 90 ft TO THE CAST POINT, then a 20 ft radius extends from there — so an affected target can be up to 110 ft from the caster. The endpoint receives pre-resolved target combatants WITHOUT a cast-point coordinate. A single-target distance check would either (a) compare against the closest target only (under-enforces — the cast-point might still be > 90 ft), or (b) reject a 110-ft target that's within the radius of a legitimate 90-ft cast point (over-enforces). The right server-side check would need a `cast_point: {x, y}` body field; that's a Phase 3 follow-up (it's also what /place_aoe gets right). Skipping for now matches the Phase 2C precedent for AoE multi-target casts.
+**Description (cont 3):** Why the test file only fully exercises /attack. Demo ownership: Pip (Alice — Rogue) and Thalindra (Bob — Wizard) are the only PCs owned by non-GM users. Magnus (Warlock) and Kael (Monk) are GM-owned. The GM auto-bypasses the range check per the v2.49.75 contract, so the 409 path can only be DIRECTLY exercised on endpoints whose owner is non-GM. /attack qualifies via Pip; /cast_hex on Magnus, /use_stunning_strike + /use_open_hand_technique on Kael only have happy-path integration coverage. The 409 contract for the shared helper is already pinned by Phase 2C's `test_out_of_range_409` on /cast_spell; the Phase 2D in-range tests verify each new call site doesn't break the happy path AND that the helper is actually invoked when tokens are present on the active map.
+**Description (cont 4):** Why each integration call site is responsible for choosing the range string vs. centralizing it. Two reasons. (a) The class-feature endpoints have constant ranges; centralizing them in a "spell-to-range" lookup table would just be a layer of indirection over the same data. (b) The range strings sit next to the endpoint definition where a reader can verify them inline. If a future commit adds /cast_misty_step + similar self-range spells, each one declares its own range at the call site — no risk of a missing-entry bug in a central table silently bypassing the check.
+**Description (cont 5):** Test design. Each Phase 2D test reuses the v2.49.75 `_ensure_pc_token` + `_place_test_npc` + `_seed_battle_with_npc` helpers (copied with minor adjustments). NPCs are deleted in finally blocks so the demo map stays clean. The single /attack `out_of_range` test asserts the FULL 409 response shape (range_ft=5, distance_ft=50, spell_name="Shortsword", source_name) so the contract is pinned once for the shared helper.
+**Description (cont 6):** Verification. Pre-fix: ran the new tests against pre-helper code — `test_attack_in_range_succeeds` PASSED (off-map skip fired before token placement), `test_attack_out_of_range_409` FAILED (no 409). Post-fix: all 6 pass. Full regression: 325 harness tests pass (was 319, +6 new). 29 existing sibling-endpoint tests (test_attack, test_use_stunning_strike, test_use_open_hand_technique, test_cast_sleep) unchanged — they don't place tokens on the active map so off-map skip fires correctly.
+**Description (cont 7):** Plan status closes Phase 2. The wiki + `docs/wiki/README.md` row moves from "🟠 Phase 1 + 2A/B/C shipped · Phase 2D unstarted" to "✅ Phases 1 + 2 shipped · Phase 3 optional." Phase 3 (hover rangefinder, range rings on cast-button hover, multi-segment ruler, broadcast mode) is explicitly marked optional in the plan; ship if user demand surfaces.
+
+### Added
+- `app/routes/tabletop_routes.py::use_attack` — range check using the attack entry's `range` field.
+- `app/routes/tabletop_routes.py::cast_hex` — range check hardcoded to "90 feet" (RAW).
+- `app/routes/tabletop_routes.py::use_stunning_strike` — range check hardcoded to "5 feet" (melee).
+- `app/routes/tabletop_routes.py::use_open_hand_technique` — range check hardcoded to "5 feet" (melee).
+- `app/routes/tabletop_routes.py::cast_sleep` — documenting comment explaining the deliberate skip.
+- `tests/harness/test_cast_attack_range.py` — 6 tests covering all four integration sites.
+- `docs/test-harness-coverage.md` — catalog entry; total 319 → 325.
+
+### Changed
+- `app/templates/wiki.html` — plan-status row updated (Phase 2 complete).
+- `docs/wiki/README.md` — same row update.
+
+### Notes
+- **Backward compat.** Pure additive helper integration. Existing sibling-endpoint tests (29 across /attack, /use_stunning_strike, /use_open_hand_technique, /cast_sleep) continue to pass because their setups don't place tokens on the active map → off-map skip fires correctly.
+- **Phase 2 complete.** Phase 3 (hover rangefinder, range rings on cast-button hover, multi-segment ruler, broadcast mode) is optional per the plan; ship if user demand surfaces.
+
+### Filed
+- **Ownership-swap fixtures for full 409 coverage on GM-owned characters** — would let the harness directly exercise the 409 path for /cast_hex / Stunning Strike / Open Hand Technique. Low priority since the helper's 409 contract is already pinned by Phase 2C tests.
+- **AoE range check for /cast_sleep + /place_aoe against cast point** — Phase 3 follow-up. Needs a `cast_point: {x, y}` body field.
+- **Phase 3 ruler features** — hover rangefinder, range rings on cast-button hover, multi-segment ruler (Shift+R), broadcast mode (Shift-click). All optional per the plan.
+
+---
+
 ## [2.49.75] - 2026-05-22
 
 **Schema version:** 56

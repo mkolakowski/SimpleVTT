@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 319 (as of v2.49.75, 2026-05-22).
+**Total tests:** 325 (as of v2.49.76, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -251,6 +251,18 @@ v2.49.61 — closes the "wake-on-damage" filed item from v2.49.58. RAW Sleep wak
 | `test_wake_on_damage_npc` | Bandit pre-seeded with Sleep-Unconscious buff; Krieger attacks (auto_apply_damage on) → latest `battle_update` shows bandit's Unconscious dropped + 🌅 wake log fires. |
 | `test_wake_on_damage_pc` | Magnus pre-seeded with Sleep-Unconscious buff; Krieger attacks → Unconscious dropped from BOTH hub and sheet mirror + 🌅 wake log names Magnus. |
 | `test_non_sleep_unconscious_preserved` | Bandit pre-seeded with a generic Unconscious buff (no `source_spell == "Sleep"`); Krieger attacks → buff preserved (regression guard against over-broad clearing). |
+
+### `test_cast_attack_range.py`
+v2.49.76 — Phase 2D of the ruler/range plan. Extends `_check_cast_range` to `/attack`, `/cast_hex`, `/use_stunning_strike`, `/use_open_hand_technique`. `/cast_sleep` is intentionally skipped (AoE multi-target — see endpoint comment + Phase 2C "When NOT to enforce"). Ownership limitation: only Pip (Alice's) and Thalindra (Bob's) are non-GM-owned in the demo, so the 409 path is directly testable only via `/attack`; the other three endpoints get integration-call-site happy-path coverage to confirm they don't break.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_attack_in_range_succeeds` | Alice's Pip swings shortsword (5 ft) at a bandit 5 ft away → 200. |
+| `test_attack_out_of_range_409` | Same setup, bandit 50 ft away → 409 `out_of_range` with `range_ft=5`, `distance_ft=50.0`, `spell_name="Shortsword"`. |
+| `test_attack_thrown_long_range_uses_long_band` | Pip's Dagger (20/60 ft thrown) at a bandit ~50 ft away → 200. Pins `max_range_ft` collapsing the (20, 60) tuple to the long band. |
+| `test_cast_hex_in_range_succeeds` | Magnus Hexes a bandit 5 ft away → 200. Hex range = 90 ft RAW; GM-owned caster so range auto-bypasses but the call site invocation is verified. |
+| `test_stunning_strike_in_range_succeeds` | Kael's Stunning Strike on a bandit 5 ft away → 200. Melee 5 ft RAW. |
+| `test_open_hand_technique_in_range_succeeds` | Kael's Open Hand Technique (no_reactions mode) on a bandit 5 ft away → 200. Melee 5 ft RAW. |
 
 ### `test_cast_spell_range.py`
 v2.49.75 — Phase 2C of the ruler/range plan. New `_check_cast_range` helper + `override_range` body field on `/cast_spell` + 409 `out_of_range` response. Tests use Bob (Thalindra's owner, non-GM) so the non-GM enforcement paths fire; the GM-bypass test uses gm_client.
