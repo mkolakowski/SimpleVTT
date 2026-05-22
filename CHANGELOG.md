@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.99] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Initiative tracker entries restyled to match the roll-log cards — same border opacity, background, shadow, and inter-card gap.** Continuation of the v2.49.95–v2.49.98 sidebar polish. The init tracker's `.init-row` (simple player view) and `.init-entry` (rich GM view) had a lighter card treatment than the `.roll-card`s in the roll log: thinner border (`rgba(167,139,250,.25)` vs `.35`), lighter background (`var(--bg-2)` vs `var(--bg)`), softer shadow (`0 2px 6px rgba(0,0,0,.15)` vs `0 3px 14px rgba(0,0,0,.22)`), and tighter inter-row gap (`margin-bottom: 4px` vs `.roll-list { gap: 7px }`). v2.49.99 aligns all four properties so the init entries read as the same kind of card as roll-log entries.
+**Description:** Two CSS edits in `app/templates/tabletop.html`. **(1)** `.init-row` — border opacity `.25` → `.35`; background `var(--bg-2)` → `var(--bg)`; box-shadow `0 2px 6px rgba(0,0,0,.15)` → `0 3px 14px rgba(0,0,0,.22)`; margin-bottom `4px` → `7px`. (2) `.init-entry` — same four changes (it shares the card properties with `.init-row` but has different inner content; the `.mini-header` gradient + `.init-card-sheet` expanded body sit on top of the new `var(--bg)` background). Inline comment on `.init-row` documents the visual rationale; `.init-entry` cross-references it.
+**Description (cont):** What stays unchanged. `.init-entry.active-turn` keeps its accent-bg + accent-border treatment (separate rule, line ~1057) — that's the "this combatant is currently acting" highlight, intentionally louder than the roll-card baseline. The `.mini-header` gradient inside `.init-entry` continues to overlay the card's background. The token portrait + name + Init/HP layout, action-economy chips, and buff chips are all unchanged.
+**Description (cont 2):** Why bump the inter-card gap to 7 px. The roll-log's `.roll-list` uses `gap: 7px` (flex column) which produces a visible map-strip between every roll card. The init tracker previously used `margin-bottom: 4px` which was tight enough that the strips between rows were barely perceptible — visually closer to "tiled list" than "floating cards". 7 px matches the roll log's breathing room. Could have switched to a `gap`-based parent (`#initiative-list { display: flex; flex-direction: column; gap: 7px }`) but margin-on-children is fewer lines and preserves the existing renderBattle layout assumptions.
+**Description (cont 3):** Why darken the background. With the v2.49.95 transparent sidebar overlaying the map, a `var(--bg-2)` card on a busy map can blend visually with the map's mid-tones. `var(--bg)` is the same darkest neutral the roll cards use, which reads cleanly against the map regardless of what tile is behind it.
+**Description (cont 4):** Why a stronger shadow. The shallow `0 2px 6px` shadow worked when the card sat on a solid `var(--bg-2)` drawer backdrop (pre-v2.49.94) — the visual separation came from the backdrop, not the shadow. With the transparent drawer the card now floats over arbitrary map content; a deeper `0 3px 14px` shadow gives more depth + better separation from busy map regions.
+**Description (cont 5):** Test coverage. Pure CSS visual change; the 5 Playwright tests in `tests/harness_ui/` still pass. Manual verification path: open the Battle tab, spawn the Tavern Brawl encounter, confirm each init entry has the same chunky border + darker background + deeper shadow as a roll-log card, and the inter-card gap shows the map.
+**Description (cont 6):** Verification. Curl `/version` confirms v2.49.99 live. Existing harness tests pass.
+
+### Changed
+- `app/templates/tabletop.html::.init-row` — border-opacity .25 → .35; background var(--bg-2) → var(--bg); box-shadow 0 2px 6px → 0 3px 14px; margin-bottom 4 → 7 px.
+- `app/templates/tabletop.html::.init-entry` — same four properties aligned with .init-row + .roll-card.
+
+### Notes
+- **Backward compat.** Pure CSS visual change. No DOM, JS, endpoint, broadcast, or schema impact.
+- **Active-turn state unchanged.** `.init-entry.active-turn` + `.init-row.active-turn` continue to override with accent-bg + accent-border for the currently-acting combatant.
+- **Inter-card gap.** 7 px now matches the roll-log gap.
+
+---
+
 ## [2.49.98] - 2026-05-22
 
 **Schema version:** 56

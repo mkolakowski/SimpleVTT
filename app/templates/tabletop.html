@@ -1066,10 +1066,17 @@
     .tt-ctrl { font-size: 10px; background: var(--bg-2); border: 1px solid var(--border); color: var(--fg-mute); border-radius: 3px; max-width: 90px; padding: 2px 3px; flex-shrink: 0; min-height: 36px; }
 
     /* ── Initiative Tracker ── */
-    .init-row { display:flex; align-items:center; gap:5px; padding:6px 8px; border:1px solid rgba(167,139,250,.25); border-radius:8px; margin-bottom:4px; box-shadow:0 2px 6px rgba(0,0,0,.15); background:var(--bg-2); }
+    /* v2.49.99: match the .roll-card visual treatment so the init
+       tracker entries feel like the roll log cards floating on the
+       map. Border opacity bumped .25 → .35, background darkened
+       --bg-2 → --bg, shadow deepened (3 px / 14 px blur, .22 alpha),
+       and the inter-card gap goes 4 → 7 px to match .roll-list's
+       gap: 7px. */
+    .init-row { display:flex; align-items:center; gap:5px; padding:6px 8px; border:1px solid rgba(167,139,250,.35); border-radius:8px; margin-bottom:7px; box-shadow:0 3px 14px rgba(0,0,0,.22); background:var(--bg); }
     .init-row.active-turn { background:var(--accent-bg); border-color:var(--accent); box-shadow:0 2px 10px rgba(167,139,250,.28); }
     /* GM combatant card wrapper — overrides the standalone init-row style when nested */
-    .init-entry { margin-bottom:4px; border:1px solid rgba(167,139,250,.25); border-radius:8px; overflow:hidden; box-shadow:0 2px 6px rgba(0,0,0,.15); background:var(--bg-2); }
+    /* v2.49.99: matches .roll-card — see comment on .init-row above. */
+    .init-entry { margin-bottom:7px; border:1px solid rgba(167,139,250,.35); border-radius:8px; overflow:hidden; box-shadow:0 3px 14px rgba(0,0,0,.22); background:var(--bg); }
     .init-entry.active-turn { border-color:var(--accent); box-shadow:0 2px 10px rgba(167,139,250,.28); }
     .init-entry.active-turn .mini-header { background:linear-gradient(135deg,rgba(167,139,250,.28),rgba(108,180,255,.18)); }
     /* v2.3.33: per-entry "Open Sheet" button. Compact (32px min-height to
