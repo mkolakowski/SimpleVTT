@@ -9981,6 +9981,48 @@ def _has_rage_str_advantage(
     return False
 
 
+def _target_has_dodging(
+    campaign_id: int, target_combatant_id: str | None,
+) -> bool:
+    """v2.49.115 — Phase B integration for Patient Defense (Monk
+    Lv 2+, v2.49.112). Returns True if the target combatant has a
+    buff with ``effects.dodging: True`` active. The attack-flow
+    caller uses this to impose disadvantage on the d20 attack roll
+    against the target (RAW Dodge action: "any attack roll made
+    against you has disadvantage if the attacker can see you").
+
+    Reads the hub battle state (NOT the character sheet's
+    ``_buffs_active`` mirror) since the dodging buff is installed
+    on the combatant in-init, and the attack-flow target is named
+    by combatant id, not character id. NPC dodging would route
+    the same way once a future commit lets an NPC take the Dodge
+    action; the helper doesn't need to change for that.
+
+    "If the attacker can see you" + "and you aren't incapacitated"
+    RAW caveats are NOT enforced — vision modelling is filed; the
+    incapacitated check is implicit since incapacitating buffs
+    (Stunned, Paralyzed, Unconscious) already drop the target's
+    concentration via the v2.49.51 hook, but the Dodging buff
+    itself isn't auto-dropped on incapacitation today. Filed.
+    """
+    if not target_combatant_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("id") != target_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects") or {}
+            if effects.get("dodging") is True:
+                return True
+        return False
+    return False
+
+
 def _resistance_halve(
     damage_amount: int, damage_type: str, target_sheet: dict,
 ) -> tuple[int, bool]:
@@ -14731,6 +14773,13 @@ async def use_attack(
     # ``_apply_roll_state`` already handles when both directions
     # are stamped).
     rage_advantage = _has_rage_str_advantage(campaign_id, char.id, damage_type)
+    # v2.49.115 Phase B: target's Patient Defense buff (v2.49.112)
+    # → disadvantage on the d20 attack roll. RAW Dodge interaction
+    # with Rage: advantage + disadvantage cancel to a straight roll
+    # (PHB p.173 "If circumstances cause a roll to have both advantage
+    # and disadvantage, you are considered to have neither of them").
+    # Handled in the dice-expression patch below.
+    target_dodging = _target_has_dodging(campaign_id, target_combatant_id)
 
     # Build the to-hit expression. Accept "+5", "5", "1d4+3" etc.
     attack_total = None
@@ -14749,9 +14798,22 @@ async def use_attack(
         atk_expr, attack_roll_state_applied = _apply_roll_state(
             atk_expr, (char.sheet or {}).get("roll_state"),
         )
-        if rage_advantage and "kh1" not in atk_expr and "kl1" not in atk_expr:
+        # v2.49.115 Phase B: layer adv/dis from buff sources. RAW PHB
+        # p.173 — if advantage AND disadvantage both apply, the roll
+        # is straight (canceled). We resolve the four cases against
+        # the pre-existing kh1/kl1 state from _apply_roll_state:
+        #   (a) Rage adv + Dodging dis     → cancel (straight 1d20)
+        #   (b) Rage adv alone             → 2d20kh1
+        #   (c) Dodging dis alone          → 2d20kl1
+        #   (d) neither                    → leave atk_expr alone
+        if rage_advantage and target_dodging:
+            attack_roll_state_applied = "canceled_rage_vs_dodging"
+        elif rage_advantage and "kh1" not in atk_expr and "kl1" not in atk_expr:
             atk_expr = atk_expr.replace("1d20", "2d20kh1", 1)
             attack_roll_state_applied = "advantage_rage"
+        elif target_dodging and "kh1" not in atk_expr and "kl1" not in atk_expr:
+            atk_expr = atk_expr.replace("1d20", "2d20kl1", 1)
+            attack_roll_state_applied = "disadvantage_dodging"
         try:
             r = dice_mod.roll(atk_expr)
             attack_total = r.total
@@ -14764,9 +14826,15 @@ async def use_attack(
         atk_expr, attack_roll_state_applied = _apply_roll_state(
             "1d20", (char.sheet or {}).get("roll_state"),
         )
-        if rage_advantage and "kh1" not in atk_expr and "kl1" not in atk_expr:
+        # Same Phase B adv/dis layering as the bonused branch above.
+        if rage_advantage and target_dodging:
+            attack_roll_state_applied = "canceled_rage_vs_dodging"
+        elif rage_advantage and "kh1" not in atk_expr and "kl1" not in atk_expr:
             atk_expr = atk_expr.replace("1d20", "2d20kh1", 1)
             attack_roll_state_applied = "advantage_rage"
+        elif target_dodging and "kh1" not in atk_expr and "kl1" not in atk_expr:
+            atk_expr = atk_expr.replace("1d20", "2d20kl1", 1)
+            attack_roll_state_applied = "disadvantage_dodging"
         try:
             r = dice_mod.roll(atk_expr)
             attack_total = r.total

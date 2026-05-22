@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.115] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Phase B v1 — Dodging disadvantage on incoming attacks.** First effect integration after the v2.49.112/v2.49.114 buff scaffolding shipped. When a weapon attack targets a combatant whose buffs include `effects.dodging: True` (installed by the v2.49.112 Patient Defense endpoint), the d20 attack roll uses disadvantage (`2d20kl1`). Per RAW PHB p.173, advantage + disadvantage cancel — so a Rage attacker (advantage on STR attacks) vs a Dodging target rolls a straight `1d20`. Three new harness tests pin all three states: no-dodging control, dodging-applies, cancellation. Existing 10 attack-buff-intercept tests still pass.
+**Description:** Two file edits + one new test file. **(1)** `app/routes/tabletop_routes.py::_target_has_dodging` (NEW helper, ~30 lines) — reads the hub battle state, looks up the target combatant by id, scans its buff list for any buff with `effects.dodging: True`. Returns True/False. Mirrors `_has_rage_str_advantage` but inspects the TARGET combatant instead of the attacker. (2) `app/routes/tabletop_routes.py::use_attack` — after the existing `rage_advantage` lookup (Phase B for Rage from v2.20.0), call `_target_has_dodging(campaign_id, target_combatant_id)` → `target_dodging`. The dice-expression builder then handles four cases: (a) both rage and dodging → `canceled_rage_vs_dodging` (leave `1d20` untouched), (b) rage alone → `2d20kh1` (existing behavior), (c) dodging alone → `2d20kl1` (new), (d) neither → straight roll (existing). Same shape applied in both the bonused-attack branch and the flat-d20 branch (no attack_bonus on the sheet). (3) `tests/harness/test_dodging_disadvantage.py` (NEW, 3 tests) — control case, dodging case, cancellation case. Each test seeds a two-combatant battle (attacker + Kael), optionally activates Rage on the attacker and/or Patient Defense on Kael, fires the attack, asserts the dice expression in `attack_breakdown` reflects the right state.
+**Description (cont):** Why only Dodging in Phase B v1. The v2.49.112 PD/SotW + v2.49.114 FoB endpoints installed FOUR buff effect flags: `dodging`, `disengage`, `dash`, and `is_flurry`/`unarmed_strikes_available`. Of those, only Dodging has a clean SERVER-side mechanical attachment point — the d20 attack roll is built server-side, so adding a `target_has_dodging` check is one variable + one branch in the existing dice-expression builder. The other three need different homes: (a) `disengage` (no opportunity attacks) — there's no OA enforcement in SimpleVTT (manual GM call), so this flag is informational only; (b) `dash` (double movement budget) — server doesn't enforce per-turn movement, only tracks distance; the v2.6.2 movement chip is client-side; (c) `flurry-of-blows-active.unarmed_strikes_available` (refund attack chip for next two unarmed strikes) — requires an "is this attack an unarmed strike" classifier on the `/attack` endpoint, AND the action-economy chip-refund logic from Action Surge. Bigger commit. All three filed.
+**Description (cont 2):** Why the Rage cancellation matters. Rage advantage was the only buff-driven advantage source in the engine pre-v2.49.115. Adding Dodging as the first buff-driven DISADVANTAGE source means the engine now has a real adv/disadv collision case. RAW PHB p.173: "If circumstances cause a roll to have both advantage and disadvantage, you are considered to have neither of them, and you roll one d20." The implementation reads as a three-way `elif` chain: if both flags fire, neither modifier is stamped; else if only adv, kh1; else if only dis, kl1; else leave alone. The same chain runs in both the bonused-attack branch and the no-bonus branch.
+**Description (cont 3):** What about the "if you can see the attacker" RAW caveat. PHB p.192 — Dodge gives disadvantage to attackers the dodger can see, and DEX-save advantage IF the dodger can see the effect. SimpleVTT has no vision modeling today, so the v2.49.115 implementation grants disadvantage unconditionally. The existing RAW assumes both sides have line of sight unless the GM rules otherwise — same default as the rest of the engine. Vision modelling is a separate plan (filed for the demo-mode + ruler plans).
+**Description (cont 4):** What about the "and aren't incapacitated" RAW caveat. PHB p.192 — Dodging benefit goes away if you're incapacitated or your speed drops to 0. The v2.49.51 incapacitation hook already drops the target's concentration on incoming Stunned / Paralyzed / Unconscious; the Dodging buff itself (concentration=False) survives. So if a Patient-Defense-active Monk gets Stunned, they keep the Dodging flag and the disadvantage check still passes. Filed: a follow-up commit can add a `drop_on_incapacitation: True` flag to the buff schema and have the v2.49.51 hook honor it.
+**Description (cont 5):** Verification. (a) New tests pass: 3 in `test_dodging_disadvantage.py`. (b) Regression check: 10 tests in `test_attack_buff_intercepts.py` (Rage / Hunter's Mark / Colossus Slayer / Resistance) + 3 in `test_use_patient_defense.py` — 16/16 pass. (c) Curl `/version` confirms v2.49.115 live. (d) Manual: a player can verify by having Kael click Patient Defense, then have any other PC attack Kael — the chat-card dice should show 2d20[X,Y]kl1 with the lower value used.
+
+### Added
+- `app/routes/tabletop_routes.py::_target_has_dodging` (NEW helper) — reads hub state, returns True if target has any buff with `effects.dodging: True`.
+- `app/routes/tabletop_routes.py::use_attack` — Phase B integration for Dodging disadvantage + Rage+Dodging cancellation.
+- `tests/harness/test_dodging_disadvantage.py` (NEW, 3 tests).
+
+### Notes
+- **Backward compat.** No broadcast / schema change. The dice-expression patch only fires when the target has the Dodging buff (or when both Rage + Dodging apply); attackers without Rage and targets without Dodging see unchanged behavior.
+- **Vision + incapacitation caveats not enforced.** RAW Dodge has two preconditions (can see attacker, not incapacitated) that the v1 implementation ignores. Filed.
+
+### Filed
+- **Disengage + Dash + Flurry chip refund.** The other three v2.49.112/v2.49.114 buff effects need different attachment points (client-side movement chip for Disengage/Dash, attack-economy logic for Flurry). Separate Phase B commits.
+- **Vision-gated Dodge.** Once line-of-sight modeling exists, gate the disadvantage on attacker visibility per PHB p.192.
+- **Incapacitation drops Dodging.** Add `drop_on_incapacitation: True` to the buff schema; v2.49.51 hook honors it.
+
+---
+
 ## [2.49.114] - 2026-05-22
 
 **Schema version:** 56
