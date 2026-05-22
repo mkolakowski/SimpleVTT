@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.83] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Phase 3D: multi-segment ruler.** Shift+R (or Shift-click on the 📏 Ruler button) starts a multi-segment ruler mode where each click adds a waypoint instead of auto-committing after 2 points. Enter commits + freezes the line for 3 s; Esc cancels. Per-segment chips display each leg's length at its midpoint; a "Σ TOTAL ft" chip floats next to the cursor showing the running total. Existing single-segment behavior is unchanged — Shift toggles between modes. Shared `_drawRulerChip` helper extracted for both segment-midpoint and total chips. No new endpoints; client-only. Plan status: "✅ Phases 1 + 2 + 3A–D shipped · 3E optional." PATCH.
+**Description:** Five edits, all in `app/static/tabletop.js`. **(1)** `_rulerPicker` state — new `multiSegment: bool` field defaulting to false. `start(opts)` now accepts `{multiSegment: bool}`. `_cleanup` resets the flag. **(2)** `_rulerPicker.addPoint` — multi-segment branch keeps pushing points without auto-commit; updates the hint banner to show running waypoint count. Single-segment branch is unchanged (2-point auto-commit). **(3)** `_rulerPicker.commitMulti` (NEW) — sums per-segment distances, calls `_showRulerResult(total)`, flips to ghost state for the 3 s freeze. **(4)** Hotkey wiring — `R` starts single-segment (existing); `Shift+R` starts multi-segment; `Enter` / `NumpadEnter` while the multi-segment picker is active with ≥2 points calls `commitMulti()`. Button click also passes `multiSegment: ev.shiftKey` so Shift-click on the toolbar button matches the keyboard. **(5)** Render pass rewritten to walk an "effective path" array (committed points + cursor tail in active mode). Draws dashed segments between consecutive points, filled circles at committed points + an open ring at the cursor preview, per-segment midpoint chips with each leg's distance, and a "Σ TOTAL ft" chip next to the cursor in multi-segment mode with ≥3 effective points (the single-segment chip already shows the only segment's distance, so the summed chip would be redundant). **(6)** Mousemove guard for cursor tracking now matches multi-segment too (cursor follows on any waypoint count when multiSegment is set, vs. only when points.length === 1 in single-segment mode).
+**Description (cont):** Why "Σ TOTAL" + a sigma glyph, not just "TOTAL ft" or the bare number. The per-segment chips already say "N ft"; a plain "85 ft" at the cursor would be visually identical to a segment chip and a glancing player might think "this segment is 85 ft" when actually the LAST segment is e.g. 15 ft and the total is 85. The Σ glyph (Greek sigma = mathematical "sum") is unambiguous: a player sees Σ → reads as total. The chip's position (offset to upper-right of the cursor, not on the line) further disambiguates it from per-segment chips that sit ON the line.
+**Description (cont 2):** Why the 1000-point cap heuristic in `showingCursor`. The condition `_rulerPicker.points.length < (_rulerPicker.multiSegment ? 1000 : 2)` reads as "always show the cursor in multi-segment mode" — 1000 is a generous bound that's effectively unlimited but avoids `Infinity` (which is fine in JS but feels weird in code). A user who manages to click 1000 ruler waypoints in one measurement deserves whatever they get. Single-segment caps at 2 points (after which the cursor is irrelevant).
+**Description (cont 3):** Why no harness tests. Same constraint as every prior ruler / hover / picker commit: HTTP+WS harness can't drive canvas mousedowns or keyboard events. Phase 3D's correctness is verified by clicking around in a browser. Filed: a Playwright spec for the entire ruler family (carries forward from v2.49.71 / .78 / .81 / .82).
+**Description (cont 4):** Why Enter and NumpadEnter both. Some users prefer the numpad Enter for spatial reasons (the numpad sits next to the trackpad on many laptops). Listing both `ev.key === 'Enter' || ev.key === 'NumpadEnter'` is a one-line cost for inclusive coverage.
+**Description (cont 5):** Verification. Manually clicked the Ruler button while holding Shift — cursor became crosshair, hint banner showed "📏 Click waypoints — Enter to commit, Esc to cancel." Clicked four waypoints in an L-shape around a token — three dashed segments appeared with per-segment chips ("15 ft", "20 ft", "15 ft") and a "Σ 50 ft" chip at the cursor end. Pressed Enter — hint banner switched to "📏 50 ft" + the line froze for 3 s + auto-cleared. Pressed Shift+R while no picker was active — started multi-segment from scratch. Pressed R (no Shift) — single-segment mode (existing behavior). Esc cancels in either mode. Container rebuilt to v2.49.83. Full smoke test passes.
+
+### Added
+- `app/static/tabletop.js::_rulerPicker.multiSegment` — new state field.
+- `app/static/tabletop.js::_rulerPicker.commitMulti` — sum + commit method for multi-segment.
+- `app/static/tabletop.js::_drawRulerChip` — shared chip-drawing helper (refactored from inline code).
+- `app/static/tabletop.js` hotkey wiring — `Shift+R` starts multi-segment; `Enter` / `NumpadEnter` commits.
+- `app/static/tabletop.js` render pass — generalised to walk N-point paths with per-segment + total chips.
+- `app/static/tabletop.js` mousemove cursor guard — extended to track on any waypoint count in multi-segment mode.
+
+### Changed
+- `app/templates/wiki.html` — plan-status row updated.
+- `docs/wiki/README.md` — same row update.
+
+### Notes
+- **Backward compat.** Single-segment ruler (R + 2-click commit) unchanged. The render-pass rewrite is generalisation; 2-point paths render identically to before.
+- **Phase 3D complete.** Phase 3E (broadcast mode) remains; closes the plan.
+
+### Filed
+- **Playwright spec for the ruler family** — carried forward.
+
+---
+
 ## [2.49.82] - 2026-05-22
 
 **Schema version:** 56

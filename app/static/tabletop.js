@@ -575,23 +575,25 @@
     // ──────────────────────────────────────────────────────────────────
     const _rulerPicker = {
         active: false,
-        points: [],            // up to 2 {x, y} canvas-space points
+        points: [],            // canvas-space {x, y} points; 2 in single-segment, 2+ in multi-segment
         cursor: null,          // {x, y} canvas-space mouse position
+        multiSegment: false,   // v2.49.83 Phase 3D — Shift+R toggles
         _clearTimer: null,     // setTimeout handle for the 3 s ghost
 
-        start() {
+        start(opts) {
             if (this.active) return false;
             // Mutex with the AoE picker — only one tool mode at a time.
             if (_aoePicker.active) _aoePicker.cancel();
             this.active = true;
             this.points = [];
             this.cursor = null;
+            this.multiSegment = !!(opts && opts.multiSegment);
             if (this._clearTimer) {
                 clearTimeout(this._clearTimer);
                 this._clearTimer = null;
             }
             document.body.classList.add('ruler-picker-active');
-            _showRulerHint(0);
+            _showRulerHint(0, this.multiSegment);
             _setRulerButtonState(true);
             try { render(); } catch (_) {}
             return true;
@@ -605,8 +607,20 @@
         addPoint(x, y) {
             if (!this.active) return;
             this.points.push({ x, y });
+            // v2.49.83 Phase 3D — multi-segment mode keeps accumulating
+            // waypoints. Each click bumps the hint to "Click next
+            // waypoint — Enter to commit." Enter calls commit(); Esc
+            // calls cancel(). The render-pass per-segment chip layout
+            // handles N points naturally.
+            if (this.multiSegment) {
+                _showRulerHint(this.points.length, true);
+                try { render(); } catch (_) {}
+                return;
+            }
+            // Single-segment (default): after the first click, prompt
+            // for the second; after the second, auto-commit.
             if (this.points.length === 1) {
-                _showRulerHint(1);
+                _showRulerHint(1, false);
                 try { render(); } catch (_) {}
                 return;
             }
@@ -630,10 +644,40 @@
             }, 3000);
         },
 
+        // v2.49.83 Phase 3D — commit a multi-segment ruler. Called
+        // on Enter while in multi-segment mode with at least 2 points.
+        // Sums the per-segment distances + flips to the "ghost" state
+        // (active=false but points kept) for the 3 s freeze.
+        commitMulti() {
+            if (!this.active || !this.multiSegment) return;
+            if (this.points.length < 2) return;
+            let total_ft = 0;
+            for (let i = 0; i < this.points.length - 1; i++) {
+                total_ft += _computeRulerDistanceFt(
+                    this.points[i], this.points[i + 1],
+                );
+            }
+            total_ft = Math.round(total_ft * 10) / 10;
+            _showRulerResult(total_ft);
+            this.active = false;
+            document.body.classList.remove('ruler-picker-active');
+            _setRulerButtonState(false);
+            try { render(); } catch (_) {}
+            this._clearTimer = setTimeout(() => {
+                this.points = [];
+                this.cursor = null;
+                this.multiSegment = false;
+                this._clearTimer = null;
+                _hideRulerHint();
+                try { render(); } catch (_) {}
+            }, 3000);
+        },
+
         _cleanup(keepGhost) {
             this.active = false;
             if (!keepGhost) this.points = [];
             this.cursor = null;
+            this.multiSegment = false;
             if (this._clearTimer) {
                 clearTimeout(this._clearTimer);
                 this._clearTimer = null;
@@ -754,14 +798,48 @@
         }
     });
 
-    function _showRulerHint(pointsClicked) {
+    // v2.49.83 Phase 3D — shared chip-drawing helper. Used for both
+    // per-segment chips (midpoint of each line) AND the total chip at
+    // the cursor in multi-segment mode. Centered at (x, y) with the
+    // ruler's accent green border + dark fill.
+    function _drawRulerChip(c, label, x, y) {
+        const metrics = c.measureText(label);
+        const padX = 8;
+        const chipW = metrics.width + padX * 2;
+        const chipH = 18;
+        c.fillStyle = 'rgba(20, 24, 28, 0.92)';
+        c.strokeStyle = '#4ade80';
+        c.lineWidth = 1.5;
+        if (c.roundRect) {
+            c.beginPath();
+            c.roundRect(x - chipW / 2, y - chipH / 2, chipW, chipH, 6);
+            c.fill();
+            c.stroke();
+        } else {
+            c.fillRect(x - chipW / 2, y - chipH / 2, chipW, chipH);
+            c.strokeRect(x - chipW / 2, y - chipH / 2, chipW, chipH);
+        }
+        c.fillStyle = '#4ade80';
+        c.fillText(label, x, y);
+    }
+
+    function _showRulerHint(pointsClicked, multiSegment) {
         _hideRulerHint();
         const el = document.createElement('div');
         el.id = 'ruler-picker-hint';
         el.className = 'ruler-picker-hint';
-        const msg = pointsClicked === 0
-            ? '📏 Click two points — Esc to cancel'
-            : '📏 Click second point — Esc to cancel';
+        let msg;
+        if (multiSegment) {
+            // v2.49.83 Phase 3D — multi-segment hint text rotates by
+            // points clicked. Enter commits; Esc cancels at any point.
+            msg = pointsClicked === 0
+                ? '📏 Click waypoints — Enter to commit, Esc to cancel'
+                : `📏 Click next waypoint (${pointsClicked} placed) — Enter to commit, Esc to cancel`;
+        } else {
+            msg = pointsClicked === 0
+                ? '📏 Click two points — Esc to cancel'
+                : '📏 Click second point — Esc to cancel';
+        }
         el.textContent = msg;
         const host = document.getElementById('map-pane') || document.body;
         host.appendChild(el);
@@ -791,27 +869,38 @@
     (function _wireRulerControls() {
         const btn = document.getElementById('ruler-btn');
         if (btn && !btn.hasAttribute('disabled')) {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', (ev) => {
                 if (_rulerPicker.active) _rulerPicker.cancel();
-                else _rulerPicker.start();
+                else _rulerPicker.start({ multiSegment: !!ev.shiftKey });
             });
         }
         // R hotkey — only when no input has focus + no other modal /
         // picker is consuming the keystroke. Esc handling already lives
         // in the existing global keydown handler below; we extend it.
+        // v2.49.83 Phase 3D — Shift+R starts the multi-segment variant.
+        // Enter inside multi-segment commits.
         document.addEventListener('keydown', (ev) => {
-            if (ev.key !== 'r' && ev.key !== 'R') return;
             // Skip if the user is typing in an input / textarea / contenteditable.
             const ae = document.activeElement;
             if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA'
                     || ae.isContentEditable)) return;
+            // Enter commits a multi-segment ruler.
+            if ((ev.key === 'Enter' || ev.key === 'NumpadEnter')
+                    && _rulerPicker.active && _rulerPicker.multiSegment) {
+                if (_rulerPicker.points.length >= 2) {
+                    ev.preventDefault();
+                    _rulerPicker.commitMulti();
+                }
+                return;
+            }
+            if (ev.key !== 'r' && ev.key !== 'R') return;
             if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
             if (_aoePicker.active) return;
             const ruleButton = document.getElementById('ruler-btn');
             if (ruleButton && ruleButton.hasAttribute('disabled')) return;
             ev.preventDefault();
             if (_rulerPicker.active) _rulerPicker.cancel();
-            else _rulerPicker.start();
+            else _rulerPicker.start({ multiSegment: !!ev.shiftKey });
         });
     })();
 
@@ -1379,66 +1468,75 @@
         // the 3 s freeze-ghost is still up (`points.length === 2` after
         // active flipped false).
         if (_rulerPicker.points.length >= 1) {
-            const a = _rulerPicker.points[0];
-            let b = null;
-            if (_rulerPicker.points.length >= 2) {
-                b = _rulerPicker.points[1];
-            } else if (_rulerPicker.cursor) {
-                b = _rulerPicker.cursor;
-            }
+            // v2.49.83 Phase 3D — generalised render. Build an
+            // "effective path" array including each committed point
+            // PLUS the live cursor (if still in active mode AND the
+            // cursor is set). Then draw circles, segments, and chips
+            // by walking the path. Works the same for single-segment
+            // (2 points, possibly with cursor as point #2) and
+            // multi-segment (N committed points + cursor).
+            const pts = _rulerPicker.points.slice();
+            // Append cursor only while the picker is ACTIVELY collecting
+            // points (not during the 3 s freeze). In multi-segment mode
+            // the cursor tracks the "next segment" preview; in single-
+            // segment mode it stands in for point #2 before commit.
+            const showingCursor = _rulerPicker.active && _rulerPicker.cursor
+                && (_rulerPicker.points.length < (_rulerPicker.multiSegment ? 1000 : 2));
+            const tailIsCursor = showingCursor && pts.length >= 1;
+            if (tailIsCursor) pts.push(_rulerPicker.cursor);
             ctx.save();
-            // Point A — solid filled circle, var(--accent)-ish.
-            ctx.fillStyle = '#4ade80';
-            ctx.beginPath();
-            ctx.arc(a.x, a.y, 5, 0, Math.PI * 2);
-            ctx.fill();
-            if (b) {
-                // Dashed line A → B / cursor.
-                ctx.strokeStyle = '#4ade80';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([8, 5]);
+            // Segment lines.
+            ctx.strokeStyle = '#4ade80';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([8, 5]);
+            for (let i = 0; i < pts.length - 1; i++) {
                 ctx.beginPath();
-                ctx.moveTo(a.x, a.y);
-                ctx.lineTo(b.x, b.y);
+                ctx.moveTo(pts[i].x, pts[i].y);
+                ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
                 ctx.stroke();
-                ctx.setLineDash([]);
-                // Point B — open circle (cursor preview) or filled
-                // (after second click commits).
-                ctx.lineWidth = 2;
+            }
+            ctx.setLineDash([]);
+            // Per-point circles. Committed points = filled; the tail
+            // (cursor preview, if any) = open ring.
+            for (let i = 0; i < pts.length; i++) {
+                const isCursorTail = tailIsCursor && i === pts.length - 1;
                 ctx.beginPath();
-                ctx.arc(b.x, b.y, 5, 0, Math.PI * 2);
-                if (_rulerPicker.points.length >= 2) {
+                ctx.arc(pts[i].x, pts[i].y, 5, 0, Math.PI * 2);
+                if (isCursorTail) {
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                } else {
                     ctx.fillStyle = '#4ade80';
                     ctx.fill();
-                } else {
-                    ctx.stroke();
                 }
-                // Distance chip at the midpoint.
-                const distance_ft = _computeRulerDistanceFt(a, b);
+            }
+            // Per-segment midpoint chips. Each chip shows the segment's
+            // length. For single-segment that's the only chip; for
+            // multi-segment the cursor also gets a "total" chip below.
+            ctx.font = '12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            let totalFt = 0;
+            for (let i = 0; i < pts.length - 1; i++) {
+                const a = pts[i], b = pts[i + 1];
+                const segFt = _computeRulerDistanceFt(a, b);
+                totalFt += segFt;
                 const midX = (a.x + b.x) / 2;
                 const midY = (a.y + b.y) / 2;
-                const label = `${distance_ft} ft`;
-                ctx.font = '12px sans-serif';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                const metrics = ctx.measureText(label);
-                const padX = 8, padY = 4;
-                const chipW = metrics.width + padX * 2;
-                const chipH = 18;
-                ctx.fillStyle = 'rgba(20, 24, 28, 0.92)';
-                ctx.strokeStyle = '#4ade80';
-                ctx.lineWidth = 1.5;
-                if (ctx.roundRect) {
-                    ctx.beginPath();
-                    ctx.roundRect(midX - chipW / 2, midY - chipH / 2, chipW, chipH, 6);
-                    ctx.fill();
-                    ctx.stroke();
-                } else {
-                    ctx.fillRect(midX - chipW / 2, midY - chipH / 2, chipW, chipH);
-                    ctx.strokeRect(midX - chipW / 2, midY - chipH / 2, chipW, chipH);
-                }
-                ctx.fillStyle = '#4ade80';
-                ctx.fillText(label, midX, midY);
+                const label = `${segFt} ft`;
+                _drawRulerChip(ctx, label, midX, midY);
+            }
+            totalFt = Math.round(totalFt * 10) / 10;
+            // Total chip at the cursor end (multi-segment only and
+            // only when there are 3+ effective points — for single-
+            // segment the midpoint chip IS the total).
+            if (_rulerPicker.multiSegment && pts.length >= 3) {
+                const tail = pts[pts.length - 1];
+                _drawRulerChip(
+                    ctx,
+                    `Σ ${totalFt} ft`,
+                    tail.x + 24, tail.y - 16,
+                );
             }
             ctx.restore();
         }
@@ -2136,7 +2234,11 @@
         // v2.49.72: snap the cursor preview to the grid-cell center so
         // the live distance label matches what the committing click
         // would actually produce.
-        if (_rulerPicker.active && _rulerPicker.points.length === 1) {
+        // v2.49.83 Phase 3D: multi-segment mode tracks the cursor for
+        // the live "next segment" preview at ANY waypoint count (not
+        // just === 1).
+        if (_rulerPicker.active && _rulerPicker.points.length >= 1
+                && (_rulerPicker.points.length === 1 || _rulerPicker.multiSegment)) {
             const [wx, wy] = clientToCanvas(ev);
             _rulerPicker.cursor = _snapPointToGridCenter(wx, wy);
             render();
