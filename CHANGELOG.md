@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.77] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Phase 3A server: AoE range enforcement on `/place_aoe`.** User-requested promotion of AoE range work from "optional follow-up" into a load-bearing Phase 3A item, closing the correctness gap Phase 2 deliberately deferred. New range check on `/place_aoe` compares the picker's chosen `center: {x, y}` to the caster's token position vs the parsed spell range; 409 `out_of_range` with the same response shape as Phase 2C. Plan doc updated to split Phase 3 into 3A (load-bearing, this commit + a client follow-up) and 3B–3E (optional polish). The cast-time stash gains `range_str` + `strict_action_economy` fields so `/place_aoe` has everything it needs without re-reading the spell dict. 4 new harness tests pin in-range / out-of-range / override / GM-bypass paths on the AoE cast → place flow. PATCH.
+**Description:** Four edits. **(1)** `docs/plans/ruler-and-range.md` — Phase 3 section restructured: new "Phase 3A — AoE range visualization + enforcement (LOAD-BEARING)" subsection naming the server + client work + a wide ASCII mockup showing the range ring + dim-out-of-range AoE preview. Phase 3B–3E (hover rangefinder, range rings on cast hover, multi-segment ruler, broadcast mode) renamed from the old "optional follow-ups" list. **(2)** `app/routes/tabletop_routes.py::place_aoe` — new range check inserted after the auth gate + before target resolution. Reads `range_str` + `strict_action_economy` from the cast stash; runs the same three-tier override (GM auto-bypass, player override + not strict, otherwise enforced) as Phase 2C. Returns 409 with `target_name="(AoE cast point)"` since AoE doesn't have a single character target — the placement coord IS what's being range-checked. **(3)** `app/routes/tabletop_routes.py::cast_spell` AoE-pending-stash — adds `range_str` (spell's "range" field) + `strict_action_economy` (campaign flag) to `_pending_aoe_casts[cast_id]` so `/place_aoe` doesn't have to re-read the spell dict. **(4)** `tests/harness/test_place_aoe_range.py` (NEW, 4 tests).
+**Description (cont):** Why the range check happens on `/place_aoe` rather than `/cast_spell`. AoE spells have two cast surfaces today: (a) the legacy `/cast_spell`-with-`target_combatant_ids`-list flow (pre-v2.48.0), which arrives with targets pre-resolved and NO cast-point coordinate — server can't enforce range without inventing data, so it stays skipped. (b) The modern `/cast_spell` → pending → `/place_aoe` flow (v2.48.0+), which DOES carry `center: {x, y}`. /place_aoe is the right insertion point because it's the only place with the cast-point coordinate. The slot is consumed at /cast_spell time (line ~7216) regardless — a 409 from /place_aoe does NOT refund the slot. That matches the existing semantic for the pending_aoe flow (a slot is "spent" on the cast attempt; the player learns the placement is invalid and can't retry without consuming another slot). Future commit could refund on /place_aoe 409 but out of scope here.
+**Description (cont 2):** Why stash `range_str` instead of re-resolving the spell at /place_aoe time. The spell dict is constructed in /cast_spell from `(sheet.spells[index] + local_content.resolve(_slug)` overlay). Reproducing that lookup at /place_aoe would mean threading the spell_index through the stash (already there) AND re-running the SRD overlay. Stashing the parsed range string is one line at cast time and zero extra DB reads at place time. The stash already holds `damage_expr` / `damage_type` / `save_ability` / `dc` for the same reason — it's the cast snapshot.
+**Description (cont 3):** Why `target_name="(AoE cast point)"` in the 409 response. AoE doesn't have a single character target — the cast-point coordinate IS what's being range-checked. The cast-card client needs SOMETHING in the field to render "Out of range: Fireball reaches 150 ft. Cast point is 350 ft away." The string `(AoE cast point)` is honest about what's being measured. Phase 2C tests assert `target_name == bandit.name`; the AoE test asserts `target_name == "(AoE cast point)"`. Two distinct contract shapes for the two distinct use cases.
+**Description (cont 4):** Why the cast-time stash captures `strict_action_economy` instead of re-reading at place time. The campaign's strict flag could theoretically change between cast and place; the stash snapshot is what the cast was promised. Same reasoning as `damage_expr` (the spell's damage at cast time is what shipped; if the GM later edits the spell, the placement honors the original). Defensive but cheap.
+**Description (cont 5):** Test design. Uses Bob (Thalindra's owner, non-GM) so the range check actually fires; the GM-bypass test uses gm_client. Each test calls `_init_aoe_cast` to fire the no-target /cast_spell that returns pending placement, then posts /place_aoe with the chosen center. The 409 test asserts the full response shape: `error`, `range_ft=150` (Fireball), `distance_ft=350.0` (70 cells × 5 ft Chebyshev on the demo grid), `spell_name`, `source_name`, `target_name="(AoE cast point)"`.
+**Description (cont 6):** Verification. Pre-fix: ran the new tests against pre-helper code — out-of-range test FAILED (no 409, AoE went through). Post-fix: all 4 pass. Existing 7 `test_cast_spell_aoe.py` tests continue to pass because they use gm_client which auto-bypasses. Full regression: 329 harness tests pass (was 325, +4 new).
+**Description (cont 7):** Plan-status update. Wiki + `docs/wiki/README.md` row moves from "✅ Phases 1 + 2 shipped · Phase 3 optional" to "🟠 Phases 1 + 2 + 3A (server) shipped · 3A client + 3B–E unstarted." The 3A status will move to fully-shipped after the client-side range ring lands (next commit).
+
+### Added
+- `app/routes/tabletop_routes.py::place_aoe` — range check before target resolution.
+- `app/routes/tabletop_routes.py::cast_spell` — stash adds `range_str` + `strict_action_economy`.
+- `tests/harness/test_place_aoe_range.py` — 4 tests.
+- `docs/test-harness-coverage.md` — catalog entry; total 325 → 329.
+- `docs/plans/ruler-and-range.md` — Phase 3 restructured: 3A (load-bearing) + 3B–3E (optional polish) + new ASCII mockup.
+
+### Changed
+- `app/templates/wiki.html` — plan-status row updated.
+- `docs/wiki/README.md` — same row update.
+
+### Notes
+- **Backward compat.** Additive stash fields + additive range check on /place_aoe. Existing 7 test_cast_spell_aoe.py tests continue to pass (gm_client auto-bypasses). The legacy `/cast_spell`-with-`target_combatant_ids`-list flow stays unchanged (no cast-point coord available).
+- **Slot semantic preserved.** A 409 from /place_aoe does NOT refund the slot consumed at /cast_spell time. Matches existing behavior; out of scope here.
+
+### Filed
+- **Phase 3A client** — translucent range ring around the caster while the AoE picker is active; dim the AoE preview when the cursor is outside the ring. Next commit.
+- **Slot refund on /place_aoe 409** — a future quality-of-life fix that gives players their slot back when the placement is rejected.
+- **Legacy `/cast_spell`-with-list AoE range** — would need the picker to pass `cast_point: {x, y}` through. Not urgent (the modern flow is the production path).
+
+---
+
 ## [2.49.76] - 2026-05-22
 
 **Schema version:** 56

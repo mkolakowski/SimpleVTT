@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 325 (as of v2.49.76, 2026-05-22).
+**Total tests:** 329 (as of v2.49.77, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -251,6 +251,16 @@ v2.49.61 — closes the "wake-on-damage" filed item from v2.49.58. RAW Sleep wak
 | `test_wake_on_damage_npc` | Bandit pre-seeded with Sleep-Unconscious buff; Krieger attacks (auto_apply_damage on) → latest `battle_update` shows bandit's Unconscious dropped + 🌅 wake log fires. |
 | `test_wake_on_damage_pc` | Magnus pre-seeded with Sleep-Unconscious buff; Krieger attacks → Unconscious dropped from BOTH hub and sheet mirror + 🌅 wake log names Magnus. |
 | `test_non_sleep_unconscious_preserved` | Bandit pre-seeded with a generic Unconscious buff (no `source_spell == "Sleep"`); Krieger attacks → buff preserved (regression guard against over-broad clearing). |
+
+### `test_place_aoe_range.py`
+v2.49.77 — Phase 3A of the ruler/range plan: server-side range enforcement on AoE casts via `/place_aoe`. The picker's chosen `center: {x, y}` is compared to the caster's token position vs the parsed spell range. Same three-tier override as Phase 2C (GM auto-bypass, player override + not strict, otherwise enforced). Tests use Bob (Thalindra's owner, non-GM) so the non-GM enforcement fires.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_place_aoe_in_range_succeeds` | Thalindra at (100,100); Fireball center 50 ft away → 200 (well within 150 ft range). |
+| `test_place_aoe_out_of_range_409` | Center 350 ft away → 409 `out_of_range` with `range_ft=150`, `distance_ft=350.0`, `spell_name="Fireball"`, `target_name="(AoE cast point)"`. |
+| `test_place_aoe_override_bypasses_409` | Same out-of-range setup + `override_range=True` → 200. |
+| `test_place_aoe_gm_bypasses_range_check` | gm_client places out-of-range AoE without `override_range` → 200 (auto-bypass). |
 
 ### `test_cast_attack_range.py`
 v2.49.76 — Phase 2D of the ruler/range plan. Extends `_check_cast_range` to `/attack`, `/cast_hex`, `/use_stunning_strike`, `/use_open_hand_technique`. `/cast_sleep` is intentionally skipped (AoE multi-target — see endpoint comment + Phase 2C "When NOT to enforce"). Ownership limitation: only Pip (Alice's) and Thalindra (Bob's) are non-GM-owned in the demo, so the 409 path is directly testable only via `/attack`; the other three endpoints get integration-call-site happy-path coverage to confirm they don't break.

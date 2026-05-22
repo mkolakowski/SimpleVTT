@@ -418,12 +418,63 @@ These are per-endpoint, so one for `/cast_spell`, one for `/use_attack`, etc. Re
 
 ---
 
-### Phase 3 (optional follow-ups)
+### Phase 3
 
-- **Hover rangefinder** when a token is selected (option C). Implementation is a single render-loop branch: if `selectedToken && cursor && !_rulerPicker.active && !_aoePicker.active`, draw a thin distance line from `selectedToken` to `cursor`.
-- **Range rings on cast-button hover** (option D). When the player mouses over a spell button in the cast list, render a translucent ring around the caster's token at the spell's range. Requires the spell-range parser from Phase 2.
-- **Multi-segment ruler** (Shift + R). Same `_rulerPicker.addPoint()` but doesn't auto-commit after 2 points; commit on Enter. Useful for "what's the total path length around the corner?"
-- **Broadcast mode toggle** for GM-led range demos (Shift-click the Ruler button).
+Originally framed as "optional follow-ups" — promoted to a load-bearing slot when **Phase 3A (AoE range enforcement)** was identified as closing a real correctness gap that Phase 2 deliberately deferred. The remaining items (3B–3E) stay optional.
+
+#### Phase 3A — AoE range visualization + enforcement (LOAD-BEARING)
+
+Phase 2 enforces range for single-target casts; AoE casts (Fireball, Sleep, Thunderwave, Shatter, etc.) deliberately skipped because the endpoint receives pre-resolved targets WITHOUT a cast-point coordinate. `/place_aoe` (the modern AoE flow's commit endpoint) DOES carry the picker's chosen center coordinate — so the server CAN enforce range there. Plus the picker UI should render a translucent range ring around the caster's token while the picker is active so the player gets pre-commit visual feedback.
+
+**Server (5 minutes of edits, ~30 lines):**
+
+Add a range check to `/place_aoe` that compares the body's `center: {x, y}` against the caster's token position on the active map. The cast context stashed in `_pending_aoe_casts` already carries the caster's character_id; pull the caster's Token row, compute distance via `_distance_ft_between_points`, parse the spell's range string via the v2.49.74 parser, and return 409 `out_of_range` if the placement exceeds the spell's range. Same three-tier override as Phase 2C (GM auto-bypass, player override + not strict, otherwise enforced).
+
+For the legacy `/cast_spell`-with-`target_combatant_ids`-list flow (pre-v2.48.0 AoE), no `cast_point` is available — keep skipping per the existing convention. Future content / picker work could pass `cast_point` through but that's a separate refactor.
+
+**Client (~80 LOC):**
+
+When `_aoePicker.active` is true, render a translucent range ring around the caster's token at the spell's `range_ft` (parsed via a JS port of `parse_range_ft` or passed through from the spell-cast call site). When the cursor's distance to the caster exceeds `range_ft`, dim the AoE preview (e.g. desaturated stroke + faded fill) so the player sees the placement would be rejected.
+
+#### Mockup — AoE picker with range ring (Phase 3A)
+
+```
+   Caster: Thalindra (Fireball, range 150 ft = 30 cells = 2100 px on the demo grid)
+
+   ╲╲╲╲                                          ╱╱╱╱
+   ╲ ╲ ╲╲                                       ╱╱ ╱ ╱           ← translucent range
+   ╲    ╲╲   ┌─ caster token                  ╱╱   ╱             ring (alpha 0.08
+   ╲     ●─ ╲                                ╱    ╱              fill, dashed accent
+   ╲        ╲─ ╲                            ╱   ╱                stroke)
+   ╲          ╲─ ╲                        ╱   ╱
+   ╲    in-range zone (Fireball ≤ 150 ft)╲╱─ ╱       ← AoE picker preview
+   ╲                                ┌────╲                       (sphere/cone/cube)
+   ╲                              ┌─╲─ ─ ╲                       follows the cursor
+   ╲                              │  ╲─ ─ ╲   AoE preview         normally; gets
+   ╲                              │   ╲─ ─ ╲  rendered            dimmed when cursor
+   ╲                              │    ╲─ ─ ╲ inside ring         goes outside the ring
+   ╲                              └─────────╲
+   ╲                                         ╲
+   ╱                                                              ⚠ AoE preview outside
+   ╱                                          ┌─ ─ ─ ─ ┐         ring renders desaturated
+   ╱╱                                          │ ─ ─ ─ │  ← dimmed (red instead of orange,
+   ╱ ╱╱                                       │  outside │     opacity 0.5)
+   ╱   ╱╱                                      └─ ─ ─ ─ ┘
+   ╱       ╱╱                                                     Click anyway: server
+   ╱           ╱╱╱╱                                              returns 409 out_of_range
+   ╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱           with the placement coord.
+
+   Ring fill:   rgba(74, 222, 128, 0.08)   — soft green
+   Ring stroke: 1.5 px dashed var(--accent) — visible at any zoom
+   Dimmed AoE: stroke #555, fill rgba(220, 38, 38, 0.10), opacity 0.5
+```
+
+#### Phase 3B–3E (optional polish)
+
+- **3B Hover rangefinder** when a token is selected (option C). Implementation is a single render-loop branch: if `selectedToken && cursor && !_rulerPicker.active && !_aoePicker.active`, draw a thin distance line from `selectedToken` to `cursor`.
+- **3C Range rings on cast-button hover** (option D). When the player mouses over a spell button in the cast list (before they've clicked Cast), render a translucent ring around the caster's token at the spell's range. Phase 3A's ring shows DURING the AoE picker; this one shows BEFORE the cast even fires — a "where can this reach?" preview. Same rendering primitive.
+- **3D Multi-segment ruler** (Shift + R). Same `_rulerPicker.addPoint()` but doesn't auto-commit after 2 points; commit on Enter. Useful for "what's the total path length around the corner?"
+- **3E Broadcast mode toggle** for GM-led range demos (Shift-click the Ruler button).
 
 #### Mockup — hover rangefinder
 

@@ -8182,6 +8182,13 @@ async def cast_spell(
             "auto_apply_damage": bool(campaign.auto_apply_damage),
             "area": _aoe_area_info or {},
             "is_concentration": _is_concentration,
+            # v2.49.77 — Phase 3A range-check inputs. The /place_aoe
+            # gate compares the picked `center` coord to the caster's
+            # token position vs the parsed spell range. Stashed at
+            # cast time because by /place_aoe time we no longer have
+            # the spell dict.
+            "range_str": (spell.get("range") or ""),
+            "strict_action_economy": bool(campaign.strict_action_economy),
         }
 
     await hub.broadcast(campaign_id, {"type": "spell_cast", "data": payload})
@@ -8311,6 +8318,52 @@ async def place_aoe(
     is_gm = _user_is_gm(user, campaign, db)
     if user.id != ctx.get("caster_user_id") and not is_gm:
         raise HTTPException(403, "only the caster or GM can place this AoE")
+
+    # v2.49.77 — Phase 3A AoE range enforcement. Compares the picked
+    # center coord to the caster's token position vs the parsed spell
+    # range. Same three-tier override as Phase 2C: GM auto-bypass,
+    # player override + not strict, otherwise enforced. Skipped when
+    # the range parses to None / 0 (Self / Special / Unknown), when
+    # the campaign has no active map, or when the caster has no token
+    # on the active map. The cast point is the picker's chosen center
+    # (Fireball at the centroid; cones / lines use the click direction
+    # but the picker's commit still lands the click on the cursor —
+    # the cursor IS the cast point for range purposes).
+    _override_range = bool(body.get("override_range"))
+    _strict_aoe = bool(ctx.get("strict_action_economy"))
+    if not is_gm and not (_override_range and not _strict_aoe):
+        from ..content.range_parser import max_range_ft, parse_range_ft
+        _max_ft = max_range_ft(parse_range_ft(ctx.get("range_str") or ""))
+        if _max_ft is not None and _max_ft > 0 and campaign.active_map_id:
+            _caster_char = db.query(Character).filter(
+                Character.id == int(ctx.get("caster_char_id") or 0),
+            ).first()
+            if _caster_char:
+                _caster_token = (
+                    db.query(Token)
+                    .filter(
+                        Token.character_id == _caster_char.id,
+                        Token.map_id == campaign.active_map_id,
+                    )
+                    .first()
+                )
+                _map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+                if _caster_token and _map_row and (center_x or center_y):
+                    _distance_to_cast_point = _distance_ft_between_points(
+                        int(_map_row.grid_size_px or 0),
+                        (_map_row.grid_type.value if _map_row.grid_type else "square").lower(),
+                        float(_caster_token.x or 0), float(_caster_token.y or 0),
+                        center_x, center_y,
+                    )
+                    if _distance_to_cast_point > _max_ft:
+                        return JSONResponse(status_code=409, content={
+                            "error": "out_of_range",
+                            "source_name": ctx.get("caster_char_name") or "",
+                            "target_name": "(AoE cast point)",
+                            "distance_ft": _distance_to_cast_point,
+                            "range_ft": int(_max_ft),
+                            "spell_name": ctx.get("spell_name") or "",
+                        })
 
     save_ability = ctx.get("save_ability") or ""
     dc = int(ctx.get("dc") or 0)
