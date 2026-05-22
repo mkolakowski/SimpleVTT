@@ -1588,6 +1588,47 @@
 <div id="players-drawer" class="drawer-panel">
     <div class="drawer-body">
 
+        {# v2.49.98 — GM Controls hoisted out of the initiative-panel
+           <details> and placed ABOVE it so the controls stay visible
+           even when the GM collapses the init tracker. Standalone
+           card, own border + gradient header. The button ids
+           (battle-from-map-btn, battle-next-btn, etc.) are unchanged
+           so the controllers in tabletop.html keep binding. #}
+        {% if is_gm %}
+        <div style="margin:0 0 8px;border:1px solid rgba(167,139,250,.25);border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.14);background:var(--bg-2);">
+            <div style="background:linear-gradient(135deg,rgba(167,139,250,.13),rgba(108,180,255,.08));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚙ GM Controls</div>
+            <div style="padding:8px;">
+                <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">
+                    <button type="button" id="battle-from-map-btn" class="tt-btn" style="flex:1;font-size:11px;" title="Add all tokens from the active map">🗺 From Map</button>
+                    <button type="button" id="battle-add-char-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Character</button>
+                    <button type="button" id="battle-add-manual-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Manual</button>
+                    <button type="button" id="battle-roll-init-btn" class="tt-btn" style="flex:1;font-size:11px;">🎲 Roll All</button>
+                </div>
+                <div id="battle-char-panel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px;max-height:200px;overflow-y:auto;margin-bottom:6px;">
+                    <div id="battle-char-list"></div>
+                </div>
+                <div id="battle-manual-panel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px;margin-bottom:6px;">
+                    <div style="display:grid;grid-template-columns:1fr 50px 50px 30px;gap:5px;margin-bottom:6px;align-items:center;">
+                        <input type="text" id="bm-name" placeholder="Name" style="font-size:12px;">
+                        <input type="number" id="bm-init" placeholder="Init" style="font-size:12px;text-align:center;">
+                        <input type="number" id="bm-hp" placeholder="HP" style="font-size:12px;text-align:center;">
+                        <input type="color" id="bm-color" value="#cc3333" style="width:100%;height:28px;padding:1px;cursor:pointer;border-radius:3px;">
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        <button type="button" id="bm-add-btn" style="font-size:12px;padding:3px 14px;">Add</button>
+                        <button type="button" id="bm-cancel-btn" style="font-size:12px;padding:3px 14px;">Cancel</button>
+                    </div>
+                </div>
+                <div class="battle-ctrl">
+                    <button type="button" id="battle-prev-btn" class="tt-btn">◀</button>
+                    <button type="button" id="battle-next-btn" class="tt-btn">Next ▶</button>
+                    <button type="button" id="battle-start-btn" class="tt-btn" title="Jump to Round 1">↺ Start</button>
+                    <button type="button" id="battle-clear-btn" class="tt-btn" style="margin-left:auto;color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--border));" title="Clear all combatants">🗑</button>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- ── Initiative Tracker ── -->
         <details id="initiative-panel" class="gm-panel" open>
             <summary>
@@ -1595,40 +1636,6 @@
                 <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚔ Initiative</h4>
                 <span id="battle-round-label" style="margin-left:auto;font-size:10px;color:var(--fg-mute);flex-shrink:0;">Not started</span>
             </summary>
-            {% if is_gm %}
-            <div style="margin:8px 8px 0;border:1px solid rgba(167,139,250,.25);border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.14);">
-                <div style="background:linear-gradient(135deg,rgba(167,139,250,.13),rgba(108,180,255,.08));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚙ GM Controls</div>
-                <div style="padding:8px;">
-                    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">
-                        <button type="button" id="battle-from-map-btn" class="tt-btn" style="flex:1;font-size:11px;" title="Add all tokens from the active map">🗺 From Map</button>
-                        <button type="button" id="battle-add-char-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Character</button>
-                        <button type="button" id="battle-add-manual-btn" class="tt-btn" style="flex:1;font-size:11px;">+ Manual</button>
-                        <button type="button" id="battle-roll-init-btn" class="tt-btn" style="flex:1;font-size:11px;">🎲 Roll All</button>
-                    </div>
-                    <div id="battle-char-panel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px;max-height:200px;overflow-y:auto;margin-bottom:6px;">
-                        <div id="battle-char-list"></div>
-                    </div>
-                    <div id="battle-manual-panel" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:8px;margin-bottom:6px;">
-                        <div style="display:grid;grid-template-columns:1fr 50px 50px 30px;gap:5px;margin-bottom:6px;align-items:center;">
-                            <input type="text" id="bm-name" placeholder="Name" style="font-size:12px;">
-                            <input type="number" id="bm-init" placeholder="Init" style="font-size:12px;text-align:center;">
-                            <input type="number" id="bm-hp" placeholder="HP" style="font-size:12px;text-align:center;">
-                            <input type="color" id="bm-color" value="#cc3333" style="width:100%;height:28px;padding:1px;cursor:pointer;border-radius:3px;">
-                        </div>
-                        <div style="display:flex;gap:6px;">
-                            <button type="button" id="bm-add-btn" style="font-size:12px;padding:3px 14px;">Add</button>
-                            <button type="button" id="bm-cancel-btn" style="font-size:12px;padding:3px 14px;">Cancel</button>
-                        </div>
-                    </div>
-                    <div class="battle-ctrl">
-                        <button type="button" id="battle-prev-btn" class="tt-btn">◀</button>
-                        <button type="button" id="battle-next-btn" class="tt-btn">Next ▶</button>
-                        <button type="button" id="battle-start-btn" class="tt-btn" title="Jump to Round 1">↺ Start</button>
-                        <button type="button" id="battle-clear-btn" class="tt-btn" style="margin-left:auto;color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--border));" title="Clear all combatants">🗑</button>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
             <div class="gm-panel-body">
                 <div id="battle-banner" class="battle-banner" style="display:none;"></div>
                 <div id="initiative-list"></div>

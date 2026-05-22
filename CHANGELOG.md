@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.98] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **GM Controls hoisted out of the initiative-panel `<details>` and placed ABOVE it, so the controls stay visible even when the GM collapses the init tracker.** Small UX continuation of the v2.49.97 init flatten — the GM Controls box (🗺 From Map / + Character / + Manual / 🎲 Roll All / ◀ / Next ▶ / ↺ Start / 🗑) was previously the first thing inside the initiative-panel `<details>`, which meant it disappeared when the GM clicked the summary to collapse the panel. The user wanted those controls always within reach. Moved the entire `{% if is_gm %}` block out of the details element and into the drawer-body just above the initiative-panel; everything else (initiative summary, battle banner, initiative-list) stays inside the details. Standalone card styling preserved — same border, gradient header, padding. Button ids unchanged (`battle-from-map-btn`, `battle-next-btn`, etc.) so the controllers in `tabletop.html` keep binding.
+**Description:** One file edit in `app/templates/tabletop.html`. Cut the `{% if is_gm %} <div ... GM Controls ...></div> {% endif %}` block from inside `<details id="initiative-panel">` (between the `<summary>` and the `.gm-panel-body` div) and pasted it as a sibling of the `<details>` element, placed immediately before it. Adjusted the box's margin from `margin:8px 8px 0` to `margin:0 0 8px` (was: 8 px top/sides, 0 bottom — for sitting inside the panel against the summary; now: 0 top/sides, 8 px bottom — for sitting in the drawer-body with breathing room above the init summary). Also added `background: var(--bg-2)` to the GM Controls box itself, since the wrapping panel that used to provide its backdrop is gone (the drawer-body is transparent post-v2.49.94).
+**Description (cont):** Why this is an improvement. Before this commit, collapsing the initiative-panel (chevron toggle on the summary) hid not just the init list but ALSO the GM controls — which is exactly the moment a GM might want to expand the list back, jump to the next turn, or add a manual combatant. The collapse gesture then became "lose your controls" instead of "tidy the view." With the controls outside the `<details>`, the collapse only hides the actual list of combatants while the controls stay reachable.
+**Description (cont 2):** What the open + closed states look like now. (a) When `<details>` is open: GM Controls card on top, gap, initiative summary card, gap, battle banner (if active), init entries with gaps between each. (b) When `<details>` is closed: GM Controls card on top, gap, initiative summary card. The GM can do `Next ▶`, `+ Character`, etc. without re-opening the panel. The init list re-appears on a single click of the summary.
+**Description (cont 3):** Why no JS changes were needed. The button handlers attach by id (`document.getElementById('battle-next-btn')` and similar at `tabletop.html:5430`-ish). Moving the buttons in the DOM doesn't change their ids; the handlers find them at any DOM position. The renderBattle function writes to `#initiative-list` which is still inside the details element — unchanged.
+**Description (cont 4):** Pure HTML restructure. No CSS rules added or modified. No behavior, endpoint, broadcast, or schema change. Existing 5 Playwright tests still pass — the canvas + chat-card suites don't depend on the GM Controls position.
+**Description (cont 5):** Verification. Curl `/version` confirms v2.49.98 live. Manual: open the Battle tab as GM, verify GM Controls appears above the initiative summary. Click the summary chevron to collapse the init list — controls stay visible. Click `+ Manual` to confirm the inline manual-add panel still expands inside the controls card. Click `Next ▶` to confirm turn advancement still works.
+
+### Changed
+- `app/templates/tabletop.html` — moved the `{% if is_gm %}` GM Controls block from inside `<details id="initiative-panel">` (between summary and body) to a sibling above the details element. Box margin updated `8px 8px 0` → `0 0 8px`; added `background: var(--bg-2)` to the box since the transparent drawer no longer provides a backdrop.
+
+### Notes
+- **Backward compat.** Pure HTML restructure. Button ids unchanged. All JS handlers continue to bind. No CSS / endpoint / broadcast / schema changes.
+- **Visible to non-GM players.** None — the controls block is wrapped in `{% if is_gm %}`. Players see only the initiative summary + entries.
+- **GM Controls collapse?** Currently uncollapsible. The previous nesting inside the `<details>` provided implicit collapse via the parent. If a future commit wants the controls themselves collapsible, wrap them in their own `<details>` and add a chevron — small change. Defer until requested.
+
+---
+
 ## [2.49.97] - 2026-05-22
 
 **Schema version:** 56
