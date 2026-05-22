@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 339 in `tests/harness/` + 5 in `tests/harness_ui/` (as of v2.49.92, 2026-05-22).
+**Total tests:** 339 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.93, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -752,7 +752,15 @@ The HTTP+WS suite at `tests/harness/` can't reach canvas event handlers, modal d
 | `test_sheet_loads_for_tavik` | Same smoke check for Tavik; `#resources-fieldset` also visible. |
 
 ### `test_attack_toast.py`
-v2.7.3 regression catcher — the broadcast was correct but the toast never appeared in the DOM. See file for exact assertions.
+v2.7.3 regression catcher — the broadcast was correct but the toast never appeared in the DOM. See file for exact assertions. **NOTE (v2.49.93):** these two tests have been silently failing since v2.16.0 added the Sneak Attack uplift modal — the click handler now opens `#uplift-modal` for Pip (Rogue Lv 1+) before reaching the fetch, and the test never dismisses it. Tracked for follow-up; not introduced by v2.49.93.
+
+### `test_attack_toast_multi_target.py`
+v2.49.93 — chat-card multi-target rendering. When `/attack` fires with `target_combatant_ids: [a, b, c]`, the server's `weapon_attack` broadcast carries `auto_attack_targets` with one entry per target (v2.49.85). Pre-v2.49.93, the client's chat card only rendered the primary target's outcome — the secondary + tertiary names were silently dropped. v2.49.93 fans the chain out: one attack + one damage toast per per-target outcome, staggered 700 ms apart so they don't pile on each other.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_multi_target_attack_renders_one_toast_chain_per_target` | Seeds a 3-bandit battle, POSTs `/attack` with `target_combatant_ids` of 3, asserts 6 `.roll-toast` elements appear (3 attack + 3 damage), and every bandit's name shows up in at least one toast label. |
+| `test_single_target_attack_still_renders_one_chain` | Backward-compat smoke. Same setup, but POSTs with the legacy singular `target_combatant_id`, asserts exactly 2 toasts (one chain only) and only the primary target's name appears. Catches an accidental double-render on the single-target path. |
 
 ### `test_tabletop_canvas.py`
 v2.49.92 — canvas pan + drag regression suite. Built when the v2.49.81 `_hoverCursor` TDZ bug silently broke every canvas listener for 11 versions and no existing test could detect it. The suite is the gate for any future change that touches canvas event handlers, CSS on `.map-pane` / `#vtt-canvas`, or the tabletop's IIFE structure.

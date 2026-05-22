@@ -334,68 +334,112 @@
             // attack die, jumping straight to the damage line, same as
             // the .atk-strike handler in sheet_dnd5e.html does.
             const nm = r.attack_name || 'Attack';
-            const tgt = r.target_name || '';
-            // v2.33.0: richer attack toast. Includes "→ TARGET",
-            // "vs AC N", and a HIT/MISS/CRIT verdict — pulled from
-            // the T.2 hit-determination payload. Falls back gracefully
-            // when no target was set (attack without target = no
-            // verdict, just the dice toast like pre-T.2).
-            if (!r.is_save && r.attack_breakdown) {
-                let verdict = '';
-                if (r.is_crit) verdict = ' · 💥 CRIT';
-                else if (r.hit === true) verdict = ' · ✅ HIT';
-                else if (r.hit === false) verdict = ' · ❌ MISS';
-                const acBit = (r.target_ac != null && r.hit != null)
-                    ? ` vs AC ${r.target_ac}` : '';
-                const tgtBit = tgt ? ` → ${tgt}` : '';
-                showRollToast({
-                    expression: '1d20',
-                    total: r.attack_total,
-                    breakdown: r.attack_breakdown,
-                    note: `🎯 ${nm}${tgtBit}${acBit}${verdict}`,
-                    user_id: r.caster_user_id,
-                    user_name: r.caster_user_name,
-                    char_name: r.caster_char_name,
-                });
+            const isSave = !!r.is_save;
+            const dmgType = r.damage_type;
+            const casterFields = {
+                user_id: r.caster_user_id,
+                user_name: r.caster_user_name,
+                char_name: r.caster_char_name,
+            };
+
+            // v2.49.93 — render one attack+damage toast chain per
+            // per-target outcome dict. Single-target legacy still rides
+            // the top-level fields (auto_attack_targets is 0 or 1
+            // entries) so the existing UX is unchanged; multi-target
+            // (auto_attack_targets.length >= 2) fans out one chain per
+            // target, staggered so the toasts don't pile on each
+            // other.
+            //
+            // The outcome shape — built in app/routes/tabletop_routes.py
+            // around the v2.49.85 multi-target loop — carries every
+            // per-target field the toast needs: target_name,
+            // attack_total/breakdown, is_crit, hit, target_ac,
+            // damage_total/breakdown, damage_applied, target_hp_*,
+            // target_resistance_applied, target_dying, target_dead.
+            // Cross-target fields (attack_name, damage_type, caster_*,
+            // is_save) live on the top-level broadcast.
+            function _renderOutcome(outcome, attackOffsetMs) {
+                const tgt = outcome.target_name || '';
+                // Attack d20 toast.
+                if (!isSave && outcome.attack_breakdown) {
+                    let verdict = '';
+                    if (outcome.is_crit) verdict = ' · 💥 CRIT';
+                    else if (outcome.hit === true) verdict = ' · ✅ HIT';
+                    else if (outcome.hit === false) verdict = ' · ❌ MISS';
+                    const acBit = (outcome.target_ac != null && outcome.hit != null)
+                        ? ` vs AC ${outcome.target_ac}` : '';
+                    const tgtBit = tgt ? ` → ${tgt}` : '';
+                    const fireAtk = () => showRollToast({
+                        expression: '1d20',
+                        total: outcome.attack_total,
+                        breakdown: outcome.attack_breakdown,
+                        note: `🎯 ${nm}${tgtBit}${acBit}${verdict}`,
+                        ...casterFields,
+                    });
+                    if (attackOffsetMs > 0) setTimeout(fireAtk, attackOffsetMs);
+                    else fireAtk();
+                }
+                // Damage toast — v2.33.1 delays 1600ms after the attack
+                // d20 lands so the dice animation finishes first. Skipped
+                // on save-DC attacks (no attack toast to wait for).
+                if (outcome.damage_breakdown) {
+                    const exprMatch = String(outcome.damage_breakdown).match(/(\d+d\d+(?:[+-]\d+)?)/);
+                    const typeBit = dmgType ? ` ${dmgType}` : '';
+                    const tgtBit = tgt ? ` → ${tgt}` : '';
+                    let suffix = '';
+                    if (outcome.damage_applied > 0 && outcome.target_hp_after != null) {
+                        suffix = ` · −${outcome.damage_applied} HP · ${outcome.target_hp_before ?? '?'} → ${outcome.target_hp_after} HP`;
+                        if (outcome.target_resistance_applied) suffix += ' (resist)';
+                        if (outcome.target_dead) suffix += ' · ☠ dead';
+                        else if (outcome.target_dying) suffix += ' · 🩸 dying';
+                    } else if (outcome.hit === false) {
+                        suffix = ' · would-be damage';
+                    }
+                    const dmgNote = `🎲 ${nm}${tgtBit}${typeBit ? ' — ' + typeBit.trim() : ''}${suffix}`;
+                    const fireDmg = () => showRollToast({
+                        expression: exprMatch ? exprMatch[1] : '1d6',
+                        total: outcome.damage_total,
+                        breakdown: outcome.damage_breakdown,
+                        note: dmgNote,
+                        ...casterFields,
+                    });
+                    const dmgDelay = (!isSave && outcome.attack_breakdown ? 1600 : 0) + attackOffsetMs;
+                    if (dmgDelay > 0) setTimeout(fireDmg, dmgDelay);
+                    else fireDmg();
+                }
             }
-            // v2.33.1: delay the damage toast until the attack-roll
-            // dice finish animating. The spin schedule in
-            // ``showRollToast`` adds up to ~1460 ms; 1600 ms gives a
-            // small breath between the d20 landing and the damage
-            // dice starting to roll. The delay is skipped on save-DC
-            // attacks (no attack-roll toast to wait for).
-            if (r.damage_breakdown) {
-                const exprMatch = String(r.damage_breakdown).match(/(\d+d\d+(?:[+-]\d+)?)/);
-                const typeBit = r.damage_type ? ` ${r.damage_type}` : '';
-                const tgtBit = tgt ? ` → ${tgt}` : '';
-                // Build a richer note describing what the damage roll
-                // means in context. When auto_apply is on and the hit
-                // landed we surface HP_BEFORE → HP_AFTER so the user
-                // sees the consequence in one glance.
-                let suffix = '';
-                if (r.damage_applied > 0 && r.target_hp_after != null) {
-                    suffix = ` · −${r.damage_applied} HP · ${r.target_hp_before ?? '?'} → ${r.target_hp_after} HP`;
-                    if (r.target_resistance_applied) suffix += ' (resist)';
-                    if (r.target_dead) suffix += ' · ☠ dead';
-                    else if (r.target_dying) suffix += ' · 🩸 dying';
-                } else if (r.hit === false) {
-                    suffix = ' · would-be damage';
-                }
-                const dmgNote = `🎲 ${nm}${tgtBit}${typeBit ? ' — ' + typeBit.trim() : ''}${suffix}`;
-                const fire = () => showRollToast({
-                    expression: exprMatch ? exprMatch[1] : '1d6',
-                    total: r.damage_total,
-                    breakdown: r.damage_breakdown,
-                    note: dmgNote,
-                    user_id: r.caster_user_id,
-                    user_name: r.caster_user_name,
-                    char_name: r.caster_char_name,
+
+            const outcomes = Array.isArray(r.auto_attack_targets) ? r.auto_attack_targets : [];
+            if (outcomes.length >= 2) {
+                // Multi-target: stagger each target's chain by 700 ms so
+                // the d20 toasts don't all pop simultaneously. The
+                // existing 1600 ms attack→damage gap inside each chain
+                // is preserved. For N targets the full sequence runs
+                // for ~(N-1)*700 + 1600 ms before the last damage
+                // toast fires; each toast self-dismisses after 10 s.
+                outcomes.forEach((outcome, idx) => {
+                    _renderOutcome(outcome, idx * 700);
                 });
-                if (!r.is_save && r.attack_breakdown) {
-                    setTimeout(fire, 1600);
-                } else {
-                    fire();
-                }
+            } else {
+                // 0 or 1 target: render from the top-level broadcast
+                // fields — same shape the legacy single-target code
+                // path produced.
+                _renderOutcome({
+                    target_name: r.target_name,
+                    attack_total: r.attack_total,
+                    attack_breakdown: r.attack_breakdown,
+                    target_ac: r.target_ac,
+                    hit: r.hit,
+                    is_crit: r.is_crit,
+                    damage_total: r.damage_total,
+                    damage_breakdown: r.damage_breakdown,
+                    damage_applied: r.damage_applied,
+                    target_hp_before: r.target_hp_before,
+                    target_hp_after: r.target_hp_after,
+                    target_resistance_applied: r.target_resistance_applied,
+                    target_dead: r.target_dead,
+                    target_dying: r.target_dying,
+                }, 0);
             }
             return;
         }
