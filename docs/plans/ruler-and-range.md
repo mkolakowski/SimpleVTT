@@ -28,7 +28,7 @@ Every UI delta this plan introduces, gathered in one place so a reviewer can sca
 | 1 | **📏 Ruler button** | 1 | New "canvas-tool" row above the existing drawer tab bar (`tabletop.html:~1216`) | Toggle button. Click → enter ruler mode. Shift-click → broadcast mode (GM demo). `R` hotkey duplicates the click. | Outlined ghost → filled `var(--accent)` + `aria-pressed="true"` |
 | 2 | **Ruler hint banner** | 1 | Top-center of the canvas viewport, ~24 px below the top edge | Translucent pill: "Click two points. Esc to cancel." Updates to "Click second point — Esc to cancel" after the first click. | Hidden → visible (300 ms fade) while `_rulerPicker.active` |
 | 3 | **Body cursor + click suspension** | 1 | `<body>` element via `.ruler-picker-active` CSS class | Crosshair cursor; map-drag + token-drag suppressed; AoE-picker mutex (only one mode active at a time). | None → crosshair |
-| 4 | **Ruler measurement overlay** | 1 | Canvas (new draw pass in `render()` after AoE preview) | Dashed line A → B + filled circle at A + open circle at B (or cursor before second click) + "45 ft" chip at the midpoint. | Hidden → drawn during measurement + 3 s after commit |
+| 4 | **Ruler measurement overlay** | 1 | Canvas (new draw pass in `render()` after AoE preview) | Dashed line A → B + filled circle at A + open circle at B (or cursor before second click) + "45 ft" chip at the midpoint. **Snaps to grid cell centers** — see "Snap to grid center" below. | Hidden → drawn during measurement + 3 s after commit |
 | 5 | **Out-of-range cast-card banner** | 2 | Cast-card error pane (rendered when server returns 409 `out_of_range`) | Red banner: "Out of range. Counterspell reaches 60 ft. Bandit Captain is 95 ft away." with `[Cancel]` and `[⚠ Cast anyway (GM)]` buttons. The GM-override button is hidden for players in strict mode. | Hidden → visible only on 409 response |
 | 6 | **Range ring around caster** | 2 (D) | Canvas — new draw pass during cast-card hover OR while a spell button is hovered on the spell list | Translucent ring at the spell's range (e.g., 120 ft Fire Bolt = 24 grid cells radius) anchored at the caster's token center. Targets inside ring keep normal opacity; targets outside dimmed to 50 %. | Hidden → drawn on hover; removed on hover-out |
 | 7 | **Hover rangefinder line** | 3 (C, optional) | Canvas — only when a token is selected AND no other tool mode is active | Thin solid line from selected token to cursor + distance chip. Updates on every `mousemove`. | Hidden → drawn while a token is selected and cursor moves |
@@ -186,6 +186,23 @@ if (_rulerPicker.active || _rulerPicker.points.length === 2) {
 - A dashed line from point A to (point B or cursor).
 - A circle at each established point.
 - A label at the midpoint: `"45 ft"` (rounded to nearest 0.1 ft) in a chip with `var(--bg-2)` background.
+
+#### Snap to grid center
+
+Both committed points AND the live cursor preview snap to the **center of the grid cell** under the pointer. The user clicks anywhere inside a cell and the ruler treats it as if they clicked the cell's center. Rationale:
+
+- **5e RAW measures by squares**, not by pixels. A ruler that returns "22.7 ft" because the user clicked slightly off-center is more confusing than helpful at a TTRPG table.
+- **Clean integer-ft results on square grids.** With both endpoints snapped, the Chebyshev distance is always an integer number of cells × 5 ft. Players see "20 ft" instead of "22.7 ft."
+- **Consistent with token placement.** Tokens already snap-to-grid via `snapToGrid` (in `tabletop.js:79`); the ruler reuses the same primitive so a measurement between two tokens equals the distance the tokens would actually be on the grid.
+- **Hex is unchanged in spirit.** Hex centers ARE the only sensible positions in a hex layout; `snapToGrid` already returns the hex center for any pixel inside a hex.
+
+Implementation: add a small `_snapPointToGridCenter(x, y) -> {x, y}` helper near `snapToGrid`. For square grids: `(Math.floor(x / gridSize) + 0.5) * gridSize`. For hex: delegate to `snapToGrid` (which already returns the hex center). Square `snapToGrid` returns the CORNER (top-left of the cell at the rounded grid intersection) — so the ruler can't reuse it directly; the `+ 0.5` offset is the bit that differs. Call the helper at THREE sites:
+
+1. `mousedown` ruler intercept — snap the canvas point before `addPoint`.
+2. `mousemove` ruler cursor update — snap the canvas point before storing as `cursor`.
+3. The `points[]` array always holds snapped values (so the render-pass draws snapped lines without re-snapping).
+
+**No "free-mode" override in Phase 1.** A future Shift-modifier could let the user pin a point off-center (for measuring along a non-grid-aligned wall), but every VTT we surveyed (Roll20, Foundry VTT) defaults to snap and the override is rarely used. Keep it simple; file the override if a user asks.
 
 #### Toolbar button
 

@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.72] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Ruler snaps to the center of the grid cell under the pointer.** User-requested refinement of Phase 1 (v2.49.71). Both committed points AND the live cursor preview now snap to grid-cell centers instead of pixel-exact click positions. Result on square grids: distances are always clean integer multiples of 5 ft (e.g. "20 ft" instead of "22.7 ft" because the click landed slightly off-center). New `_snapPointToGridCenter(x, y)` helper next to the existing `snapToGrid` — they're distinct: `snapToGrid` returns the top-left CORNER of a square cell (for token placement), while `_snapPointToGridCenter` returns the cell CENTER (for measurement endpoints). For hex grids the two are equivalent because hex layouts have no "corner" sense — every snapped position IS a hex center. The plan doc also updated with a "Snap to grid center" subsection naming the three call sites + the rationale + the deliberate decision to skip a Shift-modifier "free-mode" override in Phase 1. PATCH.
+**Description:** Three edits. **(1)** `app/static/tabletop.js::_snapPointToGridCenter` (NEW, ~20 lines) — placed right after the existing `snapToGrid`. Square: `(Math.floor(x / gridSize) + 0.5) * gridSize` (the `+ 0.5` is what differs from the corner-snap version). Hex: delegates to `snapToGrid` since hex layouts only have center positions. Returns `{x, y}` instead of an array (slightly easier to thread through the ruler's `points[]` shape). **(2)** `app/static/tabletop.js` — call site 1: the `mousedown` ruler intercept now passes the snapped point to `_rulerPicker.addPoint`. **(3)** `app/static/tabletop.js` — call site 2: the `mousemove` cursor update now stores the snapped point as `_rulerPicker.cursor`. Both sites added v2.49.72 comments naming the snap. **(4)** `docs/plans/ruler-and-range.md` — new "Snap to grid center" subsection in Phase 1 documenting the helper, the three call sites, and the four-point rationale. Updated the "Interface changes — at a glance" row #4 to mention snapping.
+**Description (cont):** Why snap is the default rather than an opt-in. Every VTT we surveyed (Roll20, Foundry VTT) snaps to grid centers by default; freeform measurement is an opt-in override on those platforms too. 5e RAW measures by squares, so a snap-by-default ruler matches how players already think about ranges. Off-center freeform readings introduce decimals (22.7 ft, 14.4 ft) that don't correspond to any RAW concept and obscure the "is this in range" question the ruler exists to answer. The Shift-modifier override is filed for the rare case where a player wants to measure along a non-grid-aligned obstacle.
+**Description (cont 2):** Why the snap fires on cursor preview too, not just on commit. The live distance chip during the second-click hover should match the distance the click would actually commit. If only the points snapped on commit, the cursor preview would show "22.7 ft" → user clicks → display jumps to "20 ft" — confusing. Snapping the cursor preview to the same cell-center grid the click will land on keeps the preview honest.
+**Description (cont 3):** Why a separate `_snapPointToGridCenter` rather than extending `snapToGrid` with a mode argument. The existing `snapToGrid` is called in 9+ places for token placement, all of which expect the top-left corner. Adding a `centerMode` boolean would either (a) require updating every call site to pass `false`, or (b) introduce subtle bugs when a caller forgets the argument. Two named functions with one job each are clearer. The hex branch shares the underlying math by delegating — minimal duplication.
+**Description (cont 4):** Why no test. Same reasoning as v2.49.71: client-only feature, no HTTP / WS surface, the harness can't drive canvas mousedowns. Manual verification: clicked the Ruler button, hovered the canvas — cursor preview locked onto cell centers (verified by mousing slowly along a row, the chip stayed at "5 ft" / "10 ft" / "15 ft" with no intermediate decimals); committed the second click — the line and chip stayed snapped. Smoke harness still 4 passing.
+**Description (cont 5):** Verification. Pre-fix: ruler clicked at pixel-exact positions, distance read "22.7 ft" for a slightly-off-center 4-cell click. Post-fix: same click reads "20 ft" because both points snapped to cell centers. Container rebuilt to v2.49.72; the served JS includes `_snapPointToGridCenter` (verified via curl). No production-code regression on the harness.
+
+### Added
+- `app/static/tabletop.js::_snapPointToGridCenter` — new helper returning the center of the grid cell containing the canvas point.
+- Wire-up at `mousedown` + `mousemove` ruler hooks.
+- `docs/plans/ruler-and-range.md` — new "Snap to grid center" subsection under Phase 1 + updated row #4 of the "Interface changes — at a glance" table.
+
+### Notes
+- **Backward compat.** Pure additive helper + two-line snap calls. No existing helper or call site changed.
+- **Square vs. hex.** Square gets a fresh center-snap formula; hex reuses `snapToGrid` because hex layouts only have center positions.
+- **No "free-mode" override.** Filed for follow-up if requested. Shift-modifier would be the natural binding.
+
+### Filed
+- **Playwright test for snap behavior** — extends the v2.49.71 filed Playwright spec to assert that two clicks placed off-center within the same cells still produce a clean integer-ft distance reading.
+- **Shift-modifier "free-mode" override** — pin a ruler endpoint off-center for measuring along non-grid-aligned obstacles. Skipped in Phase 1; file if a user asks.
+
+---
+
 ## [2.49.71] - 2026-05-22
 
 **Schema version:** 56

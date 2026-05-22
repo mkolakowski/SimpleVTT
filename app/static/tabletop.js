@@ -93,6 +93,32 @@
         return [x, y];
     }
 
+    // v2.49.72: snap a canvas point to the CENTER of the grid cell it
+    // falls inside (vs. snapToGrid above, which returns the top-left
+    // corner for square grids). Used by the ruler picker so both
+    // committed points + the live cursor preview lock onto cell centers.
+    // 5e RAW measures by squares so a "22.7 ft" reading from an
+    // off-center click is misleading at a TTRPG table; snapping to
+    // center yields clean integer-ft results (e.g. "20 ft") on square
+    // grids. See docs/plans/ruler-and-range.md Phase 1 "Snap to grid
+    // center" for the rationale.
+    function _snapPointToGridCenter(x, y) {
+        if (gridSize <= 0) return { x, y };
+        if (gridType === 'square') {
+            const cx = (Math.floor(x / gridSize) + 0.5) * gridSize;
+            const cy = (Math.floor(y / gridSize) + 0.5) * gridSize;
+            return { x: cx, y: cy };
+        }
+        if (gridType === 'hex') {
+            // snapToGrid already returns the hex center for any pixel
+            // inside a hex (hex layout has no "corner" sense the way
+            // square cells do).
+            const [hx, hy] = snapToGrid(x, y);
+            return { x: hx, y: hy };
+        }
+        return { x, y };
+    }
+
     // ---------- Rendering ----------
     function drawSquareGrid() {
         ctx.strokeStyle = 'rgba(255,255,255,0.15)';
@@ -1722,9 +1748,12 @@
         // v2.49.71: ruler tool intercepts left-click mousedown so the
         // click-to-set-point gesture doesn't start a token drag or pan.
         // Mutually exclusive with the AoE picker per _rulerPicker.start().
+        // v2.49.72: snap the click to the center of the grid cell under
+        // the cursor so distances are clean multiples of 5 ft.
         if (_rulerPicker.active && ev.button === 0) {
             const [wx, wy] = clientToCanvas(ev);
-            _rulerPicker.addPoint(wx, wy);
+            const snapped = _snapPointToGridCenter(wx, wy);
+            _rulerPicker.addPoint(snapped.x, snapped.y);
             ev.preventDefault();
             return;
         }
@@ -1860,9 +1889,12 @@
         // committed point, follow the cursor for the live-distance
         // preview to the would-be second point. Same render-loop
         // re-entry pattern as the AoE picker below.
+        // v2.49.72: snap the cursor preview to the grid-cell center so
+        // the live distance label matches what the committing click
+        // would actually produce.
         if (_rulerPicker.active && _rulerPicker.points.length === 1) {
             const [wx, wy] = clientToCanvas(ev);
-            _rulerPicker.cursor = { x: wx, y: wy };
+            _rulerPicker.cursor = _snapPointToGridCenter(wx, wy);
             render();
             return;
         }
