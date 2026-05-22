@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.107] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Fix mobile-scroll opening init-tracker sheets — gate the `pointerup` listener on `pointerType !== 'touch'`.** User-reported. On a phone, scrolling the initiative list as the GM caused the underneath mini-header to expand its sheet body as soon as the user lifted their finger. Root cause: v2.4.29 added a `pointerup` listener (in addition to `click`) on every `.mini-header` to catch the iPad Magic Keyboard trackpad's pointerup→synthesized-click latency. `pointerup` fires unconditionally on touchend regardless of finger movement, so a touch SCROLL ended with a pointerup that the toggle handler interpreted as a tap. The synthesized `click` event correctly suppresses on scroll, so listening on `click` alone is correct for touch — `pointerup` is only needed for the trackpad (pointerType `'mouse'`). The fix is one line: skip the `pointerup` branch when `ev.pointerType === 'touch'`. The trackpad fix is preserved; the scroll bug is gone. Mirrored to the Characters drawer's `_hdrActivate` since it has the same listener pattern + the same scroll-on-touch hazard.
+**Description:** Two edits in `app/templates/tabletop.html`. **(1)** Init-tracker mini-header `_activate` at `:5478` — added `if (ev.type === 'pointerup' && ev.pointerType === 'touch') return;` at the top of the function before any other check. (2) Characters drawer's `_hdrActivate` at `:3277` — same guard added; comment cross-references the init-tracker version so a future maintainer can see both fixes were paired.
+**Description (cont):** Why this didn't surface as a v2.4.29 bug. The v2.4.29 commit was specifically tested on iPad Magic Keyboard trackpad clicks (pointerType `'mouse'`). Touch-scroll on the iPad's touchscreen + on iPhones uses pointerType `'touch'`. The trackpad's "pointerup then synthesized click 500-700 ms later" needed both listeners; the touchscreen's "scroll fires pointerup at touchend" was a different code path that wasn't covered by the original repro. v2.49.107 corrects the over-fix.
+**Description (cont 2):** Why not just track movement delta between pointerdown and pointerup. That would also work — record `clientX/Y` on pointerdown, compare on pointerup, suppress if Δ > ~10 px. But the simpler `pointerType` gate is sufficient for the actual bug: every touch user is hurt by pointerup, no touch user benefits from it (the synthesized click handles taps correctly), so just bypassing the touch case is the cleanest fix. Movement-tracking would still be needed if a future commit wanted to also support stylus input (pointerType `'pen'`), which doesn't fire synthesized click in some browsers — defer until that comes up.
+**Description (cont 3):** Why mirror the fix to the Characters drawer. The Characters drawer has its own `.mini-header[data-char-id]` handler at `:3268` with the same dual-listen pattern. A player on mobile scrolling the Characters tab would see the same scroll-open behavior (less acutely than the GM scrolling a 6-combatant init tracker, but the bug shape is identical). Easier to fix both in the same commit than wait for the second report.
+**Description (cont 4):** Test coverage. Pure behavioral JS change; the existing 5 Playwright tests in `tests/harness_ui/` run at desktop viewport widths and don't simulate touch events, so they don't observe the bug or the fix. The change is small + localized + the comments cross-reference the pair, so manual verification is the validation path: open the tabletop on a phone (real device or Chrome DevTools mobile emulation), spawn a long combat (Tavern Brawl + manual adds), scroll the init list — entries should remain collapsed; tapping an entry's mini-header still opens its sheet.
+**Description (cont 5):** Verification. Curl `/version` confirms v2.49.107 live. Manual verification on a phone-sized viewport is the validation path (described above).
+
+### Fixed
+- `app/templates/tabletop.html::renderBattle::_activate` — gates the `pointerup` branch on `ev.pointerType !== 'touch'` so mobile scrolls don't trigger row expand/collapse.
+- `app/templates/tabletop.html::Characters drawer::_hdrActivate` — same gate added for consistency. Comment cross-references the init-tracker version.
+
+### Notes
+- **Backward compat.** Desktop mouse clicks unaffected (pointerType `'mouse'`). iPad Magic Keyboard trackpad fix from v2.4.29 still active (also `'mouse'`). Only touch input pointerups now skip the toggle — taps still work via the synthesized click event.
+- **No JS test.** Touch event simulation isn't part of the existing Playwright suite. Manual verification on mobile is the gate.
+
+### Filed
+- **Touch event simulation in Playwright.** If repeated mobile-touch regressions surface, add a test that calls `page.touchscreen.tap()` + `page.evaluate()` to scroll the drawer body. Would catch this class of issue in CI. Defer until the bug shape repeats.
+
+---
+
 ## [2.49.106] - 2026-05-22
 
 **Schema version:** 56

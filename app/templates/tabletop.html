@@ -3275,6 +3275,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // fires first wins, and any subsequent same-tap event is caught.
             // Window bumped 500→700 ms for trackpad-pipeline timing cushion.
             const _hdrActivate = (ev) => {
+                // v2.49.107 — see the matching comment on the init-
+                // tracker ``_activate`` (renderBattle's mini-header
+                // handler). Same pattern, same fix.
+                if (ev.type === 'pointerup' && ev.pointerType === 'touch') return;
                 if (ev.target.closest('.char-fav')) return;
                 const _now = Date.now();
                 if (hdr._dbnc && _now - hdr._dbnc < 700) return;
@@ -5476,6 +5480,18 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // don't double-fire. See the character-list ``_hdrActivate``
             // comment for the full reasoning.
             const _activate = ev => {
+                // v2.49.107 — skip the pointerup branch for touch
+                // inputs. ``pointerup`` fires unconditionally on
+                // touchend regardless of finger movement, so on
+                // mobile a SCROLL of the init list was triggering
+                // the row expand/collapse as soon as the user lifted
+                // their finger. The v2.4.29 ``pointerup`` listener was
+                // added to catch the iPad Magic Keyboard TRACKPAD's
+                // pointerup→synthesized-click latency (trackpad has
+                // ``pointerType === 'mouse'``); leaving touch out
+                // restores correct scroll behavior while keeping the
+                // trackpad fix.
+                if (ev.type === 'pointerup' && ev.pointerType === 'touch') return;
                 // v2.3.33: ``a`` added so the new Open-Sheet button (an
                 // anchor link the 2.3.15 drawer interceptor handles)
                 // doesn't ALSO trigger the row expand/collapse.
