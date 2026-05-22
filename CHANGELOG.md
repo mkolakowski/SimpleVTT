@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.80] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Gitignore Claude scheduler lock files + untrack the stray one v2.49.79 committed.** The v2.49.79 commit accidentally swept up `.claude/scheduled_tasks.lock` via `git add -A` because the harness scheduler wrote it during the commit-retry pause. The file is per-machine session state (sessionId + pid + procStart timestamp) and should never have been tracked. Adds an explicit `.claude/scheduled_tasks.lock` line + a broader `.claude/*.lock` glob to `.gitignore` next to the existing `.claude/settings.local.json` + `.claude/worktrees/` entries; runs `git rm --cached` on the stray file. Doc/chore PATCH.
+**Description:** Two edits. **(1)** `.gitignore` — appended `.claude/scheduled_tasks.lock` (explicit) + `.claude/*.lock` (catch-all for future Claude lock files). The explicit entry documents intent; the glob is defensive. (2) `git rm --cached .claude/scheduled_tasks.lock` — removes the stray file from version control while keeping it on disk so the running harness session isn't disrupted.
+**Description (cont):** Why both an explicit line AND the glob. Explicit makes the intent grep-able (a future contributor reading the gitignore sees what file is being excluded + why). The glob catches future Claude lock files the harness might invent without needing another gitignore edit. Minimal cost for forward-compat.
+**Description (cont 2):** Verification. `git ls-files .claude/` after the edit shows zero tracked files (the `.gitignore` keeps the local-only `settings.local.json` etc. out too). Future `git add -A` runs won't re-add the lock file.
+
+### Fixed
+- `.gitignore` — Claude scheduler lock files are now excluded; stray `.claude/scheduled_tasks.lock` from v2.49.79 untracked via `git rm --cached`.
+
+### Notes
+- **Backward compat.** Local-state cleanup. No code change.
+- **The stray file stays on disk.** Only the tracked copy is removed; the running harness session keeps writing to it.
+
+---
+
 ## [2.49.79] - 2026-05-22
 
 **Schema version:** 56

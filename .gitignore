@@ -14,3 +14,5 @@ app/static/uploads/
 # Claude Code local state (per-machine, should not be shared)
 .claude/settings.local.json
 .claude/worktrees/
+.claude/scheduled_tasks.lock
+.claude/*.lock
