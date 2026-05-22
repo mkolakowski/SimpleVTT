@@ -7,7 +7,11 @@
 <style>
     body { overflow: hidden; }
     .container { padding: 8px 12px; overflow: hidden; display: flex; flex-direction: column; }
-    .tabletop-layout { display: flex; flex-direction: row; flex: 1; min-height: 0; }
+    /* v2.49.94: ``position: relative`` so the drawer-sidebar's new
+       absolute positioning anchors here. Sidebar floats over the
+       right edge of the map so the map shows through the gaps
+       between cards inside the drawer. */
+    .tabletop-layout { display: flex; flex-direction: row; flex: 1; min-height: 0; position: relative; }
     .map-pane { flex: 1; min-width: 0; position: relative; overflow: hidden; background: var(--bg); border-radius: 6px; touch-action: none; }
     /* v2.9.1: live-presence bubbles. Anchored to the map pane's lower-
        left so they stay out of the way of the GM tools / drawer on the
@@ -84,10 +88,16 @@
     .character-list li { padding: 5px 2px; cursor: pointer; border-bottom: 1px dashed var(--border); font-size: 13px; }
     .character-list li:hover { color: var(--accent); }
     /* ── Drawer system ── */
+    /* v2.49.94: the sidebar floats over the right edge of the map
+       instead of taking flex space, and its background is transparent
+       so the map shows through the inter-card gaps in every panel
+       (roll log, battle, GM tools). Cards inside the drawer have
+       their own backgrounds — see ``.gm-panel`` + ``.roll-card``. */
     .drawer-sidebar {
         display: flex; flex-direction: column; flex-shrink: 0;
-        width: 480px; height: 100%;
-        background: var(--bg-2); border-left: 1px solid var(--border);
+        width: 480px;
+        position: absolute; top: 0; right: 0; bottom: 0;
+        background: transparent;
     }
     /* v2.4.22: drawer tabs now live inline with the campaign title in the
        ``.tt-topbar`` (was a dedicated bar above the sidebar panels). No
@@ -167,9 +177,12 @@
     .drawer-tab-btn:hover { background: var(--surface-hover); color: var(--fg); }
     .drawer-tab-btn.active { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-border); }
     .drawer-panels-wrapper { position: relative; flex: 1; overflow: hidden; display: block; min-width: 480px; }
+    /* v2.49.94: transparent so the map shows through gaps between
+       the cards inside each panel. Individual cards keep their own
+       backgrounds (.gm-panel, .roll-card, etc.). */
     .drawer-panel {
         position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-        background: var(--bg-2); display: flex; flex-direction: column; visibility: hidden;
+        background: transparent; display: flex; flex-direction: column; visibility: hidden;
     }
     .drawer-panel.open { visibility: visible; }
     .drawer-header {
@@ -1072,7 +1085,11 @@
     /* GM init entry header is fully clickable; .mini-header already sets cursor:pointer */
 
     /* ── GM Tools / sidebar panel cards ── */
-    .gm-panel { margin: 0 0 8px; border: 1px solid rgba(167,139,250,.35); border-radius: 8px; overflow: hidden; box-shadow: 0 3px 14px rgba(0,0,0,.22); }
+    /* v2.49.94: explicit background so cards stay opaque against the
+       drawer's new transparent backdrop. Was relying on the drawer's
+       own ``var(--bg-2)`` showing through where the card body had no
+       fill of its own. */
+    .gm-panel { margin: 0 0 8px; border: 1px solid rgba(167,139,250,.35); border-radius: 8px; overflow: hidden; box-shadow: 0 3px 14px rgba(0,0,0,.22); background: var(--bg-2); }
     /* v2.4.27: ``touch-action: manipulation`` + ``-webkit-user-select: none``
        on the summary so iPad taps reliably toggle the native <details>
        open state. Without these iOS Safari was double-firing the click
@@ -1370,14 +1387,6 @@
 
 <!-- ── Roll log drawer ── -->
 <div id="roll-log-drawer" class="drawer-panel">
-    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-bottom:1px solid var(--border);background:var(--bg-2);">
-        <strong style="flex:1;font-size:12px;color:var(--fg-mute);letter-spacing:.04em;">ROLL LOG</strong>
-        <button type="button" id="roll-log-clear-btn"
-                title="Clear all entries from your local roll log (only affects your view; server history is unchanged)"
-                style="font-size:11px;color:var(--fg-mute);background:none;border:1px solid var(--border);border-radius:3px;padding:3px 8px;cursor:pointer;min-height:28px;">
-            🗑 Clear
-        </button>
-    </div>
     <div class="drawer-body">
         <ul class="roll-list" id="roll-list">
             {% for r in rolls %}
@@ -1441,8 +1450,18 @@
             <details id="roll-request-panel" class="gm-panel" style="margin:0;border:none;border-top:1px solid var(--border);border-radius:0;box-shadow:none;" open>
                 <summary>
                     <span class="rr-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
-                    <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">📋 Roll Request</h4>
+                    <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">📋 GM Roller</h4>
                     <span style="margin-left:auto;font-size:9px;color:var(--fg-mute);letter-spacing:0.3px;">GM only</span>
+                    {# v2.49.94: roll-log Clear moved into the GM Roller header
+                       so the roll log itself reads as a clean stream of cards.
+                       ``onclick.stopPropagation`` keeps the click from toggling
+                       the parent ``<details>``. #}
+                    <button type="button" id="roll-log-clear-btn"
+                            onclick="event.stopPropagation();"
+                            title="Clear all entries from your local roll log (only affects your view; server history is unchanged)"
+                            style="font-size:10px;color:var(--fg-mute);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 6px;cursor:pointer;min-height:28px;margin-left:6px;">
+                        🗑 Clear
+                    </button>
                 </summary>
                 <div class="gm-panel-body">
                 <div style="display:flex;flex-wrap:wrap;align-items:center;gap:3px;margin-bottom:6px;">
