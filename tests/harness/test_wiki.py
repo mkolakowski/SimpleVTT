@@ -40,6 +40,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-spell-validation-suite" in resp.text
     # v2.49.118: Sorcery Points + Metamagic plan listed too.
     assert "/wiki/doc/plan-sorcery-points-and-metamagic" in resp.text
+    # v2.49.119: Warlock Pact Boon plan listed too.
+    assert "/wiki/doc/plan-warlock-pact-boon" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -154,6 +156,18 @@ async def test_wiki_doc_serves_sorcery_metamagic_plan():
     assert "text/html" in resp.headers.get("content-type", "")
     assert "sorcery points" in resp.text.lower()
     assert "metamagic" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_warlock_pact_boon_plan():
+    """v2.49.119: GET /wiki/doc/plan-warlock-pact-boon — 200 +
+    body contains the plan's H1 + the nav menu."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-warlock-pact-boon")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "pact boon" in resp.text.lower()
+    assert "warlock" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

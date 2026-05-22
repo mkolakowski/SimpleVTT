@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.119] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Plan: Warlock Pact Boon — Lv 3 subclass-shaping pick.** New design plan at `docs/plans/warlock-pact-boon.md` covering all three boons: Pact of the Tome (3 extra cantrips), Pact of the Chain (familiar combatant + action proxy), Pact of the Blade (summoned weapon with CHA-mod attack + magical-damage tag). Five-phase rollout: Phase 0 picker + boon-storage infrastructure; Phase 1 Tome (simplest — sheet-side cantrip list mutation); Phase 2 Chain (familiar combatant + action proxy); Phase 3 Blade (most complex — summoned weapon + attack-flow integration); Phase 4 class table updates; Phase 5 Pact-eligible Eldritch Invocations. Demo subject: Magnus Hexbinder (Warlock L3, The Fiend) — already in the demo seed since v2.18.4 at exactly the level Pact Boon unlocks. Plan-only commit; no code beyond the wiki surfacing per CLAUDE.md.
+**Description:** Six file edits. **(1)** `docs/plans/warlock-pact-boon.md` (NEW, ~245 lines) — full plan with design principles, per-boon implementation phases, endpoint contracts (`/use_pact_boon_pick`, `/use_pact_tome_pick_cantrips`, `/use_pact_chain_summon`, `/use_pact_chain_command_attack`, `/use_pact_blade_summon`, `/use_pact_blade_dismiss`), familiar-combatant template additions (imp/pseudodragon/quasit/sprite), CHA-mod attack-flow integration notes for Blade, open questions (respec policy, familiar HP regen, multi-class interactions), risks. (2) `app/routes/wiki_routes.py::_DOC_ALLOWLIST` — new `plan-warlock-pact-boon` slug. (3) `app/templates/wiki.html` — new Design plans table row. (4) `docs/wiki/README.md` — same row in the on-disk index. (5) `tests/harness/test_wiki.py::test_wiki_home_renders` — new landing-page assertion. (6) `tests/harness/test_wiki.py::test_wiki_doc_serves_warlock_pact_boon_plan` (NEW per-slug smoke test).
+**Description (cont):** Why a plan-only commit. Same reasoning as the v2.49.118 Sorcery Points + Metamagic plan: Pact Boon is large enough that one implementation commit would be unreviewable. The plan defines: picker UI shape (3 radio + Confirm), boon-storage schema (`sheet["warlock_pact_boon"] = "chain"|"blade"|"tome"`), Tome's cantrip-grant data path, Chain's familiar template + action proxy, Blade's `pact_blade: true` attack-row flag + CHA-mod resolution. Reviewers can sanity-check before code lands.
+**Description (cont 2):** Wiki surfacing per CLAUDE.md. Same five-edit pattern as Sorcery Points + Metamagic in v2.49.118: allowlist entry, landing-page row, on-disk index row, per-slug smoke test, landing-page assertion. 14/14 wiki tests pass (13 previous + 1 new).
+**Description (cont 3):** Why pair this with the Sorcery Points + Metamagic plan. Both are large class-feature plans + both apply to single demo PCs that are already seeded but un-wired (Zara for Sorcerer, Magnus for Warlock). Filing both now lets a future session pick either thread without re-doing the planning step.
+**Description (cont 4):** Verification. (a) `pytest tests/harness/test_wiki.py -q` — 14/14 pass. (b) Curl `/version` confirms v2.49.119 live. (c) Manual: open `/wiki` → see Warlock Pact Boon row in Design plans → click → land on the plan with the wiki nav menu injected.
+
+### Added
+- `docs/plans/warlock-pact-boon.md` (NEW) — full plan, 5 phases.
+- `app/routes/wiki_routes.py::_DOC_ALLOWLIST` — new `plan-warlock-pact-boon` slug.
+- `app/templates/wiki.html` — new Design plans table row.
+- `docs/wiki/README.md` — same row in the on-disk index.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_warlock_pact_boon_plan` (NEW per-slug test).
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — new landing-page assertion.
+
+### Notes
+- **Plan-only.** No endpoint, broadcast, or schema change. Implementation follows in Phase 0+ commits.
+- **Demo subject ready.** Magnus Hexbinder (Warlock L3, The Fiend) is in the demo seed since v2.18.4 at exactly the level Pact Boon unlocks.
+
+### Filed
+- **Phase 0 implementation** — `/use_pact_boon_pick` endpoint + sheet picker modal. First-up.
+- **Phase 1** — Pact of the Tome (smallest boon).
+- **Phase 2** — Pact of the Chain (familiar combatant + action proxy).
+- **Phase 3** — Pact of the Blade (summoned weapon + attack-flow integration).
+- **Phases 4–5** — class table updates + Pact-eligible Eldritch Invocations.
+
+---
+
 ## [2.49.118] - 2026-05-22
 
 **Schema version:** 56
