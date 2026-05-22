@@ -30,7 +30,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Demo mode](../plans/demo-mode.md) | Markdown (design) | Contributors | ✅ shipped (v2.3.0) |
 | [Encounter-sim test suite](../plans/encounter-sim-test-suite.md) | Markdown (design) | Contributors | ⚪ plan finalized · Phase 1 PoC pending |
 | [Player simulacrum](../plans/player-simulacrum.md) | Markdown (design) | Contributors | ⚪ design only · all phases unstarted |
-| [Ruler & range enforcement](../plans/ruler-and-range.md) | Markdown (design) | Contributors | 🟠 Phase 1 shipped (v2.49.71) · Phase 2 unstarted |
+| [Ruler & range enforcement](../plans/ruler-and-range.md) | Markdown (design) | Contributors | 🟠 Phase 1 + 2A/B/C shipped · Phase 2D unstarted |
 | [Autonomous click-through test harness](../plans/test-harness.md) | Markdown (design) | Contributors | ✅ Phases 1–5 shipped (212 tests) |
 | [Wiki expansion](../plans/wiki-expansion.md) | Markdown (TODO companion) | Contributors | 🟠 living roadmap |
 | [Combat encounters](../encounters-plan.md) | Markdown (proposed) | Contributors | ⚪ proposed · not started |

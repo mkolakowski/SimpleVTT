@@ -1191,6 +1191,154 @@ def _distance_ft_between_points(
     return round(cells * 5, 1)
 
 
+# v2.49.75 — Phase 2C range-enforcement helper. Given a caster + a
+# spell / weapon range string + a target descriptor, returns either
+# None (in range / unchecked / overridden) or an error dict suitable
+# for a 409 ``out_of_range`` response. The contract is shared by all
+# cast / attack endpoints in Phase 2C (cast_spell) + Phase 2D
+# (cast_hex, cast_sleep, attack, use_stunning_strike,
+# use_open_hand_technique).
+#
+# Override semantics — three tiers, mirrors the existing Phase 4
+# over-budget gate:
+#   - GM: auto-bypass. The GM is the rules authority and may
+#     narrate a cast at any distance.
+#   - Player + override_range=True + strict mode off: bypass.
+#   - Player + override_range=True + strict mode on: still enforced
+#     (strict mode disables player-side overrides).
+#
+# Skip semantics — return None (no 409) when:
+#   - The spell range parses to None (Special / Unlimited / Sight /
+#     unknown — content we don't understand, trust the GM).
+#   - The spell range is 0 (Self / Self+radius — no target distance).
+#   - The campaign has no active map (off-map narrative cast).
+#   - The caster has no token on the active map.
+#   - The target has no token on the active map.
+#
+# Returns the 409 error dict shape documented in
+# docs/plans/ruler-and-range.md Phase 2.
+def _check_cast_range(
+    db: Session,
+    campaign: Campaign,
+    caster_char: Character,
+    spell_range_str: str,
+    spell_name: str,
+    target_combatant_id: str | None,
+    target_character_id: int | None,
+    target_name_in: str | None,
+    *,
+    override_range: bool,
+    user_is_gm: bool,
+    strict: bool,
+) -> dict | None:
+    # Tier 1: GM bypass.
+    if user_is_gm:
+        return None
+    # Tier 2: player + override + not strict.
+    if override_range and not strict:
+        return None
+    # Parse the range string. None / 0 → skip the check.
+    from ..content.range_parser import max_range_ft, parse_range_ft
+    max_ft = max_range_ft(parse_range_ft(spell_range_str))
+    if max_ft is None or max_ft <= 0:
+        return None
+    # Resolve the active map.
+    map_id = campaign.active_map_id
+    if not map_id:
+        return None
+    map_row = db.query(Map).filter(Map.id == map_id).first()
+    if not map_row:
+        return None
+    # Caster token on the active map.
+    caster_token = (
+        db.query(Token)
+        .filter(Token.character_id == caster_char.id, Token.map_id == map_id)
+        .first()
+    )
+    if not caster_token:
+        return None
+    # Target token + display name.
+    target_pos, target_name = _resolve_target_token_pos(
+        db, campaign.id, map_id,
+        target_combatant_id, target_character_id, target_name_in,
+    )
+    if target_pos is None:
+        return None
+    # Distance.
+    distance_ft = _distance_ft_between_points(
+        int(map_row.grid_size_px or 0),
+        (map_row.grid_type.value if map_row.grid_type else "square").lower(),
+        float(caster_token.x or 0), float(caster_token.y or 0),
+        target_pos[0], target_pos[1],
+    )
+    if distance_ft <= max_ft:
+        return None
+    return {
+        "error": "out_of_range",
+        "source_name": caster_char.name,
+        "target_name": target_name or "",
+        "distance_ft": distance_ft,
+        "range_ft": int(max_ft),
+        "spell_name": spell_name or "",
+    }
+
+
+def _resolve_target_token_pos(
+    db: Session,
+    campaign_id: int,
+    map_id: int,
+    target_combatant_id: str | None,
+    target_character_id: int | None,
+    target_name_in: str | None = None,
+) -> tuple[tuple[float, float] | None, str]:
+    """Return ((x, y), display_name) for the target — or (None, name)
+    if the target has no token on the given map (off-map / synthesized
+    target).
+
+    Resolution order:
+      1. ``target_combatant_id`` → hub state → ``source_token_id`` for
+         NPCs, ``char_id`` → Token row for PCs.
+      2. ``target_character_id`` → Token row directly.
+      3. Fallback to ``target_name_in`` for the display name; pos = None.
+    """
+    name_out = target_name_in or ""
+    # Step 1: combatant id lookup.
+    if target_combatant_id:
+        combatant = _lookup_combatant(campaign_id, target_combatant_id)
+        if combatant:
+            name_out = combatant.get("name") or name_out
+            src_token_id = combatant.get("source_token_id")
+            if src_token_id:
+                t = db.query(Token).filter(
+                    Token.id == int(src_token_id), Token.map_id == map_id,
+                ).first()
+                if t:
+                    return (float(t.x or 0), float(t.y or 0)), name_out
+            ccid = combatant.get("char_id")
+            if ccid:
+                t = (
+                    db.query(Token)
+                    .filter(Token.character_id == int(ccid), Token.map_id == map_id)
+                    .first()
+                )
+                if t:
+                    return (float(t.x or 0), float(t.y or 0)), name_out
+    # Step 2: character id fallback.
+    if target_character_id:
+        t = (
+            db.query(Token)
+            .filter(Token.character_id == int(target_character_id), Token.map_id == map_id)
+            .first()
+        )
+        if t:
+            if not name_out:
+                ch = db.query(Character).filter(Character.id == int(target_character_id)).first()
+                name_out = ch.name if ch else name_out
+            return (float(t.x or 0), float(t.y or 0)), name_out
+    # Step 3: no token found.
+    return None, name_out
+
+
 def _read_target_ac(
     db: Session, campaign_id: int, combatant: dict | None,
 ) -> int:
@@ -7045,6 +7193,29 @@ async def cast_spell(
     spell_class_slug = (spell.get("class") or "").strip().lower()
     primary_slug = _class_slug(sheet.get("class") or "")
     cslug = body_slug or spell_class_slug or primary_slug
+
+    # v2.49.75 — Phase 2C range-enforcement gate. Fires BEFORE slot
+    # consumption so a blocked cast doesn't burn a slot (same contract
+    # as the no_slot gate below). Skipped for AoE multi-target casts —
+    # the picker UI (and the /place_aoe path) is the range gate for
+    # those (see docs/plans/ruler-and-range.md Phase 2 "When NOT to
+    # enforce"). user_is_gm + strict re-computed here AND below at
+    # the over-budget gate; cheap idempotent lookups.
+    if not target_combatant_ids_in:
+        _user_is_gm_for_range = _user_is_gm(user, campaign, db)
+        _strict_for_range = bool(campaign.strict_action_economy)
+        _override_range = bool(body.get("override_range"))
+        _range_err = _check_cast_range(
+            db, campaign, char,
+            spell.get("range") or "",
+            spell.get("name") or "",
+            target_combatant_id_in, target_character_id_in, target_name_in,
+            override_range=_override_range,
+            user_is_gm=_user_is_gm_for_range,
+            strict=_strict_for_range,
+        )
+        if _range_err:
+            return JSONResponse(status_code=409, content=_range_err)
 
     # Decrement slot when this is a leveled spell (cantrips are free)
     updated_slot = None

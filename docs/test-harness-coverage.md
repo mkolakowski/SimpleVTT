@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 313 (as of v2.49.74, 2026-05-22).
+**Total tests:** 319 (as of v2.49.75, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -251,6 +251,18 @@ v2.49.61 — closes the "wake-on-damage" filed item from v2.49.58. RAW Sleep wak
 | `test_wake_on_damage_npc` | Bandit pre-seeded with Sleep-Unconscious buff; Krieger attacks (auto_apply_damage on) → latest `battle_update` shows bandit's Unconscious dropped + 🌅 wake log fires. |
 | `test_wake_on_damage_pc` | Magnus pre-seeded with Sleep-Unconscious buff; Krieger attacks → Unconscious dropped from BOTH hub and sheet mirror + 🌅 wake log names Magnus. |
 | `test_non_sleep_unconscious_preserved` | Bandit pre-seeded with a generic Unconscious buff (no `source_spell == "Sleep"`); Krieger attacks → buff preserved (regression guard against over-broad clearing). |
+
+### `test_cast_spell_range.py`
+v2.49.75 — Phase 2C of the ruler/range plan. New `_check_cast_range` helper + `override_range` body field on `/cast_spell` + 409 `out_of_range` response. Tests use Bob (Thalindra's owner, non-GM) so the non-GM enforcement paths fire; the GM-bypass test uses gm_client.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_in_range_succeeds` | Thalindra at (100,100), bandit at +10 ft via test-NPC token; Bob casts Fire Bolt (120 ft) → 200. |
+| `test_out_of_range_409` | Bandit at +350 ft; Bob casts Fire Bolt → 409 `out_of_range`. Response shape: `error`, `range_ft=120`, `distance_ft=350.0`, `spell_name="Fire Bolt"`, `source_name`, `target_name`. |
+| `test_override_range_bypasses_409` | Same out-of-range setup + `override_range=True` → 200. Strict mode is off in the demo. |
+| `test_gm_bypasses_range_check` | gm_client casts same out-of-range setup WITHOUT `override_range` → 200 (GM auto-bypass). |
+| `test_self_range_skips_check` | Cast Shield (range=Self) → 200 regardless of any target position (parser returns 0 → check skips). |
+| `test_off_map_target_skips_check` | Cast Fire Bolt at a synthesized target_name (no Token row on the active map) → 200 (helper returns None → check skips). |
 
 ### `test_cast_sleep_immunity.py`
 v2.49.64 — closes the v2.49.58 "undead / charm-immune exclusion" filed item. RAW Sleep: "Undead and creatures immune to being charmed aren't affected by this spell." New `_is_sleep_immune` helper checks the target's monster template (NPCs) or character sheet (PCs) for `race contains "undead"` or `condition_immunities contains "charmed"`. Immune targets land in `unaffected` with `reason="undead"` or `reason="charm_immune"`. Same commit adds Skeleton (Undead) + Doppelganger (Monstrosity + charm-immune) templates to the demo seed + DB.

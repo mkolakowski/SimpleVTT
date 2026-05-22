@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.75] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Range enforcement on `/cast_spell` — Phase 2C of the ruler/range plan.** First server-side enforcement site for the new range gate. New `_check_cast_range` helper + `_resolve_target_token_pos` companion + `override_range` body field on `/cast_spell` + 409 `out_of_range` response. The check fires BEFORE slot consumption (same contract as the existing `no_slot` gate — a blocked cast doesn't burn a slot). Three override tiers: GM auto-bypass (rules authority), player + `override_range=True` + strict mode off → bypass, otherwise enforced. Skip semantics: range parses to None (Special / Unlimited / Sight / unknown) → skip, range parses to 0 (Self / Self+radius) → skip, no active map / caster off-map / target off-map → skip, AoE multi-target cast (target_combatant_ids list non-empty) → skip (picker UI is the range gate for those). Plan also updated: status row moves from "🟠 Phase 1 shipped" to "🟠 Phase 1 + 2C shipped · Phase 2D unstarted." 6 new harness tests pin the in-range / out-of-range / override / GM-bypass / self-range / off-map paths. PATCH.
+**Description:** Four edits. **(1)** `app/routes/tabletop_routes.py::_check_cast_range` (NEW helper, ~70 lines including doc comment). Three-tier override (GM auto-bypass; player override + not strict; otherwise enforced); four skip branches (None range, 0 range, no active map, no caster/target token). Returns either None (passed / skipped) or an error dict with the documented 409 shape. **(2)** `app/routes/tabletop_routes.py::_resolve_target_token_pos` (NEW companion, ~40 lines). Resolves a target descriptor (combatant_id / character_id / target_name fallback) into ((x, y), display_name) by consulting hub state → `source_token_id` for NPCs OR `char_id` → Token row for PCs. Returns (None, name) when the target has no token on the active map. **(3)** `app/routes/tabletop_routes.py::cast_spell` — new range-check block inserted right before slot consumption. AoE casts skipped via `if not target_combatant_ids_in`. Reads `override_range` from body. **(4)** `tests/harness/test_cast_spell_range.py` (NEW, 6 tests + 2 helpers).
+**Description (cont):** Why the check fires before slot consumption + before the over-budget gate. The existing `no_slot` 409 returns before mutation; the range check follows the same contract — a player whose Fire Bolt is out of range doesn't burn the cantrip slot equivalent (cantrips are free anyway, but the same reasoning applies to L1+ spells). The Phase 4 `over_budget` check at line ~7245 is AFTER slot consumption today (a known quirk of the existing code; the slot stays consumed even on `over_budget` 409 — out of scope for this commit). Inserting the range check at line ~7196 (before the `if spell_level >= 1` slot-decrement block) keeps the "no mutation on 409" invariant clean for the new gate.
+**Description (cont 2):** Why GM auto-bypass is the right convention. Two reasons. (a) Consistent with the existing `over_budget` GM-bypass at line ~7245: GM is the rules authority and may issue any cast for narrative reasons. (b) The plan's wording "When true + the requester is GM or strict mode is off" reads as inclusive (either condition bypasses); the existing convention disambiguates toward GM-always-bypass. A future commit could add a strict-GM toggle if a GM ever asks to be enforced; today it would be a regression on the established UX.
+**Description (cont 3):** Why AoE multi-target casts skip the server-side range check. The plan explicitly carves out AoE: the picker UI enforces range against the cast point, and the `target_combatant_ids` list arrives at `/cast_spell` already-resolved (the picker swept up tokens inside the AoE shape). A server-side check against the FIRST target would either (a) double-enforce what the picker already did or (b) wrongly reject Fireballs at 150 ft where the targets are individually further from the caster than 150 ft. Skipping the server check matches the plan + protects the existing AoE behavior. The `/place_aoe` endpoint (which resolves AoE targets from a cast point) is a separate path that doesn't go through `/cast_spell`.
+**Description (cont 4):** Why a `_resolve_target_token_pos` companion helper. The position resolution is the messy part — combatant_id can be a stable hub-state id OR a `tok:N` token-id prefix (used by /place_aoe; not handled here intentionally) OR missing entirely. Splitting it from `_check_cast_range` keeps the latter readable as a six-line policy decision. The companion's three-step resolution (combatant.source_token_id → combatant.char_id → standalone target_character_id) mirrors how /place_aoe resolves token positions, so the two paths share semantics.
+**Description (cont 5):** Test design. 6 tests covering every documented branch: (1) in-range happy path, (2) out-of-range 409 with full response-shape assertions, (3) `override_range=True` bypass, (4) GM auto-bypass, (5) self-range skip, (6) off-map target skip. The setup uses `bob_client` (Thalindra's owner, non-GM) so the non-GM enforcement actually fires — every prior cast_spell test in the suite uses `gm_client` which would auto-bypass and miss the 409 path. Test NPC tokens are created via GM-driven `POST /tokens` and torn down via `DELETE /tokens/{id}` in `finally` so the demo map stays clean.
+**Description (cont 6):** Verification. Pre-commit: 6 tests written, ran against pre-helper code — `test_in_range_succeeds` passed by accident (the off-map skip fired), `test_out_of_range_409` failed (cast went through 200). Post-helper: all 6 pass. Full regression: 319 harness tests pass (was 313, +6 new). No existing cast_spell test regressed because the harness's pre-existing test setups don't place tokens on the active map → range check correctly skips via the off-map branch.
+**Description (cont 7):** Plan status update. The wiki + `docs/wiki/README.md` row previously read "🟠 Phase 1 shipped (v2.49.71) · Phase 2 unstarted." Updated to "🟠 Phase 1 + 2A + 2B + 2C shipped · Phase 2D (sibling endpoints) unstarted." Per the v2.49.69 CLAUDE.md rule, status updates ride with the implementation commit.
+
+### Added
+- `app/routes/tabletop_routes.py::_check_cast_range` — three-tier override gate returning either None (passed) or an `out_of_range` error dict.
+- `app/routes/tabletop_routes.py::_resolve_target_token_pos` — companion helper resolving a target descriptor to ((x, y), display_name) or (None, name) for off-map targets.
+- `app/routes/tabletop_routes.py::cast_spell` — `override_range` body field + range-check call before slot consumption.
+- `tests/harness/test_cast_spell_range.py` — 6 tests pinning in-range / out-of-range / override / GM-bypass / self-range / off-map.
+- `docs/test-harness-coverage.md` — catalog entry; total 313 → 319.
+
+### Changed
+- `app/templates/wiki.html` — plan-status row updated (Phase 2C shipped).
+- `docs/wiki/README.md` — same row update.
+
+### Notes
+- **Backward compat.** Pure additive helper + new optional body field. Existing `/cast_spell` callers that don't pass `override_range` get the new gate; GM clients auto-bypass; the existing 36 cast_spell-family tests continued to pass because they don't place tokens on the active map and the off-map skip fires.
+- **AoE skip is by design.** /place_aoe is the AoE range-enforcement path; /cast_spell's check is single-target.
+- **GM auto-bypass is by design.** Mirrors the existing `over_budget` gate's GM bypass.
+
+### Filed
+- **Phase 2D** — extend the helper to `/attack`, `/cast_hex`, `/cast_sleep`, `/use_stunning_strike`, `/use_open_hand_technique`. Same contract; per-endpoint harness tests.
+- **Strict-GM toggle** — opt-in flag for a GM to be enforced like a player. Lower priority; file if anyone asks.
+- **AoE server-side range check** — `/place_aoe` could enforce range against the cast point (placement coord). Today the picker UI handles it. Filed as a Phase 3 follow-up to the ruler plan.
+
+---
+
 ## [2.49.74] - 2026-05-22
 
 **Schema version:** 56
