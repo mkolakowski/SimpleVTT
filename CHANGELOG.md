@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.101] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Init-tracker mini-header polish: three-letter action chip labels (Act / Bns / Rxn) restored, "ft" suffix dropped from the movement chip, and the redundant ▶ chevron removed since the whole mini-header is already clickable.** User-requested adjustments to the v2.49.96 → v2.49.100 inline-chips work. v2.49.100 had shrunk the labels to single letters (A / B / R) to fit them inline, but the user preferred the 3-letter abbreviations. To keep the strip inline at the 480 px drawer width despite the wider labels, the layout switches from `flex-wrap: wrap` to `flex-wrap: nowrap` with a shrinkable Init/HP `<span>` — the chips never wrap, and if the row overflows the Init/HP text ellipsizes instead. The chevron arrow `<span class="mini-header-arrow">▶</span>` is removed since the whole `.mini-header` row is already clickable; the JS that toggles its `.open` class uses optional chaining (`?.classList.toggle(...)`) at three call sites in `tabletop.html`, so removing the element doesn't throw. Pure UI tweak; no behavior, endpoint, broadcast, or schema change.
+**Description:** Three Jinja edits + one CSS edit in `app/templates/tabletop.html`. **(1)** `economyChips` call sites — `econChip(..., 'A', 'Action', ...)` → `econChip(..., 'Act', 'Action', ...)` etc. (helper signature from v2.49.100 unchanged; just the letter param widens from `A`/`B`/`R` to `Act`/`Bns`/`Rxn`). (2) `movChip` template literal — the trailing ` ft` in `${feetUsed}/${speedMax} ft` is dropped, leaving just `${feetUsed}/${speedMax}`. The title tooltip still names the chip "Movement used this turn — click to reset to 0" so context is preserved. (3) `init-entry` template — the `<span class="mini-header-arrow">▶</span>` element is deleted from the mini-header row. (4) `.mini-header-stats` CSS — `flex-wrap: wrap` → `flex-wrap: nowrap`; `min-width: 0` added to the stats row; `flex-shrink: 1; min-width: 0` added to `.mini-header-sub` (so Init/HP can ellipsize); `flex-shrink: 0` added to `.econ-chips` (so chips never compress).
+**Description (cont):** Why the nowrap + flex-shrink trick. Three-letter chip labels + the existing 24 px chip floor put the strip width back over what fits in the ~284 px (post-chevron-removal) of `.mini-header-info` at the default 480 px drawer width. `flex-wrap: nowrap` forces inline; `flex-shrink: 1` on the Init/HP `<span>` lets it compress under pressure. Since the Init/HP `<span>` already had `overflow: hidden; text-overflow: ellipsis; white-space: nowrap` from its original styling (line 698-ish), compression naturally degrades to ellipsis. On wider drawers (e.g. if a future commit makes the sidebar configurable), the Init/HP text remains full and the chips sit comfortably alongside.
+**Description (cont 2):** Why drop the ▶ chevron. The user reported the indicator felt redundant — the entire `.mini-header` row is a click target that toggles the init-card-sheet between collapsed and expanded states, so a dedicated affordance was visual noise. Removing the chevron also reclaims ~10 px + an 8 px flex gap (18 px total) of horizontal real estate in the mini-header, which feeds back into the chip-strip-fit problem in (1). Win-win.
+**Description (cont 3):** Why drop "ft" from the movement chip. Same width-budget reasoning. The "ft" unit is implied by the context — this chip lives inside the init tracker, in the action-economy strip; the X/Y pair reads unambiguously as "feet used / feet allowed". Dropping the suffix saves ~12 px on the movement chip and lets the X/Y values use a slightly larger visual weight without competing with the unit text. Tooltip still says "Movement used this turn" so screen-reader / hover context is preserved.
+**Description (cont 4):** What happens if the chevron's JS still tries to toggle it. The three call sites that touched `.mini-header-arrow` (`tabletop.html:3225`, `:5338`, `:5443`) all use `?.classList.toggle(...)` / `?.classList.add(...)` — optional chaining returns undefined on the missing element instead of throwing. The toggle logic itself is unaffected (it's the `.init-card-sheet.open` class that drives the visible expand/collapse). The dead `.mini-header-arrow` CSS rule at line 706 + line 707 is harmless (selector matches nothing now) and left in place so future commits can easily re-add the chevron if a user requests it.
+**Description (cont 5):** What stays unchanged. The simple `.init-row` (player-view combatants without a linked char-detail) had no chevron + no economy chips + no expandable sheet — that template is untouched. The buff-chips row below the stats line is unchanged. The `.init-entry.active-turn` highlight (accent-bg + accent-border) is unchanged. The HP-update WS handler still finds `.mini-header-sub` and rewrites its text; the renderBattle full-rebuild path is unchanged.
+**Description (cont 6):** Test coverage. Pure visual + JS-affordance change. The 5 Playwright tests in `tests/harness_ui/` (canvas pan / drag / chat-card multi-target) still pass — none of them touched the init-tracker chevron or chip text. Manual verification path: open the Battle tab, spawn an encounter, confirm each init entry's mini-header shows: token portrait, name, "Init X · HP Y/Z" + "○ Act ● Bns ○ Rxn 30/30" all on the same line, no chevron at the right; clicking anywhere on the mini-header expands the init-card-sheet below.
+**Description (cont 7):** Verification. Curl `/version` confirms v2.49.101 live. Existing harness tests green.
+
+### Changed
+- `app/templates/tabletop.html::renderBattle::economyChips` — chip body labels go single-letter → three-letter ("A" → "Act", etc.).
+- `app/templates/tabletop.html::renderBattle::movChip` — drops the trailing " ft" suffix from the chip body; tooltip unchanged.
+- `app/templates/tabletop.html::renderBattle::init-entry template` — removed the `<span class="mini-header-arrow">▶</span>` element.
+- `app/templates/tabletop.html::.mini-header-stats` — `flex-wrap` switches from wrap to nowrap; `.mini-header-sub` becomes shrinkable; `.econ-chips` is pinned at its natural width.
+
+### Notes
+- **Backward compat.** No behavior change; same buttons, same click handlers, same toggle semantics. The dead `.mini-header-arrow` CSS rule is intentionally retained (harmless, easy to restore the chevron later).
+- **Ellipsis fallback.** On unusually narrow drawers the Init/HP text may truncate. The full Init/HP values are also rendered inside the expanded init-card-sheet body, so info is never lost — just hidden behind one click.
+
+### Filed
+- **`.mini-header-arrow` CSS rule cleanup** — the rule at line 706-707 now matches no elements. Safe to delete in a future hygiene commit, kept here so the chevron can be restored without re-adding CSS.
+
+---
+
 ## [2.49.100] - 2026-05-22
 
 **Schema version:** 56

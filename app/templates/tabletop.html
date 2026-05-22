@@ -784,20 +784,23 @@
         margin-top: 3px;
         flex-wrap: wrap;
     }
-    /* v2.49.96 — Init/HP + action-economy chips share a single wrap-
-       flex row, replacing the previous "stat line above, chip strip
-       below" stack. Saves ~24 px per combatant in the init tracker.
-       The nested chips drop their margin-top since the parent row
-       handles spacing. Buffs still live on their own row underneath. */
+    /* v2.49.96 — Init/HP + action-economy chips share a single flex
+       row instead of stacking. v2.49.101 — `flex-wrap: nowrap` + a
+       shrinkable .mini-header-sub keeps the chips inline at every
+       drawer width: when the strip would otherwise wrap, the Init/
+       HP text ellipsizes instead (the user prefers the chips stay
+       on the same line; the Init/HP value is also visible in the
+       expanded sheet body for confirmation). */
     .mini-header-stats {
         display: flex;
         align-items: center;
         gap: 8px;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         margin-top: 2px;
+        min-width: 0;
     }
-    .mini-header-stats .mini-header-sub { margin-top: 0; }
-    .mini-header-stats .econ-chips { margin-top: 0; }
+    .mini-header-stats .mini-header-sub { margin-top: 0; flex-shrink: 1; min-width: 0; }
+    .mini-header-stats .econ-chips { margin-top: 0; flex-shrink: 0; }
     /* v2.49.100 — tighter padding to keep the single-letter chips
        compact enough to ride alongside the Init/HP line. */
     .econ-chip {
@@ -5254,21 +5257,24 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 let movClass = 'mov';
                 if (feetUsed > speedMax) movClass += ' over';
                 else if (feetUsed >= speedMax - 5 && feetUsed > 0) movClass += ' near';
+                // v2.49.101 — "ft" unit dropped from the chip label
+                // per user request. The tooltip still says "Movement"
+                // so context isn't lost; the X/Y shape reads as
+                // distance unambiguously in the init-tracker context.
                 const movChip = `<button type="button" class="econ-chip ${movClass}"
                     data-idx="${i}" data-slot="movement"
                     title="Movement used this turn — click to reset to 0">
-                    ${feetUsed % 1 === 0 ? feetUsed : feetUsed.toFixed(1)}/${speedMax} ft
+                    ${feetUsed % 1 === 0 ? feetUsed : feetUsed.toFixed(1)}/${speedMax}
                 </button>`;
-                // v2.49.100 — single-letter chip labels (A / B / R)
-                // instead of "Act" / "Bns" / "Rxn" so the chip strip
-                // actually fits inline with the Init/HP line without
-                // wrapping at the default 480 px drawer width. Full
-                // meaning still lives in the title tooltip. The state
-                // dot ("●" used, "○" available) carries the meaning.
+                // v2.49.101 — three-letter labels restored (user
+                // request). The strip stays inline with Init/HP via
+                // the v2.49.101 nowrap-flex + flex-shrink-on-sub rule
+                // — if it overflows on narrow viewports, the Init/HP
+                // text ellipsizes instead of bumping chips to row 2.
                 const economyChips = `<div class="econ-chips">
-                    ${econChip('action',   'A', 'Action',         !!econ.action)}
-                    ${econChip('bonus',    'B', 'Bonus action',   !!econ.bonus)}
-                    ${econChip('reaction', 'R', 'Reaction',       !!econ.reaction)}
+                    ${econChip('action',   'Act', 'Action',         !!econ.action)}
+                    ${econChip('bonus',    'Bns', 'Bonus action',   !!econ.bonus)}
+                    ${econChip('reaction', 'Rxn', 'Reaction',       !!econ.reaction)}
                     ${movChip}
                 </div>`;
                 // v2.19.0 Phase C.1: buff badges row. Renders one chip
@@ -5300,6 +5306,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // the stat line instead of stacking below it. Saves ~24 px
                 // of vertical real-estate per combatant on the init
                 // tracker. Buff chips stay on their own row beneath.
+                // v2.49.101 — chevron arrow removed (user request).
+                // The whole mini-header is already clickable to
+                // toggle the init-card-sheet expanded state, so the
+                // dedicated ▶ indicator was redundant. JS that still
+                // looks up `.mini-header-arrow` uses optional chaining
+                // (`?.classList.toggle(...)`) at tabletop.html:3225 /
+                // :5338 / :5443, so removing the element doesn't
+                // throw.
                 return `<div class="init-entry${isActive ? ' active-turn' : ''}" data-idx="${i}" data-char-id="${slotId}">
                     <div class="mini-header" data-idx="${i}" data-char-id="${slotId}">
                         ${tokenImg}
@@ -5312,7 +5326,6 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             ${buffChips}
                         </div>
                         ${sheetBtn}
-                        <span class="mini-header-arrow">▶</span>
                     </div>
                     <div class="init-card-sheet">
                         ${editRow}${staticSheet}
