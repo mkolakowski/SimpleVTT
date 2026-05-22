@@ -7384,6 +7384,13 @@ async def cast_spell(
         payload["area_shape"] = ""
         payload["area_size_ft"] = 0
         payload["area_secondary_ft"] = 0
+    # v2.49.78 — Phase 3A client. Surface the spell's parsed range so
+    # the AoE picker can render a translucent range ring around the
+    # caster's token. Self-range / unknown ranges → 0 (the client
+    # skips the ring render when range_ft is 0).
+    from ..content.range_parser import max_range_ft, parse_range_ft
+    _parsed_range = max_range_ft(parse_range_ft(spell.get("range") or ""))
+    payload["range_ft"] = int(_parsed_range) if _parsed_range else 0
 
     # Register heal claims so /apply_healing can validate and roll server-side
     if payload["spell_healing"]:

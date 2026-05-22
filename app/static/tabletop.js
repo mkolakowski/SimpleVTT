@@ -344,6 +344,7 @@
         secondary_ft: 0,
         spellName: '',
         casterCharId: 0,      // for self_sphere: filter caster out of target list
+        range_ft: 0,          // v2.49.78 Phase 3A — spell range; 0 = skip ring + dim
         origin: null,         // { x, y } canvas coords — non-null for cone/line/self-sphere
         cursor: null,         // { x, y } canvas coords
         _resolve: null,       // promise resolver — null when inactive
@@ -358,6 +359,7 @@
             this.secondary_ft = Number(opts.secondary_ft) || 0;
             this.spellName = String(opts.name || 'Spell');
             this.casterCharId = parseInt(opts.char_id, 10) || 0;
+            this.range_ft = Number(opts.range_ft) || 0;
             this.cursor = null;
             // Shapes that need an origin = caster's token resolve it
             // up-front. If we can't find a token for the casting
@@ -538,6 +540,7 @@
             this.secondary_ft = 0;
             this.spellName = '';
             this.casterCharId = 0;
+            this.range_ft = 0;
             this.origin = null;
             this.cursor = null;
             this._resolve = null;
@@ -1103,9 +1106,51 @@
             const cx = _aoePicker.cursor.x;
             const cy = _aoePicker.cursor.y;
             const len = _aoePicker._sizePx();
+            // v2.49.78 — Phase 3A range ring. Render a translucent
+            // green ring around the caster's token at the spell's
+            // range AND detect when the cursor (= cast point for
+            // sphere / cube; cursor-tip for cone / line) is outside
+            // the ring → dim the AoE preview to red-on-grey so the
+            // player gets pre-commit feedback that the placement
+            // would 409 server-side.
+            let _aoe_caster_pos = _aoePicker.origin;
+            if (!_aoe_caster_pos && _aoePicker.casterCharId) {
+                _aoe_caster_pos = _aoePicker._resolveOrigin(_aoePicker.casterCharId);
+            }
+            let _aoe_out_of_range = false;
+            if (_aoePicker.range_ft > 0 && _aoe_caster_pos) {
+                const _dist_ft = _computeRulerDistanceFt(_aoe_caster_pos, { x: cx, y: cy });
+                _aoe_out_of_range = _dist_ft > _aoePicker.range_ft;
+            }
+            // Range ring — drawn BEFORE the AoE preview so the AoE
+            // shape stays clearly on top. Skipped for Self spells
+            // (range_ft == 0).
+            if (_aoePicker.range_ft > 0 && _aoe_caster_pos) {
+                const _ring_radius_px = (_aoePicker.range_ft / 5) * gridSize;
+                ctx.save();
+                ctx.fillStyle = 'rgba(74, 222, 128, 0.06)';
+                ctx.strokeStyle = '#4ade80';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([6, 4]);
+                ctx.beginPath();
+                ctx.arc(_aoe_caster_pos.x, _aoe_caster_pos.y,
+                        _ring_radius_px, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+            }
             ctx.save();
-            ctx.fillStyle = 'rgba(220,38,38,0.18)';
-            ctx.strokeStyle = '#dc2626';
+            if (_aoe_out_of_range) {
+                // Dimmed preview — desaturated, lower-alpha, signals
+                // "this placement will be rejected." Players still see
+                // WHERE the AoE would land if they overrode.
+                ctx.fillStyle = 'rgba(120, 120, 120, 0.12)';
+                ctx.strokeStyle = '#888';
+                ctx.globalAlpha = 0.65;
+            } else {
+                ctx.fillStyle = 'rgba(220,38,38,0.18)';
+                ctx.strokeStyle = '#dc2626';
+            }
             ctx.lineWidth = 2.5;
             ctx.setLineDash([8, 6]);
             if (_aoePicker.shape === 'sphere') {
@@ -3170,6 +3215,13 @@
                         secondary_ft: d.area_secondary_ft || 0,
                         name: d.spell_name || 'Spell',
                         char_id: d.caster_char_id,
+                        // v2.49.78 — Phase 3A range ring. The server's
+                        // /cast_spell pending-placement response now
+                        // carries `range_ft`; pass it through so the
+                        // picker can render the translucent range ring
+                        // around the caster + dim the AoE preview when
+                        // the cursor strays outside.
+                        range_ft: d.range_ft || 0,
                     };
                     const placed = (typeof _openAoePicker === 'function')
                         ? await _openAoePicker(opts)

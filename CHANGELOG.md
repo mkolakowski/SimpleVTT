@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.78] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Phase 3A client: range ring + dimmed AoE preview during the picker.** Completes the Phase 3A pair started in v2.49.77 (server enforcement). When the AoE picker is active, the canvas renders a translucent green ring around the caster's token at the spell's range; if the cursor (the cast point for sphere / cube spells) is OUTSIDE the ring, the AoE preview is rendered in desaturated grey at lower opacity so the player gets pre-commit visual feedback that the placement would 409 server-side. Range threaded from the cast response (`payload["range_ft"]`, parsed via v2.49.74's `range_parser`) through the cast card → `_openAoePicker` opts → `_aoePicker.range_ft`. Self-range spells (Burning Hands, Lightning Bolt — `Self (X ft cone/line)` parses to 0) skip both the ring AND the dimming. Plan status moves to "✅ Phases 1 + 2 + 3A shipped · 3B–E optional polish." Client-only — no harness coverage (the harness can't drive canvas mousemove for the dimming); existing AoE tests continue to pass since the additions are pure render-pass extensions. PATCH.
+**Description:** Four edits. **(1)** `app/routes/tabletop_routes.py::cast_spell` — `payload["range_ft"]` added to the pending-placement response. Imports `parse_range_ft` + `max_range_ft` at call site (lazy to avoid top-of-file import bloat). Self spells → 0; "Special" / "Unknown" → 0. **(2)** `app/static/tabletop.js::placeBtn` click handler — passes `range_ft: d.range_ft || 0` into the `_openAoePicker` opts. **(3)** `app/static/tabletop.js::_aoePicker` — new `range_ft` field on the state + `_cleanup` resets it. **(4)** `app/static/tabletop.js` render pass — before the existing AoE-preview draw, computes the caster's token position (via `_aoePicker.origin` for self-anchored shapes, else `_resolveOrigin(casterCharId)` for sphere / cube), computes cursor-to-caster distance via `_computeRulerDistanceFt` (the same helper the v2.49.71 ruler uses, so client + server agree), draws a translucent green ring at the range_ft radius, and dims the AoE preview to grey-on-low-alpha when the cursor is outside the ring.
+**Description (cont):** Why the ring is GREEN while the AoE preview is RED. Red is the established "AoE / damage zone" hue from v2.48.0. Green is the "in-range" / "safe to commit" hue that matches the v2.49.71 ruler's measurement line + the Phase 2C range-check error banner. Two distinct hues so a glancing-at-the-screen player can tell "the red shape is the spell's effect; the green ring is what's reachable." Both colors used elsewhere in the UI (`var(--accent)` is green; `--c-damage` is red) so they theme correctly across all 8 demo themes.
+**Description (cont 2):** Why the cursor is the "cast point" for sphere / cube but NOT for cone / line. Sphere AoEs are anchored at the cursor — the cursor IS where the sphere lands. Cube AoEs are similar (Thunderwave is Self-anchored; non-Self cubes anchor at cursor). Cone / line spells RAW have `Self (X-foot cone)` range — the parser returns 0 for those, so the range check + the ring are both skipped. The cone / line ORIGINATES at the caster's token regardless of cursor; the cursor just aims it. So measuring "cursor to caster" for those would be wrong — but the parser-returns-0 short-circuit means the ring code never runs in those cases. Defensive correctness via the existing parser semantics.
+**Description (cont 3):** Why no harness coverage. The dimming behavior is a render-pass effect; it depends on canvas-mousemove state. The HTTP+WS harness can drive `/cast_spell` + `/place_aoe` but can't simulate the mousemove that updates `_aoePicker.cursor`. The server-side 409 path is already pinned by v2.49.77's `test_place_aoe_range.py`. The client behavior is visually verified: open the demo's tabletop, click a Place AoE button on a Fireball cast card, move the mouse — the ring appears at 150 ft (30 cells = 2100 px), the AoE preview is red inside the ring and grey-dimmed outside.
+**Description (cont 4):** Why `range_ft` is threaded through `_openAoePicker` opts rather than computed inside the picker. The picker doesn't have access to the spell dict at activation time — it gets called with shape / size / name. Computing range would mean an extra DB-tier read or a separate WS lookup. Threading the already-parsed integer through the opts dict is one line each side + matches how `secondary_ft` already flows through.
+**Description (cont 5):** Verification. Existing 7 `test_cast_spell_aoe.py` + 4 new `test_place_aoe_range.py` tests all pass — the render-pass additions don't touch any HTTP / WS surface. Container rebuilt to v2.49.78; verified that `tabletop.js` includes `_aoe_out_of_range` + the `Phase 3A range ring` comment block.
+
+### Added
+- `app/routes/tabletop_routes.py::cast_spell` — `payload["range_ft"]` for pending-placement responses.
+- `app/static/tabletop.js::_aoePicker` — `range_ft` state field + cleanup.
+- `app/static/tabletop.js` render pass — range ring + dimmed AoE preview when cursor outside ring.
+- `app/static/tabletop.js` placeBtn handler — threads `range_ft` through.
+
+### Changed
+- `app/templates/wiki.html` — plan-status row updated to "Phase 3A shipped · 3B–E optional polish."
+- `docs/wiki/README.md` — same row update.
+
+### Notes
+- **Backward compat.** Pure additive render-pass extension on the client + additive payload field on the server. Existing AoE tests + AoE picker behavior unchanged for the in-range case.
+- **Self-range AoEs handled by skip.** Burning Hands / Lightning Bolt / Thunderwave use `Self (X ft cone/cube/line)` — parser returns 0, ring + dimming both skip. Existing self-anchored picker behavior unchanged.
+- **Phase 3A complete.** Phase 3B–3E (hover rangefinder, range rings on cast hover, multi-segment ruler, broadcast mode) remain optional polish per the plan; ship if user demand surfaces.
+
+### Filed
+- **Phase 3B–3E** — hover rangefinder, range rings on cast-button hover, multi-segment ruler (Shift+R), broadcast mode (Shift-click). Optional polish.
+- **Playwright spec for the AoE dimming behavior** — same Playwright follow-up filed for Phase 1's ruler tool covers this too.
+
+---
+
 ## [2.49.77] - 2026-05-22
 
 **Schema version:** 56
