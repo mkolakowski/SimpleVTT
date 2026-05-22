@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.105] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Hide the `.canvas-tools` cluster (📏 Ruler today) on mobile (`max-width: 640px`).** User-requested. On phone-sized viewports the existing media query at `tabletop.html:1312` already hides the `.map-pane` entirely (the drawer becomes the whole UI), which makes the ruler functionally useless — there's no canvas to measure distances on. The Ruler button was still showing in the cramped mobile topbar, eating real estate next to the drawer tabs without any payoff. v2.49.105 adds `.canvas-tools { display: none; }` to the same media query so the whole cluster vanishes on mobile. Future tools added to `.canvas-tools` will inherit the mobile-hide by default; opt back in individually if any actually make sense on a phone.
+**Description:** One CSS edit in `app/templates/tabletop.html` inside the existing `@media (max-width: 640px)` block, right after the `.map-pane { display: none }` rule. Single new rule `.canvas-tools { display: none; }` hides the wrapper `<div class="canvas-tools">` that holds the Ruler button (and any future canvas tools). Inline comment explains the rationale + the future-tool default.
+**Description (cont):** Why hide the whole cluster vs. just the button. The cluster has a flex layout with `margin-left: auto` that pushes itself + the drawer-tab-bar to the right of the topbar title. Hiding just the button would leave the empty cluster wrapper in place, still consuming the auto-margin and visually a gap. Hiding the wrapper removes the gap; the drawer-tab-bar's own `margin-left: auto` takes over and pushes the tabs to the right edge.
+**Description (cont 2):** Why 640 px is the right breakpoint. The existing `@media (max-width: 640px)` block already defines "mobile" for this template — it hides the map-pane, makes the drawer full-width, condenses the topbar. Piggybacking on the existing breakpoint keeps the mobile vs. desktop split in one place. iPad portrait (768 px) stays on the desktop side of the breakpoint; iPad landscape (~1024 px) does too. Hide-on-mobile only fires on actual phone viewports.
+**Description (cont 3):** What about iPad with the canvas hidden. iPad portrait at 768 px keeps the map-pane visible (above the 640 px breakpoint), so the Ruler still makes sense and renders. If a user ever shrinks an iPad Safari window into a Split View < 640 px wide, the responsive rule kicks in correctly. Real iPhones are well under 640 px in both orientations.
+**Description (cont 4):** What stays unchanged. The Ruler button + click handlers + state machine are all unchanged — the rule is purely visual (`display: none`). On a wider viewport the button reappears with no JS state to reset. Future canvas tools added to the cluster (e.g. v2.49.81 Phase 3F hover-rangefinder, Phase 3F range-rings filter) inherit the mobile-hide; comment in the source notes that this is intentional.
+**Description (cont 5):** Test coverage. Pure responsive CSS; the existing 5 Playwright tests in `tests/harness_ui/` run at Chromium's default 1280 × 720 viewport which is well above the 640 px breakpoint, so they continue to find + click the Ruler when needed (none of them do today, but the button stays visible at desktop widths). No new test for the mobile-hide behavior — Playwright could simulate a 375 px viewport to assert the button is hidden, but the rule is so simple + so adjacent to the existing tested rules that the marginal value of a new test isn't worth the line count. Manual verification path: open the tabletop in a narrow browser window (< 640 px wide) and confirm the Ruler button doesn't render alongside the drawer tabs.
+**Description (cont 6):** Verification. Curl `/version` confirms v2.49.105 live. Existing Playwright + wiki tests both green.
+
+### Changed
+- `app/templates/tabletop.html` `@media (max-width: 640px)` block — new `.canvas-tools { display: none; }` rule.
+
+### Notes
+- **Backward compat.** Pure responsive CSS. No JS / endpoint / broadcast / schema changes. Wider viewports unaffected.
+- **Future-tool default.** New `.canvas-tools` children will be mobile-hidden by default; opt back in per tool if any actually make sense on a phone.
+
+---
+
 ## [2.49.104] - 2026-05-22
 
 **Schema version:** 56

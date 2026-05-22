@@ -1316,6 +1316,15 @@
         /* Hide the map/canvas pane entirely; the drawer becomes the whole UI */
         .tabletop-layout .map-pane { display: none; }
 
+        /* v2.49.105: hide the .canvas-tools cluster (📏 Ruler today)
+           on mobile. The ruler measures distances on the map; with
+           the map hidden above there's nothing to measure on, and
+           the button just clutters the already-tight topbar. Future
+           canvas tools added to this cluster will also be mobile-
+           hidden by default — opt them back in individually if any
+           DO make sense on a phone. */
+        .canvas-tools { display: none; }
+
         /* Sidebar fills the screen */
         .tabletop-layout .drawer-sidebar {
             width: 100%; flex: 1; min-width: 0;
