@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 339 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.93, 2026-05-22).
+**Total tests:** 349 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.108, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -738,6 +738,45 @@ Field-presence assertions on the WS broadcasts that drive the roll-log cards + t
 | `test_feature_used_simple_broadcast_carries_all_required_fields` | Cunning Action: Dash; broadcast has header + `feature_desc` (server-side fallback). |
 | `test_second_wind_broadcast_carries_dice_and_heal_fields` | `/use_second_wind` broadcast has both the v2.35.0 `dice_*` fields (for the dice toast) AND the v2.43.0 `heal_*` fields (for the card's heal pill), and v2.43.12's `feature_desc` contains "rolled". |
 | `test_lay_on_hands_broadcast_carries_heal_fields` | `/use_lay_on_hands` broadcast has the heal pill fields. |
+
+---
+
+## Spell catalog (Phase 2A — v2.49.108)
+
+First slice of the spell-validation suite proposed at [`plan-spell-validation-suite`](../plans/spell-validation-suite.md). Loads every SRD spell JSON under `app/data/local/dnd5e/spells/` (319 entries) and asserts mechanical contracts per spell. v1 covers single-target attack-roll spells (damage range-check only); save / multi-beam / auto-hit variants are filed for follow-up commits.
+
+### `spell_catalog.py` (helper, not a test file)
+The session-scope catalog loader + dice-expression parser. `load_all_spells()` reads every JSON file; `dice_range("8d6")` returns `(8, 48)`; `damage_actions(spell)` filters a spell's actions list to those with non-empty `damage`.
+
+### `spell_assert.py` (helper, not a test file)
+Assertion helpers — `assert_damage_in_range(damage_total, expression, *, spell_name, slot_level, upcast_dice)` checks the rolled total is inside the dice expression's [min, max] bounds. Failure messages lead with the spell slug + expression so a CI log points at the broken row.
+
+### `test_spell_catalog_loader.py`
+Unit tests for the loader + parser. Pure Python; doesn't need the harness server.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_load_all_spells_returns_non_empty` | The SRD catalog loads ≥ 200 spells; each has a slug + name. |
+| `test_dice_range_single_die` | `1d10` → (1, 10); `1d4` → (1, 4); `1d20` → (1, 20). |
+| `test_dice_range_multi_die` | `8d6` → (8, 48); `3d4` → (3, 12); `4d8` → (4, 32). |
+| `test_dice_range_flat_bonus` | `1d10+3` → (4, 13); `2d6+5` → (7, 17). |
+| `test_dice_range_negative_modifier` | `1d6-1` → (0, 5); `2d8-1` → (1, 15). |
+| `test_dice_range_mixed_dice_terms` | `1d8+1d6` → (2, 14); `1d4+1d6+1d8` → (3, 18). |
+| `test_dice_range_empty_string` | `""` and whitespace → (0, 0). |
+| `test_dice_range_whitespace_tolerated` | ` 1d10 + 3 ` and `8 d 6` parse the same as their compact forms. |
+| `test_damage_actions_finds_damage_only` | Filters action lists to entries with non-empty `damage`. |
+
+### `test_spell_catalog_damage.py`
+Parameterized over `(caster_name, spell_slug, spell_index, slot_level, base_dmg_expr, upcast_dice)` rows in the `DAMAGE_SPELL_CASES` table. v1 has one row (Fire Bolt at Wizard L5 → 2d10). Each case long-rests the caster, seeds a target combatant, casts the spell, and asserts `response.auto_attack_damage_rolled` is inside the dice expression's [min, max]. Damage type is verified against the catalog JSON.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_spell_damage_in_declared_range[Thalindra Moonwhisper-fire-bolt-L0]` | Fire Bolt cast by Thalindra (Wizard L5) → response rolls 2d10 fire damage; range-check 2-20. |
+
+**Filed for follow-up** (each is a separate response-shape adapter):
+- Save spells (Fireball, Sacred Flame, …) — read `auto_save_damage_rolled` / per-target `auto_save_targets[*].damage_applied`; requires `auto_apply_damage` toggled on for the cast.
+- Multi-beam spells (Scorching Ray, Eldritch Blast) — read `auto_attack_beams[*]`; expected expression is per-beam, not summed.
+- Auto-hit damage spells (Magic Missile) — read whichever field carries the auto-hit dart sum; no attack roll, no save.
 
 ---
 

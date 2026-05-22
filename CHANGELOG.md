@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.108] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Phase 2A v1 of the spell-validation suite — `spell_catalog.py` loader + `spell_assert.py` damage range assertion + `test_spell_catalog_damage.py` parameterized test, plus `test_spell_catalog_loader.py` unit tests for the dice parser.** First slice of the plan filed at `docs/plans/spell-validation-suite.md`. v1 covers single-target attack-roll spells only — Fire Bolt at Thalindra (Wizard L5) is the lone parameterized row. The infrastructure (catalog loader, dice-expression parser, range assertion helper) is now in place so future commits add rows to the `DAMAGE_SPELL_CASES` table without re-building anything. Save spells, multi-beam spells (Scorching Ray / Eldritch Blast), and auto-hit damage spells (Magic Missile) need their own response-shape adapters and are filed for follow-up. 10 new tests total, all passing.
+**Description:** Three new files + four updated docs. **(1)** `tests/harness/spell_catalog.py` (NEW, ~120 lines) — session-scope `load_all_spells()` reads every JSON under `app/data/local/dnd5e/spells/`; `damage_actions(spell)` filters to actions with non-empty `damage`; `dice_range(expression)` parses `"8d6"` / `"1d10+3"` / `"2d6+1d4"` etc. into `(min_total, max_total)`. (2) `tests/harness/spell_assert.py` (NEW, ~40 lines) — `assert_damage_in_range(damage_total, expression, *, spell_name, slot_level, upcast_dice)` checks the rolled total is inside the dice expression's bounds. Failure message format leads with the spell slug + expression + slot so CI logs point straight at the broken row. (3) `tests/harness/test_spell_catalog_loader.py` (NEW, 9 unit tests) — pure-Python coverage for the parser: single die, multi die, flat bonus, negative modifier, mixed dice terms, empty string, whitespace tolerance. (4) `tests/harness/test_spell_catalog_damage.py` (NEW, 1 parameterized case) — for each `(caster, spell_slug, spell_index, slot_level, base_dmg_expr, upcast_dice)` row in `DAMAGE_SPELL_CASES`, long-rests the caster, seeds a high-HP bandit target, casts the spell via `/cast_spell`, and range-checks `response.auto_attack_damage_rolled` against the expected expression + asserts `damage_type` matches the catalog. v1 has one row (Fire Bolt @ Wizard L5 → 2d10 fire). (5) Updated `docs/plans/spell-validation-suite.md` status to "🟠 in progress" with Phase 2A v1 listed; (6) updated `docs/test-harness-coverage.md` with a new "Spell catalog" section explaining the loader / assert helpers + the per-test file table; (7) bumped the total-test count from 339 to 349 in the same doc; (8) bumped version.
+**Description (cont):** Why one row + an infrastructure-heavy first commit. The `/cast_spell` endpoint's response shape varies per spell category: spell-attack spells write `auto_attack_damage_rolled`; save spells write `auto_save_damage_rolled` / `auto_save_targets[*].damage_applied`; multi-beam spells (Scorching Ray, Eldritch Blast) split rolls into `auto_attack_beams[*]`; Magic Missile uses a different code path entirely. The first commit lands the catalog + parser + assertion helper (the load-bearing pieces) plus a single happy-path case (Fire Bolt) that proves the chain works end-to-end. Each follow-up commit extends one row group at a time: save spells, multi-beam, auto-hit.
+**Description (cont 2):** Why range-check, not exact-with-seed. The plan's Phase 2A spec calls for both — range-check is the floor, exact-with-RNG-seed is the next tier. Range-check is simpler (no `/api/test/dice/seed` orchestration) and catches the same class of regression: a content edit that changes Fire Bolt from 1d10 to 1d6 fails the range check just as cleanly as the exact-value check. Exact-with-seed is filed for Phase 2A.2 if regression-finding precision becomes necessary.
+**Description (cont 3):** Why parameterize over a hand-curated table vs iterate the JSON catalog. The catalog has 319 spells but the demo PCs' sheets only hold ~60 of them across all classes. The `/cast_spell` endpoint reads the spell from the caster's sheet at the given `spell_index`, so iterating the catalog directly would mean ~260 spells failing with "no such spell on this caster's list." The hand-curated `DAMAGE_SPELL_CASES` table keeps the test set realistic + the failure signal clean. The harness Phase 1.5 test-fixture-character work (filed in the original test-harness plan) would let a future commit iterate every spell against a custom caster with the full spell list; until then the demo-loadout-only table is the pragmatic shape.
+**Description (cont 4):** What happens when a row fails. Each parameterized case runs as its own pytest test, named by the caster + slug + slot. A failure prints the slug, the expected dice expression, the observed total, and the full response JSON — so triaging "Fire Bolt damage dropped from 2d10 to 1d10" looks like: see the FAILED row in CI, the assertion message says `fire-bolt: damage_total=4 not in [2, 20] for expression '2d10' (slot L0)`, then check the catalog JSON for `"damage": "2d10"` vs the demo seed. The drift catches content edits OR engine bugs equally well.
+**Description (cont 5):** Test coverage update. `docs/test-harness-coverage.md` gains a new "Spell catalog" H2 section above the UI harness section, with subsections for `spell_catalog.py`, `spell_assert.py` (both helpers, no test rows), `test_spell_catalog_loader.py` (9 unit tests in a table), and `test_spell_catalog_damage.py` (the parameterized table). Total test count goes 339 → 349 (9 loader unit + 1 catalog damage = 10 new harness tests).
+**Description (cont 6):** Verification. The new 10 tests + the 12 wiki tests all pass in isolation (`pytest tests/harness/test_spell_catalog_loader.py tests/harness/test_spell_catalog_damage.py tests/harness/test_wiki.py -v`). The 5 Playwright UI tests still pass in isolation. The dice-range parser is unit-tested independently of the harness server. Curl `/version` confirms v2.49.108 live.
+
+### Added
+- `tests/harness/spell_catalog.py` (NEW) — `load_all_spells()` + `damage_actions(spell)` + `dice_range(expression)` helpers.
+- `tests/harness/spell_assert.py` (NEW) — `assert_damage_in_range(damage_total, expression, ...)` helper.
+- `tests/harness/test_spell_catalog_loader.py` (NEW, 9 tests) — unit coverage for the parser.
+- `tests/harness/test_spell_catalog_damage.py` (NEW, 1 parameterized test) — Phase 2A v1 with Fire Bolt as the seed row.
+- `docs/test-harness-coverage.md` — new "Spell catalog" section + total bumped 339 → 349.
+- `docs/plans/spell-validation-suite.md` — status flipped from ⚪ proposed → 🟠 in progress.
+
+### Notes
+- **Backward compat.** No endpoint / broadcast / schema change; all new test code.
+- **One row, growing table.** Future commits add rows to `DAMAGE_SPELL_CASES` (or new tables for save / multi-beam / auto-hit response shapes).
+
+### Filed
+- **Save spells damage validation.** Read `auto_save_damage_rolled` / `auto_save_targets[*].damage_applied` after toggling `auto_apply_damage` on. Fireball, Burning Hands, Sacred Flame, etc.
+- **Multi-beam spells damage validation.** Read `auto_attack_beams[*]`; expected expression is per-beam not summed. Scorching Ray, Eldritch Blast.
+- **Auto-hit damage spells.** Magic Missile — no attack roll, no save; needs its own response-shape adapter.
+- **Exact-value assertion via `/api/test/dice/seed`.** Phase 2A.2 — replace `[min, max]` range with exact expected total when RNG is seeded.
+
+---
+
 ## [2.49.107] - 2026-05-22
 
 **Schema version:** 56

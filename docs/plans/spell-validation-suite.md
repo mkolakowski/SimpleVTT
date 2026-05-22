@@ -1,6 +1,6 @@
 # Spell-validation test suite — plan
 
-**Status:** ⚪ proposed (v2.49.103, 2026-05-22) — no code yet.
+**Status:** 🟠 in progress (v2.49.108, 2026-05-22) — Phase 2A v1 landed: `spell_catalog.py` loader + `spell_assert.py` damage range assertion + `test_spell_catalog_damage.py` parameterized over `(caster, spell, slot)` rows. v1 covers single-target attack-roll spells (Fire Bolt). Filed: save spells, multi-beam (Scorching Ray / Eldritch Blast), auto-hit (Magic Missile) — each needs a different response-shape adapter.
 **Authors:** rolling
 **Last updated:** 2026-05-22
 
@@ -438,7 +438,7 @@ A summary of the non-test helpers this plan asks for:
 
 - [ ] Phase 0 — Inventory + sister doc
 - [ ] Phase 1 — Smoke catalog (`test_spell_catalog_smoke.py`)
-- [ ] Phase 2A — Damage assertions
+- [🟠] Phase 2A — Damage assertions (v1 v2.49.108: Fire Bolt attack-roll; filed save / multi-beam / auto-hit follow-ups)
 - [ ] Phase 2B — Save assertions
 - [ ] Phase 2C — Attack assertions
 - [ ] Phase 2D — Heal assertions
