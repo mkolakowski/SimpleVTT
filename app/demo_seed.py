@@ -808,6 +808,11 @@ def _bard_sheet(name: str) -> dict:
             {"name": "Counterspell", "level": 3, "prepared": True, "_slug": "counterspell",
              "casting_time": "1 reaction", "class": "bard", "_via": "magical-secrets",
              "desc": "Reaction when a creature within 60 ft casts a spell: their spell fails if its level ≤ 3, otherwise ability check DC 10 + spell level."},
+            # v2.49.63 — Sleep. RAW Bard spell list. Routed via the
+            # dedicated /cast_sleep endpoint with class_slug="bard".
+            # Appended to preserve any spell-index assumptions in other
+            # harness tests.
+            {"name": "Sleep", "level": 1, "prepared": True, "_slug": "sleep", "casting_time": "1 action"},
         ],
         "spell_slots": {
             "bard": {
@@ -1091,6 +1096,10 @@ def _warlock_sheet(name: str) -> dict:
              "casting_time": "1 action",
              "_subclass_granted": True, "_granted_by": "The Fiend (Expanded Spells)",
              "desc": "20-ft radius, 8d6 fire (DEX save half). Subclass-granted. Pairs with Hex for +1d6 necrotic on the marked target."},
+            # v2.49.63 — Sleep. RAW on the Warlock spell list. Magnus
+            # has only L3 slots (Pact Magic), so casts at L3 → 9d8
+            # pool. Routed via /cast_sleep with class_slug="warlock".
+            {"name": "Sleep", "level": 1, "prepared": True, "_slug": "sleep", "casting_time": "1 action"},
         ],
         # Pact Magic: 2 slots, ALL at the highest level Magnus can cast
         # (Lv 5 = L3). Refreshes on a SHORT rest (this is the unique
@@ -1696,6 +1705,9 @@ def _sorcerer_sheet(name: str) -> dict:
             {"name": "Mirror Image", "level": 2, "prepared": True, "_slug": "mirror-image", "casting_time": "1 action"},
             {"name": "Scorching Ray", "level": 2, "prepared": True, "_slug": "scorching-ray", "casting_time": "1 action"},
             {"name": "Fireball", "level": 3, "prepared": True, "_slug": "fireball", "casting_time": "1 action"},
+            # v2.49.63 — Sleep. RAW on the Sorcerer spell list. Routed
+            # via /cast_sleep with class_slug="sorcerer".
+            {"name": "Sleep", "level": 1, "prepared": True, "_slug": "sleep", "casting_time": "1 action"},
         ],
         # Lv 5 Sorcerer slots per the Sorcerer table.
         "spell_slots": {

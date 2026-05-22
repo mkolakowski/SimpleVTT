@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.63] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Add Sleep to the Bard / Sorcerer / Warlock demo spell lists.** Closes the v2.49.58 filed item. RAW per the SRD JSON, Sleep is on the bard / sorcerer / warlock / wizard spell lists; pre-v2.49.63 only Thalindra (wizard) had it in her demo seed. This commit ships seed-list entries for Lyra (Bard, Lv 6), Zara (Sorcerer, Lv 5), and Magnus (Warlock, Lv 5 Pact Magic L3-only). Each spell entry is appended to the existing array to preserve any spell-index assumptions in other harness tests. Plus a SQL backfill on the running demo DB so the running campaign carries the entries without needing a full demo reseed (which has a known FK-ordering bug, separately filed). 3 new harness tests pin a happy-path cast per class. PATCH — additive seed data; no code or schema change.
+**Description:** Four edits. **(1)** `app/demo_seed.py::_bard_sheet` — appended Sleep to Lyra's spells. (2) `app/demo_seed.py::_warlock_sheet` — appended Sleep to Magnus's known spells. RAW Warlocks have a "spells known" cap; Sleep IS on the Warlock list per the SRD JSON's `spell_lists` array, so adding it is RAW-clean. Magnus's only slots are L3 (Pact Magic), so a Sleep cast burns a L3 slot — pool scales accordingly. **(3)** `app/demo_seed.py::_sorcerer_sheet` — appended Sleep to Zara's spells. **(4)** `tests/harness/test_cast_sleep_multi_class.py` (NEW, 3 tests — one happy-path per class). Plus a one-off SQL UPDATE backfilling the entries into the running demo DB.
+**Description (cont):** Why append rather than insert at the level-1 position. Other harness tests reference Lyra's spells by index (e.g., `test_use_cutting_words` and `test_use_bardic_inspiration` rely on Bardic Inspiration's resource key, not a spell index, so they're safe; but `test_cast_spell_aoe` does reference `FIREBALL_INDEX = 7` for Thalindra's list — already protected because Sleep was appended to Thalindra in v2.49.58). Appending Sleep to Lyra/Zara/Magnus preserves any forward-compat assumption that demo lists end with the highest-level / latest-added spell. Cosmetic but defensive.
+**Description (cont 2):** Why a SQL backfill rather than relying on the demo reseed. The demo reseed has a pre-existing FK-ordering bug (it deletes demo users before their referencing campaigns can be cascaded), filed separately. Forcing a fresh reseed risks data loss for any other in-flight work in the demo. The SQL UPDATE is idempotent (guarded by `NOT (sheet @> [{_slug:sleep}])`) and surgical — only the three relevant character rows are touched. Future demo reseeds (once the FK bug is fixed) will pick up the seed-file entries on next boot.
+**Description (cont 3):** Why no PC-target / drops-concentration tests for the new classes. Those orthogonal mechanics are already pinned by `test_cast_sleep.py::test_sleep_drops_pc_concentration` (wizard caster, PC target). The path is class-agnostic in the endpoint — class_slug only routes slot consumption + spell-list validation; the buff install + v2.49.51 hook + 🌅 wake hook etc. are downstream of class. One happy-path per new class is sufficient to confirm the class_slug routing works end-to-end; behavioral invariants don't need re-pinning.
+**Description (cont 4):** Verification. Pre-fix: each new test failed 409 `spell_not_known` because the demo DB hadn't been backfilled yet. After SQL UPDATE + endpoint validation passed: all 3 pass. Full regression: 272 harness tests pass (was 269, +3 new). No regressions on existing Sleep / damage / buff tests.
+
+### Added
+- `app/demo_seed.py::_bard_sheet` — Sleep appended to Lyra's spell list.
+- `app/demo_seed.py::_sorcerer_sheet` — Sleep appended to Zara's spell list.
+- `app/demo_seed.py::_warlock_sheet` — Sleep appended to Magnus's known spell list (Warlock RAW supports it).
+- `tests/harness/test_cast_sleep_multi_class.py` — 3 tests (Bard L1 / Sorcerer L1 / Warlock L3).
+- `docs/test-harness-coverage.md` — catalog entry; total 269 → 272.
+
+### Notes
+- **Backward compat.** Pure additive seed data + SQL backfill. No code change.
+- **Sleep now spans all four RAW classes.** Wizard (Thalindra, v2.49.58), plus Bard / Sorcerer / Warlock (this commit). Coverage matches the SRD `spell_lists` array.
+
+### Filed
+- **Demo reseed FK-ordering bug** — `wipe()` deletes demo users before their referencing campaigns are cleaned, causing `psycopg2.errors.ForeignKeyViolation` on boot when prior demo state lingers. Filed for fix; today the SQL backfill is the workaround.
+- **Undead / charm-immune exclusion for Sleep targeting** — still open from v2.49.58.
+
+---
+
 ## [2.49.62] - 2026-05-22
 
 **Schema version:** 56
