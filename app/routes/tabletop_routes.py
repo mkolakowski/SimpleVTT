@@ -11526,6 +11526,297 @@ async def cast_hex(
     }
 
 
+# ----------- API: cast Sleep (HP-pool targeting) -----------
+
+@router.post("/api/campaign/{campaign_id}/cast_sleep")
+async def cast_sleep(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Cast Sleep — roll a 5d8-per-slot HP pool and put creatures to
+    sleep in ascending order of current HP until the pool is exhausted.
+
+    Body: ``{character_id, class_slug, slot_level, target_combatant_ids,
+    override?}``.
+
+    RAW (PHB Sleep, 1st-level Enchantment): 1 action, 90 ft range,
+    duration 1 minute, NO save, NO concentration. Roll 5d8 (+2d8 per
+    slot level above 1st) — that's the HP pool. Affected: creatures
+    within 20 ft of a chosen point, sorted ascending by current HP,
+    ignoring unconscious creatures. Walk the list; each affected
+    creature falls Unconscious until the spell ends, the sleeper
+    takes damage, or another creature uses an action to shake them
+    awake. Subtract each affected creature's HP from the pool before
+    moving to the next. Undead + creatures immune to charm are
+    immune.
+
+    Implementation notes:
+      - SimpleVTT doesn't enforce spatial range / radius today, so
+        the caller passes the candidate set as ``target_combatant_ids``
+        (the future ruler/range work can sweep this from the canvas).
+      - "Immune to charm" / "undead" lookups aren't fully modelled —
+        v1 skips those exclusions and lets the GM uncheck inappropriate
+        targets via the picker. Filed for follow-up.
+      - "Asleep until damaged" is handled by the existing damage
+        pipeline: damage on an Unconscious combatant doesn't auto-
+        wake them in SimpleVTT today (filed). GMs can /end_buff
+        ``unconscious`` to wake a sleeper manually.
+      - The Unconscious key is in ``_INCAPACITATING_BUFF_KEYS`` so
+        the v2.49.51 hook fires and a PC sleeper loses their own
+        concentration. Same as Hold Person etc.
+
+    Validation: caster has the named class + Sleep on spell list +
+    available slot at the requested level + Phase 4 action gate (over-
+    rideable). Pool roll uses the campaign's dice path so seeded test
+    runs are deterministic.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    class_slug = (body.get("class_slug") or "").strip().lower()
+    slot_level_raw = body.get("slot_level")
+    slot_level = int(slot_level_raw) if slot_level_raw else 1
+    target_combatant_ids = body.get("target_combatant_ids") or []
+    override = bool(body.get("override"))
+
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if class_slug not in ("wizard", "bard", "sorcerer", "warlock"):
+        raise HTTPException(400, "class_slug must be one of wizard, bard, sorcerer, warlock")
+    if slot_level < 1:
+        raise HTTPException(400, "slot_level must be >= 1")
+    if not isinstance(target_combatant_ids, list) or not target_combatant_ids:
+        raise HTTPException(400, "target_combatant_ids must be a non-empty list")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Caster not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    # Validate class membership: primary class OR a multiclass entry.
+    primary_class = (sheet.get("class") or "").strip().lower()
+    if primary_class != class_slug:
+        has_class = any(
+            (entry.get("class") or "").strip().lower() == class_slug
+            for entry in (sheet.get("classes") or [])
+        )
+        if not has_class:
+            return JSONResponse(status_code=409, content={
+                "error": "wrong_class",
+                "expected": class_slug,
+                "got": primary_class or "",
+            })
+
+    # Verify Sleep is on the spell list.
+    spells = list(sheet.get("spells") or [])
+    has_sleep = any(
+        (s.get("_slug") == "sleep") or
+        (str(s.get("name", "")).lower() == "sleep")
+        for s in spells
+    )
+    if not has_sleep:
+        return JSONResponse(status_code=409, content={
+            "error": "spell_not_known",
+            "spell": "sleep",
+        })
+
+    # Find an available slot at the requested level.
+    all_slots = dict(sheet.get("spell_slots") or {})
+    per_class = dict(all_slots.get(class_slug) or {})
+    slot = dict(per_class.get(str(slot_level)) or {"total": 0, "used": 0})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total <= 0 or used >= total:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot",
+            "level": slot_level,
+            "class_slug": class_slug,
+            "spell_name": "Sleep",
+        })
+
+    # Phase 4 over-budget gate (action slot).
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "sleep",
+            "label": "Sleep",
+            "strict": strict,
+        })
+
+    # Commit slot decrement.
+    slot["used"] = used + 1
+    per_class[str(slot_level)] = slot
+    all_slots[class_slug] = per_class
+    sheet["spell_slots"] = all_slots
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Roll the HP pool: 5d8 + 2d8 per slot level above 1st.
+    extra_dice = max(0, slot_level - 1) * 2
+    pool_dice = 5 + extra_dice
+    pool_expr = f"{pool_dice}d8"
+    try:
+        pool_roll = dice_mod.roll(pool_expr)
+        pool_total = int(pool_roll.total)
+        pool_breakdown = pool_roll.breakdown
+    except dice_mod.DiceParseError:
+        pool_total = 0
+        pool_breakdown = pool_expr
+
+    # Resolve targets + capture current HP. Skip already-unconscious
+    # combatants (RAW: ignored when ordering).
+    resolved_targets: list[dict] = []
+    for tid in target_combatant_ids:
+        if not isinstance(tid, str) or not tid:
+            continue
+        c = _lookup_combatant(campaign_id, tid)
+        if not c:
+            continue
+        hp_cur = int(c.get("hp_current") or 0)
+        # RAW: 0 HP creatures are already unconscious / dead — skip.
+        if hp_cur <= 0:
+            continue
+        already_unc = any(
+            (b or {}).get("key") in ("unconscious", "asleep")
+            for b in (c.get("buffs") or [])
+        )
+        if already_unc:
+            continue
+        resolved_targets.append({
+            "combatant_id": tid,
+            "name": c.get("name") or "",
+            "hp_current": hp_cur,
+            "char_id": c.get("char_id"),
+            "token_template_id": c.get("token_template_id"),
+        })
+
+    # Sort by ascending current HP; walk down the list.
+    resolved_targets.sort(key=lambda t: t["hp_current"])
+
+    affected: list[dict] = []
+    unaffected: list[dict] = []
+    pool_remaining = pool_total
+    sleep_duration_rounds = 10  # 1 min = 10 rounds at 6 s/round
+    for t in resolved_targets:
+        if t["hp_current"] <= pool_remaining:
+            pool_remaining -= t["hp_current"]
+            buff = {
+                "key": "unconscious",
+                "name": "Unconscious (Sleep)",
+                "icon": "💤",
+                "source_char_id": char.id,
+                "source_char_name": char.name,
+                "source_spell": "Sleep",
+                "duration_rounds": sleep_duration_rounds,
+                "duration_max": sleep_duration_rounds,
+                "concentration": False,
+                "effects": [
+                    "incapacitated — no actions or reactions",
+                    "drops what it's holding + falls prone",
+                    "auto-fail STR / DEX saves",
+                    "attacks vs target have advantage; hits within 5 ft auto-crit",
+                    "wakes on damage or when shaken (action) — GM /end_buff to wake",
+                ],
+            }
+            installed = False
+            if t["char_id"]:
+                installed = await _install_buff(
+                    campaign_id, int(t["char_id"]), buff,
+                )
+                if installed:
+                    _mirror_buffs_to_sheet(
+                        db, int(t["char_id"]),
+                        _get_buffs(campaign_id, int(t["char_id"])),
+                    )
+            else:
+                installed = await _install_buff_on_combatant_id(
+                    campaign_id, t["combatant_id"], buff,
+                )
+            affected.append({
+                "combatant_id": t["combatant_id"],
+                "name": t["name"],
+                "hp": t["hp_current"],
+                "installed": installed,
+            })
+        else:
+            unaffected.append({
+                "combatant_id": t["combatant_id"],
+                "name": t["name"],
+                "hp": t["hp_current"],
+                "reason": "hp_above_pool_remaining",
+                "pool_remaining": pool_remaining,
+            })
+
+    # Mark the action slot.
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    # Public roll log + spell-slot broadcast.
+    affected_summary = ", ".join(
+        f"{a['name']} ({a['hp']} HP)" for a in affected
+    ) or "no one"
+    note = f"💤 Sleep (L{slot_level}, pool {pool_total}) → {affected_summary}"
+    await hub.broadcast(campaign_id, {
+        "type": "roll",
+        "data": {
+            "expression": pool_expr,
+            "total": pool_total,
+            "breakdown": (
+                f"{pool_breakdown} = {pool_total} HP pool. "
+                f"Affected (asc HP): {affected_summary}. "
+                f"Pool remaining after sleeps: {pool_remaining}."
+            ),
+            "note": note,
+            "user_name": char.name,
+            "char_name": char.name,
+            "visibility": Visibility.PUBLIC.value,
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id,
+            "class_slug": class_slug,
+            "level": slot_level,
+            "total": total,
+            "used": used + 1,
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "slot_used": used + 1,
+        "slot_total": total,
+        "class_slug": class_slug,
+        "pool_expr": pool_expr,
+        "pool_total": pool_total,
+        "pool_breakdown": pool_breakdown,
+        "pool_remaining": pool_remaining,
+        "affected": affected,
+        "unaffected": unaffected,
+        "duration_rounds": sleep_duration_rounds,
+    }
+
+
 # ----------- API: get a character's current action-economy state -----------
 #
 # Phase 4a (v2.7.2) Layer A dimming: the full character sheet polls

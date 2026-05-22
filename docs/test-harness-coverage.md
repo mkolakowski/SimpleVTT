@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 254 (as of v2.49.57, 2026-05-21).
+**Total tests:** 262 (as of v2.49.58, 2026-05-21).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -232,6 +232,20 @@ Phase T.5a — AoE multi-target dispatch on `/cast_spell`. New `target_combatant
 | `test_aoe_cast_without_targets_lands_pending_then_place_aoe_resolves` | v2.48.0 Phase T.5e caster-gated placement. `/cast_spell` without `target_combatant_ids` returns `pending_aoe_placement: True` + the spell's `area_shape`/`area_size_ft`. Then POST `/place_aoe` with the cast_id + target list resolves NPC saves + damage and broadcasts `spell_cast_aoe_resolved` with the resolved targets. |
 | `test_place_aoe_auto_rolls_pc_save_and_applies_damage` | v2.48.3 — `/place_aoe` auto-rolls PC saves alongside NPCs (no more roll_request prompt for the new flow). PC entry has `rolled`/`passed`/`damage_applied` populated, `pc_skipped` and `pending_request_id` absent. PC's HP drops server-side. |
 | `test_place_aoe_rejects_non_caster_non_gm` | v2.48.0 Phase T.5e auth gate. `/place_aoe` with a bogus cast_id returns 404 (stash-not-found). |
+
+### `test_cast_sleep.py`
+v2.49.58 — `POST /cast_sleep`. RAW Sleep (1st-level enchantment, bard/sorcerer/warlock/wizard). Rolls 5d8 + 2d8 per slot level above 1st as an HP pool; affects creatures in ascending order of current HP, subtracting each affected creature's HP from the pool. No save, no concentration. Unconscious key is in `_INCAPACITATING_BUFF_KEYS`, so a PC sleeper drops their own concentration via the v2.49.51 hook. Dedicated endpoint (not `/cast_spell`) because the HP-pool targeting doesn't fit save-or-suck or save-for-half.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_sleep_happy_path_npc` | Single 5-HP bandit at L1; 5d8 min=5 → always affected. Response shape: `pool_expr`, `pool_total`, `affected`, `unaffected`. |
+| `test_sleep_ordering_invariant` | 3 bandits at 1/2/3 HP; affected list is non-decreasing by HP; sum(affected.hp) <= pool_total; first unaffected (if any) has hp > pool_remaining. Dice-independent. |
+| `test_sleep_high_hp_skipped` | Bandit HP=50; 5d8 max=40 < 50 → always unaffected. |
+| `test_sleep_already_unconscious_skipped` | Bandit pre-seeded with Unconscious buff is omitted from both `affected` and `unaffected` lists (RAW: ignored when ordering). |
+| `test_sleep_drops_pc_concentration` | Magnus has Hex up (concentration); Magnus HP=5; Thalindra Sleeps Magnus. Asserts Unconscious lands on Magnus + Hex drops via v2.49.51 hook + 💀 GM log fires. |
+| `test_sleep_upcast_scales_pool` | L3 slot → `pool_expr == "9d8"` (5 + 2 * 2). |
+| `test_sleep_no_slot` | Drain Thalindra's 4 L1 slots; next call → 409 `no_slot`. Restores via long-rest at end to keep `test_cast_magic_missile` happy. |
+| `test_sleep_wrong_class` | Krieger (Barbarian) → 409 `wrong_class` with `expected=wizard`. |
 
 ---
 

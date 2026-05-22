@@ -400,6 +400,14 @@ def _wizard_sheet(name: str) -> dict:
              "casting_time": "1 action", "damage": "8d6", "save_ability": "DEX",
              "desc": "100 ft × 5 ft line from caster, DEX save DC 14 for half. 8d6 lightning."},
             {"name": "Counterspell", "level": 3, "prepared": True, "_slug": "counterspell", "casting_time": "1 reaction"},
+            # v2.49.58 — Sleep. RAW: 5d8 + 2d8/extra slot HP-pool that
+            # affects creatures by ascending current HP, no save, no
+            # concentration. Routed through the dedicated /cast_sleep
+            # endpoint rather than /cast_spell because the HP-pool
+            # targeting doesn't fit the existing AoE/save pipeline.
+            # Appended to keep the FIREBALL_INDEX = 7 + Counterspell = 9
+            # assumptions in existing harness tests intact.
+            {"name": "Sleep", "level": 1, "prepared": True, "_slug": "sleep", "casting_time": "1 action"},
         ],
         "spell_slots": {
             "wizard": {
