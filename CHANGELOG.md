@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.65] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Wire the Open Hand Technique PC integration tests filed in v2.49.57.** Closes the last open v2.49.57 filed item. Three new tests cover all three Open Hand modes for PC targets: prone (roll_request → /respond installs Prone via `_SPELL_CONDITION_MAP["open-hand-prone"]`), push (roll_request → /respond is a no-op because there's no map entry for `open-hand-push`, so the GM observes the save result in the roll log), no_reactions (no save, inline `_install_buff` of `reaction-denied`). The prone PC test also pins a load-bearing regression guard: Prone is NOT in `_INCAPACITATING_BUFF_KEYS`, so the v2.49.51 incapacitation hook must NOT fire — Magnus's pre-existing Hex MUST survive the Prone install. This is the first test to pin the "non-incapacitating condition buff" branch of the hook (Hold Person, Stunning Strike, and Sleep all test incapacitating buffs; the symmetric "this buff does NOT incapacitate" assertion was unpinned until now). Test-only; production code untouched. 3 new harness tests. PATCH.
+**Description:** Two edits. **(1)** `tests/harness/test_use_open_hand_technique.py` — appended three PC tests + three small helpers (`_install_hex`, `_buff_keys`, `_pc_combatant`). All three share the same battle-seeding pattern as the existing NPC tests. `test_open_hand_prone_pc_installs_prone` retries up to 20 iterations on the DEX save (random); the other two are single-iteration (no save → deterministic install; push has a save but the assertion is "no buff installed regardless of outcome"). **(2)** `docs/test-harness-coverage.md` — three new rows under `test_use_open_hand_technique.py`; total 275 → 278.
+**Description (cont):** Why prone PC's "Hex must survive" assertion is the load-bearing one. The v2.49.51 incapacitation hook fires when a buff with a key in `_INCAPACITATING_BUFF_KEYS = {paralyzed, incapacitated, stunned, petrified, unconscious, asleep}` lands on a target — it then drops the target's own concentration anchors. Three prior end-to-end tests pinned the POSITIVE case (`paralyzed` via Hold Person, `stunned` via Stunning Strike, `unconscious` via Sleep — Hex dropped in all three). Until this commit, the NEGATIVE case (an installed condition buff whose key ISN'T in the set should NOT drop concentration) was unpinned. Prone is the perfect candidate: it's a condition buff (effects=list, mechanical-state rider), it lands via the same `_install_buff` pipeline, AND it's not in the incapacitating set. If a future refactor accidentally widens the hook to fire on every condition install, this test catches it.
+**Description (cont 2):** Why push PC's response shape assertion is the load-bearing one. Push has no `_SPELL_CONDITION_MAP` entry; the endpoint stashes `spell_slug: "open-hand-push"` in `_save_request_context` and the /respond handler's lookup returns `None`, so no buff installs. This is INTENTIONAL — push grants the monk permission to physically drag the target 15 ft, not to install a status condition. The test asserts `auto_buff_installed == ""` in both the cast response AND the /respond response, AND that Magnus's buff list carries no spurious prone / reaction-denied entries afterwards. Regression guard against a hypothetical future bug where push mode accidentally installs the prone buff (the two modes are similar — easy mistake).
+**Description (cont 3):** Why no_reactions PC validates both hub AND sheet mirror. The endpoint's PC branch calls `_install_buff` followed by `_mirror_buffs_to_sheet`. A subtle bug class: install lands in hub but mirror is skipped, leaving the character sheet stale until the next other-buff-install triggers a mirror. The "buffs" endpoint at `GET /character/{id}/buffs` returns both `buffs` (live hub) AND `sheet_buffs` (mirror); asserting on both pins the mirror invariant. Mirrors the same assertion shape used in the v2.49.61 wake-on-damage PC test.
+**Description (cont 4):** Verification. Pre-fix: all 3 PC tests didn't exist. Post-test-add: all 3 pass on first run for the deterministic cases; the prone case landed a save failure within 1–3 iterations (DC = 8+3+2 = 13 vs Magnus's DEX +2 → save fails ~55% of attempts). Full regression: 278 harness tests pass (was 275, +3 new). Existing 5 Open Hand NPC + error tests unchanged.
+
+### Added
+- `tests/harness/test_use_open_hand_technique.py::test_open_hand_prone_pc_installs_prone` — Prone PC + regression guard that the v2.49.51 hook does NOT fire on a non-incapacitating buff (Hex survives).
+- `tests/harness/test_use_open_hand_technique.py::test_open_hand_push_pc_no_buff` — push PC + no-install assertion (push has no `_SPELL_CONDITION_MAP` entry).
+- `tests/harness/test_use_open_hand_technique.py::test_open_hand_no_reactions_pc` — no_reactions PC + hub-AND-sheet-mirror install + 🫷 public log assertion.
+- `docs/test-harness-coverage.md` — three new rows under `test_use_open_hand_technique.py`; total 275 → 278.
+
+### Notes
+- **Backward compat.** Test-only addition. Production code untouched.
+- **Negative branch of the v2.49.51 hook now pinned.** Four sites total: paralyzed install (positive), stunned install (positive, concentration=False), unconscious install (positive, no-save / Sleep), prone install (negative — must NOT fire). The hook's `_INCAPACITATING_BUFF_KEYS` membership check is now end-to-end tested in both directions.
+
+### Filed
+- **All v2.49.57 Open Hand filed items now closed.** Remaining sub-items (Wholeness of Body / Tranquility / Quivering Palm subclass features at Lv 6 / 11 / 17) carried forward.
+- **`push_authorized` cast-card UI** — still open; coupled to ruler/range Phase 2 (drag-target-15-ft prompt benefits from range visualization).
+
+---
+
 ## [2.49.64] - 2026-05-22
 
 **Schema version:** 56
