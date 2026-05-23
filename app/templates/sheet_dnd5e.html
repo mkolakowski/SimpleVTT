@@ -2923,32 +2923,68 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // single-target picker because ``window._openAoe
                     // Picker`` is not defined there.
                     const _AOE_SHAPES = new Set(['sphere', 'cone', 'line', 'cube', 'self_sphere', 'self_cube']);
-                    // v2.48.0 Phase T.5e: AoE detection deferred to
-                    // the cast card's "📍 Place AoE" button. The
-                    // sheet just submits the cast with NO target
-                    // descriptors; the server creates a pending-
-                    // placement card and the caster (or GM) clicks
-                    // the button on the card to open the picker. This
-                    // moves the picker out of the cast button's
-                    // synchronous click handler — it can sit on the
-                    // log indefinitely until the caster is ready,
-                    // and the GM can place it if the player isn't.
+                    // v2.48.0 Phase T.5e: AoE detection.
+                    // v2.49.146: auto-open the AoE picker on the sheet
+                    // side instead of deferring to the post-cast
+                    // "📍 Place AoE" button on the chat card. Direct-
+                    // API callers without the sheet UI still hit the
+                    // pending_aoe_placement path (the server creates
+                    // the card and the GM can place it later) — only
+                    // sheet-driven casts skip the intermediate click.
                     let _spArea = null;
+                    let _spDetailHit = null;
                     try {
-                        const _detail = await _fetchSpellDetail(s.name);
-                        const _action = _detail && Array.isArray(_detail.actions)
-                            ? _detail.actions.find(a =>
+                        _spDetailHit = await _fetchSpellDetail(s.name);
+                        const _action = _spDetailHit && Array.isArray(_spDetailHit.actions)
+                            ? _spDetailHit.actions.find(a =>
                                 a && a.area
                                 && _AOE_SHAPES.has(a.area.shape)
                                 && (Number(a.area.size_ft) || 0) > 0)
                             : null;
                         if (_action) _spArea = _action.area;
                     } catch (_) {}
-                    if (_spArea) {
-                        // AoE spell — drop any pre-selected single
-                        // target so the server marks this cast as
-                        // pending_aoe_placement and the cast card
-                        // renders the Place AoE button.
+                    if (_spArea && typeof window._openAoePicker === 'function') {
+                        // v2.49.146: open the AoE picker immediately.
+                        // The picker resolves to {target_combatant_ids,
+                        // center} after the player commits the shape;
+                        // pass target_combatant_ids to /cast_spell so
+                        // the server's existing AoE multi-target loop
+                        // resolves saves + damage in one shot. Cancel
+                        // reverts the optimistic slot decrement.
+                        const _placed = await window._openAoePicker({
+                            shape: _spArea.shape,
+                            size_ft: _spArea.size_ft,
+                            secondary_ft: _spArea.secondary_ft || 0,
+                            name: s.name || 'Spell',
+                            char_id: {{ char.id }},
+                            // v2.49.146: pass the raw range string —
+                            // _aoePicker.start parses it via the same
+                            // _parseRangeFtJS helper the cast hover
+                            // ring uses.
+                            range_str: (_spDetailHit && _spDetailHit.range) || '',
+                        });
+                        if (_placed === null) {
+                            // Cancelled — revert optimistic slot decrement.
+                            if (slotRow) {
+                                slotRow.dataset.used = prevUsed;
+                                if (window._ssSyncInputs) window._ssSyncInputs(slotRow);
+                                if (window._ssRenderPips) window._ssRenderPips(slotRow);
+                            }
+                            btn.disabled = false;
+                            return;
+                        }
+                        const _ids = Array.isArray(_placed.target_combatant_ids)
+                            ? _placed.target_combatant_ids : [];
+                        _spTgt = {
+                            target_combatant_id: _ids[0] || '',
+                            target_character_id: null,
+                            target_name: '',
+                            target_combatant_ids: _ids,
+                        };
+                    } else if (_spArea) {
+                        // AoE picker isn't loaded (e.g. standalone full-
+                        // sheet page with no canvas) — fall back to the
+                        // server-side pending_aoe_placement flow.
                         _spTgt = {};
                     } else if (!_spTgt.target_combatant_id && !_spTgt.target_character_id) {
                         // v2.49.135: multi-beam attack-roll spells

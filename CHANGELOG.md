@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.146] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **AoE spells now auto-open the AoE picker on cast** instead of leaving a "📍 Place AoE" button on the chat card for the caster to click. The sheet's `.sp-cast` and the init-tracker's `.mini-cast-btn` both detect AoE via `_fetchSpellDetail` + `_AOE_SHAPES` (existing v2.45.0 / v2.49.142 check); on AoE, they now invoke `window._openAoePicker` immediately, await the picker's `{target_combatant_ids, center}` result, and pass `target_combatant_ids` to `/cast_spell` so the server's existing AoE multi-target loop resolves saves + damage in one shot. The Place AoE button on the chat card stays as a fallback for direct-API calls (when the sheet UI isn't driving the cast) and for environments without the canvas (standalone full-sheet page).
+**Description:** Three file edits. **(1)** `app/static/tabletop.js::_aoePicker.start` — accepts `range_str` alongside the existing `range_ft`, parses via the same `_parseRangeFtJS` helper the cast hover ring uses. Matches the v2.49.143 `_targetPicker` contract. **(2)** `app/templates/sheet_dnd5e.html::.sp-cast` — when `_spArea` is detected AND `window._openAoePicker` exists, open the picker immediately with `{shape, size_ft, secondary_ft, name, char_id, range_str}`. On null (cancel) revert the optimistic slot decrement and abort. On commit, set `_spTgt = {target_combatant_id: ids[0], target_combatant_ids: ids}` so the cast body carries the picked targets. Fallback branch (no canvas / no picker) keeps the old behavior of an empty `_spTgt` so the server returns `pending_aoe_placement`. **(3)** `app/templates/tabletop.html::.mini-cast-btn` PC branch — same picker auto-open. Captures `_aoePickedIds` in a let-binding and spreads it into the body so it overrides any `_tC0` spread when both are set (defensive — `_tC0` is forced null when `_spArea`).
+**Description (cont):** Why call `/cast_spell` directly with `target_combatant_ids` (vs the v2.48.0 pending-AoE flow that uses `/place_aoe`). The server's `/cast_spell` AoE multi-target loop (line ~7894+) iterates `target_combatant_ids[1:]` and resolves saves + damage per extra target — identical to what `/place_aoe` does. Passing the picker's ids straight to `/cast_spell` skips the pending-placement round-trip + the chat card "Place AoE" button click. The chat card renders the resolved cast normally (with `auto_save_targets` populated).
+**Description (cont 2):** What changes for concentration AoEs (Spirit Guardians / Hypnotic Pattern / etc.). The `/place_aoe` endpoint persists the AoE center as a map marker for concentration spells; `/cast_spell` with `target_combatant_ids` doesn't currently persist that marker. Filed: thread the `center` value from the picker through `/cast_spell` so concentration AoE markers persist on the auto-open path too. For non-concentration AoEs (Fireball, Burning Hands, Sacred Flame), no functional difference — the marker only matters for the persistent-area spells.
+**Description (cont 3):** What stays. Direct API callers without the picker UI (e.g., the GM's roll log fires `/cast_spell` programmatically, or a test harness) still hit the pending_aoe_placement path. The Place AoE button on the chat card still works for those casts. The change is purely additive at the sheet / init-tracker layer.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.146 live. (b) Manual: from the sheet, cast Fireball at L3 → AoE picker opens immediately (no chat card with Place AoE button) → place the sphere on the canvas → cast card renders with saves + damage resolved per target inside the sphere. (c) Same from the GM init-tracker: expand Thalindra's row, click Cast on Fireball → picker opens immediately. (d) Cancel the picker → spell slot refunded.
+
+### Changed
+- `app/static/tabletop.js::_aoePicker.start` — accepts `range_str` alongside `range_ft`; parses via `_parseRangeFtJS`.
+- `app/templates/sheet_dnd5e.html::.sp-cast` AoE branch — opens `_openAoePicker` immediately; passes `target_combatant_ids` to `/cast_spell`.
+- `app/templates/tabletop.html::.mini-cast-btn` PC branch — same auto-open + `_aoePickedIds` spread into the cast body.
+
+### Notes
+- **Backward compat.** Direct API / no-canvas callers still hit the pending_aoe_placement flow (unchanged). Only sheet-driven and init-tracker-driven casts auto-open.
+- **One less click** for the caster on every AoE cast.
+- **Cancel refunds slot.** Same pattern as the multi-target picker cancel path.
+
+### Filed
+- **Concentration AoE marker on auto-open path** — pass picker's `center` through `/cast_spell` so persistent-area spells (Spirit Guardians, Hypnotic Pattern) keep their map marker.
+
+---
+
 ## [2.49.145] - 2026-05-23
 
 **Schema version:** 56

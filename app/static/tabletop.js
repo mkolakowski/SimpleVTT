@@ -359,7 +359,17 @@
             this.secondary_ft = Number(opts.secondary_ft) || 0;
             this.spellName = String(opts.name || 'Spell');
             this.casterCharId = parseInt(opts.char_id, 10) || 0;
+            // v2.49.146: accept either range_ft (number) or range_str
+            // ("120 feet" / "Self (15-ft radius)"), mirroring the
+            // v2.49.143 _targetPicker contract. Callers from the sheet
+            // typically have the raw string from _fetchSpellDetail;
+            // callers from the post-cast Place AoE button have the
+            // parsed int from the server's pending_aoe response.
             this.range_ft = Number(opts.range_ft) || 0;
+            if (!this.range_ft && opts.range_str) {
+                const _parsed = _parseRangeFtJS(opts.range_str);
+                if (_parsed && _parsed > 0) this.range_ft = _parsed;
+            }
             this.cursor = null;
             // Shapes that need an origin = caster's token resolve it
             // up-front. If we can't find a token for the casting

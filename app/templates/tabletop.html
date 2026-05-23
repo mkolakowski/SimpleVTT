@@ -3592,9 +3592,36 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 let _targetsC = (window._targetingState
                     && window._targetingState.getTargets()) || [];
                 let _tC0 = _targetsC[0] || null;
-                if (_spArea) {
-                    // AoE spell — drop any pre-selected target so the
-                    // server marks this cast as pending_aoe_placement.
+                let _aoePickedIds = null;
+                if (_spArea && typeof window._openAoePicker === 'function') {
+                    // v2.49.146: auto-open the AoE picker from the
+                    // init tracker too (matches the sheet's .sp-cast
+                    // behavior). Picker resolves to {target_combatant
+                    // _ids, center}; pass target_combatant_ids to
+                    // /cast_spell so the server's AoE multi-target
+                    // loop resolves saves + damage in one shot.
+                    const _placed = await window._openAoePicker({
+                        shape: _spArea.shape,
+                        size_ft: _spArea.size_ft,
+                        secondary_ft: _spArea.secondary_ft || 0,
+                        name: spellName || 'Spell',
+                        char_id: charId,
+                        range_str: _spRangeStr,
+                    });
+                    if (_placed === null) {
+                        if (slotRow) {
+                            slotRow.dataset.used = prevUsed;
+                            _renderMiniSlotPips(slotRow);
+                        }
+                        btn.disabled = false;
+                        return;
+                    }
+                    _aoePickedIds = Array.isArray(_placed.target_combatant_ids)
+                        ? _placed.target_combatant_ids : [];
+                    _tC0 = null;
+                } else if (_spArea) {
+                    // Canvas not loaded — fall back to the server
+                    // pending_aoe_placement flow.
                     _tC0 = null;
                 } else if (!_tC0 && typeof window.vttOpenMultiTargetPicker === 'function') {
                     const _picked = await window.vttOpenMultiTargetPicker({
@@ -3626,6 +3653,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             target_combatant_id: _tC0.combatant_id || '',
                             target_character_id: _tC0.character_id || null,
                             target_name: _tC0.name || '',
+                        } : {}),
+                        // v2.49.146: AoE picker pre-resolved targets.
+                        ...(_aoePickedIds && _aoePickedIds.length ? {
+                            target_combatant_id: _aoePickedIds[0],
+                            target_combatant_ids: _aoePickedIds,
                         } : {}),
                     }),
                 });
