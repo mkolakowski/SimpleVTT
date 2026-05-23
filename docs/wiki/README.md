@@ -38,6 +38,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Sorcery Points + Metamagic](../plans/sorcery-points-and-metamagic.md) | Markdown (design) | Contributors | 🟠 Phase 0 shipped (v2.49.120); 1-5 unstarted |
 | [Warlock Pact Boon](../plans/warlock-pact-boon.md) | Markdown (design) | Contributors | ⚪ proposed · Phase 0–5 unstarted |
 | [Autonomous click-through test harness](../plans/test-harness.md) | Markdown (design) | Contributors | ✅ Phases 1–5 shipped (212 tests) |
+| [Unified mini-sheet](../plans/unified-mini-sheet.md) | Markdown (design) | Contributors | ⚪ proposed · 3 mockups · Phase 1–3 unstarted |
 | [Wiki expansion](../plans/wiki-expansion.md) | Markdown (TODO companion) | Contributors | 🟠 living roadmap |
 | [Combat encounters](../encounters-plan.md) | Markdown (proposed) | Contributors | ⚪ proposed · not started |
 | [Multi-system refactor](../multi-system-refactor.md) | Markdown (proposed) | Contributors | ⚪ proposed · not started |

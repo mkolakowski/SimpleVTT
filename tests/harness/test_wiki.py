@@ -48,6 +48,8 @@ async def test_wiki_home_renders():
     assert "/wiki/targeting-system-guide" in resp.text
     # v2.49.182: Battle & Characters tab sheets visual guide listed.
     assert "/wiki/battle-character-sheets-guide" in resp.text
+    # v2.49.185: unified mini-sheet plan listed.
+    assert "/wiki/doc/plan-unified-mini-sheet" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -218,6 +220,20 @@ async def test_wiki_doc_serves_warlock_pact_boon_plan():
     assert "text/html" in resp.headers.get("content-type", "")
     assert "pact boon" in resp.text.lower()
     assert "warlock" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_unified_mini_sheet_plan():
+    """v2.49.185: GET /wiki/doc/plan-unified-mini-sheet — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through the
+    _DOC_ALLOWLIST to ``docs/plans/unified-mini-sheet.md``."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-unified-mini-sheet")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "unified mini-sheet" in resp.text.lower()
+    # The plan has three ASCII mockups + a comparison matrix.
+    assert "mockup" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

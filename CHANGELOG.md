@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.185] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **New wiki plan: Unified mini-sheet (3 mockups + phased recommendation).** User asked for "three design mockups that are similar to the designs" for unifying the PC + NPC mini-sheets in the Battle / Characters tabs. New plan doc presents three architectural options (Conservative / Symmetric / Hybrid Density) as ASCII mockups + pros-cons tables + a 7-dimension comparison matrix. Recommends Symmetric (Mockup B) as the architectural endpoint with Hybrid Density (Mockup C) as the Phase 1 stepping stone.
+**Description:** New `docs/plans/unified-mini-sheet.md` (~280 lines) covering: (1) Goal — eliminate the two-renderer split (PC partial vs JS `buildMonsterInitSheet`); (2) History — the v2.3.17 unified attempt that was rolled back in v2.3.34 because users preferred the compact NPC stat-block view; (3) **Three mockups** with ASCII art renders of Soren (NPC) and Zara (PC) under each approach: **A. Conservative** (reuse PC partial verbatim, null-safe sections), **B. Symmetric** (new unified partial + per-tab sub-partials + server-driven `tabs=[...]` list), **C. Hybrid Density** (shared chrome, body density branches per entity type — continues v2.49.183); (4) Pros / cons per mockup; (5) 7-dimension comparison matrix (source-of-truth files, refactor scope, risk, density match, extensibility, test coverage transfer, time-to-ship); (6) Recommendation — ship C as Phase 1, evolve to B as Phase 2; (7) Phased plan with per-step tables (Phase 1 = 4 steps, Phase 2 = 6 steps, Phase 3 = cleanup); (8) Risk register with mitigations; (9) Out-of-scope notes; (10) Open questions; (11) Definition of done.
+**Description (cont):** Wiki surfacing per CLAUDE.md: (1) added `plan-unified-mini-sheet` slug to `_DOC_ALLOWLIST` mapping to `docs/plans/unified-mini-sheet.md`; (2) added "Unified mini-sheet" row to the "Design plans" table in `app/templates/wiki.html` landing page; (3) added matching row to `docs/wiki/README.md` on-disk index; (4) new `test_wiki_doc_serves_unified_mini_sheet_plan` harness test asserting the slug returns 200 + body contains "unified mini-sheet" + "mockup" + nav menu; (5) extended `test_wiki_home_renders` landing-page assertion with the new slug link.
+**Description (cont 2):** Why three mockups (vs one). Asking the user to choose between approaches needs a real choice. One mockup would have anchored the conversation to that mockup — three covers the design space: conservative (low risk, accepts user-perceived "loose" feel), symmetric (correct architecturally, big refactor), hybrid (what we've started, lock in the current direction). The matrix forces explicit trade-off comparison instead of vibes-based selection.
+**Description (cont 3):** Why ASCII mockups (vs HTML/SVG like the v2.49.168 targeting guide). Plan docs are reviewed in Markdown form (GitHub diff view + wiki render). ASCII renders correctly in both, has zero rendering surprises, and stays inside `<code>` blocks (a-grade markdown support everywhere). HTML mockups would have required worrying about whether the markdown renderer escapes raw HTML — irrelevant for a review doc whose main audience reads it in a PR.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.185 live. (b) Harness: `test_wiki.py::test_wiki_doc_serves_unified_mini_sheet_plan` + extended `test_wiki_home_renders` both pass. (c) Manual: GET `/wiki/doc/plan-unified-mini-sheet` renders the full plan with the three ASCII mockup blocks + comparison matrix + recommendation. (d) Landing page at `/wiki` lists "Unified mini-sheet" in the Design plans table.
+
+### Added
+- `docs/plans/unified-mini-sheet.md` — 3-mockup unified-mini-sheet design plan (Conservative / Symmetric / Hybrid Density) + comparison matrix + phased recommendation.
+- `app/routes/wiki_routes.py` — `plan-unified-mini-sheet` allowlist entry.
+- `app/templates/wiki.html` — landing-page Design plans row.
+- `docs/wiki/README.md` — on-disk index row.
+- `tests/harness/test_wiki.py::test_wiki_doc_serves_unified_mini_sheet_plan` — per-slug smoke test.
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — extended with new slug assertion.
+
+### Notes
+- **Decision pending.** No implementation yet — this commit ships the design doc for user review. Phase 1 work (chrome extraction) begins only after the user picks A / B / C (or modifies one).
+- **Supersedes the v2.49.183 ad-hoc alignment commits.** Future PC↔NPC mini-sheet work flows through this plan instead of one-off template changes.
+- **Per-slug harness coverage** added per CLAUDE.md's allowlist contract (every new `_DOC_ALLOWLIST` slug needs a smoke test).
+
+---
+
 ## [2.49.184] - 2026-05-23
 
 **Schema version:** 56
