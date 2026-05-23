@@ -1125,6 +1125,24 @@
     .init-card-edit { display:flex; align-items:center; gap:4px; padding:4px 8px; border-bottom:1px solid var(--border); }
     /* v2.4.9: bumped 24px → 36px (50% larger) so PC / NPC portraits read clearly in the init tracker. */
     .init-swatch { width:36px; height:36px; border-radius:50%; flex-shrink:0; border:1px solid var(--border); }
+    /* v2.49.130: 💀 overlay for combatants at 0 HP. ``init-token-wrap``
+       is the relative-positioned host (drop-in replacement for the bare
+       portrait IMG / swatch); ``init-down-skull`` is the absolute-
+       positioned overlay. Inset overlay covers the portrait with a
+       dark scrim so the skull reads on light + dark portraits alike.
+       ``pointer-events:none`` on the overlay so clicks still hit the
+       parent's expand-toggle / GM-edit handlers below. */
+    .init-token-wrap { position: relative; display: inline-flex; flex-shrink: 0; }
+    .init-down-skull {
+        position: absolute; inset: 0;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(0, 0, 0, 0.55);
+        border-radius: 50%;
+        font-size: 22px;
+        line-height: 1;
+        pointer-events: none;
+        -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.4);
+    }
     .init-name { flex:1; font-size:12px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
     .init-init { width:38px; font-size:12px; font-weight:700; text-align:center; background: var(--bg); border:1px solid var(--border); border-radius:3px; color: var(--fg); padding:2px; flex-shrink:0; }
     .init-hp-cur { width:36px; font-size:12px; text-align:center; background: var(--bg); border:1px solid var(--border); border-radius:3px; padding:2px; flex-shrink:0; }
@@ -5233,9 +5251,18 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // worked, close didn't). With pointer-events disabled the
             // IMG is a pure visual layer and every tap on the portrait
             // area is processed by the parent's click handler instead.
-            const tokenImg = c.image_url
+            const _tokenImgInner = c.image_url
                 ? `<img src="${c.image_url}" draggable="false" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1px solid rgba(167,139,250,.4);flex-shrink:0;pointer-events:none;-webkit-touch-callout:none;-webkit-user-drag:none;" alt="">`
                 : `<div class="init-swatch" style="background:${c.color || '#888'};flex-shrink:0;margin-top:2px;"></div>`;
+            // v2.49.130: 💀 overlay on the portrait when the combatant
+            // is at 0 HP. Catches downed PCs (dying — death-save state)
+            // and dropped NPCs (0 HP, removed-from-init-but-still-on-
+            // card edge cases) alike. Wrapper keeps flex-shrink:0 so
+            // the row layout stays identical to the un-overlaid path.
+            const _isDown = (parseInt(c.hp_current) || 0) <= 0;
+            const tokenImg = _isDown
+                ? `<span class="init-token-wrap" title="At 0 HP">${_tokenImgInner}<span class="init-down-skull" aria-label="At 0 HP">💀</span></span>`
+                : _tokenImgInner;
 
             if (IS_GM || hasCharDetail) {
                 /* Card entry — GM always; player for own characters */

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.130] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **💀 skull overlay on the init-tracker portrait when a combatant is at 0 HP.** CSS + one tokenImg edit. Catches both downed PCs (dying / death-save state) and dropped NPCs at a glance; the existing `hp_current` colour-coding on the HP cell was easy to miss in a busy combat. Skull renders over the portrait with a darkened scrim so it reads on both image-portrait combatants and plain colour-swatch combatants. Works for both card types (`init-row` simple rows + `init-entry` GM combatant cards) because both branches share the same `tokenImg` construction.
+**Description:** Two edits in `app/templates/tabletop.html`. **(1)** The `tokenImg` construction (around line 5236) — renamed the existing image/swatch html to `_tokenImgInner`, added an `_isDown = (parseInt(c.hp_current) || 0) <= 0` check, and when true wrapped the inner element in `<span class="init-token-wrap">…<span class="init-down-skull">💀</span></span>`. Falls through to bare `_tokenImgInner` otherwise so non-downed combatants pay zero overhead. **(2)** Two new CSS rules near `.init-swatch`: `.init-token-wrap { position: relative; display: inline-flex; flex-shrink: 0; }` (the relative host) + `.init-down-skull { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); border-radius: 50%; font-size: 22px; line-height: 1; pointer-events: none; -webkit-text-stroke: 0.5px rgba(0,0,0,0.4); }` (the overlay — covers the portrait with a dark scrim so the 💀 emoji reads on both light and dark portraits, no pointer events so clicks pass through to the parent's expand-toggle / GM-edit handlers).
+**Description (cont):** Why an overlay instead of replacing the portrait. Two reasons: (a) keeping the portrait visible behind the skull preserves the at-a-glance identity recognition the portrait provides (the GM can still see *which* combatant is down without reading the name); (b) the colour swatch + portrait IMG paths both fit under the same wrapper with no special-casing — the overlay just stacks on top of whichever inner element renders. The 55% black scrim was picked to read well on light portraits (white-ish ink illustrations) AND dark portraits (silhouette art); below 40% the skull washes out on bright art, above 70% it obscures too much of the portrait identity.
+**Description (cont 2):** Why `<= 0` and not `=== 0`. Defensive — `c.hp_current` is sometimes a string from the GM HP-edit input, sometimes a number from the seed/hub. `parseInt` normalises both; the `|| 0` guards against NaN if the field is somehow blank. `<= 0` also catches the rare case where damage briefly drives HP into a negative integer before death-save logic clamps to 0 (shouldn't happen in normal flow, but the broader check is cheap).
+**Description (cont 3):** Why no test. CSS / template-only readability change; no harness assertion on portrait rendering today. The Playwright UI suite at `tests/harness_ui/` could screenshot-diff this but doesn't (same gap noted in v2.49.128's filed items).
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.130 live after `docker compose up -d --build app`. (b) Visually: setting a combatant's HP to 0 via the GM edit cell shows 💀 over the portrait immediately on the next renderBattle; raising HP above 0 removes the overlay. (c) Both `init-row` (player view) and `init-entry` (GM view) carry the overlay since they share `tokenImg`.
+
+### Added
+- `app/templates/tabletop.html` — `.init-token-wrap` + `.init-down-skull` CSS rules; `tokenImg` construction now wraps with the skull overlay when `hp_current <= 0`.
+
+### Notes
+- **Backward compat.** Non-downed combatants get the bare portrait (no wrapper) — DOM shape unchanged from v2.49.129. Downed combatants gain a `<span class="init-token-wrap">` wrapper around the existing portrait.
+- **Pointer events.** The overlay carries `pointer-events: none` so the GM can still click the portrait to expand the init-card-sheet.
+- **Coverage.** Both PC death-save dying (auto-clamped to 0) and NPC dropped-to-0 cases trigger the overlay; the check is on HP, not on death-save status.
+
+---
+
 ## [2.49.129] - 2026-05-22
 
 **Schema version:** 56
