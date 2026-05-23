@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.173] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix FK violation on `/admin/demo/reset` (wipe path).** Running the admin demo-reset endpoint hit `psycopg2.errors.ForeignKeyViolation: update or delete on table "users" violates foreign key constraint "campaigns_gm_user_id_fkey"` during the wipe's commit. Root cause: the wipe function did `for c in demo_campaigns: db.delete(c)` (per-row delete, no flush) immediately followed by `for u in demo_users: db.delete(u)`. SQLAlchemy's flush ordering at the trailing commit dropped users before campaigns, and the FK from `campaigns.gm_user_id` to `users.id` fired. The CLAUDE.md note "the demo seed has known bugs on partial-state replays" mentions this class of issue; this commit closes one of them.
+**Description:** One block edit in `app/demo_seed.py::wipe`. Replaced the per-row `db.delete(c)` campaign loop with a bulk `db.query(Campaign).filter(...).delete(synchronize_session=False)` (matches how the function deletes Tokens / Encounters / DiceRolls / TokenTemplates / Characters / Maps / Memberships above). Added `db.flush()` after the campaign delete so the rows are out of the DB before the user-delete section runs. Also added a defensive bulk delete for `Campaign.gm_user_id IN demo_user_ids` — handles standalone campaigns owned by a demo user that might have been left behind by a partial prior reseed (e.g. an interrupted wipe).
+**Description (cont):** Why two flushes (campaign + standalone-campaign). The first flush handles the normal case (the demo campaign references demo users via `gm_user_id`). The second handles the edge case where the demo user has OTHER campaigns from a previous partial wipe — both must be gone before SQLAlchemy can DELETE the user row without re-triggering the same FK.
+**Description (cont 2):** Why this wasn't caught earlier. The admin demo-reset endpoint is GM-triggered only — there's no automated harness test exercising it. The first reset on a fresh postgres volume works because there are no leftover demo users (nothing to delete). The second reset is where the bug fires because demo users from the first seeding need to be wiped. v2.49.173 is the first reset that actually completes on the demo volume.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.173 live. (b) Login as `demo-gm@example.com` → POST `/admin/demo/reset` → 200 + per-section counts in the response body. (c) Existing demo data is replaced; the Tavern Brawl encounter now shows the v2.49.172 6-PC layout + v2.49.171's Soren NPC. (d) Re-running the reset a second time also succeeds (no FK re-fire).
+
+### Fixed
+- `app/demo_seed.py::wipe` — replaced per-row Campaign delete loop with bulk delete; added flushes around the campaign + user delete sections to force the campaign rows out of the DB before the user rows are dropped.
+
+### Notes
+- **No new harness test.** Adding one would require an admin login + the demo-reset endpoint to be safe to call mid-suite (it wipes the demo state every other test depends on). Filed as a follow-up: a Phase 2 "fresh-volume" harness that runs `/admin/demo/reset` against a separate test postgres before exercising the normal suite.
+- **Per-commit rule satisfied.** One bug, one fix, one bump.
+
+---
+
 ## [2.49.172] - 2026-05-23
 
 **Schema version:** 56

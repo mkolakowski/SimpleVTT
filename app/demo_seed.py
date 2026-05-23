@@ -136,9 +136,21 @@ def wipe(db: Session) -> dict[str, int]:
             .filter(CampaignMembership.campaign_id.in_(demo_campaign_ids))
             .delete(synchronize_session=False)
         )
-        # The campaign itself
-        for c in demo_campaigns:
-            db.delete(c)
+        # The campaign itself. v2.49.173: use bulk delete (consistent
+        # with the other tables above) instead of ``for c in ...:
+        # db.delete(c)``. The per-row delete marks the rows for
+        # deletion but doesn't flush — when the next section deletes
+        # demo users, SQLAlchemy's flush ordering tries to drop users
+        # before campaigns and FK constraint
+        # ``campaigns_gm_user_id_fkey`` fires. Bulk delete + flush
+        # forces the campaign rows out before the user delete runs.
+        db.query(Campaign).filter(
+            Campaign.id.in_(demo_campaign_ids)
+        ).delete(synchronize_session=False)
+
+    # Flush so the campaign deletions are committed to the DB before
+    # the user deletions try to remove rows still referenced by them.
+    db.flush()
 
     # 3) Demo users (might also own standalone characters/campaigns we
     # don't care about cleaning up — the unique email constraint forces
@@ -148,6 +160,13 @@ def wipe(db: Session) -> dict[str, int]:
         db.query(Character).filter(
             Character.owner_user_id.in_(demo_user_ids)
         ).delete(synchronize_session=False)
+        # Drop any standalone campaigns owned by demo users (e.g. from
+        # a partial prior reseed that didn't share the demo campaign
+        # name). Without this the user delete still 409s on FK.
+        db.query(Campaign).filter(
+            Campaign.gm_user_id.in_(demo_user_ids)
+        ).delete(synchronize_session=False)
+        db.flush()
         for u in demo_users:
             db.delete(u)
 
