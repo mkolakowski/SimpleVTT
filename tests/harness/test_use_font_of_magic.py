@@ -240,3 +240,48 @@ async def test_font_of_magic_wrong_class(gm_client, roster):
     err = r.json()
     assert err["error"] == "wrong_class"
     assert err["expected"] == "sorcerer"
+
+
+# ---------- Multiclass class_slug (v2.49.122) ----------
+
+async def test_font_of_magic_default_class_slug_is_sorcerer(gm_client, zara_rested):
+    """Omitting class_slug defaults to 'sorcerer' — backward compat
+    with the v2.49.120 contract. Response should echo the resolved
+    class_slug so the caller can verify."""
+    zara = zara_rested
+    await _seed_zara_solo(gm_client, zara)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_font_of_magic_to_points",
+        json={"character_id": zara["id"], "slot_level": 1},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["class_slug"] == "sorcerer"
+
+
+async def test_font_of_magic_explicit_class_slug_sorcerer(gm_client, zara_rested):
+    """Explicit class_slug='sorcerer' works identically to default."""
+    zara = zara_rested
+    await _seed_zara_solo(gm_client, zara)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_font_of_magic_to_points",
+        json={"character_id": zara["id"], "slot_level": 1, "class_slug": "sorcerer"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["class_slug"] == "sorcerer"
+
+
+async def test_font_of_magic_unknown_class_slug(gm_client, zara_rested):
+    """class_slug pointing at a pool Zara doesn't have → 409
+    unknown_class_slug with the available pools listed."""
+    zara = zara_rested
+    await _seed_zara_solo(gm_client, zara)
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_font_of_magic_to_points",
+        json={"character_id": zara["id"], "slot_level": 1, "class_slug": "wizard"},
+    )
+    assert r.status_code == 409, r.text
+    err = r.json()
+    assert err["error"] == "unknown_class_slug"
+    assert err["class_slug"] == "wizard"
+    assert "sorcerer" in err["available"]

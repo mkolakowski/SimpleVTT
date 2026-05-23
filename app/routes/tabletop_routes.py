@@ -10348,6 +10348,18 @@ async def use_font_of_magic_to_points(
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     slot_level = int(body.get("slot_level") or 0)
+    # v2.49.122 — optional class_slug for multiclass Sorcerers. The
+    # spell-slot pool is keyed under the class on the sheet
+    # (`spell_slots.sorcerer.{1,2,3}` for pure Sorcerer; for multi-
+    # class characters the pool may live under "wizard", "warlock",
+    # etc.). RAW PHB p.165 multiclass spellcasting combines slots
+    # into a shared pool, but the demo + the curated content keep
+    # per-class buckets for now. The caller picks which bucket via
+    # ``class_slug``; defaults to "sorcerer" so pure-Sorcerer
+    # callers (the v2.49.120 contract) don't need to send the
+    # field. Validated against the sheet's available pool keys to
+    # reject typos.
+    class_slug = (body.get("class_slug") or "sorcerer").strip().lower()
     override = bool(body.get("override"))
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
@@ -10378,16 +10390,23 @@ async def use_font_of_magic_to_points(
             "error": "level_too_low", "required": 2, "got": level,
         })
 
-    # Verify the slot is available.
+    # Verify the slot is available on the chosen pool.
     all_slots = dict(sheet.get("spell_slots") or {})
-    sorc_slots = dict(all_slots.get("sorcerer") or {})
+    class_slots = dict(all_slots.get(class_slug) or {})
+    if not class_slots:
+        return JSONResponse(status_code=409, content={
+            "error": "unknown_class_slug",
+            "class_slug": class_slug,
+            "available": sorted(all_slots.keys()),
+        })
     slot_key = str(slot_level)
-    slot = dict(sorc_slots.get(slot_key) or {})
+    slot = dict(class_slots.get(slot_key) or {})
     total = int(slot.get("total") or 0)
     used = int(slot.get("used") or 0)
     if total - used < 1:
         return JSONResponse(status_code=409, content={
             "error": "no_slot", "slot_level": slot_level,
+            "class_slug": class_slug,
             "total": total, "used": used,
         })
 
@@ -10419,8 +10438,8 @@ async def use_font_of_magic_to_points(
     # (capped at max — RAW the pool can't exceed your sorcerer level).
     new_used = used + 1
     slot["used"] = new_used
-    sorc_slots[slot_key] = slot
-    all_slots["sorcerer"] = sorc_slots
+    class_slots[slot_key] = slot
+    all_slots[class_slug] = class_slots
     sheet["spell_slots"] = all_slots
 
     new_sp = min(sp_cur + slot_level, sp_max)
@@ -10438,7 +10457,7 @@ async def use_font_of_magic_to_points(
     await hub.broadcast(campaign_id, {
         "type": "spell_slot_update",
         "data": {
-            "character_id": char.id, "class_slug": "sorcerer",
+            "character_id": char.id, "class_slug": class_slug,
             "level": slot_level, "total": total, "used": new_used,
         },
     })
@@ -10466,6 +10485,7 @@ async def use_font_of_magic_to_points(
     return {
         "ok": True,
         "slot_level": slot_level,
+        "class_slug": class_slug,
         "sp_gained": slot_level,
         "sp_remaining": new_sp,
         "sp_max": sp_max,
@@ -10495,6 +10515,9 @@ async def use_font_of_magic_to_slot(
     body = await request.json()
     char_id = int(body.get("character_id") or 0)
     slot_level = int(body.get("slot_level") or 0)
+    # v2.49.122 — same class_slug parameter as the to_points endpoint.
+    # See its docstring for the multiclass rationale.
+    class_slug = (body.get("class_slug") or "sorcerer").strip().lower()
     override = bool(body.get("override"))
     if char_id <= 0:
         raise HTTPException(400, "character_id is required")
@@ -10545,17 +10568,24 @@ async def use_font_of_magic_to_slot(
         })
 
     # Verify the slot has a "used" entry to restore. v1: no ephemeral
-    # slot creation (filed).
+    # slot creation (filed). v2.49.122 — pool keyed on class_slug.
     all_slots = dict(sheet.get("spell_slots") or {})
-    sorc_slots = dict(all_slots.get("sorcerer") or {})
+    class_slots = dict(all_slots.get(class_slug) or {})
+    if not class_slots:
+        return JSONResponse(status_code=409, content={
+            "error": "unknown_class_slug",
+            "class_slug": class_slug,
+            "available": sorted(all_slots.keys()),
+        })
     slot_key = str(slot_level)
-    slot = dict(sorc_slots.get(slot_key) or {})
+    slot = dict(class_slots.get(slot_key) or {})
     total = int(slot.get("total") or 0)
     used = int(slot.get("used") or 0)
     if used < 1:
         return JSONResponse(status_code=409, content={
             "error": "no_used_slot_to_restore",
             "slot_level": slot_level,
+            "class_slug": class_slug,
             "total": total, "used": used,
             "hint": "All L{} slots are already full. Ephemeral slot creation is filed.".format(slot_level),
         })
@@ -10574,8 +10604,8 @@ async def use_font_of_magic_to_slot(
 
     new_used = used - 1
     slot["used"] = new_used
-    sorc_slots[slot_key] = slot
-    all_slots["sorcerer"] = sorc_slots
+    class_slots[slot_key] = slot
+    all_slots[class_slug] = class_slots
     sheet["spell_slots"] = all_slots
 
     new_sp = sp_cur - cost
@@ -10593,7 +10623,7 @@ async def use_font_of_magic_to_slot(
     await hub.broadcast(campaign_id, {
         "type": "spell_slot_update",
         "data": {
-            "character_id": char.id, "class_slug": "sorcerer",
+            "character_id": char.id, "class_slug": class_slug,
             "level": slot_level, "total": total, "used": new_used,
         },
     })
@@ -10621,6 +10651,7 @@ async def use_font_of_magic_to_slot(
     return {
         "ok": True,
         "slot_level": slot_level,
+        "class_slug": class_slug,
         "sp_cost": cost,
         "sp_remaining": new_sp,
         "sp_max": sp_max,

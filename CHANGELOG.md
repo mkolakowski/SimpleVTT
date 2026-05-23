@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.122] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Font of Magic endpoints accept an optional `class_slug` parameter for multiclass Sorcerers.** Both `/use_font_of_magic_to_points` and `/use_font_of_magic_to_slot` now take `{character_id, slot_level, class_slug?, override?}`. The `class_slug` defaults to `"sorcerer"` (backward-compatible with the v2.49.120 contract); explicit values let a multiclass Sorcerer/Wizard caller target a specific spell-slot pool. Unknown pools return 409 `unknown_class_slug` with the available pool keys listed. Response now echoes the resolved `class_slug` so callers can verify which pool they hit. 3 new tests (default behavior, explicit `sorcerer`, unknown pool) cover the contract addition; 9 existing tests still pass.
+**Description:** Six small edits in `app/routes/tabletop_routes.py::use_font_of_magic_to_points` + `use_font_of_magic_to_slot`. (1+2) Both endpoints parse `body.get("class_slug")` with `"sorcerer"` default. (3+4) Slot-pool lookup uses `all_slots.get(class_slug)` instead of hardcoded `all_slots.get("sorcerer")`; an empty result returns the new 409 `unknown_class_slug` with `available: sorted(all_slots.keys())`. (5+6) The slot write-back + the `spell_slot_update` broadcast both use `class_slug` instead of the hardcoded string. Response dicts gain `class_slug` so the client knows which pool was mutated.
+**Description (cont):** Why this is the right multiclass shape. Two competing approaches: (a) infer the pool from the character's class list automatically, (b) make the caller specify explicitly. RAW PHB p.165 multiclass spellcasting has subtle rules (full casters' levels combine into a shared pool, half-casters count half, Warlocks have their own pool…). Inferring the pool would mean encoding that table. The explicit `class_slug` approach defers the table decision: pure Sorcerer callers omit the field (default), multiclass callers (or content authors testing edge cases) pass the slug. When multiclass infrastructure ships, this endpoint's signature doesn't change — callers just start using the new pool keys.
+**Description (cont 2):** Why response echoes the resolved `class_slug`. The default's value is determined server-side; the client doesn't have to know about it. Echoing in the response lets a generic UI (the v2.49.121 sheet picker) display "Recovered an L3 SORCERER slot" or similar without needing to track which pool the request hit. Same shape the v2.49.85 multi-target weapon-attack response uses (echoes `auto_attack_targets[i].target_name` so the chat card doesn't have to re-resolve).
+**Description (cont 3):** Tests. Three new in `test_use_font_of_magic.py`: default class_slug, explicit `sorcerer` (sanity check that explicit == default), and unknown `wizard` returns 409. 9 existing tests still pass — they all use the default and continue to receive `class_slug: "sorcerer"` in the response.
+**Description (cont 4):** Verification. (a) `pytest tests/harness/test_use_font_of_magic.py -q` — 12/12 pass. (b) Curl `/version` confirms v2.49.122 live.
+
+### Added
+- `app/routes/tabletop_routes.py::use_font_of_magic_to_points` — `class_slug` parameter + `unknown_class_slug` 409 + response echo.
+- `app/routes/tabletop_routes.py::use_font_of_magic_to_slot` — same.
+- `tests/harness/test_use_font_of_magic.py` — 3 new tests for the multiclass parameter.
+
+### Notes
+- **Backward compat.** Callers omitting `class_slug` get the same behavior as v2.49.120 (defaults to "sorcerer"). The 9 existing tests run unchanged.
+- **Unknown pool error path.** Useful for content authors typing the wrong slug in a homebrew picker; the 409 carries `available: [...]` so the client can show "did you mean...".
+
+### Filed
+- **Multiclass spell-slot infrastructure.** The endpoint accepts a class_slug today, but the sheet schema still uses per-class buckets. A future multiclass-spell-slot pass needs to define how shared / split pools render on the sheet + map back through the `class_slug` parameter. Tracked separately.
+
+---
+
 ## [2.49.121] - 2026-05-22
 
 **Schema version:** 56
