@@ -5823,6 +5823,54 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         const activeRow = list.querySelector('.active-turn');
         if (activeRow) activeRow.scrollIntoView({ block: 'nearest' });
 
+        /* v2.49.159: GM auto-expand on turn change. When the active
+         * combatant differs from the last-rendered one (turn advanced,
+         * combat just started, etc.), collapse every other expanded
+         * .init-entry and expand the new active one. Players don't
+         * get this (they use the Characters tab for their own sheet);
+         * GM gets it so the just-acted character's sheet rolls off
+         * and the up-next character's sheet comes into view without
+         * a manual click. _lastAutoExpandedIdx prevents re-firing on
+         * pure-buff renders that don't change turn_index. */
+        if (IS_GM && battle.active && battle.combatants && battle.combatants.length) {
+            const _activeIdx = battle.turn_index % battle.combatants.length;
+            if (window._lastAutoExpandedIdx !== _activeIdx) {
+                window._lastAutoExpandedIdx = _activeIdx;
+                // Collapse all currently-open sheets first (including
+                // the previous active one) — returns their mini-body
+                // back to the Characters section. Same logic as the
+                // header click handler at line ~5805.
+                list.querySelectorAll('.init-entry').forEach(entry => {
+                    const sheetEl = entry.querySelector('.init-card-sheet');
+                    if (!sheetEl || !sheetEl.classList.contains('open')) return;
+                    sheetEl.classList.remove('open');
+                    entry.querySelector('.mini-header-arrow')?.classList.remove('open');
+                    const entryCharId = entry.dataset.charId;
+                    if (entryCharId) {
+                        const miniBody = sheetEl.querySelector('.mini-body');
+                        if (miniBody) {
+                            document.querySelector(`#char-detail-${entryCharId} .mini-sheet`)?.appendChild(miniBody);
+                        }
+                    }
+                });
+                // Expand the new active combatant's entry.
+                const activeEntry = list.querySelector(`.init-entry[data-idx="${_activeIdx}"]`);
+                if (activeEntry) {
+                    const sheetEl = activeEntry.querySelector('.init-card-sheet');
+                    const headerEl = activeEntry.querySelector('.mini-header');
+                    const entryCharId = activeEntry.dataset.charId;
+                    if (sheetEl) {
+                        sheetEl.classList.add('open');
+                        headerEl?.querySelector('.mini-header-arrow')?.classList.add('open');
+                        if (entryCharId) {
+                            const miniBody = document.querySelector(`#char-detail-${entryCharId} .mini-sheet .mini-body`);
+                            if (miniBody) sheetEl.appendChild(miniBody);
+                        }
+                    }
+                }
+            }
+        }
+
         /* v2.4.8: persist any portrait heals from the top of this function
          * so the next page load skips the resolve work. Skipped when no
          * heal happened to avoid the localStorage write thrash. */

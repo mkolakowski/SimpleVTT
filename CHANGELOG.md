@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.158] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **GM init tracker auto-expands the active combatant's sheet when the turn advances.** Previously the GM had to manually click the new active combatant's card to see their action buttons + spell list. Now: when `battle.turn_index` changes (turn advanced, combat just started, etc.) and the user is the GM, `renderBattle()` collapses every other expanded `.init-entry` and expands the new active combatant's. Players don't get this (they use the Characters tab for their own sheet). `window._lastAutoExpandedIdx` guards against re-firing on pure-buff renders that don't change `turn_index`.
+**Description:** One edit in `app/templates/tabletop.html::renderBattle` — added a new block after the `activeRow.scrollIntoView` step. Reads `battle.turn_index % battle.combatants.length` for the new active index, checks against `window._lastAutoExpandedIdx`, and if different: collapses all currently-open `.init-entry` sheets (moves each mini-body back to the Characters section via the same logic as the header click handler at line ~5805), then expands the new active entry (adds `.open` class, moves mini-body into the sheet slot). Gated on `IS_GM && battle.active && battle.combatants.length` so it doesn't fire on idle / out-of-combat / player views.
+**Description (cont):** Why GM-only. Players viewing the tabletop see the init tracker too, but their action surface is the Characters tab (or their own standalone sheet). Auto-expanding random combatants' sheets to a player would be noise — they don't act for those characters. GMs run every NPC + most PCs (in the demo, GM owns 9 of 10 PCs), so they benefit from "the sheet I need next is already open."
+**Description (cont 2):** Why `_lastAutoExpandedIdx` guards re-fire. `renderBattle` runs on every battle state change — including buff installs, HP edits, action chip toggles — most of which don't change `turn_index`. Without the guard, every render would re-collapse + re-expand the active sheet, which (a) closes a sheet the GM may have manually opened on a DIFFERENT combatant, and (b) causes mini-body DOM thrash on every state change. Tracking the last-auto-expanded index means we only collapse + re-expand when the active combatant actually changes.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.158 live. (b) Manual: GM clicks the ▶ Next Turn button → previously-active combatant's sheet collapses + the new active combatant's sheet expands automatically. (c) GM manually expands a different combatant (not the active one) → re-render doesn't collapse it (the `_lastAutoExpandedIdx` matches; no turn change). (d) Player view → no auto-expand (gated on `IS_GM`).
+
+### Added
+- `app/templates/tabletop.html::renderBattle` — GM-only auto-expand block driven by `battle.turn_index` changes; `window._lastAutoExpandedIdx` prevents re-fire on pure-state renders.
+
+### Notes
+- **Backward compat.** Players unchanged. GM's manual expand on non-active combatants still works (re-render only auto-expands the active one).
+- **Mini-body DOM moves.** Same as the existing header-click expand/collapse — moves the mini-body element between `#char-detail-<id> .mini-sheet` and `.init-card-sheet`.
+
+---
+
 ## [2.49.157] - 2026-05-23
 
 **Schema version:** 56
