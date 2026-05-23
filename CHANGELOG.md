@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.190] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Mockups: Res + Feats tabs merged into one "Features" tab (PHB "Features & Traits" convention).** User: "can you combine res and feats?" PC tab count drops 4 → 4 (Actions / Spells / Stats / Features) with the merged Features panel hosting Resources at the top + Class & Racial Features below. Mockup A's hidden-tab placeholder collapses from 2 entries (`Res` + `Feats`) to 1 (`Features`). PHB convention: the official D&D 5e character sheet has a single "Features & Traits" section that holds both class features and active resource counters — this commit aligns the mockup's tab to that nomenclature.
+**Description:** Three edits to `docs/wiki/unified-mini-sheet-mockups.html`. **(1)** `zaraTemplate` PC tab strip: drops the separate `Res` + `Feats` tabs, adds a single `Features` tab. **(2)** `zaraTemplate` panels: `#${prefix}-pc-res` + `#${prefix}-pc-feats` panel pair replaced with a unified `#${prefix}-pc-features` panel that contains a `.mock-section-label` "Resources" header → 4 resource rows (Sorcery Points / Hit Dice / Hellish Rebuke / Darkness) → another `.mock-section-label` "Class & Racial Features" header → 4 feature rows (Draconic Resilience / Elemental Affinity / Darkvision / Hellish Resistance). **(3)** Mockup A's NPC hidden-tab placeholders: `<span class="mock-tab hidden">Res</span><span class="mock-tab hidden">Feats</span>` collapses to a single `<span class="mock-tab hidden">Features</span>`.
+**Description (cont):** Why "Features" as the merged name. The PHB ("Features & Traits") and D&D Beyond's character sheet both use this umbrella term. "Resources" is what the v2.43.19 mini-sheet calls the counter-tracker panel, but a feature like "Sorcery Points" naturally belongs under "what this class can do" rather than as its own category — the resource counter is a tracking widget for an underlying feature. Merging keeps the resources easy to find (top of the panel) without duplicating the conceptual hierarchy.
+**Description (cont 2):** PC tab count progression — v2.49.182 had 6 tabs (Actions / Spells / Abilities / Skills / Resources / Feats); v2.49.189 merged Abilities + Skills → 5 tabs; v2.49.190 merges Res + Feats → 4 tabs. NPC stays at 3 (Actions / Spells / Stats). The tabbed mini-sheet is now visually leaner — less to scan, faster cognitive grasp of "where do I go for X."
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.190 live. (b) Manual: `GET /wiki/unified-mini-sheet-mockups` → PC mockups show 4 tabs (was 5); clicking the new Features tab shows resources at top + features below with their respective `.mock-section-label` dividers. (c) Mockup A's hidden placeholder shows just `Features` strikethrough. (d) NPC mockups unchanged (still 3 tabs). (e) 19 wiki tests pass.
+
+### Changed
+- `docs/wiki/unified-mini-sheet-mockups.html` — `zaraTemplate` collapses `Res` + `Feats` tabs into a single `Features` tab; new panel `#${prefix}-pc-features` contains both sections separated by `.mock-section-label` headers. Mockup A NPC hidden placeholder collapses to single `Features` tab.
+
+### Notes
+- **PC tab count: 4** (Actions / Spells / Stats / Features). Was 6 in v2.49.182 → 5 in v2.49.189 → 4 now. Approaching the cognitive sweet spot.
+- **NPC tab count unchanged** at 3 (Actions / Spells / Stats). NPCs don't have resources or feats so the merge doesn't apply.
+- **No server / harness change.** Pure mockup template tweak.
+
+---
+
 ## [2.49.189] - 2026-05-23
 
 **Schema version:** 56

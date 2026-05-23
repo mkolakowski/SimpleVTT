@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>SimpleVTT — Unified mini-sheet mockups (v2.49.189)</title>
+<title>SimpleVTT — Unified mini-sheet mockups (v2.49.190)</title>
 <style>
   :root {
     --bg:        #15171c;
@@ -456,15 +456,16 @@
 
 <div id="notice"></div>
 
-<h1>Unified mini-sheet — visual mockups <span class="version">v2.49.189</span></h1>
+<h1>Unified mini-sheet — visual mockups <span class="version">v2.49.190</span></h1>
 <p class="lede">
   Visual companion to the
   <a href="/wiki/doc/plan-unified-mini-sheet">Unified mini-sheet design plan</a>.
   Three mockups rendered side-by-side (NPC left, PC right). Tabs are
   clickable, buttons fire toast feedback, spell-slot pips toggle live.
-  <strong>v2.49.189:</strong> Abilities + Skills merged into a single
-  <em>Stats</em> tab, status chips under the HP bar, resistance + immunity
-  chips at the top of the Stats panel.
+  <strong>v2.49.189–.190:</strong> Abilities + Skills merged into a single
+  <em>Stats</em> tab; Resources + Feats merged into a single <em>Features</em>
+  tab; status chips under the HP bar; resistance + immunity chips at the
+  top of the Stats panel.
 </p>
 
 <div class="callout note">
@@ -604,8 +605,7 @@
           <span class="mock-tab active" data-target="a-npc-actions">Actions</span>
           <span class="mock-tab" data-target="a-npc-spells">Spells</span>
           <span class="mock-tab" data-target="a-npc-stats">Stats</span>
-          <span class="mock-tab hidden">Res</span>
-          <span class="mock-tab hidden">Feats</span>
+          <span class="mock-tab hidden">Features</span>
         </div>
         <div class="mock-panels">
           <div class="mock-panel active" id="a-npc-actions">
@@ -968,8 +968,7 @@
           <span class="mock-tab" data-target="${prefix}-pc-actions">Actions</span>
           <span class="mock-tab active" data-target="${prefix}-pc-spells">Spells</span>
           <span class="mock-tab" data-target="${prefix}-pc-stats">Stats</span>
-          <span class="mock-tab" data-target="${prefix}-pc-res">Res</span>
-          <span class="mock-tab" data-target="${prefix}-pc-feats">Feats</span>
+          <span class="mock-tab" data-target="${prefix}-pc-features">Features</span>
         </div>
         <div class="mock-panels">
           <div class="mock-panel" id="${prefix}-pc-actions">
@@ -1104,7 +1103,8 @@
             <div class="mock-skill-row"><span class="mock-skill-name">Perception</span><span class="mock-chip skill">+1</span><button class="mock-roll-btn">🎲 Roll</button></div>
             <div class="mock-skill-row"><span class="mock-skill-name">Investigation</span><span class="mock-chip skill">+1</span><button class="mock-roll-btn">🎲 Roll</button></div>
           </div>
-          <div class="mock-panel" id="${prefix}-pc-res">
+          <div class="mock-panel" id="${prefix}-pc-features">
+            <div class="mock-section-label">Resources</div>
             <div class="mock-resource-row">
               <span class="mock-resource-name">Sorcery Points</span>
               <span class="mock-resource-pips">
@@ -1128,8 +1128,7 @@
               <span>1/1</span>
               <button class="mock-roll-btn">✨ Cast</button>
             </div>
-          </div>
-          <div class="mock-panel" id="${prefix}-pc-feats">
+            <div class="mock-section-label">Class &amp; Racial Features</div>
             <div class="mock-feat-row">
               <div class="mock-feat-name">Draconic Resilience (Red)</div>
               <div class="mock-feat-desc">+1 HP per level, AC 13 + DEX without armor.</div>
