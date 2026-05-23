@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.168] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **New wiki visual guide — the targeting system, with inline SVG diagrams.** Comprehensive visual reference for the canvas target picker covering ring-state legend, three range regimes (melee / mid-range / out-of-range), multi-target stacking (×N badges), AoE picker, the three picker modules, PC vs NPC caster resolution, the data flow from click to chat card, and the two-layer (client warning + server enforcement) range gate.
+**Description:** New `docs/wiki/targeting-system-guide.html` (~600 lines) modeled on the existing `roll-log-guide.html` pattern (inline `<style>` + theme tokens + faux-canvas SVG diagrams). Sections: (1) anatomy diagram showing every visual state on one canvas — caster, in-range green ring, hovered crimson ring, out-of-range amber dashed, picked ×N badge, ruler line, distance chip, floating hint; (2) ring-state legend grid (6 cells); (3) range regime diagrams for melee (5 ft, no ruler line per v2.49.161), mid-range (Fire Bolt 120 ft), and out-of-range (amber ruler + warning chip); (4) multi-target stacking diagram (Magic Missile 3 darts split ×2/×1); (5) AoE picker diagram (Fireball 20 ft sphere preview); (6) client-side + server-side flow steps; (7) picker modules comparison table (`_targetPicker` / `_aoePicker` / `_rulerPicker`); (8) PC vs NPC caster resolution side-by-side code diagram; (9) caller-side API examples; (10) keyboard + mouse controls table; (11) range-enforcement two-layer explanation.
+**Description (cont):** Surfaced through the wiki per the CLAUDE.md rule: (1) added landing-page table row in `app/templates/wiki.html` ("Available guides"); (2) added on-disk index row in `docs/wiki/README.md`; (3) new `test_wiki_targeting_system_guide_renders` harness test confirming the slug returns 200, body contains the H1, inline SVG present, nav menu injected; (4) extended `test_wiki_home_renders` to assert the new slug link is in the landing-page HTML.
+**Description (cont 2):** Why inline SVG (vs static screenshots or PNGs). SVG renders crisply at any zoom level, themes via current CSS variables (the `--accent` / `--c-heal` / `--c-crit` colors used in the diagrams match the actual canvas renderer), and lives in version control alongside the doc — a future contributor updating the picker can update the diagram in the same commit. Static screenshots would drift the moment the picker visual changes; SVG diagrams stay in sync because they're prose-adjacent code.
+**Description (cont 3):** Why a standalone HTML page (vs Markdown with `<svg>` blocks). The existing markdown renderer (`app/routes/wiki_routes.py`) doesn't reliably pass inline SVG through — the `roll-log-guide.html` and `toast-notifications-guide.html` precedents show that HTML guides are the project's pattern for visual-heavy content. The `_inject_wiki_nav` server-side injector adds the nav strip + `/static/style.css` link automatically, so the standalone page integrates cleanly with the wiki shell.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.168 live. (b) Harness: `test_wiki.py::test_wiki_targeting_system_guide_renders` + extended `test_wiki_home_renders` both pass. (c) Manual: `GET /wiki/targeting-system-guide` renders the full visual guide with all 7 diagrams + the nav strip. (d) The landing page at `/wiki` lists the new guide in the "Available guides" table.
+
+### Added
+- `docs/wiki/targeting-system-guide.html` — visual targeting-system reference with 7 inline SVG diagrams (anatomy / ring legend / 3 range regimes / multi-target / AoE) + flow steps + API examples + keyboard reference.
+- `app/templates/wiki.html` — landing-page row for the new guide.
+- `docs/wiki/README.md` — on-disk index row for the new guide.
+- `tests/harness/test_wiki.py::test_wiki_targeting_system_guide_renders` — per-slug smoke test (200 + H1 + inline SVG + nav).
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — extended landing-page assertion.
+
+### Notes
+- **Per CLAUDE.md wiki-surfacing rule:** docs under `docs/wiki/<slug>.html` don't need an allowlist entry — they're served directly via `/wiki/<slug>` and the standalone HTML gets `_inject_wiki_nav` applied at request time.
+- **No backend change.** Pure documentation.
+
+---
+
 ## [2.49.167] - 2026-05-23
 
 **Schema version:** 56

@@ -44,6 +44,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-warlock-pact-boon" in resp.text
     # v2.49.167: PC vs NPC combat systems audit doc listed.
     assert "/wiki/pc-vs-npc-systems" in resp.text
+    # v2.49.168: targeting system visual guide listed.
+    assert "/wiki/targeting-system-guide" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -94,6 +96,21 @@ async def test_wiki_pc_vs_npc_systems_doc_renders():
     # H1 contains "PC vs NPC combat systems".
     assert "pc vs npc" in resp.text.lower()
     assert "<h1" in resp.text
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_targeting_system_guide_renders():
+    """v2.49.168: GET /wiki/targeting-system-guide — standalone HTML
+    visual guide with inline SVG diagrams. 200 + body has the H1, the
+    SVG diagrams, and the nav menu injected after <body>."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/targeting-system-guide")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "targeting system" in resp.text.lower()
+    # Inline SVG diagrams are the whole point of this guide.
+    assert "<svg" in resp.text
+    # Standalone HTML gets the nav injected after <body>.
     assert 'class="wiki-nav"' in resp.text
 
 

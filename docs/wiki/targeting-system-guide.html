@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SimpleVTT — Targeting system guide (v2.49.168)</title>
+<style>
+  /* Theme tokens — fallback when no data-theme is set; the wiki nav
+     injector adds /static/style.css below which wins via cascade. */
+  :root {
+    --bg:        #15171c;
+    --bg-2:      #20232a;
+    --panel:     #20232a;
+    --border:    #2c303a;
+    --input-bg:  #2a2d36;
+    --fg:        #e8e8ee;
+    --fg-mute:   #9aa0aa;
+    --accent:    #6cb4ff;
+    --danger:    #d74a4a;
+    --c-heal:    #4ade80;
+    --c-crit:    #fbbf24;
+    --c-damage:  #fb923c;
+    --c-buff:    #5ec1d6;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 28px 36px 80px;
+    line-height: 1.5;
+  }
+  h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+  h1 .version {
+    font-size: 12px; color: var(--fg-mute);
+    font-weight: 400; margin-left: 8px;
+  }
+  .lede { font-size: 14px; color: var(--fg-mute); margin: 6px 0 24px; }
+  h2 {
+    font-size: 16px;
+    margin: 36px 0 6px;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+  h3 {
+    font-size: 13px;
+    margin: 22px 0 6px;
+    color: var(--fg);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  p, ul, ol { font-size: 14px; }
+  ul li, ol li { margin: 3px 0; }
+  code, .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    background: rgba(108, 180, 255, 0.10);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  pre code {
+    background: transparent;
+    color: var(--fg);
+    padding: 0;
+  }
+  .callout {
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-2));
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    margin: 10px 0;
+  }
+  .callout.warn {
+    background: color-mix(in srgb, var(--c-crit) 8%, var(--bg-2));
+    border-left-color: var(--c-crit);
+  }
+  .callout.warn strong { color: var(--c-crit); }
+  .callout strong { color: var(--accent); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin: 10px 0 16px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: var(--bg-2);
+    font-weight: 600;
+    font-size: 12px;
+  }
+  td .code { font-size: 11px; }
+
+  /* ── Diagrams ── */
+  .diagram {
+    background: linear-gradient(180deg, #0d1117 0%, #161b22 100%);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px;
+    margin: 14px 0 20px;
+    text-align: center;
+  }
+  .diagram svg { display: block; margin: 0 auto; max-width: 100%; }
+  .diagram-caption {
+    font-size: 11px;
+    color: var(--fg-mute);
+    margin-top: 8px;
+    font-style: italic;
+  }
+
+  /* ── Legend grid for ring states ── */
+  .ring-legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
+    margin: 14px 0 20px;
+  }
+  .ring-legend-cell {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    text-align: center;
+  }
+  .ring-legend-cell .label {
+    font-size: 11px;
+    color: var(--fg);
+    font-weight: 600;
+    margin-top: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .ring-legend-cell .sub {
+    font-size: 10px;
+    color: var(--fg-mute);
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+
+  /* ── Flow box (server pipeline) ── */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 14px 0;
+  }
+  .flow-step {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  .flow-step .num {
+    display: inline-block;
+    width: 18px; height: 18px;
+    background: var(--accent);
+    color: var(--bg);
+    border-radius: 50%;
+    text-align: center;
+    line-height: 18px;
+    font-weight: 700;
+    font-size: 10px;
+    margin-right: 8px;
+  }
+  .flow-step.terminal { border-left-color: var(--c-heal); }
+  .flow-step.terminal .num { background: var(--c-heal); }
+  .flow-step.error { border-left-color: var(--danger); }
+  .flow-step.error .num { background: var(--danger); }
+</style>
+</head>
+<body>
+<h1>Targeting system guide <span class="version">v2.49.168</span></h1>
+<p class="lede">
+  Visual reference for SimpleVTT's canvas target picker — how players and the GM
+  pick spell / attack targets on the map, what the green / red / amber rings mean,
+  how range is gated client-side and enforced server-side, and how the three picker
+  modules (<code>_targetPicker</code>, <code>_aoePicker</code>, <code>_rulerPicker</code>)
+  differ. Worked examples for single-target spells, multi-beam stacking (Magic Missile,
+  Eldritch Blast), AoE placement (Fireball), and melee weapon attacks.
+</p>
+
+<h2 id="overview">How the picker works at a glance</h2>
+<p>
+  When a player clicks <code>🗡 Strike</code>, <code>✨ Cast</code>, or a feature button
+  on the character sheet (or, for NPCs, <code>🗡 Strike</code> in the init tracker), and
+  no target is already pre-selected via canvas double-click, the canvas picker opens.
+  The player sees:
+</p>
+<ul>
+  <li>A <strong>green dashed ring</strong> around every in-range token that's a valid target.</li>
+  <li>A <strong>crimson ring + glow</strong> on the token currently under the cursor (if in range).</li>
+  <li>An <strong>amber dashed ring + warning</strong> if the cursor hovers an out-of-range token.</li>
+  <li>A <strong>ruler line + distance chip</strong> from the caster's token to the cursor (suppressed for melee ≤ 5 ft).</li>
+  <li>A <strong>"×N" badge</strong> on tokens picked more than once (for stacking — Magic Missile, Eldritch Blast).</li>
+  <li>A <strong>floating hint</strong> at the top of the canvas: "🎯 Spell · pick 0 / N targets · click target · right-click to undo · Enter to commit · Esc to cancel".</li>
+</ul>
+
+<div class="diagram">
+<svg viewBox="0 0 720 360" width="720" height="360" xmlns="http://www.w3.org/2000/svg">
+  <!-- grid background -->
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#252a33" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="720" height="360" fill="#1a1f29" />
+  <rect width="720" height="360" fill="url(#grid)" />
+
+  <!-- Caster token (Zara) -->
+  <circle cx="120" cy="180" r="20" fill="#6cb4ff" opacity="0.25" />
+  <circle cx="120" cy="180" r="20" fill="none" stroke="#6cb4ff" stroke-width="2" />
+  <text x="120" y="184" text-anchor="middle" font-size="12" font-weight="700" fill="#fff">🪄</text>
+  <text x="120" y="216" text-anchor="middle" font-size="10" fill="#9aa0aa">Zara (caster)</text>
+
+  <!-- In-range target — green ring (available) -->
+  <circle cx="280" cy="120" r="20" fill="#3a2a2a" />
+  <circle cx="280" cy="120" r="20" fill="none" stroke="#dc2626" stroke-width="0.5" />
+  <text x="280" y="124" text-anchor="middle" font-size="14">👹</text>
+  <!-- green availability halo + ring -->
+  <circle cx="280" cy="120" r="25" fill="none" stroke="rgba(74,222,128,0.35)" stroke-width="5" />
+  <circle cx="280" cy="120" r="22" fill="none" stroke="#4ade80" stroke-width="3"
+          stroke-dasharray="0" filter="drop-shadow(0 0 8px rgba(74,222,128,0.7))" />
+  <text x="280" y="160" text-anchor="middle" font-size="10" fill="#4ade80">in range</text>
+
+  <!-- Hovered token — crimson bold ring -->
+  <circle cx="420" cy="200" r="20" fill="#3a2a2a" />
+  <circle cx="420" cy="200" r="20" fill="none" stroke="#dc2626" stroke-width="0.5" />
+  <text x="420" y="204" text-anchor="middle" font-size="14">👹</text>
+  <!-- crimson hover halo + ring -->
+  <circle cx="420" cy="200" r="25" fill="none" stroke="rgba(220,38,38,0.4)" stroke-width="5" />
+  <circle cx="420" cy="200" r="22" fill="none" stroke="#dc2626" stroke-width="3.5"
+          filter="drop-shadow(0 0 12px #dc2626)" />
+  <text x="420" y="240" text-anchor="middle" font-size="10" fill="#dc2626">hovered (click)</text>
+  <!-- cursor crosshair -->
+  <g transform="translate(420,200)">
+    <circle cx="0" cy="0" r="3" fill="none" stroke="#fff" stroke-width="1" />
+    <line x1="-7" y1="0" x2="-3" y2="0" stroke="#fff" stroke-width="1" />
+    <line x1="7" y1="0" x2="3" y2="0" stroke="#fff" stroke-width="1" />
+    <line x1="0" y1="-7" x2="0" y2="-3" stroke="#fff" stroke-width="1" />
+    <line x1="0" y1="7" x2="0" y2="3" stroke="#fff" stroke-width="1" />
+  </g>
+
+  <!-- Out-of-range token — amber dashed -->
+  <circle cx="600" cy="80" r="20" fill="#3a2a2a" />
+  <circle cx="600" cy="80" r="20" fill="none" stroke="#dc2626" stroke-width="0.5" />
+  <text x="600" y="84" text-anchor="middle" font-size="14">👹</text>
+  <circle cx="600" cy="80" r="24" fill="none" stroke="rgba(245,158,11,0.85)"
+          stroke-width="2" stroke-dasharray="4 3" />
+  <text x="600" y="120" text-anchor="middle" font-size="10" fill="#f59e0b">out of range</text>
+
+  <!-- Picked token — bold crimson + ×2 badge -->
+  <circle cx="280" cy="280" r="20" fill="#3a2a2a" />
+  <circle cx="280" cy="280" r="20" fill="none" stroke="#dc2626" stroke-width="0.5" />
+  <text x="280" y="284" text-anchor="middle" font-size="14">👹</text>
+  <circle cx="280" cy="280" r="23" fill="none" stroke="rgba(220,38,38,0.35)" stroke-width="4" />
+  <circle cx="280" cy="280" r="21" fill="none" stroke="#dc2626" stroke-width="2.5"
+          filter="drop-shadow(0 0 14px #dc2626)" />
+  <!-- ×N badge -->
+  <circle cx="295" cy="265" r="11" fill="#dc2626" stroke="#fff" stroke-width="2" />
+  <text x="295" y="269" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">×2</text>
+  <text x="280" y="320" text-anchor="middle" font-size="10" fill="#dc2626">picked (×2)</text>
+
+  <!-- Ruler line caster → cursor -->
+  <line x1="120" y1="180" x2="420" y2="200"
+        stroke="#dc2626" stroke-width="2" stroke-dasharray="6 4"
+        stroke-linecap="round" opacity="0.85" />
+  <!-- Distance chip -->
+  <rect x="432" y="212" width="68" height="16" rx="4" fill="rgba(20,24,28,0.88)"
+        stroke="rgba(220,38,38,0.6)" stroke-width="1" />
+  <text x="438" y="223" font-size="11" fill="#fff">75 ft / 120 ft</text>
+
+  <!-- Floating hint -->
+  <rect x="180" y="14" width="360" height="22" rx="11"
+        fill="rgba(20,24,28,0.95)" stroke="#6cb4ff" stroke-width="1" />
+  <text x="360" y="29" text-anchor="middle" font-size="11" fill="#fff">
+    🎯 Fire Bolt · pick 0 / 1 targets · click · Esc to cancel
+  </text>
+</svg>
+<div class="diagram-caption">
+  Anatomy of an active target picker. Caster (blue) → ruler line + chip → cursor on
+  a crimson-highlighted hovered token. Green dashed ring marks an available
+  in-range token; amber dashed marks an out-of-range one; previously-picked
+  tokens carry a crimson ring + ×N badge.
+</div>
+</div>
+
+<h2 id="ring-states">Ring state legend</h2>
+<p>
+  Every token visible to the picker is in one of these states. The picker
+  re-renders on every cursor move so states transition fluidly as you hover.
+</p>
+
+<div class="ring-legend">
+  <div class="ring-legend-cell">
+    <svg viewBox="0 0 80 80" width="80" height="80">
+      <circle cx="40" cy="40" r="20" fill="#3a2a2a" />
+      <text x="40" y="46" text-anchor="middle" font-size="16">👹</text>
+      <circle cx="40" cy="40" r="25" fill="none" stroke="rgba(74,222,128,0.35)" stroke-width="5" />
+      <circle cx="40" cy="40" r="22" fill="none" stroke="#4ade80" stroke-width="3"
+              filter="drop-shadow(0 0 8px rgba(74,222,128,0.7))" />
+    </svg>
+    <div class="label">In range, available</div>
+    <div class="sub">Green ring + soft halo. Click to pick.</div>
+  </div>
+
+  <div class="ring-legend-cell">
+    <svg viewBox="0 0 80 80" width="80" height="80">
+      <circle cx="40" cy="40" r="20" fill="#3a2a2a" />
+      <text x="40" y="46" text-anchor="middle" font-size="16">👹</text>
+      <circle cx="40" cy="40" r="25" fill="none" stroke="rgba(220,38,38,0.4)" stroke-width="5" />
+      <circle cx="40" cy="40" r="22" fill="none" stroke="#dc2626" stroke-width="3.5"
+              filter="drop-shadow(0 0 12px #dc2626)" />
+    </svg>
+    <div class="label">In range, hovered</div>
+    <div class="sub">Crimson ring + glow. Clicking commits this pick.</div>
+  </div>
+
+  <div class="ring-legend-cell">
+    <svg viewBox="0 0 80 80" width="80" height="80">
+      <circle cx="40" cy="40" r="20" fill="#3a2a2a" />
+      <text x="40" y="46" text-anchor="middle" font-size="16">👹</text>
+      <circle cx="40" cy="40" r="24" fill="none" stroke="rgba(245,158,11,0.85)"
+              stroke-width="2" stroke-dasharray="4 3" />
+    </svg>
+    <div class="label">Out of range, hovered</div>
+    <div class="sub">Amber dashed. Click → server 409s; ruler line also goes amber.</div>
+  </div>
+
+  <div class="ring-legend-cell">
+    <svg viewBox="0 0 80 80" width="80" height="80">
+      <circle cx="40" cy="40" r="20" fill="#3a2a2a" />
+      <text x="40" y="46" text-anchor="middle" font-size="16">👹</text>
+      <circle cx="40" cy="40" r="23" fill="none" stroke="rgba(220,38,38,0.35)" stroke-width="4" />
+      <circle cx="40" cy="40" r="21" fill="none" stroke="#dc2626" stroke-width="2.5"
+              filter="drop-shadow(0 0 14px #dc2626)" />
+    </svg>
+    <div class="label">Picked (×1)</div>
+    <div class="sub">Sharp crimson ring + glow. Right-click to undo.</div>
+  </div>
+
+  <div class="ring-legend-cell">
+    <svg viewBox="0 0 80 80" width="80" height="80">
+      <circle cx="40" cy="40" r="20" fill="#3a2a2a" />
+      <text x="40" y="46" text-anchor="middle" font-size="16">👹</text>
+      <circle cx="40" cy="40" r="23" fill="none" stroke="rgba(220,38,38,0.35)" stroke-width="4" />
+      <circle cx="40" cy="40" r="21" fill="none" stroke="#dc2626" stroke-width="2.5"
+              filter="drop-shadow(0 0 14px #dc2626)" />
+      <circle cx="56" cy="24" r="11" fill="#dc2626" stroke="#fff" stroke-width="2" />
+      <text x="56" y="28" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">×3</text>
+    </svg>
+    <div class="label">Picked (×N)</div>
+    <div class="sub">×N badge for stacking — Magic Missile, Eldritch Blast.</div>
+  </div>
+
+  <div class="ring-legend-cell">
+    <svg viewBox="0 0 80 80" width="80" height="80">
+      <circle cx="40" cy="40" r="20" fill="#3a2a2a" opacity="0.4" />
+      <text x="40" y="46" text-anchor="middle" font-size="16" opacity="0.5">🪄</text>
+    </svg>
+    <div class="label">Caster's own token</div>
+    <div class="sub">Skipped — single-target spells can't target self.</div>
+  </div>
+</div>
+
+<h2 id="range-regimes">Range visualization — three regimes</h2>
+<p>
+  How the picker visualises range depends on the spell / attack's reach.
+</p>
+
+<h3>1. Melee (range ≤ 5 ft)</h3>
+<p>
+  The ruler line + distance chip is <strong>suppressed</strong> (v2.49.161+) because
+  "5 ft / 5 ft" carries no useful information and visually clutters the
+  one-cell decision. Only the green ring on the adjacent token marks the target.
+</p>
+<div class="diagram">
+<svg viewBox="0 0 480 220" width="480" height="220">
+  <defs>
+    <pattern id="grid2" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#252a33" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="480" height="220" fill="#1a1f29" />
+  <rect width="480" height="220" fill="url(#grid2)" />
+
+  <!-- Caster (Pip) center -->
+  <circle cx="200" cy="110" r="18" fill="#6cb4ff" opacity="0.25" />
+  <circle cx="200" cy="110" r="18" fill="none" stroke="#6cb4ff" stroke-width="2" />
+  <text x="200" y="115" text-anchor="middle" font-size="12">🗡</text>
+
+  <!-- Adjacent enemies — all 8 cells (Chebyshev) -->
+  <g>
+    <circle cx="160" cy="70" r="18" fill="#3a2a2a" />
+    <text x="160" y="75" text-anchor="middle" font-size="12">👹</text>
+    <circle cx="160" cy="70" r="23" fill="none" stroke="#4ade80" stroke-width="3"
+            filter="drop-shadow(0 0 6px rgba(74,222,128,0.7))" />
+  </g>
+  <g>
+    <circle cx="200" cy="70" r="18" fill="#3a2a2a" />
+    <text x="200" y="75" text-anchor="middle" font-size="12">👹</text>
+    <circle cx="200" cy="70" r="23" fill="none" stroke="#4ade80" stroke-width="3"
+            filter="drop-shadow(0 0 6px rgba(74,222,128,0.7))" />
+  </g>
+  <g>
+    <circle cx="240" cy="70" r="18" fill="#3a2a2a" />
+    <text x="240" y="75" text-anchor="middle" font-size="12">👹</text>
+    <circle cx="240" cy="70" r="23" fill="none" stroke="#4ade80" stroke-width="3"
+            filter="drop-shadow(0 0 6px rgba(74,222,128,0.7))" />
+  </g>
+  <g>
+    <circle cx="240" cy="110" r="18" fill="#3a2a2a" />
+    <text x="240" y="115" text-anchor="middle" font-size="12">👹</text>
+    <circle cx="240" cy="110" r="23" fill="none" stroke="#4ade80" stroke-width="3"
+            filter="drop-shadow(0 0 6px rgba(74,222,128,0.7))" />
+  </g>
+  <g>
+    <circle cx="160" cy="110" r="18" fill="#3a2a2a" />
+    <text x="160" y="115" text-anchor="middle" font-size="12">👹</text>
+    <circle cx="160" cy="110" r="23" fill="none" stroke="#4ade80" stroke-width="3"
+            filter="drop-shadow(0 0 6px rgba(74,222,128,0.7))" />
+  </g>
+  <!-- Out of melee range — 10 ft diagonal -->
+  <g>
+    <circle cx="300" cy="170" r="18" fill="#3a2a2a" />
+    <text x="300" y="175" text-anchor="middle" font-size="12">👹</text>
+    <!-- no ring — out of range, no highlight -->
+  </g>
+  <text x="200" y="200" text-anchor="middle" font-size="11" fill="#9aa0aa">
+    No ruler line — distance chip would just say "5 ft / 5 ft"
+  </text>
+</svg>
+<div class="diagram-caption">
+  Pip (caster) with Shortsword (5 ft reach). All 8 adjacent enemy tokens
+  (Chebyshev distance = 5 ft) get a green ring. The enemy 10 ft away
+  diagonally gets nothing. No ruler line.
+</div>
+</div>
+
+<h3>2. Mid-range (e.g. 30–120 ft)</h3>
+<p>
+  Full picker: green availability rings on in-range tokens, ruler line +
+  distance chip from caster to cursor, amber preview when the cursor strays
+  beyond range.
+</p>
+<div class="diagram">
+<svg viewBox="0 0 680 260" width="680" height="260">
+  <defs>
+    <pattern id="grid3" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#252a33" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="680" height="260" fill="#1a1f29" />
+  <rect width="680" height="260" fill="url(#grid3)" />
+
+  <!-- Caster Zara -->
+  <circle cx="100" cy="130" r="18" fill="#6cb4ff" opacity="0.25" />
+  <circle cx="100" cy="130" r="18" fill="none" stroke="#6cb4ff" stroke-width="2" />
+  <text x="100" y="135" text-anchor="middle" font-size="12">🪄</text>
+
+  <!-- Multiple enemies at varying distances -->
+  <g>
+    <circle cx="260" cy="90" r="18" fill="#3a2a2a" />
+    <text x="260" y="95" text-anchor="middle" font-size="12">👹</text>
+    <circle cx="260" cy="90" r="22" fill="none" stroke="#4ade80" stroke-width="3"
+            filter="drop-shadow(0 0 6px rgba(74,222,128,0.7))" />
+  </g>
+  <g>
+    <circle cx="380" cy="150" r="18" fill="#3a2a2a" />
+    <text x="380" y="155" text-anchor="middle" font-size="12">👹</text>
+    <circle cx="380" cy="150" r="22" fill="none" stroke="#4ade80" stroke-width="3"
+            filter="drop-shadow(0 0 6px rgba(74,222,128,0.7))" />
+  </g>
+  <g>
+    <!-- Hovered, in range -->
+    <circle cx="500" cy="100" r="18" fill="#3a2a2a" />
+    <text x="500" y="105" text-anchor="middle" font-size="12">👹</text>
+    <circle cx="500" cy="100" r="23" fill="none" stroke="rgba(220,38,38,0.4)" stroke-width="5" />
+    <circle cx="500" cy="100" r="21" fill="none" stroke="#dc2626" stroke-width="3"
+            filter="drop-shadow(0 0 10px #dc2626)" />
+  </g>
+  <g>
+    <!-- Out of range -->
+    <circle cx="620" cy="200" r="18" fill="#3a2a2a" />
+    <text x="620" y="205" text-anchor="middle" font-size="12">👹</text>
+  </g>
+
+  <!-- Cursor at hovered token -->
+  <g transform="translate(500,100)">
+    <circle cx="0" cy="0" r="3" fill="none" stroke="#fff" stroke-width="1" />
+    <line x1="-7" y1="0" x2="-3" y2="0" stroke="#fff" stroke-width="1" />
+    <line x1="7" y1="0" x2="3" y2="0" stroke="#fff" stroke-width="1" />
+    <line x1="0" y1="-7" x2="0" y2="-3" stroke="#fff" stroke-width="1" />
+    <line x1="0" y1="7" x2="0" y2="3" stroke="#fff" stroke-width="1" />
+  </g>
+
+  <!-- Ruler caster → cursor -->
+  <line x1="100" y1="130" x2="500" y2="100"
+        stroke="#dc2626" stroke-width="2" stroke-dasharray="6 4"
+        stroke-linecap="round" opacity="0.85" />
+  <!-- Chip -->
+  <rect x="512" y="112" width="68" height="16" rx="4" fill="rgba(20,24,28,0.88)"
+        stroke="rgba(220,38,38,0.6)" stroke-width="1" />
+  <text x="518" y="123" font-size="11" fill="#fff">60 ft / 120 ft</text>
+</svg>
+<div class="diagram-caption">
+  Zara casting Fire Bolt (120 ft). Three enemy tokens in range get green
+  rings; the hovered one (right) flips to crimson. Ruler chip reads
+  "60 ft / 120 ft" — comfortably in range. The far enemy outside
+  120 ft gets no ring at all.
+</div>
+</div>
+
+<h3>3. Out of range (cursor or token beyond reach)</h3>
+<p>
+  When the cursor enters an out-of-range cell or hovers an out-of-range token,
+  the ruler line + chip flip to amber, the hover ring goes amber dashed, and
+  the chip prefixes a "⚠" with the distance overrun.
+</p>
+<div class="diagram">
+<svg viewBox="0 0 680 200" width="680" height="200">
+  <defs>
+    <pattern id="grid4" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#252a33" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="680" height="200" fill="#1a1f29" />
+  <rect width="680" height="200" fill="url(#grid4)" />
+
+  <!-- Caster -->
+  <circle cx="100" cy="100" r="18" fill="#6cb4ff" opacity="0.25" />
+  <circle cx="100" cy="100" r="18" fill="none" stroke="#6cb4ff" stroke-width="2" />
+  <text x="100" y="105" text-anchor="middle" font-size="12">🪄</text>
+
+  <!-- Far enemy — out of range -->
+  <circle cx="580" cy="100" r="18" fill="#3a2a2a" />
+  <text x="580" y="105" text-anchor="middle" font-size="12">👹</text>
+  <circle cx="580" cy="100" r="24" fill="none" stroke="rgba(245,158,11,0.85)"
+          stroke-width="2" stroke-dasharray="4 3" />
+
+  <!-- Cursor at far enemy -->
+  <g transform="translate(580,100)">
+    <circle cx="0" cy="0" r="3" fill="none" stroke="#fff" stroke-width="1" />
+    <line x1="-7" y1="0" x2="-3" y2="0" stroke="#fff" stroke-width="1" />
+    <line x1="7" y1="0" x2="3" y2="0" stroke="#fff" stroke-width="1" />
+  </g>
+
+  <!-- Amber ruler -->
+  <line x1="100" y1="100" x2="580" y2="100"
+        stroke="#f59e0b" stroke-width="2" stroke-dasharray="4 3"
+        stroke-linecap="round" opacity="0.95" />
+  <!-- Amber chip with warning -->
+  <rect x="370" y="115" width="120" height="18" rx="4" fill="rgba(20,24,28,0.95)"
+        stroke="#f59e0b" stroke-width="1" />
+  <text x="430" y="128" text-anchor="middle" font-size="11" fill="#fbbf24">⚠ 145 ft / 120 ft</text>
+</svg>
+<div class="diagram-caption">
+  Cursor on an out-of-range token (145 ft &gt; 120 ft Fire Bolt range). Ruler
+  goes amber, hover ring goes amber dashed, chip prefixes "⚠". A click here
+  posts to the server which 409s with <code>out_of_range</code>.
+</div>
+</div>
+
+<h2 id="multi-target">Multi-target stacking — Magic Missile, Eldritch Blast</h2>
+<p>
+  Spells that fire multiple darts / beams (Magic Missile, Scorching Ray,
+  Eldritch Blast) ask for <code>required = N</code> picks where N is the
+  number of darts / beams (with per-slot scaling and per-level cantrip
+  scaling). The picker accepts the same token clicked multiple times — each
+  click increments a <code>×N</code> badge on that token. Right-click
+  decrements. The picker auto-commits when the total equals <code>required</code>;
+  Enter commits early.
+</p>
+
+<div class="diagram">
+<svg viewBox="0 0 560 200" width="560" height="200">
+  <defs>
+    <pattern id="grid5" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#252a33" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="560" height="200" fill="#1a1f29" />
+  <rect width="560" height="200" fill="url(#grid5)" />
+
+  <!-- Caster -->
+  <circle cx="80" cy="100" r="18" fill="#6cb4ff" opacity="0.25" />
+  <circle cx="80" cy="100" r="18" fill="none" stroke="#6cb4ff" stroke-width="2" />
+  <text x="80" y="105" text-anchor="middle" font-size="12">🪄</text>
+
+  <!-- Picked token ×2 -->
+  <circle cx="260" cy="80" r="18" fill="#3a2a2a" />
+  <text x="260" y="85" text-anchor="middle" font-size="12">👹</text>
+  <circle cx="260" cy="80" r="23" fill="none" stroke="rgba(220,38,38,0.35)" stroke-width="4" />
+  <circle cx="260" cy="80" r="21" fill="none" stroke="#dc2626" stroke-width="2.5"
+          filter="drop-shadow(0 0 14px #dc2626)" />
+  <circle cx="275" cy="65" r="11" fill="#dc2626" stroke="#fff" stroke-width="2" />
+  <text x="275" y="69" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">×2</text>
+
+  <!-- Picked token ×1 -->
+  <circle cx="420" cy="140" r="18" fill="#3a2a2a" />
+  <text x="420" y="145" text-anchor="middle" font-size="12">👹</text>
+  <circle cx="420" cy="140" r="23" fill="none" stroke="rgba(220,38,38,0.35)" stroke-width="4" />
+  <circle cx="420" cy="140" r="21" fill="none" stroke="#dc2626" stroke-width="2.5"
+          filter="drop-shadow(0 0 14px #dc2626)" />
+
+  <!-- Hint -->
+  <rect x="60" y="14" width="440" height="22" rx="11"
+        fill="rgba(20,24,28,0.95)" stroke="#a855f7" stroke-width="1" />
+  <text x="280" y="29" text-anchor="middle" font-size="11" fill="#fff">
+    🎯 Magic Missile · pick 3 / 3 targets · Enter to commit
+  </text>
+</svg>
+<div class="diagram-caption">
+  Magic Missile L1 (3 darts). Left bandit gets 2 darts (×2 badge), right
+  bandit gets 1 dart. Picker auto-commits at 3/3 → server iterates the
+  combatant-id list <code>[bandit_a, bandit_a, bandit_b]</code> and
+  rolls per-dart damage.
+</div>
+</div>
+
+<h2 id="aoe-picker">AoE picker (Fireball, Spirit Guardians, Spike Growth)</h2>
+<p>
+  AoE spells use the <strong>second</strong> picker module — <code>_aoePicker</code>
+  — which differs from the target picker in that you place a SHAPE on the
+  map, not pick individual tokens. The picker draws the AoE outline (sphere /
+  cube / cone / line) following the cursor with the caster's reach as the
+  range gate. Same green-in-range / amber-out-of-range colour language.
+</p>
+<div class="diagram">
+<svg viewBox="0 0 600 280" width="600" height="280">
+  <defs>
+    <pattern id="grid6" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#252a33" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="600" height="280" fill="#1a1f29" />
+  <rect width="600" height="280" fill="url(#grid6)" />
+
+  <!-- Caster -->
+  <circle cx="80" cy="140" r="18" fill="#6cb4ff" opacity="0.25" />
+  <circle cx="80" cy="140" r="18" fill="none" stroke="#6cb4ff" stroke-width="2" />
+  <text x="80" y="145" text-anchor="middle" font-size="12">🪄</text>
+
+  <!-- AoE preview circle (Fireball — 20 ft radius sphere) -->
+  <circle cx="380" cy="140" r="80" fill="rgba(251,146,60,0.10)"
+          stroke="#fb923c" stroke-width="2.5" stroke-dasharray="6 4" />
+  <!-- Cursor crosshair at center -->
+  <g transform="translate(380,140)">
+    <line x1="-12" y1="0" x2="-4" y2="0" stroke="#fff" stroke-width="1.5" />
+    <line x1="12" y1="0" x2="4" y2="0" stroke="#fff" stroke-width="1.5" />
+    <line x1="0" y1="-12" x2="0" y2="-4" stroke="#fff" stroke-width="1.5" />
+    <line x1="0" y1="12" x2="0" y2="4" stroke="#fff" stroke-width="1.5" />
+  </g>
+  <!-- Enemies inside the AoE -->
+  <circle cx="340" cy="110" r="18" fill="#3a2a2a" />
+  <text x="340" y="115" text-anchor="middle" font-size="12">👹</text>
+  <circle cx="420" cy="170" r="18" fill="#3a2a2a" />
+  <text x="420" y="175" text-anchor="middle" font-size="12">👹</text>
+  <circle cx="380" cy="200" r="18" fill="#3a2a2a" />
+  <text x="380" y="205" text-anchor="middle" font-size="12">👹</text>
+
+  <!-- Ruler caster → cursor -->
+  <line x1="80" y1="140" x2="380" y2="140"
+        stroke="#dc2626" stroke-width="2" stroke-dasharray="6 4"
+        stroke-linecap="round" opacity="0.85" />
+  <!-- Chip -->
+  <rect x="160" y="120" width="60" height="16" rx="4" fill="rgba(20,24,28,0.88)"
+        stroke="rgba(220,38,38,0.6)" stroke-width="1" />
+  <text x="166" y="131" font-size="11" fill="#fff">75 / 150 ft</text>
+
+  <!-- Hint -->
+  <rect x="120" y="14" width="360" height="22" rx="11"
+        fill="rgba(20,24,28,0.95)" stroke="#fb923c" stroke-width="1" />
+  <text x="300" y="29" text-anchor="middle" font-size="11" fill="#fff">
+    🔥 Fireball · click to place · Esc to cancel
+  </text>
+</svg>
+<div class="diagram-caption">
+  Fireball cast. Caster center → cursor with the 20 ft radius sphere preview
+  (orange dashed). Three enemies fall inside the AoE; clicking commits the
+  placement and the server resolves the save vs damage for each enclosed
+  combatant.
+</div>
+</div>
+
+<h2 id="data-flow">Data flow — from click to chat card</h2>
+
+<h3>Client-side</h3>
+<div class="flow">
+  <div class="flow-step"><span class="num">1</span> User clicks 🗡 Strike / ✨ Cast → button handler reads <code>data-attack-range</code> / spell range.</div>
+  <div class="flow-step"><span class="num">2</span> Handler calls <code>vttOpenMultiTargetPicker({required, casterCharId | casterCombatantId, rangeStr, spellName})</code>.</div>
+  <div class="flow-step"><span class="num">3</span> Picker resolves caster's token center (PC: via <code>character_id</code>; NPC: via <code>combatant_id</code> → <code>source_token_id</code> / <code>token_template_id+name</code>).</div>
+  <div class="flow-step"><span class="num">4</span> Picker parses <code>rangeStr</code> ("120 ft", "5 ft", "30/120 ft") → <code>rangeFt</code>.</div>
+  <div class="flow-step"><span class="num">5</span> Picker renders green rings on in-range tokens (Chebyshev distance from caster center).</div>
+  <div class="flow-step"><span class="num">6</span> User hovers / clicks. <code>addPick()</code> increments badge; right-click <code>removePick()</code>.</div>
+  <div class="flow-step terminal"><span class="num">7</span> Picker auto-commits at <code>required</code> picks → resolves to <code>Array&lt;combatant_id&gt;</code> (duplicates allowed for stacking).</div>
+  <div class="flow-step"><span class="num">8</span> Handler POSTs to <code>/attack</code> (PC) or <code>/npc_attack</code> (NPC) with <code>target_combatant_id</code> + <code>target_combatant_ids[]</code>.</div>
+</div>
+
+<h3>Server-side</h3>
+<div class="flow">
+  <div class="flow-step"><span class="num">1</span> Endpoint reads body, validates auth + character ownership.</div>
+  <div class="flow-step"><span class="num">2</span> Action-economy gate (PC only): 409 over_budget if slot used and not override.</div>
+  <div class="flow-step"><span class="num">3</span> Range check (PC: <code>_check_cast_range</code> three-tier; NPC: <code>_check_npc_attack_range</code> no-bypass + <code>override_range</code> flag).</div>
+  <div class="flow-step error"><span class="num">⚠</span> Returns 409 <code>{error: "out_of_range", source_name, target_name, distance_ft, range_ft, spell_name}</code> when too far.</div>
+  <div class="flow-step"><span class="num">4</span> Roll attack d20 + bonus with adv/dis from buffs (Rage advantage, Dodging disadvantage).</div>
+  <div class="flow-step"><span class="num">5</span> Roll damage (doubled on crit per RAW). Apply auto-uplifts (Hunter's Mark, Hex, Colossus Slayer — PC only).</div>
+  <div class="flow-step"><span class="num">6</span> Hit determination via <code>_read_target_ac</code>; if hit + <code>auto_apply_damage</code>, call <code>_apply_damage_to_combatant</code>.</div>
+  <div class="flow-step"><span class="num">7</span> For multi-target list, iterate per-id with fresh attack + damage rolls per RAW.</div>
+  <div class="flow-step terminal"><span class="num">✓</span> Broadcast <code>weapon_attack</code> WS message → clients render chat card with verdict + damage + Undo.</div>
+</div>
+
+<h2 id="picker-modules">The three picker modules</h2>
+
+<table>
+  <thead>
+    <tr><th>Module</th><th>When used</th><th>Output</th><th>Range gate</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>_targetPicker</code></td>
+      <td>Spells / attacks needing token targets (Fire Bolt, Magic Missile, weapon attacks, Hunter's Mark)</td>
+      <td><code>Array&lt;combatant_id&gt;</code> (duplicates OK for stacking)</td>
+      <td>Per-token green ring (in-range) / amber ring + ruler (out-of-range)</td>
+    </tr>
+    <tr>
+      <td><code>_aoePicker</code></td>
+      <td>AoE spells (Fireball, Spirit Guardians, Spike Growth, Sleep)</td>
+      <td><code>{x, y}</code> world-space center</td>
+      <td>Caster→cursor ruler line, AoE shape preview (sphere / cube / cone)</td>
+    </tr>
+    <tr>
+      <td><code>_rulerPicker</code> <em>(passive)</em></td>
+      <td>Always-on ruler tool (R key); distance measurement only</td>
+      <td>none (measurement only)</td>
+      <td>n/a — pure measurement, no gate</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="caster-resolution">Caster resolution — PC vs NPC</h2>
+<p>
+  The picker needs to know the caster's token center to draw the ruler line
+  and compute distances. PCs and NPCs use different lookups:
+</p>
+
+<div class="diagram">
+<svg viewBox="0 0 680 220" width="680" height="220">
+  <rect width="680" height="220" fill="#1a1f29" />
+
+  <!-- PC branch -->
+  <rect x="20" y="20" width="300" height="180" rx="6" fill="#1f2730" stroke="#6cb4ff" stroke-width="1" />
+  <text x="170" y="40" text-anchor="middle" font-size="13" font-weight="700" fill="#6cb4ff">PC caster</text>
+  <text x="170" y="62" text-anchor="middle" font-size="11" fill="#9aa0aa">opts.casterCharId = 42</text>
+  <line x1="40" y1="76" x2="300" y2="76" stroke="#2c303a" stroke-width="1" />
+  <text x="40" y="98" font-size="11" fill="#e8e8ee">for t of tokens:</text>
+  <text x="50" y="116" font-size="11" fill="#e8e8ee">  if t.character_id == 42</text>
+  <text x="50" y="134" font-size="11" fill="#e8e8ee">    casterPos = t.center</text>
+  <text x="40" y="166" font-size="10" fill="#9aa0aa" font-style="italic">PC token wired by char_id —</text>
+  <text x="40" y="182" font-size="10" fill="#9aa0aa" font-style="italic">single token per PC per map.</text>
+
+  <!-- NPC branch -->
+  <rect x="360" y="20" width="300" height="180" rx="6" fill="#1f2730" stroke="#fbbf24" stroke-width="1" />
+  <text x="510" y="40" text-anchor="middle" font-size="13" font-weight="700" fill="#fbbf24">NPC caster (v2.49.163+)</text>
+  <text x="510" y="62" text-anchor="middle" font-size="11" fill="#9aa0aa">opts.casterCombatantId = "tok_..."</text>
+  <line x1="380" y1="76" x2="640" y2="76" stroke="#2c303a" stroke-width="1" />
+  <text x="380" y="98" font-size="11" fill="#e8e8ee">comb = battle.find(...combId)</text>
+  <text x="380" y="116" font-size="11" fill="#e8e8ee">for t of tokens:</text>
+  <text x="390" y="134" font-size="11" fill="#e8e8ee">  if t.id == comb.source_token_id</text>
+  <text x="390" y="148" font-size="11" fill="#e8e8ee">    OR (template+name match)</text>
+  <text x="390" y="166" font-size="11" fill="#e8e8ee">      casterPos = t.center</text>
+  <text x="380" y="194" font-size="10" fill="#9aa0aa" font-style="italic">3 bandits share 1 template — name disambiguates.</text>
+</svg>
+<div class="diagram-caption">
+  PC caster resolution walks tokens by <code>character_id</code>. NPC caster
+  resolution walks the battle to find the combatant, then resolves the
+  token via the same three-tier match the picker's commit path uses
+  (<code>source_token_id</code> → <code>token_template_id + name</code>).
+</div>
+</div>
+
+<h2 id="api">Caller-side API</h2>
+
+<h3>Single-target spell / attack</h3>
+<pre><code>const picked = await window.vttOpenMultiTargetPicker({
+    required: 1,
+    spellName: 'Fire Bolt',
+    casterCharId: 42,           // PC caster
+    rangeStr: '120 ft',         // parsed via _parseRangeFtJS
+});
+// picked === null         → user cancelled (Esc / right-click out)
+// picked === ['tok_99']   → user picked one target combatant
+</code></pre>
+
+<h3>Multi-target stacking (Magic Missile)</h3>
+<pre><code>const picked = await window.vttOpenMultiTargetPicker({
+    required: 3,                // L1 Magic Missile = 3 darts
+    spellName: 'Magic Missile',
+    casterCharId: 42,
+    rangeStr: '120 ft',
+});
+// picked === ['tok_a', 'tok_a', 'tok_b']  → 2 darts on a, 1 on b
+</code></pre>
+
+<h3>NPC attacker</h3>
+<pre><code>const picked = await window.vttOpenMultiTargetPicker({
+    required: 1,
+    spellName: 'Scimitar',
+    casterCombatantId: 'tok_501_demo',   // NPC, not casterCharId
+    rangeStr: '5 ft',                    // melee — picker suppresses ruler line
+});
+</code></pre>
+
+<h2 id="keyboard">Keyboard + mouse controls</h2>
+
+<table>
+  <thead>
+    <tr><th>Input</th><th>Effect</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Click on token</strong></td><td>Add 1 pick to that token. Auto-commits when total reaches <code>required</code>.</td></tr>
+    <tr><td><strong>Right-click on token</strong></td><td>Remove 1 pick. (×3 → ×2 → ×1 → removed.)</td></tr>
+    <tr><td><strong>Click on empty space</strong></td><td>No-op — picker only accepts token clicks.</td></tr>
+    <tr><td><strong>Enter</strong></td><td>Commit early with current picks (under-quota allowed).</td></tr>
+    <tr><td><strong>Esc</strong></td><td>Cancel — resolves <code>null</code>; caller aborts the cast.</td></tr>
+    <tr><td><strong>Double-click on token</strong></td><td>Single-target picker auto-commits on first click; second click of dbl is guarded for 500 ms to prevent the second click from leaking into the <code>_targeting</code> state on the next render.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="range-enforcement">Range enforcement — client + server</h2>
+
+<p>
+  Range is enforced in <strong>two layers</strong>:
+</p>
+
+<ol>
+  <li><strong>Client-side warning</strong> — the picker draws the green ring only on in-range tokens, and the cursor / ruler turn amber when the cursor goes beyond the spell / attack's max reach. This is the <em>visual</em> gate; the player sees the problem before clicking.</li>
+  <li><strong>Server-side enforcement</strong> — endpoints (<code>/attack</code>, <code>/cast_spell</code>, <code>/place_aoe</code>, <code>/npc_attack</code>) re-check distance against the caster's actual token position and 409 with <code>{error: "out_of_range", ...}</code> if the client tried to send a too-far target. PCs honor a three-tier override (GM bypass / player override / strict mode); NPCs honor only an explicit <code>override_range</code> body flag (the GM acting as an NPC isn't allowed to bend the NPC's rules by default).</li>
+</ol>
+
+<div class="callout warn">
+  <strong>Why both layers.</strong> The client-side ring is the UX — players see range without trial and error. The server-side check is the authority — a buggy client, a touch-screen misclick, or a stale token position can't silently let an out-of-range cast through. The server is the source of truth.
+</div>
+
+<h2 id="related-docs">Related docs</h2>
+
+<ul>
+  <li><a href="/wiki/pc-vs-npc-systems">PC vs NPC combat systems</a> — broader divergence audit between PC and NPC code paths.</li>
+  <li><a href="/wiki/doc/plan-ruler-and-range">Ruler &amp; range enforcement plan</a> — design doc for the underlying ruler + range gate system.</li>
+  <li><a href="/wiki/realtime-broadcasts-catalog">Realtime broadcasts catalog</a> — <code>weapon_attack</code> payload shape that arrives after a picker commits.</li>
+  <li><a href="/wiki/endpoint-catalog">Endpoint catalog</a> — the attack / cast / place_aoe / npc_attack endpoints the picker feeds into.</li>
+</ul>
+
+</body>
+</html>
