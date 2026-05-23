@@ -3551,10 +3551,39 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // the button doesn't currently carry beam-count data
                 // (the per-sheet .sp-cast fetches spell detail to
                 // compute it).
+                // v2.49.142: AoE detection — fetch the spell's SRD
+                // record to check actions[].area.shape. When the
+                // spell is an AoE (Fireball / Burning Hands / etc.),
+                // skip the target picker entirely. The cast goes
+                // through targetless; server returns pending_aoe_
+                // placement and the cast card renders a "📍 Place
+                // AoE" button that opens the AoE picker. Same flow
+                // the sheet's .sp-cast (v2.45.0 / Phase T.5e) uses.
+                let _spArea = null;
+                try {
+                    const _cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
+                    const _r = await fetch('/api/open5e/spells?search=' + encodeURIComponent(spellName) + '&limit=10'
+                        + (_cid ? '&campaign_id=' + _cid : ''));
+                    if (_r.ok) {
+                        const _data = await _r.json();
+                        const _list = _data.results || [];
+                        const _exact = _list.find(s => (s.name || '').toLowerCase() === spellName.toLowerCase());
+                        const _hit = _exact || _list[0] || null;
+                        const _AOE_SHAPES = new Set(['sphere', 'cone', 'line', 'cube', 'self_sphere', 'self_cube']);
+                        const _action = _hit && Array.isArray(_hit.actions)
+                            ? _hit.actions.find(a => a && a.area && _AOE_SHAPES.has(a.area.shape) && (Number(a.area.size_ft) || 0) > 0)
+                            : null;
+                        if (_action) _spArea = _action.area;
+                    }
+                } catch (_) {}
                 let _targetsC = (window._targetingState
                     && window._targetingState.getTargets()) || [];
                 let _tC0 = _targetsC[0] || null;
-                if (!_tC0 && typeof window.vttOpenMultiTargetPicker === 'function') {
+                if (_spArea) {
+                    // AoE spell — drop any pre-selected target so the
+                    // server marks this cast as pending_aoe_placement.
+                    _tC0 = null;
+                } else if (!_tC0 && typeof window.vttOpenMultiTargetPicker === 'function') {
                     const _picked = await window.vttOpenMultiTargetPicker({
                         required: 1,
                         spellName: spellName,

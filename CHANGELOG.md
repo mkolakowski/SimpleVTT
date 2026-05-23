@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.142] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Fix: init-tracker `.mini-cast-btn` now routes AoE spells (Fireball, Burning Hands, etc.) to the AoE picker instead of the new crosshair target picker.** The sheet's `.sp-cast` handler has detected AoE since v2.45.0 (Phase T.5e) — when the spell's action has an `area.shape` of sphere/cone/line/cube, the cast goes through targetless and the server returns `pending_aoe_placement` so the cast card renders a "📍 Place AoE" button. The init-tracker's `.mini-cast-btn` PC branch was missing that check, so casting Fireball from a GM-expanded init row opened the v2.49.135 crosshair target picker instead of dropping into the AoE flow. Fix: same `_fetchSpellDetail` + `_AOE_SHAPES` check inlined into the `.mini-cast-btn` PC branch before the target-picker fallback.
+**Description:** One edit in `app/templates/tabletop.html::.mini-cast-btn` PC branch (~line 3544). Before the existing target-picker fallback, added an `_spArea` lookup that fetches the spell's SRD record via `/api/open5e/spells?search=<name>`, walks its `actions[]` array for a `{shape, size_ft}` block whose shape is in `_AOE_SHAPES` (`sphere`, `cone`, `line`, `cube`, `self_sphere`, `self_cube`) and `size_ft > 0`. When `_spArea` is set, the handler clears `_tC0` (dropping any pre-selected single target) and falls through to `/cast_spell` with no target descriptors — server creates a pending-AoE-placement card, caster clicks "📍 Place AoE" on the card, opens the canvas `_aoePicker` for shape placement. When `_spArea` is null (single-target spell), the existing target-picker fallback fires.
+**Description (cont):** Why inline the fetch instead of sharing with the sheet's `_fetchSpellDetail`. The sheet's helper is a private IIFE function with its own `_spellDetailCache`. Exposing it as a window global would couple the tabletop IIFE to the sheet IIFE's load order — the sheet might not be loaded when the init-tracker click handler fires (e.g., GM hasn't opened any sheet yet). Inlining the fetch + skipping the cache is fine: one network round-trip per cast (~50ms) matches the sheet's existing behavior, and the browser will cache the Open5e response at the HTTP layer for repeat casts of the same spell.
+**Description (cont 2):** Why `_AOE_SHAPES` includes `self_sphere` / `self_cube`. RAW Spirit Guardians (self-sphere 15ft) and Thunderwave (self-cube 15ft) are anchored to the caster but still need the AoE picker for the radius preview + per-target save resolution. The set matches the sheet's `_spArea` detection (same `Set(['sphere', 'cone', 'line', 'cube', 'self_sphere', 'self_cube'])`) so the two handlers agree on what counts as AoE.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.142 live. (b) Manual: from the GM init tracker, expand Thalindra's row, click Cast on Fireball → AoE placement card appears (NOT the crosshair target picker) → click Place AoE → canvas AoE picker activates with sphere preview. (c) Cast a single-target spell (Hold Person, Healing Word) → target picker still fires. (d) Pre-selected target on a non-AoE spell still skips the picker (existing behavior preserved).
+
+### Changed
+- `app/templates/tabletop.html::.mini-cast-btn` PC branch — inlined `_spArea` AoE check that fetches SRD spell record + skips the target picker when the spell has an area.shape.
+
+### Notes
+- **Backward compat.** Non-AoE spells still route through the target picker; pre-selected targets still skip the picker.
+- **Fetch cost.** One `/api/open5e/spells` round-trip per init-tracker cast click. HTTP-cached by the browser; same cost the sheet's `.sp-cast` already pays.
+- **Self-anchored AoEs included.** `self_sphere` (Spirit Guardians) + `self_cube` (Thunderwave) route to the AoE picker too.
+
+---
+
 ## [2.49.141] - 2026-05-22
 
 **Schema version:** 56
