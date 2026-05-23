@@ -10313,6 +10313,322 @@ async def use_arcane_recovery(
     }
 
 
+# ----------- API: Font of Magic (Sorcerer Lv 2+) -----------
+#
+# Per docs/plans/sorcery-points-and-metamagic.md Phase 0. Two endpoints
+# for the slot ↔ sorcery-points conversion. RAW PHB p.101:
+#   - Spell slot → Sorcery Points: sacrifice a slot of level N for N points.
+#   - Sorcery Points → Spell slot: cost table by slot level
+#     (L1=2 SP, L2=3, L3=5, L4=6, L5=7). L6+ slots are NOT recoverable.
+# Both are bonus actions; Sorcerer must be Lv 2+.
+
+# Cost table for SP → slot. Index is slot level - 1.
+_FONT_OF_MAGIC_SP_TO_SLOT_COST: dict[int, int] = {
+    1: 2, 2: 3, 3: 5, 4: 6, 5: 7,
+}
+
+
+@router.post("/api/campaign/{campaign_id}/use_font_of_magic_to_points")
+async def use_font_of_magic_to_points(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Sacrifice a spell slot of level N to gain N sorcery points.
+    Bonus action. RAW PHB p.101 (Font of Magic).
+
+    Body: ``{character_id, slot_level: int (1-9), override?}``.
+
+    Validates Sorcerer Lv 2+, slot of that level has at least one
+    unused (slot.total - slot.used >= 1), sorcery points won't
+    exceed max (sorcerer level). Decrements the slot + adds
+    slot_level sorcery points + marks the bonus slot.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    slot_level = int(body.get("slot_level") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level < 1 or slot_level > 9:
+        raise HTTPException(400, "slot_level must be in 1-9")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "sorcerer", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 2:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 2, "got": level,
+        })
+
+    # Verify the slot is available.
+    all_slots = dict(sheet.get("spell_slots") or {})
+    sorc_slots = dict(all_slots.get("sorcerer") or {})
+    slot_key = str(slot_level)
+    slot = dict(sorc_slots.get(slot_key) or {})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if total - used < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_slot", "slot_level": slot_level,
+            "total": total, "used": used,
+        })
+
+    # Sorcery-points resource lookup.
+    resources = list(sheet.get("resources") or [])
+    sp_row = None
+    sp_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "sorcery-points":
+            sp_row = dict(r); sp_idx = i; break
+    if sp_row is None:
+        raise HTTPException(404, "No Sorcery Points resource on this sheet")
+    sp_cur = int(sp_row.get("current") or 0)
+    sp_max = int(sp_row.get("max") or 0)
+
+    # Phase 4 bonus-slot gate.
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget", "slot": "bonus",
+            "char_name": char.name, "source": "font-of-magic",
+            "label": "Font of Magic", "strict": strict,
+        })
+
+    # Apply: bump the slot's used + add slot_level sorcery points
+    # (capped at max — RAW the pool can't exceed your sorcerer level).
+    new_used = used + 1
+    slot["used"] = new_used
+    sorc_slots[slot_key] = slot
+    all_slots["sorcerer"] = sorc_slots
+    sheet["spell_slots"] = all_slots
+
+    new_sp = min(sp_cur + slot_level, sp_max)
+    sp_row["current"] = new_sp
+    resources[sp_idx] = sp_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id, "class_slug": "sorcerer",
+            "level": slot_level, "total": total, "used": new_used,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "sorcery-points",
+            "current": new_sp, "max": sp_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id, "character_name": char.name,
+            "feature_name": f"✨ Font of Magic — sacrificed L{slot_level} slot → +{slot_level} SP",
+            "feature_desc": (
+                f"Bonus action. Spent one L{slot_level} spell slot to gain "
+                f"{slot_level} sorcery point{'s' if slot_level != 1 else ''}."
+            ),
+            "source": "font-of-magic", "remaining": new_sp, "max": sp_max,
+            "over_budget": was_used, "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "sp_gained": slot_level,
+        "sp_remaining": new_sp,
+        "sp_max": sp_max,
+        "slot_total": total,
+        "slot_used": new_used,
+        "sp_overflow_lost": (sp_cur + slot_level) - new_sp,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_font_of_magic_to_slot")
+async def use_font_of_magic_to_slot(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend sorcery points to recover a spell slot. Bonus action.
+    RAW PHB p.101 cost table: L1=2, L2=3, L3=5, L4=6, L5=7. L6+
+    not recoverable.
+
+    Body: ``{character_id, slot_level: int (1-5), override?}``.
+
+    v1: only restores USED slots (the slot row's ``used`` must be
+    > 0). The "create an extra ephemeral slot when all slots are
+    full" RAW edge case is filed for a follow-up.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    slot_level = int(body.get("slot_level") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if slot_level < 1 or slot_level > 5:
+        return JSONResponse(status_code=409, content={
+            "error": "slot_too_high", "max_recoverable": 5, "got": slot_level,
+        })
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "sorcerer", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 2:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 2, "got": level,
+        })
+
+    cost = _FONT_OF_MAGIC_SP_TO_SLOT_COST[slot_level]
+
+    resources = list(sheet.get("resources") or [])
+    sp_row = None
+    sp_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "sorcery-points":
+            sp_row = dict(r); sp_idx = i; break
+    if sp_row is None:
+        raise HTTPException(404, "No Sorcery Points resource on this sheet")
+    sp_cur = int(sp_row.get("current") or 0)
+    sp_max = int(sp_row.get("max") or 0)
+    if sp_cur < cost:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_points", "required": cost, "have": sp_cur,
+        })
+
+    # Verify the slot has a "used" entry to restore. v1: no ephemeral
+    # slot creation (filed).
+    all_slots = dict(sheet.get("spell_slots") or {})
+    sorc_slots = dict(all_slots.get("sorcerer") or {})
+    slot_key = str(slot_level)
+    slot = dict(sorc_slots.get(slot_key) or {})
+    total = int(slot.get("total") or 0)
+    used = int(slot.get("used") or 0)
+    if used < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "no_used_slot_to_restore",
+            "slot_level": slot_level,
+            "total": total, "used": used,
+            "hint": "All L{} slots are already full. Ephemeral slot creation is filed.".format(slot_level),
+        })
+
+    # Phase 4 bonus-slot gate.
+    was_used = _is_slot_used(campaign_id, char.id, "bonus")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget", "slot": "bonus",
+            "char_name": char.name, "source": "font-of-magic",
+            "label": "Font of Magic", "strict": strict,
+        })
+
+    new_used = used - 1
+    slot["used"] = new_used
+    sorc_slots[slot_key] = slot
+    all_slots["sorcerer"] = sorc_slots
+    sheet["spell_slots"] = all_slots
+
+    new_sp = sp_cur - cost
+    sp_row["current"] = new_sp
+    resources[sp_idx] = sp_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    await _mark_battle_economy(campaign_id, char.id, "bonus")
+
+    await hub.broadcast(campaign_id, {
+        "type": "spell_slot_update",
+        "data": {
+            "character_id": char.id, "class_slug": "sorcerer",
+            "level": slot_level, "total": total, "used": new_used,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "sorcery-points",
+            "current": new_sp, "max": sp_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id, "character_name": char.name,
+            "feature_name": f"✨ Font of Magic — {cost} SP → L{slot_level} slot",
+            "feature_desc": (
+                f"Bonus action. Spent {cost} sorcery points to recover one "
+                f"L{slot_level} spell slot."
+            ),
+            "source": "font-of-magic", "remaining": new_sp, "max": sp_max,
+            "over_budget": was_used, "over_budget_slot": "bonus" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "slot_level": slot_level,
+        "sp_cost": cost,
+        "sp_remaining": new_sp,
+        "sp_max": sp_max,
+        "slot_total": total,
+        "slot_used": new_used,
+    }
+
+
 # ----------- API: Second Wind (Fighter Lv 1) -----------
 
 @router.post("/api/campaign/{campaign_id}/use_second_wind")

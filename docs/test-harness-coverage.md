@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 368 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.117, 2026-05-22).
+**Total tests:** 379 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.120, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -536,6 +536,21 @@ v2.49.55 — Monk class feature `POST /use_stunning_strike`. Lv 5+ + ki >= 1 + a
 | `test_stunning_strike_wrong_class` | Krieger (Barbarian) → 409 `wrong_class` with `expected=monk`. |
 | `test_stunning_strike_no_ki` | Drain Kael's ki via repeated calls (response carries `ki_remaining`); when 0, next call → 409 `no_ki` with `available=0`. |
 | `test_stunning_strike_pc_drops_own_concentration` | v2.49.56 — closes the v2.49.55 filed item. Magnus casts Hex (concentration); Kael uses Stunning Strike on Magnus → roll_request; GM-as-Magnus /responds; on save fail assert (a) Stunned lands on Magnus, (b) Magnus's Hex drops via the v2.49.51 hook's `concentration: False` branch, (c) 💀 GM log naming "stunned" + "incapacitated" fires. Retry loop because the CON save is random. |
+
+### `test_use_font_of_magic.py`
+v2.49.120 — Sorcerer Lv 2+ Font of Magic feature (Phase 0 of the Sorcery Points + Metamagic plan). Two endpoints: `/use_font_of_magic_to_points` (spell slot → sorcery points, gain = slot level) + `/use_font_of_magic_to_slot` (sorcery points → spell slot, cost table L1=2/L2=3/L3=5/L4=6/L5=7). Both bonus actions; L6+ slots not recoverable per RAW. Demo subject: Zara Emberfire (Sorcerer L5).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_font_of_magic_l1_slot_to_1_sp` | Sacrifice L1 slot → +1 SP. From a full pool (5/5), the +1 overflow caps; response carries `sp_overflow_lost: 1`. |
+| `test_font_of_magic_l3_slot_to_3_sp` | Sacrifice L3 slot → +3 SP (with overflow when starting full). |
+| `test_font_of_magic_no_slot_to_sacrifice` | Zara has no L4 slots (Lv 5) → 409 `no_slot`. |
+| `test_font_of_magic_2_sp_to_l1_slot` | After sacrificing an L1 slot, spend 2 SP to recover it. |
+| `test_font_of_magic_5_sp_to_l3_slot` | After sacrificing an L3 slot, spend the full pool (5 SP) to recover it. |
+| `test_font_of_magic_slot_too_high` | L6+ slots → 409 `slot_too_high` with `max_recoverable: 5`. |
+| `test_font_of_magic_not_enough_points` | Drain SP to 1, try to recover an L1 slot (cost 2) → 409 `not_enough_points`. |
+| `test_font_of_magic_no_used_slot_to_restore` | All L1 slots full → 409 `no_used_slot_to_restore` (the RAW "ephemeral slot creation" edge case is filed). |
+| `test_font_of_magic_wrong_class` | Thalindra the Wizard → 409 `wrong_class`. |
 
 ### `test_flurry_chip_refund.py`
 v2.49.117 — Phase B v2. While `flurry-of-blows-active` is on the attacker, the next two unarmed-strike attacks DON'T burn the action chip; `effects.unarmed_strikes_available` decrements per strike. When it hits 0, the buff drops. Non-unarmed attacks while Flurry active still mark the chip — RAW Flurry grants unarmed strikes only.

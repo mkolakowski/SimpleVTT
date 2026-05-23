@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.120] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Sorcery Points + Metamagic Phase 0 — Font of Magic slot ↔ SP conversions.** First implementation slice of the v2.49.118 plan. Two new endpoints turn Zara Emberfire's existing Sorcery Points counter into a real, spendable resource that flexes against her spell slots per RAW PHB p.101. `/use_font_of_magic_to_points` sacrifices a spell slot of level N for N sorcery points (capped at sorcerer-level max; overflow burns). `/use_font_of_magic_to_slot` spends sorcery points per the cost table (L1=2, L2=3, L3=5, L4=6, L5=7) to recover a USED spell slot — L6+ not recoverable per RAW. Both are bonus actions with the standard Phase 4 over-budget gate. 9 new harness tests cover both directions + every error path. Plan status flips ⚪ proposed → 🟠 Phase 0 shipped.
+**Description:** Three new sources of code + 5 doc edits. **(1)** `app/routes/tabletop_routes.py::_FONT_OF_MAGIC_SP_TO_SLOT_COST` (NEW constant, the PHB cost table dict). (2) `app/routes/tabletop_routes.py::use_font_of_magic_to_points` (NEW endpoint, ~120 lines) — validates Sorcerer Lv 2+, slot of that level has at least one unused (`total - used >= 1`), Phase 4 bonus-slot gate. Decrements the slot (`used += 1`) and adds `slot_level` sorcery points (capped at max). Returns `sp_overflow_lost` when capping. Broadcasts `spell_slot_update`, `resource_update`, `feature_used`. (3) `app/routes/tabletop_routes.py::use_font_of_magic_to_slot` (NEW endpoint, ~110 lines) — validates Sorcerer Lv 2+, `slot_level in 1-5`, sorcery points ≥ cost-table value, AND that level has at least one USED slot to restore (v1 doesn't create ephemeral slots from full pools — filed). Decrements SP by the cost, decrements the slot's `used`. Same broadcast set. (4) `tests/harness/test_use_font_of_magic.py` (NEW, 9 tests) — happy paths for L1 + L3 slot sacrifice, happy paths for L1 + L3 slot recovery, no_slot / not_enough_points / no_used_slot_to_restore / slot_too_high / wrong_class error paths. (5) `docs/plans/sorcery-points-and-metamagic.md` — status line flipped to "🟠 in progress" with Phase 0 listed; status-tracking checkbox ticked. (6) `app/templates/wiki.html` — plan row status flipped to "🟠 Phase 0 shipped". (7) `docs/wiki/README.md` — same row update. (8) `docs/test-harness-coverage.md` — new "test_use_font_of_magic.py" subsection with 9 test rows; total bumped 368 → 379 (9 FoM + 2 Pact-plan harness tests from v2.49.119).
+**Description (cont):** Why both endpoints in one commit. Phase 0 of the plan grouped them — they're symmetric directions of the same resource conversion + share the cost-table constant + share the same set of validation gates. Splitting would mean either shipping one direction with no inverse (asymmetric API) or duplicating the test-fixture setup. The combined commit lands the full Phase 0 in one reviewable diff.
+**Description (cont 2):** Why the SP overflow burns instead of erroring. RAW PHB p.101 is silent on the edge case "you sacrifice a slot but your SP pool is already full." Two interpretations: (a) the conversion fails and the slot is preserved (defensive), (b) the conversion succeeds and the excess SP burns (generous). I picked (b) — matches how Wizard's Arcane Recovery works (you spend the resource even if your slot pool can't fully absorb), keeps the endpoint simpler (no pre-flight overflow check), and surfaces the loss via the `sp_overflow_lost` response field so the chat card can warn the player. If the user prefers (a), the flip is a one-line change to the validation block.
+**Description (cont 3):** Why v1 doesn't create ephemeral slots. RAW PHB p.101: "you can create one spell slot." When all your slots of that level are already full, RAW probably means you create an EXTRA slot above your max — the so-called "ephemeral slot" that vanishes at the end of a long rest. The plan filed this as a separate edge case because the slot data structure (`{total, used}` per level) doesn't have a concept of "extra" slots; the engine would need a third field (`bonus` or `font_of_magic_extra`) and a long-rest cleanup pass that strips it. v1 takes the safer "restore-used" path that mirrors Arcane Recovery: only allowed when the slot row has `used > 0`.
+**Description (cont 4):** Sheet-side wiring is filed for a follow-up. The endpoints work end-to-end via direct POST, but the Sorcerer's class-features block on the sheet doesn't yet have a UI to invoke them. Phase 0's exit criterion is "the counter is a real spendable resource" — POST works, but the sheet button comes in a follow-up commit that adds a direction-picker modal to the existing `font-of-magic` resource pill (similar to the v2.49.113 Patient Defense / Step of the Wind sheet wiring).
+**Description (cont 5):** Phase 1 walking-skeleton coming next. The plan's Phase 1 lands the Metamagic picker modal + Empowered Spell as the simplest option. That commit will be larger because the picker modal is new UI; Phase 0 was deliberately scoped small to prove the resource-arithmetic pattern first.
+**Description (cont 6):** Verification. (a) 9 new tests in `test_use_font_of_magic.py` pass. (b) Regression check: existing Sorcerer-adjacent tests (none specifically target sorcery-points today, but the spell-cast / attack tests on Zara are unaffected — pure additive endpoints). (c) Curl `/version` confirms v2.49.120 live. (d) Manual via direct POST: works end-to-end. Sheet button manual verification is deferred to the follow-up commit.
+
+### Added
+- `app/routes/tabletop_routes.py::use_font_of_magic_to_points` (NEW endpoint).
+- `app/routes/tabletop_routes.py::use_font_of_magic_to_slot` (NEW endpoint).
+- `app/routes/tabletop_routes.py::_FONT_OF_MAGIC_SP_TO_SLOT_COST` (NEW cost-table constant).
+- `tests/harness/test_use_font_of_magic.py` (NEW, 9 tests).
+- `docs/test-harness-coverage.md` — new subsection.
+
+### Changed
+- `docs/plans/sorcery-points-and-metamagic.md` — status ⚪ proposed → 🟠 Phase 0 shipped.
+- `app/templates/wiki.html` + `docs/wiki/README.md` — plan row reflects Phase 0 done.
+
+### Notes
+- **Backward compat.** Two new pure-additive endpoints; no existing endpoint / broadcast / schema change.
+- **Sheet UI deferred.** Endpoints live + tested; the sheet's `font-of-magic` resource block doesn't yet have a direction-picker UI to call them. Filed.
+- **Ephemeral slot creation deferred.** RAW allows SP → slot conversion even when all slots of that level are full (the "extra ephemeral slot" edge case). v1 rejects with `no_used_slot_to_restore`; future commit adds a `font_of_magic_extra` slot-row field + long-rest cleanup.
+
+### Filed
+- **Sheet-side direction picker** — Zara's `font-of-magic` resource pill needs a modal that asks "slot → SP or SP → slot?" + slot-level selector. Mirrors the v2.49.113 Patient Defense / Step of the Wind sheet wiring.
+- **Ephemeral slot creation** — when SP → slot is attempted on a full slot level, create an extra slot that vanishes at long rest. Needs schema addition + long-rest cleanup.
+- **Multiclass Sorcerer slot validation** — current endpoint validates `sheet["spell_slots"]["sorcerer"]`; a Sorcerer/Wizard multiclass has separate pools per RAW PHB p.165. Filed pending the multiclass spell-slot work.
+- **Phase 1 — Metamagic picker + Empowered Spell** — next commit per the plan.
+
+---
+
 ## [2.49.119] - 2026-05-22
 
 **Schema version:** 56

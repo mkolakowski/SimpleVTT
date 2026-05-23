@@ -1,6 +1,6 @@
 # Sorcery Points + Metamagic — design plan
 
-**Status:** ⚪ proposed (v2.49.118, 2026-05-22) — no code yet.
+**Status:** 🟠 in progress (v2.49.120, 2026-05-22) — Phase 0 shipped: `/use_font_of_magic_to_points` + `/use_font_of_magic_to_slot` endpoints with 9 harness tests. Phases 1-5 unstarted.
 **Authors:** rolling
 **Last updated:** 2026-05-22
 
@@ -387,7 +387,7 @@ adds:
 
 ## Status tracking
 
-- [ ] Phase 0 — Font of Magic conversions + harness
+- [✅] Phase 0 — Font of Magic conversions + harness (v2.49.120)
 - [ ] Phase 1 — Picker + pending-buff machinery + Empowered Spell
 - [ ] Phase 2 — Quickened + Twinned
 - [ ] Phase 3a — Subtle Spell
