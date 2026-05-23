@@ -3090,6 +3090,19 @@
     // = additive multi-target (Magic Missile, Eldritch Blast picking
     // 2 beams at Lv 5+, etc.). Hidden tokens skipped for non-GM.
     canvas.addEventListener('dblclick', (ev) => {
+        // v2.49.153: while the target picker is active, swallow
+        // dblclick so it doesn't bleed into the persistent _targeting
+        // state. The browser dispatches both mousedown→mousedown
+        // (which feed picker stacking via addPick) AND a dblclick
+        // for any double-click gesture; without this guard, stacking
+        // on a token by dbl-clicking would ALSO set the token as the
+        // persistent target — and the first picker id would resolve
+        // against that persistent target after the cast, leading to
+        // "I picked the bandit but Tavik took damage."
+        if (_targetPicker.active) {
+            ev.preventDefault();
+            return;
+        }
         const [x, y] = clientToCanvas(ev);
         for (let i = tokens.length - 1; i >= 0; i--) {
             const t = tokens[i];

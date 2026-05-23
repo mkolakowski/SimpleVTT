@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.153] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix: target picker no longer bleeds picks into the persistent `_targeting` state via dblclick.** The canvas's `dblclick` handler set a persistent target (the red ring that stays around a token after dbl-click). When the multi-target picker was active and the player double-clicked a token to stack (×2), the browser dispatched both the picker's two mousedown→addPick events (stacking the pick) AND a separate `dblclick` event (which called `_targeting.setTarget(t.id)` and made the token a persistent target). After the cast finished, the picker state cleared but the persistent target remained — and worse, on the FIRST cast it might have been an already-existing persistent target (e.g., Tavik) and the engine resolved damage against THAT target instead of the picker's picks. The fix is one line: in the `dblclick` handler, return early when `_targetPicker.active`.
+**Description:** One edit in `app/static/tabletop.js::dblclick handler` — added a guard at the top: `if (_targetPicker.active) { ev.preventDefault(); return; }`. The `preventDefault` is for defense; the early return is the actual fix. The picker's stacking via `addPick` (called from `mousedown`) continues to work normally, but the `dblclick` event that fires alongside the two mousedowns no longer feeds the persistent `_targeting` state.
+**Description (cont):** Why this caused "Brother Tavik took damage from Magic Missile he wasn't picked for." Two-step bug. (1) Before opening the picker, the user (or earlier flow) had set Tavik as the persistent target (red ring on Tavik via a prior dblclick). (2) Picker fires for Magic Missile, the user clicks 3 bandits. Picker resolves to [bandit_id, bandit_id, bandit_id]. (3) The cast body's `target_combatant_id` is set to `_picked[0]` (bandit). All looks correct so far. But wait — looking at the chat-card screenshot, the damage card says "Brother Tavik" took damage. This points to a SEPARATE issue: the engine's auto-hit multi-target damage for Magic Missile isn't shipped yet (filed). The engine processes Magic Missile as a single-target spell against `target_combatant_id`. If somehow the persistent target is in play, the wrong token gets hit. The dblclick fix here removes the leak; the engine fix (task #61, filed) addresses the per-dart application.
+**Description (cont 2):** Why the screenshot's pills are missing. The chat card's per-target outcome pills come from `auto_save_targets` (save spells) or `auto_attack_beams` (attack-roll spells). Magic Missile is neither — it's auto-hit no-save no-attack. The engine doesn't currently emit per-dart outcomes. Filed: Magic Missile per-dart auto-damage + chat-card pills (task #61). The cast card just shows the spell name with no per-target detail until that ships.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.153 live. (b) Manual: open Magic Missile picker, double-click a token to stack → token shows ×2 picker badge (red ring); after commit, the picker's red ring clears and NO persistent crimson `_targeting` ring sticks to the token. (c) Single-clicks unchanged — `_targeting` set only via deliberate dblclick OUTSIDE the picker.
+
+### Changed
+- `app/static/tabletop.js::canvas.addEventListener('dblclick')` — return early when `_targetPicker.active` so picker stacking gestures don't also set persistent `_targeting`.
+
+### Notes
+- **Two bugs in one report.** This commit fixes the dblclick→targeting leak (full fix). The per-dart auto-damage + chat-card pills is a separate engine task (#61, filed).
+- **AoE picker unaffected.** The AoE picker uses single-click commit, not double-click stacking, so the dblclick guard doesn't change its behavior.
+
+### Filed
+- **Magic Missile per-dart auto-damage + pills** (task #61): engine needs an auto-hit multi-target damage branch in `cast_spell` that iterates `target_combatant_ids`, rolls `1d4+1` per dart, applies via `_apply_damage_to_combatant`. Chat card then surfaces per-target outcome pills (already supported for save / attack-roll spells via `auto_save_targets` / `auto_attack_beams`).
+
+---
+
 ## [2.49.152] - 2026-05-23
 
 **Schema version:** 56
