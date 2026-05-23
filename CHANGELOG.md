@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.171] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Demo gets a spellcasting NPC — Soren (Cult Acolyte).** Until now the demo's Tavern Brawl had Vex (Bandit Captain), three bandits, a Thug, and Grixxa (Goblin Captain) — six melee/ranged NPCs but no magic-using opposition to showcase the spell-action flows on NPCs. Soren is a homebrew Cult Acolyte standing behind Vex's crew with two spell-like actions that exercise both NPC strike flows in one combatant: Inflict Wounds (attack-roll spell → /npc_attack picker) and Sacred Flame (save-DC cantrip → 📋 Save announce). Plus a Dagger backup for when out of spells.
+**Description:** Three coordinated edits to `app/demo_seed.py`. **(1)** New homebrew monster JSON in `seed_homebrew_files` (~70 lines) for `cult-acolyte`. AC 12, HP 18, +4 spell attack. Three actions + one passive: Inflict Wounds (3d10 necrotic, +4 to hit, melee touch, 2 charges/encounter), Sacred Flame (DC 13 DEX, 1d8 radiant, 60 ft), Dagger (1d4+2 piercing, +4 to hit, 5 ft or 20/60 ft), Divine Eminence (passive, stub — renders on mini-sheet but not enforced). **(2)** `seed_token_templates` specs list gains `("cult-acolyte", "Cult Acolyte")` so the template pointer exists for `_monster_template_to_sheet` to resolve. **(3)** `seed_tokens` npc_placements gets `Soren (Cult Acolyte)` at `(1190, 490)` — east of the Thug, with `image_url=None` (no portrait yet — falls back to color ring + label). The image-url fallback required tightening the placement loop to handle `None` image entries. `seed_encounter` init_specs gains a new entry at token_idx=18, initiative 2 (DEX +2 mod, rolled poorly) so Soren acts last in the round.
+**Description (cont):** Why two distinct spell types. The audit doc (v2.49.167) flagged that NPCs have no /cast_spell endpoint; spell-like NPC actions resolve through either /npc_attack (attack-roll spells) or the 📋 Save announce button (save-DC spells). Soren's two spells let a contributor exercise BOTH flows on a single combatant without spawning a separate dragon / fanatic / wizard NPC. Inflict Wounds is the canonical Lv1 attack-roll spell (touch attack, 3d10 necrotic); Sacred Flame is the canonical cleric save cantrip (DC vs DEX, 1d8 radiant, 60 ft) — both are pulled straight from the SRD cleric spell list so a 5e GM recognizes them instantly.
+**Description (cont 2):** Why 2 charges on Inflict Wounds (vs unlimited). NPCs have no spell-slot system (per the v2.49.167 audit) — modeling Lv1 spell uses as charges on the action is the established pattern (Goblin Captain's "Frightful Howl (Recharge 5–6)" already does this with 1 charge). Two charges lets the GM cast Inflict Wounds in two consecutive turns before having to recharge — long enough for a meaningful demo, short enough that the encounter doesn't grind on a single high-damage spell. Sacred Flame is a cantrip = no charge limit.
+**Description (cont 3):** Why a separate Dagger action. With Inflict Wounds spent (or out of reach — touch attack is 5 ft), the GM still needs a melee fallback so Soren has a turn-by-turn action even when spells run dry. A bare-handed acolyte standing in the back of combat doing nothing reads as a stub; a dagger swing reads as "I'm out of magic, I'm desperate." Mirrors how PC casters carry a martial backup.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.171 live. (b) Manual: GM resets the demo, loads Tavern Brawl encounter → 7 NPCs visible in init tracker (was 6); Soren shows three Strike buttons: 🗡 Inflict Wounds, 📋 Sacred Flame, 🗡 Dagger. Click 🗡 Inflict Wounds → picker opens at 5 ft melee range, click a target, /npc_attack rolls 1d20+4 vs target AC, on hit 3d10 necrotic applies. Click 📋 Sacred Flame → save announce posts "DC 13 DEX save · 1d8 radiant". (c) Existing 18-test regression (NPC + PC attack) unaffected — no test asserts NPC roster count.
+
+### Added
+- `app/demo_seed.py::seed_homebrew_files` — `cult-acolyte` homebrew monster JSON with 3 actions + 1 passive.
+- `app/demo_seed.py::seed_token_templates` — `cult-acolyte` slug in the specs list.
+- `app/demo_seed.py::seed_tokens` — Soren placement at `(1190, 490)` with color `#9d4edd`.
+- `app/demo_seed.py::seed_encounter` — init_specs entry at token_idx=18, initiative 2.
+
+### Changed
+- `app/demo_seed.py::seed_tokens` placement loop — handles `image_url=None` for tokens without a portrait jpg.
+
+### Notes
+- **No code change outside demo_seed.** The NPC works because the v2.49.164 /npc_attack + v2.49.166 range enforcement + v2.49.170 SRD-desc parser are already in place.
+- **Demo data is dormant until reset.** The new NPC only appears after a fresh demo seed (GM clicks "Reset demo" in Settings, or the postgres volume is wiped and re-seeded). Existing demo campaigns won't auto-gain Soren.
+- **No portrait jpg yet.** Token falls back to color ring + label. Filed for `docs/demo/image-prompts.md` when art lands.
+
+---
+
 ## [2.49.170] - 2026-05-23
 
 **Schema version:** 56

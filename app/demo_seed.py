@@ -2164,6 +2164,11 @@ def seed_token_templates(db: Session, camp: Campaign) -> dict[str, TokenTemplate
         # resolve via the shipped SRD JSONs.
         ("skeleton", "Skeleton"),
         ("doppelganger", "Doppelganger"),
+        # v2.49.171 — spellcasting NPC homebrew (Cult Acolyte). Two
+        # spell actions (Inflict Wounds + Sacred Flame) exercise both
+        # NPC strike flows: attack-roll → /npc_attack picker; save-DC
+        # → 📋 Save announce.
+        ("cult-acolyte", "Cult Acolyte"),
     ]
     out: dict[str, TokenTemplate] = {}
     for slug, label in specs:
@@ -2347,6 +2352,16 @@ def seed_tokens(
         ("bandit",         "Bandit Gamma",             980, 560, "#c84a4a", "bandit-gamma.jpg"),
         ("thug",           "Thug",                    1120, 420, "#c84a4a", "thug.jpg"),
         ("goblin-captain", "Grixxa (Goblin Captain)", 1120, 560, "#7c9c54", "goblin-captain.jpg"),
+        # v2.49.171 — spellcasting NPC. The party's first encounter
+        # with a divine-magic NPC: Soren is a hired Cult Acolyte
+        # standing behind Vex's crew, ready to drop a Sacred Flame on
+        # the party's healer and reach in with Inflict Wounds when
+        # someone gets close. Demonstrates both NPC strike flows in
+        # the same combatant: attack-roll spell (Inflict Wounds →
+        # /npc_attack picker) and save-DC spell (Sacred Flame → 📋
+        # Save announce). No portrait jpg yet — falls back to the
+        # color ring + label.
+        ("cult-acolyte",   "Soren (Cult Acolyte)",    1190, 490, "#9d4edd", None),
     ]
     for slug, label, x, y, color, image in npc_placements:
         tmpl = templates.get(slug)
@@ -2358,7 +2373,7 @@ def seed_tokens(
             token_template_id=tmpl.id,
             label=label,
             color=color,
-            image_url=f"/static/demo/tokens/{image}",
+            image_url=(f"/static/demo/tokens/{image}" if image else None),
             x=x, y=y, size=1,
         ))
 
@@ -2693,6 +2708,97 @@ def seed_homebrew_files(camp: Campaign) -> int:
     )
     written += 1
 
+    # v2.49.171 — spellcasting NPC. Cult Acolyte demonstrates both
+    # NPC strike flows in a single combatant:
+    #   - Inflict Wounds: melee touch attack-roll → /npc_attack (the
+    #     server rolls 1d20+4 vs target AC, auto-applies 3d10 necrotic
+    #     on hit, all via the existing v2.49.164 weapon-attack pipeline).
+    #   - Sacred Flame: DC 13 DEX save, 1d8 radiant, 60 ft → the 📋 Save
+    #     button announces the DC + ability to chat and the targeted
+    #     PCs roll their own save.
+    #   - Dagger backup: regular melee for when out of spells (gives the
+    #     GM a non-magical fallback action on the same combatant).
+    # Filed via the same v2.3.8 homebrew-monster editor path the Goblin
+    # Captain uses; ``_monster_template_to_sheet`` resolves homebrew
+    # tier first so the slug ``cult-acolyte`` overlays the
+    # TokenTemplate pointer seed_token_templates registers.
+    write_homebrew(
+        {
+            "slug": "cult-acolyte",
+            "name": "Cult Acolyte",
+            "size": "Medium",
+            "type": "Humanoid",
+            "alignment": "any evil alignment",
+            "armor_class": 12,
+            "armor_desc": "leather armor",
+            "hit_points": 18,
+            "hit_dice": "4d8",
+            "speed": {"walk": 30},
+            "strength": 10, "dexterity": 14, "constitution": 10,
+            "intelligence": 10, "wisdom": 14, "charisma": 11,
+            "damage_immunities": "",
+            "condition_immunities": "",
+            "senses": "passive Perception 12",
+            "languages": "any one language (usually Common)",
+            "challenge_rating": "1/4",
+            "prof_saving_throws": "Wis +4",
+            "prof_skills": "Medicine +4, Religion +2",
+            "actions": [
+                {
+                    "id": "inflict-wounds",
+                    "name": "Inflict Wounds (Spell)",
+                    "desc": "Melee Spell Attack: +4 to hit, reach 5 ft., one creature. Hit: 16 (3d10) necrotic damage. (Level 1 cleric spell.)",
+                    "damage": "3d10",
+                    "damage_type": "necrotic",
+                    "attack_roll": True,
+                    "attack_bonus": "+4",
+                    # v2.49.171 — Inflict Wounds is a Lv1 spell but for
+                    # the NPC stat block we treat it as an at-will
+                    # action with one charge so the demo doesn't
+                    # require slot tracking (NPCs have no slot system
+                    # per the v2.49.167 audit). Recharges via the ↻
+                    # button between encounters.
+                    "charges_max": 2,
+                    "category": "action",
+                },
+                {
+                    "id": "sacred-flame",
+                    "name": "Sacred Flame (Cantrip)",
+                    "desc": "The acolyte invokes a flame-like radiance that descends on a creature within 60 feet. The target must succeed on a DC 13 Dexterity saving throw or take 4 (1d8) radiant damage. The target gains no benefit from cover for this save.",
+                    "damage": "1d8",
+                    "damage_type": "radiant",
+                    "save_ability": "dex",
+                    "save_dc": 13,
+                    "category": "action",
+                },
+                {
+                    "id": "dagger",
+                    "name": "Dagger",
+                    "desc": "Melee or Ranged Weapon Attack: +4 to hit, reach 5 ft. or range 20/60 ft., one target. Hit: 4 (1d4 + 2) piercing damage.",
+                    "damage": "1d4+2",
+                    "damage_type": "piercing",
+                    "attack_roll": True,
+                    "attack_bonus": "+4",
+                    "category": "action",
+                },
+                {
+                    "id": "divine-eminence",
+                    "name": "Divine Eminence",
+                    "desc": "As a bonus action, the acolyte can expend a spell slot to cause its melee weapon attacks to magically deal an extra 10 (3d6) radiant damage to a target on a hit. (Stub; not mechanically enforced — kept here so the mini-sheet renders the Divine Eminence trait.)",
+                    "category": "special_ability",
+                },
+            ],
+            "system": "dnd5e",
+            "scope": scope,
+            "source": "homebrew",
+            "owner": None,
+            "_attribution": "Demo seed homebrew (v2.49.171). Authored to showcase the NPC strike flows for both attack-roll spells (Inflict Wounds → /npc_attack) and save-DC spells (Sacred Flame → 📋 Save announce). Stat block loosely inspired by the D&D 5e SRD Acolyte / Cult Fanatic.",
+        },
+        type="monsters",
+        scope=scope,
+    )
+    written += 1
+
     return written
 
 
@@ -2829,6 +2935,11 @@ def seed_encounter(
         (15,  5, 11, 1),   # Bandit Gamma
         (10,  4, 44, 4),   # Rowan Quickbow (v2.18.3)
         (11,  3, 38, 2),   # Magnus Hexbinder (v2.18.4)
+        # v2.49.171 — Cult Acolyte added at token_idx=18 (next slot
+        # after Grixxa at 17). Initiative 2 puts him near the bottom
+        # so the party gets to act first; DEX 14 (+2) is the acolyte's
+        # init mod, rolled poorly at the table.
+        (18,  2, 18, 2),   # Soren (Cult Acolyte)
     ]
     combatants = []
     for token_idx, init_roll, hp_max, dex_mod in init_specs:
