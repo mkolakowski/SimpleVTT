@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.159] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Cast card strips the "🎲 Roll damage" button when auto-hit damage applied (Magic Missile).** v2.49.155-156 added server-side per-dart damage + chat-card pills for auto-hit spells. The legacy manual "Roll damage" action button is now redundant — clicking it would re-roll the same damage and confuse the GM ("did I already apply damage or do I still need to click?"). Mirrors the v2.26.1 / v2.42.3 pattern that strips Apply Healing / Roll attack when those auto-fire.
+**Description:** One edit in `app/static/tabletop.js::appendSpellCast`. **(1)** New `_autoHit = Array.isArray(d.auto_hit_targets) && d.auto_hit_targets.length > 0` flag computed alongside the existing `_autoHeal` / `_autoAttack` / `_autoSave`. **(2)** In the `actions.map` block that strips action buttons, added `if (_autoHit && (out.damage || damage_scaling.length)) out = {...out, damage: '', damage_scaling: []}` — same shape as the existing `_autoAttack` strip. The damage button only renders when the action has a non-empty `damage` field; clearing it strips the button cleanly.
+**Description (cont):** Verification. (a) Curl `/version` confirms v2.49.159 live. (b) Cast Magic Missile L1 from Zara — per-dart pills appear, no "🎲 Roll damage" button on the card. (c) Cast Fire Bolt — manual damage button still renders (no auto-hit pills; auto_attack pills handle it via separate path). (d) Cast a healing spell — no regression in the existing auto-heal strip.
+
+### Changed
+- `app/static/tabletop.js::appendSpellCast` — strip damage actions when `auto_hit_targets` has entries.
+
+### Notes
+- **Mirrors existing strip patterns** for auto-heal / auto-attack / auto-save.
+- **No server change.** Pure client-side filter.
+
+---
+
 ## [2.49.158] - 2026-05-23
 
 **Schema version:** 56

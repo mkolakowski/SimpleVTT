@@ -4165,6 +4165,11 @@
         const _autoHeal   = d.auto_heal_applied > 0;
         const _autoAttack = d.auto_attack_hit != null;
         const _autoSave   = d.auto_save_target_kind != null;
+        // v2.49.159: auto-hit spells (Magic Missile) now apply per-
+        // dart damage server-side and emit auto_hit_targets pills —
+        // the legacy "🎲 Roll damage" button is redundant. Strip
+        // damage actions when at least one dart landed.
+        const _autoHit    = Array.isArray(d.auto_hit_targets) && d.auto_hit_targets.length > 0;
         // v2.48.3 — AoE spells strip ALL legacy action buttons (Roll
         // Damage / Prompt SAVE / etc.). The v2.48.0 pending → place
         // flow renders a Place button when pending and per-target
@@ -4185,6 +4190,10 @@
                 if (out.damage || (out.damage_scaling && out.damage_scaling.length)) {
                     out = {...out, damage: '', damage_scaling: []};
                 }
+            }
+            // v2.49.159: auto-hit spells strip damage actions too.
+            if (_autoHit && (out.damage || (out.damage_scaling && out.damage_scaling.length))) {
+                out = {...out, damage: '', damage_scaling: []};
             }
             return out;
         });
