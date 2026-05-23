@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>SimpleVTT — Unified mini-sheet mockups (v2.49.188)</title>
+<title>SimpleVTT — Unified mini-sheet mockups (v2.49.189)</title>
 <style>
   :root {
     --bg:        #15171c;
@@ -185,6 +185,49 @@
     color: var(--fg-mute);
     background: var(--input-bg);
   }
+  /* v2.49.189: status chips — sits under HP bar (above economy chips
+     for PCs). Color-coded by status type:
+       conc   = concentration (teal #5eead4 — matches concentration AoE)
+       buff   = beneficial buff (amber #fbbf24)
+       cond   = adverse condition (red #d74a4a)
+       aura   = aura emanation (cyan #5ec1d6)
+     The same chip palette can power the actual mini-sheet later. */
+  .mock-status-row {
+    display: flex;
+    gap: 6px;
+    margin: 4px 0 8px;
+    flex-wrap: wrap;
+  }
+  .mock-status-chip {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: filter 120ms ease;
+  }
+  .mock-status-chip:hover { filter: brightness(1.2); }
+  .mock-status-chip.conc {
+    background: color-mix(in srgb, #5eead4 22%, transparent);
+    color: #5eead4;
+    border: 1px solid color-mix(in srgb, #5eead4 50%, transparent);
+  }
+  .mock-status-chip.buff {
+    background: color-mix(in srgb, #fbbf24 18%, transparent);
+    color: #fbbf24;
+    border: 1px solid color-mix(in srgb, #fbbf24 40%, transparent);
+  }
+  .mock-status-chip.cond {
+    background: color-mix(in srgb, #d74a4a 18%, transparent);
+    color: #d74a4a;
+    border: 1px solid color-mix(in srgb, #d74a4a 40%, transparent);
+  }
+  .mock-status-chip.aura {
+    background: color-mix(in srgb, #5ec1d6 18%, transparent);
+    color: #5ec1d6;
+    border: 1px solid color-mix(in srgb, #5ec1d6 40%, transparent);
+  }
+
   .mock-tabs {
     display: flex;
     gap: 2px;
@@ -216,7 +259,6 @@
   }
   .mock-tab.hidden:hover { color: rgba(154, 160, 170, 0.3); }
 
-  /* Panels — only one visible at a time, switched by tab clicks. */
   .mock-panels { position: relative; }
   .mock-panel { display: none; animation: fadeIn 140ms ease; }
   .mock-panel.active { display: block; }
@@ -254,6 +296,43 @@
     border: 1px solid color-mix(in srgb, var(--c-heal) 40%, transparent);
     padding: 1px 5px;
     border-radius: 8px;
+  }
+  /* v2.49.189: resistance / immunity chips — sit in the Stats tab
+     above the ability grid. Color matches the status palette:
+     resist = teal (cool, defensive); immune = red (absolute, blocking). */
+  .mock-resist-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 4px;
+    font-size: 11px;
+    color: var(--fg-mute);
+    flex-wrap: wrap;
+  }
+  .mock-resist-row .label { font-weight: 600; color: var(--fg); }
+  .mock-chip.resist {
+    color: #5eead4;
+    background: color-mix(in srgb, #5eead4 12%, transparent);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .mock-chip.immune {
+    color: #d74a4a;
+    background: color-mix(in srgb, #d74a4a 14%, transparent);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .mock-chip.cond-immune {
+    color: #fbbf24;
+    background: color-mix(in srgb, #fbbf24 14%, transparent);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .mock-chip.vuln {
+    color: #fb923c;
+    background: color-mix(in srgb, #fb923c 14%, transparent);
+    padding: 1px 6px;
+    border-radius: 3px;
   }
   .mock-cast-btn, .mock-strike-btn, .mock-roll-btn {
     background: rgba(167, 139, 250, .12);
@@ -377,28 +456,28 @@
 
 <div id="notice"></div>
 
-<h1>Unified mini-sheet — visual mockups <span class="version">v2.49.188</span></h1>
+<h1>Unified mini-sheet — visual mockups <span class="version">v2.49.189</span></h1>
 <p class="lede">
   Visual companion to the
   <a href="/wiki/doc/plan-unified-mini-sheet">Unified mini-sheet design plan</a>.
   Three mockups rendered side-by-side (NPC left, PC right). Tabs are
-  <strong>clickable</strong> — switch between Actions / Spells / Skills /
-  etc. to see how each design accommodates content density. Cast / Strike
-  buttons trigger a transient toast so the rollover behaviour reads as
-  "real," not as static art.
+  clickable, buttons fire toast feedback, spell-slot pips toggle live.
+  <strong>v2.49.189:</strong> Abilities + Skills merged into a single
+  <em>Stats</em> tab, status chips under the HP bar, resistance + immunity
+  chips at the top of the Stats panel.
 </p>
 
 <div class="callout note">
   <strong>This is a mockup.</strong> Clicking tabs switches local panel
-  visibility; clicking Cast / Strike / skill buttons fires a corner
-  toast and a no-op alert. Nothing here talks to the server — the
-  data is hand-authored for design review.
+  visibility; clicking Cast / Strike / Roll fires a corner toast and a
+  no-op. Nothing here talks to the server — the data is hand-authored
+  for design review.
 </div>
 
 <h2 id="current">Current state — baseline (post-v2.49.184)</h2>
 <p>
-  What ships today. NPC has the shared header + HP bar from PC, then
-  diverges into the compact stat-block body.
+  What ships today, refreshed with the v2.49.189 status / resist / Stats-tab
+  conventions so the baseline is comparable to the three mockups below.
 </p>
 
 <div class="mockup-pair">
@@ -416,6 +495,9 @@
       <div class="mock-body dense">
         <div class="mock-stat-row"><span>HP <span class="v">18</span> / 18</span></div>
         <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-status-row">
+          <span class="mock-status-chip aura" title="Acolyte aura buffs allies within 5 ft">🌀 Divine Aura</span>
+        </div>
         <div class="mock-quick-chips">
           <span><b>AC</b> 12</span>
           <span><b>Spd</b> 30</span>
@@ -431,7 +513,7 @@
         <div class="mock-tabs">
           <span class="mock-tab active" data-target="cur-npc-actions">Actions</span>
           <span class="mock-tab" data-target="cur-npc-spells">Spells</span>
-          <span class="mock-tab" data-target="cur-npc-skills">Skills</span>
+          <span class="mock-tab" data-target="cur-npc-stats">Stats</span>
         </div>
         <div class="mock-panels">
           <div class="mock-panel active" id="cur-npc-actions">
@@ -457,22 +539,20 @@
               <button class="mock-cast-btn">✨ Cast</button>
             </div>
           </div>
-          <div class="mock-panel" id="cur-npc-skills">
-            <div class="mock-skill-row">
-              <span class="mock-skill-name">Religion</span>
-              <span class="mock-chip skill">+2</span>
-              <button class="mock-roll-btn">🎲 Roll</button>
+          <div class="mock-panel" id="cur-npc-stats">
+            <div class="mock-resist-row">
+              <span class="label">🛡 Resist</span>
+              <span class="mock-chip resist">necrotic</span>
             </div>
-            <div class="mock-skill-row">
-              <span class="mock-skill-name">Medicine (Prof)</span>
-              <span class="mock-chip skill">+4</span>
-              <button class="mock-roll-btn">🎲 Roll</button>
+            <div class="mock-resist-row">
+              <span class="label">🚫 Cond. Immune</span>
+              <span class="mock-chip cond-immune">charmed</span>
+              <span class="mock-chip cond-immune">frightened</span>
             </div>
-            <div class="mock-skill-row">
-              <span class="mock-skill-name">Perception</span>
-              <span class="mock-chip skill">+2</span>
-              <button class="mock-roll-btn">🎲 Roll</button>
-            </div>
+            <div class="mock-section-label">Skills</div>
+            <div class="mock-skill-row"><span class="mock-skill-name">Religion</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
+            <div class="mock-skill-row"><span class="mock-skill-name">Medicine (Prof)</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
+            <div class="mock-skill-row"><span class="mock-skill-name">Perception</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
           </div>
         </div>
       </div>
@@ -481,21 +561,21 @@
 
   <div class="mockup-column">
     <h4>PC — Zara Emberfire · today</h4>
-    <div class="mock-mini" data-pc="zara"></div>
+    <div class="mock-mini" data-pc="zara" data-id-prefix="cur"></div>
   </div>
 </div>
 
 <div class="annotation">
-  Click tabs to switch panels. NPC body has the dense ability grid + 3-tab
-  strip. PC body has the rich tabbed layout with 6 tabs (Actions / Spells /
-  Abilities / Skills / Resources / Feats).
+  Click tabs to switch panels. NPC body keeps the compact ability grid + dense
+  layout; PC body has the rich tabbed layout. Both now share status chips
+  under the HP bar and a Stats tab containing resistances + immunities + skills.
 </div>
 
 <h2 id="mockup-a">Mockup A — Conservative <span class="badge">PC partial, NPC fits in</span></h2>
 <p>
   Reuse <code>_mini_sheet_card.html</code> verbatim. Server projects NPCs
   into PC-shaped dicts. Empty PC-only tabs are <strong>shown but disabled</strong>
-  (strikethrough) so the reviewer can see what's hidden. Single source of truth.
+  (strikethrough). Single source of truth.
 </p>
 
 <div class="mockup-pair">
@@ -517,11 +597,13 @@
           <span>Spd <span class="v">30</span></span>
         </div>
         <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-status-row">
+          <span class="mock-status-chip aura" title="Acolyte aura buffs allies within 5 ft">🌀 Divine Aura</span>
+        </div>
         <div class="mock-tabs">
           <span class="mock-tab active" data-target="a-npc-actions">Actions</span>
           <span class="mock-tab" data-target="a-npc-spells">Spells</span>
-          <span class="mock-tab hidden">Abilities</span>
-          <span class="mock-tab" data-target="a-npc-skills">Skills</span>
+          <span class="mock-tab" data-target="a-npc-stats">Stats</span>
           <span class="mock-tab hidden">Res</span>
           <span class="mock-tab hidden">Feats</span>
         </div>
@@ -552,7 +634,26 @@
               <button class="mock-cast-btn">✨ Cast</button>
             </div>
           </div>
-          <div class="mock-panel" id="a-npc-skills">
+          <div class="mock-panel" id="a-npc-stats">
+            <div class="mock-resist-row">
+              <span class="label">🛡 Resist</span>
+              <span class="mock-chip resist">necrotic</span>
+            </div>
+            <div class="mock-resist-row">
+              <span class="label">🚫 Cond. Immune</span>
+              <span class="mock-chip cond-immune">charmed</span>
+              <span class="mock-chip cond-immune">frightened</span>
+            </div>
+            <div class="mock-section-label">Abilities</div>
+            <div class="mock-ability-grid">
+              <div class="mock-ability-cell"><div class="a-label">STR</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
+              <div class="mock-ability-cell"><div class="a-label">DEX</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
+              <div class="mock-ability-cell"><div class="a-label">CON</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
+              <div class="mock-ability-cell"><div class="a-label">INT</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
+              <div class="mock-ability-cell prof"><div class="a-label">WIS</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
+              <div class="mock-ability-cell"><div class="a-label">CHA</div><div class="a-mod">+0</div><div class="a-score">11</div></div>
+            </div>
+            <div class="mock-section-label">Skills</div>
             <div class="mock-skill-row"><span class="mock-skill-name">Religion</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
             <div class="mock-skill-row"><span class="mock-skill-name">Medicine (Prof)</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
             <div class="mock-skill-row"><span class="mock-skill-name">Perception</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
@@ -561,9 +662,9 @@
       </div>
     </div>
     <div class="annotation">
-      Same chrome + tab strip as PC. Strikethrough tabs (Abilities / Res /
-      Feats) show what's hidden. Compact stat-block ability grid is gone —
-      PC partial doesn't have one.
+      Same chrome + tab strip as PC. Strikethrough tabs (Res / Feats) show
+      what's hidden. Stats tab carries Abilities + Skills + Resistances +
+      Immunities — the merged "where do I check stats" home.
     </div>
   </div>
 
@@ -574,15 +675,15 @@
 </div>
 
 <div class="callout">
-  <strong>Trade-off.</strong> Single source of truth, but loses the compact NPC
+  <strong>Trade-off.</strong> Single source of truth, but loses the inline
   ability grid that v2.3.34 users explicitly asked for. Strikethrough tabs
-  show what's hidden — visual gaps remain because the chrome height stays.
+  show what's hidden — visual gaps remain because chrome height stays.
 </div>
 
 <h2 id="mockup-b">Mockup B — Symmetric <span class="badge recommend">⭐ recommended endpoint</span></h2>
 <p>
   New unified partial. Same chrome for both. Tab strip is
-  <strong>server-driven</strong>: PCs get 6 tabs, NPCs get 3 — no
+  <strong>server-driven</strong>: PCs get 5 tabs, NPCs get 3 — no
   hidden placeholders. Each tab renders through the same Jinja
   sub-partial regardless of source.
 </p>
@@ -606,10 +707,13 @@
           <span>Spd <span class="v">30</span></span>
         </div>
         <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-status-row">
+          <span class="mock-status-chip aura">🌀 Divine Aura</span>
+        </div>
         <div class="mock-tabs">
           <span class="mock-tab active" data-target="b-npc-actions">Actions</span>
           <span class="mock-tab" data-target="b-npc-spells">Spells</span>
-          <span class="mock-tab" data-target="b-npc-skills">Skills</span>
+          <span class="mock-tab" data-target="b-npc-stats">Stats</span>
         </div>
         <div class="mock-panels">
           <div class="mock-panel active" id="b-npc-actions">
@@ -638,7 +742,26 @@
               <button class="mock-cast-btn">✨ Cast</button>
             </div>
           </div>
-          <div class="mock-panel" id="b-npc-skills">
+          <div class="mock-panel" id="b-npc-stats">
+            <div class="mock-resist-row">
+              <span class="label">🛡 Resist</span>
+              <span class="mock-chip resist">necrotic</span>
+            </div>
+            <div class="mock-resist-row">
+              <span class="label">🚫 Cond. Immune</span>
+              <span class="mock-chip cond-immune">charmed</span>
+              <span class="mock-chip cond-immune">frightened</span>
+            </div>
+            <div class="mock-section-label">Abilities</div>
+            <div class="mock-ability-grid">
+              <div class="mock-ability-cell"><div class="a-label">STR</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
+              <div class="mock-ability-cell"><div class="a-label">DEX</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
+              <div class="mock-ability-cell"><div class="a-label">CON</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
+              <div class="mock-ability-cell"><div class="a-label">INT</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
+              <div class="mock-ability-cell prof"><div class="a-label">WIS</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
+              <div class="mock-ability-cell"><div class="a-label">CHA</div><div class="a-mod">+0</div><div class="a-score">11</div></div>
+            </div>
+            <div class="mock-section-label">Skills</div>
             <div class="mock-skill-row"><span class="mock-skill-name">Religion</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
             <div class="mock-skill-row"><span class="mock-skill-name">Medicine (Prof)</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
             <div class="mock-skill-row"><span class="mock-skill-name">Perception</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
@@ -647,13 +770,13 @@
       </div>
     </div>
     <div class="annotation">
-      Server sends <code>tabs=['actions','spells','skills']</code> — only those
+      Server sends <code>tabs=['actions','spells','stats']</code> — only those
       render. No hidden placeholders. Same chip layout as PC.
     </div>
   </div>
 
   <div class="mockup-column">
-    <h4>PC — full 6-tab strip</h4>
+    <h4>PC — full 5-tab strip</h4>
     <div class="mock-mini" data-pc="zara" data-id-prefix="b"></div>
   </div>
 </div>
@@ -666,9 +789,9 @@
 
 <h2 id="mockup-c">Mockup C — Hybrid Density <span class="badge">Phase 1 stepping stone</span></h2>
 <p>
-  Shared chrome (header + HP bar). Body density branches per entity type:
-  NPC keeps the compact stat-block (current v2.49.183 look); PC keeps the
-  tabbed layout. <strong>Continues v2.49.183.</strong>
+  Shared chrome (header + HP bar + status chips). Body density branches
+  per entity type: NPC keeps the compact stat-block (inline ability grid);
+  PC keeps the tabbed layout. <strong>Continues v2.49.183.</strong>
 </p>
 
 <div class="mockup-pair">
@@ -686,6 +809,9 @@
       <div class="mock-body dense">
         <div class="mock-stat-row"><span>HP <span class="v">18</span> / 18</span></div>
         <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-status-row">
+          <span class="mock-status-chip aura">🌀 Divine Aura</span>
+        </div>
         <div class="mock-quick-chips">
           <span><b>AC</b> 12</span>
           <span><b>Spd</b> 30</span>
@@ -701,7 +827,7 @@
         <div class="mock-tabs">
           <span class="mock-tab active" data-target="c-npc-actions">Actions</span>
           <span class="mock-tab" data-target="c-npc-spells">Spells</span>
-          <span class="mock-tab" data-target="c-npc-skills">Skills</span>
+          <span class="mock-tab" data-target="c-npc-stats">Stats</span>
         </div>
         <div class="mock-panels">
           <div class="mock-panel active" id="c-npc-actions">
@@ -727,17 +853,31 @@
               <button class="mock-cast-btn">✨ Cast</button>
             </div>
           </div>
-          <div class="mock-panel" id="c-npc-skills">
+          <div class="mock-panel" id="c-npc-stats">
+            <div class="mock-resist-row">
+              <span class="label">🛡 Resist</span>
+              <span class="mock-chip resist">necrotic</span>
+            </div>
+            <div class="mock-resist-row">
+              <span class="label">🚫 Cond. Immune</span>
+              <span class="mock-chip cond-immune">charmed</span>
+              <span class="mock-chip cond-immune">frightened</span>
+            </div>
+            <div class="mock-section-label">Skills</div>
             <div class="mock-skill-row"><span class="mock-skill-name">Religion</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
             <div class="mock-skill-row"><span class="mock-skill-name">Medicine (Prof)</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
             <div class="mock-skill-row"><span class="mock-skill-name">Perception</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
+            <div class="annotation" style="margin-top:8px;">
+              No ability grid here — it's inline above (Hybrid Density's signature).
+            </div>
           </div>
         </div>
       </div>
     </div>
     <div class="annotation">
-      Body density branches: compact ability grid + flat action list. Same
-      chrome (header + HP bar) as the PC right.
+      Body density branches: compact ability grid INLINE + flat action list.
+      Stats tab is leaner (no duplicate ability grid — it's already shown
+      above). Same chrome (header + HP bar + status chips) as the PC right.
     </div>
   </div>
 
@@ -791,9 +931,11 @@
 </p>
 
 <script>
-// v2.49.188: render the Zara PC mini-sheet via a JS template into every
-// .mock-mini[data-pc='zara'] container, then wire up tab switching +
-// button click toasts. Keeps the markup DRY (4 PC blocks share one source).
+// v2.49.189: render the Zara PC mini-sheet via a JS template. The
+// template now uses 5 tabs (Actions / Spells / Stats / Res / Feats)
+// instead of 6 — Abilities + Skills merged into Stats per the user
+// review note. Status chips under HP bar; resistance + immunity
+// rows at the top of the Stats panel.
 (function() {
   function zaraTemplate(prefix) {
     return `
@@ -812,6 +954,10 @@
           <span>Spd <span class="v">30</span></span>
         </div>
         <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-status-row">
+          <span class="mock-status-chip conc" title="Concentrating on Mirror Image">🧿 Concentrating · Mirror Image</span>
+          <span class="mock-status-chip buff" title="Mirror Image gives 3 duplicates that mislead attackers">🪞 Mirror Image (3)</span>
+        </div>
         <div class="mock-econ">
           <span class="mock-econ-chip">⚔ Act</span>
           <span class="mock-econ-chip">💨 Bns</span>
@@ -821,8 +967,7 @@
         <div class="mock-tabs">
           <span class="mock-tab" data-target="${prefix}-pc-actions">Actions</span>
           <span class="mock-tab active" data-target="${prefix}-pc-spells">Spells</span>
-          <span class="mock-tab" data-target="${prefix}-pc-abilities">Abilities</span>
-          <span class="mock-tab" data-target="${prefix}-pc-skills">Skills</span>
+          <span class="mock-tab" data-target="${prefix}-pc-stats">Stats</span>
           <span class="mock-tab" data-target="${prefix}-pc-res">Res</span>
           <span class="mock-tab" data-target="${prefix}-pc-feats">Feats</span>
         </div>
@@ -901,7 +1046,7 @@
             <div class="mock-section-label">Level 2 Spells</div>
             <div class="mock-slots">
               Slots
-              <span><span class="mock-pip"></span><span class="mock-pip"></span><span class="mock-pip"></span> 3/3</span>
+              <span><span class="mock-pip"></span><span class="mock-pip"></span><span class="mock-pip used"></span> 2/3</span>
             </div>
             <div class="mock-spell-row">
               <span class="mock-spell-name">✨ Scorching Ray</span>
@@ -928,7 +1073,17 @@
               <button class="mock-cast-btn">✨ Cast</button>
             </div>
           </div>
-          <div class="mock-panel" id="${prefix}-pc-abilities">
+          <div class="mock-panel" id="${prefix}-pc-stats">
+            <div class="mock-resist-row">
+              <span class="label">🛡 Resist</span>
+              <span class="mock-chip resist">fire</span>
+              <span class="annotation" style="margin-top:0;margin-left:6px;">Tiefling racial</span>
+            </div>
+            <div class="mock-resist-row">
+              <span class="label">⚡ Vulnerable</span>
+              <span class="annotation" style="margin-top:0;">(none)</span>
+            </div>
+            <div class="mock-section-label">Abilities</div>
             <div class="mock-ability-grid">
               <div class="mock-ability-cell"><div class="a-label">STR</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
               <div class="mock-ability-cell"><div class="a-label">DEX</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
@@ -941,8 +1096,7 @@
             <div class="mock-skill-row"><span class="mock-skill-name">CON save (Prof)</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
             <div class="mock-skill-row"><span class="mock-skill-name">CHA save (Prof)</span><span class="mock-chip skill">+7</span><button class="mock-roll-btn">🎲 Roll</button></div>
             <div class="mock-skill-row"><span class="mock-skill-name">DEX save</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
-          </div>
-          <div class="mock-panel" id="${prefix}-pc-skills">
+            <div class="mock-section-label">Skills</div>
             <div class="mock-skill-row"><span class="mock-skill-name">Arcana (Prof)</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
             <div class="mock-skill-row"><span class="mock-skill-name">Insight</span><span class="mock-chip skill">+1</span><button class="mock-roll-btn">🎲 Roll</button></div>
             <div class="mock-skill-row"><span class="mock-skill-name">Persuasion (Prof)</span><span class="mock-chip skill">+7</span><button class="mock-roll-btn">🎲 Roll</button></div>
@@ -988,6 +1142,10 @@
               <div class="mock-feat-name">Darkvision (Racial)</div>
               <div class="mock-feat-desc">60 ft darkvision in dim light + see in darkness as if dim.</div>
             </div>
+            <div class="mock-feat-row">
+              <div class="mock-feat-name">Hellish Resistance (Racial)</div>
+              <div class="mock-feat-desc">Resistance to fire damage. Shown in Stats tab above.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -998,8 +1156,6 @@
     el.innerHTML = zaraTemplate(prefix);
   });
 
-  // Tab switching — delegated handler on <body>. Clicking a non-hidden
-  // tab activates it + its sibling panel; other tabs deactivate.
   document.body.addEventListener('click', (ev) => {
     const tab = ev.target.closest('.mock-tab');
     if (!tab) return;
@@ -1019,8 +1175,6 @@
     if (target) target.classList.add('active');
   });
 
-  // Button toasts — Cast / Strike / Roll all show a transient corner
-  // toast naming what was clicked. Mockup-only; no server interaction.
   document.body.addEventListener('click', (ev) => {
     const btn = ev.target.closest('.mock-cast-btn, .mock-strike-btn, .mock-roll-btn');
     if (!btn) return;
@@ -1030,12 +1184,10 @@
     showNotice(`${label} → ${name}`);
   });
 
-  // Spell-slot pip toggle — click to flip used/unused for the visual demo.
   document.body.addEventListener('click', (ev) => {
     const pip = ev.target.closest('.mock-pip');
     if (!pip) return;
     pip.classList.toggle('used');
-    // Update the trailing "N/M" counter on the same slot line.
     const slotLine = pip.closest('.mock-slots, .mock-resource-row');
     if (!slotLine) return;
     const pips = [...slotLine.querySelectorAll('.mock-pip')];
@@ -1047,13 +1199,19 @@
     }
   });
 
-  // Ability cell click — flash the toast with the modifier value.
   document.body.addEventListener('click', (ev) => {
     const cell = ev.target.closest('.mock-ability-cell');
     if (!cell) return;
     const label = cell.querySelector('.a-label')?.textContent || '';
     const mod = cell.querySelector('.a-mod')?.textContent || '';
     showNotice(`🎲 ${label} check → 1d20${mod}`);
+  });
+
+  // v2.49.189: status chips clickable — show what they mean.
+  document.body.addEventListener('click', (ev) => {
+    const chip = ev.target.closest('.mock-status-chip');
+    if (!chip) return;
+    showNotice(`Status: ${chip.textContent.trim()}`);
   });
 
   let noticeTimer = null;

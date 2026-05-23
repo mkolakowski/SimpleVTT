@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.189] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Mockups: Abilities + Skills merged into one "Stats" tab; status chips + resistances/immunities added.** User: "on all examples, can you combine abilities and skills into one tab? can you also show resistances and immunities as well as status." Three coordinated changes to all six mini-sheet mockups (3 NPC + 3 PC, plus the Current-state baseline pair): (a) every tab strip drops the "Abilities" tab, renames "Skills" → "Stats", and the Stats panel now hosts Resistances / Immunities / Ability grid / Saving throws / Skills under one roof; (b) new status-chip row under the HP bar with 4 chip palettes (concentration teal, buff amber, condition red, aura cyan); (c) demo data: Zara shows "🧿 Concentrating · Mirror Image" + "🪞 Mirror Image (3)" status, "🛡 Resist fire (Tiefling racial)" + "⚡ Vulnerable (none)" on Stats; Soren shows "🌀 Divine Aura" status + "🛡 Resist necrotic" + "🚫 Cond. Immune charmed, frightened" on Stats.
+**Description:** Full rewrite of `docs/wiki/unified-mini-sheet-mockups.html`. New CSS classes: `.mock-status-row` + `.mock-status-chip.{conc,buff,cond,aura}` for status chips (color-coded by type); `.mock-resist-row` + `.mock-chip.{resist,immune,cond-immune,vuln}` for the Stats-tab resistance / immunity / vulnerability chips. All tab strips updated:
+**Description (cont):** **Tab strip changes per mockup.** Current PC/NPC: was 6 tabs (Actions/Spells/Abilities/Skills/Res/Feats) / 3 tabs (Actions/Spells/Skills); now 5 / 3 (Actions/Spells/Stats[/Res/Feats] respectively). Mockup A: still has hidden-tab placeholders (`Res` + `Feats` only, the "Abilities" hidden tab is gone since it's merged into Stats). Mockups B + C unchanged tab count (3 for NPC); just the rename Skills → Stats. PC variants drop the Abilities tab entirely; Stats absorbs its content.
+**Description (cont 2):** **Status chips placement.** New `.mock-status-row` div sits between the HP bar and the action-economy chip row (PC) or between HP bar and tab strip (NPC). Color logic: teal-`#5eead4` for concentration (matches existing concentration AoE color), amber-`#fbbf24` for beneficial buffs, red-`#d74a4a` for adverse conditions, cyan-`#5ec1d6` for auras. Chips have a 1.8s toast on click ("Status: 🧿 Concentrating · Mirror Image") so reviewers can tell they're meant to be hover-tap targets in the real implementation.
+**Description (cont 3):** **Stats panel composition.** Top of every Stats panel: 🛡 Resist row + 🚫 Cond. Immune row + (PC only) ⚡ Vulnerable row. Then a `mock-section-label` "Abilities" → 6-cell ability grid (PC has prof rings on CON + CHA; NPC has prof ring on WIS). Then "Saving throws" (PC only) → save rows. Then "Skills" → skill rows with prof chips. Mockup C NPC's Stats panel is leaner — no duplicate ability grid because Hybrid Density keeps it inline above the tab strip; an inline annotation explains "No ability grid here — it's inline above (Hybrid Density's signature)" so reviewers don't think it's a bug.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.189 live. (b) Manual: `GET /wiki/unified-mini-sheet-mockups` renders all 8 mini-sheets (4 NPC + 4 PC) with the new Stats tab; clicking the Stats tab on any mockup shows the merged resistances + abilities + skills panel; clicking a status chip toasts the status name; clicking ability cells still toasts the roll (`🎲 CHA check → 1d20+4`). (c) Tab count consistency: PCs now have 5 tabs (was 6); NPCs still have 3 tabs (Skills renamed to Stats). (d) Mockup A's hidden-tab placeholders correctly show only `Res` + `Feats` strikethrough — the `Abilities` placeholder is gone.
+
+### Changed
+- `docs/wiki/unified-mini-sheet-mockups.html` — full rewrite. Merged Abilities + Skills into a Stats tab across all 8 mini-sheet mockups; added status-chip row under the HP bar with 4 color palettes; added resistance / immunity / vulnerability chips at the top of every Stats panel.
+
+### Notes
+- **Tab count drops from 6→5 for PCs**, 3→3 for NPCs (Skills renamed). NPC count unchanged because NPCs never had an Abilities tab to merge from.
+- **Status chip palette is reusable** — when the real mini-sheet adopts these chips, the CSS can be lifted directly from this mockup.
+- **No server / harness change.** Pure docs.
+
+---
+
 ## [2.49.188] - 2026-05-23
 
 **Schema version:** 56
