@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.128] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Zebra-striping for the roll log + initiative tracker cards.** CSS-only readability tweak: every other card in `.roll-list` and `#initiative-list` shifts background from `var(--bg)` to `var(--bg-2)` (the slightly-lighter shade already defined in every theme palette) so a long list is easier to visually parse. The init tracker's `.active-turn` highlight still wins on the current combatant — the zebra rules are defined BEFORE the `.active-turn` rules so source-order resolves the same-specificity conflict in favor of the active highlight.
+**Description:** Three small edits in `app/templates/tabletop.html`. **(1)** Added `.roll-list > li:nth-child(even) > .roll-card { background: var(--bg-2); }` right after the base `.roll-card` rule. The colored left column (`.roll-card-total-col`, which has its own visibility-tinted background per vis-class) is unaffected — only the card body shifts. **(2)** Added `.init-row:nth-child(even) { background: var(--bg-2); }` between the base `.init-row` rule and the `.init-row.active-turn` override. **(3)** Same for `.init-entry:nth-child(even)` — the GM combatant-card wrapper used by the expanded init-tracker entries. Both `.active-turn` rules immediately follow their respective `:nth-child(even)` rules so the active-turn highlight wins on the current combatant regardless of its odd/even position (same specificity → source order resolves it; verified visually).
+**Description (cont):** Why `var(--bg-2)` instead of a fixed alpha overlay. `--bg-2` is already defined in every theme palette (dark default `#20232a` over `--bg: #15171c`; midnight `#13161f` over `#0d0f14`; smoke `#2a2e38` over `#22262e`) as the standard "slightly lifted" surface — used today for the GM panel, the mini-statblock body, and the sound panel. Re-using it keeps the stripe visually coherent with the rest of the theming. A custom alpha (e.g. `rgba(255,255,255,0.04)`) would diverge per theme and re-implement what `--bg-2` already does correctly.
+**Description (cont 2):** Why source-order specificity resolution instead of `!important`. `.init-row:nth-child(even)` and `.init-row.active-turn` both have specificity `0,2,0` (one class + one pseudo-class). When two same-specificity rules both match, CSS resolves by source order — last-declared wins. Defining `:nth-child(even)` FIRST and `.active-turn` SECOND means: even-row inactive → `:nth-child(even)` background; even-row active → `.active-turn` background (active-turn wins by source order); odd-row active → only `.active-turn` matches. No `!important` needed; the cascade naturally orders things correctly. The CSS comments at each site flag this so future edits don't accidentally re-order the rules.
+**Description (cont 3):** No test coverage delta. CSS-only readability changes don't have harness-level assertions (the Playwright UI suite at `tests/harness_ui/` could screenshot-diff but doesn't today). Visually verified across the dark / midnight / smoke / steel themes; the zebra effect is subtle but readable at all three.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.128 live after `docker compose up -d --build app`. (b) Visually inspected the roll log + init tracker in the demo campaign; alternating cards now have the expected lift.
+
+### Changed
+- `app/templates/tabletop.html` — added `.roll-list > li:nth-child(even) > .roll-card`, `.init-row:nth-child(even)`, and `.init-entry:nth-child(even)` zebra-stripe rules. Each one defined immediately before the matching `.active-turn` override so source-order specificity resolution preserves the active-turn highlight.
+
+### Notes
+- **Backward compat.** No JS / HTML structure changes. The new rules only target the existing cascade; downstream content + screenshot tests are unaffected (no fixture relies on the exact card background hex).
+- **Theme coherence.** `--bg-2` is part of every theme palette; the zebra effect works without per-theme overrides.
+- **Active-turn highlight preserved.** The init-tracker's accent-tinted active-turn card still reads as the current combatant in both odd and even slots.
+
+### Filed
+- **Screenshot-diff harness for visual changes.** The Playwright UI suite could grow a snapshot-comparison harness so future CSS edits trigger a visual diff in CI. Lower priority — the current 4-screenshot manual workflow scales fine.
+
+---
+
 ## [2.49.127] - 2026-05-22
 
 **Schema version:** 56

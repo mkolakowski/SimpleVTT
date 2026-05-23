@@ -219,6 +219,11 @@
         box-shadow: 0 3px 14px rgba(0,0,0,.22);
         display: flex;
     }
+    /* v2.49.128: zebra-strip alternating roll-log cards (every other
+       card lifts to ``--bg-2``) so a long roll list is easier to scan
+       at a glance. The visibility-variant colored left column
+       (.roll-card-total-col) keeps its own tint and isn't affected. */
+    .roll-list > li:nth-child(even) > .roll-card { background: var(--bg-2); }
     /* feature-used-card has no total column — stack vertically */
     .feature-used-card { flex-direction: column; }
 
@@ -1078,10 +1083,19 @@
        and the inter-card gap goes 4 → 7 px to match .roll-list's
        gap: 7px. */
     .init-row { display:flex; align-items:center; gap:5px; padding:6px 8px; border:1px solid rgba(167,139,250,.35); border-radius:8px; margin-bottom:7px; box-shadow:0 3px 14px rgba(0,0,0,.22); background:var(--bg); }
+    /* v2.49.128: zebra-strip alternating init-tracker rows so a long
+       combatant list reads easier. Defined BEFORE the .active-turn
+       overrides below so the active-turn highlight always wins on the
+       current combatant (same CSS specificity → source-order decides). */
+    .init-row:nth-child(even) { background: var(--bg-2); }
     .init-row.active-turn { background:var(--accent-bg); border-color:var(--accent); box-shadow:0 2px 10px rgba(167,139,250,.28); }
     /* GM combatant card wrapper — overrides the standalone init-row style when nested */
     /* v2.49.99: matches .roll-card — see comment on .init-row above. */
     .init-entry { margin-bottom:7px; border:1px solid rgba(167,139,250,.35); border-radius:8px; overflow:hidden; box-shadow:0 3px 14px rgba(0,0,0,.22); background:var(--bg); }
+    /* v2.49.128: GM combatant cards zebra-strip too. Same source-order
+       logic as .init-row above — .active-turn rules below win on the
+       current combatant. */
+    .init-entry:nth-child(even) { background: var(--bg-2); }
     .init-entry.active-turn { border-color:var(--accent); box-shadow:0 2px 10px rgba(167,139,250,.28); }
     .init-entry.active-turn .mini-header { background:linear-gradient(135deg,rgba(167,139,250,.28),rgba(108,180,255,.18)); }
     /* v2.3.33: per-entry "Open Sheet" button. Compact (32px min-height to
