@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.163] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **NPC 🎯 Attack opens the canvas target picker (matches PC Strike flow).** Until now the GM-side init-tracker `.monster-strike-btn` rolled the attack with no target context — just `1d20+bonus` and a generic note like "Bandit: Scimitar attack." PCs have used the canvas picker since v2.49.137 (`.mini-strike-btn` opens `vttOpenMultiTargetPicker` when no token is pre-targeted). This brings NPCs to feature parity: clicking 🎯 Attack now opens the green/red per-token picker (v2.49.161) so the GM clicks a target token on the map. The picked target's name is folded into the roll note so the roll-log entry reads "Bandit: Scimitar attack → Pip." Damage and Save buttons skip the picker (GM picks once on Attack; follow-up rolls inherit context).
+**Description:** Two coordinated edits. **(1)** `app/static/tabletop.js::_targetPicker` — added `casterCombatantId` option to `.start()` and the new three-tier NPC-caster token resolution (matches `_targetPicker.commit`'s existing target-resolution: `source_token_id` → `token_template_id + name`). `casterCharId` path unchanged for PCs; the new lookup only fires when `casterCharId` produced no `casterPos`. `_cleanup()` resets the new field. **(2)** `app/templates/tabletop.html` `.monster-strike-btn` handler (~line 6335) — on `kind === 'attack'`, find the combatant via `_row.dataset.idx → battle.combatants[idx]`, check `window._targetingState.getTargets()` for a pre-selected token (skip picker if set, same convention as PC path), else call `vttOpenMultiTargetPicker({required: 1, spellName: action.name, casterCombatantId, rangeStr: action.range})`. A null return (Esc / cancel) aborts the click. The picked combatant_id resolves back to a name via `battle.combatants.find` for the note suffix `→ <name>`.
+**Description (cont):** Why combatant-id (vs character-id) for NPCs. PCs have a `Character` row with an `id` and a token wired via `character_id`. NPCs are tokens with no `Character` backing — they exist as `combatants` in the active battle (each combatant has an `id` like `tok_501_demo` and links to a token via `source_token_id` or `token_template_id + name`). The picker's existing PC lookup (`tokens.find(t.character_id === ...)`) returns nothing for NPCs, so I added the parallel combatant-id path that walks `window.battle.combatants` first to find the combatant row, then the same three-tier match `_targetPicker.commit` already uses for picked-target resolution. Symmetric and reuses the established convention.
+**Description (cont 2):** Why suppress picker on 🎲 Dmg + 📋 Save. The current 3-button monster-action row (Attack / Dmg / Save) is "pick the kind of roll." After Attack picks a target, the GM rolls damage manually if the attack hit. Asking for the target again on the Dmg click would be friction (the GM has already mentally locked the target). Same for Save announcements — those are broadcast-style ("this AoE forces DC 14 DEX"); the players self-select targets. So picker fires only on Attack.
+**Description (cont 3):** Why no server-side change. The `/roll` endpoint already accepts arbitrary `note` strings — appending `→ <target name>` is cosmetic and lands in the roll log without any contract change. Server-side auto-damage application for NPC attacks (so a hit auto-applies damage to the picked target's HP) is a separate larger lift — would need a new endpoint or extending `/attack` to support NPC casters. Filed as a follow-up; this commit gives the GM the picker UX without that lift.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.163 live. (b) Manual: bandit's 🎯 Attack on Scimitar → picker opens with green rings around in-range PC/NPC tokens, ruler line from bandit to cursor (or suppressed at ≤ 5 ft per v2.49.161), click a target → 1d20+5 rolls with note "Bandit: Scimitar attack → Pip." (c) Pre-select a token via canvas double-click first, then click 🎯 Attack → picker skipped, note still gets the target name from `_targetingState`. (d) Click 🎲 Dmg → rolls damage with no picker open (Dmg button behavior unchanged). (e) PC `.mini-strike-btn` regression check — passes `casterCharId` (not `casterCombatantId`), PC path takes the existing `character_id` lookup; no regression.
+
+### Added
+- `app/static/tabletop.js::_targetPicker.start` — `casterCombatantId` option + three-tier NPC-caster token lookup via `window.battle.combatants`.
+- `app/templates/tabletop.html` `.monster-strike-btn` handler — picker integration on `kind === 'attack'`; target name appended to roll note.
+
+### Notes
+- **No server contract change.** Roll note is cosmetic; existing `/api/campaign/{cid}/roll` endpoint unchanged.
+- **No harness test required** — per CLAUDE.md, harness tests are required when adding HTTP endpoints or changing WS broadcast shapes. This is a client-side UI flow change.
+- **Follow-up filed (#60 still applies for the "auto-damage on hit" piece):** rolling NPC attacks through `/attack` (or a new NPC-attack endpoint) so a hit auto-applies damage to the picked target. That requires server-side combatant→attacker resolution and is out of scope for this commit.
+
+---
+
 ## [2.49.162] - 2026-05-23
 
 **Schema version:** 56

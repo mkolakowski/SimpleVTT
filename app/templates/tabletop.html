@@ -6341,6 +6341,56 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 action = JSON.parse(decodeURIComponent(btn.dataset.monsterAction || ''));
             } catch { return; }
             btn.disabled = true;
+            // v2.49.163: NPC target picker integration. When the GM
+            // clicks 🎯 Attack and no token is pre-targeted via the
+            // canvas-double-click _targetingState, open the canvas
+            // picker so the GM picks a target the same way PCs do
+            // via .mini-strike-btn (v2.49.137). The picked target's
+            // name is folded into the roll note so the roll-log entry
+            // reads "Bandit: Scimitar attack → Pip" instead of just
+            // "Bandit: Scimitar attack". For 🎲 Dmg and 📋 Save the
+            // picker is suppressed — the GM picks once on Attack and
+            // the follow-up rolls inherit context from the cast card.
+            let _pickerTargetName = '';
+            if (kind === 'attack' && typeof window.vttOpenMultiTargetPicker === 'function') {
+                const _row = btn.closest('.init-row, .init-entry');
+                const _idx = parseInt(_row?.dataset.idx ?? '');
+                const _comb = Number.isFinite(_idx) ? (battle.combatants || [])[_idx] : null;
+                const _combId = _comb && _comb.id ? _comb.id : '';
+                // Skip the picker if a target is already pre-selected
+                // via canvas double-click (same convention as the PC
+                // .mini-strike-btn path at line ~4438).
+                const _preTargets = (window._targetingState
+                    && window._targetingState.getTargets()) || [];
+                if (!_preTargets.length && _combId) {
+                    const _picked = await window.vttOpenMultiTargetPicker({
+                        required: 1,
+                        spellName: action.name,
+                        casterCombatantId: _combId,
+                        rangeStr: action.range || '',
+                    });
+                    if (_picked === null) {
+                        // Cancelled — abort the whole click; don't roll
+                        // an attack with no target.
+                        btn.disabled = false;
+                        return;
+                    }
+                    // Resolve the picked combatant_id back to a name
+                    // for the note. The picker returns combatant_ids
+                    // or "tok:<token_id>" for unknown-combatant clicks.
+                    if (_picked.length > 0) {
+                        const _pickedId = _picked[0];
+                        const _tcomb = (battle.combatants || []).find(c => c.id === _pickedId);
+                        if (_tcomb && _tcomb.name) {
+                            _pickerTargetName = _tcomb.name;
+                        }
+                    }
+                } else if (_preTargets.length) {
+                    // Pre-selected via canvas double-click — use its name.
+                    const _t0 = _preTargets[0];
+                    if (_t0 && _t0.name) _pickerTargetName = _t0.name;
+                }
+            }
             try {
                 let expression = '';
                 let note = '';
@@ -6351,6 +6401,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         : '';
                     expression = '1d20' + bonusExpr;
                     note = `${action.combatant_name}: ${action.name} attack`;
+                    if (_pickerTargetName) note += ` → ${_pickerTargetName}`;
                 } else if (kind === 'damage') {
                     expression = action.damage || '';
                     if (!expression) return;

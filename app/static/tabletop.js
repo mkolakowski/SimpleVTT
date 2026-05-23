@@ -587,6 +587,7 @@
         required: 0,
         spellName: '',
         casterCharId: 0,
+        casterCombatantId: '', // v2.49.163 — NPC casters; resolved via window.battle.combatants
         casterPos: null,    // v2.49.138 — {x, y} canvas-space center of caster's token
         cursor: null,       // v2.49.138 — {x, y} snapped to grid-cell center; drives ruler endpoint
         cursorRaw: null,    // v2.49.140 — {x, y} raw cursor; drives hover-token preview ring
@@ -601,9 +602,14 @@
             this.required = Math.max(1, parseInt(opts && opts.required, 10) || 1);
             this.spellName = String((opts && opts.spellName) || 'Spell');
             this.casterCharId = parseInt(opts && opts.casterCharId, 10) || 0;
+            this.casterCombatantId = String((opts && opts.casterCombatantId) || '');
             // v2.49.138: resolve the caster's token center for the
             // ruler line. Mirrors _aoePicker._resolveOrigin (private —
             // re-walked here so the picker stays self-contained).
+            // v2.49.163: PC casters resolve via character_id; NPC
+            // casters resolve via combatant_id → window.battle, then
+            // via the three-tier token lookup (source_token_id →
+            // token_template_id+name).
             this.casterPos = null;
             if (this.casterCharId) {
                 for (const t of tokens) {
@@ -613,6 +619,27 @@
                             y: t.y + gridSize / 2,
                         };
                         break;
+                    }
+                }
+            }
+            if (!this.casterPos && this.casterCombatantId) {
+                const _battle = (window.battle && window.battle.combatants) || [];
+                const _comb = _battle.find(c => c.id === this.casterCombatantId);
+                if (_comb) {
+                    for (const t of tokens) {
+                        const _hit = (
+                            (_comb.source_token_id != null && t.id === _comb.source_token_id)
+                            || (_comb.token_template_id != null
+                                && t.token_template_id === _comb.token_template_id
+                                && t.label === _comb.name)
+                        );
+                        if (_hit) {
+                            this.casterPos = {
+                                x: t.x + gridSize / 2,
+                                y: t.y + gridSize / 2,
+                            };
+                            break;
+                        }
                     }
                 }
             }
@@ -714,6 +741,7 @@
             this.required = 0;
             this.spellName = '';
             this.casterCharId = 0;
+            this.casterCombatantId = '';
             this.casterPos = null;
             this.cursor = null;
             this.cursorRaw = null;
