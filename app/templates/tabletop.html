@@ -1116,13 +1116,23 @@
        current combatant. v2.49.129: same fg-mix as the other zebra
        rules for cross-theme visibility. */
     .init-entry:nth-child(even) { background: color-mix(in srgb, var(--bg) 88%, var(--fg) 12%); }
-    /* v2.49.131: same desktop-only hover treatment as .init-row above.
-       See the comment block on .init-row's @media (hover: hover) rule
-       for the source-ordering rationale (hover after zebra so it wins
-       on non-active rows; active-turn after hover so it still wins on
-       the current combatant). */
+    /* v2.49.131: desktop-only hover treatment. v2.49.132 (this commit):
+       the .init-entry's own background is hidden behind .mini-header's
+       opaque gradient — so hovering the card needs to also lift the
+       mini-header's gradient (and the border + a small box-shadow on
+       the wrapper for an extra at-a-glance cue). See comment block on
+       .init-row's @media (hover: hover) rule above for the source-
+       ordering rationale (hover wins over zebra, .active-turn wins
+       over hover). */
     @media (hover: hover) and (pointer: fine) {
-        .init-entry:hover { background: color-mix(in srgb, var(--accent) 16%, var(--bg)); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); cursor: pointer; }
+        .init-entry:hover {
+            border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+            box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 22%, rgba(0,0,0,.22));
+            cursor: pointer;
+        }
+        .init-entry:hover .mini-header {
+            background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 32%, transparent), color-mix(in srgb, var(--accent) 18%, transparent));
+        }
     }
     .init-entry.active-turn { border-color:var(--accent); box-shadow:0 2px 10px rgba(167,139,250,.28); }
     .init-entry.active-turn .mini-header { background:linear-gradient(135deg,rgba(167,139,250,.28),rgba(108,180,255,.18)); }

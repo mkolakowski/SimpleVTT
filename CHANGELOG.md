@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.132] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Init-tracker hover highlight now actually visible on the GM combatant cards.** v2.49.131 set `background` + `border-color` on `.init-entry:hover`, but the GM card's entire interior is covered by `.mini-header` (which has its own opaque linear-gradient background) — so the parent's background change was invisible. Fix: hovering the card now (a) keeps the border-color tint, (b) adds an accent-tinted box-shadow lift, AND (c) re-styles the `.mini-header` gradient via `.init-entry:hover .mini-header { background: linear-gradient(... accent-mix ...) }`. The player `.init-row` rule from v2.49.131 was already correct (no `.mini-header` covering it) and stays unchanged.
+**Description:** One CSS block edit in `app/templates/tabletop.html`. The v2.49.131 `.init-entry:hover` rule was split + extended: kept the `border-color` change, dropped the unused `background` (hidden), added `box-shadow: 0 4px 18px color-mix(in srgb, var(--accent) 22%, rgba(0,0,0,.22))` so the whole card visually lifts on hover. Added a sibling rule `.init-entry:hover .mini-header { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 32%, transparent), color-mix(in srgb, var(--accent) 18%, transparent)); }` so the visible surface (the mini-header) shifts toward the accent colour. Both rules stay inside the same `@media (hover: hover) and (pointer: fine)` block from v2.49.131.
+**Description (cont):** Why the v2.49.131 attempt didn't work. The GM combatant card is structured as `<div class="init-entry"><div class="mini-header">…</div><div class="init-card-sheet">…</div></div>`. The `.mini-header` (line 711) is the full-width clickable header and always has `background: linear-gradient(135deg, rgba(167,139,250,.15), rgba(108,180,255,.10))` — an opaque-ish gradient that covers everything behind it. Setting `.init-entry:hover { background: ... }` did paint the parent, but the child gradient was painted on top, so the user saw no change. The border DID lift (it's drawn around the parent, outside `.mini-header`'s box) but a 1px border tint shift was easy to miss.
+**Description (cont 2):** Why a `.mini-header` gradient swap instead of removing the gradient entirely. Two reasons: (a) the gradient is part of the visual design language for combatant cards (the v2.4.21 mini-statblock layout that flows through `.init-card-sheet` below assumes the gradient header for visual hierarchy); removing it would degrade the non-hover look. (b) the existing `.mini-header:hover` rule (line 712, predates this work) already shifts the gradient to a stronger version — but it's not scoped to "hovering the parent card" and the shift is subtle (`rgba(167,139,250,.26)` vs base `.15`). The v2.49.132 rule shifts to `color-mix(in srgb, var(--accent) 32%, transparent)` — same gradient shape, theme-aware accent mix, stronger contrast. The `.init-entry:hover .mini-header` selector has higher specificity (`0,2,1` vs `0,1,1` for `.mini-header:hover`) so it wins when both match.
+**Description (cont 3):** How to test (added to the wiki as a v2.49.132 reference, but also here for the immediate handoff). (1) Open the tabletop at `http://localhost:8013` as the GM. (2) Mouse over any combatant card in the init tracker — expect the card border to tint toward accent + the header gradient to shift toward accent + an accent-tinted box-shadow lift. (3) Mouse over a player-view row (an `.init-row`, e.g. on an alice / bob session) — expect the background to lift toward accent. (4) Hover the active-turn combatant — expect the active-turn highlight to stay dominant (active wins by source order). (5) On iPad / touch: tap a row, then tap elsewhere — expect no stuck hover state (the `@media (hover: hover) and (pointer: fine)` gate keeps the rule from firing on touch-only devices). Browser cache: if the change doesn't appear, hard-refresh (Cmd+Shift+R / Ctrl+Shift+R) — the dev image bakes static assets at build time but the browser still caches by URL.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.132 live after `docker compose up -d --build app`. (b) Visually inspected the GM combatant card hover: border tints, box-shadow lifts, mini-header gradient swaps to accent-mixed. (c) Player `.init-row` hover unchanged from v2.49.131 (still working — bare row has no `.mini-header` covering it).
+
+### Changed
+- `app/templates/tabletop.html::.init-entry:hover` — drop `background` (was hidden), keep `border-color`, add accent-tinted `box-shadow` lift.
+- `app/templates/tabletop.html::.init-entry:hover .mini-header` — new selector swaps the gradient to an accent-mixed version so the visible surface changes on hover.
+
+### Notes
+- **Backward compat.** Touch / coarse-pointer devices still see no behavioural change (gate from v2.49.131 still in place).
+- **Active-turn precedence preserved.** `.init-entry.active-turn .mini-header` (line 1128) defines a stronger gradient that wins over `.init-entry:hover .mini-header` due to specificity (`0,3,1` vs `0,2,1` — active-turn class chained with the parent selector outweighs the hover-only chain).
+
+---
+
 ## [2.49.131] - 2026-05-22
 
 **Schema version:** 56
