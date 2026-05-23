@@ -10567,8 +10567,16 @@ async def use_font_of_magic_to_slot(
             "error": "not_enough_points", "required": cost, "have": sp_cur,
         })
 
-    # Verify the slot has a "used" entry to restore. v1: no ephemeral
-    # slot creation (filed). v2.49.122 — pool keyed on class_slug.
+    # v2.49.123 — pool keyed on class_slug. When the pool has at
+    # least one used slot, restore it (cheaper bookkeeping — long
+    # rest would have restored it anyway). When all slots at this
+    # level are full, create an EPHEMERAL slot above the normal max
+    # — RAW PHB p.101 "you can create one spell slot" with the
+    # caveat that the slot vanishes at the end of a long rest.
+    # The ephemeral slot is tracked via ``slot.font_of_magic_extra``
+    # (count of ephemeral slots created at this level); long rest's
+    # ``rest_character`` decrements ``total`` by that count + clears
+    # the flag, restoring the canonical pool size.
     all_slots = dict(sheet.get("spell_slots") or {})
     class_slots = dict(all_slots.get(class_slug) or {})
     if not class_slots:
@@ -10581,14 +10589,15 @@ async def use_font_of_magic_to_slot(
     slot = dict(class_slots.get(slot_key) or {})
     total = int(slot.get("total") or 0)
     used = int(slot.get("used") or 0)
+    ephemeral_created = False
     if used < 1:
-        return JSONResponse(status_code=409, content={
-            "error": "no_used_slot_to_restore",
-            "slot_level": slot_level,
-            "class_slug": class_slug,
-            "total": total, "used": used,
-            "hint": "All L{} slots are already full. Ephemeral slot creation is filed.".format(slot_level),
-        })
+        # Create an ephemeral slot. Bump total by 1; tag the slot
+        # with font_of_magic_extra so the long-rest cleanup can
+        # strip it. The slot is immediately castable since
+        # total - used = (total+1) - 0 >= 1.
+        existing_extra = int(slot.get("font_of_magic_extra") or 0)
+        slot["font_of_magic_extra"] = existing_extra + 1
+        ephemeral_created = True
 
     # Phase 4 bonus-slot gate.
     was_used = _is_slot_used(campaign_id, char.id, "bonus")
@@ -10602,8 +10611,17 @@ async def use_font_of_magic_to_slot(
             "label": "Font of Magic", "strict": strict,
         })
 
-    new_used = used - 1
-    slot["used"] = new_used
+    # When ephemeral, bump total instead of decrementing used (the
+    # slot is created above the canonical max). When restoring a
+    # used slot, the standard decrement-used path.
+    if ephemeral_created:
+        new_used = used  # unchanged
+        new_total = total + 1
+        slot["total"] = new_total
+    else:
+        new_used = used - 1
+        new_total = total
+        slot["used"] = new_used
     class_slots[slot_key] = slot
     all_slots[class_slug] = class_slots
     sheet["spell_slots"] = all_slots
@@ -10624,7 +10642,7 @@ async def use_font_of_magic_to_slot(
         "type": "spell_slot_update",
         "data": {
             "character_id": char.id, "class_slug": class_slug,
-            "level": slot_level, "total": total, "used": new_used,
+            "level": slot_level, "total": new_total, "used": new_used,
         },
     })
     await hub.broadcast(campaign_id, {
@@ -10634,14 +10652,17 @@ async def use_font_of_magic_to_slot(
             "current": new_sp, "max": sp_max,
         },
     })
+    suffix = " (ephemeral; vanishes at long rest)" if ephemeral_created else ""
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
             "character_id": char.id, "character_name": char.name,
-            "feature_name": f"✨ Font of Magic — {cost} SP → L{slot_level} slot",
+            "feature_name": f"✨ Font of Magic — {cost} SP → L{slot_level} slot{suffix}",
             "feature_desc": (
-                f"Bonus action. Spent {cost} sorcery points to recover one "
+                f"Bonus action. Spent {cost} sorcery points to "
+                f"{'create an ephemeral' if ephemeral_created else 'recover one'} "
                 f"L{slot_level} spell slot."
+                + (" The slot vanishes at the end of a long rest." if ephemeral_created else "")
             ),
             "source": "font-of-magic", "remaining": new_sp, "max": sp_max,
             "over_budget": was_used, "over_budget_slot": "bonus" if was_used else "",
@@ -10655,8 +10676,9 @@ async def use_font_of_magic_to_slot(
         "sp_cost": cost,
         "sp_remaining": new_sp,
         "sp_max": sp_max,
-        "slot_total": total,
+        "slot_total": new_total,
         "slot_used": new_used,
+        "ephemeral_created": ephemeral_created,
     }
 
 
@@ -14178,14 +14200,30 @@ async def rest_character(
                 cleaned: dict = {}
                 for lvl_key, slot_obj in by_lvl.items():
                     if isinstance(slot_obj, dict):
-                        cleaned[lvl_key] = {**slot_obj, "used": 0}
+                        # v2.49.123 — strip ephemeral Font-of-Magic
+                        # slots before resetting used. RAW PHB p.101:
+                        # ephemeral slots created by the SP→slot
+                        # conversion vanish at long rest. The total
+                        # is decremented by the ephemeral count;
+                        # font_of_magic_extra is cleared.
                         try:
-                            total = int(slot_obj.get("total") or 0)
+                            cur_total = int(slot_obj.get("total") or 0)
                         except (TypeError, ValueError):
-                            total = 0
-                        if total > 0:
+                            cur_total = 0
+                        try:
+                            extra = int(slot_obj.get("font_of_magic_extra") or 0)
+                        except (TypeError, ValueError):
+                            extra = 0
+                        post_total = max(0, cur_total - extra)
+                        cleaned[lvl_key] = {
+                            **slot_obj,
+                            "used": 0,
+                            "total": post_total,
+                            "font_of_magic_extra": 0,
+                        }
+                        if post_total > 0:
                             try:
-                                broadcasts.append((cslug, int(lvl_key), total))
+                                broadcasts.append((cslug, int(lvl_key), post_total))
                             except (TypeError, ValueError):
                                 pass
                     else:

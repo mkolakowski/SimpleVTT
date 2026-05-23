@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.123] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Font of Magic SP→slot now creates ephemeral slots when the pool is full; long rest strips them.** Closes the second v2.49.120 filed item. RAW PHB p.101: "you can create one spell slot" — even when all your slots at that level are already full. v1 rejected with `no_used_slot_to_restore`; v2.49.123 honors the rule by bumping `slot.total` + tagging the slot with `font_of_magic_extra: N` (ephemeral count). The long-rest cleanup in `rest_character` decrements `total` by `font_of_magic_extra` and clears the flag, restoring the canonical pool size. 2 new harness tests cover both branches; 9 existing tests still pass; the previously-filed `no_used_slot_to_restore` test is replaced by the new ephemeral-creation test.
+**Description:** Three file edits. **(1)** `app/routes/tabletop_routes.py::use_font_of_magic_to_slot` — replaced the `used < 1` rejection with an ephemeral-creation branch. When `used == 0` AND the conversion proceeds, set `slot["font_of_magic_extra"] = (existing or 0) + 1` instead of decrementing `used`. The post-conversion write-back uses `new_total = total + 1` for ephemerals and `new_used = used - 1` for normal recovery. Response gains an `ephemeral_created: bool` field. (2) `app/routes/tabletop_routes.py::rest_character` long-rest slot-reset block — before resetting `used: 0`, compute `extra = slot.font_of_magic_extra` and set `total = max(0, cur_total - extra)`, then clear `font_of_magic_extra: 0`. The cleaned slot ships with the canonical pool size restored. (3) `tests/harness/test_use_font_of_magic.py` — replaced the `test_font_of_magic_no_used_slot_to_restore` test with two new ones: `test_font_of_magic_creates_ephemeral_slot_when_full` (asserts the new ephemeral-creation branch fires + `total` bumps + `ephemeral_created: True`) and `test_font_of_magic_long_rest_strips_ephemeral_slots` (creates ephemeral, long rests, creates another ephemeral — proves the first was stripped and the second creates correctly from the canonical max).
+**Description (cont):** Why store as a per-slot `font_of_magic_extra` count instead of a separate field. Two reasons: (a) the slot row already carries `{total, used}` and other per-slot metadata, so adding a third field is a clean schema extension; (b) the cast-spell path doesn't change — it reads `total - used` regardless of how `total` got there, so ephemeral slots are cast-eligible without any additional engine changes. Long rest is the only consumer of `font_of_magic_extra`; the cast path treats the ephemeral slot identically to a canonical slot until LR cleanup runs.
+**Description (cont 2):** Why bump `total` instead of decrementing `used` on ephemeral creation. The semantics differ: "restoring a used slot" means used was > 0 and we tick it back down; "creating ephemeral" means used was 0 and we expand the pool. Mixing them (e.g. setting used to a negative number) would break the cast-spell `total - used` arithmetic. Two clean branches keep the post-conversion invariants intact.
+**Description (cont 3):** RAW edge case: stacking ephemerals. RAW PHB p.101 says "you can create one spell slot" — singular. The v2.49.123 implementation allows stacking (each conversion bumps `font_of_magic_extra` by 1; total grows accordingly) because the engine doesn't track a per-rest "you've already created one" lock. This is more permissive than RAW. Filed: if it matters, add a `font_of_magic_extra_created_this_rest` boolean on the sheet that long-rest clears + the SP→slot endpoint checks.
+**Description (cont 4):** Why the test exercises both creation AND long-rest cleanup. The cleanup is the load-bearing part — without it, ephemerals would persist across rests and the Sorcerer would have a permanently expanded pool. The two-step test (create → rest → create again) proves the cleanup happened correctly: if it didn't, the second creation would bump total to 6 instead of 5.
+**Description (cont 5):** Verification. (a) 13/13 pass in `test_use_font_of_magic.py` (9 from v2.49.120 + 3 from v2.49.122 multiclass + 2 new + 1 ephemeral test that replaced the rejection test = wait that's only 12. Let me recount.) Actually 13 = 9 v2.49.120 + 3 v2.49.122 multiclass + 2 new ephemeral - 1 dropped rejection test (the no_used_slot_to_restore test was rewritten to test ephemeral creation, so net 0 + 2 added). Right: 9 + 3 + 1 = 13. ✓ (b) Curl `/version` confirms v2.49.123 live.
+
+### Added
+- `app/routes/tabletop_routes.py::use_font_of_magic_to_slot` — ephemeral slot creation branch when target level is full.
+- `app/routes/tabletop_routes.py::rest_character` — long-rest cleanup decrements `total` by `font_of_magic_extra` and clears the flag.
+- `tests/harness/test_use_font_of_magic.py` — `test_font_of_magic_creates_ephemeral_slot_when_full` + `test_font_of_magic_long_rest_strips_ephemeral_slots`.
+
+### Changed
+- `tests/harness/test_use_font_of_magic.py::test_font_of_magic_no_used_slot_to_restore` (RENAMED + reshape) — the previous rejection test no longer applies since the v2.49.123 contract creates ephemerals instead.
+
+### Notes
+- **Backward compat.** The 409 `no_used_slot_to_restore` error no longer fires; callers that branched on that error now see a 200 with `ephemeral_created: True`. Loud failure → quiet success path. No other contracts change.
+- **Schema addition.** New optional `font_of_magic_extra: int` field on slot rows. Defaults to 0 / absent for slots that haven't ephemeral-created. The long-rest cleanup tolerates absence.
+
+### Filed
+- **RAW "one slot per rest" cap** — current implementation allows stacking ephemerals per rest. RAW says singular. Add a per-rest counter + endpoint check if needed.
+- **Spell-validation suite Phase 2A** (v2.49.108) test for ephemeral slots — verify a cast against an ephemeral slot's damage works identically to a canonical slot.
+
+---
+
 ## [2.49.122] - 2026-05-22
 
 **Schema version:** 56

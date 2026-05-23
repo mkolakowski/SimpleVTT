@@ -214,19 +214,65 @@ async def test_font_of_magic_not_enough_points(gm_client, zara_rested):
     assert err["have"] == 1
 
 
-async def test_font_of_magic_no_used_slot_to_restore(gm_client, zara_rested):
-    """All L1 slots full → 409 no_used_slot_to_restore."""
+async def test_font_of_magic_creates_ephemeral_slot_when_full(
+    gm_client, zara_rested,
+):
+    """v2.49.123 — when all slots at the level are full, SP→slot
+    creates an ephemeral slot above the canonical max (RAW PHB
+    p.101 "you can create one spell slot"). Slot vanishes at long
+    rest via the rest_character cleanup (covered by the next test).
+    """
     zara = zara_rested
     await _seed_zara_solo(gm_client, zara)
-    # Zara starts with all slots full. Try to recover L1 — should
-    # reject because no slot is used.
+    # Zara starts with all L1 slots full + 5 SP. SP→L1 conversion
+    # creates an ephemeral slot.
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/use_font_of_magic_to_slot",
         json={"character_id": zara["id"], "slot_level": 1},
     )
-    assert r.status_code == 409, r.text
-    err = r.json()
-    assert err["error"] == "no_used_slot_to_restore"
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["ephemeral_created"] is True
+    assert body["sp_cost"] == 2
+    assert body["sp_remaining"] == 3
+    # Total bumped to 5 (was 4); used unchanged.
+    assert body["slot_total"] == 5
+    assert body["slot_used"] == 0
+
+
+async def test_font_of_magic_long_rest_strips_ephemeral_slots(
+    gm_client, zara_rested,
+):
+    """Long rest decrements total by the ephemeral count + clears
+    the font_of_magic_extra flag. Verifies via a second SP→slot
+    call after the rest — the pool is back to canonical max so the
+    next conversion creates a NEW ephemeral (not stacks)."""
+    zara = zara_rested
+    await _seed_zara_solo(gm_client, zara)
+    # Create an ephemeral slot.
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_font_of_magic_to_slot",
+        json={"character_id": zara["id"], "slot_level": 1},
+    )
+    assert r.status_code == 200
+    assert r.json()["slot_total"] == 5  # ephemeral bumped to 5
+    # Long rest — should strip the ephemeral slot.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/rest",
+        json={"type": "long"},
+    )
+    # After long rest, all L1 slots are full again (canonical max 4).
+    # A fresh SP→L1 conversion should ephemeral-create AGAIN (proving
+    # the previous ephemeral was stripped + the cleanup didn't double-
+    # subtract).
+    r = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_font_of_magic_to_slot",
+        json={"character_id": zara["id"], "slot_level": 1},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ephemeral_created"] is True
+    assert body["slot_total"] == 5  # back to canonical (4) + new ephemeral
 
 
 async def test_font_of_magic_wrong_class(gm_client, roster):
