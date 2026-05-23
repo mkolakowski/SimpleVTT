@@ -2687,29 +2687,32 @@ def seed_homebrew_files(camp: Campaign) -> int:
             "prof_skills": "Medicine +4, Religion +2",
             "actions": [
                 {
+                    # v2.49.174: spell_slug references the shared
+                    # spell catalog (app/data/local/dnd5e/spells/
+                    # inflict-wounds.json) — _resolve_spell_slug_action
+                    # in tabletop_routes.py merges the spell's
+                    # damage / damage_type / attack_roll / range
+                    # fields into this action at sheet-render time.
+                    # Monster-only fields here: attack_bonus (caster-
+                    # dependent), charges_max (NPC slot equivalent),
+                    # name (display label), id (charge-state key).
+                    # If the spell catalog gets updated, this NPC's
+                    # cast updates with it.
                     "id": "inflict-wounds",
                     "name": "Inflict Wounds (Spell)",
-                    "desc": "Melee Spell Attack: +4 to hit, reach 5 ft., one creature. Hit: 16 (3d10) necrotic damage. (Level 1 cleric spell.)",
-                    "damage": "3d10",
-                    "damage_type": "necrotic",
-                    "attack_roll": True,
+                    "spell_slug": "inflict-wounds",
                     "attack_bonus": "+4",
-                    # v2.49.171 — Inflict Wounds is a Lv1 spell but for
-                    # the NPC stat block we treat it as an at-will
-                    # action with one charge so the demo doesn't
-                    # require slot tracking (NPCs have no slot system
-                    # per the v2.49.167 audit). Recharges via the ↻
-                    # button between encounters.
                     "charges_max": 2,
                     "category": "action",
                 },
                 {
+                    # v2.49.174: same spell-catalog reference for the
+                    # save-DC cantrip. save_dc is monster-specific
+                    # (caster spellcasting DC = 13 for this acolyte);
+                    # everything else comes from sacred-flame.json.
                     "id": "sacred-flame",
                     "name": "Sacred Flame (Cantrip)",
-                    "desc": "The acolyte invokes a flame-like radiance that descends on a creature within 60 feet. The target must succeed on a DC 13 Dexterity saving throw or take 4 (1d8) radiant damage. The target gains no benefit from cover for this save.",
-                    "damage": "1d8",
-                    "damage_type": "radiant",
-                    "save_ability": "dex",
+                    "spell_slug": "sacred-flame",
                     "save_dc": 13,
                     "category": "action",
                 },

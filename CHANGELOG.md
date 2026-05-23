@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.174] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **NPC spell actions reference the shared spell catalog via `spell_slug`.** Pre-fix: when v2.49.171 added Soren the Cult Acolyte, his Inflict Wounds and Sacred Flame actions inlined the spell mechanics (damage `"3d10"`, damage_type `"necrotic"`, attack_roll `True`, etc.) directly in the monster JSON — duplicating the canonical definitions that already live in `app/data/local/dnd5e/spells/inflict-wounds.json` and `sacred-flame.json`. If anyone updates the spell catalog, the NPC version doesn't follow. This commit closes the duplication by letting NPC actions reference the catalog via a `spell_slug` field; the server resolves the slug at sheet-render time and merges the spell's action data into the monster action. Same picker UI / same /npc_attack endpoint — only the data source changes.
+**Description:** Two coordinated edits. **(1)** New `_resolve_spell_slug_action(action, campaign_id)` helper in `app/routes/tabletop_routes.py` (~50 lines) right before `_monster_template_to_sheet`. When an action carries `spell_slug`, the helper calls `local_content.resolve(slug, type="spells", campaign_id=...)` (same resolver `/cast_spell` uses for PC spells), pulls the spell dict's `actions[0]` block, and merges `damage / damage_type / damage_scaling / attack_roll / save_ability / area / aoe_targets / range / desc` into the monster action — but only for fields the monster left empty/null/0. Monster-specific overrides (name, id, charges_max, attack_bonus, save_dc, category) win because they were already set. **(2)** `_monster_template_to_sheet` invokes the helper on every action right after the monster_slug resolution, before the existing legacy-`attacks[]` projection block — so downstream consumers (the init-tracker action stamping, the /npc_attack body builder) see the fully-expanded action with zero client changes. **(3)** Updated Soren's two spell actions in `seed_homebrew_files` (demo_seed.py) to use `spell_slug` references. Inflict Wounds shrinks from 9 fields to 5 (id, name, spell_slug, attack_bonus, charges_max, category — damage/damage_type/attack_roll/desc/etc. all inherited from inflict-wounds.json). Sacred Flame shrinks from 7 fields to 4. Dagger stays inline (it's a weapon, not a spell).
+**Description (cont):** Why server-side resolution (vs client-side fetch). The PC sheet's `_fetchSpellDetail` (sheet_dnd5e.html line ~3248) fetches spell details async via `/api/open5e/spells?search=...` — but that's for ENRICHMENT (filling missing fields after page load). Doing the same for NPC monster actions would mean async DOM updates after the init tracker renders — flickery UX. Server-side resolution at `_monster_template_to_sheet` means the sheet returned to the client is already complete, no second round-trip needed.
+**Description (cont 2):** Why monster fields override catalog. Spell catalogs lack two caster-dependent fields: `attack_bonus` (spell attack = caster spellcasting mod + prof bonus; varies per NPC) and `save_dc` (8 + caster spellcasting mod + prof bonus; varies per NPC). NPC stat blocks have to carry these explicitly. The catalog provides everything else.
+**Description (cont 3):** What's UNCHANGED. /npc_attack endpoint — still the same body shape; the client sends fully-resolved `damage` / `damage_type` / `range` because the server already merged them into the action. The picker module — already shared between PC and NPC casters (per v2.49.163 + v2.49.169). The 📋 Save announce button — still pulls `save_dc` + `save_ability` from the (now-merged) action. Per the v2.49.167 audit doc, NPCs still have no /cast_spell endpoint or slot system — this commit aligns the DATA SOURCE for spell mechanics, not the resolution pipeline.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.174 live. (b) `/admin/demo/reset` re-seeds successfully — Soren's actions are now resolved through the spell catalog. (c) Manual: GM expands Soren in init tracker → 🗡 Inflict Wounds (Spell) shows the picker on click with rangeStr from the catalog ("Touch" → 5 ft), 1d20+4 attack roll, 3d10 necrotic damage on hit — all data sourced from inflict-wounds.json + Soren's `attack_bonus`/`charges_max` overrides. 📋 Sacred Flame (Cantrip) announces "DC 13 DEX save · 1d8 radiant" from sacred-flame.json + Soren's `save_dc`. (d) Pip casts Inflict Wounds (via PC sheet) → same spell, same damage formula, same source — zero divergence. (e) Existing 18-test NPC + PC attack regression unaffected.
+
+### Added
+- `app/routes/tabletop_routes.py::_resolve_spell_slug_action` — merges a `spell_slug`-bearing monster action with its catalog entry; caster-specific fields (attack_bonus / save_dc) preserved.
+
+### Changed
+- `app/routes/tabletop_routes.py::_monster_template_to_sheet` — invokes the spell-slug resolver on every action; mutates `sheet["actions"]` in-place.
+- `app/demo_seed.py::seed_homebrew_files` (Cult Acolyte) — Inflict Wounds + Sacred Flame actions converted to `spell_slug` references; inline damage / damage_type / attack_roll / save_ability removed.
+
+### Notes
+- **No client change required.** The client already reads `action.damage / damage_type / attack_roll / save_ability / range` from the sheet; those fields are now populated by the server-side merge.
+- **No new endpoint.** Reuses the existing `/npc_attack` v2.49.164 + 📋 Save announce flows.
+- **Spell catalog is the source of truth for spell mechanics.** Update inflict-wounds.json → both PC casters and Soren's Inflict Wounds get the change.
+- **Demo reseed required.** Run `POST /admin/demo/reset` to drop the old inlined Soren and seed the new spell_slug-referencing Soren.
+- **Filed follow-up:** extend /cast_spell to accept NPC casters via combatant_id (full PC-parity pipeline including slot tracking, auto-uplifts, etc.). Larger refactor — separate from this commit's data-alignment scope.
+
+---
+
 ## [2.49.173] - 2026-05-23
 
 **Schema version:** 56

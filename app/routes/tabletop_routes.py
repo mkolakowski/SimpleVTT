@@ -19983,6 +19983,64 @@ def _monster_dict_to_sheet(m: dict, *, base: Optional[dict] = None) -> dict:
     return out
 
 
+def _resolve_spell_slug_action(action: dict, campaign_id: int) -> dict:
+    """v2.49.174: merge a monster action with its referenced spell
+    catalog entry when the action carries a ``spell_slug``.
+
+    The spell catalog (``app/data/local/dnd5e/spells/*.json``) is the
+    source of truth for spell mechanics (damage, type, attack-roll vs
+    save, AoE shape, range, scaling). NPC actions can reference a
+    spell by slug — e.g., ``{"spell_slug": "inflict-wounds",
+    "attack_bonus": "+4", "save_dc": 13, "charges_max": 2}`` — and
+    this helper resolves the slug, then merges the spell action's
+    fields into the monster action. Monster-specific fields (name,
+    id, charges_max, attack_bonus, save_dc, category, custom desc)
+    override the catalog defaults.
+
+    Returns the merged action dict (or the original if no spell_slug
+    or the slug doesn't resolve).
+    """
+    if not isinstance(action, dict):
+        return action
+    slug = action.get("spell_slug")
+    if not slug:
+        return action
+    resolved = local_content.resolve(
+        str(slug).strip(), type="spells", campaign_id=campaign_id,
+    )
+    if not resolved:
+        return action
+    spell_dict, _src = resolved
+    spell_actions = spell_dict.get("actions") or []
+    if not spell_actions:
+        return action
+    spell_action = spell_actions[0]
+    spell_range = spell_dict.get("range", "")
+    # Build the merged action. Start with spell catalog defaults, then
+    # overlay the monster's overrides on top — empty / None monster
+    # values fall through to the spell catalog so the catalog wins
+    # for fields the NPC didn't override.
+    merged = dict(action)
+    catalog_defaults = {
+        "damage": spell_action.get("damage", ""),
+        "damage_type": spell_action.get("damage_type", ""),
+        "damage_scaling": spell_action.get("damage_scaling") or [],
+        "attack_roll": bool(spell_action.get("attack_roll")),
+        "save_ability": (spell_action.get("save_ability") or "").lower(),
+        "area": spell_action.get("area") or {},
+        "aoe_targets": spell_action.get("aoe_targets") or 1,
+        "range": spell_range or "",
+        # Append spell's short desc if the monster doesn't provide one.
+        "desc": spell_dict.get("desc", ""),
+    }
+    for k, v in catalog_defaults.items():
+        cur = merged.get(k)
+        # Empty cur (None / "" / 0 / []) → inherit from catalog.
+        if cur is None or cur == "" or cur == 0 or cur == []:
+            merged[k] = v
+    return merged
+
+
 def _monster_template_to_sheet(tmpl: TokenTemplate, campaign_id: int) -> dict:
     """Project a monster TokenTemplate's stat block + structured actions
     into the dict shape that ``sheet_dnd5e.html`` consumes.
@@ -20023,6 +20081,19 @@ def _monster_template_to_sheet(tmpl: TokenTemplate, campaign_id: int) -> dict:
     actions = sheet.get("actions") or []
     if not actions:
         return sheet
+
+    # v2.49.174: NPC actions can reference the shared spell catalog
+    # via ``spell_slug``. Resolve and merge here so downstream
+    # consumers (action button stamping, /npc_attack request builder)
+    # see the fully-expanded action — damage / damage_type /
+    # damage_scaling / attack_roll / save_ability / area / aoe_targets /
+    # range / desc inherited from the spell catalog entry; monster-
+    # specific fields (id, name, charges_max, attack_bonus, save_dc,
+    # category) override. This means a monster's "Inflict Wounds"
+    # action is THE SAME spell as the cleric's — update the spell
+    # JSON once, both casters get the change.
+    actions = [_resolve_spell_slug_action(a, campaign_id) for a in actions]
+    sheet["actions"] = actions
 
     existing_attacks = list(sheet.get("attacks") or [])
     by_name = {
