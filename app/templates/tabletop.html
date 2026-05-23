@@ -5095,6 +5095,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                       attack_roll: !!a.attack_roll,
                       desc: a.desc || '',
                       range: _rangeFromAction(a),
+                      // v2.49.175: surface spell_slug so the renderer can
+                      // bucket spell actions into a separate Spells tab
+                      // (PC parity) instead of mixing them into Actions.
+                      spell_slug: a.spell_slug || '',
                   }))
             : [];
         const fromAttacks = (!fromActions.length && Array.isArray(sh.attacks))
@@ -5132,10 +5136,18 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         // can be wrapped in a tab panel below alongside the new Skills
         // panel. AC/Spd chips + ability grid stay above the tabs (matching
         // the PC mini-sheet structure where they're always visible).
+        // v2.49.175: spell-tagged actions (carrying spell_slug from the
+        // v2.49.174 catalog reference) get bucketed into a separate
+        // Spells tab so a GM expanding an NPC sees the same Spells /
+        // Actions split a player sees on a PC sheet. Non-spell actions
+        // (weapons, special abilities) stay in the Actions tab.
         let actionsHtml = '';
-        if (actions.length) {
-            actionsHtml += '<div class="monster-init-actions" style="display:flex;flex-direction:column;gap:4px;">';
-            actions.forEach((a) => {
+        let spellsHtml = '';
+        const spellActions = actions.filter(a => a.spell_slug);
+        const nonSpellActions = actions.filter(a => !a.spell_slug);
+        // Single render closure so the row markup is identical between
+        // the Actions tab and the Spells tab.
+        const _renderActionRow = (a) => {
                 const charges_cur = (a.charges_max > 0)
                     ? (combatant.action_charges[a.id] ?? a.charges_max) : null;
                 const spent = a.charges_max > 0 && charges_cur <= 0;
@@ -5196,8 +5208,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 const detailDesc = a.desc
                     ? `<div class="mini-row-detail-desc">${a.desc}</div>`
                     : (!detailBits.length ? '<span class="muted">No description.</span>' : '');
-                actionsHtml += `<div class="m-action-row mini-row-expandable" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:3px 6px;background:var(--input-bg);border-radius:3px;font-size:11px;${spent ? 'opacity:0.55;' : ''}cursor:pointer;">
-                    <span style="font-weight:600;flex:1 1 auto;min-width:0;">${a.name}</span>
+                // v2.49.175: spell-tagged actions get a ✨ glyph prefix in
+                // the row label so they remain visually distinct even
+                // when expanded into the Spells tab (e.g., a GM scrolling
+                // monster mini-sheets shouldn't have to read the action
+                // name to know "this one's a spell").
+                const _glyph = a.spell_slug ? '✨ ' : '';
+                return `<div class="m-action-row mini-row-expandable" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:3px 6px;background:var(--input-bg);border-radius:3px;font-size:11px;${spent ? 'opacity:0.55;' : ''}cursor:pointer;">
+                    <span style="font-weight:600;flex:1 1 auto;min-width:0;">${_glyph}${a.name}</span>
                     ${tags.join(' ')}
                     ${btns.join('')}
                 </div>
@@ -5205,8 +5223,16 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     ${detailHeader}
                     ${detailDesc}
                 </div>`;
-            });
-            actionsHtml += '</div>';
+            };
+        if (nonSpellActions.length) {
+            actionsHtml = '<div class="monster-init-actions" style="display:flex;flex-direction:column;gap:4px;">'
+                + nonSpellActions.map(_renderActionRow).join('')
+                + '</div>';
+        }
+        if (spellActions.length) {
+            spellsHtml = '<div class="monster-init-actions" style="display:flex;flex-direction:column;gap:4px;">'
+                + spellActions.map(_renderActionRow).join('')
+                + '</div>';
         }
 
         // v2.4.10: tab bar — Actions (default) / Skills. Wired into the
@@ -5227,7 +5253,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         const slotKey = combatant.id || ('monster-' + tmpl.id);
         let savedTab = 'actions';
         try { savedTab = localStorage.getItem('vtt_minitab_' + slotKey) || 'actions'; } catch (_) {}
-        if (savedTab !== 'actions' && savedTab !== 'skills') savedTab = 'actions';
+        // v2.49.175: the Spells tab joins Actions / Skills. Only valid
+        // when the monster actually has any spell-tagged actions
+        // (otherwise the tab button is suppressed and a saved
+        // ``vtt_minitab_..._spells`` from a prior monster falls back
+        // to Actions).
+        const _hasSpells = spellActions.length > 0;
+        const _validTabs = _hasSpells ? ['actions', 'spells', 'skills'] : ['actions', 'skills'];
+        if (!_validTabs.includes(savedTab)) savedTab = 'actions';
         const skillsHtml = _monsterSkillsHtml(sh, combatant.name);
         // v2.4.11: inner ``data-char-id="monster-{tid}"`` wrapper inside the
         // Skills panel. The document-level ``.mini-sk-btn`` click handler at
@@ -5240,14 +5273,25 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         // unique) so ``_setMiniTab`` toggles the right one when multiple
         // bandits share a template; the inner wrapper takes precedence for
         // click resolution because ``closest`` finds nearer ancestors first.
+        // v2.49.175: Spells tab only renders when the monster has any
+        // spell-tagged actions — matching the PC mini-sheet's "Spells
+        // tab only when spell list is non-empty" pattern.
+        const _spellsTabBtn = _hasSpells
+            ? `<button class="mini-tab-btn${savedTab === 'spells' ? ' active' : ''}" data-char-id="${slotKey}" data-tab="spells">Spells</button>`
+            : '';
+        const _spellsTabPanel = _hasSpells
+            ? `<div class="mini-tab-panel${savedTab === 'spells' ? ' active' : ''}" data-char-id="${slotKey}" data-panel="spells">${spellsHtml}</div>`
+            : '';
         html += `<div class="mini-tabs" data-char-id="${slotKey}">
             <button class="mini-tab-btn${savedTab === 'actions' ? ' active' : ''}" data-char-id="${slotKey}" data-tab="actions">Actions</button>
+            ${_spellsTabBtn}
             <button class="mini-tab-btn${savedTab === 'skills' ? ' active' : ''}" data-char-id="${slotKey}" data-tab="skills">Skills</button>
         </div>
         <div class="mini-tab-content" data-char-id="${slotKey}">
             <div class="mini-tab-panel${savedTab === 'actions' ? ' active' : ''}" data-char-id="${slotKey}" data-panel="actions">
                 ${actionsHtml || '<p class="muted" style="font-size:11px;padding:4px 0;">No structured actions.</p>'}
             </div>
+            ${_spellsTabPanel}
             <div class="mini-tab-panel${savedTab === 'skills' ? ' active' : ''}" data-char-id="${slotKey}" data-panel="skills">
                 <div data-char-id="monster-${tmpl.id}">${skillsHtml}</div>
             </div>

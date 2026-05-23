@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.175] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **NPC mini-sheet gains a Spells tab when the monster has any spell_slug-tagged actions.** User reported: "I do not see a spells tab for soren." Pre-fix, the NPC mini-sheet had two tabs — Actions / Skills — so Soren's Inflict Wounds (Spell) and Sacred Flame (Cantrip) were buried in the Actions tab alongside his Dagger. PCs have a Spells tab on their full sheet, and post-v2.49.174 NPC actions can carry the same `spell_slug` reference PCs use, so the natural extension is: bucket spell-tagged actions into a parallel Spells tab on the NPC mini-sheet, matching PC UX.
+**Description:** Four coordinated edits in `app/templates/tabletop.html` monster-init-card render. **(1)** `fromActions` map block (~line 5084) — added `spell_slug` field pass-through so the renderer can detect spell-tagged actions downstream. **(2)** Action-row rendering (~line 5135) — refactored from inline `actionsHtml += ...` mutation inside a `forEach` to a `_renderActionRow(a)` closure that RETURNS the row HTML. Same row markup as before; just lifted into a reusable function. Spell rows get a ✨ glyph prefix on the action name. **(3)** Bucketing: `spellActions = actions.filter(a => a.spell_slug)` and `nonSpellActions = actions.filter(a => !a.spell_slug)`. Two parallel HTML strings (`actionsHtml`, `spellsHtml`) built via `_renderActionRow.map().join('')`. **(4)** Tab bar + content (~line 5240): the Spells tab button + panel are conditional on `_hasSpells = spellActions.length > 0` — monsters with no spells (bandits, thugs, Grixxa) keep the original 2-tab layout. The `_validTabs` allowlist for `localStorage` tab-state restoration was extended to include 'spells'.
+**Description (cont):** Why a third tab (vs grouping within Actions). The PC mini-sheet has a dedicated Spells tab for the same reason: scanning a long action list is slow, and "what spells does this caster have" is a frequent question. NPC parity calls for the same UI affordance. The split also makes it visually obvious which monster actions are spells vs weapons vs special abilities — Soren's Dagger stays in Actions (it's a weapon), Inflict Wounds + Sacred Flame go to Spells (catalog-backed via v2.49.174's `spell_slug` references).
+**Description (cont 2):** Why a ✨ glyph prefix on spell rows. When the GM scrolls between NPCs in the init tracker, the Spells tab might be inactive (Actions is default). The glyph keeps spell rows visually distinct even if a future client UI surfaces them in the Actions tab again (e.g., a "Show all actions" toggle). Same prefix convention as the Cult Acolyte's action names ("Inflict Wounds (Spell)" / "Sacred Flame (Cantrip)").
+**Description (cont 3):** Why suppress the tab when empty. Bandits / Thugs / Grixxa have zero spell-tagged actions today. Showing them an empty Spells tab is clutter; suppressing it keeps the existing 2-tab layout. Future monsters that gain spells (any cult fanatic / mage / lich port from the SRD) will pick up the Spells tab automatically without any per-monster wiring.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.175 live. (b) Manual: GM expands Soren in init tracker → THREE tabs now: Actions / Spells / Skills. Actions tab shows Dagger only. Spells tab shows ✨ Inflict Wounds (Spell) + ✨ Sacred Flame (Cantrip), each with the same Strike / Save buttons as before. (c) GM expands a Bandit → TWO tabs (Actions / Skills) — no Spells tab because the bandit has no spell_slug actions. (d) Tab state persists per-combatant via localStorage (`vtt_minitab_<combatant_id>`) — Soren's Spells selection survives re-render; falls back to Actions on stale localStorage keys. (e) Regression: 18-test PC + NPC attack suite passes.
+
+### Added
+- `app/templates/tabletop.html` `fromActions` map block — `spell_slug` field pass-through.
+- `app/templates/tabletop.html` `_renderActionRow` closure — single source for the row markup, called by both Actions and Spells panels.
+- `app/templates/tabletop.html` monster-init-card tabs — conditional Spells tab button + panel + ✨ glyph prefix.
+
+### Changed
+- `app/templates/tabletop.html` action-row rendering — refactored from inline string mutation to closure-returning-HTML so the same row markup powers both panels.
+
+### Notes
+- **No server change.** The v2.49.174 `spell_slug` resolution already feeds the renderer.
+- **No new harness test.** The split is a pure UI bucketing change; existing harness coverage exercises the per-action click handlers which are unchanged.
+- **Backward compat.** Monsters without spell-tagged actions keep the original 2-tab layout. Stale `vtt_minitab_..._spells` localStorage values on non-spellcasting monsters fall back to Actions via the `_validTabs` allowlist.
+
+---
+
 ## [2.49.174] - 2026-05-23
 
 **Schema version:** 56
