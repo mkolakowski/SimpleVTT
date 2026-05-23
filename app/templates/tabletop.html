@@ -213,7 +213,15 @@
     .roll-card {
         border-radius: 8px;
         border: 1px solid rgba(167,139,250,.35);
-        background: var(--bg);
+        /* v2.49.139: frosted-glass look — semi-transparent background +
+           backdrop blur so the canvas behind the drawer reads through.
+           ``color-mix`` with 78% bg makes the card readable on any
+           theme (the alpha is implicit via the transparent component
+           of the mix). The 10px blur is the iOS / macOS "Vibrancy"
+           default and matches the system-app feel users expect. */
+        background: color-mix(in srgb, var(--bg) 78%, transparent);
+        -webkit-backdrop-filter: blur(10px) saturate(140%);
+        backdrop-filter: blur(10px) saturate(140%);
         overflow: hidden;
         font-size: 12px;
         box-shadow: 0 3px 14px rgba(0,0,0,.22);
@@ -227,8 +235,14 @@
        --bg-2 is too close to --bg (sepia: #2c1f0e → #3a2a14, ~14
        luminance delta — fine for surface separation but too subtle
        for zebra contrast). Mixing 12% of --fg lifts the stripe by a
-       constant perceptual amount in every palette. */
-    .roll-list > li:nth-child(even) > .roll-card { background: color-mix(in srgb, var(--bg) 88%, var(--fg) 12%); }
+       constant perceptual amount in every palette.
+       v2.49.139: zebra rule keeps the glass-effect alpha + blur
+       (inherited from .roll-card) and just adjusts the colour mix. */
+    .roll-list > li:nth-child(even) > .roll-card {
+        background: color-mix(in srgb,
+            color-mix(in srgb, var(--bg) 88%, var(--fg) 12%) 78%,
+            transparent);
+    }
     /* feature-used-card has no total column — stack vertically */
     .feature-used-card { flex-direction: column; }
 

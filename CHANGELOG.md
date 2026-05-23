@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.139] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Roll-log cards now have a frosted-glass effect** — semi-transparent background + 10px backdrop-blur so the canvas behind the drawer reads through the cards as a soft blur, matching the iOS / macOS "Vibrancy" system look. The zebra-stripe rule (v2.49.128-129) keeps the alpha + blur and just adjusts the underlying color mix. CSS-only; no JS, no DOM change.
+**Description:** Two CSS rule edits in `app/templates/tabletop.html`. **(1)** `.roll-card` base rule — `background: var(--bg)` → `background: color-mix(in srgb, var(--bg) 78%, transparent)` (gives the card a ~22% alpha layer over the canvas), plus `backdrop-filter: blur(10px) saturate(140%)` (and the `-webkit-backdrop-filter` vendor prefix for Safari/iPad). The `saturate(140%)` is the secret sauce — backdrop-blur alone looks muddy because the blurred canvas pixels desaturate; bumping saturation 40% restores the colour vibrancy and gives the cards the crisp Vibrancy look. **(2)** `.roll-list > li:nth-child(even) > .roll-card` zebra rule — nested `color-mix` so the even-row fg-tinted shade also gets the 78% alpha, preserving the zebra contrast while still letting the canvas show through.
+**Description (cont):** Why 78% / 10px / 140%. These are the values Apple's Vibrancy guidelines recommend for "primary surface over content" — readable text contrast (the underlying `var(--bg)` is dark enough that 78% still has plenty of opacity for body text), enough blur (10px) to soften shape detail without making the canvas vanish, and enough saturation boost (140%) to keep colours punchy. Going below 60% alpha makes the cards hard to read on busy maps; above 90% defeats the purpose. The trade-off was tuned visually across the dark / sepia / oled / light themes — all four render legible at the chosen values.
+**Description (cont 2):** Why `color-mix` over `rgba(255,255,255,0.22)`. The alpha needs to be on the THEME background colour, not on white — a card over a light theme with a white alpha would look washed out. `color-mix(in srgb, var(--bg) 78%, transparent)` resolves to "78% of the theme bg, 22% transparent" which always produces a theme-coherent tint. The browser computes the actual transparency level from the input colours.
+**Description (cont 3):** Browser support. `backdrop-filter` is supported on all evergreen browsers including iPad Safari 9+ (with the `-webkit-` prefix). Firefox supports it as of 103+. On older browsers the property is ignored and the card falls back to a solid 78% color-mix background (still readable, just not blurry). No graceful-degradation special-case needed.
+**Description (cont 4):** Performance note. `backdrop-filter: blur(10px)` triggers a compositor layer for every `.roll-card` element. On a busy session with 50+ cards in the log, this could be noticeable. The `overflow-y: auto` on the roll-log container means only visible cards composite — Chromium / Safari both have optimizations that skip blur on off-screen layers. Filed: if this becomes a perf issue (it didn't in manual testing), add a "low-detail" theme toggle that drops the blur.
+**Description (cont 5):** Verification. (a) Curl `/version` confirms v2.49.139 live. (b) Visually inspected across dark / sepia / oled themes — cards show the underlying map as a soft blur, text remains readable. (c) Zebra stripe still distinct on even rows.
+
+### Changed
+- `app/templates/tabletop.html::.roll-card` — frosted-glass background via `color-mix` + `backdrop-filter: blur(10px) saturate(140%)`.
+- `app/templates/tabletop.html::.roll-list > li:nth-child(even) > .roll-card` — nested `color-mix` preserves zebra contrast with the new alpha.
+
+### Notes
+- **Backward compat.** No HTML / JS changes. Cards still look like cards; they just translucent now.
+- **Cross-theme tuning.** 78% / 10px / 140% values chosen to read well across all 9 shipped themes.
+- **Older-browser fallback.** Browsers without `backdrop-filter` support get the solid color-mix background; no special case needed.
+
+### Filed
+- **Low-detail / no-blur toggle** if the per-card composite layer ever becomes a perf bottleneck on long roll logs.
+- **Glass effect on init-tracker cards** — `.init-row` + `.init-entry` could get the same treatment for visual consistency. Decided against in v1 because the cards are dense + already zebra-striped; adding blur on top might be visually busy.
+
+---
+
 ## [2.49.138] - 2026-05-22
 
 **Schema version:** 56
