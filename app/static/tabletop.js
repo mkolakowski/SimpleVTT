@@ -591,6 +591,7 @@
         cursor: null,       // v2.49.138 — {x, y} snapped to grid-cell center; drives ruler endpoint
         cursorRaw: null,    // v2.49.140 — {x, y} raw cursor; drives hover-token preview ring
         rangeFt: 0,         // v2.49.143 — spell/attack range in feet; 0 = no range gating
+        _justClosedAt: 0,   // v2.49.154 — ms timestamp of last cleanup; dblclick guard window
         picks: null,        // Map<token.id, count>
         _resolve: null,
 
@@ -719,6 +720,13 @@
             this.rangeFt = 0;
             this.picks = null;
             this._resolve = null;
+            // v2.49.154: stamp the close time so the dblclick handler
+            // can guard a short window (single-target picker auto-
+            // commits on the first click; the second click of a
+            // dbl-click lands AFTER cleanup, so checking `active`
+            // alone misses it). 500 ms covers the typical browser
+            // dblclick threshold (Safari/Chrome ~300, plus headroom).
+            this._justClosedAt = Date.now();
             document.body.classList.remove('target-picker-active');
             _hideTargetPickerHint();
             try { render(); } catch (_) {}
@@ -3099,7 +3107,14 @@
         // persistent target — and the first picker id would resolve
         // against that persistent target after the cast, leading to
         // "I picked the bandit but Tavik took damage."
-        if (_targetPicker.active) {
+        // v2.49.154: ALSO swallow if the picker just closed within
+        // the last 500 ms. Single-target picker auto-commits on the
+        // first click, so the second click of a dblclick lands when
+        // ``active`` is already false — without this window check
+        // the dblclick fires anyway and persistently targets the
+        // token the player just picked.
+        if (_targetPicker.active
+                || (Date.now() - _targetPicker._justClosedAt < 500)) {
             ev.preventDefault();
             return;
         }

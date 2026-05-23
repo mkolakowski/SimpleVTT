@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.154] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix: target-picker dblclick guard now covers the just-closed window too.** v2.49.153 added `if (_targetPicker.active)` to the canvas dblclick handler, which fixed the MULTI-target picker case (Magic Missile stacking via dblclick). But the SINGLE-target picker auto-commits on the first click — so the second click of a dblclick lands AFTER `cleanup()` set `active = false`. The dblclick event then fires while `active` is false, and `_targeting.setTarget(t.id)` runs anyway. Net effect: clicking a token twice in a single-target picker (Fire Bolt at a bandit, then accidentally double-tap) → cast goes through correctly AND the token sticks as a persistent crimson `_targeting` ring.
+**Description:** Two-line change in `app/static/tabletop.js::_targetPicker`. **(1)** Added `_justClosedAt: 0` field on the picker state. **(2)** `_cleanup()` stamps `this._justClosedAt = Date.now()` after clearing state. **(3)** The dblclick handler's guard changed from `if (_targetPicker.active)` to `if (_targetPicker.active || Date.now() - _targetPicker._justClosedAt < 500)` — 500 ms is comfortably above the browser's dblclick threshold (Safari + Chrome ~300 ms) so any in-flight dblclick events from picker-time clicks get caught.
+**Description (cont):** Why 500 ms. The browser's dblclick threshold is implementation-defined but typically 200-500 ms (Safari leans 300, Chrome leans 500 — the Web standard doesn't pin a value). Going up to 500 catches every browser; the cost is a 500 ms window after picker close during which legitimate-but-unrelated dblclicks (e.g., the player dblclicks a different token to set a fresh target) are also swallowed. Acceptable trade — the player can wait half a second after picker close.
+**Description (cont 2):** Why not just longer "just-closed" debounce. 500 ms is the tight knee — anything longer (say 1s) starts to feel like input lag if the player is moving fast (cast → immediate dblclick on next combatant to set up the next action). 500 ms is short enough to feel instant for any deliberate followup but long enough to catch the trailing dblclick from the picker click.
+**Description (cont 3):** Why not track which token was just picked. Alternative would be: store the last picked token id in `_targetPicker`, and in the dblclick handler check if the hovered token id matches — only swallow when they match. More precise but messier; the 500 ms timestamp is simpler and handles all the edge cases.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.154 live. (b) Manual: open Fire Bolt picker (single-target), dblclick a bandit fast → cast fires + bandit is NOT left with a persistent red ring. (c) Open Magic Missile picker (3-target), dblclick a bandit twice fast → ×2 picker stack badge appears + after auto-commit no persistent ring sticks. (d) Outside any picker: dblclick a token → persistent _targeting still fires (unchanged for normal flow).
+
+### Changed
+- `app/static/tabletop.js::_targetPicker._cleanup` — stamps `_justClosedAt = Date.now()`.
+- `app/static/tabletop.js::canvas dblclick handler` — guard widens to `active || Date.now() - _justClosedAt < 500`.
+
+### Notes
+- **Backward compat.** Picker UX unchanged. Only the post-cleanup dblclick window changes.
+- **500 ms window cost.** Brief, only matters if the player tries to start a new dblclick-set-target IMMEDIATELY after a picker closes.
+
+---
+
 ## [2.49.153] - 2026-05-23
 
 **Schema version:** 56
