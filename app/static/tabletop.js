@@ -1624,7 +1624,20 @@
         // for rangeFt === 0 (self-cast, "Special", unknown ranges).
         let _tpOutOfRange = false;  // shared with the ruler + hover ring rendering below
         if (_targetPicker.active && _targetPicker.casterPos && _targetPicker.rangeFt > 0) {
-            const _radius_px = (_targetPicker.rangeFt / 5) * gridSize;
+            // v2.49.157: a 5-ft "melee" reach (Shortsword, Unarmed
+            // Strike, etc.) computes to a circle whose radius is
+            // half a square — the diagonally-adjacent token's center
+            // falls just OUTSIDE the circle even though it's reach-
+            // able RAW under Chebyshev. Bump the visual ring to 10 ft
+            // for melee-range gates so diagonals are enclosed. The
+            // out-of-range check below still uses the literal rangeFt
+            // (Chebyshev distance to a diagonal is 5 ft, so the
+            // server still says "in range") — only the displayed ring
+            // changes.
+            const _visualRangeFt = _targetPicker.rangeFt <= 5
+                ? 10
+                : _targetPicker.rangeFt;
+            const _radius_px = (_visualRangeFt / 5) * gridSize;
             ctx.save();
             ctx.fillStyle = 'rgba(74, 222, 128, 0.06)';
             ctx.strokeStyle = '#4ade80';
@@ -1699,12 +1712,24 @@
                 const cy = t.y + gridSize / 2;
                 const r = (gridSize * t.size) / 2;
                 ctx.save();
-                ctx.lineWidth = 3;
+                // v2.49.158: tighter + bolder ring matching the new
+                // active-turn init card border style. Outer halo +
+                // tight inner ring instead of the v2.49.140 single
+                // r+6 offset. Draws in two passes: a softer wider
+                // outer halo first, then a sharp 2px inner ring on
+                // top, so the visual reads as "thick crimson border
+                // with glow" rather than "fat fuzzy ring."
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = 'rgba(220, 38, 38, 0.35)';
+                ctx.beginPath();
+                ctx.arc(cx, cy, r + 3, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.lineWidth = 2.5;
                 ctx.strokeStyle = '#dc2626';
                 ctx.shadowColor = '#dc2626';
-                ctx.shadowBlur = 12;
+                ctx.shadowBlur = 14;
                 ctx.beginPath();
-                ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
+                ctx.arc(cx, cy, r + 1, 0, Math.PI * 2);
                 ctx.stroke();
                 ctx.restore();
                 // "×N" badge in the upper-right of the token (only when

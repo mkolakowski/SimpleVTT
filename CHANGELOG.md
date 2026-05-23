@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.157] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Target-picker visual polish — 10ft visual ring for 5-ft melee weapons + tighter+bolder selected-token ring.** Two related picker render tweaks: (1) when the spell/weapon range is ≤ 5 ft (melee reach), draw the green range ring at 10 ft visually so diagonally-adjacent tokens look enclosed by the circle. RAW Chebyshev says 5 ft IS the diagonal, but a circle with 5-ft radius from the caster's center barely reaches the diagonal token's edge — visually misleading. The literal range gate (`_tpOutOfRange` check) still uses the real `rangeFt`, so server-side enforcement is unchanged. (2) Selected-token ring tightened from `r+6` to `r+1` (snug to the token edge) + restyled as a two-pass stroke matching the v2.49.149 active-turn border style: wider 4px halo at 35% accent alpha first, then a sharp 2.5px crimson stroke with 14px shadow blur on top — reads as "thick crimson border + glow" instead of "fuzzy fat ring."
+**Description:** Two edits in `app/static/tabletop.js`. **(1)** Range-ring draw block (~line 1626) — new `_visualRangeFt` derived as `rangeFt <= 5 ? 10 : rangeFt`. Only affects the ring radius computation; the out-of-range gate logic and chip label still use the literal `rangeFt`. **(2)** Picked-token ring loop (~line 1668) — replaced the single `arc(cx, cy, r + 6)` stroke with two passes: a 4px halo at `rgba(220, 38, 38, 0.35)` at `r + 3`, then a 2.5px solid `#dc2626` with `shadowBlur: 14` at `r + 1`. The outer halo gives the "glow" effect; the inner stroke is the sharp border.
+**Description (cont):** Why 10 ft visually for 5 ft. Diagonal-to-the-caster token center sits at `gridSize * sqrt(2)/2 ≈ 0.707 * gridSize` from the caster's center. A 5-ft circle (= 1 grid-square radius from center) reaches `gridSize * 0.5` — short of the diagonal token's center. A 10-ft circle reaches `gridSize` from center, comfortably enclosing the diagonal cell. RAW Chebyshev: the diagonal cell is 5 ft away (the "5/5/5" rule). The visual shorthand of "10 ft circle" matches the player's intuition without changing the gate.
+**Description (cont 2):** Why two-pass ring (vs single thicker stroke). A single 4px stroke would be uniformly thick and lose the "border + glow" feel. Layering the halo (wide, semi-transparent, no shadow) under the sharp inner stroke (thinner, opaque, glowing) produces the same visual as the v2.49.149 active-turn border's CSS `box-shadow` stack. On canvas, the strokes can't truly overlap a CSS box-shadow style — but the two-pass approach gives the closest equivalent.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.157 live. (b) Manual: cast Fire Bolt (120 ft range) on Zara — picker shows a wide green ring (unchanged). (c) Click Strike on Pip's Shortsword (5 ft) — picker shows a 10-ft green ring that visually encloses the diagonal cell. (d) Pick a token — the red ring is now snug to the token edge with a visible outer halo + sharper inner stroke.
+
+### Changed
+- `app/static/tabletop.js::render` range ring — visual radius bumps to 10 ft when range ≤ 5 ft; gate logic unchanged.
+- `app/static/tabletop.js::render` picked-token ring — single-stroke `r+6` replaced with two-pass halo + sharp inner ring at `r+1`.
+
+### Notes
+- **Server contract unchanged.** Visual change only; range gate enforcement uses literal feet.
+- **Tighter ring** keeps the visual close to the token without overlapping with adjacent token rings.
+
+---
+
 ## [2.49.156] - 2026-05-23
 
 **Schema version:** 56
