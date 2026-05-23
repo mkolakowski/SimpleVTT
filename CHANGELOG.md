@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.183] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **PC ↔ NPC mini-sheet alignment: NPC gains PC-style header + HP bar; PC cast button switches to ✨ (matching NPC).** Three coordinated changes per user request, using the v2.49.182 visual guide as the design source. The NPC mini-sheet's expanded body previously jumped straight from the init-card row into AC/Spd chips with no portrait header and no HP visualisation — this commit gives it the same portrait-disc + name + sub block PCs have, plus a gradient HP pill. The PC cast button glyph unifies to ✨ across both renderers so the visual language is identical.
+**Description:** Three coordinated edits. **(1)** `app/templates/tabletop.html::buildMonsterInitSheet` (~line 5032) — new PC-style header block prepended to the body HTML: 36×36 portrait disc with token color ring, image fallback if `combatant.image_url` / `tmpl.image_url` is set, else first-letter glyph; name (13px / 700) + sub line built from `sh.race || (sh.size + sh.type)` (`sh.background` appended when present). No collapse arrow because the body is already inside the expanded init-card. **(2)** Same function, after the header — new HP bar block: muted "HP cur / max" label + 6px gradient pill (`green → amber → orange`) computing fill % from `combatant.hp_current / combatant.hp_max`. Matches the PC `.mini-hp-bar` styling exactly. **(3)** PC cast button glyph swapped from 🪄 to ✨ in both `_mini_sheet_card.html` (mini-sheet) and `sheet_dnd5e.html::spellRowHtml` (full sheet). **(4)** Wiki guide (`docs/wiki/battle-character-sheets-guide.html`) PC-vs-NPC comparison table updated to reflect the new alignment — header row, HP bar row, and cast button row now show "v2.49.183" annotations and matching ✨ glyphs.
+**Description (cont):** Why portrait + name in the expanded body (vs the init-card row above). The init-card row at the top of each expanded entry shows the GM's editable HP/init inputs + remove button — it's a thin admin strip, not a "this is who this combatant is" identity block. PCs have always had the rich `.mini-header` portrait + name inside the expanded body for the same reason: the admin row is functional, the mini-sheet header is identity. NPC parity means the GM expanding a bandit sees a portrait + name header before diving into stats, just like expanding a PC.
+**Description (cont 2):** Why ✨ (not 🪄) for the unified glyph. Both glyphs work, but ✨ established earlier in v2.49.175 (NPC spell row prefix) and v2.49.177 (NPC Cast button). Migrating PCs to ✨ keeps the existing NPC convention; migrating NPCs to 🪄 would have meant changing two NPC code paths instead of two PC code paths. Same net effort either direction; ✨ wins by simply being the established prefix glyph on spell rows already.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.183 live. (b) Manual: GM expands Soren (Cult Acolyte) → new portrait disc with ring color #9d4edd + "S" glyph (no image_url yet for Soren), name "Soren (Cult Acolyte)", sub "Medium Humanoid", then a gradient HP bar showing 18/18 full green. Bandits show the same header pattern with `#c84a4a` ring color + "B" glyph. (c) GM expands Zara (PC) → spell rows now show "✨ Cast" button (was "🪄 Cast"). Full sheet via 📋 Sheet button also shows "✨ Cast". (d) No regression — 30-test suite passes (attack + npc_attack + smoke + cast_spell_save).
+
+### Added
+- `app/templates/tabletop.html::buildMonsterInitSheet` — PC-style header block (portrait disc + name + sub) and gradient HP bar at the top of the body HTML.
+
+### Changed
+- `app/templates/_mini_sheet_card.html` `.mini-cast-btn` — 🪄 Cast → ✨ Cast (unified with NPC).
+- `app/templates/sheet_dnd5e.html::spellRowHtml` `.sp-cast` — 🪄 Cast → ✨ Cast (unified with mini-sheet).
+- `docs/wiki/battle-character-sheets-guide.html` — PC vs NPC comparison table updated for v2.49.183 alignment.
+
+### Notes
+- **No server change.** Pure client / template rendering.
+- **NPCs without portraits** (most SRD monsters) get the first-letter glyph fallback at the token color — same pattern PCs use when portrait_url is missing.
+- **No new harness test.** Visual change only; existing 30-test regression covers the underlying endpoints.
+
+---
+
 ## [2.49.182] - 2026-05-23
 
 **Schema version:** 56

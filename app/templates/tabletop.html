@@ -5031,6 +5031,54 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 
         let html = '<div style="padding:8px 10px 12px;">';
 
+        // v2.49.183: PC-style header for NPC mini-sheets. Mirrors the
+        // ``.mini-header`` block in _mini_sheet_card.html — a portrait
+        // disc (token color ring + first-letter glyph fallback when no
+        // portrait jpg ships), name + size·type sub line. No collapse
+        // arrow because the NPC mini-sheet is always shown when the
+        // init-card is expanded; no toggle behavior here.
+        const _ringColor = combatant.color || tmpl.color || 'var(--accent)';
+        const _portraitUrl = combatant.image_url || tmpl.image_url || '';
+        const _initialGlyph = (combatant.name || tmpl.name || '?').trim()[0].toUpperCase();
+        const _portraitInner = _portraitUrl
+            ? `<img src="${escapeHTML(_portraitUrl)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+            : `<span style="color:#fff;font-size:14px;font-weight:700;">${escapeHTML(_initialGlyph)}</span>`;
+        const _subBits = [];
+        if (sh.race) _subBits.push(escapeHTML(sh.race));
+        else {
+            const _sz = sh.size ? escapeHTML(sh.size) : '';
+            const _tp = sh.type ? escapeHTML(sh.type) : '';
+            const _st = [_sz, _tp].filter(Boolean).join(' ');
+            if (_st) _subBits.push(_st);
+        }
+        if (sh.background) _subBits.push(escapeHTML(sh.background));
+        const _subLine = _subBits.join(' · ');
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0 10px;border-bottom:1px solid var(--border);margin-bottom:8px;">
+            <div style="width:36px;height:36px;border-radius:50%;background:${escapeHTML(_ringColor)};border:2px solid ${escapeHTML(_ringColor)};display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
+                ${_portraitInner}
+            </div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;font-size:13px;">${escapeHTML(combatant.name || tmpl.name)}</div>
+                ${_subLine ? `<div style="font-size:10px;color:var(--fg-mute);">${_subLine}</div>` : ''}
+            </div>
+        </div>`;
+
+        // v2.49.183: PC-style HP bar for NPC mini-sheets. Gradient pill
+        // matching .mini-hp-bar in _mini_sheet_card.html — green → amber
+        // → orange so a visually low bar reads as "this NPC is hurt"
+        // without needing to parse digits. Numeric overlay below.
+        const _hpCur = parseInt(combatant.hp_current);
+        const _hpMax = parseInt(combatant.hp_max);
+        if (Number.isFinite(_hpCur) && Number.isFinite(_hpMax) && _hpMax > 0) {
+            const _pct = Math.max(0, Math.min(100, (_hpCur / _hpMax) * 100));
+            html += `<div style="font-size:11px;color:var(--fg-mute);margin-bottom:3px;">
+                HP <span style="font-weight:700;color:var(--fg);">${_hpCur}</span> / ${_hpMax}
+            </div>
+            <div style="height:6px;border-radius:3px;background:var(--input-bg);margin-bottom:8px;overflow:hidden;">
+                <div style="height:100%;width:${_pct}%;background:linear-gradient(90deg,#4ade80 0%,#fbbf24 70%,#fb923c 100%);border-radius:3px;"></div>
+            </div>`;
+        }
+
         // Quick chips — AC / Speed
         const quick = [];
         if (sh.ac != null && sh.ac !== '') quick.push(`<span><b>AC</b> ${sh.ac}</span>`);
