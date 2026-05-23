@@ -1331,11 +1331,19 @@
     .enc-modal-btn  { font-size: 11px; min-height: 44px; padding: 0 10px; }
     .enc-spawn-btn  { font-size: 9px;  min-height: 32px; padding: 0 5px;  flex-shrink: 0; }
 </style>
-{% set gm_tint = campaign.gm_tab_color or '#d4a84a' %}
+{# v2.49.145: GM tint is opt-in. Previously defaulted to '#d4a84a'
+   (amber) which made the GM Tools tab look visually distinct from the
+   other drawer-tab-btns (Roll Log, Battle, Characters, Settings).
+   Now only applies when the campaign has explicitly set gm_tab_color;
+   default → the tab inherits .drawer-tab-btn's standard accent styling
+   so the topbar reads as one consistent row. Same opt-in pattern as
+   battle_tint / player_tint (user-level) below. #}
+{% set gm_tint = campaign.gm_tab_color %}
 {% set battle_tint = user.battle_tab_color %}
 {% set player_tint = user.player_tab_color %}
 <style>
-    /* ── GM Tools / Settings tab tint (campaign-level) ── */
+    /* ── GM Tools / Settings tab tint (campaign-level, opt-in) ── */
+    {% if gm_tint %}
     .gm-tools-tab {
         border-color: {{ gm_tint }};
         color: {{ gm_tint }};
@@ -1353,6 +1361,7 @@
         background: var(--bg);
         background: color-mix(in srgb, {{ gm_tint }} 35%, var(--bg));
     }
+    {% endif %}
 
     /* ── Battle tab tint (user-level) ── */
     {% if battle_tint %}

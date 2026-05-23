@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.145] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **GM Tools tab now matches the other drawer tabs out of the box.** The `.gm-tools-tab` had a hardcoded `#d4a84a` amber tint that fired for every campaign — even ones that hadn't customized `campaign.gm_tab_color` — which made the GM Tools button visually distinct from Roll Log / Battle / Characters / Settings. v2.49.145 makes the tint opt-in: the override CSS block only renders when `campaign.gm_tab_color` is explicitly set. When unset (the demo + default for new campaigns), the tab inherits the standard `.drawer-tab-btn` styling so the topbar reads as one consistent row. Matches the existing pattern for `battle_tint` and `player_tint` (user-level), which were already opt-in.
+**Description:** One-line edit in `app/templates/tabletop.html` around the `gm_tint` Jinja set. Was `{% set gm_tint = campaign.gm_tab_color or '#d4a84a' %}` — fell back to amber when the field was empty. Now `{% set gm_tint = campaign.gm_tab_color %}` (no fallback) + wrapped the `.gm-tools-tab` / `:hover` / `.active` CSS rule block in `{% if gm_tint %}` so it only renders when the campaign has opted in. When `gm_tab_color` is null / empty, the GM Tools button inherits the base `.drawer-tab-btn` styles (same `var(--input-bg)` / `var(--border)` / `var(--accent)` palette as every other drawer tab).
+**Description (cont):** Why opt-in instead of removing the feature. Some users do want a distinct GM Tools color — it's a useful affordance when running a long session and the player + GM views look similar. The campaign-settings form already exposes `gm_tab_color` (line 2813 in `tabletop_routes.py`); the field just defaulted to the amber even when blank. Making it opt-in preserves the customization for users who want it AND fixes the visual inconsistency for everyone else.
+**Description (cont 2):** What stays. The campaign-settings form for `gm_tab_color` is unchanged. The two user-level tints (`battle_tab_color` / `player_tab_color`) were already opt-in via the same `{% if %}` pattern; they weren't touched. The Battle drawer's `.battle-tab` styles only render when `user.battle_tab_color` is set.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.145 live. (b) Visually: hard-refresh the tabletop → GM Tools tab now uses the same default-accent palette as Roll Log / Battle / Characters / Settings. (c) Set a non-empty `gm_tab_color` in campaign settings → tab gets the custom tint as before (existing feature preserved).
+
+### Changed
+- `app/templates/tabletop.html` — `gm_tint` no longer defaults to `#d4a84a`; `.gm-tools-tab` CSS rules wrapped in `{% if gm_tint %}` so the tint is opt-in per-campaign.
+
+### Notes
+- **Backward compat.** Campaigns with a custom `gm_tab_color` still get the tint. Default campaigns now match the rest of the topbar.
+- **Same pattern as user-level tints.** `battle_tint` / `player_tint` were already opt-in via `{% if %}` blocks; this aligns `gm_tint` with that convention.
+
+---
+
 ## [2.49.144] - 2026-05-22
 
 **Schema version:** 56
