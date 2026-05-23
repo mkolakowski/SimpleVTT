@@ -1259,7 +1259,12 @@
     // user-reported pan/drag breakage from v2.49.81 onward was this
     // bug; the new tests in tests/harness_ui/test_tabletop_canvas.py
     // catch it.
-    let _hoverCursor = null;
+    // v2.49.134: removed the _hoverCursor declaration — its only
+    // consumer was the v2.49.81 Phase 3B hover-rangefinder render
+    // block, which was removed in this commit. The TDZ-safety
+    // comment that the original declaration carried (Read full
+    // context at v2.49.92 git history if needed) doesn't apply
+    // because there's no consumer left.
 
     // v2.49.133: init-tracker → canvas hover linking. When the user
     // hovers an .init-row / .init-entry in the side drawer (desktop
@@ -1748,77 +1753,14 @@
             ctx.restore();
         }
 
-        // v2.49.81 — Phase 3B hover rangefinder. Thin distance line
-        // from the currently-targeted token's center to the cursor +
-        // a "X ft" chip floating next to the cursor. Suppressed when
-        // ANY tool / drag is active so it doesn't overlap with the
-        // AoE picker preview, the ruler measurement, or a token
-        // drag's movement breadcrumb. Activates only with EXACTLY
-        // one target — multi-target selections don't have a single
-        // anchor point.
-        if (
-            _hoverCursor &&
-            _targeting.tokenIds.size === 1 &&
-            !_aoePicker.active &&
-            !_rulerPicker.active &&
-            !dragging
-        ) {
-            const onlyTargetId = [..._targeting.tokenIds][0];
-            const tok = tokens.find(t => t.id === onlyTargetId);
-            if (tok) {
-                const fromX = tok.x + gridSize / 2;
-                const fromY = tok.y + gridSize / 2;
-                const toX = _hoverCursor.x;
-                const toY = _hoverCursor.y;
-                // Only render when the cursor has moved off the token
-                // itself — a line of zero length is visual noise.
-                if (Math.hypot(toX - fromX, toY - fromY) > 8) {
-                    ctx.save();
-                    // Thin solid line — passive cue, not a committed
-                    // measurement. Uses fg-mute equivalent so it sits
-                    // quietly compared to the ruler tool's brighter
-                    // dashed green.
-                    ctx.strokeStyle = 'rgba(180, 180, 180, 0.75)';
-                    ctx.lineWidth = 1;
-                    ctx.setLineDash([]);
-                    ctx.beginPath();
-                    ctx.moveTo(fromX, fromY);
-                    ctx.lineTo(toX, toY);
-                    ctx.stroke();
-                    // Distance chip — floats ~12 px below + 12 px
-                    // right of the cursor so it doesn't sit on the
-                    // hot spot where the player wants to see what
-                    // they're hovering.
-                    const distance_ft = _computeRulerDistanceFt(
-                        { x: fromX, y: fromY }, { x: toX, y: toY },
-                    );
-                    const label = `${distance_ft} ft`;
-                    ctx.font = '11px sans-serif';
-                    ctx.textAlign = 'left';
-                    ctx.textBaseline = 'middle';
-                    const metrics = ctx.measureText(label);
-                    const padX = 6, chipH = 16;
-                    const chipW = metrics.width + padX * 2;
-                    const chipX = toX + 12;
-                    const chipY = toY + 12;
-                    ctx.fillStyle = 'rgba(20, 24, 28, 0.88)';
-                    ctx.strokeStyle = 'rgba(180, 180, 180, 0.6)';
-                    ctx.lineWidth = 1;
-                    if (ctx.roundRect) {
-                        ctx.beginPath();
-                        ctx.roundRect(chipX, chipY, chipW, chipH, 4);
-                        ctx.fill();
-                        ctx.stroke();
-                    } else {
-                        ctx.fillRect(chipX, chipY, chipW, chipH);
-                        ctx.strokeRect(chipX, chipY, chipW, chipH);
-                    }
-                    ctx.fillStyle = '#dcdcdc';
-                    ctx.fillText(label, chipX + padX, chipY + chipH / 2);
-                    ctx.restore();
-                }
-            }
-        }
+        // v2.49.134: removed the v2.49.81 Phase 3B hover-rangefinder
+        // block (thin distance line + "X ft" chip drawn from a
+        // dbl-click-selected target to the cursor). User feedback —
+        // it read as a phantom ruler appearing on token select. The
+        // explicit ruler tool (toolbar button) still provides on-
+        // demand measurements when needed; cast-button hover rings
+        // (v2.49.82) still preview spell range. Just the auto-on-
+        // target-set distance line + chip is gone.
 
         // v2.49.84 Phase 3E — remote ruler broadcasts. Render each
         // foreign measurement as a semi-transparent green overlay with
@@ -2485,20 +2427,12 @@
             return;
         }
         if (!dragging) {
-            // v2.49.81 — Phase 3B hover rangefinder. When no tool /
-            // drag is active AND exactly one token is currently
-            // targeted, track the cursor + re-render so the distance
-            // line + chip stay live. Only fires the render when the
-            // rangefinder would actually draw (otherwise it's pure
-            // overhead on every mousemove).
-            if (_targeting.tokenIds.size === 1) {
-                const [wx, wy] = clientToCanvas(ev);
-                _hoverCursor = { x: wx, y: wy };
-                render();
-            } else if (_hoverCursor) {
-                _hoverCursor = null;
-                render();
-            }
+            // v2.49.134: the v2.49.81 Phase 3B hover-rangefinder pump
+            // (set _hoverCursor + render on every mousemove while a
+            // single target was selected) was removed alongside the
+            // renderer block that consumed it — see the matching
+            // comment in render() above. No mousemove work needed
+            // when not dragging.
             return;
         }
         const [x, y] = clientToCanvas(ev);
@@ -2506,20 +2440,6 @@
         dragging.token.y = y - dragging.offsetY;
         render();
     });
-
-    // v2.49.81 — Phase 3B: clear the hover cursor when the mouse
-    // leaves the canvas so the distance line doesn't stay stale at a
-    // stale position. mapPane is the closest ancestor that contains
-    // the canvas; mouseleave on it fires when the cursor exits the
-    // entire map viewport.
-    if (mapPane) {
-        mapPane.addEventListener('mouseleave', () => {
-            if (_hoverCursor) {
-                _hoverCursor = null;
-                try { render(); } catch (_) {}
-            }
-        });
-    }
 
     canvas.addEventListener('mouseup', (ev) => {
         if (ev.button === 2) {

@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.134] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Removed the hover-rangefinder (v2.49.81 Phase 3B) that drew a phantom "ruler" line when a token was selected.** User feedback: double-clicking a token to select it as a target (the existing v2.21.0 targeting state) caused a thin distance line + `X ft` chip to follow the cursor — read as a confusing on-by-default ruler. The auto-rangefinder is removed entirely; the explicit ruler tool (toolbar button → `_rulerPicker`) still provides on-demand measurements, and cast-button hover rings (v2.49.82 Phase 3C) still preview spell range. Only the auto-on-target-set distance line is gone.
+**Description:** Three edits in `app/static/tabletop.js`. **(1)** Removed the v2.49.81 Phase 3B render block at the bottom of `render()` (~70 lines): the conditional `if (_hoverCursor && _targeting.tokenIds.size === 1 && !_aoePicker.active && !_rulerPicker.active && !dragging) { ... draws line + chip ... }`. Replaced with a comment block pointing at this commit. **(2)** Removed the mousemove pumping that updated `_hoverCursor` on every cursor movement while a single target was selected (~16 lines inside the `mousemove` handler). The `if (!dragging) return;` early-out is preserved (still needed so non-drag mousemoves don't trigger the drag path below). **(3)** Removed the `mapPane.addEventListener('mouseleave', ...)` block (~12 lines) that cleared `_hoverCursor` on cursor-out — no consumer, no need for the cleanup. **(4)** Removed the `let _hoverCursor = null;` declaration since nothing reads or writes it anymore.
+**Description (cont):** Why remove rather than gate behind a setting. The feature had a single trigger (double-click target → mousemove draws line) and a single visual effect (line + chip). Adding a settings toggle would require: (a) a new user-settings field + form input, (b) a default value decision, (c) client-side conditional. The cost-benefit didn't justify it for one UX-noise feature; if a user wants on-demand range measurement, the explicit ruler tool button is one click away and supports multi-segment paths, broadcast mode, and other affordances the auto-rangefinder didn't have. Removal is the lighter and more honest design statement: "this was implicit and confusing; the explicit tool is the canonical answer."
+**Description (cont 2):** What stays. **Targeting state itself unchanged** — double-clicking a token still sets `_targeting.tokenIds`; the crimson targeting ring still draws around selected tokens; the chip showing target count still renders; the `target_combatant_id` / `target_combatant_ids` body fields on attack / cast endpoints still get populated. **Ruler tool** (explicit, click the toolbar button) still works exactly as before — point-and-click measurements, multi-segment with Enter to commit, broadcast mode for GM-led range demos. **Cast-button hover ring** (v2.49.82 Phase 3C) still previews a spell's range as an accent-green dashed circle around the caster when the player hovers a cast button on their sheet. The only deletion is the **auto-rangefinder** that fired on cursor movement while a target was selected.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.134 live after `docker compose up -d --build app`. (b) Double-clicked a token in the demo — selection ring still draws (crimson), no follow-cursor line / chip appears. (c) Clicked the explicit ruler tool button — picker still activates and measures correctly. (d) Hovered a cast button on Zara's sheet — range ring still draws around her token. (e) Pan / drag still works (TDZ-safety: nothing reads `_hoverCursor` anymore so the v2.49.92 TDZ-rule the comment block referenced is moot).
+**Description (cont 4):** Why `_hoverCursor` deserves removal vs. keeping it as a no-op `let`. Pure-readability cost only — leaving a dead declaration with a TDZ-safety comment that no longer applies invites future "why is this here?" investigation. Removing it removes the questions.
+
+### Removed
+- `app/static/tabletop.js::render` — the v2.49.81 Phase 3B hover-rangefinder draw block.
+- `app/static/tabletop.js` mousemove handler — the `_hoverCursor` update + render-trigger inside the `!dragging` branch.
+- `app/static/tabletop.js` `mapPane.addEventListener('mouseleave', ...)` — no longer needed (no `_hoverCursor` consumer).
+- `app/static/tabletop.js::let _hoverCursor = null` — dead declaration.
+
+### Notes
+- **Backward compat.** No payload / endpoint changes; UI-only.
+- **Test impact.** `tests/harness_ui/test_tabletop_canvas.py` (v2.49.92) tested pan/drag; verified manually those still work. No test asserted on the rangefinder, so nothing to remove from the suite.
+- **Filed reactions revisited.** v2.49.81's design notes had Phase 3B as the "passive cue" complement to Phase 2's explicit ruler tool. Removing it formally accepts user feedback that the explicit tool is sufficient.
+
+---
+
 ## [2.49.133] - 2026-05-22
 
 **Schema version:** 56
