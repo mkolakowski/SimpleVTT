@@ -558,6 +558,170 @@
     };
 
     // ──────────────────────────────────────────────────────────────────
+    // v2.49.135 — Multi-target token picker (canvas-based crosshair).
+    //
+    // Pre-cast picker for multi-beam spells (Magic Missile, Scorching
+    // Ray, Eldritch Blast at L5+). Modeled on _aoePicker but instead
+    // of placing a shape, the player clicks each target token (allowing
+    // stacking — clicking the same token N times puts N beams on it,
+    // RAW PHB). Right-click decrements a token's count. Enter commits
+    // (auto-commits when count === required). Esc cancels.
+    //
+    // Returns a Promise<Array<combatant_id>> where duplicates are
+    // allowed for stacking (the server's existing target_combatant_ids
+    // loop iterates per id, naturally resolving "3 beams on 1 bandit"
+    // by passing the bandit's id three times).
+    // ──────────────────────────────────────────────────────────────────
+    const _targetPicker = {
+        active: false,
+        required: 0,
+        spellName: '',
+        casterCharId: 0,
+        picks: null,        // Map<token.id, count>
+        _resolve: null,
+
+        start(opts) {
+            if (this.active) this.cancel();
+            this.active = true;
+            this.required = Math.max(1, parseInt(opts && opts.required, 10) || 1);
+            this.spellName = String((opts && opts.spellName) || 'Spell');
+            this.casterCharId = parseInt(opts && opts.casterCharId, 10) || 0;
+            this.picks = new Map();
+            document.body.classList.add('target-picker-active');
+            _showTargetPickerHint(this.spellName, 0, this.required);
+            try { render(); } catch (_) {}
+            return new Promise((resolve) => { this._resolve = resolve; });
+        },
+
+        cancel() {
+            if (!this.active) return;
+            const resolve = this._resolve;
+            this._cleanup();
+            if (resolve) resolve(null);
+        },
+
+        commit() {
+            if (!this.active) return;
+            const resolve = this._resolve;
+            // Build the combatant-id list, repeating each entry per
+            // the pick count. The server iterates this list per beam,
+            // so [bandit, bandit, bandit] = 3 beams on the same bandit.
+            const battle = (window.battle && window.battle.combatants) || [];
+            const ids = [];
+            for (const [tokenId, count] of this.picks) {
+                const tok = tokens.find(t => t.id === tokenId);
+                if (!tok) continue;
+                let combatant = null;
+                for (const c of battle) {
+                    if (c.source_token_id != null && c.source_token_id === tok.id) { combatant = c; break; }
+                    if (tok.character_id && c.char_id === tok.character_id) { combatant = c; break; }
+                    if (tok.token_template_id
+                            && c.token_template_id === tok.token_template_id
+                            && c.name === tok.label) { combatant = c; break; }
+                }
+                const id = combatant && combatant.id ? combatant.id : `tok:${tok.id}`;
+                for (let n = 0; n < count; n++) ids.push(id);
+            }
+            this._cleanup();
+            if (resolve) resolve(ids);
+        },
+
+        addPick(canvasX, canvasY) {
+            if (!this.active) return false;
+            // Find the topmost token under the cursor.
+            for (let i = tokens.length - 1; i >= 0; i--) {
+                const t = tokens[i];
+                if (t.is_hidden && !ME.isGm) continue;
+                if (!pointInToken(canvasX, canvasY, t)) continue;
+                const cur = this.picks.get(t.id) || 0;
+                if (this._totalPicked() >= this.required) return false;
+                this.picks.set(t.id, cur + 1);
+                _showTargetPickerHint(this.spellName, this._totalPicked(), this.required);
+                try { render(); } catch (_) {}
+                // Auto-commit when the required count is met — players
+                // can also press Enter early for under-quota commits.
+                if (this._totalPicked() >= this.required) this.commit();
+                return true;
+            }
+            return false;
+        },
+
+        removePick(canvasX, canvasY) {
+            if (!this.active) return false;
+            for (let i = tokens.length - 1; i >= 0; i--) {
+                const t = tokens[i];
+                if (!pointInToken(canvasX, canvasY, t)) continue;
+                const cur = this.picks.get(t.id) || 0;
+                if (cur <= 0) return false;
+                if (cur <= 1) this.picks.delete(t.id);
+                else this.picks.set(t.id, cur - 1);
+                _showTargetPickerHint(this.spellName, this._totalPicked(), this.required);
+                try { render(); } catch (_) {}
+                return true;
+            }
+            return false;
+        },
+
+        _totalPicked() {
+            let n = 0;
+            for (const v of this.picks.values()) n += v;
+            return n;
+        },
+
+        _cleanup() {
+            this.active = false;
+            this.required = 0;
+            this.spellName = '';
+            this.casterCharId = 0;
+            this.picks = null;
+            this._resolve = null;
+            document.body.classList.remove('target-picker-active');
+            _hideTargetPickerHint();
+            try { render(); } catch (_) {}
+        },
+    };
+
+    function _showTargetPickerHint(spellName, picked, required) {
+        _hideTargetPickerHint();
+        const el = document.createElement('div');
+        el.id = 'target-picker-hint';
+        el.innerHTML =
+            `<strong>🎯 ${spellName}</strong> · ` +
+            `<span class="muted">pick ${picked} / ${required} target${required === 1 ? '' : 's'} · ` +
+            `click target · right-click to undo · Enter to commit · Esc to cancel</span>`;
+        Object.assign(el.style, {
+            position: 'absolute',
+            top: '10px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 200,
+            padding: '6px 12px',
+            borderRadius: '14px',
+            border: '1.5px solid var(--accent)',
+            background: 'color-mix(in srgb, var(--accent) 18%, var(--bg))',
+            color: 'var(--accent)',
+            fontSize: '12px',
+            fontWeight: '600',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.35)',
+            pointerEvents: 'none',
+        });
+        const host = document.getElementById('map-pane') || document.body;
+        host.appendChild(el);
+    }
+    function _hideTargetPickerHint() {
+        const el = document.getElementById('target-picker-hint');
+        if (el) el.remove();
+    }
+
+    /** Convenience entry point for the sheet's cast handler. Returns a
+     *  Promise<Array<combatant_id>> with duplicates allowed for stacking,
+     *  or null when cancelled. */
+    window.vttOpenMultiTargetPicker = function (opts) {
+        if (!opts || !opts.required || opts.required < 1) return Promise.resolve(null);
+        return _targetPicker.start(opts);
+    };
+
+    // ──────────────────────────────────────────────────────────────────
     // v2.49.71 — Ruler tool (Phase 1 of docs/plans/ruler-and-range.md)
     //
     // Mirrors _aoePicker's "suspend map control, prompt for clicks,
@@ -1401,6 +1565,52 @@
             ctx.stroke();
             ctx.restore();
         });
+        // v2.49.135: multi-target picker — draw an accent ring + an
+        // "×N" badge on every token that has at least one pick. Drawn
+        // on top of the targeting ring so a picked-during-cast token
+        // visibly stands out from any pre-existing target selection.
+        if (_targetPicker.active && _targetPicker.picks && _targetPicker.picks.size) {
+            for (const [tokenId, count] of _targetPicker.picks) {
+                const t = tokens.find(tk => tk.id === tokenId);
+                if (!t) continue;
+                if (t.is_hidden && !ME.isGm) continue;
+                const cx = t.x + gridSize / 2;
+                const cy = t.y + gridSize / 2;
+                const r = (gridSize * t.size) / 2;
+                ctx.save();
+                // Accent-tinted ring around the token to flag it as picked.
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#a78bfa';
+                ctx.shadowColor = '#a78bfa';
+                ctx.shadowBlur = 12;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+                // "×N" badge in the upper-right of the token (only when
+                // the same token is picked more than once — single picks
+                // are obvious from the ring alone).
+                if (count > 1) {
+                    ctx.save();
+                    const badgeR = Math.max(11, Math.round(gridSize * 0.22));
+                    const bx = cx + r * 0.72;
+                    const by = cy - r * 0.72;
+                    ctx.fillStyle = '#a78bfa';
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(bx, by, badgeR, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                    ctx.font = `bold ${Math.round(badgeR * 1.1)}px system-ui, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = '#fff';
+                    ctx.fillText(`×${count}`, bx, by + 1);
+                    ctx.restore();
+                }
+            }
+        }
         // v2.49.0 — persistent concentration AoE markers. Drawn after
         // tokens + targeting rings but before the picker preview, so
         // a fresh placement's preview circle is still visible on top.
@@ -2168,6 +2378,21 @@
             _rulerPicker.cancel();
             return;
         }
+        // v2.49.135: right-click in target-picker mode decrements the
+        // count on the token under the cursor (the "undo last pick"
+        // gesture per the picker hint). Falls through to sheet-open
+        // only when the click is on empty space (no token under the
+        // cursor) — that way a misclick on a non-token area cancels
+        // the picker via the Escape key path.
+        if (_targetPicker.active) {
+            const [x, y] = clientToCanvas(ev);
+            const consumed = _targetPicker.removePick(x, y);
+            if (!consumed) {
+                // Right-click on empty canvas = cancel the picker.
+                _targetPicker.cancel();
+            }
+            return;
+        }
         if (Date.now() - _lastSheetOpenAt < 300) return;
         const [x, y] = clientToCanvas(ev);
         for (let i = tokens.length - 1; i >= 0; i--) {
@@ -2273,6 +2498,17 @@
         if (_aoePicker.active && ev.button === 0) {
             const [wx, wy] = clientToCanvas(ev);
             _aoePicker.commit(wx, wy);
+            ev.preventDefault();
+            return;
+        }
+        // v2.49.135: target picker intercepts left-click so the
+        // click-to-pick gesture doesn't start a token drag. Right-
+        // click is handled by _handleRightClick above (decrements or
+        // cancels). The picker stays open until the required count
+        // is reached (auto-commit), Enter is pressed, or Esc cancels.
+        if (_targetPicker.active && ev.button === 0) {
+            const [wx, wy] = clientToCanvas(ev);
+            _targetPicker.addPick(wx, wy);
             ev.preventDefault();
             return;
         }
@@ -2385,6 +2621,19 @@
         if (ev.key === 'Escape' && _rulerPicker.active) {
             _rulerPicker.cancel();
             return;
+        }
+        // v2.49.135: Esc cancels an active target-picker; Enter
+        // commits the picks so far (under-quota commits allowed).
+        if (_targetPicker.active) {
+            if (ev.key === 'Escape') {
+                _targetPicker.cancel();
+                return;
+            }
+            if (ev.key === 'Enter' || ev.key === 'NumpadEnter') {
+                if (_targetPicker._totalPicked() > 0) _targetPicker.commit();
+                else _targetPicker.cancel();
+                return;
+            }
         }
         if (ev.key === 'Escape' && spawnArmingCharId != null) {
             window.vttCancelSpawnArming();

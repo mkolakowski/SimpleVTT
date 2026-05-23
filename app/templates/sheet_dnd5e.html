@@ -2951,6 +2951,63 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         // renders the Place AoE button.
                         _spTgt = {};
                     } else if (!_spTgt.target_combatant_id && !_spTgt.target_character_id) {
+                        // v2.49.135: multi-beam attack-roll spells
+                        // (Scorching Ray, Eldritch Blast L5+) open the
+                        // canvas multi-target picker BEFORE the cast
+                        // fires. Required count = base 1 beam +
+                        // damage_scaling.extra_beams (cantrip character-
+                        // level scaling) + (slot - level) × extra_beams
+                        // _per_slot_above_base (Scorching Ray RAW
+                        // upcast). When > 1, the canvas picker fires;
+                        // when == 1, falls through to the existing
+                        // single-target modal picker below.
+                        let _beamCount = 1;
+                        try {
+                            const _detail = await _fetchSpellDetail(s.name);
+                            const _act = _detail && Array.isArray(_detail.actions)
+                                ? _detail.actions.find(a => a && a.attack_roll && a.damage)
+                                : null;
+                            if (_act) {
+                                const _scaling = Array.isArray(_act.damage_scaling) ? _act.damage_scaling : [];
+                                const _myLvl = parseInt({{ char.sheet.get('level', 1) | int }}, 10) || 1;
+                                const _tiers = _scaling
+                                    .filter(t => t && (parseInt(t.level, 10) || 1) <= _myLvl)
+                                    .sort((a, b) => (parseInt(b.level, 10) || 0) - (parseInt(a.level, 10) || 0));
+                                const _tier = _tiers[0];
+                                _beamCount = 1 + (parseInt(_tier && _tier.extra_beams, 10) || 0);
+                                const _eppba = parseInt(_act.extra_beams_per_slot_above_base, 10) || 0;
+                                const _slotDelta = Math.max(0, lvl - (parseInt(s.level, 10) || 0));
+                                _beamCount += _slotDelta * _eppba;
+                            }
+                        } catch (_) {}
+                        if (_beamCount > 1 && typeof window.vttOpenMultiTargetPicker === 'function') {
+                            const _picked = await window.vttOpenMultiTargetPicker({
+                                required: _beamCount,
+                                spellName: s.name || 'Spell',
+                                casterCharId: {{ char.id }},
+                            });
+                            if (_picked === null) {
+                                // Cancelled — revert optimistic slot decrement.
+                                if (slotRow) {
+                                    slotRow.dataset.used = prevUsed;
+                                    if (window._ssSyncInputs) window._ssSyncInputs(slotRow);
+                                    if (window._ssRenderPips) window._ssRenderPips(slotRow);
+                                }
+                                btn.disabled = false;
+                                return;
+                            }
+                            // _picked is an Array<combatant_id> with
+                            // duplicates allowed (3 beams on 1 token =
+                            // [id, id, id]). Server's existing target_
+                            // combatant_ids loop iterates per-id so the
+                            // stacking falls out naturally.
+                            _spTgt = {
+                                target_combatant_id: _picked[0] || '',
+                                target_character_id: null,
+                                target_name: '',
+                                target_combatant_ids: _picked,
+                            };
+                        } else if (!_spTgt.target_combatant_id && !_spTgt.target_character_id) {
                         // v2.29.0: prompt the target-picker modal whenever no
                         // target is set. Self-cast / utility spells (Misty
                         // Step, Mage Armor, Detect Magic, etc.) use the

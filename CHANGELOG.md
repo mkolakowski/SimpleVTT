@@ -10,6 +10,45 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.135] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Canvas multi-target picker for multi-beam spells (Phase 1 of the multi-target overhaul).** New `_targetPicker` in `tabletop.js` — crosshair cursor, click each token to add a beam, right-click to undo, Enter to commit, auto-commit when the required count is met. Per-token `×N` badge when the same target is picked more than once (stacking — RAW PHB allows putting multiple Scorching Ray beams / Magic Missile darts on one creature). Wired into the sheet's `.sp-cast` handler: when the spell has > 1 beam (`damage_scaling.extra_beams` from cantrip scaling + `extra_beams_per_slot_above_base * (slot_level - spell.level)` from the v2.49.127 upcast mechanism), the canvas picker fires before the cast. Single-beam spells fall through to the existing single-target modal picker unchanged. Server-side contract unchanged — picks ride through as `target_combatant_ids` with duplicates allowed, the existing per-id loop iterates naturally.
+**Description:** Three file edits + one CSS rule. **(1)** `app/static/tabletop.js` — added `_targetPicker` module (state: active, required, spellName, casterCharId, picks: Map<token.id, count>, _resolve; methods: start/cancel/commit/addPick/removePick/_totalPicked/_cleanup). Exposed `window.vttOpenMultiTargetPicker({ required, spellName, casterCharId })` returning a Promise<Array<combatant_id>>. Added picker-active class management + hint banner ("🎯 Spell · pick 0 / 3 targets · click target · right-click to undo · Enter to commit · Esc to cancel"). Wired into the canvas mousedown (left-click picks), `_handleRightClick` (right-click decrements or cancels on empty-canvas), and the document keydown (Enter commits, Esc cancels). Added a render-side draw block that renders an accent-purple ring around each picked token + a `×N` badge in the upper-right when count > 1. **(2)** `app/templates/tabletop.html` — added `body.target-picker-active` CSS rule mirroring `body.aoe-picker-active` so the cursor becomes a crosshair across the canvas / canvas host / map pane. **(3)** `app/templates/sheet_dnd5e.html::sp-cast` handler — new branch inside the existing "no pre-selected target" else-if that computes beam count from the SRD-enriched spell action (read `damage_scaling[].extra_beams` for the highest-eligible tier + `extra_beams_per_slot_above_base × (slot_level - spell.level)`). When > 1, calls `window.vttOpenMultiTargetPicker`, awaits the pick list, and attaches it as `target_combatant_ids` on the cast body. Cancellation reverts the optimistic slot decrement and aborts the cast.
+**Description (cont):** Why a canvas picker, not the existing modal. The v2.29.0 `_promptTargetPicker` (single-target modal with a list of token rows) is fine for picking one target from a roster — Bardic Inspiration, Lay on Hands, Cutting Words all use it. But for multi-beam spells the player wants to point AT specific tokens on the map (RAW: "make a separate attack roll for each beam — you can direct the beams at the same target or different ones"). A list-based picker for picking 3 targets from 5 bandits is awkward; a crosshair-clicks-on-the-map picker matches the spatial nature of the decision. The two pickers coexist: canvas picker for multi-beam, modal for single-target.
+**Description (cont 2):** Why expose `vttOpenMultiTargetPicker` from the canvas IIFE. Same pattern as `vttHighlightCombatant` (v2.49.133), `_openAoePicker` (v2.45.0), `vttSetSpawnContext` (older) — the sheet lives in a separate IIFE that doesn't have direct access to the canvas `tokens` array. Exposing a Promise-returning function lets the sheet `await` the result and proceed (or cancel) without needing to know how the picker resolves token ids. The function returns `null` on cancel and an `Array<combatant_id>` with duplicates allowed on commit.
+**Description (cont 3):** Why stacking via duplicate ids (vs. a count-per-id map). The server's `/cast_spell` has a `target_combatant_ids: list[str]` field that the multi-beam loop iterates per id. Passing `[bandit, bandit, bandit]` cleanly resolves to "3 beams on this bandit" without any new server contract. The picker's internal `picks: Map<token.id, count>` is flattened to the duplicate-id list at commit time. If a future feature wants per-target metadata, the map can carry it and we'd add a richer server payload then.
+**Description (cont 4):** What this enables right now in the demo. Zara's Scorching Ray at L2 fires 3 beams (v2.49.126); casting it now opens the canvas picker, the player clicks 3 bandits (or one bandit 3 times — `×3` badge appears) and confirms; the cast resolves with all three beams targeting per the picks. The v2.49.125 Empowered Spell pool reroll still works across beams. Upcast Scorching Ray (L3 slot = 4 beams via v2.49.127) gets a 4-target picker.
+**Description (cont 5):** Filed for follow-up commits.
+  - **Pre-cast picker on weapon attacks** (`.atk-strike` handler): currently auto-uses the last-selected target; adding the picker fires the same flow on the attack button.
+  - **Pre-cast picker on class features that need targets** (Cutting Words, Bardic Inspiration, Lay on Hands): currently use the modal `showTargetPicker`. Keep the modal for roster-based picks (allies) but offer the canvas picker as an alternative for enemy-targeting features.
+  - **Post-cast roll-log button**: when a cast lands targetless from a direct-API call or a UI fallback, render a "Select N Targets" button on the chat card that re-fires the picker + retroactively applies damage. Requires a new server endpoint (`/cast_spell/{cast_id}/apply_targets`) to mutate the existing cast.
+  - **Multi-dart Magic Missile**: the engine currently treats Magic Missile as a single 1d4+1 hit. Needs auto-hit multi-dart damage (no attack rolls; each dart hits automatically). Requires a separate damage path in `/cast_spell` for `auto_hit: true` multi-target spells.
+  - **Multi-target picker for the GM Roller**: rare use case, lowest priority.
+**Description (cont 6):** Verification. (a) Curl `/version` confirms v2.49.135 live. (b) 35/35 cast-spell + metamagic harness tests pass (server contract unchanged, picker just feeds the existing `target_combatant_ids` field). (c) Manual smoke: Zara cast Scorching Ray, canvas picker opened, clicked a bandit 3 times → `×3` badge appeared on the token → auto-committed when the 3rd click brought count to required → cast fired with the bandit id 3 times in `target_combatant_ids` → all 3 beams resolved against the bandit. (d) Picker cancel via Esc / right-click-on-empty-canvas correctly reverts the optimistic slot decrement so no slot is burned on cancel.
+
+### Added
+- `app/static/tabletop.js::_targetPicker` + `window.vttOpenMultiTargetPicker` — canvas-based crosshair multi-target picker.
+- `app/static/tabletop.js::render` — per-token `×N` badge + accent ring when picker is active.
+- `app/templates/tabletop.html` — `body.target-picker-active` cursor CSS.
+- `app/templates/sheet_dnd5e.html::sp-cast` — multi-beam picker branch (uses `damage_scaling.extra_beams` + `extra_beams_per_slot_above_base` to compute required count).
+
+### Notes
+- **Server contract unchanged.** Picks ride through as `target_combatant_ids` (existing field from v2.49.85); duplicates are intentional (stacking).
+- **Single-beam spells unchanged.** Fall through to the existing `_promptTargetPicker` modal when no pre-selected target.
+- **Pre-existing target ignored when multi-beam.** If the player has a single token pre-selected via dbl-click target state, the multi-beam picker still opens (the pre-selection isn't enough to fill the beam count). The picker starts empty so the player can build the full target list intentionally.
+- **No harness test for the picker UI itself.** The Playwright suite at `tests/harness_ui/` could add a click-through but doesn't yet. Server-side contract is covered by the existing `test_cast_spell_attack.py` tests.
+
+### Filed
+- **Attack button picker** — `.atk-strike` handler integration (currently uses last-selected target only).
+- **Class-feature picker variants** — Cutting Words / Bardic Inspiration / Lay on Hands could optionally use the canvas picker.
+- **Post-cast roll-log "Select Targets" button** — for direct-API casts that land targetless.
+- **Magic Missile multi-dart engine work** — auto-hit per dart, no attack rolls; requires a separate damage branch in `/cast_spell`.
+- **GM Roller multi-target** — rare but possible.
+- **Pre-selected target as starter pick** — auto-populate the picker's first pick from `_targeting.tokenIds` so the player only adds the additional N-1 beams instead of starting from scratch.
+
+---
+
 ## [2.49.134] - 2026-05-22
 
 **Schema version:** 56
