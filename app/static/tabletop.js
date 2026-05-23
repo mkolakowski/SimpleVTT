@@ -1610,7 +1610,8 @@
             ctx.save();
             ctx.fillStyle = 'rgba(74, 222, 128, 0.06)';
             ctx.strokeStyle = '#4ade80';
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 2;        // v2.49.144: 1.5 → 2 for HD crispness
+            ctx.lineCap = 'round';    // v2.49.144: smoother dash endpoints
             ctx.setLineDash([6, 4]);
             ctx.beginPath();
             ctx.arc(
@@ -1731,18 +1732,24 @@
             if (Math.hypot(toX - fromX, toY - fromY) > 8) {
                 const _outOfRange = _tpOutOfRange;
                 ctx.save();
+                // v2.49.144: HD ruler polish — round line caps + 2px
+                // baseline width so the dashed pattern renders as
+                // crisp pills instead of fuzzy chevrons. Endpoint
+                // pixel-snap (Math.round) eliminates sub-pixel blur
+                // from non-integer grid-snap coordinates.
+                ctx.lineCap = 'round';
                 if (_outOfRange) {
                     ctx.strokeStyle = 'rgba(245, 158, 11, 0.95)';
                     ctx.lineWidth = 2;
                     ctx.setLineDash([4, 3]);
                 } else {
                     ctx.strokeStyle = 'rgba(220, 38, 38, 0.85)';
-                    ctx.lineWidth = 1.5;
+                    ctx.lineWidth = 2;
                     ctx.setLineDash([6, 4]);
                 }
                 ctx.beginPath();
-                ctx.moveTo(fromX, fromY);
-                ctx.lineTo(toX, toY);
+                ctx.moveTo(Math.round(fromX), Math.round(fromY));
+                ctx.lineTo(Math.round(toX), Math.round(toY));
                 ctx.stroke();
                 ctx.restore();
                 const distance_ft = _computeRulerDistanceFt(
@@ -2049,13 +2056,19 @@
             if (tailIsCursor) pts.push(_rulerPicker.cursor);
             ctx.save();
             // Segment lines.
+            // v2.49.144: HD polish — round caps + round joins so
+            // multi-segment paths read as smooth strokes instead of
+            // pixel-sharp corners. Endpoints pixel-snap for crisp
+            // dash rendering. Pre-existing 2px width kept (already HD).
             ctx.strokeStyle = '#4ade80';
             ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
             ctx.setLineDash([8, 5]);
             for (let i = 0; i < pts.length - 1; i++) {
                 ctx.beginPath();
-                ctx.moveTo(pts[i].x, pts[i].y);
-                ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+                ctx.moveTo(Math.round(pts[i].x), Math.round(pts[i].y));
+                ctx.lineTo(Math.round(pts[i + 1].x), Math.round(pts[i + 1].y));
                 ctx.stroke();
             }
             ctx.setLineDash([]);
@@ -2119,9 +2132,12 @@
         ) {
             const _radius_px = (_castHoverRing.range_ft / 5) * gridSize;
             ctx.save();
+            // v2.49.144: HD polish — 1.5px → 2px + lineCap round so
+            // the dashed ring matches the target picker's range ring.
             ctx.fillStyle = 'rgba(74, 222, 128, 0.06)';
             ctx.strokeStyle = '#4ade80';
-            ctx.lineWidth = 1.5;
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
             ctx.setLineDash([6, 4]);
             ctx.beginPath();
             ctx.arc(
@@ -2159,14 +2175,17 @@
                 if (!entry.points || entry.points.length < 1) continue;
                 const pts = entry.points;
                 ctx.save();
+                // v2.49.144: HD polish matching the local ruler tool.
                 ctx.globalAlpha = 0.6;
                 ctx.strokeStyle = '#4ade80';
                 ctx.lineWidth = 2;
+                ctx.lineCap = 'round';
+                ctx.lineJoin = 'round';
                 ctx.setLineDash([8, 5]);
                 for (let i = 0; i < pts.length - 1; i++) {
                     ctx.beginPath();
-                    ctx.moveTo(pts[i].x, pts[i].y);
-                    ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+                    ctx.moveTo(Math.round(pts[i].x), Math.round(pts[i].y));
+                    ctx.lineTo(Math.round(pts[i + 1].x), Math.round(pts[i + 1].y));
                     ctx.stroke();
                 }
                 ctx.setLineDash([]);

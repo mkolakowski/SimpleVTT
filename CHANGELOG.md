@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.144] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **HD polish across the ruler system — pixel-snapped endpoints, round line caps + joins, consistent 2px widths.** All four ruler-style canvas overlays (main ruler tool, target-picker caster→cursor line, target-picker / cast-button range rings, remote rulers from `_remoteRulers`) now share the same crisp rendering treatment: `ctx.lineCap = 'round'` for smoother dash endpoints, `ctx.lineJoin = 'round'` on multi-segment paths, `Math.round(...)` on line endpoints to land them on integer logical-pixel boundaries (no sub-pixel anti-alias blur from snapped-to-grid-center coordinates), and uniform 2px width (was a mix of 1.5px and 2px). Visual result: dashed lines render as crisp pills instead of fuzzy chevrons; the green range ring + the green ruler tool look identical in stroke style across local + broadcast variants.
+**Description:** Four edit groups in `app/static/tabletop.js`. **(1)** Target picker range ring (line ~1613) — `lineWidth: 1.5 → 2`, added `ctx.lineCap = 'round'`. **(2)** Target picker caster→cursor line (line ~1738) — in-range branch was 1.5px; bumped to 2px to match the out-of-range branch, added `ctx.lineCap = 'round'`, pixel-snapped both endpoints via `Math.round(fromX), Math.round(fromY), Math.round(toX), Math.round(toY)`. **(3)** Main ruler tool (`_rulerPicker`, line ~2050) — kept 2px width, added `ctx.lineCap = 'round'` + `ctx.lineJoin = 'round'`, pixel-snapped per-segment endpoints. **(4)** Remote rulers (`_remoteRulers`, line ~2174) — same treatment as the local tool. **(5)** Cast-button hover ring (`_castHoverRing`, line ~2133) — `lineWidth: 1.5 → 2`, added `ctx.lineCap = 'round'`. All edits gated behind comments explaining the v2.49.144 polish so the next person reading the code knows why the dash params changed.
+**Description (cont):** Why `Math.round` (vs `Math.floor` + 0.5). For ODD line widths (1px, 3px) the classic crispness trick is `Math.floor(x) + 0.5` so the line falls on a half-pixel-center boundary at 1× DPR. For EVEN widths (2px) you want `Math.round(x)` so the line straddles a pixel boundary symmetrically. All the ruler lines are now 2px, so `Math.round` is right. On a DPR=2 display, both rules converge because the backing-store has twice the resolution. The browser anti-aliases the rest.
+**Description (cont 2):** Why `lineCap: 'round'` over `'butt'` (default) or `'square'`. With `butt`, dashes have sharp rectangular ends — visible on screen as 8x2 pixel hard-edge segments, which read as "broken into chunks." With `round`, each dash gets two half-circle caps that blend into the next dash gap, giving the line a continuous-but-dashed quality. `square` extends the dash by half the line width on each end, which lengthens the apparent dash and can break the desired pattern. `round` is the standard choice for any dashed UI line.
+**Description (cont 3):** Why `lineJoin: 'round'` on multi-segment paths. The main ruler tool can draw 2+ connected segments (Phase 3D multi-segment ruler). At each waypoint vertex, the default `miter` join can produce sharp pointed corners that look pixelated, especially with dashes. `round` makes each corner a smooth quarter-arc. The remote-rulers block gets the same treatment so a broadcast multi-segment measurement looks identical.
+**Description (cont 4):** What's NOT touched. The token-drag movement breadcrumb (line ~1900) wasn't covered — it's drawn differently (solid line over arrows) and falls outside the "ruler system" the user named. Filed if it needs the same polish later. The AoE picker preview stroke (line ~1898+) wasn't touched either — its 2.5px / `[8,6]` dash is intentionally chunkier than the ruler tool for visual distinction ("this is committing a shape, not measuring distance").
+**Description (cont 5):** Verification. (a) Curl `/version` confirms v2.49.144 live. (b) Visually: target picker ruler line now renders as crisp pill-shaped dashes; the green range ring is sharper; the main ruler tool's dashes look identical to a screenshot capture; the cast-button hover ring (when hovering a Cast button on the sheet) matches the target picker's range ring style.
+
+### Changed
+- `app/static/tabletop.js::render` (4 sites) — target picker range ring, target picker ruler line, main ruler tool segments, remote rulers, cast-button hover ring. All gain `lineCap: 'round'` + integer pixel-snap; multi-segment paths gain `lineJoin: 'round'`; widths normalised to 2px.
+
+### Notes
+- **Backward compat.** Pure-rendering change. No behavior, no DOM, no payload deltas.
+- **No screenshot-diff test.** The Playwright UI suite could screenshot-compare canvas pixels but doesn't today; filed as part of v2.49.128's note.
+- **Movement breadcrumb untouched.** Different visual language (solid + arrows); leave alone.
+- **AoE picker preview untouched.** 2.5px / `[8,6]` dash is intentionally chunkier than the ruler tool.
+
+---
+
 ## [2.49.143] - 2026-05-22
 
 **Schema version:** 56
