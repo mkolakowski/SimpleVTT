@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.169] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Target picker + AoE picker honor NPC casters for self-skip + origin resolution (closes ring-state PC/NPC parity).** Pre-fix: when an NPC was the caster, the picker's caster-self-skip check only fired for PC casters (`casterCharId && token.character_id === casterCharId`), letting NPC tokens appear ringed green as a valid self-target. Same with the AoE picker — `_resolveOrigin(charId)` only resolved PC origins, blocking NPCs from using self-anchored shapes (cone, line, self-sphere, self-cube) entirely. v2.49.163 had wired NPC casters through the picker for the ruler line, but the caster-skip rendering path still assumed PC. This commit closes the parity gap with two shared helpers used by both pickers.
+**Description:** Three coordinated edits in `app/static/tabletop.js`. **(1)** New module-level `_isCasterToken(token, casterCharId, casterCombatantId)` + `_resolveCasterTokenPos(casterCharId, casterCombatantId)` helpers (~40 lines, just before `_aoePicker`). Both implement the three-tier resolution PC by `character_id`, NPC by combatant_id → `source_token_id` → `token_template_id+name`. **(2)** `_targetPicker.start()` casterPos resolution refactored to call `_resolveCasterTokenPos` — eliminates the v2.49.163 inline duplication. `_targetPicker.render()` green-ring loop's caster-skip uses `_isCasterToken(t, ...)` instead of the PC-only check. **(3)** `_aoePicker` gets a new `casterCombatantId` field (matching `_targetPicker`'s contract); `start()` accepts `opts.combatant_id` / `opts.casterCombatantId`; `_resolveOrigin` becomes a thin back-compat wrapper around `_resolveCasterTokenPos`; the self-sphere caster filter in `commit()` uses `_isCasterToken`. `_cleanup` resets the new field.
+**Description (cont):** Why extract helpers (vs inline branching). The pre-v2.49.169 code had THREE separate "is this token the caster?" checks: `_targetPicker` resolution (inline), `_targetPicker` skip-loop (inline), and `_aoePicker` self-sphere filter (inline). All three implemented the same logic differently, and only the v2.49.163 resolution branch handled NPCs at all. Extracting to two named helpers makes the contract obvious + means future picker code (multi-cone Cleave, line-AoE Lightning Bolt, etc.) gets NPC support free.
+**Description (cont 2):** Why the AoE picker NPC support is "ready-but-unused." NPCs can't currently call `/cast_spell` or `/place_aoe` (PC-only endpoints — documented in the v2.49.167 audit doc). So `_aoePicker`'s NPC origin resolution isn't exercised by any caller today. Shipping the support now means when NPC spell casting lands (or when a homebrew NPC action invokes the AoE picker via a future GM-tool), no second-pass refactor is needed.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.169 live. (b) Harness: 9-test `test_npc_attack.py` suite passes (no regression — these don't exercise the canvas picker, but they're the closest server-side coverage of NPC attacks). 16-test `test_wiki.py` passes. (c) Manual: GM clicks 🗡 Strike on a bandit, picker opens — the bandit's own token now has NO green ring (was incorrectly highlighted pre-fix). All other enemy tokens still get the green ring + crimson-on-hover treatment as before.
+
+### Added
+- `app/static/tabletop.js::_isCasterToken` — shared helper, PC + NPC three-tier resolution.
+- `app/static/tabletop.js::_resolveCasterTokenPos` — shared helper, returns `{x, y}` token center or null.
+- `_aoePicker.casterCombatantId` — new field, matches `_targetPicker`'s NPC-caster contract.
+
+### Changed
+- `_targetPicker.start` — casterPos resolution delegated to the shared helper; inline duplication removed.
+- `_targetPicker` render caster-skip — uses `_isCasterToken` (fixes the NPC-caster self-ring bug).
+- `_aoePicker.start` — accepts `combatant_id` / `casterCombatantId` body, uses shared resolver for self-anchored shape origins.
+- `_aoePicker.commit` self-sphere filter — uses `_isCasterToken`.
+- `_aoePicker._resolveOrigin` — back-compat wrapper around `_resolveCasterTokenPos`.
+
+### Notes
+- **No server change.** Pure client refactor + bug fix.
+- **No new harness test.** The bug is a render-only issue in the canvas picker; existing harness coverage doesn't exercise the picker UI. Manual verification + the existing 9-test NPC attack suite covers the server contract.
+- **Updates the v2.49.167 audit doc's accuracy:** the "Caster's own token — Skipped" entry in the targeting-system guide now applies to both PC and NPC casters as advertised. No doc edit needed.
+
+---
+
 ## [2.49.168] - 2026-05-23
 
 **Schema version:** 56

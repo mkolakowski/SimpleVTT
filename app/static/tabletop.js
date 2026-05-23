@@ -337,6 +337,54 @@
     //                       perp * L/2), matching the printed cone
     //                       template; cleaner than a circular sector
     //                       for grid play.
+    // v2.49.169: shared caster-token helpers. The picker modules
+    // independently resolved "is this token the caster's token?" via
+    // ``casterCharId`` lookups (PC-only). NPC casters (v2.49.163+)
+    // need the parallel ``casterCombatantId`` path. Extracting these
+    // two helpers means both _targetPicker and _aoePicker (and any
+    // future picker) get NPC support uniformly. Same three-tier
+    // resolution the picker.commit / _resolveOrigin paths already use.
+    function _isCasterToken(token, casterCharId, casterCombatantId) {
+        if (!token) return false;
+        if (casterCharId && token.character_id === casterCharId) return true;
+        if (casterCombatantId) {
+            const battle = (window.battle && window.battle.combatants) || [];
+            const comb = battle.find(c => c.id === casterCombatantId);
+            if (comb) {
+                if (comb.source_token_id != null && token.id === comb.source_token_id) {
+                    return true;
+                }
+                if (comb.token_template_id != null
+                        && token.token_template_id === comb.token_template_id
+                        && token.label === comb.name) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+    function _resolveCasterTokenPos(casterCharId, casterCombatantId) {
+        if (casterCharId) {
+            for (const t of tokens) {
+                if (t.character_id === casterCharId) {
+                    return { x: t.x + gridSize / 2, y: t.y + gridSize / 2 };
+                }
+            }
+        }
+        if (casterCombatantId) {
+            const battle = (window.battle && window.battle.combatants) || [];
+            const comb = battle.find(c => c.id === casterCombatantId);
+            if (comb) {
+                for (const t of tokens) {
+                    if (_isCasterToken(t, 0, casterCombatantId)) {
+                        return { x: t.x + gridSize / 2, y: t.y + gridSize / 2 };
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     const _aoePicker = {
         active: false,
         shape: '',
@@ -344,6 +392,7 @@
         secondary_ft: 0,
         spellName: '',
         casterCharId: 0,      // for self_sphere: filter caster out of target list
+        casterCombatantId: '', // v2.49.169 — NPC casters (matches _targetPicker contract)
         range_ft: 0,          // v2.49.78 Phase 3A — spell range; 0 = skip ring + dim
         origin: null,         // { x, y } canvas coords — non-null for cone/line/self-sphere
         cursor: null,         // { x, y } canvas coords
@@ -359,6 +408,9 @@
             this.secondary_ft = Number(opts.secondary_ft) || 0;
             this.spellName = String(opts.name || 'Spell');
             this.casterCharId = parseInt(opts.char_id, 10) || 0;
+            // v2.49.169: NPC caster support — same combatant_id three-
+            // tier lookup _targetPicker has used since v2.49.163.
+            this.casterCombatantId = String(opts.combatant_id || opts.casterCombatantId || '');
             // v2.49.146: accept either range_ft (number) or range_str
             // ("120 feet" / "Self (15-ft radius)"), mirroring the
             // v2.49.143 _targetPicker contract. Callers from the sheet
@@ -378,7 +430,10 @@
             this.origin = null;
             if (this.shape === 'cone' || this.shape === 'line'
                     || this.shape === 'self_sphere' || this.shape === 'self_cube') {
-                this.origin = _aoePicker._resolveOrigin(opts.char_id);
+                // v2.49.169: use the shared resolver so NPC casters
+                // (combatant_id path) can also drive self-anchored
+                // shapes — same logic _targetPicker uses for the ruler.
+                this.origin = _resolveCasterTokenPos(this.casterCharId, this.casterCombatantId);
                 if (!this.origin) {
                     this._cleanup();
                     return Promise.resolve(null);
@@ -418,10 +473,10 @@
                 // themselves — Spirit Guardians, Antimagic Field,
                 // Thunderwave etc. affect creatures "originating from"
                 // or "around" the caster, which by RAW convention
-                // excludes the caster.
+                // excludes the caster. v2.49.169: NPC casters honored
+                // via the shared _isCasterToken helper.
                 if ((this.shape === 'self_sphere' || this.shape === 'self_cube')
-                        && this.casterCharId
-                        && t.character_id === this.casterCharId) {
+                        && _isCasterToken(t, this.casterCharId, this.casterCombatantId)) {
                     continue;
                 }
                 if (!this._tokenInShape(t, canvasX, canvasY)) continue;
@@ -522,17 +577,13 @@
         },
 
         /** Resolve a {x, y} canvas-space origin for the caster's token.
-         *  Returns null if no token with ``character_id === charId``
-         *  is on the active map. */
+         *  PC casters resolve by ``character_id``; NPC casters resolve
+         *  by combatant_id → source_token_id / token_template_id+name.
+         *  Kept as a thin wrapper for back-compat with existing callers
+         *  that pass an integer char_id; the shared
+         *  ``_resolveCasterTokenPos`` does the real work. */
         _resolveOrigin(charId) {
-            const cid = parseInt(charId, 10);
-            if (!cid) return null;
-            for (const t of tokens) {
-                if (t.character_id === cid) {
-                    return { x: t.x + gridSize / 2, y: t.y + gridSize / 2 };
-                }
-            }
-            return null;
+            return _resolveCasterTokenPos(parseInt(charId, 10) || 0, '');
         },
 
         _sizePx() {
@@ -550,6 +601,7 @@
             this.secondary_ft = 0;
             this.spellName = '';
             this.casterCharId = 0;
+            this.casterCombatantId = '';
             this.range_ft = 0;
             this.origin = null;
             this.cursor = null;
@@ -610,39 +662,14 @@
             // casters resolve via combatant_id → window.battle, then
             // via the three-tier token lookup (source_token_id →
             // token_template_id+name).
-            this.casterPos = null;
-            if (this.casterCharId) {
-                for (const t of tokens) {
-                    if (t.character_id === this.casterCharId) {
-                        this.casterPos = {
-                            x: t.x + gridSize / 2,
-                            y: t.y + gridSize / 2,
-                        };
-                        break;
-                    }
-                }
-            }
-            if (!this.casterPos && this.casterCombatantId) {
-                const _battle = (window.battle && window.battle.combatants) || [];
-                const _comb = _battle.find(c => c.id === this.casterCombatantId);
-                if (_comb) {
-                    for (const t of tokens) {
-                        const _hit = (
-                            (_comb.source_token_id != null && t.id === _comb.source_token_id)
-                            || (_comb.token_template_id != null
-                                && t.token_template_id === _comb.token_template_id
-                                && t.label === _comb.name)
-                        );
-                        if (_hit) {
-                            this.casterPos = {
-                                x: t.x + gridSize / 2,
-                                y: t.y + gridSize / 2,
-                            };
-                            break;
-                        }
-                    }
-                }
-            }
+            // v2.49.169: refactored to use the shared
+            // _resolveCasterTokenPos helper. The old inline three-tier
+            // resolution (PC by character_id, then NPC by combatant_id
+            // → source_token_id / token_template_id+name) now lives in
+            // one place so _aoePicker can use it too.
+            this.casterPos = _resolveCasterTokenPos(
+                this.casterCharId, this.casterCombatantId,
+            );
             this.cursor = null;
             this.cursorRaw = null;
             // v2.49.143 — accept either a pre-parsed rangeFt OR a raw
@@ -1681,8 +1708,11 @@
                 if (t.is_hidden && !ME.isGm) continue;
                 // Skip the caster's own token — single-target spells
                 // can't target self, and showing the caster as a
-                // valid target clutters the visual.
-                if (_targetPicker.casterCharId && t.character_id === _targetPicker.casterCharId) continue;
+                // valid target clutters the visual. v2.49.169: NPC
+                // casters honored via the shared _isCasterToken helper
+                // (the pre-v2.49.169 check only fired for casterCharId,
+                // letting NPCs ring their own token green).
+                if (_isCasterToken(t, _targetPicker.casterCharId, _targetPicker.casterCombatantId)) continue;
                 const tcx = t.x + gridSize / 2;
                 const tcy = t.y + gridSize / 2;
                 const dist_ft = _computeRulerDistanceFt(
