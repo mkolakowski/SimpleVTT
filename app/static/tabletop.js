@@ -1261,6 +1261,42 @@
     // catch it.
     let _hoverCursor = null;
 
+    // v2.49.133: init-tracker → canvas hover linking. When the user
+    // hovers an .init-row / .init-entry in the side drawer (desktop
+    // only — see the @media (hover: hover) gate in tabletop.html),
+    // the bound listener calls window.vttHighlightCombatant(c) to set
+    // _initHoverTokenId. render() draws an accent-coloured glow ring
+    // around the matching token so the GM can identify which canvas
+    // token a row corresponds to without trial-and-error clicking.
+    let _initHoverTokenId = null;
+    window.vttHighlightCombatant = function (combatant) {
+        if (!combatant) {
+            if (_initHoverTokenId !== null) {
+                _initHoverTokenId = null;
+                try { render(); } catch (_) {}
+            }
+            return;
+        }
+        let foundId = null;
+        for (const t of tokens) {
+            if (combatant.source_token_id != null && combatant.source_token_id === t.id) {
+                foundId = t.id; break;
+            }
+            if (combatant.char_id && t.character_id === combatant.char_id) {
+                foundId = t.id; break;
+            }
+            if (combatant.token_template_id
+                    && t.token_template_id === combatant.token_template_id
+                    && combatant.name === t.label) {
+                foundId = t.id; break;
+            }
+        }
+        if (foundId !== _initHoverTokenId) {
+            _initHoverTokenId = foundId;
+            try { render(); } catch (_) {}
+        }
+    };
+
     function render() {
         ctx.clearRect(0, 0, MAP_W, MAP_H);
         if (showGrid) {
@@ -1317,6 +1353,30 @@
         });
         drawSpawnMarkers();
         drawMovementBreadcrumb();
+        // v2.49.133: init-tracker hover-link glow ring. Set by
+        // window.vttHighlightCombatant when the user mouses over a
+        // row in the init drawer (desktop only). Drawn before the
+        // crimson targeting ring so a tracker-hovered token that is
+        // ALSO a target gets the crimson on top (priority: explicit
+        // target > tracker hover). Hidden tokens skipped for non-GM
+        // so the glow doesn't leak hidden NPC positions.
+        if (_initHoverTokenId !== null) {
+            const t = tokens.find(tk => tk.id === _initHoverTokenId);
+            if (t && !(t.is_hidden && !ME.isGm)) {
+                const cx = t.x + gridSize / 2;
+                const cy = t.y + gridSize / 2;
+                const r = (gridSize * t.size) / 2;
+                ctx.save();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = '#a78bfa';      // accent purple (matches theme accent default)
+                ctx.shadowColor = '#a78bfa';
+                ctx.shadowBlur = 14;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r + 5, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
         // v2.21.0 Phase T.0: targeting rings drawn on top of tokens so
         // the crimson outer ring stays visible even when a portrait
         // jpg fills the token face. Skip hidden tokens for non-GM.

@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.133] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Init-tracker → canvas hover linking — mousing over a row glow-rings the matching token.** Cross-component interaction: the desktop hover handlers on `.init-row` / `.init-entry` (v2.49.131-132) now also call a new canvas API, `window.vttHighlightCombatant(c)`, which resolves the combatant → token id and renders an accent-purple glow ring around the matching token on the canvas. Lets the GM identify which canvas token a tracker row corresponds to without trial-and-error click. Mouseleave clears the highlight. Desktop-only — the matching CSS hover rules from v2.49.131-132 are already wrapped in `@media (hover: hover) and (pointer: fine)`, and JS `mouseenter`/`mouseleave` events don't fire on touch-only devices so the link stays gated naturally.
+**Description:** Two file edits. **(1)** `app/static/tabletop.js` — added a module-level `let _initHoverTokenId = null` next to `_hoverCursor`, plus a new global `window.vttHighlightCombatant = function (combatant) { ... }` that resolves the combatant to a token id via the same three-step matching used by the targeting state (source_token_id → char_id → token_template_id+name) and triggers a `render()`. The render loop gained a new ring-drawing block right after the spawn/breadcrumb passes and before the targeting rings: when `_initHoverTokenId !== null`, draws a 3px accent-purple stroke (with a 14px shadow blur for a glow effect) around the matching token. Skipped for hidden tokens when the viewer isn't the GM so the glow doesn't leak hidden NPC positions. **(2)** `app/templates/tabletop.html::renderBattle` — added a new event-binding block after the GM-specific input handlers and before the buff-end button binder: `list.querySelectorAll('.init-row, .init-entry').forEach(row => row.addEventListener('mouseenter', ...) / 'mouseleave')`. Resolves the row's `data-idx` to the combatant via `battle.combatants[idx]` and calls `window.vttHighlightCombatant(c)` on enter, `(null)` on leave.
+**Description (cont):** Why expose `window.vttHighlightCombatant` instead of `window.vttHighlightToken(tokenId)`. The init tracker doesn't know which canvas token corresponds to a given combatant — that resolution is canvas-side knowledge (the `tokens` array lives inside the canvas IIFE). Exposing a combatant-level API keeps the resolution logic where the data lives and gives the tracker a one-line call. The render-side helper still allows future per-token highlight use cases (e.g., chat-card hover, sheet-link hover) by introducing `window.vttHighlightToken(id)` as a sibling.
+**Description (cont 2):** Why glow purple instead of theme-accent. The canvas isn't CSS-styled — it's a `<canvas>` 2D context with hard-coded fill/stroke colours. Reading the theme's `--accent` from JS would require resolving the CSS variable at render time (`getComputedStyle(document.documentElement).getPropertyValue('--accent')`), parsing the value, handling theme switches mid-game. For v1 the hard-coded `#a78bfa` (the dark theme's accent purple) is the right tradeoff — visually consistent with the in-page accent highlights for the majority of users on the default dark theme. Filed: read the theme accent dynamically so the glow ring matches the user's chosen palette.
+**Description (cont 3):** Why the glow ring goes BEFORE the targeting ring in render order. Layering: skull overlay (deadest) → spawn markers → movement breadcrumb → **init-hover glow** → targeting rings (crimson) → concentration AoEs → picker preview → ruler. The targeting ring is a stronger semantic state ("explicitly selected as an attack target") than init hover ("transiently hovering"), so it should stay on top. The glow ring sits just below so a tracker-hovered token that is ALSO a current target gets the crimson ring on top — matches the "explicit > transient" hierarchy elsewhere.
+**Description (cont 4):** Why `mouseenter` / `mouseleave` not `mouseover` / `mouseout`. The latter bubble through child elements (firing once per child traverse), the former fire only on the bound element. Init rows have nested children (`.mini-header`, `.mini-header-info`, `.init-name`, etc.) and using `mouseover` would cause noisy enter/leave pairs as the cursor moves across children. `mouseenter`/`mouseleave` fire once per row entry/exit regardless of internal traversal — exactly the semantics needed.
+**Description (cont 5):** Verification. (a) Curl `/version` confirms v2.49.133 live after `docker compose up -d --build app`. (b) Visually: hovering Kael Brightleaf's row in the GM init tracker shows the glow ring on his token on the canvas; moving to a different row instantly switches the glow to the new token; mouseleave (cursor off the tracker) clears the glow. (c) Tested with both PC (char_id link), NPC bandit (source_token_id link), and template-matched NPCs — all three resolution paths resolve correctly. (d) Hovering a row whose token is off-map (or never spawned) is a no-op (foundId stays null).
+
+### Added
+- `app/static/tabletop.js::window.vttHighlightCombatant` — global API that resolves a combatant → canvas token id and triggers a render with an accent-purple glow ring around the matching token.
+- `app/static/tabletop.js::render` — new ring-drawing block between the movement breadcrumb pass and the targeting ring pass.
+- `app/templates/tabletop.html::renderBattle` — `mouseenter`/`mouseleave` handlers on `.init-row` + `.init-entry` that call `window.vttHighlightCombatant`.
+
+### Notes
+- **Desktop-only.** JS `mouseenter`/`mouseleave` events don't fire on touch-only devices, so the linkage stays naturally gated to mouse / trackpad input.
+- **Three-step combatant→token resolution** matches the targeting state's matcher: `source_token_id` (spawned NPC) → `char_id` (PC) → `token_template_id + name` (templated NPC).
+- **Glow colour fixed.** Hard-coded `#a78bfa` for v1; filed to read the theme accent dynamically once a theme-switcher event hook lands.
+
+### Filed
+- **Theme-aware glow colour.** Read `getComputedStyle(document.documentElement).getPropertyValue('--accent')` at render time so the glow matches non-default themes.
+- **Hover→tracker reverse link.** Inverse direction: hovering a canvas token highlights its row in the init tracker. Symmetric, useful for the "who is this NPC?" GM-side workflow.
+- **Hover→sheet link**. Hovering a row could pop a sheet quick-peek on the canvas, distinct from the click-to-expand init-card-sheet.
+
+---
+
 ## [2.49.132] - 2026-05-22
 
 **Schema version:** 56

@@ -5503,6 +5503,33 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             }));
         }
 
+        // v2.49.133: init-tracker → canvas hover linking. When the
+        // user mouses over a row, ask the canvas to glow-ring the
+        // matching token (window.vttHighlightCombatant resolves the
+        // combatant → token id and triggers a render). Mouseleave
+        // clears it. Bound for both .init-row (player view) and
+        // .init-entry (GM view). Desktop-only — the matching CSS
+        // hover rules at line ~1080-1140 are wrapped in
+        // @media (hover: hover) and (pointer: fine), and the JS
+        // mouseenter/mouseleave events naturally don't fire on
+        // touch-only devices, so this stays cleanly gated without
+        // a second MQ check.
+        list.querySelectorAll('.init-row, .init-entry').forEach(row => {
+            const idx = parseInt(row.dataset.idx, 10);
+            if (!Number.isFinite(idx)) return;
+            row.addEventListener('mouseenter', () => {
+                const c = battle.combatants[idx];
+                if (c && typeof window.vttHighlightCombatant === 'function') {
+                    window.vttHighlightCombatant(c);
+                }
+            });
+            row.addEventListener('mouseleave', () => {
+                if (typeof window.vttHighlightCombatant === 'function') {
+                    window.vttHighlightCombatant(null);
+                }
+            });
+        });
+
         // v2.19.0 Phase C.1: buff × button — end a buff manually. Fires
         // /end_buff which removes the entry server-side + broadcasts
         // buff_update. Bound for both GM and players (anyone who owns
