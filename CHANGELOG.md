@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.184] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix: v2.49.183 NPC mini-sheet header threw ReferenceError on `escapeHTML`, blanking the Battle tab.** User reported sheets not displaying in Battle tab. Root cause: my v2.49.183 portrait-header block called `escapeHTML(...)` inside `buildMonsterInitSheet`, but `escapeHTML` is defined inside the `tabletop.js` IIFE (line 5475) — it's not reachable from the `<script>` block in `tabletop.html` where `buildMonsterInitSheet` lives. Every NPC mini-sheet render threw, the surrounding `renderBattle` swallowed the error or surfaced it to the console, and the Battle tab's combatant cards came up blank.
+**Description:** One block edit in `app/templates/tabletop.html::buildMonsterInitSheet`. Added a local `_esc(s)` helper (~3 lines) that does the same `[&<>'"]` replacement `escapeHTML` does; replaced all `escapeHTML(...)` calls in the v2.49.183 header block with `_esc(...)`. Also tightened the glyph initial computation: was `(combatant.name || tmpl.name || '?').trim()[0].toUpperCase()` which throws when name is an empty string (`''.trim()[0]` → `undefined`, then `.toUpperCase()` → TypeError). Now uses `String(... || '?').trim()` then `.charAt(0) || '?'` which always returns a string. Defensive against malformed combatant entries.
+**Description (cont):** Why a local helper (vs exposing `escapeHTML` on `window`). The tabletop.js IIFE intentionally scopes its helpers; adding a `window.escapeHTML = escapeHTML` line at the end of that IIFE would work but adds a cross-file dependency that's invisible to the reader. A local helper inside the function that uses it is more discoverable and matches the convention of the surrounding `tabletop.html` code (e.g., the monster-strike-btn handler builds raw template strings without escaping).
+**Description (cont 2):** How this slipped through. The 35-test regression I ran on v2.49.183 covered attack endpoints + wiki rendering. None of those tests exercise the NPC mini-sheet's expanded body — the harness validates server contracts, not canvas/DOM render paths. Filed as a meta-followup (matching the v2.49.176 round-trip suggestion): a Playwright-style harness that walks the Battle tab, expands each combatant, and asserts the mini-sheet body contains expected content would catch this class of bug. The existing `tests/harness_ui/` directory has 7 tests but doesn't exercise expand/collapse paths.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.184 live. (b) Hard-refresh demo → Battle tab → expand any NPC (Soren / Vex / Grixxa / bandits / thug) → mini-sheet now renders the v2.49.183 header (portrait + name + sub) + HP bar + AC/Spd chips + ability grid + tabs as designed. (c) Expand any PC → unchanged behavior (PC uses `_mini_sheet_card.html`, not `buildMonsterInitSheet`). (d) Regression: 35-test suite still passes.
+
+### Fixed
+- `app/templates/tabletop.html::buildMonsterInitSheet` — replaced all v2.49.183 `escapeHTML(...)` cross-file references with a local `_esc(...)` helper; tightened the first-letter glyph computation to handle empty names safely.
+
+### Notes
+- **No server / endpoint change.** Pure client render-path fix.
+- **v2.49.183 features unaffected.** Header + HP bar render correctly once the ReferenceError is gone.
+- **Filed meta-follow-up:** DOM-render harness coverage for the init-tracker expand path would catch this class of bug without needing a manual click-through.
+
+---
+
 ## [2.49.183] - 2026-05-23
 
 **Schema version:** 56

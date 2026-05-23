@@ -5037,28 +5037,37 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         // portrait jpg ships), name + size·type sub line. No collapse
         // arrow because the NPC mini-sheet is always shown when the
         // init-card is expanded; no toggle behavior here.
+        // v2.49.184: local _esc helper because escapeHTML in tabletop.js
+        // is IIFE-scoped and not reachable from this <script> block —
+        // the v2.49.183 cross-file reference threw ReferenceError and
+        // broke every NPC mini-sheet render (Battle tab went blank).
+        const _esc = (s) => String(s == null ? '' : s).replace(
+            /[&<>'"]/g,
+            c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]),
+        );
         const _ringColor = combatant.color || tmpl.color || 'var(--accent)';
         const _portraitUrl = combatant.image_url || tmpl.image_url || '';
-        const _initialGlyph = (combatant.name || tmpl.name || '?').trim()[0].toUpperCase();
+        const _nameForGlyph = String(combatant.name || tmpl.name || '?').trim();
+        const _initialGlyph = (_nameForGlyph.charAt(0) || '?').toUpperCase();
         const _portraitInner = _portraitUrl
-            ? `<img src="${escapeHTML(_portraitUrl)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
-            : `<span style="color:#fff;font-size:14px;font-weight:700;">${escapeHTML(_initialGlyph)}</span>`;
+            ? `<img src="${_esc(_portraitUrl)}" alt="" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+            : `<span style="color:#fff;font-size:14px;font-weight:700;">${_esc(_initialGlyph)}</span>`;
         const _subBits = [];
-        if (sh.race) _subBits.push(escapeHTML(sh.race));
+        if (sh.race) _subBits.push(_esc(sh.race));
         else {
-            const _sz = sh.size ? escapeHTML(sh.size) : '';
-            const _tp = sh.type ? escapeHTML(sh.type) : '';
+            const _sz = sh.size ? _esc(sh.size) : '';
+            const _tp = sh.type ? _esc(sh.type) : '';
             const _st = [_sz, _tp].filter(Boolean).join(' ');
             if (_st) _subBits.push(_st);
         }
-        if (sh.background) _subBits.push(escapeHTML(sh.background));
+        if (sh.background) _subBits.push(_esc(sh.background));
         const _subLine = _subBits.join(' · ');
         html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 0 10px;border-bottom:1px solid var(--border);margin-bottom:8px;">
-            <div style="width:36px;height:36px;border-radius:50%;background:${escapeHTML(_ringColor)};border:2px solid ${escapeHTML(_ringColor)};display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
+            <div style="width:36px;height:36px;border-radius:50%;background:${_esc(_ringColor)};border:2px solid ${_esc(_ringColor)};display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;">
                 ${_portraitInner}
             </div>
             <div style="flex:1;min-width:0;">
-                <div style="font-weight:700;font-size:13px;">${escapeHTML(combatant.name || tmpl.name)}</div>
+                <div style="font-weight:700;font-size:13px;">${_esc(combatant.name || tmpl.name)}</div>
                 ${_subLine ? `<div style="font-size:10px;color:var(--fg-mute);">${_subLine}</div>` : ''}
             </div>
         </div>`;
