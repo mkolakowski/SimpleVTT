@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.151] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Init-tracker weapon attack picker now shows the range-gate ring + amber out-of-range warning.** v2.49.143 wired `rangeStr` through `.sp-cast` (sheet spells) + `.atk-strike` (sheet weapons) + `.mini-cast-btn` (init-tracker spells), but `.mini-strike-btn` (init-tracker weapons) was missing because the button didn't carry a `data-attack-range` attribute. Now: `_mini_sheet_card.html` stamps `data-attack-range="{{ a.range or '' }}"` on each `.mini-strike-btn`, and the `tabletop.html` handler reads `btn.dataset.attackRange` and passes it as `rangeStr` to `vttOpenMultiTargetPicker`. The amber out-of-range warning fires consistently across every weapon-attack surface now.
+**Description:** Two edits. **(1)** `app/templates/_mini_sheet_card.html::.mini-strike-btn` — added `data-attack-range="{{ a.range or '' }}"` to the attack button stamping loop, sitting next to the existing `data-attack-*` attributes (bonus / damage / damage-type / save-ability / save-dc). **(2)** `app/templates/tabletop.html::.mini-strike-btn` PC click handler — picker call now passes `rangeStr: btn.dataset.attackRange || ''` alongside the existing `required: 1` / `spellName: atkName` / `casterCharId: charId`. Empty string is fine — the picker's parser returns null + skips the gate when the range field is empty (defense for older mini-sheet cards that don't carry the attr).
+**Description (cont):** Why this is purely a client-side UX fix. The server's `/attack` endpoint has had the range gate since v2.49.76 (Phase 2D) — the weapon's `range` field on the character sheet is read server-side and `_check_cast_range` enforces it. v2.49.143 already added the client picker warning for sheet-side `.atk-strike` casts; this commit just extends it to init-tracker `.mini-strike-btn` casts. The GM tier-1 auto-bypass (the most likely cause of the user's "dagger hit at 75 ft" / "Pip shortsword at 50 ft" reports) is unchanged — the picker still shows the warning to the GM (helpful client cue), but the server bypass for tier-1 is by design.
+**Description (cont 2):** What this DOESN'T fix. **Pre-selected target case** — when the player double-clicks an enemy token to set `_targeting` state, then clicks Strike on a weapon, the picker doesn't fire (the target is already chosen) and no warning shows. The server-side gate still rejects for players but the GM tier-1 still bypasses silently. Two follow-ups (already filed) address this: GM-bypass audit badge (chat card surfaces "GM range override" annotation), and pre-cast click-time range warning toast (sheet-side check before sending the request).
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.151 live. (b) Manual: open the GM init tracker, expand any PC's row, click Strike on a weapon without a pre-selected target → picker opens with the range gate ring around the caster + amber warning when the cursor strays past the weapon's range. (c) Pip's Shortsword (5 ft) → tight green ring around Pip's token; bandit at 30 ft = amber warning. (d) Zara's Dagger (20/60 ft) → 60 ft green ring; cursor at 75 ft = amber `⚠ 75 ft / 60 ft` chip.
+
+### Added
+- `app/templates/_mini_sheet_card.html::.mini-strike-btn` — `data-attack-range` attribute stamped from `a.range`.
+- `app/templates/tabletop.html::.mini-strike-btn` PC handler — passes `rangeStr` to the picker.
+
+### Notes
+- **Server contract unchanged.** Range is enforced server-side via `_check_cast_range` since v2.49.76; this commit only adds the missing client-side visual cue for the init-tracker surface.
+- **Empty rangeStr is safe.** The parser returns null on empty + the picker skips the gate ring.
+
+### Filed
+- **Pre-selected-target range warning** — when the player has dbl-clicked a target before clicking Strike, the picker doesn't fire and no client-side cue shows.
+- **GM-bypass audit badge** (already filed v2.49.148) — chat-card annotation when GM bypasses an out-of-range click.
+
+---
+
 ## [2.49.150] - 2026-05-23
 
 **Schema version:** 56

@@ -4396,10 +4396,16 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         && window._targetingState.getTargets()) || [];
                     let _t0 = _targets[0] || null;
                     if (!_t0 && typeof window.vttOpenMultiTargetPicker === 'function') {
+                        // v2.49.151: pass the weapon's range so the
+                        // picker draws the range gate ring (v2.49.143)
+                        // and amber out-of-range warning. data-attack-
+                        // range is stamped on the .mini-strike-btn by
+                        // _mini_sheet_card.html in this same commit.
                         const _picked = await window.vttOpenMultiTargetPicker({
                             required: 1,
                             spellName: atkName,
                             casterCharId: charId,
+                            rangeStr: btn.dataset.attackRange || '',
                         });
                         if (_picked === null) {
                             btn.disabled = false;
