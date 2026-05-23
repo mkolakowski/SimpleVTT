@@ -2556,6 +2556,33 @@ def campaign_view(
         else []
     )
     tmpl_objs = db.query(TokenTemplate).filter(TokenTemplate.campaign_id == campaign.id).order_by(TokenTemplate.name).all()
+    # v2.49.180: enrich each PC's spell list with catalog metadata so
+    # the spell-row chips (range / damage / save / etc., added in
+    # v2.49.177-179) render with full data instead of just the bare
+    # ``{name, level, _slug}`` the demo seed ships. _enrich_pc_spell_
+    # from_catalog uses setdefault so any inline data on the sheet
+    # (Lightning Bolt's damage / save_ability override, homebrew, etc.)
+    # wins over the catalog. Mutates char.sheet in-place — safe
+    # because SQLAlchemy session is read-only for this view; the
+    # mutated copy doesn't persist to the DB.
+    for ch in characters:
+        if (ch.template or "dnd5e") != "dnd5e":
+            continue
+        _sheet = dict(ch.sheet or {})
+        _spells = list(_sheet.get("spells") or [])
+        if not _spells:
+            continue
+        _sheet["spells"] = [
+            _enrich_pc_spell_from_catalog(dict(s) if isinstance(s, dict) else s, campaign.id)
+            for s in _spells
+        ]
+        # Detach from the SQLAlchemy session so the in-memory mutation
+        # doesn't get auto-flushed back to the DB on the next commit.
+        try:
+            db.expunge(ch)
+        except Exception:  # noqa: BLE001
+            pass
+        ch.sheet = _sheet
     char_data = [
         {
             "id": c.id,
@@ -19980,6 +20007,59 @@ def _monster_dict_to_sheet(m: dict, *, base: Optional[dict] = None) -> dict:
     # them up. Caller handles attack-button projection.
     if m.get("actions"):
         out["actions"] = m.get("actions")
+    return out
+
+
+def _enrich_pc_spell_from_catalog(spell: dict, campaign_id: int) -> dict:
+    """v2.49.180: PC spell entries on the demo sheet carry only
+    ``{name, level, _slug, casting_time}`` — no damage / range /
+    save_ability / attack_roll. The mini-sheet + full-sheet spell
+    rows render compact chips for those fields when present
+    (v2.49.177-179), so without enrichment the rows render bare.
+
+    This helper merges the catalog spell's top-level fields (range,
+    school, duration, components, desc, concentration, ritual) AND
+    its ``actions[0]`` mechanical fields (damage, damage_type,
+    attack_roll, save_ability, aoe_targets, area) into the spell
+    entry using ``setdefault`` — sheet-side overrides (homebrew,
+    partial customization, the v2.46.0 Lightning Bolt inline data)
+    take precedence over the catalog.
+
+    Caster-dependent fields (attack_bonus, save_dc) are NOT
+    populated here — those need the character's spellcasting
+    ability mod + prof bonus. Filed as a follow-up; the existing
+    no-attack-bonus / no-save-dc rows still render damage / range
+    / save_ability chips, which is the user's immediate ask.
+
+    Returns the enriched spell dict (or the original if no _slug or
+    no catalog hit).
+    """
+    slug = (spell.get("_slug") or "").strip().lower()
+    if not slug:
+        return spell
+    hit = local_content.resolve(slug, type="spells", campaign_id=campaign_id)
+    if not hit:
+        return spell
+    srd_rec, _src = hit
+    out = dict(spell)
+    # Top-level catalog fields the spell row chips read.
+    for key in (
+        "range", "school", "duration", "components", "desc",
+        "concentration", "ritual", "casting_time",
+    ):
+        if srd_rec.get(key) is not None:
+            out.setdefault(key, srd_rec[key])
+    # Mechanical fields from actions[0] (damage, type, attack/save).
+    spell_actions = srd_rec.get("actions") or []
+    if spell_actions and isinstance(spell_actions[0], dict):
+        sa = spell_actions[0]
+        for key in (
+            "damage", "damage_type", "damage_scaling",
+            "attack_roll", "save_ability",
+            "aoe_targets", "area",
+        ):
+            if sa.get(key) not in (None, "", 0, []):
+                out.setdefault(key, sa[key])
     return out
 
 

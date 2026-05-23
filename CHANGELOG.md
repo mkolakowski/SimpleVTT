@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.180] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **PC spell rows now display range / damage / save chips on the demo characters (catalog enrichment at sheet render).** User screenshot showed every PC spell rendering bare (just name + 🪄 Cast) EXCEPT Lightning Bolt — the v2.49.177-179 chips were correctly conditional but the data was missing. Root cause: the demo seed stores PC spells as `{name, level, _slug, casting_time}` only; mechanical fields (damage, range, save_ability) live in the spell catalog (`app/data/local/dnd5e/spells/*.json`). Lightning Bolt is the only spell in `demo_seed.py` with inlined `damage` + `save_ability` (added in v2.46.0 for AoE test coverage). Fix: enrich each PC's spell list with catalog metadata at tabletop-page render — mirrors the v2.49.174 NPC `_resolve_spell_slug_action` pattern, applied to the PC spell list.
+**Description:** Two coordinated edits in `app/routes/tabletop_routes.py`. **(1)** New `_enrich_pc_spell_from_catalog(spell, campaign_id)` helper (~40 lines) right before `_resolve_spell_slug_action`. Calls `local_content.resolve(slug, type="spells", ...)` (same resolver `/cast_spell` already uses for slot-spend enrichment). Merges TOP-LEVEL catalog fields (`range`, `school`, `duration`, `components`, `desc`, `concentration`, `ritual`, `casting_time`) AND `actions[0]` mechanical fields (`damage`, `damage_type`, `damage_scaling`, `attack_roll`, `save_ability`, `aoe_targets`, `area`) into the spell entry via `setdefault` — sheet-side inline overrides (Lightning Bolt, homebrew customizations) win over the catalog. **(2)** Tabletop page render (~line 2558) — added a per-character spell-list enrichment loop right after the TokenTemplate query. Iterates `characters` list, deep-copies each spell entry through the helper, mutates `ch.sheet["spells"]` in-place. Detaches the SQLAlchemy ORM object via `db.expunge(ch)` so the in-memory mutation doesn't auto-flush back to the DB on commit.
+**Description (cont):** Why server-side enrichment (vs client-side async fetch). The mini-sheet + full-sheet spell-row templates already read fields like `s.damage` / `s.range` / `s.save_ability` directly — async client fetching would require the renderer to handle a "loading" state and re-render once the fetch completes. Server-side merge at page load means every spell row arrives at the client with full data already populated; no flicker, no extra round-trips.
+**Description (cont 2):** Why `setdefault` (vs always-overwrite). Two cases the catalog can't authoritatively answer: (a) sheet-side overrides — homebrew spell variants, partial customizations, or inline data like Lightning Bolt's pre-baked damage; (b) caster-dependent values — `attack_bonus` (= spellcasting mod + prof) and `save_dc` (= 8 + spellcasting mod + prof) aren't on the catalog at all. The chips for those caster-dependent fields will still render BARE for PCs until a follow-up commit computes them from the character's class + ability scores. The user's immediate ask (range / damage / save_ability chips) is satisfied by this commit.
+**Description (cont 3):** Performance. `local_content.resolve` already caches the spell catalog (file-system reads memoized). Each PC has ~6-12 spells = ~6-12 catalog lookups per PC per page render = trivial cost. The deep-copy + setdefault loop is single-pass O(spells per PC).
+**Description (cont 4):** Why `db.expunge` matters. SQLAlchemy tracks attribute mutations on ORM objects (`Character.sheet` is JSON; mutating it marks the row dirty). Without expunge, the in-memory spell enrichment would propagate to the DB on the next commit, polluting the persistent character data with catalog snapshots. Expunging detaches the object from the session so the mutation is purely render-local.
+**Description (cont 5):** Verification. (a) Curl `/version` confirms v2.49.180 live. (b) Manual: refresh tabletop → Characters drawer → expand Zara → Spells tab now shows enriched rows for Fire Bolt ("✨ Fire Bolt · 120 feet · 2d10 fire · 🪄 Cast"), Magic Missile ("✨ Magic Missile · 120 feet · 1d4+1 force · 🪄 Cast"), Fireball ("✨ Fireball · 150 feet · 8d6 fire · DEX · 🪄 Cast"), etc. Lightning Bolt unchanged (already had inline data). (c) Mage Hand / Prestidigitation / Counterspell / Shield / Sleep / Mirror Image / Misty Step show range only (no damage / save) — that's correct, those are utility spells. (d) Regression: 18-test attack suite passes.
+
+### Added
+- `app/routes/tabletop_routes.py::_enrich_pc_spell_from_catalog` — merges spell catalog fields (top-level + actions[0]) into a PC spell entry via setdefault.
+
+### Changed
+- `app/routes/tabletop_routes.py` tabletop page render — applies `_enrich_pc_spell_from_catalog` to each PC's spell list before passing characters to the template. `db.expunge` keeps the mutation render-local.
+
+### Notes
+- **Caster-dependent fields not yet computed.** `attack_bonus` (Fire Bolt's "+6") and `save_dc` (Fireball's "DC 15") need character spellcasting context — filed as a follow-up. Save chip falls back to "ABILITY save" without DC.
+- **No new endpoint / broadcast.** Pure server-side data enrichment at the tabletop page render.
+- **No harness test needed.** The enrichment is data-source, not a contract — existing /cast_spell tests still exercise the catalog resolution path the helper now mirrors.
+- **Detached ORM objects** prevent the in-memory mutation from polluting the DB on commit.
+
+---
+
 ## [2.49.179] - 2026-05-23
 
 **Schema version:** 56
