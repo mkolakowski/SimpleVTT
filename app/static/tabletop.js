@@ -580,6 +580,7 @@
         casterPos: null,    // v2.49.138 — {x, y} canvas-space center of caster's token
         cursor: null,       // v2.49.138 — {x, y} snapped to grid-cell center; drives ruler endpoint
         cursorRaw: null,    // v2.49.140 — {x, y} raw cursor; drives hover-token preview ring
+        rangeFt: 0,         // v2.49.143 — spell/attack range in feet; 0 = no range gating
         picks: null,        // Map<token.id, count>
         _resolve: null,
 
@@ -606,6 +607,15 @@
             }
             this.cursor = null;
             this.cursorRaw = null;
+            // v2.49.143 — accept either a pre-parsed rangeFt OR a raw
+            // range_str ("120 feet", "60 ft", "Self (15-ft radius)") so
+            // callers can pass whichever is convenient. Self-cast (0)
+            // and "Special" / null disable range gating.
+            this.rangeFt = parseInt(opts && opts.rangeFt, 10) || 0;
+            if (!this.rangeFt && opts && opts.rangeStr) {
+                const _parsed = _parseRangeFtJS(opts.rangeStr);
+                if (_parsed && _parsed > 0) this.rangeFt = _parsed;
+            }
             this.picks = new Map();
             document.body.classList.add('target-picker-active');
             _showTargetPickerHint(this.spellName, 0, this.required);
@@ -696,6 +706,7 @@
             this.casterPos = null;
             this.cursor = null;
             this.cursorRaw = null;
+            this.rangeFt = 0;
             this.picks = null;
             this._resolve = null;
             document.body.classList.remove('target-picker-active');
@@ -1588,13 +1599,44 @@
             ctx.stroke();
             ctx.restore();
         });
-        // v2.49.140: target picker hover preview — draw a faint red
-        // ring around the token under the cursor so the player sees
-        // "click here will pick this." Same crimson as the picked
-        // ring but thinner + semi-transparent + no glow so it visually
-        // reads as "preview, not committed." Drawn BEFORE the picked-
-        // token ring below so a hovered-and-picked token still shows
-        // the stronger picked ring on top.
+        // v2.49.143: target picker range-gate ring. When the spell /
+        // attack has a known range, draw a translucent green ring
+        // around the caster at the range radius so out-of-range
+        // candidate targets are obvious before the click. Suppressed
+        // for rangeFt === 0 (self-cast, "Special", unknown ranges).
+        let _tpOutOfRange = false;  // shared with the ruler + hover ring rendering below
+        if (_targetPicker.active && _targetPicker.casterPos && _targetPicker.rangeFt > 0) {
+            const _radius_px = (_targetPicker.rangeFt / 5) * gridSize;
+            ctx.save();
+            ctx.fillStyle = 'rgba(74, 222, 128, 0.06)';
+            ctx.strokeStyle = '#4ade80';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.arc(
+                _targetPicker.casterPos.x, _targetPicker.casterPos.y,
+                _radius_px, 0, Math.PI * 2,
+            );
+            ctx.fill();
+            ctx.stroke();
+            ctx.restore();
+            // Compute out-of-range against the SNAPPED cursor so the
+            // gate matches what the server would resolve (same Chebyshev
+            // / Euclidean math as the ruler line).
+            if (_targetPicker.cursor) {
+                const _dist = _computeRulerDistanceFt(
+                    _targetPicker.casterPos, _targetPicker.cursor,
+                );
+                if (_dist > _targetPicker.rangeFt) _tpOutOfRange = true;
+            }
+        }
+        // v2.49.140: target picker hover preview — draw a ring around
+        // the token under the cursor so the player sees "click here
+        // will pick this." Crimson when in range (matches the picked
+        // ring), amber-warning when out of range (matches the ruler
+        // out-of-range color below). Drawn BEFORE the picked-token
+        // ring so a hovered-and-picked token still shows the stronger
+        // picked ring on top.
         if (_targetPicker.active && _targetPicker.cursorRaw) {
             for (let i = tokens.length - 1; i >= 0; i--) {
                 const t = tokens[i];
@@ -1605,8 +1647,15 @@
                 const r = (gridSize * t.size) / 2;
                 ctx.save();
                 ctx.lineWidth = 2;
-                ctx.strokeStyle = 'rgba(220, 38, 38, 0.55)';
-                ctx.setLineDash([]);
+                if (_tpOutOfRange) {
+                    // v2.49.143: out-of-range hover — amber + dashed
+                    // so the player sees the click won't connect.
+                    ctx.strokeStyle = 'rgba(245, 158, 11, 0.85)';
+                    ctx.setLineDash([4, 3]);
+                } else {
+                    ctx.strokeStyle = 'rgba(220, 38, 38, 0.55)';
+                    ctx.setLineDash([]);
+                }
                 ctx.beginPath();
                 ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
                 ctx.stroke();
@@ -1669,6 +1718,9 @@
         // so the player sees the spell/attack range in feet as they
         // hover candidate targets. Suppressed when the picker isn't
         // active OR the caster's token isn't on the map.
+        // v2.49.143: line + chip switch to amber when out of range.
+        // Distance chip carries an "X / Y" form so the player sees
+        // both the cursor distance and the spell's max range.
         if (_targetPicker.active && _targetPicker.casterPos && _targetPicker.cursor) {
             const fromX = _targetPicker.casterPos.x;
             const fromY = _targetPicker.casterPos.y;
@@ -1677,24 +1729,30 @@
             // Only render once the cursor has moved off the caster's
             // own square — a zero-length line is visual noise.
             if (Math.hypot(toX - fromX, toY - fromY) > 8) {
+                const _outOfRange = _tpOutOfRange;
                 ctx.save();
-                ctx.strokeStyle = 'rgba(220, 38, 38, 0.85)';
-                ctx.lineWidth = 1.5;
-                ctx.setLineDash([6, 4]);
+                if (_outOfRange) {
+                    ctx.strokeStyle = 'rgba(245, 158, 11, 0.95)';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([4, 3]);
+                } else {
+                    ctx.strokeStyle = 'rgba(220, 38, 38, 0.85)';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([6, 4]);
+                }
                 ctx.beginPath();
                 ctx.moveTo(fromX, fromY);
                 ctx.lineTo(toX, toY);
                 ctx.stroke();
                 ctx.restore();
-                // Distance chip — same Chebyshev / Euclidean math the
-                // ruler tool uses (server-aligned via
-                // _computeRulerDistanceFt). Floats just below + right
-                // of the cursor so it doesn't sit on the target hot
-                // spot.
                 const distance_ft = _computeRulerDistanceFt(
                     { x: fromX, y: fromY }, { x: toX, y: toY },
                 );
-                const label = `${distance_ft} ft`;
+                const label = (_targetPicker.rangeFt > 0)
+                    ? (_outOfRange
+                        ? `⚠ ${distance_ft} ft / ${_targetPicker.rangeFt} ft`
+                        : `${distance_ft} ft / ${_targetPicker.rangeFt} ft`)
+                    : `${distance_ft} ft`;
                 ctx.save();
                 ctx.font = '11px sans-serif';
                 ctx.textAlign = 'left';
@@ -1705,7 +1763,9 @@
                 const chipX = toX + 12;
                 const chipY = toY + 12;
                 ctx.fillStyle = 'rgba(20, 24, 28, 0.88)';
-                ctx.strokeStyle = 'rgba(220, 38, 38, 0.6)';
+                ctx.strokeStyle = _outOfRange
+                    ? 'rgba(245, 158, 11, 0.85)'
+                    : 'rgba(220, 38, 38, 0.6)';
                 ctx.lineWidth = 1;
                 if (ctx.roundRect) {
                     ctx.beginPath();
@@ -1716,7 +1776,7 @@
                     ctx.fillRect(chipX, chipY, chipW, chipH);
                     ctx.strokeRect(chipX, chipY, chipW, chipH);
                 }
-                ctx.fillStyle = '#fff';
+                ctx.fillStyle = _outOfRange ? '#fbbf24' : '#fff';
                 ctx.fillText(label, chipX + padX, chipY + chipH / 2);
                 ctx.restore();
             }

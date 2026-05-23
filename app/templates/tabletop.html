@@ -3560,6 +3560,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // AoE" button that opens the AoE picker. Same flow
                 // the sheet's .sp-cast (v2.45.0 / Phase T.5e) uses.
                 let _spArea = null;
+                let _spRangeStr = '';
                 try {
                     const _cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
                     const _r = await fetch('/api/open5e/spells?search=' + encodeURIComponent(spellName) + '&limit=10'
@@ -3574,6 +3575,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             ? _hit.actions.find(a => a && a.area && _AOE_SHAPES.has(a.area.shape) && (Number(a.area.size_ft) || 0) > 0)
                             : null;
                         if (_action) _spArea = _action.area;
+                        // v2.49.143: pass spell range to the target
+                        // picker so the range gate ring fires.
+                        if (_hit && _hit.range) _spRangeStr = _hit.range;
                     }
                 } catch (_) {}
                 let _targetsC = (window._targetingState
@@ -3588,6 +3592,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         required: 1,
                         spellName: spellName,
                         casterCharId: charId,
+                        rangeStr: _spRangeStr,
                     });
                     if (_picked === null) {
                         if (slotRow) {

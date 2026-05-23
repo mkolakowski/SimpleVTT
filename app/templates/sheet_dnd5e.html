@@ -2962,6 +2962,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         // when == 1, falls through to the existing
                         // single-target modal picker below.
                         let _beamCount = 1;
+                        let _rangeStr = '';
                         try {
                             const _detail = await _fetchSpellDetail(s.name);
                             const _act = _detail && Array.isArray(_detail.actions)
@@ -2979,12 +2980,16 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 const _slotDelta = Math.max(0, lvl - (parseInt(s.level, 10) || 0));
                                 _beamCount += _slotDelta * _eppba;
                             }
+                            // v2.49.143: pass the spell's range to the
+                            // picker so the range gate ring fires.
+                            _rangeStr = (_detail && _detail.range) || '';
                         } catch (_) {}
                         if (_beamCount > 1 && typeof window.vttOpenMultiTargetPicker === 'function') {
                             const _picked = await window.vttOpenMultiTargetPicker({
                                 required: _beamCount,
                                 spellName: s.name || 'Spell',
                                 casterCharId: {{ char.id }},
+                                rangeStr: _rangeStr,
                             });
                             if (_picked === null) {
                                 // Cancelled — revert optimistic slot decrement.
@@ -3022,10 +3027,14 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         // the tabletop window. Modal stays as the fall-
                         // back for the standalone full-sheet page.
                         if (typeof window.vttOpenMultiTargetPicker === 'function') {
+                            // v2.49.143: include range from the SRD
+                            // fetch above so the picker draws the
+                            // range ring + out-of-range warning.
                             const _picked = await window.vttOpenMultiTargetPicker({
                                 required: 1,
                                 spellName: s.name || 'Spell',
                                 casterCharId: {{ char.id }},
+                                rangeStr: _rangeStr,
                             });
                             if (_picked === null) {
                                 if (slotRow) {
@@ -4809,10 +4818,16 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     if (!_tgtBody.target_combatant_id && !_tgtBody.target_character_id) {
                         const _atkName = (attacks[idx] && attacks[idx].name) || 'Attack';
                         if (typeof window.vttOpenMultiTargetPicker === 'function') {
+                            // v2.49.143: weapon attacks carry a range
+                            // string ("5 ft", "20/60 ft", "150 ft"
+                            // for longbows). The parser handles
+                            // "X/Y ft" by using Y (long range).
+                            const _atkRange = (attacks[idx] && attacks[idx].range) || '';
                             const _picked = await window.vttOpenMultiTargetPicker({
                                 required: 1,
                                 spellName: _atkName,
                                 casterCharId: MY_CHAR_ID,
+                                rangeStr: _atkRange,
                             });
                             if (_picked === null) {
                                 btn.disabled = false;

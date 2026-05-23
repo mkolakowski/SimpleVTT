@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.143] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Target-picker range gate + out-of-range visual warning.** When the picker is opened with a `rangeStr` / `rangeFt`, a translucent green dashed ring draws around the caster at the spell's range so the player sees the spatial gate before clicking. If the cursor crosses the ring, the ruler line shifts from red-dashed to amber-dashed, the distance chip switches to an `⚠ X ft / Y ft` form with amber text, and the hover ring on the targeted token switches to amber + dashed — all signalling "this click will fail the server's range check." The click still goes through (RAW cast attempts out-of-range fail at the server, not the client), but the warning is hard to miss.
+**Description:** Five file edits. **(1)** `app/static/tabletop.js::_targetPicker` — new `rangeFt: 0` field on the state. `start(opts)` accepts either a pre-parsed `rangeFt: int` OR a raw `rangeStr: "120 feet"` and parses via the existing `_parseRangeFtJS` helper (same parser the v2.49.82 `_castHoverRing` uses). Cleaned up in `_cleanup`. **(2)** `app/static/tabletop.js::render` — three new / modified blocks: a range ring (translucent green fill + dashed green stroke, mirrors `_castHoverRing`'s style) drawn around `casterPos` when `rangeFt > 0`; a shared `_tpOutOfRange` flag computed once from `_computeRulerDistanceFt(casterPos, cursor) > rangeFt`; the existing ruler line + chip switch styling when `_tpOutOfRange` (amber `rgba(245, 158, 11, 0.95)` + 2px width + `[4,3]` dash); the existing hover preview ring switches to amber + dashed too. The distance chip's label switches to `⚠ X ft / Y ft` when out-of-range so the player sees both the cursor's distance AND the spell's max range. **(3)** `app/templates/sheet_dnd5e.html::.sp-cast` — multi-beam picker call gains `rangeStr: _rangeStr` (read from the already-fetched `_detail.range`). Single-target spell branch same — passes the captured range string. **(4)** `app/templates/sheet_dnd5e.html::.atk-strike` — weapon attacks pass `rangeStr: attacks[idx].range` (the sheet's `attacks` array carries `range: "5 ft"` / `"20/60 ft"` strings; the parser handles the slash form by using long range). **(5)** `app/templates/tabletop.html::.mini-cast-btn` — picker call gains `rangeStr: _spRangeStr` (read from the same `_hit.range` the v2.49.142 AoE-detection fetch already loaded).
+**Description (cont):** Why amber for out-of-range and not red. Red is already the "this is a target" color (the existing `_targeting` ring + the v2.49.138 picked ring + the v2.49.140 hover preview). Reusing red for the warning would conflate "selected" with "won't connect." Amber (`#f59e0b`) is the standard warning-not-error color that signals "this is allowed but flagged" — matches the existing AoE picker's `_aoe_out_of_range` styling at v2.49.78 Phase 3A.
+**Description (cont 2):** Why the click still goes through. Range is gated on the server via `_check_cast_range` (v2.49.75 Phase 2C) — a cast that violates range returns 409 `out_of_range`. The client's warning is advisory; the server's check is authoritative. Allowing the click means narrative casts ("I lob a Fireball over the wall even though I can't see") can still resolve when the GM overrides; the server's response carries the actual range failure with a clear error. Filed: could add a confirm-modal on out-of-range click for non-GM players, similar to the over-budget modal pattern.
+**Description (cont 3):** What surfaces get the gate. The `.sp-cast` (sheet spells) + `.atk-strike` (sheet weapon attacks) + `.mini-cast-btn` (init-tracker spells) all pass `rangeStr` now. The `.mini-strike-btn` (init-tracker weapon attacks) doesn't because the button doesn't carry `data-attack-range` — would need a `_mini_sheet_card.html` change to stamp it on the button at render time. Filed; the picker still works without `rangeStr` (it just doesn't draw the gate ring).
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.143 live. (b) Manual: cast Scorching Ray (120 ft) on Zara — green dashed range ring draws around Zara's token; cursor stays red while inside the ring; moving the cursor past the 120-ft radius flips the ruler to amber + the hover ring to amber + the chip label to `⚠ X ft / 120 ft`. (c) Cast Fire Bolt at the demo's far-flank bandit (within 120 ft) — stays green / red, no warning. (d) Weapon attack picker — Greatsword (5 ft melee) draws a tiny ring at the caster's square; moving the cursor 10ft+ away flips the warning.
+
+### Added
+- `app/static/tabletop.js::_targetPicker.rangeFt` — parsed range in feet (accepts `rangeFt` or `rangeStr` opts).
+- `app/static/tabletop.js::render` — green range ring around caster; amber `_tpOutOfRange` styling on ruler / hover ring / chip / chip label.
+- `app/templates/sheet_dnd5e.html::.sp-cast` + `.atk-strike` — pass `rangeStr` to the picker.
+- `app/templates/tabletop.html::.mini-cast-btn` — pass `rangeStr` (reuses the AoE-detection fetch).
+
+### Notes
+- **Backward compat.** Callers that omit `rangeStr` / `rangeFt` get the picker without the range ring (no behavioral change).
+- **Server still authoritative.** Out-of-range clicks fire the cast; the server returns 409 `out_of_range` on its own check.
+- **Amber, not red.** Reuses the AoE picker's out-of-range color so the visual language stays consistent across pickers.
+
+### Filed
+- **`.mini-strike-btn` range gate** — needs `data-attack-range` stamped on the button in `_mini_sheet_card.html`. Init-tracker weapon attacks currently get the picker but no range ring.
+- **Confirm-modal on out-of-range click** for non-GM players — mirror the over-budget modal pattern so the warning becomes a hard gate when desired.
+- **Range ring on a freshly-moved token** — if the caster's token moves while the picker is active, the ring stays at the start-time position. Snap the ring to the live token position on each render pass.
+
+---
+
 ## [2.49.142] - 2026-05-22
 
 **Schema version:** 56
