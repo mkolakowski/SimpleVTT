@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 390 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.125, 2026-05-22).
+**Total tests:** 391 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.126, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -546,7 +546,8 @@ v2.49.124-125 — Sorcerer Lv 3+ Empowered Spell metamagic (Phase 1 of the Sorce
 | `test_empowered_409_when_no_sorcery_points` | Drain 5 SP via 5 arm calls → 6th returns 409 `not_enough_points` (`required=1`, `have=0`). |
 | `test_empowered_wrong_class` | Thalindra (Wizard) → 409 `wrong_class` with `expected="sorcerer"`. |
 | `test_empowered_buff_consumed_on_cast_fireball` | Arm Empowered → cast Fireball at a bandit → response `empowered_spell` block present, `rerolled_count==3`, each reroll entry has `sides==6` + `old/new` in 1-6. Buff removed after the cast. |
-| `test_empowered_single_beam_fire_bolt` | v2.49.125 — attack-roll path. Arm Empowered → cast Fire Bolt (2d10 cantrip); assert `rerolled_count==2` (CHA-mod budget 3 clipped to pool size 2) + all reroll log entries are d10. Same code path as multi-beam Eldritch Blast; pool reroll across beams is sanity-checked via `docker exec` (see comment block in the test file). |
+| `test_empowered_pool_reroll_scorching_ray` | v2.49.126 — true cross-beam Empowered. Arm Empowered → cast Scorching Ray L2 (3 beams of 2d6 = 6-die pool); retry until ≥ 2 beams hit + budget fully fires; assert `rerolled_count==3` (CHA-mod budget fully spent across the pool) + each cast fires 3 beams + at least one beam's `damage_breakdown` carries the `→` annotation. Proves the pool reroll spans beams, not just the first one. |
+| `test_empowered_single_beam_fire_bolt` | v2.49.125 — attack-roll path. Arm Empowered → cast Fire Bolt (2d10 cantrip); assert `rerolled_count==2` (CHA-mod budget 3 clipped to pool size 2) + all reroll log entries are d10. |
 | `test_no_empowered_block_when_buff_absent` | Control: cast Fireball without arming → `empowered_spell` key NOT present in payload (no spurious fire). |
 
 ### `test_use_font_of_magic.py`

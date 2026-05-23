@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.126] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Scorching Ray now fires 3 beams per RAW PHB p.273.** Closes the largest of the v2.49.125 filed items (HTTP test for true multi-beam Empowered Spell). Content edit only: `app/data/local/dnd5e/spells/scorching-ray.json` gains `damage_scaling: [{level: 1, damage: "2d6", extra_beams: 2}]` so the existing engine `_pick_damage_tier` + `total_beams = 1 + extra_beams` math produces 3 beams for any character level ≥ 1. Zara casting Scorching Ray at L2 now resolves three independent attack rolls + three independent 2d6 damage rolls; the v2.49.125 Empowered pool reroll spans all three beams' dice. New HTTP test `test_empowered_pool_reroll_scorching_ray` exercises the cross-beam pool case end-to-end (replaces the docker-exec smoke check that v2.49.125 filed).
+**Description:** Two file edits. **(1)** `app/data/local/dnd5e/spells/scorching-ray.json` — added a single `damage_scaling` tier `{level: 1, damage: "2d6", extra_beams: 2}` to the action. The `level: 1` keys to the existing `_pick_damage_tier` (highest tier whose level ≤ caster character level) — since Zara is L5 and Sorcerer Lv 1 is the minimum to cast a leveled spell at all, this fires for every Sorcerer who can cast Scorching Ray. The `extra_beams: 2` adds to the engine's `total_beams = 1 + extra_beams = 3`. The `_note` field documents the deferred upcast scaling (RAW PHB says +1 beam per slot level above 2; the engine currently keys tier selection on character level, not slot level — filed). **(2)** `tests/harness/test_use_metamagic_empowered.py` — replaced the documentation block from v2.49.125 with `test_empowered_pool_reroll_scorching_ray` (loops up to 20 casts until ≥ 2 beams hit AND `rerolled_count == 3`; asserts 3 beams per cast + reroll log shape + at least one beam's breakdown carries the `→` annotation). 7 metamagic tests now in the file; 391 total.
+**Description (cont):** Why the content-layer edit instead of bumping Magnus to Lv 5. Magnus is the demo Pact Boon subject (v2.49.119 plan) and an in-progress Warlock Lv 3 build — bumping his level would (a) require recomputing his spell-slot pool + invocation budget + HP, (b) potentially affect other tests that reference his current state, and (c) preempt the Warlock Pact Boon plan's Phase 1 work. Editing Scorching Ray's content JSON is one file, one tier entry, and benefits every Sorcerer / Wizard / Cleric / Warlock in the demo who knows the spell (not just one). Zara was already configured to cast Scorching Ray; the change just unlocks the RAW behavior the engine already supported.
+**Description (cont 2):** Why three beams of 2d6 at all character levels (no per-slot upcast). RAW the spell creates +1 ray per slot level above 2 (L3 → 4 beams, L4 → 5 beams, …). The engine's `_pick_damage_tier` reads character level, not slot level — so encoding "L3 slot → 4 beams" would need a separate scaling mechanism. The L2-base case is the most common cast (Sorcerers / Warlocks pump Eldritch Blast for upcast slot value, not Scorching Ray). The slot-level scaling is filed in this changelog as the natural follow-up: add an `upcast_extra_beams` mechanism to the action schema + the cast_spell branch.
+**Description (cont 3):** Demo balance note. Pre-v2.49.126: Zara's Scorching Ray L2 averaged 2d6 = 7 damage. Post-v2.49.126: averages 3×2d6 = 21 damage. Triple. Bandit HP at the demo's encounter level is 11-15, so a single Scorching Ray often one-shots one or two bandits — RAW-correct and a meaningful demo upgrade. The GM-facing UX (3 beams in the chat card, per-beam hit/miss breakdown via the v2.40.0 per-beam detail panel) was already wired; the content unlock just activates it.
+**Description (cont 4):** Verification. (a) `pytest tests/harness/test_use_metamagic_empowered.py -q` — 7/7 pass. (b) `pytest tests/harness/test_cast_spell*.py test_spell_catalog*.py -q` — 52/52 pass (no regression in cast paths or spell catalog tests). (c) Manual debug cast confirmed 3 beams fire with per-beam hit/miss/damage, and the Empowered pool reroll spans all 3 beams' dice. (d) Curl `/version` confirms v2.49.126 live.
+
+### Added
+- `app/data/local/dnd5e/spells/scorching-ray.json` — `damage_scaling: [{level: 1, damage: "2d6", extra_beams: 2}]` activates RAW 3-beam behavior.
+- `tests/harness/test_use_metamagic_empowered.py::test_empowered_pool_reroll_scorching_ray` — true cross-beam Empowered pool reroll HTTP integration test.
+
+### Changed
+- `tests/harness/test_use_metamagic_empowered.py` — removed the v2.49.125 documentation block explaining why multi-beam HTTP coverage was deferred; the new test supersedes it.
+
+### Notes
+- **Demo balance.** Scorching Ray now does triple its pre-v2.49.126 damage (3 beams × 2d6 each instead of 1 beam × 2d6). RAW-correct; matches the spell description.
+- **Backward compat.** Single-beam attack-roll spells (Fire Bolt, Inflict Wounds, etc.) are unchanged — they have no `damage_scaling` entry with `extra_beams`, so `total_beams = 1` still.
+- **No engine changes.** The engine already supported `extra_beams` for cantrip scaling (Eldritch Blast); this commit just feeds the same mechanism a leveled-spell config.
+
+### Filed
+- **Scorching Ray slot-level upcast (+1 beam per slot level above 2).** Needs an `upcast_extra_beams: int` field on the action OR a new scaling key that reads slot level instead of character level. Current engine flat-rates Scorching Ray at 3 beams regardless of slot level used.
+- **Other multi-beam RAW spells.** Audit the spell catalog for other JSON entries that omit `extra_beams` for spells that fire multiple rays/bolts/beams RAW. Likely candidates: none in the current SRD content beyond Scorching Ray + Eldritch Blast.
+
+---
+
 ## [2.49.125] - 2026-05-22
 
 **Schema version:** 56

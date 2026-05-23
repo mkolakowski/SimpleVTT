@@ -34,7 +34,14 @@
       "active_toggle": false,
       "damage": "2d6",
       "damage_type": "fire",
-      "damage_scaling": [],
+      "damage_scaling": [
+        {
+          "level": 1,
+          "damage": "2d6",
+          "extra_beams": 2,
+          "_note": "Scorching Ray RAW PHB p.273 fires 3 rays at base L2 slot (1 + extra_beams=2). The +1 ray per slot level above 2 (RAW upcast) is filed for a future engine enhancement — current _pick_damage_tier reads character level, not slot level, so this row gives a flat 3 beams regardless of upcast."
+        }
+      ],
       "attack_roll": true,
       "save_ability": "",
       "healing": "",

@@ -265,24 +265,90 @@ async def test_empowered_buff_consumed_on_cast_fireball(gm_client, zara_rested):
     assert "empowered_spell" not in resp2.json()
 
 
-# ---------- Multi-beam (v2.49.125 — Phase 1.5) ----------
-#
-# Note on multi-beam coverage. The current SRD content layer treats
-# Scorching Ray as a single-beam attack (its ``damage_scaling`` carries
-# no ``extra_beams`` entry) and Zara doesn't know Eldritch Blast, so
-# there's no end-to-end demo cast that fires more than one beam through
-# the engine. The pool-reroll helper ``_apply_pool_empowered_reroll``
-# IS exercised by the single-beam case below (same code path), and the
-# cross-beam pool logic was sanity-checked manually:
-#
-#   docker exec simplevtt-app python -c "from app.routes.tabletop_routes
-#   import _apply_pool_empowered_reroll; beams=[{...3 fake 2d6 beams...}];
-#   log=_apply_pool_empowered_reroll(beams, rerolls=3); ..."
-#
-# A true multi-beam harness test will land when (a) Magnus bumps to Lv 5
-# and learns Eldritch Blast, OR (b) Scorching Ray's content JSON gains
-# the RAW ``extra_beams: 2`` damage_scaling entry. Filed in the
-# CHANGELOG for this commit.
+# ---------- Multi-beam (v2.49.125 helper, v2.49.126 content) ----------
+
+async def test_empowered_pool_reroll_scorching_ray(gm_client, zara_rested):
+    """v2.49.126 — Scorching Ray's content JSON now carries
+    ``damage_scaling: [{level:1, damage:2d6, extra_beams:2}]`` so a cast
+    fires 3 beams of 2d6 (RAW PHB p.273). With Zara's CHA-mod +3 reroll
+    budget and 3 beams' worth of dice (6 d6 in the pool when all hit),
+    the budget should fully fire (3 rerolls) when ≥ 2 beams hit.
+
+    Loops up to 20 casts until at least 2 beams hit AND the reroll
+    budget fully fires (3 rerolls). Each beam at Zara's +6 spell-atk
+    vs the AC 12 bandit hits ~75% — P(<2 hits across 3 beams) ≈ 16%
+    per cast, so 20 retries is well over enough headroom for the
+    strong-form invariant to fire.
+    """
+    zara = zara_rested
+    await _set_auto_apply(gm_client, on=True)
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    emp = None
+    data = None
+    for _ in range(20):
+        await _seed_zara_vs_bandit(
+            gm_client, zara, bandit_tmpl["id"], bandit_tmpl["name"],
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/rest",
+            json={"type": "long"},
+        )
+        arm = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_metamagic_empowered_spell",
+            json={"character_id": zara["id"]},
+        )
+        assert arm.status_code == 200, arm.text
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": zara["id"],
+                "spell_index": SCORCHING_RAY_INDEX,
+                "slot_level": 2,
+                "class_slug": "sorcerer",
+                "target_combatant_id": "tok_emp_bandit",
+                "target_name": bandit_tmpl["name"],
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        # Sanity: every cast should fire 3 beams (per the JSON tier).
+        assert len(data.get("auto_attack_beams", [])) == 3, (
+            f"Expected 3 beams; got {len(data.get('auto_attack_beams', []))}"
+        )
+        emp = data.get("empowered_spell")
+        if emp is None:
+            # No beam hit (all 3 missed) — retry.
+            continue
+        # Sanity on the log shape.
+        for entry in emp["rerolls"]:
+            assert entry["sides"] == 6
+            assert 1 <= entry["old"] <= 6
+            assert 1 <= entry["new"] <= 6
+        if emp["rerolled_count"] == 3:
+            break
+    assert emp is not None, "20 Scorching Ray casts and no beam hit?"
+    assert emp["rerolled_count"] == 3, (
+        f"Expected 3 rerolls when ≥ 2 beams hit, got {emp['rerolled_count']}. "
+        f"Pool reroll may be clipping to a single beam."
+    )
+    # When the pool spans beams the lowest dice can come from any beam.
+    # Verify by counting beams that carry the '→' annotation in their
+    # damage_breakdown — should be ≥ 1, and when 3 rerolls land across
+    # multiple beams it's commonly ≥ 2.
+    arrow_count = sum(
+        1 for beam in data.get("auto_attack_beams", [])
+        if "→" in (beam.get("damage_breakdown") or "")
+    )
+    assert arrow_count >= 1, (
+        f"Expected ≥ 1 beam's breakdown to carry the old→new reroll "
+        f"arrow; got beams={data.get('auto_attack_beams')}"
+    )
 
 
 async def test_empowered_single_beam_fire_bolt(gm_client, zara_rested):
