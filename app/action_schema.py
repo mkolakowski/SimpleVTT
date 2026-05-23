@@ -86,6 +86,16 @@ class Action(BaseModel):
     # character level for cantrip scaling); the two can coexist on the
     # same action if a homebrew spell wants both axes.
     extra_beams_per_slot_above_base: int = 0
+    # v2.49.147: slot-level upcast target-count scaling for non-attack-
+    # roll multi-target spells (Magic Missile RAW PHB p.257: 3 darts at
+    # L1, +1 dart per slot above 1; future spells like Crusader's
+    # Mantle if it ever picks up multi-target damage). The sheet's
+    # multi-target picker uses ``aoe_targets + (slot_level - spell.level)
+    # * extra_targets_per_slot_above_base`` as the required count when
+    # ``attack_roll: false``. Independent of ``extra_beams_per_slot_
+    # above_base`` (which drives attack-roll multi-beam math); these
+    # serve symmetric purposes for the two spell archetypes.
+    extra_targets_per_slot_above_base: int = 0
     attack_roll: bool = False
     # To-hit string ("+5", "-1") used when ``attack_roll`` is true. Stored as
     # a string (not int) for parity with the character-sheet attack schema

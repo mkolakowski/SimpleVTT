@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.147] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Magic Missile now fires the multi-target picker for its 3 darts (4 at L2 slot, 5 at L3, …).** New action-schema field `extra_targets_per_slot_above_base: int` (parallel to v2.49.127's `extra_beams_per_slot_above_base` but for non-attack-roll multi-target spells). Magic Missile's JSON gains `aoe_targets: 3` (RAW base count) + `extra_targets_per_slot_above_base: 1` (RAW upcast). The sheet's `.sp-cast` beam-count math falls back to the non-attack-roll branch when no attack-roll action exists, using `aoe_targets + (slot - base) × extra_targets_per_slot_above_base` as the picker's required count. Now a Magic Missile cast with no target selected opens the picker with "pick 0 / 3 targets" (5 at L3, etc.) and the player taps tokens (or one token multiple times via the ×N stacking from v2.49.135). Per-dart damage application is a separate filed engine task — for now the cast resolves with `target_combatant_ids` as a list; the server's existing single-damage-roll behavior persists until the engine grows the auto-hit multi-dart path.
+**Description:** Three file edits. **(1)** `app/action_schema.py::Action` — added `extra_targets_per_slot_above_base: int = 0`. Required because Pydantic strips unknown fields on validation (the v2.49.127 schema gotcha). **(2)** `app/data/local/dnd5e/spells/magic-missile.json::actions[0]` — `aoe_targets: 1 → 3`; added `extra_targets_per_slot_above_base: 1`. The RAW upcast (+1 dart per slot above 1st) now drives the picker count automatically: L1 slot → 3 darts, L2 → 4, L3 → 5, L4 → 6, L5 → 7. **(3)** `app/templates/sheet_dnd5e.html::.sp-cast` beam-count block — changed the action-find from `attack_roll && damage` only to a two-tier preference: first any attack-roll+damage action (existing behavior), then any damage action (new fallback for non-attack-roll spells). Branch on `_act.attack_roll`: attack-roll path uses the v2.49.135 beam math; non-attack-roll path uses `aoe_targets + slot delta × extra_targets_per_slot_above_base`. Both paths feed the same multi-target picker.
+**Description (cont):** Why a separate field instead of reusing `extra_beams_per_slot_above_base`. Conceptually "beam" implies attack-roll-with-damage-roll for each (Scorching Ray), while "target" applies to any picker count regardless of whether the engine does multi-beam attacks. A future spell could have BOTH axes — e.g., an attack-roll spell that targets multiple creatures per slot. Keeping the two fields independent lets each axis evolve without entangling the other. The sheet's beam-count switch on `_act.attack_roll` picks the right axis.
+**Description (cont 2):** What the user sees AFTER the picker resolves. Today's server behavior: when Magic Missile lands with `target_combatant_ids: [bandit, bandit, bandit]`, the cast card shows "Zara casts Magic Missile" + each dart's name but the engine doesn't auto-roll 3×(1d4+1) damage and apply per dart. The single `damage: "1d4+1"` field on the action is what the chat card surfaces as the roll-damage button. So the player can still pick "3 darts on the goblin" via the picker, then click the Roll Damage button 3 times on the card and apply manually. Full auto-hit per-dart damage is a filed engine task (needs a new code path: iterate `target_combatant_ids`, roll 1d4+1 per dart, apply via `_apply_damage_to_combatant`, no attack roll, no save).
+**Description (cont 3):** Why this is still worth shipping now. The picker fires correctly for the right count — that's the biggest UX miss the user reported. Players can pick targets visually. The server-side per-dart damage automation is a strictly larger commit (new endpoint branch + per-target damage loop) that builds on this foundation. Shipping the picker now unblocks the visual workflow.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.147 live. (b) Manual: from Zara's sheet, cast Magic Missile at L1 without a target → multi-target picker opens with "🎯 Magic Missile · pick 0 / 3 targets" → click tokens, ×N badge on stacked picks. (c) Cast Magic Missile at L3 → picker requires 5 darts (3 base + 2 upcast). (d) Existing attack-roll spells (Scorching Ray, Eldritch Blast) unchanged — the attack-roll branch picks them up first.
+
+### Added
+- `app/action_schema.py::Action.extra_targets_per_slot_above_base` — slot-level target-count scaling for non-attack-roll multi-target spells.
+- `app/data/local/dnd5e/spells/magic-missile.json::actions[0]` — `aoe_targets: 3` + `extra_targets_per_slot_above_base: 1`.
+
+### Changed
+- `app/templates/sheet_dnd5e.html::.sp-cast` beam-count math — two-tier action find + branch on `attack_roll` for the right counting axis.
+
+### Notes
+- **Backward compat.** Attack-roll multi-beam spells (Scorching Ray, Eldritch Blast) still hit the existing attack-roll path. Non-multi-target spells (Fire Bolt) still get `_beamCount = 1`.
+- **Per-dart damage automation deferred.** The cast resolves with target_combatant_ids; engine still uses single damage roll until the auto-hit multi-target damage path is added.
+
+### Filed
+- **Magic Missile per-dart auto-damage** — engine path that iterates `target_combatant_ids`, rolls `1d4+1` per dart, applies via `_apply_damage_to_combatant`, no attack roll / no save. The picker's count + ids list are the right input shape; the server just needs a new branch in `cast_spell` for auto-hit multi-target spells.
+- **Server-side range check for Magic Missile range** — currently the range gate fires for attack-roll spells via `_check_cast_range`. Confirm non-attack-roll multi-target casts also flow through the range check.
+
+---
+
 ## [2.49.146] - 2026-05-23
 
 **Schema version:** 56

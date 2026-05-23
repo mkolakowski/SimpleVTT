@@ -3001,9 +3001,16 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         let _rangeStr = '';
                         try {
                             const _detail = await _fetchSpellDetail(s.name);
-                            const _act = _detail && Array.isArray(_detail.actions)
-                                ? _detail.actions.find(a => a && a.attack_roll && a.damage)
-                                : null;
+                            // v2.49.147: prefer the attack-roll action
+                            // (Scorching Ray / Eldritch Blast); fall
+                            // back to any damaging action so non-
+                            // attack-roll multi-target spells (Magic
+                            // Missile) also drive the picker via
+                            // `aoe_targets + extra_targets_per_slot
+                            // _above_base`.
+                            const _actsArr = _detail && Array.isArray(_detail.actions) ? _detail.actions : [];
+                            const _act = _actsArr.find(a => a && a.attack_roll && a.damage)
+                                || _actsArr.find(a => a && a.damage);
                             if (_act) {
                                 const _scaling = Array.isArray(_act.damage_scaling) ? _act.damage_scaling : [];
                                 const _myLvl = parseInt({{ char.sheet.get('level', 1) | int }}, 10) || 1;
@@ -3011,10 +3018,23 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                     .filter(t => t && (parseInt(t.level, 10) || 1) <= _myLvl)
                                     .sort((a, b) => (parseInt(b.level, 10) || 0) - (parseInt(a.level, 10) || 0));
                                 const _tier = _tiers[0];
-                                _beamCount = 1 + (parseInt(_tier && _tier.extra_beams, 10) || 0);
-                                const _eppba = parseInt(_act.extra_beams_per_slot_above_base, 10) || 0;
                                 const _slotDelta = Math.max(0, lvl - (parseInt(s.level, 10) || 0));
-                                _beamCount += _slotDelta * _eppba;
+                                if (_act.attack_roll) {
+                                    // Attack-roll path: 1 base + tier
+                                    // extra_beams + slot delta × eppba.
+                                    _beamCount = 1 + (parseInt(_tier && _tier.extra_beams, 10) || 0);
+                                    const _eppba = parseInt(_act.extra_beams_per_slot_above_base, 10) || 0;
+                                    _beamCount += _slotDelta * _eppba;
+                                } else {
+                                    // v2.49.147: non-attack-roll multi-
+                                    // target path (Magic Missile). Base
+                                    // count = aoe_targets; +1 per slot
+                                    // above per extra_targets_per_slot_
+                                    // above_base.
+                                    _beamCount = Math.max(1, parseInt(_act.aoe_targets, 10) || 1);
+                                    const _etpsba = parseInt(_act.extra_targets_per_slot_above_base, 10) || 0;
+                                    _beamCount += _slotDelta * _etpsba;
+                                }
                             }
                             // v2.49.143: pass the spell's range to the
                             // picker so the range gate ring fires.
