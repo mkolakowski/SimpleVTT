@@ -2573,7 +2573,11 @@ def campaign_view(
         if not _spells:
             continue
         _sheet["spells"] = [
-            _enrich_pc_spell_from_catalog(dict(s) if isinstance(s, dict) else s, campaign.id)
+            _enrich_pc_spell_from_catalog(
+                dict(s) if isinstance(s, dict) else s,
+                campaign.id,
+                sheet=_sheet,
+            )
             for s in _spells
         ]
         # Detach from the SQLAlchemy session so the in-memory mutation
@@ -20010,7 +20014,32 @@ def _monster_dict_to_sheet(m: dict, *, base: Optional[dict] = None) -> dict:
     return out
 
 
-def _enrich_pc_spell_from_catalog(spell: dict, campaign_id: int) -> dict:
+# v2.49.181: spellcasting-ability lookup by class slug. Used by
+# _enrich_pc_spell_from_catalog to compute the per-spell attack_bonus
+# and save_dc (= 8 + mod + prof for save spells, = mod + prof for
+# attack-roll spells). Subclass entries (Eldritch Knight, Arcane
+# Trickster) get their own ability because they use INT regardless
+# of the parent Fighter/Rogue class.
+_SPELLCASTING_ABILITY_BY_CLASS = {
+    "wizard": "INT",
+    "cleric": "WIS",
+    "druid": "WIS",
+    "ranger": "WIS",
+    "sorcerer": "CHA",
+    "warlock": "CHA",
+    "bard": "CHA",
+    "paladin": "CHA",
+    "artificer": "INT",
+    "eldritch-knight": "INT",
+    "arcane-trickster": "INT",
+}
+
+
+def _enrich_pc_spell_from_catalog(
+    spell: dict,
+    campaign_id: int,
+    sheet: dict | None = None,
+) -> dict:
     """v2.49.180: PC spell entries on the demo sheet carry only
     ``{name, level, _slug, casting_time}`` — no damage / range /
     save_ability / attack_roll. The mini-sheet + full-sheet spell
@@ -20025,11 +20054,15 @@ def _enrich_pc_spell_from_catalog(spell: dict, campaign_id: int) -> dict:
     partial customization, the v2.46.0 Lightning Bolt inline data)
     take precedence over the catalog.
 
-    Caster-dependent fields (attack_bonus, save_dc) are NOT
-    populated here — those need the character's spellcasting
-    ability mod + prof bonus. Filed as a follow-up; the existing
-    no-attack-bonus / no-save-dc rows still render damage / range
-    / save_ability chips, which is the user's immediate ask.
+    v2.49.181: when ``sheet`` is provided, also computes the caster-
+    dependent ``attack_bonus`` (mod + prof) and ``save_dc`` (8 + mod
+    + prof). Uses the spell's tagged ``class`` slug (or the sheet's
+    primary class as fallback) to pick the spellcasting ability
+    (Wizard→INT, Cleric→WIS, Sorcerer→CHA, etc.), reads that
+    ability's score from ``sheet["abilities"]``, and computes the
+    standard 5e modifier ``floor((score - 10) / 2)``. The
+    proficiency bonus is read from ``sheet["proficiency_bonus"]``
+    (default 2).
 
     Returns the enriched spell dict (or the original if no _slug or
     no catalog hit).
@@ -20060,6 +20093,40 @@ def _enrich_pc_spell_from_catalog(spell: dict, campaign_id: int) -> dict:
         ):
             if sa.get(key) not in (None, "", 0, []):
                 out.setdefault(key, sa[key])
+    # v2.49.181: caster-dependent attack_bonus + save_dc. Requires the
+    # character sheet so we can read the spellcasting ability score +
+    # proficiency bonus.
+    if sheet:
+        # Pick the casting class. Prefer the spell's tagged class
+        # (multi-class characters have spells from multiple classes);
+        # fall back to the sheet's primary single-class.
+        spell_class = (out.get("class") or "").strip().lower()
+        if not spell_class:
+            spell_class = (sheet.get("class") or "").strip().lower()
+        # Normalize spaces and slug-ify (e.g., "Eldritch Knight" →
+        # "eldritch-knight" so subclass entries match the map).
+        spell_class_slug = spell_class.replace(" ", "-")
+        ability = _SPELLCASTING_ABILITY_BY_CLASS.get(spell_class_slug)
+        if ability:
+            abilities = sheet.get("abilities") or {}
+            try:
+                score = int(abilities.get(ability) or abilities.get(ability.lower()) or 10)
+            except (TypeError, ValueError):
+                score = 10
+            mod = (score - 10) // 2
+            try:
+                prof = int(sheet.get("proficiency_bonus") or 2)
+            except (TypeError, ValueError):
+                prof = 2
+            # Spell attack bonus = mod + prof; save DC = 8 + mod +
+            # prof. Both stored with the same setdefault convention so
+            # inline overrides (Lightning Bolt etc.) still win.
+            atk = mod + prof
+            dc = 8 + mod + prof
+            if out.get("attack_roll") and not out.get("attack_bonus") and not out.get("atk_bonus"):
+                out["attack_bonus"] = ("+" if atk >= 0 else "") + str(atk)
+            if out.get("save_ability") and not out.get("save_dc"):
+                out["save_dc"] = dc
     return out
 
 

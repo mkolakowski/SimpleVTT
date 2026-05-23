@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.181] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **PC spell chips compute caster-dependent attack_bonus + save_dc (Fireball now shows "DC 15 DEX", Fire Bolt "+6").** User screenshot comparison: PC Fireball read "DEX save" while NPC Sacred Flame read "DC 13 DEX". User asked to make PC look like NPC. The v2.49.180 catalog enrichment populated `damage` / `range` / `save_ability` from the spell catalog, but `attack_bonus` and `save_dc` aren't catalog data — they're caster-dependent (= spellcasting mod + prof bonus). This commit computes them from the character's spellcasting class + ability score + proficiency bonus.
+**Description:** Two coordinated edits in `app/routes/tabletop_routes.py`. **(1)** New module-level dict `_SPELLCASTING_ABILITY_BY_CLASS` (~15 lines) — class slug → ability code: Wizard→INT, Cleric→WIS, Druid→WIS, Ranger→WIS, Sorcerer→CHA, Warlock→CHA, Bard→CHA, Paladin→CHA, Artificer→INT, Eldritch Knight→INT, Arcane Trickster→INT. Subclass entries handle the int-cast subclasses of Fighter / Rogue. **(2)** `_enrich_pc_spell_from_catalog` extended with an optional `sheet` parameter. When provided, picks the spell's tagged class (or sheet's primary class as fallback), normalizes to a slug, looks up the spellcasting ability via the map, reads the ability score from `sheet["abilities"]`, computes the 5e modifier `(score - 10) // 2`, reads `sheet["proficiency_bonus"]` (default 2). Sets `attack_bonus = (mod + prof formatted as "+N")` when `attack_roll && !attack_bonus`. Sets `save_dc = 8 + mod + prof` when `save_ability && !save_dc`. Both use the same setdefault-style pattern: inline overrides (Lightning Bolt's pre-baked data, homebrew customizations) still win.
+**Description (cont):** Why a hard-coded class map (vs catalog lookup). The class catalog (`app/data/local/dnd5e/classes/*.json`) DOES carry `spellcasting_ability` per class — but that's an extra disk read per spell at page render. The PHB class list is short (~12 classes + 2 subclasses) and stable; a static dict is faster and equivalent. If a future homebrew class wants its own spellcasting ability, the map needs to grow — filed as a follow-up if/when homebrew classes land in the demo.
+**Description (cont 2):** Why setdefault for both fields. Same reason as the catalog enrichment: sheet-side inline data wins. Lightning Bolt's pre-baked save_ability=DEX still gets the computed save_dc when no inline DC exists. Homebrew or partial customizations (e.g., a campaign-specific +1 spell-attack item) can pre-fill `attack_bonus` and the computed value won't override it.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.181 live. (b) Manual: refresh tabletop → Characters drawer → expand Zara (Sorcerer, CHA 18 = +4 mod, prof +3 at Lv 5; computed spell attack bonus = +7, spell save DC = 15). Fire Bolt row: "✨ Fire Bolt · 120 feet · +7 · 2d10 fire · 🪄 Cast" (was no attack_bonus chip). Fireball row: "✨ Fireball · 150 feet · 8d6 fire · DC 15 DEX · 🪄 Cast" (was "DEX save"). Magic Missile (auto-hit, no chip change) and Mage Hand (no damage / save) unaffected. (c) Different caster — expand Thalindra (assuming Druid WIS) → spell rows pick WIS ability for mod. (d) Multi-class chars compute per-spell based on the spell's `class` tag. (e) Regression: 22-test suite passes (attack + npc_attack + smoke).
+
+### Added
+- `app/routes/tabletop_routes.py::_SPELLCASTING_ABILITY_BY_CLASS` — class slug → ability code map (12 classes + 2 INT-cast subclasses).
+- `_enrich_pc_spell_from_catalog` `sheet` parameter — computes attack_bonus + save_dc from character spellcasting ability + proficiency bonus.
+
+### Changed
+- Tabletop page render — passes `sheet=_sheet` to the enrichment helper so PC spell rows get full caster-aware chips.
+
+### Notes
+- **No server / endpoint change.** Pure render-time data enrichment.
+- **Setdefault pattern preserved.** Sheet-side inline overrides win over computed values.
+- **Filed follow-up:** Eldritch Invocation / Pact Boon attack-bonus modifiers (Warlock's "Agonizing Blast", e.g.) would need additive layering on top of the base mod+prof. Out of scope for this commit; the base computation matches RAW 5e PHB without invocations.
+
+---
+
 ## [2.49.180] - 2026-05-23
 
 **Schema version:** 56
