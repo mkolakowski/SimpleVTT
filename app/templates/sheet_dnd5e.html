@@ -2619,9 +2619,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 ${msBadge}
                 ${s.school       ? `<span style="font-size:11px;color:var(--s-accent);flex-shrink:0;">${_esc(s.school)}</span>` : ''}
                 ${s.casting_time ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.casting_time)}</span>` : ''}
-                ${s.range        ? `<span class="muted" style="font-size:11px;flex-shrink:0;">${_esc(s.range)}</span>` : ''}
-                ${s.damage ? `<span style="font-size:11px;color:#e8a;flex-shrink:0;font-weight:500;">${_esc(s.damage)}</span>` : ''}
-                ${s.save_ability ? `<span style="font-size:11px;color:#8cf;flex-shrink:0;font-weight:500;">${_esc(s.save_ability)} save</span>` : ''}
+                ${s.range        ? `<span style="font-size:11px;color:#7dd3c0;flex-shrink:0;font-weight:500;" title="Range">${_esc(s.range)}</span>` : ''}
+                ${(s.attack_roll && (s.attack_bonus || s.atk_bonus)) ? `<span style="font-size:11px;color:#fbb88a;flex-shrink:0;font-weight:600;" title="To hit">${_esc(s.attack_bonus || s.atk_bonus)}</span>` : ''}
+                ${s.damage ? `<span style="font-size:11px;color:#e8a;flex-shrink:0;font-weight:500;">${_esc(s.damage)}${s.damage_type ? ' ' + _esc(s.damage_type) : ''}</span>` : ''}
+                ${s.save_ability ? `<span style="font-size:11px;color:#8cf;flex-shrink:0;font-weight:500;">${s.save_dc ? 'DC ' + _esc(String(s.save_dc)) + ' ' : ''}${_esc(s.save_ability.toUpperCase().slice(0,3))}${!s.save_dc ? ' save' : ''}</span>` : ''}
                 ${aoeBadge}
                 <button type="button" class="sp-cast" data-idx="${idx}"
                         data-casting-time="${_esc(s.casting_time || '')}"

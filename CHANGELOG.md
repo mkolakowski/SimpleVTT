@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.179] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Full character sheet's spell row gets the same enriched chips as the mini-sheet (range / atk / damage type / DC).** User clarification: "sorry, this is for the sheet in the battle and character tabs." The v2.49.177 + v2.49.178 enrichments landed on `_mini_sheet_card.html` (the mini-sheet, which IS what the Battle + Characters drawer tabs use), but the user was likely also looking at the full character sheet opened via the 📋 Sheet button from those tabs. This commit extends the same enrichment to `sheet_dnd5e.html::spellRowHtml` so the full sheet matches.
+**Description:** One block edit in `app/templates/sheet_dnd5e.html::spellRowHtml` (~line 2620). Pre-fix the row showed range (muted gray) + damage (pink, no type) + save_ability (blue, no DC). Post-fix: (a) range chip recolored to teal `#7dd3c0` matching the v2.49.178 mini-sheet range color, (b) new attack-bonus chip (amber `#fbb88a`) when `s.attack_roll && s.attack_bonus`, (c) damage chip appends damage_type ("3d10 necrotic" instead of "3d10"), (d) save chip leads with "DC N" when `s.save_dc` is set ("DC 13 DEX" instead of "DEX save"), with save_ability uppercased + truncated to 3 chars.
+**Description (cont):** Why inline styles (vs a CSS class). The full sheet uses scoped CSS variables (`--s-mute`, `--s-border`, etc.) and per-chip styles are already inlined throughout `spellRowHtml`. Adding a `.sp-spell-tag.range` class would scatter the styling across two locations. Inlining keeps the chip definitions co-located with the conditional render. The mini-sheet uses `.mini-spell-tag.range` / `.mini-spell-tag.atk` classes — same colors, different style location to match each template's local convention.
+**Description (cont 2):** Verification. (a) Curl `/version` confirms v2.49.179 live. (b) Manual: open Zara's full sheet (📋 Sheet button from Characters tab) → Spells tab → Fire Bolt row shows "Fire Bolt · evocation · Action · 120 feet · +6 · 2d10 fire · 🪄 Cast" (range now teal, new amber attack-bonus chip, damage with type). Magic Missile L1 row: "Magic Missile · evocation · Action · 120 feet · 1d4+1 force · 🪄 Cast". Fireball: "Fireball · evocation · Action · 150 feet · 8d6 fire · DC 15 DEX · 🪄 Cast". Touch spells like Cure Wounds: "Cure Wounds · evocation · Action · Touch · 🪄 Cast". (c) Regression: 18-test attack suite passes.
+
+### Changed
+- `app/templates/sheet_dnd5e.html::spellRowHtml` — range chip recolored to teal; new attack-bonus chip; damage chip appends type; save chip prepends DC.
+
+### Notes
+- **No server change.** Pure template enrichment.
+- **No new harness test.** Visual change only.
+- **Backward compat.** All conditional renders preserve the original empty case (no chip if the field is missing).
+
+---
+
 ## [2.49.178] - 2026-05-23
 
 **Schema version:** 56
