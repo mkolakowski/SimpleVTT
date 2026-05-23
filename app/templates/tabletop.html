@@ -991,6 +991,10 @@
     .mini-spell-tag { font-size: 9px; color: var(--fg-mute); flex-shrink: 0; }
     .mini-spell-tag.dmg { color: #e8a; font-weight: 500; }
     .mini-spell-tag.save { color: #8cf; font-weight: 500; }
+    /* v2.49.177: attack-bonus chip matches the NPC mini-sheet's
+       amber color so a glance-test PC spell row reads the same
+       as the NPC version the user asked to mirror. */
+    .mini-spell-tag.atk { color: #fbb88a; font-weight: 600; }
     .mini-cast-btn { background: rgba(167,139,250,.12); border: 1px solid rgba(167,139,250,.4); color: #b9a3fb; border-radius: 3px; padding: 1px 7px; font-size: 10px; font-weight: 600; cursor: pointer; flex-shrink: 0; line-height: 1.4; min-height: 32px; }
     .mini-cast-btn:hover { background: rgba(167,139,250,.22); }
     .mini-cast-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -5187,13 +5191,29 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // Save-based actions (Frightful Howl, Breath Weapon, ...)
                 // keep the announce-only 📋 Save button until the
                 // npc_attack endpoint grows save support.
+                // v2.49.177: spell-tagged actions (spell_slug) get a
+                // ✨ Cast button matching the PC mini-cast-btn convention
+                // — same picker → /npc_attack flow for attack-roll spells,
+                // same /roll save-announce flow for save-DC spells, just
+                // a unified label so the GM doesn't see 🗡 Strike on a
+                // spell row. Non-spell actions keep their 🗡 Strike /
+                // 🎲 Dmg / 📋 Save labels (weapons, special abilities).
+                const _isSpell = !!a.spell_slug;
                 if (a.attack_roll) {
-                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="attack"${spent ? ' disabled' : ''} title="Strike — picks target, rolls 1d20${a.attack_bonus || ''}, damage ${a.damage || ''}${a.damage_type ? ' ' + a.damage_type : ''}">🗡 Strike</button>`);
+                    const _label = _isSpell ? '✨ Cast' : '🗡 Strike';
+                    const _title = _isSpell
+                        ? `Cast ${a.name} — picks target, rolls 1d20${a.attack_bonus || ''}, damage ${a.damage || ''}${a.damage_type ? ' ' + a.damage_type : ''}`
+                        : `Strike — picks target, rolls 1d20${a.attack_bonus || ''}, damage ${a.damage || ''}${a.damage_type ? ' ' + a.damage_type : ''}`;
+                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="attack"${spent ? ' disabled' : ''} title="${_title}">${_label}</button>`);
                 } else if (a.damage && !(a.save_dc && a.save_ability)) {
                     btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="damage"${spent ? ' disabled' : ''} title="Roll damage — ${a.damage}${a.damage_type ? ' ' + a.damage_type : ''}">🎲 Dmg</button>`);
                 }
                 if (a.save_dc && a.save_ability) {
-                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="save"${spent ? ' disabled' : ''} title="Announce save — DC ${a.save_dc} ${a.save_ability}">📋 Save</button>`);
+                    const _label = _isSpell ? '✨ Cast' : '📋 Save';
+                    const _title = _isSpell
+                        ? `Cast ${a.name} — announces DC ${a.save_dc} ${a.save_ability} save${a.damage ? ' for ' + a.damage + (a.damage_type ? ' ' + a.damage_type : '') : ''}`
+                        : `Announce save — DC ${a.save_dc} ${a.save_ability}`;
+                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="save"${spent ? ' disabled' : ''} title="${_title}">${_label}</button>`);
                 }
                 // v2.4.23: each action row is now a clickable container
                 // that toggles a sibling ``.m-action-detail`` panel below

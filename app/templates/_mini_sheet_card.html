@@ -329,11 +329,19 @@
                                via ``window._loadSpellContent`` on first open
                                when a ``_slug`` is set (same mechanism as the
                                full sheet's v2.4.19 spell-detail load). #}
+                            {# v2.49.177: enrich the row with the same compact
+                               chip layout the NPC Spells tab uses (v2.49.175).
+                               ✨ glyph prefix on the name, attack-bonus chip
+                               for attack-roll spells, damage_type appended to
+                               the damage chip, save_dc included in the save
+                               chip. The user explicitly asked for parity
+                               with the NPC spell-row display. #}
                             <div class="mini-spell-row mini-row-expandable" title="{{ s.name }}{% if s.casting_time %} · {{ s.casting_time }}{% endif %}{% if s.range %} · {{ s.range }}{% endif %}">
-                                <span class="mini-spell-name">{{ s.name }}{% if s.concentration %} <span class="mini-spell-tag" title="Concentration">⏱</span>{% endif %}{% if s.ritual %} <span class="mini-spell-tag" title="Ritual">®</span>{% endif %}</span>
+                                <span class="mini-spell-name">✨ {{ s.name }}{% if s.concentration %} <span class="mini-spell-tag" title="Concentration">⏱</span>{% endif %}{% if s.ritual %} <span class="mini-spell-tag" title="Ritual">®</span>{% endif %}</span>
                                 {% if _is_multiclass %}<span class="mini-spell-tag cls">{{ _cc_label }}</span>{% endif %}
-                                {% if s.damage %}<span class="mini-spell-tag dmg">{{ s.damage }}</span>{% endif %}
-                                {% if s.save_ability %}<span class="mini-spell-tag save">{{ s.save_ability }} save</span>{% endif %}
+                                {% if s.attack_roll and (s.attack_bonus or s.atk_bonus) %}<span class="mini-spell-tag atk">{{ s.attack_bonus or s.atk_bonus }}</span>{% endif %}
+                                {% if s.damage %}<span class="mini-spell-tag dmg">{{ s.damage }}{% if s.damage_type %} {{ s.damage_type }}{% endif %}</span>{% endif %}
+                                {% if s.save_ability %}<span class="mini-spell-tag save">{% if s.save_dc %}DC {{ s.save_dc }} {% endif %}{{ (s.save_ability | upper) if (s.save_ability | length) <= 3 else (s.save_ability | upper)[:3] }}{% if not s.save_dc %} save{% endif %}</span>{% endif %}
                                 {# v2.3.21: stash spell roll fields on the button
                                    so the cast handler can build /roll posts for
                                    monster casts (TokenTemplate-backed mini-sheets

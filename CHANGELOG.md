@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.177] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **NPC spells get ✨ Cast button + PC spell rows mirror the NPC chip layout.** User feedback: "I like how spell details are shown, can you apply that (screenshot) to the PC spells in the initiative order" — referring to the NPC Spells tab's compact "✨ name · +bonus · damage type · DC ability" format. Two coordinated changes: (a) NPC spell-tagged actions now show ✨ Cast (was 🗡 Strike / 📋 Save) — same routing under the hood, just unified label matching the PC mini-cast-btn convention; (b) PC mini-spell-row in the init-tracker mini-sheet enriched with the ✨ glyph prefix + attack-bonus chip + damage_type + save_dc so a glance-test reads identically between PC and NPC.
+**Description:** Three coordinated edits. **(1)** `app/templates/tabletop.html::buildMonsterInitSheet` (~line 5178) — spell-tagged action button labels now branch on `_isSpell = !!a.spell_slug`. Attack-roll spells show "✨ Cast" instead of "🗡 Strike"; save-DC spells show "✨ Cast" instead of "📋 Save". Non-spell actions (Dagger, weapons, special abilities) keep their original labels (🗡 Strike / 🎲 Dmg / 📋 Save). The `data-kind` attribute is unchanged, so all routing (picker → /npc_attack for attack, picker → /roll for save) works exactly as before — only the button text + title changed. **(2)** `app/templates/tabletop.html` CSS (~line 991) — new `.mini-spell-tag.atk { color: #fbb88a; font-weight: 600; }` matching the NPC mini-sheet's amber attack-bonus color (consistency with `tags.push` in `buildMonsterInitSheet` line ~5143). **(3)** `app/templates/_mini_sheet_card.html` `.mini-spell-row` (~line 332) — added ✨ prefix to the name, conditional `.atk` chip when `attack_roll && attack_bonus`, appended `damage_type` to the damage chip ("3d10 necrotic" instead of "3d10"), and rewrote the save chip to lead with "DC N" when `save_dc` is set ("DC 13 DEX" instead of "DEX save"). All conditional renders preserve the original-empty case (no chip if the field is missing).
+**Description (cont):** Why the same label (vs differentiating by spell type). The user's mental model is "this is a spell" — they don't think "this is a melee spell attack" or "this is a save-DC spell." Showing two different labels on the same Spells tab (one ✨ Cast, one 🗡 Strike) breaks that mental model. Unified ✨ Cast preserves the type information via the chip layout (attack bonus chip = attack-roll spell, save chip = save-DC spell) — the chips DO differentiate, the button label is just "do the spell thing."
+**Description (cont 2):** Why ✨ (not 🪄 the PC sheet uses). The NPC Spells tab already established ✨ as the spell-row prefix in v2.49.175 (via `_glyph = a.spell_slug ? '✨ ' : ''`). Aligning the PC mini-sheet to use ✨ in the same position closes the visual gap. The PC sheet's mini-cast-btn still says 🪄 Cast — that's the button glyph, not the spell-row prefix; they don't conflict. Future cleanup could unify both to ✨ but that's scope creep.
+**Description (cont 3):** Save chip rewrite logic. Pre-fix, `{save_ability} save` always rendered ("DEX save", "WIS save"). The new logic prefers "DC N {ability}" when the spell has an explicit DC (Sacred Flame → "DC 13 DEX"); falls back to "{ability} save" when no DC is set (rare for PCs, since spell save DC = caster spellcasting mod + prof bonus, but PC sheet may not have it computed). The `save_ability` value is upper-cased and truncated to 3 chars (DEX / WIS / CHA) for the compact display — full names like "dexterity" get clipped.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.177 live. (b) Manual NPC: GM expands Soren → Spells tab now shows "✨ Inflict Wounds (Spell) · +4 · 3d10 necrotic · 2/2 ↻ · ✨ Cast" — the strike button is now ✨ Cast. Sacred Flame row shows "✨ Sacred Flame (Cantrip) · 1d8 radiant · DC 13 DEX · ✨ Cast". (c) Manual PC: GM expands Zara → Spells tab shows enriched rows: "✨ Fire Bolt · +6 · 2d10 fire · 🪄 Cast", "✨ Magic Missile · 1d4+1 force · 🪄 Cast". (d) Regression: 18-test NPC + PC attack suite passes; no harness coverage of mini-sheet render (visual change only).
+
+### Added
+- `app/templates/tabletop.html` CSS — `.mini-spell-tag.atk` color (amber, matching NPC mini-sheet attack-bonus chip).
+
+### Changed
+- `app/templates/tabletop.html::buildMonsterInitSheet` — NPC spell_slug action buttons show ✨ Cast (was 🗡 Strike / 📋 Save). Non-spell actions unchanged.
+- `app/templates/_mini_sheet_card.html` `.mini-spell-row` — added ✨ prefix on name, attack-bonus chip, damage_type in damage chip, DC in save chip.
+
+### Notes
+- **No server / routing change.** Same /npc_attack and /roll endpoints handle the buttons; only labels and chip text changed.
+- **No new harness test.** Pure visual change.
+- **Backward compat.** Existing data round-trips fine — fields the spell row didn't display before (attack_bonus, damage_type, save_dc) now render if set; they were always present in the spell data.
+
+---
+
 ## [2.49.176] - 2026-05-23
 
 **Schema version:** 56
