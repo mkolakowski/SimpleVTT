@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.150] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **AoE picker now draws a ruler line from the caster to the cursor (sphere center)** so the player sees the distance to the Fireball / Hypnotic Pattern landing point in real time. Mirrors the v2.49.138 target-picker caster→cursor ruler — dashed red line at 2px lineWidth (HD polish from v2.49.144) + distance chip floating next to the cursor + amber out-of-range warning when the cursor strays past the spell's range. Only fires for `sphere` and `cube` shapes (where the cursor IS the AoE center); cone / line / self_sphere / self_cube shapes already convey direction via their shape outline, so adding a separate ruler line there would be visual noise.
+**Description:** One edit in `app/static/tabletop.js` — added a new block inside the AoE picker render section, between the range ring draw and the AoE preview shape. The block reads `_aoe_caster_pos` (already resolved by the existing range-ring code), checks if the shape is sphere/cube AND the cursor has moved off the caster's own square (≥ 8 px), then draws a dashed line + a distance chip. Out-of-range styling matches the v2.49.143 target picker convention: red dashed `[6,4]` when in range, amber dashed `[4,3]` + `⚠ X ft / Y ft` chip label when out. Pixel-snapped endpoints (`Math.round`) and `lineCap: 'round'` per the v2.49.144 HD polish. The range-ring `lineWidth` also bumps 1.5 → 2 + lineCap round to match.
+**Description (cont):** Why only sphere / cube. The AoE picker's other shapes show direction inherently: `cone` draws a triangle from caster → cursor; `line` draws a rectangle along the same vector; `self_sphere` / `self_cube` anchor at the caster (no "distance to the AoE center" question — the caster IS the center). For those shapes, the ruler line would either duplicate information already conveyed by the shape outline (cone, line) or draw zero-length (self anchored). Sphere and cube are the cases where the cursor is a separate point in space from the caster; the ruler answers "how far away is this Fireball landing?"
+**Description (cont 2):** Why amber out-of-range matches the target picker. v2.49.143 established amber as the "advisory warning, not error" color for client-side range gates. The AoE picker already uses gray / dimmed when out of range for its preview shape (v2.49.78 Phase 3A); the new ruler line uses amber for the LINE color (so it's distinct from the shape) and matches the chip text. Visual language: amber = "the click will land but the server will likely reject."
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.150 live. (b) Manual: cast Fireball from Zara's sheet → AoE picker opens → move cursor → red dashed line tracks from Zara's token to the cursor with "X ft / 150 ft" chip → move past the 150 ft range → line + chip flip to amber `⚠`. (c) Cast Burning Hands (cone) → no extra ruler line (the cone shape conveys distance/direction itself). (d) Range ring + AoE preview shape still render unchanged from before.
+
+### Added
+- `app/static/tabletop.js::render` AoE picker block — new caster→cursor ruler line + distance chip for sphere/cube shapes.
+
+### Changed
+- `app/static/tabletop.js::render` AoE picker range ring — `lineWidth: 1.5 → 2` + `lineCap: round` for HD polish parity with the v2.49.144 ruler-system pass.
+
+### Notes
+- **Sphere / cube only.** Other shapes already convey distance through their outline.
+- **Pixel-snap + round lineCap.** Same HD polish as the v2.49.144 ruler system.
+- **Amber out-of-range.** Consistent with v2.49.143 target picker convention.
+
+---
+
 ## [2.49.149] - 2026-05-23
 
 **Schema version:** 56

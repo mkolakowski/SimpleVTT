@@ -1891,13 +1891,78 @@
                 ctx.save();
                 ctx.fillStyle = 'rgba(74, 222, 128, 0.06)';
                 ctx.strokeStyle = '#4ade80';
-                ctx.lineWidth = 1.5;
+                ctx.lineWidth = 2;        // v2.49.144 HD polish
+                ctx.lineCap = 'round';    // v2.49.144 HD polish
                 ctx.setLineDash([6, 4]);
                 ctx.beginPath();
                 ctx.arc(_aoe_caster_pos.x, _aoe_caster_pos.y,
                         _ring_radius_px, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.stroke();
+                ctx.restore();
+            }
+            // v2.49.150: caster→cursor ruler line for sphere / cube
+            // placements (Fireball, Hypnotic Pattern, etc.) so the
+            // player sees the distance to the AoE center. Cone / line
+            // / self_* shapes already convey direction via their
+            // shape outline — adding a separate ruler line there
+            // would be visual noise. Color shifts to amber when out
+            // of range (matches the AoE preview's dimmed state +
+            // the v2.49.143 target-picker out-of-range warning).
+            if (_aoe_caster_pos
+                    && (_aoePicker.shape === 'sphere' || _aoePicker.shape === 'cube')
+                    && Math.hypot(cx - _aoe_caster_pos.x, cy - _aoe_caster_pos.y) > 8) {
+                ctx.save();
+                ctx.lineCap = 'round';
+                ctx.lineWidth = 2;
+                if (_aoe_out_of_range) {
+                    ctx.strokeStyle = 'rgba(245, 158, 11, 0.95)';
+                    ctx.setLineDash([4, 3]);
+                } else {
+                    ctx.strokeStyle = 'rgba(220, 38, 38, 0.85)';
+                    ctx.setLineDash([6, 4]);
+                }
+                ctx.beginPath();
+                ctx.moveTo(Math.round(_aoe_caster_pos.x), Math.round(_aoe_caster_pos.y));
+                ctx.lineTo(Math.round(cx), Math.round(cy));
+                ctx.stroke();
+                ctx.restore();
+                // Distance chip — same shape as the v2.49.143 target
+                // picker's chip so the visual language is consistent
+                // across pickers.
+                const _aoeDistFt = _computeRulerDistanceFt(
+                    _aoe_caster_pos, { x: cx, y: cy },
+                );
+                const _aoeLabel = (_aoePicker.range_ft > 0)
+                    ? (_aoe_out_of_range
+                        ? `⚠ ${_aoeDistFt} ft / ${_aoePicker.range_ft} ft`
+                        : `${_aoeDistFt} ft / ${_aoePicker.range_ft} ft`)
+                    : `${_aoeDistFt} ft`;
+                ctx.save();
+                ctx.font = '11px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                const _metrics = ctx.measureText(_aoeLabel);
+                const _padX = 6, _chipH = 16;
+                const _chipW = _metrics.width + _padX * 2;
+                const _chipX = cx + 12;
+                const _chipY = cy + 12;
+                ctx.fillStyle = 'rgba(20, 24, 28, 0.88)';
+                ctx.strokeStyle = _aoe_out_of_range
+                    ? 'rgba(245, 158, 11, 0.85)'
+                    : 'rgba(220, 38, 38, 0.6)';
+                ctx.lineWidth = 1;
+                if (ctx.roundRect) {
+                    ctx.beginPath();
+                    ctx.roundRect(_chipX, _chipY, _chipW, _chipH, 4);
+                    ctx.fill();
+                    ctx.stroke();
+                } else {
+                    ctx.fillRect(_chipX, _chipY, _chipW, _chipH);
+                    ctx.strokeRect(_chipX, _chipY, _chipW, _chipH);
+                }
+                ctx.fillStyle = _aoe_out_of_range ? '#fbbf24' : '#fff';
+                ctx.fillText(_aoeLabel, _chipX + _padX, _chipY + _chipH / 2);
                 ctx.restore();
             }
             ctx.save();
