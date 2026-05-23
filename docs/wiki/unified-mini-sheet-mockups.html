@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SimpleVTT — Unified mini-sheet mockups (v2.49.186)</title>
+<style>
+  :root {
+    --bg:        #15171c;
+    --bg-2:      #20232a;
+    --panel:     #20232a;
+    --border:    #2c303a;
+    --input-bg:  #2a2d36;
+    --fg:        #e8e8ee;
+    --fg-mute:   #9aa0aa;
+    --accent:    #6cb4ff;
+    --danger:    #d74a4a;
+    --c-heal:    #4ade80;
+    --c-crit:    #fbbf24;
+    --c-damage:  #fb923c;
+    --c-buff:    #5ec1d6;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 28px 36px 80px;
+    line-height: 1.5;
+  }
+  h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+  h1 .version {
+    font-size: 12px; color: var(--fg-mute);
+    font-weight: 400; margin-left: 8px;
+  }
+  .lede { font-size: 14px; color: var(--fg-mute); margin: 6px 0 24px; }
+  h2 {
+    font-size: 16px;
+    margin: 36px 0 6px;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+  h2 .badge {
+    font-size: 11px;
+    font-weight: 600;
+    margin-left: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  h2 .badge.recommend {
+    background: color-mix(in srgb, var(--c-heal) 22%, transparent);
+    color: var(--c-heal);
+  }
+  h3 {
+    font-size: 13px;
+    margin: 22px 0 6px;
+    color: var(--fg);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  p, ul, ol { font-size: 14px; }
+  code, .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    background: rgba(108, 180, 255, 0.10);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  .callout {
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-2));
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    margin: 10px 0;
+  }
+  .callout.recommend {
+    background: color-mix(in srgb, var(--c-heal) 8%, var(--bg-2));
+    border-left-color: var(--c-heal);
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin: 10px 0 16px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--bg-2); font-weight: 600; font-size: 12px; }
+
+  /* ── Side-by-side mockup layout ── */
+  .mockup-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin: 14px 0 20px;
+  }
+  .mockup-column h4 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: var(--fg-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  @media (max-width: 760px) {
+    .mockup-pair { grid-template-columns: 1fr; }
+  }
+
+  /* ── Mini-sheet mockup blocks ── */
+  .mock-mini {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+  .mock-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, var(--bg-2)) 0%, var(--bg-2) 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  .mock-header.compact {
+    padding: 5px 10px;
+    background: var(--bg-2);
+  }
+  .mock-portrait {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #6cb4ff;
+    border: 2px solid var(--accent);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .mock-portrait.npc { background: #9d4edd; border-color: #9d4edd; }
+  .mock-portrait.bandit { background: #c84a4a; border-color: #c84a4a; }
+  .mock-name { flex: 1; min-width: 0; }
+  .mock-name-line { font-weight: 700; font-size: 13px; }
+  .mock-name-sub { font-size: 10px; color: var(--fg-mute); }
+  .mock-arrow { font-size: 10px; color: var(--fg-mute); }
+
+  .mock-body { padding: 8px 10px; }
+  .mock-body.dense { padding: 6px 10px; }
+  .mock-stat-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 6px;
+    font-size: 11px;
+    color: var(--fg-mute);
+  }
+  .mock-stat-row .v {
+    font-weight: 700;
+    color: var(--fg);
+    margin-left: 3px;
+  }
+  .mock-hp-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--input-bg);
+    margin: 4px 0 8px;
+    overflow: hidden;
+  }
+  .mock-hp-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4ade80 0%, #fbbf24 70%, #fb923c 100%);
+    border-radius: 3px;
+  }
+  .mock-econ {
+    display: flex;
+    gap: 4px;
+    margin: 6px 0 8px;
+  }
+  .mock-econ-chip {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    color: var(--fg-mute);
+    background: var(--input-bg);
+  }
+  .mock-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    margin: 0 0 6px;
+    flex-wrap: wrap;
+  }
+  .mock-tab {
+    font-size: 11px;
+    padding: 4px 8px;
+    color: var(--fg-mute);
+  }
+  .mock-tab.active {
+    color: var(--accent);
+    font-weight: 600;
+    border-bottom: 2px solid var(--accent);
+    margin-bottom: -1px;
+  }
+  .mock-tab.hidden {
+    color: rgba(154, 160, 170, 0.3);
+    text-decoration: line-through;
+    font-style: italic;
+  }
+  .mock-spell-row, .mock-action-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    background: var(--input-bg);
+    border-radius: 4px;
+    margin-bottom: 4px;
+    font-size: 11px;
+  }
+  .mock-spell-name, .mock-action-name {
+    flex: 1;
+    font-weight: 500;
+    font-size: 12px;
+    min-width: 0;
+  }
+  .mock-chip { font-size: 10px; flex-shrink: 0; }
+  .mock-chip.range { color: #7dd3c0; font-weight: 500; }
+  .mock-chip.atk   { color: #fbb88a; font-weight: 600; }
+  .mock-chip.dmg   { color: #e8a;   font-weight: 500; }
+  .mock-chip.save  { color: #8cf;   font-weight: 500; }
+  .mock-cast-btn {
+    background: rgba(167, 139, 250, .12);
+    border: 1px solid rgba(167, 139, 250, .4);
+    color: #b9a3fb;
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .mock-section-label {
+    font-size: 10px;
+    color: var(--fg-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 8px 0 4px;
+  }
+  .mock-slots {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 10px;
+    color: var(--fg-mute);
+    margin-bottom: 6px;
+  }
+  .mock-pip {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--c-crit);
+    margin-right: 2px;
+  }
+  .mock-pip.used { background: transparent; border: 1px solid var(--fg-mute); }
+  .mock-ability-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 3px;
+    text-align: center;
+    margin: 6px 0;
+  }
+  .mock-ability-cell {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 0;
+    background: var(--input-bg);
+  }
+  .mock-ability-cell .a-label {
+    font-size: 8px;
+    color: var(--fg-mute);
+  }
+  .mock-ability-cell .a-mod {
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .mock-ability-cell .a-score {
+    font-size: 8px;
+    color: var(--fg-mute);
+  }
+  .mock-quick-chips {
+    display: flex;
+    gap: 14px;
+    margin: 6px 0;
+    font-size: 11px;
+  }
+  .mock-quick-chips b { color: var(--fg); }
+  .mock-empty-panel {
+    font-size: 10px;
+    color: rgba(154, 160, 170, 0.5);
+    font-style: italic;
+    padding: 8px 4px;
+  }
+  .annotation {
+    font-size: 11px;
+    color: var(--fg-mute);
+    margin-top: 6px;
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+<h1>Unified mini-sheet — visual mockups <span class="version">v2.49.186</span></h1>
+<p class="lede">
+  Visual companion to the
+  <a href="/wiki/doc/plan-unified-mini-sheet">Unified mini-sheet design plan</a>.
+  Three mockups rendered side-by-side (NPC left, PC right) so a reviewer can
+  scan the layout differences without parsing ASCII. Each mockup uses the same
+  Soren (Cult Acolyte) and Zara (Sorcerer) data so only the renderer differs.
+</p>
+
+<h2 id="current">Current state — for reference</h2>
+<p>
+  What ships today (after v2.49.183 / v2.49.184). NPC has the shared header
+  + HP bar from PC, then diverges into the compact stat-block body.
+</p>
+
+<div class="mockup-pair">
+  <div class="mockup-column">
+    <h4>NPC — Soren (Cult Acolyte)</h4>
+    <div class="mock-mini">
+      <div class="mock-header">
+        <div class="mock-portrait npc">S</div>
+        <div class="mock-name">
+          <div class="mock-name-line">Soren (Cult Acolyte)</div>
+          <div class="mock-name-sub">Medium Humanoid · evil</div>
+        </div>
+        <div class="mock-arrow">▼</div>
+      </div>
+      <div class="mock-body dense">
+        <div class="mock-stat-row">
+          <span>HP <span class="v">18</span> / 18</span>
+        </div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-quick-chips">
+          <span><b>AC</b> 12</span>
+          <span><b>Spd</b> 30</span>
+        </div>
+        <div class="mock-ability-grid">
+          <div class="mock-ability-cell"><div class="a-label">STR</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
+          <div class="mock-ability-cell"><div class="a-label">DEX</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
+          <div class="mock-ability-cell"><div class="a-label">CON</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
+          <div class="mock-ability-cell"><div class="a-label">INT</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
+          <div class="mock-ability-cell"><div class="a-label">WIS</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
+          <div class="mock-ability-cell"><div class="a-label">CHA</div><div class="a-mod">+0</div><div class="a-score">11</div></div>
+        </div>
+        <div class="mock-tabs">
+          <span class="mock-tab active">Actions</span>
+          <span class="mock-tab">Spells</span>
+          <span class="mock-tab">Skills</span>
+        </div>
+        <div class="mock-action-row">
+          <span class="mock-action-name">Dagger</span>
+          <span class="mock-chip atk">+4</span>
+          <span class="mock-chip dmg">1d4+2 piercing</span>
+          <span class="mock-cast-btn">🗡 Strike</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup-column">
+    <h4>PC — Zara Emberfire</h4>
+    <div class="mock-mini">
+      <div class="mock-header">
+        <div class="mock-portrait">Z</div>
+        <div class="mock-name">
+          <div class="mock-name-line">Zara Emberfire 🧿</div>
+          <div class="mock-name-sub">Sorcerer 5 · Tiefling</div>
+        </div>
+        <div class="mock-arrow">▼</div>
+      </div>
+      <div class="mock-body">
+        <div class="mock-stat-row">
+          <span>HP <span class="v">37</span> / 37</span>
+          <span>AC <span class="v">12</span></span>
+          <span>Spd <span class="v">30</span></span>
+        </div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-econ">
+          <span class="mock-econ-chip">⚔ Act</span>
+          <span class="mock-econ-chip">💨 Bns</span>
+          <span class="mock-econ-chip">🛡 Rxn</span>
+          <span class="mock-econ-chip">👣 30</span>
+        </div>
+        <div class="mock-tabs">
+          <span class="mock-tab">Actions</span>
+          <span class="mock-tab active">Spells</span>
+          <span class="mock-tab">Abilities</span>
+          <span class="mock-tab">Skills</span>
+          <span class="mock-tab">Res</span>
+          <span class="mock-tab">Feats</span>
+        </div>
+        <div class="mock-section-label">Cantrips</div>
+        <div class="mock-spell-row">
+          <span class="mock-spell-name">✨ Fire Bolt</span>
+          <span class="mock-chip range">120 feet</span>
+          <span class="mock-chip atk">+7</span>
+          <span class="mock-chip dmg">2d10 fire</span>
+          <span class="mock-cast-btn">✨ Cast</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="annotation">
+  Header + HP bar shared. NPC body branches into compact ability grid + flat
+  action list; PC body has tabs + spell-slot pips + action-economy chips.
+</div>
+
+<h2 id="mockup-a">Mockup A — Conservative <span class="badge">PC partial, NPC fits in</span></h2>
+<p>
+  Reuse <code>_mini_sheet_card.html</code> verbatim. Server projects NPCs
+  into PC-shaped dicts. Empty PC-only fields hide their sections via the
+  existing <code>{% if %}</code> gates. Single source of truth for the
+  entire mini-sheet.
+</p>
+
+<div class="mockup-pair">
+  <div class="mockup-column">
+    <h4>NPC — rendered through PC partial</h4>
+    <div class="mock-mini">
+      <div class="mock-header">
+        <div class="mock-portrait npc">S</div>
+        <div class="mock-name">
+          <div class="mock-name-line">Soren (Cult Acolyte)</div>
+          <div class="mock-name-sub">Medium Humanoid · evil</div>
+        </div>
+        <div class="mock-arrow">▼</div>
+      </div>
+      <div class="mock-body">
+        <div class="mock-stat-row">
+          <span>HP <span class="v">18</span> / 18</span>
+          <span>AC <span class="v">12</span></span>
+          <span>Spd <span class="v">30</span></span>
+        </div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <!-- No economy chips block — gated on combatant.economy presence -->
+        <div class="mock-tabs">
+          <span class="mock-tab active">Actions</span>
+          <span class="mock-tab">Spells</span>
+          <span class="mock-tab hidden">Abilities</span>
+          <span class="mock-tab">Skills</span>
+          <span class="mock-tab hidden">Res</span>
+          <span class="mock-tab hidden">Feats</span>
+        </div>
+        <div class="mock-action-row">
+          <span class="mock-action-name">🗡 Dagger</span>
+          <span class="mock-chip atk">+4</span>
+          <span class="mock-chip dmg">1d4+2 piercing</span>
+          <span class="mock-cast-btn">🗡 Strike</span>
+        </div>
+      </div>
+    </div>
+    <div class="annotation">
+      Same chrome as PC. Empty tabs (Abilities / Res / Feats) hidden via existing
+      <code>{% if %}</code>. Compact stat-block ability grid is gone — PC partial
+      doesn't have one.
+    </div>
+  </div>
+
+  <div class="mockup-column">
+    <h4>PC — unchanged</h4>
+    <div class="mock-mini">
+      <div class="mock-header">
+        <div class="mock-portrait">Z</div>
+        <div class="mock-name">
+          <div class="mock-name-line">Zara Emberfire 🧿</div>
+          <div class="mock-name-sub">Sorcerer 5 · Tiefling</div>
+        </div>
+        <div class="mock-arrow">▼</div>
+      </div>
+      <div class="mock-body">
+        <div class="mock-stat-row">
+          <span>HP <span class="v">37</span> / 37</span>
+          <span>AC <span class="v">12</span></span>
+          <span>Spd <span class="v">30</span></span>
+        </div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-econ">
+          <span class="mock-econ-chip">⚔ Act</span>
+          <span class="mock-econ-chip">💨 Bns</span>
+          <span class="mock-econ-chip">🛡 Rxn</span>
+          <span class="mock-econ-chip">👣 30</span>
+        </div>
+        <div class="mock-tabs">
+          <span class="mock-tab">Actions</span>
+          <span class="mock-tab active">Spells</span>
+          <span class="mock-tab">Abilities</span>
+          <span class="mock-tab">Skills</span>
+          <span class="mock-tab">Res</span>
+          <span class="mock-tab">Feats</span>
+        </div>
+        <div class="mock-section-label">Cantrips</div>
+        <div class="mock-spell-row">
+          <span class="mock-spell-name">✨ Fire Bolt</span>
+          <span class="mock-chip range">120 feet</span>
+          <span class="mock-chip atk">+7</span>
+          <span class="mock-chip dmg">2d10 fire</span>
+          <span class="mock-cast-btn">✨ Cast</span>
+        </div>
+      </div>
+    </div>
+    <div class="annotation">
+      Untouched. PC sheet already at the target shape.
+    </div>
+  </div>
+</div>
+
+<div class="callout">
+  <strong>Trade-off.</strong> Single source of truth, but loses the compact NPC
+  ability grid that users explicitly asked for in v2.3.34. The strikethrough
+  tabs above show what gets hidden — visual gaps remain because the chrome
+  height stays.
+</div>
+
+<h2 id="mockup-b">Mockup B — Symmetric <span class="badge recommend">⭐ recommended endpoint</span></h2>
+<p>
+  New unified partial. Same chrome for both. Tab strip is <strong>server-driven</strong>:
+  PCs get 6 tabs, NPCs get 3 — no hidden/disabled placeholders. Each tab
+  renders through the same Jinja sub-partial regardless of source.
+</p>
+
+<div class="mockup-pair">
+  <div class="mockup-column">
+    <h4>NPC — adaptive tab strip</h4>
+    <div class="mock-mini">
+      <div class="mock-header">
+        <div class="mock-portrait npc">S</div>
+        <div class="mock-name">
+          <div class="mock-name-line">Soren (Cult Acolyte)</div>
+          <div class="mock-name-sub">Medium Humanoid · evil</div>
+        </div>
+        <div class="mock-arrow">▼</div>
+      </div>
+      <div class="mock-body">
+        <div class="mock-stat-row">
+          <span>HP <span class="v">18</span> / 18</span>
+          <span>AC <span class="v">12</span></span>
+          <span>Spd <span class="v">30</span></span>
+        </div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <!-- No economy row for NPC -->
+        <div class="mock-tabs">
+          <span class="mock-tab active">Actions</span>
+          <span class="mock-tab">Spells</span>
+          <span class="mock-tab">Skills</span>
+        </div>
+        <div class="mock-action-row">
+          <span class="mock-action-name">🗡 Dagger</span>
+          <span class="mock-chip atk">+4</span>
+          <span class="mock-chip dmg">1d4+2 piercing</span>
+          <span class="mock-cast-btn">🗡 Strike</span>
+        </div>
+      </div>
+    </div>
+    <div class="annotation">
+      Server sends <code>tabs=['actions','spells','skills']</code> — only those
+      render. No hidden placeholders. Action row uses the same chip-row
+      Jinja sub-partial as PC.
+    </div>
+  </div>
+
+  <div class="mockup-column">
+    <h4>PC — full 6-tab strip</h4>
+    <div class="mock-mini">
+      <div class="mock-header">
+        <div class="mock-portrait">Z</div>
+        <div class="mock-name">
+          <div class="mock-name-line">Zara Emberfire 🧿</div>
+          <div class="mock-name-sub">Sorcerer 5 · Tiefling</div>
+        </div>
+        <div class="mock-arrow">▼</div>
+      </div>
+      <div class="mock-body">
+        <div class="mock-stat-row">
+          <span>HP <span class="v">37</span> / 37</span>
+          <span>AC <span class="v">12</span></span>
+          <span>Spd <span class="v">30</span></span>
+        </div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-econ">
+          <span class="mock-econ-chip">⚔ Act</span>
+          <span class="mock-econ-chip">💨 Bns</span>
+          <span class="mock-econ-chip">🛡 Rxn</span>
+          <span class="mock-econ-chip">👣 30</span>
+        </div>
+        <div class="mock-tabs">
+          <span class="mock-tab">Actions</span>
+          <span class="mock-tab active">Spells</span>
+          <span class="mock-tab">Abilities</span>
+          <span class="mock-tab">Skills</span>
+          <span class="mock-tab">Res</span>
+          <span class="mock-tab">Feats</span>
+        </div>
+        <div class="mock-section-label">Cantrips</div>
+        <div class="mock-spell-row">
+          <span class="mock-spell-name">✨ Fire Bolt</span>
+          <span class="mock-chip range">120 feet</span>
+          <span class="mock-chip atk">+7</span>
+          <span class="mock-chip dmg">2d10 fire</span>
+          <span class="mock-cast-btn">✨ Cast</span>
+        </div>
+      </div>
+    </div>
+    <div class="annotation">
+      Server sends <code>tabs=['actions','spells','abilities','skills','resources','feats']</code>.
+      Same partial as NPC; just iterates more tab entries.
+    </div>
+  </div>
+</div>
+
+<div class="callout recommend">
+  <strong>Why this is the architectural endpoint.</strong> One partial, per-tab
+  sub-partials, no hidden tabs, no density branch. Future features land in
+  one place. Per-tab sub-partials are individually testable. Largest
+  refactor, biggest payoff.
+</div>
+
+<h2 id="mockup-c">Mockup C — Hybrid Density <span class="badge">Phase 1 stepping stone</span></h2>
+<p>
+  Shared chrome (header + HP bar). Body density branches per entity type:
+  NPC keeps the compact stat-block (current v2.49.183 look); PC keeps the
+  tabbed layout. <strong>This is the natural next step from v2.49.183</strong>
+  and the easiest to ship.
+</p>
+
+<div class="mockup-pair">
+  <div class="mockup-column">
+    <h4>NPC — compact body preserved</h4>
+    <div class="mock-mini">
+      <div class="mock-header">
+        <div class="mock-portrait npc">S</div>
+        <div class="mock-name">
+          <div class="mock-name-line">Soren (Cult Acolyte)</div>
+          <div class="mock-name-sub">Medium Humanoid · evil</div>
+        </div>
+        <div class="mock-arrow">▼</div>
+      </div>
+      <div class="mock-body dense">
+        <div class="mock-stat-row">
+          <span>HP <span class="v">18</span> / 18</span>
+        </div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-quick-chips">
+          <span><b>AC</b> 12</span>
+          <span><b>Spd</b> 30</span>
+        </div>
+        <div class="mock-ability-grid">
+          <div class="mock-ability-cell"><div class="a-label">STR</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
+          <div class="mock-ability-cell"><div class="a-label">DEX</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
+          <div class="mock-ability-cell"><div class="a-label">CON</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
+          <div class="mock-ability-cell"><div class="a-label">INT</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
+          <div class="mock-ability-cell"><div class="a-label">WIS</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
+          <div class="mock-ability-cell"><div class="a-label">CHA</div><div class="a-mod">+0</div><div class="a-score">11</div></div>
+        </div>
+        <div class="mock-tabs">
+          <span class="mock-tab active">Actions</span>
+          <span class="mock-tab">Spells</span>
+          <span class="mock-tab">Skills</span>
+        </div>
+        <div class="mock-action-row">
+          <span class="mock-action-name">🗡 Dagger</span>
+          <span class="mock-chip atk">+4</span>
+          <span class="mock-chip dmg">1d4+2 piercing</span>
+          <span class="mock-cast-btn">🗡 Strike</span>
+        </div>
+      </div>
+    </div>
+    <div class="annotation">
+      Body density branches: compact ability grid + flat action list. Same chrome
+      (header + HP bar) as the PC right.
+    </div>
+  </div>
+
+  <div class="mockup-column">
+    <h4>PC — full tabbed body</h4>
+    <div class="mock-mini">
+      <div class="mock-header">
+        <div class="mock-portrait">Z</div>
+        <div class="mock-name">
+          <div class="mock-name-line">Zara Emberfire 🧿</div>
+          <div class="mock-name-sub">Sorcerer 5 · Tiefling</div>
+        </div>
+        <div class="mock-arrow">▼</div>
+      </div>
+      <div class="mock-body">
+        <div class="mock-stat-row">
+          <span>HP <span class="v">37</span> / 37</span>
+          <span>AC <span class="v">12</span></span>
+          <span>Spd <span class="v">30</span></span>
+        </div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-econ">
+          <span class="mock-econ-chip">⚔ Act</span>
+          <span class="mock-econ-chip">💨 Bns</span>
+          <span class="mock-econ-chip">🛡 Rxn</span>
+          <span class="mock-econ-chip">👣 30</span>
+        </div>
+        <div class="mock-tabs">
+          <span class="mock-tab">Actions</span>
+          <span class="mock-tab active">Spells</span>
+          <span class="mock-tab">Abilities</span>
+          <span class="mock-tab">Skills</span>
+          <span class="mock-tab">Res</span>
+          <span class="mock-tab">Feats</span>
+        </div>
+        <div class="mock-section-label">Cantrips</div>
+        <div class="mock-spell-row">
+          <span class="mock-spell-name">✨ Fire Bolt</span>
+          <span class="mock-chip range">120 feet</span>
+          <span class="mock-chip atk">+7</span>
+          <span class="mock-chip dmg">2d10 fire</span>
+          <span class="mock-cast-btn">✨ Cast</span>
+        </div>
+        <div class="mock-section-label">Level 1 Spells</div>
+        <div class="mock-slots">
+          Slots
+          <span><span class="mock-pip"></span><span class="mock-pip"></span><span class="mock-pip used"></span><span class="mock-pip used"></span> 2/4</span>
+        </div>
+        <div class="mock-spell-row">
+          <span class="mock-spell-name">✨ Magic Missile</span>
+          <span class="mock-chip range">120 feet</span>
+          <span class="mock-chip dmg">1d4+1 force</span>
+          <span class="mock-cast-btn">✨ Cast</span>
+        </div>
+      </div>
+    </div>
+    <div class="annotation">
+      Body unchanged from today's PC mini-sheet. Spell-slot pips + section
+      labels preserved.
+    </div>
+  </div>
+</div>
+
+<div class="callout">
+  <strong>Why this is Phase 1.</strong> Smallest refactor (we're 60% there with
+  v2.49.183), preserves the compact NPC view users like, locks in the
+  chrome-sharing architecture. Pays down some technical debt but doesn't
+  achieve full unification — that's Mockup B as Phase 2.
+</div>
+
+<h2 id="side-by-side">All three NPC mockups side by side</h2>
+<p>
+  Quick visual scan of just the NPC variant in each approach. Same data,
+  three different render paths.
+</p>
+
+<div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;margin:14px 0 20px;">
+  <div>
+    <h4 style="margin:0 0 6px;font-size:11px;color:var(--fg-mute);text-transform:uppercase;letter-spacing:0.5px;">A — Conservative</h4>
+    <div class="mock-mini">
+      <div class="mock-header">
+        <div class="mock-portrait npc">S</div>
+        <div class="mock-name">
+          <div class="mock-name-line" style="font-size:11px;">Soren</div>
+          <div class="mock-name-sub">Medium Humanoid</div>
+        </div>
+      </div>
+      <div class="mock-body">
+        <div class="mock-stat-row"><span>HP <span class="v">18</span>/18</span><span>AC <span class="v">12</span></span></div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-tabs">
+          <span class="mock-tab active">Actions</span>
+          <span class="mock-tab">Spells</span>
+          <span class="mock-tab hidden">Abil</span>
+          <span class="mock-tab">Skills</span>
+          <span class="mock-tab hidden">Res</span>
+          <span class="mock-tab hidden">Feat</span>
+        </div>
+        <div class="mock-action-row" style="font-size:10px;padding:3px 6px;">
+          <span class="mock-action-name" style="font-size:10px;">Dagger</span>
+          <span class="mock-chip atk">+4</span>
+          <span class="mock-cast-btn">🗡</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h4 style="margin:0 0 6px;font-size:11px;color:var(--c-heal);text-transform:uppercase;letter-spacing:0.5px;">B — Symmetric ⭐</h4>
+    <div class="mock-mini">
+      <div class="mock-header">
+        <div class="mock-portrait npc">S</div>
+        <div class="mock-name">
+          <div class="mock-name-line" style="font-size:11px;">Soren</div>
+          <div class="mock-name-sub">Medium Humanoid</div>
+        </div>
+      </div>
+      <div class="mock-body">
+        <div class="mock-stat-row"><span>HP <span class="v">18</span>/18</span><span>AC <span class="v">12</span></span></div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-tabs">
+          <span class="mock-tab active">Actions</span>
+          <span class="mock-tab">Spells</span>
+          <span class="mock-tab">Skills</span>
+        </div>
+        <div class="mock-action-row" style="font-size:10px;padding:3px 6px;">
+          <span class="mock-action-name" style="font-size:10px;">Dagger</span>
+          <span class="mock-chip atk">+4</span>
+          <span class="mock-cast-btn">🗡</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h4 style="margin:0 0 6px;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">C — Hybrid Density</h4>
+    <div class="mock-mini">
+      <div class="mock-header">
+        <div class="mock-portrait npc">S</div>
+        <div class="mock-name">
+          <div class="mock-name-line" style="font-size:11px;">Soren</div>
+          <div class="mock-name-sub">Medium Humanoid</div>
+        </div>
+      </div>
+      <div class="mock-body dense">
+        <div class="mock-stat-row"><span>HP <span class="v">18</span>/18</span></div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-quick-chips" style="font-size:10px;"><span><b>AC</b> 12</span><span><b>Spd</b> 30</span></div>
+        <div class="mock-ability-grid">
+          <div class="mock-ability-cell"><div class="a-label">STR</div><div class="a-mod">+0</div></div>
+          <div class="mock-ability-cell"><div class="a-label">DEX</div><div class="a-mod">+2</div></div>
+          <div class="mock-ability-cell"><div class="a-label">CON</div><div class="a-mod">+0</div></div>
+          <div class="mock-ability-cell"><div class="a-label">INT</div><div class="a-mod">+0</div></div>
+          <div class="mock-ability-cell"><div class="a-label">WIS</div><div class="a-mod">+2</div></div>
+          <div class="mock-ability-cell"><div class="a-label">CHA</div><div class="a-mod">+0</div></div>
+        </div>
+        <div class="mock-tabs">
+          <span class="mock-tab active">Actions</span>
+          <span class="mock-tab">Spells</span>
+          <span class="mock-tab">Skills</span>
+        </div>
+        <div class="mock-action-row" style="font-size:10px;padding:3px 6px;">
+          <span class="mock-action-name" style="font-size:10px;">Dagger</span>
+          <span class="mock-chip atk">+4</span>
+          <span class="mock-cast-btn">🗡</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2 id="summary">Summary</h2>
+<table>
+  <thead>
+    <tr><th>Mockup</th><th>NPC chrome match</th><th>NPC body density</th><th>Refactor scope</th><th>Recommended for</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>A. Conservative</strong></td>
+      <td>Identical to PC (same partial)</td>
+      <td>Loose (PC partial spacing)</td>
+      <td>High (audit existing partial)</td>
+      <td>Teams that prioritize "one partial" over "compact NPC"</td>
+    </tr>
+    <tr>
+      <td><strong>B. Symmetric</strong> ⭐</td>
+      <td>Identical to PC</td>
+      <td>Same density as PC</td>
+      <td>Largest (new partial + sub-partials + server projection)</td>
+      <td>Long-term architectural endpoint</td>
+    </tr>
+    <tr>
+      <td><strong>C. Hybrid Density</strong></td>
+      <td>Shared chrome only</td>
+      <td>Compact (preserves v2.3.34 preference)</td>
+      <td>Small (extends v2.49.183)</td>
+      <td>Phase 1 stepping stone toward B</td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  See the
+  <a href="/wiki/doc/plan-unified-mini-sheet">full design plan</a>
+  for the phased rollout, risk register, and definition-of-done checklist.
+</p>
+
+</body>
+</html>

@@ -20,6 +20,7 @@ Guides land at `docs/wiki/<slug>.{md,html}`. Plans live at `docs/plans/<slug>.md
 | [PC vs NPC combat systems](pc-vs-npc-systems.md) | Markdown (reference) | Contributors | ✅ shipped (v2.49.167) |
 | [Targeting system guide](targeting-system-guide.html) | HTML (visual) | GMs + contributors | ✅ shipped (v2.49.168) |
 | [Battle & Characters tab sheets](battle-character-sheets-guide.html) | HTML (visual) | Players + GMs + contributors | ✅ shipped (v2.49.182) |
+| [Unified mini-sheet mockups](unified-mini-sheet-mockups.html) | HTML (visual) | Contributors (design review) | ⚪ 3 mockups · companion to design plan (v2.49.186) |
 
 ## Design plans
 

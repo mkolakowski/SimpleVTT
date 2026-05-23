@@ -50,6 +50,8 @@ async def test_wiki_home_renders():
     assert "/wiki/battle-character-sheets-guide" in resp.text
     # v2.49.185: unified mini-sheet plan listed.
     assert "/wiki/doc/plan-unified-mini-sheet" in resp.text
+    # v2.49.186: unified mini-sheet visual mockups companion.
+    assert "/wiki/unified-mini-sheet-mockups" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -129,6 +131,23 @@ async def test_wiki_battle_character_sheets_guide_renders():
     assert "battle" in resp.text.lower()
     assert "characters" in resp.text.lower()
     assert "mini-sheet" in resp.text.lower()
+    # Standalone HTML gets the nav injected after <body>.
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_unified_mini_sheet_mockups_renders():
+    """v2.49.186: GET /wiki/unified-mini-sheet-mockups — visual
+    companion to the unified mini-sheet design plan. Renders the
+    three architectural options as side-by-side .mock-mini blocks
+    so a reviewer can scan layout differences."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/unified-mini-sheet-mockups")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # The three mockups + summary table are the whole point.
+    assert "conservative" in resp.text.lower()
+    assert "symmetric" in resp.text.lower()
+    assert "hybrid density" in resp.text.lower()
     # Standalone HTML gets the nav injected after <body>.
     assert 'class="wiki-nav"' in resp.text
 

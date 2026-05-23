@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.186] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **New wiki visual companion: Unified mini-sheet mockups (HTML rendering of the v2.49.185 plan's 3 mockups).** User asked to render the design mockups in an HTML file so a reviewer can see the layouts visually instead of parsing ASCII. New `docs/wiki/unified-mini-sheet-mockups.html` shows each option (Conservative / Symmetric / Hybrid Density) as side-by-side NPC + PC mock-mini blocks using the same `.mock-mini` CSS classes the v2.49.182 visual guide established. Includes a "current state" baseline section (post-v2.49.183/.184) and a 3-up summary grid showing just the NPC variant under each approach for quick scanning.
+**Description:** New `docs/wiki/unified-mini-sheet-mockups.html` (~520 lines) modeled on `battle-character-sheets-guide.html` (same `.mock-mini` / `.mock-tabs` / `.mock-spell-row` / chip-color classes). Sections: (1) Current state — what ships today (shared chrome + density-branched body); (2) Mockup A (Conservative) — NPC rendered through the PC partial with strikethrough placeholders for hidden tabs; (3) Mockup B (Symmetric ⭐) — both rendered through a unified partial with server-driven tabs=[...]; (4) Mockup C (Hybrid Density) — shared chrome only, NPC keeps compact ability-grid body; (5) 3-up side-by-side NPC comparison at small scale; (6) Summary table cross-referencing the design plan.
+**Description (cont):** Each mockup section pairs NPC (left) with PC (right) so the reviewer sees the per-renderer divergence at-a-glance. The Conservative mockup uses `.mock-tab.hidden` (strikethrough, dimmed) to show what tabs would be present-but-empty in the PC partial when rendering an NPC — visualises the "loose feel" complaint the v2.3.34 rollback was about. Symmetric uses no hidden placeholders. Hybrid preserves the dense 6-cell ability grid only on NPCs.
+**Description (cont 2):** Cross-references the v2.49.185 plan doc with a callout at the top of the Mockups section: "Visual mockups — the three options are also rendered as live-styled HTML at..." with a link to this new HTML. Plan readers can switch between text + visual representations.
+**Description (cont 3):** Wiki surfacing per CLAUDE.md: (1) `docs/wiki/<slug>.html` slug doesn't need an allowlist entry (served directly via `/wiki/<slug>`); (2) added landing-page table row in `app/templates/wiki.html` "Available guides" with "design review" status; (3) added matching row to `docs/wiki/README.md` on-disk index; (4) new `test_wiki_unified_mini_sheet_mockups_renders` harness test asserting the slug returns 200 + body contains "conservative" + "symmetric" + "hybrid density" + nav menu; (5) extended `test_wiki_home_renders` landing-page assertion.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.186 live. (b) Harness: `test_wiki.py::test_wiki_unified_mini_sheet_mockups_renders` + extended `test_wiki_home_renders` both pass. (c) Manual: GET `/wiki/unified-mini-sheet-mockups` renders the page with all three mockup pairs + the 3-up comparison. Each mock-mini block uses the actual chip colors from style.css. The "current state" section shows what ships today as a baseline.
+
+### Added
+- `docs/wiki/unified-mini-sheet-mockups.html` — visual companion to the unified mini-sheet plan; three side-by-side mockup pairs (Conservative / Symmetric ⭐ / Hybrid Density) + current-state baseline + 3-up summary grid.
+- `app/templates/wiki.html` — landing-page row for the new visual companion.
+- `docs/wiki/README.md` — on-disk index row.
+- `tests/harness/test_wiki.py::test_wiki_unified_mini_sheet_mockups_renders` — per-slug smoke test (200 + 3-mockup keywords + nav).
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — extended with new slug assertion.
+
+### Changed
+- `docs/plans/unified-mini-sheet.md` — added a callout at the top of the Mockups section linking to the new visual companion.
+
+### Notes
+- **No code change beyond docs / harness.** The plan + mockup pair is for design review; implementation begins when the user picks A / B / C.
+- **Visual mockups use the exact CSS palette** from `app/static/style.css` so the rendered HTML reflects current theme tokens (Dark / Midnight / etc. all themes override the `:root` block).
+
+---
+
 ## [2.49.185] - 2026-05-23
 
 **Schema version:** 56

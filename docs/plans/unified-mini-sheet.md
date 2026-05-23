@@ -27,6 +27,12 @@ So the precedent for "unify" is documented, and the precedent for "users like th
 
 Three approaches presented for review. Each shows the same combatant (Soren the Cult Acolyte) so the differences are about the **renderer**, not the data.
 
+> **🎨 Visual mockups** — the three options are also rendered as
+> live-styled HTML at [unified-mini-sheet-mockups.html](../wiki/unified-mini-sheet-mockups.html)
+> (side-by-side NPC + PC for each approach, plus a 3-up summary
+> comparison at the bottom). The ASCII below is the same content
+> in text-form for review-in-diff.
+
 ---
 
 ### Mockup A — "Conservative: PC-shape, NPC fits in"
