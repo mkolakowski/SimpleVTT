@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SimpleVTT — Battle & Characters tab sheets (v2.49.182)</title>
+<style>
+  :root {
+    --bg:        #15171c;
+    --bg-2:      #20232a;
+    --panel:     #20232a;
+    --border:    #2c303a;
+    --input-bg:  #2a2d36;
+    --fg:        #e8e8ee;
+    --fg-mute:   #9aa0aa;
+    --accent:    #6cb4ff;
+    --danger:    #d74a4a;
+    --c-heal:    #4ade80;
+    --c-crit:    #fbbf24;
+    --c-damage:  #fb923c;
+    --c-buff:    #5ec1d6;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 28px 36px 80px;
+    line-height: 1.5;
+  }
+  h1 { font-size: 22px; font-weight: 700; margin: 0 0 4px; }
+  h1 .version {
+    font-size: 12px; color: var(--fg-mute);
+    font-weight: 400; margin-left: 8px;
+  }
+  .lede { font-size: 14px; color: var(--fg-mute); margin: 6px 0 24px; }
+  h2 {
+    font-size: 16px;
+    margin: 36px 0 6px;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+  h3 {
+    font-size: 13px;
+    margin: 22px 0 6px;
+    color: var(--fg);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  p, ul, ol { font-size: 14px; }
+  ul li, ol li { margin: 3px 0; }
+  code, .code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    background: rgba(108, 180, 255, 0.10);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  pre code { background: transparent; color: var(--fg); padding: 0; }
+  .callout {
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-2));
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    margin: 10px 0;
+  }
+  .callout strong { color: var(--accent); }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin: 10px 0 16px;
+  }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 6px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: var(--bg-2);
+    font-weight: 600;
+    font-size: 12px;
+  }
+
+  /* ── Mini-sheet mockup ── */
+  .mock-mini {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0;
+    margin: 12px 0 18px;
+    max-width: 360px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+  .mock-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, var(--bg-2)) 0%, var(--bg-2) 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  .mock-portrait {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #6cb4ff;
+    border: 2px solid var(--accent);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .mock-name {
+    flex: 1;
+    min-width: 0;
+  }
+  .mock-name-line { font-weight: 700; font-size: 13px; }
+  .mock-name-sub { font-size: 10px; color: var(--fg-mute); }
+  .mock-arrow { font-size: 10px; color: var(--fg-mute); }
+
+  .mock-body { padding: 8px 10px; }
+  .mock-stat-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 6px;
+    font-size: 11px;
+    color: var(--fg-mute);
+  }
+  .mock-stat-row .v {
+    font-weight: 700;
+    color: var(--fg);
+    margin-left: 3px;
+  }
+  .mock-hp-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--input-bg);
+    margin: 4px 0 8px;
+    overflow: hidden;
+  }
+  .mock-hp-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4ade80 0%, #fbbf24 70%, #fb923c 100%);
+    border-radius: 3px;
+  }
+  .mock-econ {
+    display: flex;
+    gap: 4px;
+    margin: 6px 0 8px;
+  }
+  .mock-econ-chip {
+    font-size: 9px;
+    font-weight: 700;
+    padding: 2px 5px;
+    border-radius: 3px;
+    border: 1px solid var(--border);
+    color: var(--fg-mute);
+    background: var(--input-bg);
+  }
+  .mock-econ-chip.lit {
+    color: var(--c-crit);
+    border-color: var(--c-crit);
+    background: color-mix(in srgb, var(--c-crit) 16%, var(--input-bg));
+  }
+  .mock-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    margin: 0 0 6px;
+  }
+  .mock-tab {
+    font-size: 11px;
+    padding: 4px 8px;
+    color: var(--fg-mute);
+    cursor: pointer;
+  }
+  .mock-tab.active {
+    color: var(--accent);
+    font-weight: 600;
+    border-bottom: 2px solid var(--accent);
+    margin-bottom: -1px;
+  }
+
+  .mock-spell-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--input-bg);
+    border-radius: 4px;
+    margin-bottom: 4px;
+    font-size: 11px;
+  }
+  .mock-spell-name {
+    flex: 1;
+    font-weight: 500;
+    font-size: 12px;
+    min-width: 0;
+  }
+  .mock-chip {
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .mock-chip.range { color: #7dd3c0; font-weight: 500; }
+  .mock-chip.atk   { color: #fbb88a; font-weight: 600; }
+  .mock-chip.dmg   { color: #e8a;   font-weight: 500; }
+  .mock-chip.save  { color: #8cf;   font-weight: 500; }
+  .mock-cast-btn {
+    background: rgba(167, 139, 250, .12);
+    border: 1px solid rgba(167, 139, 250, .4);
+    color: #b9a3fb;
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-size: 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .mock-section-label {
+    font-size: 10px;
+    color: var(--fg-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 8px 0 4px;
+  }
+  .mock-slots {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 10px;
+    color: var(--fg-mute);
+    margin-bottom: 6px;
+  }
+  .mock-pip {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--c-crit);
+    margin-right: 2px;
+  }
+  .mock-pip.used {
+    background: transparent;
+    border: 1px solid var(--fg-mute);
+  }
+
+  /* ── Color/font swatch grid ── */
+  .swatch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin: 12px 0 18px;
+  }
+  .swatch {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+  }
+  .swatch-chip {
+    height: 28px;
+    border-radius: 4px;
+    margin-bottom: 6px;
+    border: 1px solid var(--border);
+  }
+  .swatch-label { font-size: 11px; font-weight: 600; }
+  .swatch-meta { font-size: 10px; color: var(--fg-mute); font-family: monospace; }
+  .swatch-use { font-size: 10px; color: var(--fg-mute); margin-top: 3px; line-height: 1.3; }
+
+  /* ── Font sample blocks ── */
+  .font-sample {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 8px 0;
+  }
+  .font-sample-label {
+    font-size: 10px;
+    color: var(--fg-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+</style>
+</head>
+<body>
+<h1>Sheets in the Battle &amp; Characters tabs <span class="version">v2.49.182</span></h1>
+<p class="lede">
+  Visual reference for the <strong>mini-sheet</strong> that powers both the
+  Battle tab (init tracker) and the Characters tab in the player drawer.
+  Covers the layout anatomy, typography, color palette, the new v2.49.177-181
+  spell row chip system, and the PC-vs-NPC render-path split documented in
+  <a href="/wiki/pc-vs-npc-systems">PC vs NPC combat systems</a>.
+</p>
+
+<h2 id="surfaces">Two drawer tabs, one mini-sheet partial</h2>
+<p>
+  Both the <strong>Battle</strong> tab (the init tracker with combatant cards)
+  and the <strong>Characters</strong> tab (the full roster) render PC characters
+  through the same Jinja partial: <code>app/templates/_mini_sheet_card.html</code>.
+  NPCs in the Battle tab take a separate render path
+  (<code>buildMonsterInitSheet</code> JS function in <code>tabletop.html</code>),
+  but the visual conventions match — colors, fonts, chip styles all line up.
+</p>
+
+<table>
+  <thead>
+    <tr><th>Surface</th><th>Combatant type</th><th>Renderer</th><th>Source</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Battle tab</td>
+      <td>PCs</td>
+      <td><code>_mini_sheet_card.html</code></td>
+      <td><code>app/templates/_mini_sheet_card.html:1</code></td>
+    </tr>
+    <tr>
+      <td>Battle tab</td>
+      <td>NPCs / monsters</td>
+      <td><code>buildMonsterInitSheet</code></td>
+      <td><code>app/templates/tabletop.html:4988</code></td>
+    </tr>
+    <tr>
+      <td>Characters tab</td>
+      <td>PCs</td>
+      <td><code>_mini_sheet_card.html</code> (same partial)</td>
+      <td><code>app/templates/tabletop.html:1841</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="anatomy">Mini-sheet anatomy</h2>
+<p>
+  A PC mini-sheet at rest (no token selected) looks like this:
+</p>
+
+<div class="mock-mini">
+  <div class="mock-header">
+    <div class="mock-portrait">Z</div>
+    <div class="mock-name">
+      <div class="mock-name-line">Zara Emberfire 🧿</div>
+      <div class="mock-name-sub">Sorcerer 5 · Tiefling</div>
+    </div>
+    <div class="mock-arrow">▼</div>
+  </div>
+  <div class="mock-body">
+    <div class="mock-stat-row">
+      <span>HP <span class="v">37</span> / 37</span>
+      <span>AC <span class="v">12</span></span>
+      <span>Spd <span class="v">30</span></span>
+    </div>
+    <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+    <div class="mock-econ">
+      <span class="mock-econ-chip">⚔ Act</span>
+      <span class="mock-econ-chip">💨 Bns</span>
+      <span class="mock-econ-chip">🛡 Rxn</span>
+      <span class="mock-econ-chip">👣 30</span>
+    </div>
+    <div class="mock-tabs">
+      <span class="mock-tab">Actions</span>
+      <span class="mock-tab active">Spells</span>
+      <span class="mock-tab">Abilities</span>
+      <span class="mock-tab">Skills</span>
+      <span class="mock-tab">Resources</span>
+    </div>
+    <div class="mock-section-label">Cantrips</div>
+    <div class="mock-spell-row">
+      <span class="mock-spell-name">✨ Fire Bolt</span>
+      <span class="mock-chip range">120 feet</span>
+      <span class="mock-chip atk">+7</span>
+      <span class="mock-chip dmg">2d10 fire</span>
+      <span class="mock-cast-btn">🪄 Cast</span>
+    </div>
+    <div class="mock-section-label">Level 1 Spells</div>
+    <div class="mock-slots">
+      Slots
+      <span><span class="mock-pip"></span><span class="mock-pip"></span><span class="mock-pip used"></span><span class="mock-pip used"></span> 2/4</span>
+    </div>
+    <div class="mock-spell-row">
+      <span class="mock-spell-name">✨ Magic Missile</span>
+      <span class="mock-chip range">120 feet</span>
+      <span class="mock-chip dmg">1d4+1 force</span>
+      <span class="mock-cast-btn">🪄 Cast</span>
+    </div>
+    <div class="mock-section-label">Level 3 Spells</div>
+    <div class="mock-slots">
+      Slots
+      <span><span class="mock-pip"></span><span class="mock-pip"></span> 2/2</span>
+    </div>
+    <div class="mock-spell-row">
+      <span class="mock-spell-name">✨ Fireball</span>
+      <span class="mock-chip range">150 feet</span>
+      <span class="mock-chip dmg">8d6 fire</span>
+      <span class="mock-chip save">DC 15 DEX</span>
+      <span class="mock-cast-btn">🪄 Cast</span>
+    </div>
+  </div>
+</div>
+
+<h3>Top-to-bottom blocks</h3>
+<ol>
+  <li><strong>Header (always visible)</strong> — Portrait disc on the left (token color as ring + first-letter glyph fallback), name + class line, "concentrating" sigil (🧿) when active, ▶ / ▼ collapse arrow on the right.</li>
+  <li><strong>Stat row</strong> — Compact "HP cur / max · AC · Spd" line in muted text. HP digits get the high-contrast color; everything else stays muted to keep the eye on changing values.</li>
+  <li><strong>HP bar</strong> — Single horizontal pill, green-to-amber-to-orange gradient so a visually low bar reads as "this PC is hurt" without needing the player to parse digits.</li>
+  <li><strong>Action-economy chip strip</strong> — Four chips (Act / Bns / Rxn / Mov). Lit (amber-tinted background) when used this turn; muted (gray) when unused. The movement chip shows feet remaining as digits.</li>
+  <li><strong>Section tabs</strong> — Actions / Spells / Abilities / Skills / Resources / Feats. Only tabs with content render; PCs with no spells skip Spells, characters with no resources skip Resources.</li>
+  <li><strong>Section content</strong> — Per-tab rows: attack/weapon rows, spell rows (the v2.49.177+ chip layout below), skill rows, ability rows, resource counters.</li>
+</ol>
+
+<h2 id="spell-row">Spell row anatomy (v2.49.177-181)</h2>
+<p>
+  Spell rows pack a lot of info into one line. Chip order is meaningful:
+  <strong>name → metadata (class · range) → actionable (atk · dmg · save)
+  → cast button</strong>. A glance-scan reads "what is this · what does it do
+  · cast it."
+</p>
+
+<div class="mock-mini" style="max-width:500px;">
+  <div class="mock-body" style="padding-top:14px;">
+    <div class="mock-spell-row">
+      <span class="mock-spell-name">✨ Fireball</span>
+      <span class="mock-chip range">150 feet</span>
+      <span class="mock-chip dmg">8d6 fire</span>
+      <span class="mock-chip save">DC 15 DEX</span>
+      <span class="mock-cast-btn">🪄 Cast</span>
+    </div>
+    <div class="mock-spell-row">
+      <span class="mock-spell-name">✨ Fire Bolt</span>
+      <span class="mock-chip range">120 feet</span>
+      <span class="mock-chip atk">+7</span>
+      <span class="mock-chip dmg">2d10 fire</span>
+      <span class="mock-cast-btn">🪄 Cast</span>
+    </div>
+    <div class="mock-spell-row">
+      <span class="mock-spell-name">✨ Inflict Wounds <span style="color:#fbb88a;font-size:9px;">(Spell)</span></span>
+      <span class="mock-chip atk">+4</span>
+      <span class="mock-chip dmg">3d10 necrotic</span>
+      <span class="mock-cast-btn">🪄 Cast</span>
+    </div>
+    <div class="mock-spell-row">
+      <span class="mock-spell-name">✨ Cure Wounds</span>
+      <span class="mock-chip range">Touch</span>
+      <span class="mock-cast-btn">🪄 Cast</span>
+    </div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr><th>Chip</th><th>Color</th><th>What it tells you</th><th>When it appears</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="mock-chip range">120 feet</span></td>
+      <td>Teal <code>#7dd3c0</code></td>
+      <td>Range — what you can target</td>
+      <td>Spell catalog has a range (always except utility spells)</td>
+    </tr>
+    <tr>
+      <td><span class="mock-chip atk">+7</span></td>
+      <td>Amber <code>#fbb88a</code></td>
+      <td>Spell attack bonus to roll alongside d20</td>
+      <td>Spell is an attack roll (computed = spellcasting mod + prof bonus)</td>
+    </tr>
+    <tr>
+      <td><span class="mock-chip dmg">8d6 fire</span></td>
+      <td>Pink <code>#e8a</code></td>
+      <td>Damage dice + type</td>
+      <td>Spell deals damage</td>
+    </tr>
+    <tr>
+      <td><span class="mock-chip save">DC 15 DEX</span></td>
+      <td>Blue <code>#8cf</code></td>
+      <td>Save DC + ability — target rolls vs this</td>
+      <td>Spell forces a save (DC computed = 8 + mod + prof)</td>
+    </tr>
+    <tr>
+      <td><span class="mock-cast-btn">🪄 Cast</span></td>
+      <td>Purple <code>#a78bfa</code></td>
+      <td>Trigger button</td>
+      <td>Always. NPCs use ✨ Cast with the same purple style.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <strong>Color logic.</strong> Metadata chips (range, class) use cool colors
+  (teal, muted italic) — they're descriptive, not actionable. Actionable
+  chips (atk, dmg, save) use warm and high-saturation colors (amber, pink,
+  blue) so they read as "click here to do this." The cast button is purple
+  to mark it as the primary CTA.
+</div>
+
+<h2 id="typography">Typography</h2>
+<p>
+  All text inside the mini-sheet inherits the page-level system font stack —
+  there are no custom typefaces. Different elements use the same family at
+  different sizes + weights to establish hierarchy.
+</p>
+
+<div class="font-sample">
+  <div class="font-sample-label">Font family (whole document)</div>
+  <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:14px;">
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif
+  </div>
+</div>
+
+<div class="font-sample">
+  <div class="font-sample-label">Header name — 13px / 700</div>
+  <div style="font-size:13px;font-weight:700;">Zara Emberfire 🧿</div>
+</div>
+<div class="font-sample">
+  <div class="font-sample-label">Header sub (class · race) — 10px / 400, muted</div>
+  <div style="font-size:10px;font-weight:400;color:var(--fg-mute);">Sorcerer 5 · Tiefling</div>
+</div>
+<div class="font-sample">
+  <div class="font-sample-label">Stat row label — 11px / 400, muted</div>
+  <div style="font-size:11px;font-weight:400;color:var(--fg-mute);">
+    HP <span style="font-weight:700;color:var(--fg);">37</span> / 37
+  </div>
+</div>
+<div class="font-sample">
+  <div class="font-sample-label">Tab button (inactive / active) — 11px / 400 → 600</div>
+  <div style="display:flex;gap:14px;">
+    <span style="font-size:11px;color:var(--fg-mute);">Actions</span>
+    <span style="font-size:11px;font-weight:600;color:var(--accent);">Spells</span>
+  </div>
+</div>
+<div class="font-sample">
+  <div class="font-sample-label">Spell row name — 12px / 500</div>
+  <div style="font-size:12px;font-weight:500;">✨ Fireball</div>
+</div>
+<div class="font-sample">
+  <div class="font-sample-label">Chip — 10px / 500 (range, dmg, save) or 600 (atk)</div>
+  <div style="display:flex;gap:8px;">
+    <span style="font-size:10px;font-weight:500;color:#7dd3c0;">120 feet</span>
+    <span style="font-size:10px;font-weight:600;color:#fbb88a;">+7</span>
+    <span style="font-size:10px;font-weight:500;color:#e8a;">8d6 fire</span>
+    <span style="font-size:10px;font-weight:500;color:#8cf;">DC 15 DEX</span>
+  </div>
+</div>
+<div class="font-sample">
+  <div class="font-sample-label">Cast button — 10px / 600, purple on translucent purple</div>
+  <button style="background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.4);color:#b9a3fb;border-radius:3px;padding:2px 8px;font-size:10px;font-weight:600;cursor:default;">🪄 Cast</button>
+</div>
+<div class="font-sample">
+  <div class="font-sample-label">Code / dice strings (when used) — ui-monospace fallback</div>
+  <div style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;">
+    2d20kh1[12,17]kh1=17 +5  =>  22
+  </div>
+</div>
+
+<h2 id="colors">Color palette</h2>
+<p>
+  Every visible color comes from a CSS custom property declared on
+  <code>:root</code> in <code>app/static/style.css</code>. The mini-sheet
+  inherits the active theme — when the user switches Dark / Midnight / Light
+  / Forest / Bubblegum, the same markup re-renders with the new tokens.
+</p>
+
+<div class="swatch-grid">
+  <div class="swatch">
+    <div class="swatch-chip" style="background:#6cb4ff;"></div>
+    <div class="swatch-label">Accent</div>
+    <div class="swatch-meta">#6cb4ff · --accent</div>
+    <div class="swatch-use">Active tab underline, header tint, code highlighting, primary buttons.</div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-chip" style="background:#d74a4a;"></div>
+    <div class="swatch-label">Danger</div>
+    <div class="swatch-meta">#d74a4a · --danger</div>
+    <div class="swatch-use">Remove buttons, HP-empty warnings, picked-target ring.</div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-chip" style="background:#4ade80;"></div>
+    <div class="swatch-label">Heal</div>
+    <div class="swatch-meta">#4ade80 · --c-heal</div>
+    <div class="swatch-use">HP bar (full), heal pills, in-range target rings.</div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-chip" style="background:#fbbf24;"></div>
+    <div class="swatch-label">Crit / Resource</div>
+    <div class="swatch-meta">#fbbf24 · --c-crit</div>
+    <div class="swatch-use">Action-economy chip lit state, spell-slot pips, "crit" badge on rolls.</div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-chip" style="background:#fb923c;"></div>
+    <div class="swatch-label">Damage</div>
+    <div class="swatch-meta">#fb923c · --c-damage</div>
+    <div class="swatch-use">HP bar (low), AoE picker preview, damage-applied indicators.</div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-chip" style="background:#5ec1d6;"></div>
+    <div class="swatch-label">Buff / Info</div>
+    <div class="swatch-meta">#5ec1d6 · --c-buff</div>
+    <div class="swatch-use">Concentration AoE markers, buff badges, target name pill.</div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-chip" style="background:#7dd3c0;"></div>
+    <div class="swatch-label">Range chip</div>
+    <div class="swatch-meta">#7dd3c0 (v2.49.178)</div>
+    <div class="swatch-use">Spell row range chip — metadata, not actionable.</div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-chip" style="background:#fbb88a;"></div>
+    <div class="swatch-label">Attack bonus chip</div>
+    <div class="swatch-meta">#fbb88a (v2.49.177)</div>
+    <div class="swatch-use">Spell attack bonus + NPC weapon attack bonus.</div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-chip" style="background:#e8a;"></div>
+    <div class="swatch-label">Damage chip</div>
+    <div class="swatch-meta">#e8a (pre-v2.49 baseline)</div>
+    <div class="swatch-use">Damage dice + type on spell + attack rows.</div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-chip" style="background:#8cf;"></div>
+    <div class="swatch-label">Save chip</div>
+    <div class="swatch-meta">#8cf (pre-v2.49 baseline)</div>
+    <div class="swatch-use">Save DC + ability on spell rows.</div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-chip" style="background:#a78bfa;"></div>
+    <div class="swatch-label">Cast / spell</div>
+    <div class="swatch-meta">#a78bfa</div>
+    <div class="swatch-use">Cast button text + border, spell-tab tint, ✨ glyph context.</div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-chip" style="background:#2a2d36;border-color:#444;"></div>
+    <div class="swatch-label">Input bg</div>
+    <div class="swatch-meta">var(--input-bg)</div>
+    <div class="swatch-use">Spell row background, action row background, input fields.</div>
+  </div>
+</div>
+
+<h2 id="pc-vs-npc">PC vs NPC mini-sheets</h2>
+<p>
+  Both renderers share the visual language above. The render code paths
+  differ because PCs have richer mechanics (spell slots, resources, death
+  saves, class features) that NPCs don't model.
+</p>
+
+<table>
+  <thead>
+    <tr><th>Element</th><th>PC (<code>_mini_sheet_card.html</code>)</th><th>NPC (<code>buildMonsterInitSheet</code>)</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Header</td>
+      <td>Portrait disc + name + class · race + concentration sigil</td>
+      <td>Color ring + label + size / type (no portrait jpg for most)</td>
+    </tr>
+    <tr>
+      <td>HP bar</td>
+      <td>Gradient pill + numeric overlay</td>
+      <td>Numeric "HP X / Y" line only</td>
+    </tr>
+    <tr>
+      <td>Action-economy chips</td>
+      <td>4 chips (Act / Bns / Rxn / Mov) always rendered</td>
+      <td>Absent — NPCs don't track economy</td>
+    </tr>
+    <tr>
+      <td>Tabs</td>
+      <td>Actions / Spells (if caster) / Abilities / Skills / Resources / Feats</td>
+      <td>Actions / Spells (v2.49.175+, if any <code>spell_slug</code> action) / Skills</td>
+    </tr>
+    <tr>
+      <td>Cast button</td>
+      <td><span class="mock-cast-btn">🪄 Cast</span> (purple)</td>
+      <td><span class="mock-cast-btn">✨ Cast</span> (same purple, different glyph)</td>
+    </tr>
+    <tr>
+      <td>Spell row chips</td>
+      <td>name · range · atk · dmg · save (v2.49.177-181)</td>
+      <td>name · atk · dmg · save · charges (v2.49.175+; range in expand panel)</td>
+    </tr>
+    <tr>
+      <td>Rest buttons</td>
+      <td>Short Rest / Long Rest at the top of the HP block</td>
+      <td>None</td>
+    </tr>
+    <tr>
+      <td>Death save tracker</td>
+      <td>Overlay block when HP=0</td>
+      <td>None — NPCs drop instantly at 0 HP</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="behavior">Behavior</h2>
+
+<h3>Read-only vs editable</h3>
+<p>
+  Mini-sheets are <strong>read-only for edits</strong> — to change HP, name,
+  ability scores, or any sheet field, players open the full sheet via the
+  📋 Sheet button. The mini-sheet supports <em>actions</em>: clicking 🗡 Strike
+  or 🪄 Cast fires the picker + endpoint; clicking a skill rolls it; clicking
+  the HP digits opens an HP-edit popover.
+</p>
+
+<h3>Header click → collapse / expand</h3>
+<p>
+  The header is a click target. Clicking anywhere on the header bar toggles
+  the body open / closed. The ▶ / ▼ arrow on the right reflects current
+  state. Collapse state is persisted to localStorage per-character per-tab
+  via <code>vtt_minisheet_open_&lt;char_id&gt;</code> so a refresh restores
+  what the player had open.
+</p>
+
+<h3>Tab state persistence</h3>
+<p>
+  Each combatant remembers its last-selected tab via
+  <code>vtt_minitab_&lt;combatant_id&gt;</code> in localStorage. Switching
+  tabs on one PC doesn't affect another. NPC monster mini-sheets use the
+  combatant id, not the template id, so three bandits sharing one
+  <code>TokenTemplate</code> keep their tab state independent.
+</p>
+
+<h3>WebSocket sync</h3>
+<p>
+  HP edits via the full sheet broadcast <code>character_hp_update</code>; the
+  mini-sheet handler updates the HP digits + bar in real time. Color /
+  portrait changes broadcast similar deltas. The mini-sheet doesn't need a
+  page refresh to pick up changes from anywhere in the app.
+</p>
+
+<h2 id="related">Related docs</h2>
+<ul>
+  <li><a href="/wiki/the-character-sheet">The character sheet (full)</a> — long-form Markdown guide covering the full <code>/character/&lt;id&gt;/sheet</code> page.</li>
+  <li><a href="/wiki/targeting-system-guide">Targeting system guide</a> — what happens when you click 🪄 Cast / 🗡 Strike.</li>
+  <li><a href="/wiki/pc-vs-npc-systems">PC vs NPC combat systems</a> — the divergence audit between the two render paths.</li>
+  <li><a href="/wiki/roll-log-guide">Roll-log guide</a> — what the cast / strike actions produce in the chat panel.</li>
+  <li><a href="/wiki/realtime-broadcasts-catalog">Realtime broadcasts catalog</a> — WS message shapes that drive mini-sheet updates.</li>
+</ul>
+
+</body>
+</html>

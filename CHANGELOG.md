@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.182] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **New wiki visual guide: Battle & Characters tab sheets.** User asked for a visual wiki guide covering "how the sheets in the battle and character tabs work" with font + design-element descriptions. The existing `the-character-sheet.md` is a long-form Markdown reference that covers BOTH the full sheet and the mini-sheet but isn't visual — no chip mockups, no font samples, no color swatches. This new HTML doc fills the visual gap for the mini-sheet surface specifically.
+**Description:** New `docs/wiki/battle-character-sheets-guide.html` (~480 lines) modeled on `targeting-system-guide.html` (the established visual-guide pattern). Sections: (1) Two drawer tabs / one partial — table mapping each surface (Battle PC / Battle NPC / Characters tab) to its renderer; (2) Mini-sheet anatomy with a full faux-render mockup (header, stat row, HP bar, action-economy chips, tabs, spell-row chip example); (3) Spell row anatomy — the v2.49.177-181 chip layout broken down into a chip-by-chip table with color, meaning, when-it-renders; (4) Typography — 8 font samples covering header name, sub, stat label, tab, spell name, chip variants, cast button, monospace; (5) Color palette — 12-swatch grid covering accent / danger / heal / crit / damage / buff / range / atk / dmg / save / cast / input-bg with the CSS variable name + usage notes for each; (6) PC vs NPC mini-sheet comparison table; (7) Behavior — read-only edits, header click collapse, tab state persistence, WS sync; (8) Related docs links.
+**Description (cont):** Surfaced through the wiki per CLAUDE.md: (1) added landing-page table row in `app/templates/wiki.html` "Available guides"; (2) added on-disk index row in `docs/wiki/README.md`; (3) new `test_wiki_battle_character_sheets_guide_renders` harness test confirming the slug returns 200, body has the H1 + "mini-sheet" + nav menu; (4) extended `test_wiki_home_renders` to assert the new slug link.
+**Description (cont 2):** Why a separate HTML doc (vs extending the existing Markdown). The existing `the-character-sheet.md` is a how-to with action-by-action edit gestures — it's a reference manual for players. The new HTML doc is a visual style guide showing what each pixel means, with mock renders, font samples, and the design-element table the user explicitly asked for. Two documents, two purposes; cross-linked in both directions.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.182 live. (b) Harness: `test_wiki.py::test_wiki_battle_character_sheets_guide_renders` + extended `test_wiki_home_renders` both pass. (c) Manual: `GET /wiki/battle-character-sheets-guide` renders all 7 sections with the mock-mini block showing a faithful Zara-style PC mini-sheet (header / HP bar / economy chips / 5-tab bar / Cantrips / Lv1 spells with slots / Lv3 spells with the Fireball DC chip). The color swatches use the actual CSS values from style.css. The font samples render in the same family the live mini-sheet uses.
+
+### Added
+- `docs/wiki/battle-character-sheets-guide.html` — visual style guide for the mini-sheet used in Battle + Characters drawer tabs. 8 font samples, 12 color swatches, PC-vs-NPC anatomy comparison, spell row chip-by-chip breakdown.
+- `app/templates/wiki.html` — landing row for the new guide.
+- `docs/wiki/README.md` — on-disk index row for the new guide.
+- `tests/harness/test_wiki.py::test_wiki_battle_character_sheets_guide_renders` — per-slug smoke test (200 + H1 + nav).
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — extended landing assertion.
+
+### Notes
+- **Cross-references** the existing `the-character-sheet.md` (the long-form how-to). The new doc is a visual reference; the existing doc is a player how-to. Both surfaced via wiki nav.
+- **Inline CSS uses real palette values** copied from `app/static/style.css` so the doc reads in the user's selected theme when /static/style.css overrides the inline `:root` block.
+- **No server change.** Pure documentation.
+
+---
+
 ## [2.49.181] - 2026-05-23
 
 **Schema version:** 56

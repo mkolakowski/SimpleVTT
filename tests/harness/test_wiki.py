@@ -46,6 +46,8 @@ async def test_wiki_home_renders():
     assert "/wiki/pc-vs-npc-systems" in resp.text
     # v2.49.168: targeting system visual guide listed.
     assert "/wiki/targeting-system-guide" in resp.text
+    # v2.49.182: Battle & Characters tab sheets visual guide listed.
+    assert "/wiki/battle-character-sheets-guide" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -110,6 +112,21 @@ async def test_wiki_targeting_system_guide_renders():
     assert "targeting system" in resp.text.lower()
     # Inline SVG diagrams are the whole point of this guide.
     assert "<svg" in resp.text
+    # Standalone HTML gets the nav injected after <body>.
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_battle_character_sheets_guide_renders():
+    """v2.49.182: GET /wiki/battle-character-sheets-guide — visual
+    guide for the mini-sheet used in Battle + Characters drawer tabs.
+    Includes mock-mini blocks, font samples, color swatches."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/battle-character-sheets-guide")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert "battle" in resp.text.lower()
+    assert "characters" in resp.text.lower()
+    assert "mini-sheet" in resp.text.lower()
     # Standalone HTML gets the nav injected after <body>.
     assert 'class="wiki-nav"' in resp.text
 
