@@ -577,6 +577,8 @@
         required: 0,
         spellName: '',
         casterCharId: 0,
+        casterPos: null,    // v2.49.138 — {x, y} canvas-space center of caster's token
+        cursor: null,       // v2.49.138 — {x, y} canvas-space cursor (snapped to grid center)
         picks: null,        // Map<token.id, count>
         _resolve: null,
 
@@ -586,6 +588,22 @@
             this.required = Math.max(1, parseInt(opts && opts.required, 10) || 1);
             this.spellName = String((opts && opts.spellName) || 'Spell');
             this.casterCharId = parseInt(opts && opts.casterCharId, 10) || 0;
+            // v2.49.138: resolve the caster's token center for the
+            // ruler line. Mirrors _aoePicker._resolveOrigin (private —
+            // re-walked here so the picker stays self-contained).
+            this.casterPos = null;
+            if (this.casterCharId) {
+                for (const t of tokens) {
+                    if (t.character_id === this.casterCharId) {
+                        this.casterPos = {
+                            x: t.x + gridSize / 2,
+                            y: t.y + gridSize / 2,
+                        };
+                        break;
+                    }
+                }
+            }
+            this.cursor = null;
             this.picks = new Map();
             document.body.classList.add('target-picker-active');
             _showTargetPickerHint(this.spellName, 0, this.required);
@@ -673,6 +691,8 @@
             this.required = 0;
             this.spellName = '';
             this.casterCharId = 0;
+            this.casterPos = null;
+            this.cursor = null;
             this.picks = null;
             this._resolve = null;
             document.body.classList.remove('target-picker-active');
@@ -1565,10 +1585,14 @@
             ctx.stroke();
             ctx.restore();
         });
-        // v2.49.135: multi-target picker — draw an accent ring + an
-        // "×N" badge on every token that has at least one pick. Drawn
-        // on top of the targeting ring so a picked-during-cast token
-        // visibly stands out from any pre-existing target selection.
+        // v2.49.135: multi-target picker — draw a red ring + an "×N"
+        // badge on every token that has at least one pick. Drawn on
+        // top of the targeting ring (`_targeting` state) so a picked-
+        // during-cast token visibly stands out from any pre-existing
+        // selection. v2.49.138: ring color shifted from accent purple
+        // → red (#dc2626, same crimson the existing `_targeting`
+        // ring uses) so "this is a target you've selected" reads as
+        // the same visual language across the two systems.
         if (_targetPicker.active && _targetPicker.picks && _targetPicker.picks.size) {
             for (const [tokenId, count] of _targetPicker.picks) {
                 const t = tokens.find(tk => tk.id === tokenId);
@@ -1578,10 +1602,9 @@
                 const cy = t.y + gridSize / 2;
                 const r = (gridSize * t.size) / 2;
                 ctx.save();
-                // Accent-tinted ring around the token to flag it as picked.
                 ctx.lineWidth = 3;
-                ctx.strokeStyle = '#a78bfa';
-                ctx.shadowColor = '#a78bfa';
+                ctx.strokeStyle = '#dc2626';
+                ctx.shadowColor = '#dc2626';
                 ctx.shadowBlur = 12;
                 ctx.beginPath();
                 ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
@@ -1595,7 +1618,7 @@
                     const badgeR = Math.max(11, Math.round(gridSize * 0.22));
                     const bx = cx + r * 0.72;
                     const by = cy - r * 0.72;
-                    ctx.fillStyle = '#a78bfa';
+                    ctx.fillStyle = '#dc2626';
                     ctx.strokeStyle = '#fff';
                     ctx.lineWidth = 2;
                     ctx.beginPath();
@@ -1609,6 +1632,64 @@
                     ctx.fillText(`×${count}`, bx, by + 1);
                     ctx.restore();
                 }
+            }
+        }
+        // v2.49.138: ruler line from the caster's token center to the
+        // crosshair cursor (snapped to the grid-cell center the mouse
+        // is hovering). Mirrors the ruler tool's distance chip + line
+        // so the player sees the spell/attack range in feet as they
+        // hover candidate targets. Suppressed when the picker isn't
+        // active OR the caster's token isn't on the map.
+        if (_targetPicker.active && _targetPicker.casterPos && _targetPicker.cursor) {
+            const fromX = _targetPicker.casterPos.x;
+            const fromY = _targetPicker.casterPos.y;
+            const toX = _targetPicker.cursor.x;
+            const toY = _targetPicker.cursor.y;
+            // Only render once the cursor has moved off the caster's
+            // own square — a zero-length line is visual noise.
+            if (Math.hypot(toX - fromX, toY - fromY) > 8) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(220, 38, 38, 0.85)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([6, 4]);
+                ctx.beginPath();
+                ctx.moveTo(fromX, fromY);
+                ctx.lineTo(toX, toY);
+                ctx.stroke();
+                ctx.restore();
+                // Distance chip — same Chebyshev / Euclidean math the
+                // ruler tool uses (server-aligned via
+                // _computeRulerDistanceFt). Floats just below + right
+                // of the cursor so it doesn't sit on the target hot
+                // spot.
+                const distance_ft = _computeRulerDistanceFt(
+                    { x: fromX, y: fromY }, { x: toX, y: toY },
+                );
+                const label = `${distance_ft} ft`;
+                ctx.save();
+                ctx.font = '11px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                const metrics = ctx.measureText(label);
+                const padX = 6, chipH = 16;
+                const chipW = metrics.width + padX * 2;
+                const chipX = toX + 12;
+                const chipY = toY + 12;
+                ctx.fillStyle = 'rgba(20, 24, 28, 0.88)';
+                ctx.strokeStyle = 'rgba(220, 38, 38, 0.6)';
+                ctx.lineWidth = 1;
+                if (ctx.roundRect) {
+                    ctx.beginPath();
+                    ctx.roundRect(chipX, chipY, chipW, chipH, 4);
+                    ctx.fill();
+                    ctx.stroke();
+                } else {
+                    ctx.fillRect(chipX, chipY, chipW, chipH);
+                    ctx.strokeRect(chipX, chipY, chipW, chipH);
+                }
+                ctx.fillStyle = '#fff';
+                ctx.fillText(label, chipX + padX, chipY + chipH / 2);
+                ctx.restore();
             }
         }
         // v2.49.0 — persistent concentration AoE markers. Drawn after
@@ -2682,6 +2763,17 @@
             // renderer block that consumed it — see the matching
             // comment in render() above. No mousemove work needed
             // when not dragging.
+            // v2.49.138: target picker — when active, snap the cursor
+            // to the hovered grid-cell's center and re-render so the
+            // caster→cursor ruler line stays live. Same snap math the
+            // ruler tool uses (_snapPointToGridCenter) so a snapped
+            // cursor matches a snapped target click.
+            if (_targetPicker.active) {
+                const [wx, wy] = clientToCanvas(ev);
+                const snapped = _snapPointToGridCenter(wx, wy);
+                _targetPicker.cursor = snapped;
+                render();
+            }
             return;
         }
         const [x, y] = clientToCanvas(ev);

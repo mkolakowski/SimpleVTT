@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.138] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Target picker — red selection rings + ruler line from crosshair to caster.** Two visual polish enhancements to the v2.49.135 multi-target picker: (1) the per-token "you've picked this" ring shifts from accent-purple (`#a78bfa`) to red (`#dc2626`, same crimson as the existing `_targeting` state) so "this is a target you selected" reads as one visual language across both systems; (2) a new dashed-red distance line draws from the caster's token center to the cursor (snapped to the grid-cell center under the mouse) with a feet-distance chip, so the player sees the range to candidate targets in real time. The crosshair cursor + the existing per-token `×N` stacking badge stay.
+**Description:** Three file edits in `app/static/tabletop.js`. **(1)** `_targetPicker` state — added `casterPos: {x,y}|null` (resolved at start from `tokens.find(t => t.character_id === casterCharId)`, mirrors `_aoePicker._resolveOrigin`) and `cursor: {x,y}|null` (updated on mousemove). Both cleared in `_cleanup`. **(2)** Render block — swapped the picked-token ring color + badge fill from `#a78bfa` to `#dc2626`. Added a new conditional block that draws a 1.5px dashed-red line from `casterPos` to `cursor` plus a feet-distance chip computed via the existing `_computeRulerDistanceFt` helper (same Chebyshev / Euclidean math the ruler tool uses). Suppressed when the cursor hasn't moved off the caster's own square (zero-length line is visual noise). **(3)** `mousemove` handler — when `_targetPicker.active && !dragging`, snap the cursor to the grid-cell center via `_snapPointToGridCenter` (same snap function the ruler tool uses) and trigger a re-render. Cursor stays null until the first mousemove; the line + chip don't draw until then.
+**Description (cont):** Why red, not accent-purple. The existing `_targeting` state (set via dbl-click on a token) draws a crimson `#dc2626` ring. v2.49.135 used purple to distinguish "transient picker selection" from "persistent targeting state" — but in practice both are "the player has chosen this token as a target," and the dual color was more confusing than clarifying. Unifying on red matches existing visual language; the `×N` stacking badge differentiates picker selections from persistent ones when stacking matters.
+**Description (cont 2):** Why snap-to-grid-center cursor (vs raw cursor position). The ruler tool (v2.49.72) snaps clicks to grid-cell centers so the distance reads as clean multiples of 5 ft, matching the server's range checks. The target picker's cursor uses the same snap so the line endpoint is always a tidy cell center — and the displayed distance matches what the server will compute for range gating. Without the snap, a cursor 2 px off-center would read "27.3 ft" instead of "30 ft" and confuse the player.
+**Description (cont 3):** Why dashed (vs solid) line. The committed ruler tool uses dashed green (the active measurement). The targeting line should read as "passive range cue, not a committed measurement" — same visual semantics as the v2.49.81 hover rangefinder that v2.49.134 removed (which was solid). Dashed-red borrows the explicit-ruler tool's dashed pattern but in target-red instead of measurement-green, so it visually pairs with the picker's ring color without looking like an active ruler measurement.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.138 live. (b) Manual smoke: cast Scorching Ray from Zara, picker opens with crosshair → move cursor, dashed red line draws from Zara's token to the cursor + "30 ft" chip → click bandit, red ring appears + line tracks to new cursor position → click bandit again, `×2` red badge appears in the upper-right of the token. (c) Hovering the caster's own square shows no line (zero-length suppression).
+**Description (cont 5):** Caveat. The caster→cursor line is only drawn when `casterCharId` was passed to the picker (and the caster's token is on the active map). Calls that omit `casterCharId` (or where the caster is off-map) get the picker without the ruler. The `.atk-strike` / `.sp-cast` / `.mini-strike-btn` / `.mini-cast-btn` integrations from v2.49.135-137 all pass the casting character's id, so the ruler fires for those.
+
+### Changed
+- `app/static/tabletop.js::_targetPicker` — added `casterPos` (resolved at start) and `cursor` (updated on mousemove); cleaned up in `_cleanup`.
+- `app/static/tabletop.js::render` — picker ring + badge fill changed from accent-purple to red; new dashed-red caster→cursor line + distance chip block.
+- `app/static/tabletop.js::mousemove` — when the picker is active, snap the cursor to the grid-cell center and re-render.
+
+### Notes
+- **Backward compat.** No state-shape change visible to callers. Existing pick → commit → list flow unchanged.
+- **No ruler line when caster isn't on the map.** Filed: future enhancement could draw a "caster offline" indicator instead of suppressing the line.
+
+### Filed
+- **Range-gate visualization in the picker.** When a spell has a known range (already parsed for `_checkCastRange`), draw the range ring around the caster while the picker is active so out-of-range targets are visually flagged before the click.
+- **Caster offline indicator** — replace the suppressed line with a UI hint when `casterPos === null`.
+
+---
+
 ## [2.49.137] - 2026-05-22
 
 **Schema version:** 56
