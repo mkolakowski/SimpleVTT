@@ -2194,14 +2194,17 @@ def seed_tokens(
 ) -> list[Token]:
     tokens: list[Token] = []
 
-    # Player tokens — near the door (left side). v2.3.25: chars[2] is the
-    # GM's Cleric (Brother Tavik); placed alongside the other PCs so the
-    # demo party is visibly three-strong on the map. v2.3.44: all three
-    # PCs now carry portrait jpgs from app/static/demo/tokens/ (the
-    # color swatch on each combatant becomes the ring around the
-    # portrait rather than the whole token face). v2.4.1: spawn positions
-    # repositioned for the new 1254×1254 tavern.png — Brother Tavik on
-    # the front line, Pip behind, Thalindra slightly off to the side.
+    # Player tokens. v2.49.172: the encounter is slimmed from 12 PCs
+    # to 6 — a typical D&D party size. All 12 Character rows still
+    # exist in the campaign roster (so the Characters tab + harness
+    # ``roster`` fixture still find them) but only the 6 selected
+    # PCs get tokens spawned on the map + entries in the pre-rolled
+    # initiative below. The 6 keepers cover broad class coverage:
+    # Rogue (Pip), Druid (Thalindra), Cleric (Tavik), Sorcerer (Zara),
+    # Barbarian (Krieger), Warlock (Magnus). The 6 sidelined PCs
+    # (Sir Caelan / Lyra / Mira / Garrik / Kael / Rowan) remain in
+    # the roster but aren't visible on the map until the GM
+    # drag-spawns them from the Characters drawer.
     tokens.append(Token(
         map_id=map_.id, character_id=chars[0].id,
         controller_user_id=users["alice"].id,
@@ -2223,67 +2226,8 @@ def seed_tokens(
         image_url="/static/demo/tokens/cleric.jpg",
         x=420, y=420, size=1,
     ))
-    # v2.14.0: Phase A.1 — Sir Caelan token. Placed on the front line
-    # slightly ahead of Tavik so the demo's "front-line martial" role
-    # has visible representation. No portrait jpg ships yet; falls
-    # back to the colored ring + label per the token render.
-    tokens.append(Token(
-        map_id=map_.id, character_id=chars[3].id,
-        controller_user_id=users["gm"].id,
-        label=chars[3].name, color="#e8c14a",
-        image_url=None,
-        x=490, y=420, size=1,
-    ))
-    # v2.14.1: Phase A.2 — Lyra token. Bards stay back; placed above
-    # Pip at (350, 420) so the party reads visually as "Caelan + Tavik
-    # front line, Pip / Thalindra middle, Lyra slightly off to the
-    # north supporting".
-    tokens.append(Token(
-        map_id=map_.id, character_id=chars[4].id,
-        controller_user_id=users["gm"].id,
-        label=chars[4].name, color="#d977b8",
-        image_url=None,
-        x=350, y=420, size=1,
-    ))
-    # v2.14.2: Phase A.3 — Mira token. Druid stays at the northern
-    # edge of the party — close enough for healing spells, far enough
-    # to drop Moonbeam without catching allies in the AoE. (350, 350)
-    # is one cell above Lyra.
-    tokens.append(Token(
-        map_id=map_.id, character_id=chars[5].id,
-        controller_user_id=users["gm"].id,
-        label=chars[5].name, color="#4d9d6d",
-        image_url=None,
-        x=350, y=350, size=1,
-    ))
-    # v2.17.0: Phase A.4 — Garrik Ironside token. Fighter goes on the
-    # front line; placed at (560, 420) one cell east of Caelan so the
-    # demo's "two-knight front" reads visually as a wall. No portrait
-    # jpg ships yet; falls back to the colored ring + label.
-    tokens.append(Token(
-        map_id=map_.id, character_id=chars[6].id,
-        controller_user_id=users["gm"].id,
-        label=chars[6].name, color="#8a96a3",
-        image_url=None,
-        x=560, y=420, size=1,
-    ))
-    # v2.18.0: Phase A.5 — Kael Brightleaf token. Monk goes in the
-    # thick of melee; placed at (490, 490) one cell south of Caelan
-    # and east of Pip so the line reads as "Tavik + Caelan + Garrik
-    # front, Kael + Pip middle, Lyra + Mira back." No portrait jpg
-    # ships yet.
-    tokens.append(Token(
-        map_id=map_.id, character_id=chars[7].id,
-        controller_user_id=users["gm"].id,
-        label=chars[7].name, color="#ff8c42",
-        image_url=None,
-        x=490, y=490, size=1,
-    ))
-    # v2.18.1: Phase A.6 — Zara Emberfire token. Sorcerer stays back
-    # with the support casters; placed at (280, 490) one cell west of
-    # Pip so the back-line caster row reads "Mira (350,350), Lyra
-    # (350,420), Thalindra (420,560), Zara (280,490)" — clustered
-    # left + south, well back from the front-line martials.
+    # Zara Emberfire (Sorcerer, chars[8]) — back-line caster on the
+    # west flank, Fire Bolt's 120 ft covers the NPC cluster.
     tokens.append(Token(
         map_id=map_.id, character_id=chars[8].id,
         controller_user_id=users["gm"].id,
@@ -2291,38 +2235,17 @@ def seed_tokens(
         image_url=None,
         x=280, y=490, size=1,
     ))
-    # v2.18.2: Phase A.7 — Krieger Stonefist token. Barbarian goes on
-    # the front line; placed at (630, 420) one cell east of Garrik
-    # so the front-line wall reads "Lyra(350), Tavik(420), Caelan(490),
-    # Garrik(560), Krieger(630)" — a full row of melee bodies at
-    # y=420. Half-Orc with Speed 40 means he closes ground first.
+    # Krieger Stonefist (Barbarian, chars[9]) — front-line tank,
+    # Half-Orc Speed 40 closes ground first.
     tokens.append(Token(
         map_id=map_.id, character_id=chars[9].id,
         controller_user_id=users["gm"].id,
         label=chars[9].name, color="#993333",
         image_url=None,
-        x=630, y=420, size=1,
+        x=490, y=420, size=1,
     ))
-    # v2.18.3: Phase A.8 — Rowan Quickbow token. Ranger archer stays
-    # at the back of the formation with the casters; placed at
-    # (280, 350) one cell west of Mira so the back row reads
-    # "Rowan(280), Mira(350), Lyra(350), Thalindra(420), Zara(280)"
-    # — archer and druid covering the north flank, casters strung
-    # south. Longbow range 150 ft means Rowan can reach the NPC
-    # cluster from anywhere on this side of the map.
-    tokens.append(Token(
-        map_id=map_.id, character_id=chars[10].id,
-        controller_user_id=users["gm"].id,
-        label=chars[10].name, color="#5d7c4a",
-        image_url=None,
-        x=280, y=350, size=1,
-    ))
-    # v2.18.4: Phase A.9 — Magnus Hexbinder token. Warlock stays back
-    # with the other casters; placed at (210, 490) one cell west of
-    # Zara so the south back-line caster row reads "Magnus(210),
-    # Zara(280), Pip(350)" — Magnus on the far flank where Eldritch
-    # Blast's 120-ft range covers the whole map. Phase A wrap: the
-    # 12th and final PC token, completing PHB class coverage.
+    # Magnus Hexbinder (Warlock, chars[11]) — far west flank,
+    # Eldritch Blast 120 ft covers the whole map.
     tokens.append(Token(
         map_id=map_.id, character_id=chars[11].id,
         controller_user_id=users["gm"].id,
@@ -2874,72 +2797,40 @@ def seed_encounter(
     GM still needs a "From Map" / "Load encounter" click on first
     visit — that's a separate UX gap.)
     """
-    # Initiative order — pre-rolled, twelve entries (6 PCs + 6 NPCs).
-    # v2.3.22: Grixxa (Goblin Captain) at the top to showcase the new
-    # monster mini-sheet up front.
-    # v2.3.25: Brother Tavik (GM's Cleric) added at init 14.
-    # v2.14.0: Sir Caelan (GM's Paladin) added at init 12.
-    # v2.14.1: Lyra Sunstrider (GM's Bard) added at init 16.
-    # v2.14.2: Mira Greenleaf (GM's Druid) added at init 8, between
-    # Bandit Alpha (9) and Bandit Beta (7).
-    # v2.17.0: Garrik Ironside (GM's Fighter, Champion) added at init
-    # 19 — top of the order at that point.
-    # v2.18.0: Kael Brightleaf (GM's Monk, Way of the Open Hand)
-    # added at init 20 — top of the order with DEX 18 / +4 init mod
-    # rolled high.
-    # v2.18.1: Zara Emberfire (GM's Sorcerer, Draconic Bloodline)
-    # added at init 10 — middle of the order with DEX 14 / +2 init
-    # mod rolled average. Slots in between Thug (11) and Bandit
-    # Alpha (9). NPC token indices +1 again (Vex 8→9, Bandit Alpha
-    # 9→10, Bandit Beta 10→11, Bandit Gamma 11→12, Thug 12→13,
-    # Grixxa 13→14) since Zara lands at tokens[8].
-    # v2.18.2: Krieger Stonefist (GM's Barbarian, Path of the
-    # Berserker) added at init 6 — slots into the open gap between
-    # Bandit Beta (7) and Bandit Gamma (5). DEX 14 / +2 init mod
-    # rolled low for the half-orc raging frontline tank. NPC token
-    # indices +1 again (Vex 9→10, Bandit Alpha 10→11, Bandit Beta
-    # 11→12, Bandit Gamma 12→13, Thug 13→14, Grixxa 14→15) since
-    # Krieger lands at tokens[9].
-    # v2.18.3: Rowan Quickbow (GM's Ranger, Hunter) added at init 4
-    # — below Bandit Gamma (5). DEX 18 / +4 init mod rolled 0 (a
-    # poor surprise-round start for the archer; he opens by laying
-    # Hunter's Mark before getting a shot off in round 2). NPC token
-    # indices +1 again (Vex 10→11, Bandit Alpha 11→12, Bandit Beta
-    # 12→13, Bandit Gamma 13→14, Thug 14→15, Grixxa 15→16) since
-    # Rowan lands at tokens[10].
-    # v2.18.4: Magnus Hexbinder (GM's Warlock, The Fiend) added at
-    # init 3 — bottom of the order, below Rowan. DEX 14 / +2 init
-    # mod rolled 1; the eldritch caster doesn't move fast. NPC
-    # token indices +1 again (Vex 11→12, Bandit Alpha 12→13, Bandit
-    # Beta 13→14, Bandit Gamma 14→15, Thug 15→16, Grixxa 16→17)
-    # since Magnus lands at tokens[11]. Phase A wraps: 18-entry
-    # init order, 12 PCs + 6 NPCs, all 12 PHB classes represented.
+    # v2.49.172 — encounter slimmed to 13 entries: 6 PCs + 7 NPCs.
+    # The 6 sidelined PCs (Sir Caelan / Lyra / Mira / Garrik / Kael /
+    # Rowan) stay in the campaign roster but don't have tokens spawned
+    # in seed_tokens, so they're not in init either. Token indices
+    # shift accordingly:
+    #   tokens[0]   Pip
+    #   tokens[1]   Thalindra
+    #   tokens[2]   Brother Tavik
+    #   tokens[3]   Zara
+    #   tokens[4]   Krieger
+    #   tokens[5]   Magnus
+    #   tokens[6]   Vex (Bandit Captain)     — was 12
+    #   tokens[7]   Bandit Alpha             — was 13
+    #   tokens[8]   Bandit Beta              — was 14
+    #   tokens[9]   Bandit Gamma             — was 15
+    #   tokens[10]  Thug                     — was 16
+    #   tokens[11]  Grixxa (Goblin Captain)  — was 17
+    #   tokens[12]  Soren (Cult Acolyte)     — was 18
     # Specs: (token_idx, initiative_roll, hp_max, dex_mod).
     init_specs = [
         # token_idx, init, hp_max, dex_mod
-        (7,  20, 38, 4),   # Kael Brightleaf (v2.18.0)
-        (6,  19, 49, 2),   # Garrik Ironside (v2.17.0)
-        (17, 18, 36, 3),   # Grixxa (Goblin Captain)
-        (12, 17, 65, 3),   # Vex (Bandit Captain)
-        (4,  16, 33, 2),   # Lyra Sunstrider (v2.14.1)
+        (11, 18, 36, 3),   # Grixxa (Goblin Captain)
+        (6,  17, 65, 3),   # Vex (Bandit Captain)
         (0,  15, 33, 3),   # Pip Quickfingers
         (2,  14, 43, 0),   # Brother Tavik Stonebrow
         (1,  13, 27, 2),   # Thalindra Moonwhisper
-        (3,  12, 44, 0),   # Sir Caelan Lightbringer (v2.14.0)
-        (16, 11, 32, 0),   # Thug
-        (8,  10, 37, 2),   # Zara Emberfire (v2.18.1)
-        (13,  9, 11, 1),   # Bandit Alpha
-        (5,   8, 36, 3),   # Mira Greenleaf (v2.14.2)
-        (14,  7, 11, 1),   # Bandit Beta
-        (9,   6, 55, 2),   # Krieger Stonefist (v2.18.2)
-        (15,  5, 11, 1),   # Bandit Gamma
-        (10,  4, 44, 4),   # Rowan Quickbow (v2.18.3)
-        (11,  3, 38, 2),   # Magnus Hexbinder (v2.18.4)
-        # v2.49.171 — Cult Acolyte added at token_idx=18 (next slot
-        # after Grixxa at 17). Initiative 2 puts him near the bottom
-        # so the party gets to act first; DEX 14 (+2) is the acolyte's
-        # init mod, rolled poorly at the table.
-        (18,  2, 18, 2),   # Soren (Cult Acolyte)
+        (10, 11, 32, 0),   # Thug
+        (3,  10, 37, 2),   # Zara Emberfire
+        (7,   9, 11, 1),   # Bandit Alpha
+        (8,   7, 11, 1),   # Bandit Beta
+        (4,   6, 55, 2),   # Krieger Stonefist
+        (9,   5, 11, 1),   # Bandit Gamma
+        (5,   3, 38, 2),   # Magnus Hexbinder
+        (12,  2, 18, 2),   # Soren (Cult Acolyte) — v2.49.171
     ]
     combatants = []
     for token_idx, init_roll, hp_max, dex_mod in init_specs:
