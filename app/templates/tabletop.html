@@ -5136,10 +5136,22 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     charges_max: a.charges_max,
                     ...a,
                 }));
+                // v2.49.165: single 🗡 Strike button per attack-roll
+                // action matches the PC mini-strike-btn UX — opens the
+                // picker → /npc_attack (server rolls attack + damage +
+                // auto-applies on hit per v2.49.164). The separate
+                // 🎲 Dmg button is gone for attack-roll actions because
+                // /npc_attack rolls damage server-side; an extra manual
+                // click would just re-roll the same dice.
+                // Damage-only actions (no attack roll, no save — rare:
+                // typically passive auras or always-on effects) keep
+                // the legacy 🎲 Dmg button calling /roll.
+                // Save-based actions (Frightful Howl, Breath Weapon, ...)
+                // keep the announce-only 📋 Save button until the
+                // npc_attack endpoint grows save support.
                 if (a.attack_roll) {
-                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="attack"${spent ? ' disabled' : ''} title="Roll attack — 1d20${a.attack_bonus || ''}">🎯 Attack</button>`);
-                }
-                if (a.damage) {
+                    btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="attack"${spent ? ' disabled' : ''} title="Strike — picks target, rolls 1d20${a.attack_bonus || ''}, damage ${a.damage || ''}${a.damage_type ? ' ' + a.damage_type : ''}">🗡 Strike</button>`);
+                } else if (a.damage && !(a.save_dc && a.save_ability)) {
                     btns.push(`<button type="button" class="monster-strike-btn" data-monster-action="${payload}" data-kind="damage"${spent ? ' disabled' : ''} title="Roll damage — ${a.damage}${a.damage_type ? ' ' + a.damage_type : ''}">🎲 Dmg</button>`);
                 }
                 if (a.save_dc && a.save_ability) {

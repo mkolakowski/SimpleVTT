@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.165] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **NPC monster-strike row collapses 🎯 Attack + 🎲 Dmg into one 🗡 Strike button (matches PC UX).** Pre-v2.49.164 the three-button row was the only way to drive NPC attacks because each kind went to a different code path (/roll with a different note). Now that /npc_attack rolls attack + damage + auto-applies in one server call, the separate 🎲 Dmg click is redundant — clicking it would just re-roll the same dice the Strike already rolled. Consolidating to a single 🗡 Strike button matches the PC `.mini-strike-btn` visual + click pattern: one button, opens picker, fires through the server-authoritative flow.
+**Description:** One block edit in `app/templates/tabletop.html` (~line 5139) — the per-action button rendering. Was three independent `if` blocks (Attack / Dmg / Save), now an `if/else if` that emits 🗡 Strike for `attack_roll` actions and falls through to 🎲 Dmg only for damage-only actions (no attack roll, no save) — a rare combination, typically passive auras or always-on effects. Save-based actions (Frightful Howl, Breath Weapon, etc.) keep their announce-only 📋 Save button unchanged because /npc_attack doesn't support save-DC actions yet (filed follow-up).
+**Description (cont):** Why drop the manual 🎲 Dmg button. v2.49.164's /npc_attack endpoint rolls damage server-side as part of the attack resolution — the damage_total + damage_breakdown ride on the same weapon_attack broadcast, and on hit the damage is auto-applied to the target's HP via `_apply_damage_to_combatant`. A second click on a manual 🎲 Dmg button would: (a) re-roll the same dice (different total — wasted), (b) post a duplicate damage line to the roll log (confusing — "did the bandit hit twice?"), (c) NOT auto-apply (the manual /roll path has no target context, so damage just floats in chat). The button was a v2.3.34 artifact from when monsters had no auto-damage path at all.
+**Description (cont 2):** Why keep 📋 Save separately. Save-based monster actions ("DC 14 DEX or 18 fire") work differently from attack-roll actions: there's no per-target d20-vs-AC check, and the targets are the ones who roll. The current 📋 Save button posts an announcement-only chat line so the GM can declare the save DC and the targets self-roll. /npc_attack could grow to support this by emitting a multi-target save prompt, but that's a separate lift (would mirror the PC save-spell pipeline). Until then, the Save button stays.
+**Description (cont 3):** Handler unchanged. The click handler at line ~6307 already routes `kind === 'attack'` through the picker → /npc_attack flow (v2.49.164). The button kind / data-attribute contract is identical; only the rendered button text + count changed. `kind === 'damage'` and `kind === 'save'` paths in the handler still work for the remaining buttons.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.165 live. (b) Manual: GM expands a bandit's init card → only one 🗡 Strike button per attack-roll action (Scimitar / Light Crossbow); click → picker → click target → chat card lands with attack + damage + hit verdict + Undo pill. (c) Cult Fanatic's save-based actions still show 📋 Save (Inflict Wounds is attack-roll, so shows 🗡 Strike; spells with save DC show 📋 Save). (d) PC `.mini-strike-btn` regression check — unchanged behavior (different template, different code path).
+
+### Changed
+- `app/templates/tabletop.html` — consolidated NPC monster-strike row from `🎯 Attack / 🎲 Dmg / 📋 Save` to `🗡 Strike` (attack-roll actions) + `📋 Save` (save-DC actions) + `🎲 Dmg` (rare damage-only actions).
+
+### Notes
+- **No server change.** Handler routing unchanged; only the button-rendering JS changes.
+- **No harness test required.** No new endpoint, no broadcast shape change.
+- **Filed follow-up:** /npc_attack save-DC support so the 📋 Save button can also collapse into 🗡 Strike for full PC parity.
+
+---
+
 ## [2.49.164] - 2026-05-23
 
 **Schema version:** 56
