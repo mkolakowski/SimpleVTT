@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.160] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Target picker renders per-token cell highlights instead of a single range circle.** User feedback: "for melee range, to accommodate longer ranges, I think that when in the targeting mode, the visual indicator should not be a circle, but a highlight around the edge of the possible target boxes." The v2.49.143 green range ring was visually misleading at both ends of the range scale — at 5 ft melee the circle barely reached the diagonal cell's edge (patched in v2.49.157 by inflating to 10 ft visually, but that lied about the literal range), and at 120 ft (Fire Bolt) the ring dominated the screen and washed out the canvas. New approach: iterate every token, compute Chebyshev distance to the caster, and stroke an accent-green dashed cell rectangle around the ones within range. Out-of-range tokens get nothing — the player sees exactly which tokens are reachable.
+**Description:** One block edit in `app/static/tabletop.js::render` (~line 1626). Replaces the v2.49.157 `ctx.arc` green range-circle stroke with a token-iteration loop. For each token: skip hidden (non-GM viewer), skip the caster's own token (single-target spells can't target self), compute `dist_ft = _computeRulerDistanceFt(casterPos, tokenCenter)`, skip if `> rangeFt`. In-range tokens get a `rgba(74,222,128,0.85)` 2px dashed stroke + `rgba(74,222,128,0.08)` fill on a rect at `(x, y, gridSize * t.size, gridSize * t.size)` — the token's full cell footprint. Visual scales with token count instead of range size.
+**Description (cont):** `_tpOutOfRange` gate logic unchanged. Still computed against the snapped cursor (`_targetPicker.cursor`) — so the chip + ruler still warn when the cursor strays into a non-token cell beyond range, even though no token-highlight rendered there. Server-side range enforcement (`_check_cast_range`) is unchanged. Picked-token red ring + hover preview ring still render on top of the cell highlights as before.
+**Description (cont 2):** Why dashed + filled cells (vs solid stroke). Dashed pattern reads as "candidate / available" — solid would look like a selection. The 8% fill is just enough to make the cell read as "highlighted" without obscuring the token art or the underlying grid. The accent-green color matches the v2.49.157 range-ring palette so the visual language stays continuous (green = available, red = picked, amber = out-of-range).
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.160 live. (b) Manual: Zara casts Fire Bolt (120 ft) → in-range enemy tokens light up with green dashed cell highlights, no canvas-spanning circle. (c) Pip clicks Strike on Shortsword (5 ft melee) → only the 8 adjacent cells (Chebyshev) containing tokens get highlighted; diagonal-adjacent enemies are clearly in reach without any "lying" visual inflation. (d) Hover an out-of-range token → cursor ring + ruler turn amber, chip warns out-of-range. Server still rejects the cast if attempted.
+
+### Changed
+- `app/static/tabletop.js::render` target-picker range visualisation — single `arc` ring replaced with per-token dashed cell highlights gated on Chebyshev distance.
+
+### Notes
+- **Visual change only.** Out-of-range gate logic and server-side range enforcement unchanged.
+- **Supersedes v2.49.157's 10-ft-for-5-ft visual hack.** No longer needed — diagonal cells are highlighted directly when their token is in range.
+- **Scales gracefully** with both token count and range size. No canvas-wide visual blowup at 120 ft.
+
+---
+
 ## [2.49.159] - 2026-05-23
 
 **Schema version:** 56

@@ -1624,37 +1624,53 @@
         // for rangeFt === 0 (self-cast, "Special", unknown ranges).
         let _tpOutOfRange = false;  // shared with the ruler + hover ring rendering below
         if (_targetPicker.active && _targetPicker.casterPos && _targetPicker.rangeFt > 0) {
-            // v2.49.157: a 5-ft "melee" reach (Shortsword, Unarmed
-            // Strike, etc.) computes to a circle whose radius is
-            // half a square — the diagonally-adjacent token's center
-            // falls just OUTSIDE the circle even though it's reach-
-            // able RAW under Chebyshev. Bump the visual ring to 10 ft
-            // for melee-range gates so diagonals are enclosed. The
-            // out-of-range check below still uses the literal rangeFt
-            // (Chebyshev distance to a diagonal is 5 ft, so the
-            // server still says "in range") — only the displayed ring
-            // changes.
-            const _visualRangeFt = _targetPicker.rangeFt <= 5
-                ? 10
-                : _targetPicker.rangeFt;
-            const _radius_px = (_visualRangeFt / 5) * gridSize;
+            // v2.49.160: cell highlights instead of a single range
+            // circle. The old circle approach had two problems:
+            //   (1) For melee (5 ft), a circle from the caster's
+            //       center didn't visually reach the diagonally-
+            //       adjacent token even though RAW Chebyshev says
+            //       it's in reach (v2.49.157 patched this by drawing
+            //       a 10 ft visual ring, but that lied about the
+            //       actual range).
+            //   (2) For long ranges (Fire Bolt 120 ft = 24-cell
+            //       radius), the circle dominated the screen and
+            //       washed out the canvas.
+            // New approach: stroke an accent-green cell highlight
+            // around every TOKEN within range. Out-of-range tokens
+            // get nothing; the player sees exactly which targets are
+            // reachable. Visual scales cleanly with token count
+            // instead of range size.
             ctx.save();
-            ctx.fillStyle = 'rgba(74, 222, 128, 0.06)';
-            ctx.strokeStyle = '#4ade80';
-            ctx.lineWidth = 2;        // v2.49.144: 1.5 → 2 for HD crispness
-            ctx.lineCap = 'round';    // v2.49.144: smoother dash endpoints
+            ctx.strokeStyle = 'rgba(74, 222, 128, 0.85)';
+            ctx.fillStyle = 'rgba(74, 222, 128, 0.08)';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
             ctx.setLineDash([6, 4]);
-            ctx.beginPath();
-            ctx.arc(
-                _targetPicker.casterPos.x, _targetPicker.casterPos.y,
-                _radius_px, 0, Math.PI * 2,
-            );
-            ctx.fill();
-            ctx.stroke();
+            for (const t of tokens) {
+                if (t.is_hidden && !ME.isGm) continue;
+                // Skip the caster's own token — single-target spells
+                // can't target self, and showing the caster as a
+                // valid target clutters the visual.
+                if (_targetPicker.casterCharId && t.character_id === _targetPicker.casterCharId) continue;
+                const tcx = t.x + gridSize / 2;
+                const tcy = t.y + gridSize / 2;
+                const dist_ft = _computeRulerDistanceFt(
+                    _targetPicker.casterPos, { x: tcx, y: tcy },
+                );
+                if (dist_ft > _targetPicker.rangeFt) continue;
+                const cellPx = gridSize * (t.size || 1);
+                const x = Math.round(t.x);
+                const y = Math.round(t.y);
+                ctx.beginPath();
+                ctx.rect(x, y, cellPx, cellPx);
+                ctx.fill();
+                ctx.stroke();
+            }
             ctx.restore();
             // Compute out-of-range against the SNAPPED cursor so the
-            // gate matches what the server would resolve (same Chebyshev
-            // / Euclidean math as the ruler line).
+            // chip + ruler still warn when the cursor strays into a
+            // non-target cell beyond range. Same Chebyshev math.
             if (_targetPicker.cursor) {
                 const _dist = _computeRulerDistanceFt(
                     _targetPicker.casterPos, _targetPicker.cursor,
