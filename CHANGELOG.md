@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.176] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix: `spell_slug` field stripped by Pydantic during homebrew serialization (Spells tab never appeared for Soren).** User reported: "I am still not seeing the spells tab." Root cause: when v2.49.174 added `spell_slug` to Soren's actions and v2.49.175 added the conditional Spells tab keyed on that field, the field never reached the client — the `Action` Pydantic model in `app/action_schema.py` doesn't declare `spell_slug`, so `write_homebrew` silently dropped it during serialization. Same gotcha that bit v2.49.127's `extra_beams_per_slot_above_base` and v2.49.147's `extra_targets_per_slot_above_base`.
+**Description:** One field addition in `app/action_schema.py::Action` — `spell_slug: str = ""`. Pydantic's default behavior strips unknown fields on parse + serialize for strict `BaseModel` (no `model_config = ConfigDict(extra='allow')`). The field is declared with the default empty string so existing monster actions (Goblin Captain's Frightful Howl, bandit Scimitars, demo PC attacks, etc.) round-trip unchanged; only actions that explicitly set `spell_slug` (Soren's Inflict Wounds + Sacred Flame post-v2.49.174) get the catalog merge.
+**Description (cont):** Verification path. (a) Inspect the seeded homebrew JSON: `docker exec simplevtt-app cat /app/app/data/homebrew/dnd5e/campaign-1/monsters/cult-acolyte.json` — Soren's `inflict-wounds` action now shows `"spell_slug": "inflict-wounds"` instead of the field being absent. (b) GM hard-refreshes browser → expands Soren in init tracker → THREE tabs render (Actions / Spells / Skills). Actions tab: Dagger only. Spells tab: ✨ Inflict Wounds (Spell) + ✨ Sacred Flame (Cantrip). (c) Other monsters (Bandit, Thug, Grixxa) unaffected — they have no `spell_slug` actions, so the conditional tab stays hidden. (d) Regression: 18-test NPC + PC attack suite passes.
+**Description (cont 2):** Why this wasn't caught earlier. The v2.49.174 commit (server-side resolver) and v2.49.175 commit (client Spells tab) both LOGICALLY work — but neither commit exercised the actual data round-trip through `write_homebrew`. The demo reseed in v2.49.173 was the first time the homebrew JSON was actually re-written with the new shape, and the silently-stripped field meant `spell_slug` was always falsy at render time. The harness suite doesn't seed homebrew monsters via `write_homebrew` directly (tests seed combatants ad-hoc with `_mknpc`), so the round-trip gap is invisible to existing coverage.
+**Description (cont 3):** Why this is THE same class of bug as v2.49.127. Both were Pydantic-strips-unknown silently. Both were diagnosable only by inspecting the serialized JSON on disk and comparing to the source-of-truth dict in code. The fix is identical: declare the field on the BaseModel so it round-trips. Filing a meta-followup (in the changelog notes): add a smoke test that writes a homebrew monster with every `Action` field set and asserts every field round-trips through write_homebrew → read_homebrew.
+
+### Fixed
+- `app/action_schema.py::Action` — added `spell_slug: str = ""` field so the v2.49.174 NPC catalog-reference field survives Pydantic serialization through `write_homebrew`.
+
+### Notes
+- **No client / endpoint change.** Pure schema fix. The v2.49.174 server resolver + v2.49.175 client Spells tab were both correct; the field just wasn't reaching them.
+- **Demo reseed required.** Run `POST /admin/demo/reset` to re-write the homebrew JSON with the new field. Without reseed, the existing on-disk JSON for Soren still lacks `spell_slug` and the Spells tab won't render.
+- **No new harness test.** Adding a round-trip test would help catch the next strip-bug-by-default; filed as a follow-up — currently the project's smoke surface is the rebuild + manual click-through.
+
+---
+
 ## [2.49.175] - 2026-05-23
 
 **Schema version:** 56

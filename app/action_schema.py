@@ -96,6 +96,18 @@ class Action(BaseModel):
     # above_base`` (which drives attack-roll multi-beam math); these
     # serve symmetric purposes for the two spell archetypes.
     extra_targets_per_slot_above_base: int = 0
+    # v2.49.176: NPC actions can reference the shared spell catalog via
+    # ``spell_slug`` (added v2.49.174). When set, the server's
+    # _resolve_spell_slug_action helper merges the spell's catalog
+    # entry into this action at sheet-render time (damage / type /
+    # attack_roll / save_ability / range / area / etc.). Empty string
+    # means "no catalog reference" — the action uses its inline data.
+    # Same Pydantic-strips-unknown-fields gotcha that bit v2.49.127's
+    # extra_beams_per_slot_above_base + v2.49.147's
+    # extra_targets_per_slot_above_base: without this declaration the
+    # field gets dropped during write_homebrew serialization, even
+    # though the client + server logic reads it.
+    spell_slug: str = ""
     attack_roll: bool = False
     # To-hit string ("+5", "-1") used when ``attack_roll`` is true. Stored as
     # a string (not int) for parity with the character-sheet attack schema
