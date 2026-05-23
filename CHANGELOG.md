@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.191] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Stats tab in mockups now uses the real `.mini-ab-grid` + `.mini-sk-btn` button styles from the live mini-sheet.** User: "under stats, can you update it to use the stats buttons that are currently in use?" Pre-fix the mockup invented its own ability cells (`.mock-ability-cell`) and skill rows (`.mock-skill-row` with a button on the side) — close but not identical to what ships. This commit replaces both with the exact markup + CSS the live `_mini_sheet_card.html` partial uses: 3-row ability grid (name labels with prof dot · raw mod · clickable `.mac-btn`), 2-column skill grid (`.mini-sk-btn` with `.is-prof` / `.is-exp` border + dot). Plus the Check/Save toggle pill at the Abilities header that flips every ability button's displayed mod between check and save in one click.
+**Description:** Three coordinated edits to `docs/wiki/unified-mini-sheet-mockups.html`. **(1)** Inlined the relevant CSS rules from `tabletop.html:695-720` and `tabletop.html:707-720` + `:978` into the mockup's `<style>` block — `.mini-ab-grid` / `.mac-name{.prof}` / `.mac-mod-lg` / `.mac-btn{.mac-btn-ab,.mac-btn-mod}` / `.mini-ab-header` / `.mini-ab-toggle{.mini-ab-toggle-btn{.active}}` / `.mini-skills-grid` / `.mini-sk-btn{.is-prof,.is-exp}` / `.mini-sk-dot` / `.mini-sk-name` / `.mini-sk-ab` / `.mini-sk-mod`. Self-contained so the mockup looks the same opened outside the wiki nav. **(2)** Stats panel markup replaced in all 4 PC variants (via `zaraTemplate`) and all 4 NPC Stats panels (inline per mockup). PCs get the full 3-row ability grid with name labels (CON + CHA have prof dots), raw mod row, button row + Check/Save toggle pill, plus the 18-skill `.mini-skills-grid` with Arcana / Deception / Persuasion marked `.is-prof`. NPC Stats panels for Mockups A + B get the same full grid (WIS prof) + 4-skill grid (Medicine prof). Current state NPC + Mockup C NPC Stats panels skip the ability grid (it's inline above in those layouts) + show the 4-skill grid only, with an annotation explaining the omission. **(3)** New JS handlers in the existing `<script>` block: (a) `.mini-ab-toggle-btn` click flips the active class within its group + updates every `.mac-btn-mod` to the `data-check-mod` or `data-save-mod` value; (b) `.mini-ab-btn` click fires a toast `🎲 STR check → 1d20+0` (or save mod when toggle says save); (c) `.mini-sk-btn` click fires `🎲 Arcana (prof) → 1d20+4`.
+**Description (cont):** Why mirror the real markup (vs invent a mockup-only). The user explicitly asked for the buttons that are "currently in use" — making the mockup pixel-true means future Phase 1 work can copy the markup verbatim. Old `.mock-ability-cell` was 1 row (label + mod + score); the real `.mini-ab-grid` is 3 rows (name with prof dot + raw mod + clickable button). The new mockup matches the live UI exactly.
+**Description (cont 2):** Why the Check/Save toggle. The live mini-sheet's `.mini-ab-toggle` lets the player swap every ability button between "1d20 + mod" (check) and "1d20 + mod + prof" (save) without changing tabs. The mockup now demonstrates this: clicking `Save` flips CON from +1 to +4 (CON save prof) and CHA from +4 to +7 (CHA save prof); the other 4 stay the same (no prof). Click another ability button → toast shows the correct check or save mod for the current toggle state.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.191 live. (b) Manual: `GET /wiki/unified-mini-sheet-mockups` → Stats tabs on all 8 mockups render with the real button styles. Click the Save toggle on Zara's Stats tab → CON button reads +4, CHA reads +7; click STR → toast `🎲 STR save → 1d20+0`. Click Arcana skill → toast `🎲 Arcana (prof) → 1d20+4`. (c) Hidden Mockup A `Features` tab still suppresses click + shows the explanatory toast. (d) 19 wiki tests pass.
+
+### Changed
+- `docs/wiki/unified-mini-sheet-mockups.html` — Stats panel uses real `.mini-ab-grid` + `.mini-sk-btn` markup + CSS lifted from `tabletop.html`; new JS handlers for Check/Save toggle + ability + skill button clicks; self-contained styling (no dependency on the live `tabletop.html` `<style>` block).
+
+### Notes
+- **Pixel-true to the live mini-sheet.** Future Phase 1 work (chrome extraction per the unified-mini-sheet plan) can copy the markup verbatim — the mockup is now the live spec.
+- **Check/Save toggle preserved** so reviewers see how the save modifier surface (toggle pill) reads vs the saving-throw rows the v2.49.189 mockup had as separate items.
+- **No server / harness change.**
+
+---
+
 ## [2.49.190] - 2026-05-23
 
 **Schema version:** 56

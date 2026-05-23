@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>SimpleVTT — Unified mini-sheet mockups (v2.49.190)</title>
+<title>SimpleVTT — Unified mini-sheet mockups (v2.49.191)</title>
 <style>
   :root {
     --bg:        #15171c;
@@ -398,6 +398,173 @@
   .mock-ability-cell .a-mod { font-size: 13px; font-weight: 700; }
   .mock-ability-cell .a-score { font-size: 8px; color: var(--fg-mute); }
   .mock-ability-cell.prof { border-color: var(--c-crit); }
+
+  /* ── v2.49.191: real ability + skill button styles, lifted from
+     the live mini-sheet (tabletop.html:695-720) so the Stats tab
+     mockup is pixel-true to what's currently shipped instead of a
+     simplified facsimile. Self-contained so the mockup renders the
+     same when opened outside the wiki nav (without static/style.css
+     overrides). ── */
+  .mini-section-label {
+    font-size: 10px;
+    color: var(--fg-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 8px 0 4px;
+    display: block;
+  }
+  .mini-ab-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 4px;
+  }
+  .mini-ab-toggle {
+    display: inline-flex;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .mini-ab-toggle-btn {
+    font-size: 10px;
+    padding: 2px 8px;
+    min-height: 24px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: var(--fg-mute);
+    line-height: 1;
+    transition: background .12s, color .12s;
+  }
+  .mini-ab-toggle-btn.active {
+    background: var(--accent);
+    color: #fff;
+  }
+  .mini-ab-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    text-align: center;
+    margin-bottom: 6px;
+    gap: 2px 0;
+  }
+  .mac-name {
+    font-size: 9px;
+    color: var(--fg-mute);
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    padding: 4px 0 1px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+  }
+  .mac-name-prof { color: var(--accent); }
+  .mac-name-prof::after {
+    content: '●';
+    font-size: 6px;
+    line-height: 1;
+    opacity: 0.85;
+  }
+  .mac-mod { font-size: 10px; color: var(--fg-mute); padding-bottom: 2px; }
+  .mac-mod-lg {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--fg);
+    padding-bottom: 2px;
+  }
+  .mac-btn {
+    width: 100%;
+    padding: 2px 1px;
+    font-size: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.15;
+    gap: 0;
+    min-height: 32px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg);
+    cursor: pointer;
+    transition: background .12s, border-color .12s;
+  }
+  .mac-btn:hover {
+    background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+    border-color: var(--accent);
+  }
+  .mac-btn .mac-btn-ab {
+    font-size: 9px;
+    opacity: 0.85;
+    letter-spacing: 0.3px;
+  }
+  .mac-btn .mac-btn-mod {
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .mini-skills-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 3px 6px;
+  }
+  .mini-sk-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    padding: 3px 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: left;
+    min-height: 32px;
+    color: var(--fg);
+    font-family: inherit;
+    transition: background .12s;
+  }
+  .mini-sk-btn.is-prof { border: 2px solid var(--accent); }
+  .mini-sk-btn.is-exp {
+    border: 2px solid color-mix(in srgb, #daa520 70%, var(--accent));
+  }
+  .mini-sk-btn:hover {
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg));
+  }
+  .mini-sk-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid var(--border);
+  }
+  .mini-sk-btn.is-prof .mini-sk-dot {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .mini-sk-btn.is-exp .mini-sk-dot {
+    background: color-mix(in srgb, #daa520 70%, var(--accent));
+    border-color: color-mix(in srgb, #daa520 70%, var(--accent));
+  }
+  .mini-sk-name {
+    flex: 1;
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--fg);
+  }
+  .mini-sk-ab { font-size: 9px; color: var(--fg-mute); flex-shrink: 0; }
+  .mini-sk-mod {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    min-width: 22px;
+    text-align: right;
+    flex-shrink: 0;
+  }
   .mock-quick-chips {
     display: flex;
     gap: 14px;
@@ -456,7 +623,7 @@
 
 <div id="notice"></div>
 
-<h1>Unified mini-sheet — visual mockups <span class="version">v2.49.190</span></h1>
+<h1>Unified mini-sheet — visual mockups <span class="version">v2.49.191</span></h1>
 <p class="lede">
   Visual companion to the
   <a href="/wiki/doc/plan-unified-mini-sheet">Unified mini-sheet design plan</a>.
@@ -550,10 +717,16 @@
               <span class="mock-chip cond-immune">charmed</span>
               <span class="mock-chip cond-immune">frightened</span>
             </div>
-            <div class="mock-section-label">Skills</div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Religion</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Medicine (Prof)</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Perception</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
+            <span class="mini-section-label">Skills</span>
+            <div class="mini-skills-grid">
+              <button class="mini-sk-btn is-prof" data-skill="Medicine"><span class="mini-sk-dot"></span><span class="mini-sk-name">Medicine</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+4</span></button>
+              <button class="mini-sk-btn" data-skill="Religion"><span class="mini-sk-dot"></span><span class="mini-sk-name">Religion</span><span class="mini-sk-ab">INT</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Perception"><span class="mini-sk-dot"></span><span class="mini-sk-name">Perception</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Insight"><span class="mini-sk-dot"></span><span class="mini-sk-name">Insight</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+2</span></button>
+            </div>
+            <div class="annotation" style="margin-top:6px;">
+              No ability grid — it's inline above (Current-state body convention).
+            </div>
           </div>
         </div>
       </div>
@@ -644,19 +817,32 @@
               <span class="mock-chip cond-immune">charmed</span>
               <span class="mock-chip cond-immune">frightened</span>
             </div>
-            <div class="mock-section-label">Abilities</div>
-            <div class="mock-ability-grid">
-              <div class="mock-ability-cell"><div class="a-label">STR</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
-              <div class="mock-ability-cell"><div class="a-label">DEX</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
-              <div class="mock-ability-cell"><div class="a-label">CON</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
-              <div class="mock-ability-cell"><div class="a-label">INT</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
-              <div class="mock-ability-cell prof"><div class="a-label">WIS</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
-              <div class="mock-ability-cell"><div class="a-label">CHA</div><div class="a-mod">+0</div><div class="a-score">11</div></div>
+            <div class="mini-ab-header">
+              <span class="mini-section-label" style="margin:0;flex:1;">Abilities</span>
+              <div class="mini-ab-toggle" data-toggle-group="a-npc-ab">
+                <button type="button" class="mini-ab-toggle-btn active" data-mode="check" data-toggle-group="a-npc-ab">Check</button>
+                <button type="button" class="mini-ab-toggle-btn" data-mode="save" data-toggle-group="a-npc-ab">Save</button>
+              </div>
             </div>
-            <div class="mock-section-label">Skills</div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Religion</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Medicine (Prof)</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Perception</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
+            <div class="mini-ab-grid" data-toggle-group="a-npc-ab">
+              <span class="mac-name">STR</span><span class="mac-name">DEX</span><span class="mac-name">CON</span>
+              <span class="mac-name">INT</span><span class="mac-name mac-name-prof" title="Save proficiency">WIS</span><span class="mac-name">CHA</span>
+              <span class="mac-mod mac-mod-lg">+0</span><span class="mac-mod mac-mod-lg">+2</span><span class="mac-mod mac-mod-lg">+0</span>
+              <span class="mac-mod mac-mod-lg">+0</span><span class="mac-mod mac-mod-lg">+2</span><span class="mac-mod mac-mod-lg">+0</span>
+              <button class="mac-btn mini-ab-btn" data-ab="STR" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">STR</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="DEX" data-check-mod="+2" data-save-mod="+2"><span class="mac-btn-ab">DEX</span><span class="mac-btn-mod">+2</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="CON" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">CON</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="INT" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">INT</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="WIS" data-check-mod="+2" data-save-mod="+4" title="Save proficiency"><span class="mac-btn-ab">WIS</span><span class="mac-btn-mod">+2</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="CHA" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">CHA</span><span class="mac-btn-mod">+0</span></button>
+            </div>
+            <span class="mini-section-label">Skills</span>
+            <div class="mini-skills-grid">
+              <button class="mini-sk-btn is-prof" data-skill="Medicine"><span class="mini-sk-dot"></span><span class="mini-sk-name">Medicine</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+4</span></button>
+              <button class="mini-sk-btn" data-skill="Religion"><span class="mini-sk-dot"></span><span class="mini-sk-name">Religion</span><span class="mini-sk-ab">INT</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Perception"><span class="mini-sk-dot"></span><span class="mini-sk-name">Perception</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Insight"><span class="mini-sk-dot"></span><span class="mini-sk-name">Insight</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+2</span></button>
+            </div>
           </div>
         </div>
       </div>
@@ -752,19 +938,32 @@
               <span class="mock-chip cond-immune">charmed</span>
               <span class="mock-chip cond-immune">frightened</span>
             </div>
-            <div class="mock-section-label">Abilities</div>
-            <div class="mock-ability-grid">
-              <div class="mock-ability-cell"><div class="a-label">STR</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
-              <div class="mock-ability-cell"><div class="a-label">DEX</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
-              <div class="mock-ability-cell"><div class="a-label">CON</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
-              <div class="mock-ability-cell"><div class="a-label">INT</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
-              <div class="mock-ability-cell prof"><div class="a-label">WIS</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
-              <div class="mock-ability-cell"><div class="a-label">CHA</div><div class="a-mod">+0</div><div class="a-score">11</div></div>
+            <div class="mini-ab-header">
+              <span class="mini-section-label" style="margin:0;flex:1;">Abilities</span>
+              <div class="mini-ab-toggle" data-toggle-group="b-npc-ab">
+                <button type="button" class="mini-ab-toggle-btn active" data-mode="check" data-toggle-group="b-npc-ab">Check</button>
+                <button type="button" class="mini-ab-toggle-btn" data-mode="save" data-toggle-group="b-npc-ab">Save</button>
+              </div>
             </div>
-            <div class="mock-section-label">Skills</div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Religion</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Medicine (Prof)</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Perception</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
+            <div class="mini-ab-grid" data-toggle-group="b-npc-ab">
+              <span class="mac-name">STR</span><span class="mac-name">DEX</span><span class="mac-name">CON</span>
+              <span class="mac-name">INT</span><span class="mac-name mac-name-prof" title="Save proficiency">WIS</span><span class="mac-name">CHA</span>
+              <span class="mac-mod mac-mod-lg">+0</span><span class="mac-mod mac-mod-lg">+2</span><span class="mac-mod mac-mod-lg">+0</span>
+              <span class="mac-mod mac-mod-lg">+0</span><span class="mac-mod mac-mod-lg">+2</span><span class="mac-mod mac-mod-lg">+0</span>
+              <button class="mac-btn mini-ab-btn" data-ab="STR" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">STR</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="DEX" data-check-mod="+2" data-save-mod="+2"><span class="mac-btn-ab">DEX</span><span class="mac-btn-mod">+2</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="CON" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">CON</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="INT" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">INT</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="WIS" data-check-mod="+2" data-save-mod="+4" title="Save proficiency"><span class="mac-btn-ab">WIS</span><span class="mac-btn-mod">+2</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="CHA" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">CHA</span><span class="mac-btn-mod">+0</span></button>
+            </div>
+            <span class="mini-section-label">Skills</span>
+            <div class="mini-skills-grid">
+              <button class="mini-sk-btn is-prof" data-skill="Medicine"><span class="mini-sk-dot"></span><span class="mini-sk-name">Medicine</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+4</span></button>
+              <button class="mini-sk-btn" data-skill="Religion"><span class="mini-sk-dot"></span><span class="mini-sk-name">Religion</span><span class="mini-sk-ab">INT</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Perception"><span class="mini-sk-dot"></span><span class="mini-sk-name">Perception</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Insight"><span class="mini-sk-dot"></span><span class="mini-sk-name">Insight</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+2</span></button>
+            </div>
           </div>
         </div>
       </div>
@@ -863,10 +1062,13 @@
               <span class="mock-chip cond-immune">charmed</span>
               <span class="mock-chip cond-immune">frightened</span>
             </div>
-            <div class="mock-section-label">Skills</div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Religion</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Medicine (Prof)</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Perception</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
+            <span class="mini-section-label">Skills</span>
+            <div class="mini-skills-grid">
+              <button class="mini-sk-btn is-prof" data-skill="Medicine"><span class="mini-sk-dot"></span><span class="mini-sk-name">Medicine</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+4</span></button>
+              <button class="mini-sk-btn" data-skill="Religion"><span class="mini-sk-dot"></span><span class="mini-sk-name">Religion</span><span class="mini-sk-ab">INT</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Perception"><span class="mini-sk-dot"></span><span class="mini-sk-name">Perception</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Insight"><span class="mini-sk-dot"></span><span class="mini-sk-name">Insight</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+2</span></button>
+            </div>
             <div class="annotation" style="margin-top:8px;">
               No ability grid here — it's inline above (Hybrid Density's signature).
             </div>
@@ -1082,26 +1284,54 @@
               <span class="label">⚡ Vulnerable</span>
               <span class="annotation" style="margin-top:0;">(none)</span>
             </div>
-            <div class="mock-section-label">Abilities</div>
-            <div class="mock-ability-grid">
-              <div class="mock-ability-cell"><div class="a-label">STR</div><div class="a-mod">+0</div><div class="a-score">10</div></div>
-              <div class="mock-ability-cell"><div class="a-label">DEX</div><div class="a-mod">+2</div><div class="a-score">14</div></div>
-              <div class="mock-ability-cell prof"><div class="a-label">CON</div><div class="a-mod">+1</div><div class="a-score">13</div></div>
-              <div class="mock-ability-cell"><div class="a-label">INT</div><div class="a-mod">+1</div><div class="a-score">12</div></div>
-              <div class="mock-ability-cell"><div class="a-label">WIS</div><div class="a-mod">+1</div><div class="a-score">12</div></div>
-              <div class="mock-ability-cell prof"><div class="a-label">CHA</div><div class="a-mod">+4</div><div class="a-score">18</div></div>
+            <div class="mini-ab-header">
+              <span class="mini-section-label" style="margin:0;flex:1;">Abilities</span>
+              <div class="mini-ab-toggle" data-toggle-group="${prefix}-pc-ab">
+                <button type="button" class="mini-ab-toggle-btn active" data-mode="check" data-toggle-group="${prefix}-pc-ab">Check</button>
+                <button type="button" class="mini-ab-toggle-btn" data-mode="save" data-toggle-group="${prefix}-pc-ab">Save</button>
+              </div>
             </div>
-            <div class="mock-section-label">Saving throws</div>
-            <div class="mock-skill-row"><span class="mock-skill-name">CON save (Prof)</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">CHA save (Prof)</span><span class="mock-chip skill">+7</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">DEX save</span><span class="mock-chip skill">+2</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-section-label">Skills</div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Arcana (Prof)</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Insight</span><span class="mock-chip skill">+1</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Persuasion (Prof)</span><span class="mock-chip skill">+7</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Intimidation</span><span class="mock-chip skill">+4</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Perception</span><span class="mock-chip skill">+1</span><button class="mock-roll-btn">🎲 Roll</button></div>
-            <div class="mock-skill-row"><span class="mock-skill-name">Investigation</span><span class="mock-chip skill">+1</span><button class="mock-roll-btn">🎲 Roll</button></div>
+            <div class="mini-ab-grid" data-toggle-group="${prefix}-pc-ab">
+              <span class="mac-name">STR</span>
+              <span class="mac-name">DEX</span>
+              <span class="mac-name mac-name-prof" title="Save proficiency">CON</span>
+              <span class="mac-name">INT</span>
+              <span class="mac-name">WIS</span>
+              <span class="mac-name mac-name-prof" title="Save proficiency">CHA</span>
+              <span class="mac-mod mac-mod-lg">+0</span>
+              <span class="mac-mod mac-mod-lg">+2</span>
+              <span class="mac-mod mac-mod-lg">+1</span>
+              <span class="mac-mod mac-mod-lg">+1</span>
+              <span class="mac-mod mac-mod-lg">+1</span>
+              <span class="mac-mod mac-mod-lg">+4</span>
+              <button class="mac-btn mini-ab-btn" data-ab="STR" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">STR</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="DEX" data-check-mod="+2" data-save-mod="+2"><span class="mac-btn-ab">DEX</span><span class="mac-btn-mod">+2</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="CON" data-check-mod="+1" data-save-mod="+4" title="Save proficiency"><span class="mac-btn-ab">CON</span><span class="mac-btn-mod">+1</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="INT" data-check-mod="+1" data-save-mod="+1"><span class="mac-btn-ab">INT</span><span class="mac-btn-mod">+1</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="WIS" data-check-mod="+1" data-save-mod="+1"><span class="mac-btn-ab">WIS</span><span class="mac-btn-mod">+1</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="CHA" data-check-mod="+4" data-save-mod="+7" title="Save proficiency"><span class="mac-btn-ab">CHA</span><span class="mac-btn-mod">+4</span></button>
+            </div>
+            <span class="mini-section-label">Skills</span>
+            <div class="mini-skills-grid">
+              <button class="mini-sk-btn" data-skill="Acrobatics"><span class="mini-sk-dot"></span><span class="mini-sk-name">Acrobatics</span><span class="mini-sk-ab">DEX</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Animal Handling"><span class="mini-sk-dot"></span><span class="mini-sk-name">Animal Handling</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+1</span></button>
+              <button class="mini-sk-btn is-prof" data-skill="Arcana"><span class="mini-sk-dot"></span><span class="mini-sk-name">Arcana</span><span class="mini-sk-ab">INT</span><span class="mini-sk-mod">+4</span></button>
+              <button class="mini-sk-btn" data-skill="Athletics"><span class="mini-sk-dot"></span><span class="mini-sk-name">Athletics</span><span class="mini-sk-ab">STR</span><span class="mini-sk-mod">+0</span></button>
+              <button class="mini-sk-btn is-prof" data-skill="Deception"><span class="mini-sk-dot"></span><span class="mini-sk-name">Deception</span><span class="mini-sk-ab">CHA</span><span class="mini-sk-mod">+7</span></button>
+              <button class="mini-sk-btn" data-skill="History"><span class="mini-sk-dot"></span><span class="mini-sk-name">History</span><span class="mini-sk-ab">INT</span><span class="mini-sk-mod">+1</span></button>
+              <button class="mini-sk-btn" data-skill="Insight"><span class="mini-sk-dot"></span><span class="mini-sk-name">Insight</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+1</span></button>
+              <button class="mini-sk-btn" data-skill="Intimidation"><span class="mini-sk-dot"></span><span class="mini-sk-name">Intimidation</span><span class="mini-sk-ab">CHA</span><span class="mini-sk-mod">+4</span></button>
+              <button class="mini-sk-btn" data-skill="Investigation"><span class="mini-sk-dot"></span><span class="mini-sk-name">Investigation</span><span class="mini-sk-ab">INT</span><span class="mini-sk-mod">+1</span></button>
+              <button class="mini-sk-btn" data-skill="Medicine"><span class="mini-sk-dot"></span><span class="mini-sk-name">Medicine</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+1</span></button>
+              <button class="mini-sk-btn" data-skill="Nature"><span class="mini-sk-dot"></span><span class="mini-sk-name">Nature</span><span class="mini-sk-ab">INT</span><span class="mini-sk-mod">+1</span></button>
+              <button class="mini-sk-btn" data-skill="Perception"><span class="mini-sk-dot"></span><span class="mini-sk-name">Perception</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+1</span></button>
+              <button class="mini-sk-btn" data-skill="Performance"><span class="mini-sk-dot"></span><span class="mini-sk-name">Performance</span><span class="mini-sk-ab">CHA</span><span class="mini-sk-mod">+4</span></button>
+              <button class="mini-sk-btn is-prof" data-skill="Persuasion"><span class="mini-sk-dot"></span><span class="mini-sk-name">Persuasion</span><span class="mini-sk-ab">CHA</span><span class="mini-sk-mod">+7</span></button>
+              <button class="mini-sk-btn" data-skill="Religion"><span class="mini-sk-dot"></span><span class="mini-sk-name">Religion</span><span class="mini-sk-ab">INT</span><span class="mini-sk-mod">+1</span></button>
+              <button class="mini-sk-btn" data-skill="Sleight of Hand"><span class="mini-sk-dot"></span><span class="mini-sk-name">Sleight of Hand</span><span class="mini-sk-ab">DEX</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Stealth"><span class="mini-sk-dot"></span><span class="mini-sk-name">Stealth</span><span class="mini-sk-ab">DEX</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Survival"><span class="mini-sk-dot"></span><span class="mini-sk-name">Survival</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+1</span></button>
+            </div>
           </div>
           <div class="mock-panel" id="${prefix}-pc-features">
             <div class="mock-section-label">Resources</div>
@@ -1211,6 +1441,50 @@
     const chip = ev.target.closest('.mock-status-chip');
     if (!chip) return;
     showNotice(`Status: ${chip.textContent.trim()}`);
+  });
+
+  // v2.49.191: real .mini-ab-btn / .mini-sk-btn / .mini-ab-toggle-btn
+  // handlers so the Stats tab mockup uses the same buttons the live
+  // mini-sheet ships. Check/Save toggle flips the displayed mod on
+  // every .mac-btn in the same group; click fires the corresponding
+  // toast (check or save).
+  document.body.addEventListener('click', (ev) => {
+    const tog = ev.target.closest('.mini-ab-toggle-btn');
+    if (!tog) return;
+    const group = tog.dataset.toggleGroup;
+    if (!group) return;
+    const mode = tog.dataset.mode;
+    document.querySelectorAll(`.mini-ab-toggle-btn[data-toggle-group="${group}"]`).forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+    document.querySelectorAll(`.mini-ab-grid[data-toggle-group="${group}"] .mini-ab-btn`).forEach(btn => {
+      const mod = btn.dataset[mode === 'save' ? 'saveMod' : 'checkMod'];
+      const modEl = btn.querySelector('.mac-btn-mod');
+      if (modEl && mod) modEl.textContent = mod;
+    });
+  });
+  document.body.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.mini-ab-btn');
+    if (!btn) return;
+    if (ev.target.closest('.mini-ab-toggle-btn')) return;
+    const grid = btn.closest('.mini-ab-grid');
+    const group = grid && grid.dataset.toggleGroup;
+    const mode = group
+      ? (document.querySelector(`.mini-ab-toggle-btn[data-toggle-group="${group}"].active`)?.dataset.mode || 'check')
+      : 'check';
+    const ab = btn.dataset.ab || '';
+    const mod = btn.dataset[mode === 'save' ? 'saveMod' : 'checkMod'] || '+0';
+    showNotice(`🎲 ${ab} ${mode} → 1d20${mod}`);
+  });
+  document.body.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.mini-sk-btn');
+    if (!btn) return;
+    const name = btn.dataset.skill || btn.querySelector('.mini-sk-name')?.textContent || 'Skill';
+    const mod = btn.querySelector('.mini-sk-mod')?.textContent || '+0';
+    const tier = btn.classList.contains('is-exp')
+      ? ' (expertise)'
+      : btn.classList.contains('is-prof') ? ' (prof)' : '';
+    showNotice(`🎲 ${name}${tier} → 1d20${mod}`);
   });
 
   let noticeTimer = null;
