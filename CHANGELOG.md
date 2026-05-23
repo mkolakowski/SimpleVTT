@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.149] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Active-turn init card border is now thicker + has a brighter glow** so the GM sees whose turn it is at a glance. Was 1px accent border + 10px shadow at 28% alpha; now 2px accent border + a layered box-shadow with a 1px outer "ring" at 35% accent alpha + an 18px outer glow at 50% accent alpha. The 1px ring effectively doubles the perceived border weight (visually 3px total) without reflowing the card. `.init-row` and `.init-entry` both get the treatment; `.init-row` also picks up `padding: 5px 7px` to compensate for the 1px border-width bump (so the inner content doesn't reflow). Same accent color (`var(--accent)`), so the theme-coherence stays.
+**Description:** Two CSS rule edits in `app/templates/tabletop.html`. **(1)** `.init-row.active-turn` — `border` shorthand replaces `border-color`, bumping width from 1px (inherited from base `.init-row`) to 2px. Added `padding: 5px 7px` so the inner content doesn't shift relative to the non-active rows. `box-shadow` becomes a two-layer stack: `0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent)` (the 1px ring) + `0 4px 18px color-mix(in srgb, var(--accent) 50%, rgba(0,0,0,.28))` (the glow). **(2)** `.init-entry.active-turn` — same shorthand + box-shadow stack. No `padding` change because `.init-entry` already has `overflow: hidden` and the children layout absolutely doesn't shift.
+**Description (cont):** Why the double-shadow trick instead of a thicker border. Borders push the box-model out and reflow neighbour rows if the surrounding gap doesn't compensate. CSS `box-shadow: 0 0 0 Npx` is an "outer ring" that draws OUTSIDE the border without affecting layout — perfect for visual emphasis on a state-toggled element. Stacking a 1px solid ring with a soft 18px glow gives the active card a "double border + halo" effect that reads as "this one's the active combatant" from across the screen.
+**Description (cont 2):** Why `color-mix` for both shadow layers. The 35% alpha ring needs to be accent-colored (matches the border); the 50% alpha glow needs the same accent with darker fall-off. Hard-coding `rgba(167,139,250,...)` worked in the old rule but locked the color to the dark-theme purple. The mix variant respects the current theme's `--accent` (purple on dark, gold on light, etc.).
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.149 live. (b) Visually: open the GM init tracker → active combatant card visibly stands out from the rest. (c) Hover over a non-active card → v2.49.131 hover styling still wins (different selector, higher specificity per source order).
+
+### Changed
+- `app/templates/tabletop.html::.init-row.active-turn` — 1px → 2px accent border + two-layer accent-color box-shadow stack + 5px/7px padding to keep content position stable.
+- `app/templates/tabletop.html::.init-entry.active-turn` — same 2px border + two-layer shadow stack.
+
+### Notes
+- **Theme-coherent.** Both layers use `color-mix(in srgb, var(--accent) N%, ...)` so the glow recolors with the user's theme.
+- **No layout shift.** `.init-row` compensates with padding; `.init-entry` doesn't need it (overflow:hidden + absolute children).
+- **Active-turn precedence unchanged.** Hover / zebra rules still defer to active-turn per the v2.49.131 source-order chain.
+
+---
+
 ## [2.49.148] - 2026-05-23
 
 **Schema version:** 56
