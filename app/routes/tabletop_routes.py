@@ -8595,11 +8595,15 @@ async def cast_spell(
                 _ah_combatant = _lookup_combatant(campaign_id, _ah_id)
                 if not _ah_combatant:
                     continue
-                # NPC only for v1 (matches the save block's auto-
-                # apply gate). PCs need a chat-card manual-apply
-                # flow or a roll_request equivalent.
-                if not _ah_combatant.get("token_template_id"):
-                    continue
+                # v2.49.156: PC + NPC both auto-apply for auto-hit
+                # spells. RAW Magic Missile: "Each dart hits a creature
+                # of your choice that you can see within range." No
+                # save, no attack, no opt-out — so unlike save spells
+                # (where PCs need to roll their save first), there's
+                # nothing for the PC to acknowledge. _apply_damage_to
+                # _combatant routes through _apply_hp_change for PCs
+                # so the death-save state machine still wakes a dying
+                # PC cleanly.
                 try:
                     _ah_dr = dice_mod.roll(_ah_damage_expr)
                     _ah_rolled = max(0, int(_ah_dr.total))

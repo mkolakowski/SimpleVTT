@@ -4060,6 +4060,32 @@
                 `<span class="result-pill chip-buff">${escapeHTML(d.auto_save_buff_icon || '💫')} ${escapeHTML(d.auto_save_buff_name)} · ${durLabel}</span>`
             );
         }
+        // v2.49.156: auto-hit per-target damage pills (Magic Missile).
+        // The server's auto_hit_targets list (v2.49.155) carries one
+        // entry per dart with {target_name, rolled, breakdown,
+        // damage_applied, damage_type}. Each renders as a clickable
+        // pill with the same expandable-detail pattern as save pills.
+        // Σ aggregate pill appended when 2+ darts landed.
+        const hitTargets = Array.isArray(d.auto_hit_targets) ? d.auto_hit_targets : [];
+        let _hitTotal = 0;
+        let _hitDmgType = '';
+        if (hitTargets.length) {
+            for (const t of hitTargets) {
+                const type = t.damage_type ? ` ${escapeHTML(t.damage_type)}` : '';
+                const amt = (t.damage_applied != null && t.damage_applied > 0)
+                    ? t.damage_applied
+                    : (t.rolled || 0);
+                const header = `🎯 ${escapeHTML(t.target_name || '')} 🎲 ${amt}${type}`;
+                const detail = t.breakdown ? `Damage: ${escapeHTML(t.breakdown)}` : '';
+                pills.push(_buildPill('chip-damage', header, detail));
+                _hitTotal += (t.damage_applied || 0);
+                if (!_hitDmgType && t.damage_type) _hitDmgType = t.damage_type;
+            }
+            if (hitTargets.length > 1 && _hitTotal > 0) {
+                const typeBit = _hitDmgType ? ` ${escapeHTML(_hitDmgType)}` : '';
+                pills.push(`<span class="result-pill chip-damage">Σ ${_hitTotal}${typeBit}</span>`);
+            }
+        }
         // Undo pill (when anything was actually applied). For multi-
         // target AoE, "applied" sums across per-target damage so the
         // button shows when at least one bandit took damage.
@@ -4070,6 +4096,7 @@
             || (d.auto_attack_damage_applied || 0) > 0
             || (d.auto_save_damage_applied || 0) > 0
             || multiTargetDmg > 0
+            || _hitTotal > 0
         );
         if (anyApplied) {
             pills.push(

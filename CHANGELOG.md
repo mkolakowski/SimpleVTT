@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.156] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Magic Missile chat-card per-target pills + PC auto-apply for auto-hit spells.** Two related changes building on v2.49.155 (server-side per-dart damage). (1) Removed the NPC-only gate from the auto-hit damage block so PC darts also auto-apply — RAW Magic Missile auto-hits without saving throw, unlike save spells (where PCs need to roll their save first). (2) Added chat-card per-target pills for the `auto_hit_targets` payload field. Each dart renders as a clickable `🎯 NAME 🎲 X force` pill; clicking expands to show the per-dart damage breakdown. Σ aggregate pill appended when 2+ darts landed. The Undo button's `anyApplied` gate now includes auto-hit damage.
+**Description:** Two edits. **(1)** `app/routes/tabletop_routes.py::cast_spell` auto-hit branch — removed the `if not _ah_combatant.get("token_template_id"): continue` line that skipped PCs. Now both NPCs (via token_template_id path) and PCs (via char_id path in `_apply_damage_to_combatant`) get damage applied. The helper routes PC damage through `_apply_hp_change` so the death-save state machine wakes a dying PC cleanly. **(2)** `app/static/tabletop.js::_renderSpellCastResult` — new pill block right after the save buff pill rendering: reads `d.auto_hit_targets`, iterates each entry, builds a `chip-damage` pill via the existing `_buildPill` helper with header `🎯 NAME 🎲 N type` and detail `Damage: <breakdown>`. Σ aggregate when 2+ darts landed. The `_hitTotal` counter now also feeds the `anyApplied` Undo-pill gate so casts with auto-hit damage get the ↶ Undo button.
+**Description (cont):** Why PC auto-apply for Magic Missile (vs save-spell PC abstain). The save block has `auto_save_target_kind == "npc"` because PCs need to roll their save before damage applies — the engine creates a RollRequest, the PC rolls, the server applies damage based on the result. Auto-hit spells have no such intermediate step: the dart hits, period. RAW: "Each dart hits a creature of your choice." No opt-out. The save-block convention exists because the engine wanted to give players agency over their save rolls, but for auto-hit there's no agency to preserve — the damage is inevitable. So PCs auto-apply too, same as NPCs.
+**Description (cont 2):** Pill rendering format. Save spells already use `📋 NAME 🎲 ROLL/DC ✅/❌ · DMG TYPE` — the verdict + DC + outcome. Auto-hit spells use `🎯 NAME 🎲 DAMAGE type` — there's no verdict (always hits) so the dart count + damage IS the outcome. Click expands to show `Damage: 1d4[3]=3 +1 => 4` per-dart breakdown. The `_buildPill` helper is shared with save / attack chat-card pill rendering.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.156 live. (b) Manual: cast Magic Missile L1 from Zara at 3 bandits → 3 `🎯 Bandit 🎲 4 force` pills + `Σ 12 force` aggregate. Click any pill → expands to show the dart's `1d4[…]+1` breakdown. (c) Cast Magic Missile L3 (5 darts) mixed PC + NPC → PC dart applies + PC's pill appears in the list. (d) 35/35 cast_spell + attack + save + aoe + metamagic regression tests still pass.
+
+### Added
+- `app/static/tabletop.js::_renderSpellCastResult` — auto_hit_targets pill loop + Σ aggregate; `_hitTotal` factored into Undo gate.
+
+### Changed
+- `app/routes/tabletop_routes.py::cast_spell` auto-hit branch — removed NPC-only gate; PCs auto-apply too.
+
+### Notes
+- **Backward compat.** `auto_hit_targets` was empty before; chat card just had no pills. Now populated for Magic Missile + future auto-hit spells.
+- **PC auto-apply.** Magic Missile darts at PCs immediately reduce HP. Death-save state machine still triggers correctly via `_apply_hp_change`.
+- **Aggregate Σ pill** only when 2+ darts landed; single-dart cast shows just the one pill.
+
+---
+
 ## [2.49.155] - 2026-05-23
 
 **Schema version:** 56
