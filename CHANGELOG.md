@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.187] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix: relative wiki links in the unified-mini-sheet plan doc resolved wrong when rendered through `/wiki/doc/...`, taking the user to the home screen.** User report: "the link to the mockups takes me to the home screen." Root cause: markdown links like `[name](../wiki/foo.html)` are relative to the source markdown file's path on disk, but when the wiki renders the plan via `/wiki/doc/plan-unified-mini-sheet`, the browser interprets the relative path against the page URL — `../wiki/unified-mini-sheet-mockups.html` from base `/wiki/doc/plan-unified-mini-sheet` becomes `/wiki/wiki/unified-mini-sheet-mockups.html`, which 404s and falls back to wherever the SPA / static-route catches it. v2.49.186's mockup link + four other wiki cross-links in the same plan all had this bug.
+**Description:** One edit in `docs/plans/unified-mini-sheet.md` — replaced all 5 relative wiki-doc links with absolute `/wiki/<slug>` URLs: (1) mockups callout `[/wiki/unified-mini-sheet-mockups](/wiki/unified-mini-sheet-mockups)`, (2-5) cross-links to `/wiki/battle-character-sheets-guide` and `/wiki/pc-vs-npc-systems` in the Related docs / Phase 3 / Out-of-scope / Definition of done sections. Used the slug (no file extension) form because that's the canonical wiki URL pattern — the route handler `wiki_routes.py` strips the extension internally.
+**Description (cont):** Why absolute URLs (vs root-relative or another convention). When the wiki renderer serves a markdown doc through `/wiki/<slug>` or `/wiki/doc/<slug>`, the browser's `<base>` URL is the request URL — so all relative links resolve from there, not from the source file location. Absolute paths (`/wiki/foo`) are the only form that's robust across both renderer surfaces (the source file in `docs/plans/` AND the rendered page at `/wiki/doc/plan-...`). The markdown renderer doesn't rewrite relative links automatically.
+**Description (cont 2):** Verification. (a) Curl `/version` confirms v2.49.187 live. (b) `curl http://localhost:8013/wiki/doc/plan-unified-mini-sheet` shows the rendered links as `<a href="/wiki/unified-mini-sheet-mockups">` (absolute, no `../wiki/` prefix) — they now navigate correctly. (c) `curl http://localhost:8013/wiki/unified-mini-sheet-mockups` still returns the mockups HTML (the underlying slug serving wasn't broken; just the links pointing at it were). (d) Existing harness coverage (19 wiki tests) still passes — none of those tests assert link href shape, but they do assert both endpoints serve 200.
+
+### Fixed
+- `docs/plans/unified-mini-sheet.md` — 5 relative wiki cross-links converted to absolute `/wiki/<slug>` URLs so they resolve correctly when the plan is rendered through `/wiki/doc/plan-unified-mini-sheet`.
+
+### Notes
+- **Convention going forward** — wiki cross-links inside markdown docs that get served through `/wiki/doc/<slug>` should always be absolute (`/wiki/<target-slug>`), not relative. Filed as a "lessons learned" item for the wiki-expansion plan.
+- **No code change.** Pure doc fix.
+
+---
+
 ## [2.49.186] - 2026-05-23
 
 **Schema version:** 56

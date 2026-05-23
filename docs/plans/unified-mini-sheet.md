@@ -3,7 +3,7 @@
 **Status:** ⚪ Proposed — for review. No code shipped beyond the v2.49.183 partial alignment that this doc supersedes / extends.
 **Filed across:** the v2.49.183 alignment work (NPC gained PC-style header + HP bar) hit the limit of what we can do without picking a unified architecture. The user's question — "can we create a new mini-sheet and only display properties that are relevant to the entity displayed?" — is what this plan answers.
 **Related code surfaces:** `app/templates/_mini_sheet_card.html` (PC partial), `app/templates/tabletop.html::buildMonsterInitSheet` (NPC JS renderer), `app/routes/tabletop_routes.py::_monster_template_to_sheet` (server-side monster projection).
-**Related docs:** [Battle & Characters tab sheets](../wiki/battle-character-sheets-guide.html), [PC vs NPC combat systems](../wiki/pc-vs-npc-systems.md).
+**Related docs:** [Battle & Characters tab sheets](/wiki/battle-character-sheets-guide), [PC vs NPC combat systems](/wiki/pc-vs-npc-systems).
 
 ---
 
@@ -28,7 +28,7 @@ So the precedent for "unify" is documented, and the precedent for "users like th
 Three approaches presented for review. Each shows the same combatant (Soren the Cult Acolyte) so the differences are about the **renderer**, not the data.
 
 > **🎨 Visual mockups** — the three options are also rendered as
-> live-styled HTML at [unified-mini-sheet-mockups.html](../wiki/unified-mini-sheet-mockups.html)
+> live-styled HTML at [/wiki/unified-mini-sheet-mockups](/wiki/unified-mini-sheet-mockups)
 > (side-by-side NPC + PC for each approach, plus a 3-up summary
 > comparison at the bottom). The ASCII below is the same content
 > in text-form for review-in-diff.
@@ -222,8 +222,8 @@ Rationale: B is the right architectural endpoint (one partial, per-tab sub-parti
 
 - Delete `buildMonsterInitSheet` entirely.
 - Move `.mini-spell-tag` CSS from `tabletop.html` inline `<style>` to `style.css` for shared use.
-- Update the [PC vs NPC combat systems audit](../wiki/pc-vs-npc-systems.md) to remove the "two renderers" entry from the data-model section.
-- Update the [Battle & Characters tab sheets visual guide](../wiki/battle-character-sheets-guide.html) PC-vs-NPC table to reflect single-renderer reality.
+- Update the [PC vs NPC combat systems audit](/wiki/pc-vs-npc-systems) to remove the "two renderers" entry from the data-model section.
+- Update the [Battle & Characters tab sheets visual guide](/wiki/battle-character-sheets-guide) PC-vs-NPC table to reflect single-renderer reality.
 
 ---
 
@@ -243,7 +243,7 @@ Rationale: B is the right architectural endpoint (one partial, per-tab sub-parti
 
 - **Full character sheet** (`sheet_dnd5e.html`) is unaffected. This plan only touches the init-tracker mini-sheet.
 - **The `/character/<id>/sheet` page** keeps its own rendering — that's the long-form view, not the at-a-glance view.
-- **PC vs NPC server divergence** (no `/cast_spell` for NPCs, no spell slots for NPCs, etc.) is documented in the [PC vs NPC audit](../wiki/pc-vs-npc-systems.md) and out of scope for this UI plan.
+- **PC vs NPC server divergence** (no `/cast_spell` for NPCs, no spell slots for NPCs, etc.) is documented in the [PC vs NPC audit](/wiki/pc-vs-npc-systems) and out of scope for this UI plan.
 
 ---
 
@@ -264,4 +264,4 @@ Rationale: B is the right architectural endpoint (one partial, per-tab sub-parti
 - Header + HP bar + tab strip + chips render identically across PC and NPC.
 - All existing harness tests (35+ in attack + npc_attack + wiki suites) pass without modification.
 - New harness test (Phase 1.4) snapshots the chrome markup for both surfaces.
-- Visual guide ([battle-character-sheets-guide.html](../wiki/battle-character-sheets-guide.html)) PC-vs-NPC table reduced to a single "rendered through the unified partial" line.
+- Visual guide ([battle-character-sheets-guide.html](/wiki/battle-character-sheets-guide)) PC-vs-NPC table reduced to a single "rendered through the unified partial" line.
