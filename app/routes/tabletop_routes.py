@@ -1324,6 +1324,98 @@ def _check_cast_range(
     }
 
 
+def _check_npc_attack_range(
+    db: Session,
+    campaign: Campaign,
+    attacker_combatant: dict,
+    range_str: str,
+    action_name: str,
+    target_combatant_id: str | None,
+) -> dict | None:
+    """v2.49.166: NPC-attack equivalent of _check_cast_range.
+
+    Differences from the PC version:
+      - Resolves the attacker's token via ``source_token_id`` (NPC) or
+        ``token_template_id + name`` rather than ``character_id``.
+      - No GM-bypass tier — the GM acting as an NPC is playing the
+        NPC; range is enforced unconventional override is via the
+        explicit ``override_range`` body flag on /npc_attack.
+      - No ``override_range`` / ``strict`` knobs here — the caller has
+        already short-circuited when ``override_range`` is set.
+
+    Returns the structured ``out_of_range`` dict (status_code=409
+    response body) when the attack exceeds range; None when the attack
+    is within range OR when any prerequisite is missing (no map, no
+    token, no parseable range — fail open).
+    """
+    from ..content.range_parser import max_range_ft, parse_range_ft
+    max_ft = max_range_ft(parse_range_ft(range_str))
+    if max_ft is None or max_ft <= 0:
+        return None
+    map_id = campaign.active_map_id
+    if not map_id:
+        return None
+    map_row = db.query(Map).filter(Map.id == map_id).first()
+    if not map_row:
+        return None
+    # Attacker (NPC) token lookup. Mirrors the picker's three-tier
+    # resolution: source_token_id → token_template_id + name.
+    attacker_pos: tuple[float, float] | None = None
+    src_token_id = attacker_combatant.get("source_token_id")
+    if src_token_id:
+        t = db.query(Token).filter(
+            Token.id == int(src_token_id), Token.map_id == map_id,
+        ).first()
+        if t:
+            attacker_pos = (float(t.x or 0), float(t.y or 0))
+    if attacker_pos is None:
+        # Fallback: token_template_id + name match (multiple bandits
+        # share one template; name disambiguates).
+        ttid = attacker_combatant.get("token_template_id")
+        nm = attacker_combatant.get("name")
+        if ttid is not None and nm:
+            t = (
+                db.query(Token)
+                .filter(
+                    Token.token_template_id == int(ttid),
+                    Token.label == nm,
+                    Token.map_id == map_id,
+                )
+                .first()
+            )
+            if t:
+                attacker_pos = (float(t.x or 0), float(t.y or 0))
+    if attacker_pos is None:
+        # Attacker has no token on this map (off-grid combatant —
+        # uncommon but possible). Fail open: skip range check rather
+        # than block a legitimate attack on a malformed state.
+        return None
+    # Target token position via the shared resolver (handles both PC
+    # and NPC targets).
+    target_pos, target_name = _resolve_target_token_pos(
+        db, campaign.id, map_id,
+        target_combatant_id, None, None,
+    )
+    if target_pos is None:
+        return None
+    distance_ft = _distance_ft_between_points(
+        int(map_row.grid_size_px or 0),
+        (map_row.grid_type.value if map_row.grid_type else "square").lower(),
+        attacker_pos[0], attacker_pos[1],
+        target_pos[0], target_pos[1],
+    )
+    if distance_ft <= max_ft:
+        return None
+    return {
+        "error": "out_of_range",
+        "source_name": str(attacker_combatant.get("name") or "NPC"),
+        "target_name": target_name or "",
+        "distance_ft": distance_ft,
+        "range_ft": int(max_ft),
+        "spell_name": action_name or "",
+    }
+
+
 def _resolve_target_token_pos(
     db: Session,
     campaign_id: int,
@@ -16554,6 +16646,22 @@ async def use_npc_attack(
     )
     if target_combatant_id and not target_combatant:
         raise HTTPException(404, "Target combatant not found")
+
+    # v2.49.166: range enforcement. Mirrors PC /attack's _check_cast_range
+    # gate but NPC-specific — looks up the attacker's token via
+    # combatant.source_token_id (PCs use character_id; NPCs don't have
+    # one). No GM bypass for NPC range — when the GM acts as a bandit
+    # they're playing the bandit, not bending its rules. ``override_range``
+    # body flag is the explicit escape hatch when the GM does want to
+    # bypass (click-again-to-override pattern on the client).
+    override_range = bool(body.get("override_range"))
+    if target_combatant_id and not override_range:
+        _range_err = _check_npc_attack_range(
+            db, campaign, attacker, range_str, action_name,
+            target_combatant_id,
+        )
+        if _range_err:
+            return JSONResponse(status_code=409, content=_range_err)
 
     # Dodging disadvantage on the target — same buff lookup PCs honor.
     target_dodging = _target_has_dodging(campaign_id, target_combatant_id)

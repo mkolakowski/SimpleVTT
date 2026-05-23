@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 400 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.164, 2026-05-23).
+**Total tests:** 402 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.166, 2026-05-23).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -127,6 +127,8 @@ v2.49.164 — parallel `/api/campaign/{cid}/npc_attack` endpoint for NPC monster
 | `test_npc_attack_missing_combatant_id` | Empty body → 400. |
 | `test_npc_attack_unknown_combatant_id` | Attacker not in battle → 404. |
 | `test_npc_attack_unknown_target_combatant_id` | Target not in battle → 404. |
+| `test_npc_attack_out_of_range_returns_409` | v2.49.166: `range` body field is parsed; endpoint accepts `override_range: true` body param without 400-ing. Fail-open semantics documented — out-of-range only fires when both attacker + target tokens are on the active map. |
+| `test_npc_attack_override_range_bypasses_check` | v2.49.166: explicit `override_range: true` short-circuits the range check unconditionally. |
 | `test_npc_attack_player_forbidden` | Non-GM caller → 403 (NPCs are GM-authorised). |
 
 ### `test_attack_force_gm_sync.py`

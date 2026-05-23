@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.166] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **NPC range enforcement on /npc_attack + click-again-to-override 409 UX.** v2.49.164 shipped /npc_attack with no server-side range check — the picker's client-side amber-out-of-range warning was the only gate, and a determined GM could click through. This commit closes the gap by adding `_check_npc_attack_range` (parallel to PC's `_check_cast_range`) that resolves the attacker NPC's token via `source_token_id` + `token_template_id+name`, computes distance vs `_resolve_target_token_pos`, and 409s with the structured `out_of_range` body when the action's `range` is exceeded. Client catches the 409 → shows a clear toast → stashes an override key → next Strike click on the same combatant + action + target within 10 s sends `override_range: true` (touch-friendly alternative to shift-click).
+**Description:** Three edits + 2 new harness tests. **(1)** `app/routes/tabletop_routes.py` — new `_check_npc_attack_range` helper (~80 lines) right before `_resolve_target_token_pos`. Mirrors `_check_cast_range`'s structure but: (a) takes `attacker_combatant: dict` instead of `caster_char: Character`, (b) resolves the attacker token via NPC three-tier lookup (`source_token_id` → `token_template_id + name`), (c) NO GM-bypass tier — when the GM acts as a bandit they're playing the bandit, not bending its rules; the explicit `override_range` body flag is the escape hatch. Fail-open semantics (return None) for: range unparseable, no active map, attacker token off-map, target token off-map — same as the PC version. **(2)** `app/routes/tabletop_routes.py::use_npc_attack` — calls `_check_npc_attack_range` immediately after target lookup; returns the helper's dict via `JSONResponse(status_code=409, ...)` on out-of-range. New `override_range` body param short-circuits the check when `True`. **(3)** `app/templates/tabletop.html` `.monster-strike-btn` handler — wraps the `/npc_attack` fetch in a `doFetch(override)` closure. Tracks `window._lastNpcRangeOverride` keyed on `combatant_id|action|target_combatant_id`; first 409 stamps the timestamp; second click within 10 s sends `override_range: true`. On 409 the toast reads `🚫 Bandit: Scimitar out of range (40 ft / 5 ft). Click 🗡 Strike again to override.` Successful attack clears the override stash for that combo.
+**Description (cont):** Why no GM-bypass (unlike PC range). The PC tier-1 `user_is_gm` bypass exists because the GM is the rules authority — they may legitimately want to free-cast a PC spell out of range as a "the wizard found a way" override. For NPCs that bypass is the WRONG default — the whole point of "bandit can't reach Pip with a 5 ft scimitar from 40 ft" is to make the rules honest about NPC reach. The GM is acting on behalf of the NPC, not breaking the rules for it. The `override_range` flag is the deliberate escape hatch for the rare case where the GM does want to bypass (e.g., narrative reach extension, monster ability not modeled).
+**Description (cont 2):** Why click-again-to-override (not shift-click). Shift-click doesn't work on touch devices, and the demo has a substantial tablet user base (DM-on-iPad is a common deployment). The click-again pattern: (a) is touch-friendly, (b) is discoverable via the toast's hint text, (c) auto-expires after 10 s so the GM can't accidentally override a stale state, (d) keys on `combatant_id|action|target` so overriding one NPC's range doesn't accidentally override another's. The 10 s window is generous enough for "read toast, decide, click" but tight enough to avoid stale-state errors.
+**Description (cont 3):** Why no Pydantic schema change. The body params are read via `body.get("override_range")` directly (NPC endpoint uses raw `await request.json()` for backward-compat with future field additions). No allowlist to update — same pattern as `target_combatant_id` and other body-keyed params on this endpoint.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.166 live. (b) Harness: 2 new tests in `tests/harness/test_npc_attack.py` cover the `override_range` happy path. The pure 409 path requires map-token seeding which the existing harness fixtures don't provide (PC range tests have the same gap — they document fail-open behavior). (c) Full 9-test `test_npc_attack.py` suite passes. (d) Regression: 15 tests in `test_attack.py` + adjacent files all pass. (e) Manual: in a live battle with bandit + Pip spaced 40 ft apart, GM clicks 🗡 Strike on bandit Scimitar (5 ft range) → picker → click Pip → toast reads "🚫 Bandit: Scimitar out of range (40 ft / 5 ft). Click 🗡 Strike again to override." Click again → attack fires through.
+
+### Added
+- `app/routes/tabletop_routes.py::_check_npc_attack_range` — NPC-specific range helper parallel to `_check_cast_range`. No GM-bypass; honors explicit `override_range` flag on the caller.
+- `app/routes/tabletop_routes.py::use_npc_attack` — `override_range` body param + 409 short-circuit.
+- `tests/harness/test_npc_attack.py` — 2 new tests for override flow.
+
+### Changed
+- `app/templates/tabletop.html` `.monster-strike-btn` handler — `doFetch(override)` closure + `window._lastNpcRangeOverride` click-again-to-override key keyed on `combatant_id|action|target_combatant_id` with 10 s expiry.
+
+### Notes
+- **No new endpoint.** Just extends `/api/campaign/{cid}/npc_attack` with `override_range` body param + range enforcement.
+- **No broadcast shape change.** weapon_attack payload unchanged when the attack does fire.
+- **Touch-friendly override.** Click-again-to-override pattern (not shift-click) so iPad GMs aren't locked out.
+- **Filed follow-up:** PC `/cast_spell` and PC `/attack` clients could adopt the same click-again-to-override toast UX. Currently their 409 `out_of_range` responses don't have a dedicated client handler (just generic error toast).
+
+---
+
 ## [2.49.165] - 2026-05-23
 
 **Schema version:** 56

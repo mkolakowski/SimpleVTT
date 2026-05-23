@@ -6419,7 +6419,20 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // is missing — preserves the GM "I just want to roll
                 // this damage real quick" muscle memory.
                 if (kind === 'attack' && _attackerCombId && _pickerTargetCombatantId) {
-                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/npc_attack`, {
+                    // v2.49.166: NPC range enforcement. The server
+                    // 409s on out-of-range; on the FIRST 409 we toast
+                    // a warning + stash an override key so the GM's
+                    // next Strike click on the same combatant + action +
+                    // target within 10s sends ``override_range: true``.
+                    // Click-again-to-override is touch-friendly + low-
+                    // friction (vs. shift-click which doesn't work on
+                    // tablets) and matches the user mental model of
+                    // "I see the picker warned amber, but I'm sure."
+                    window._lastNpcRangeOverride = window._lastNpcRangeOverride || {};
+                    const _overrideKey = `${_attackerCombId}|${action.action_id || action.name || ''}|${_pickerTargetCombatantId}`;
+                    const _prev = window._lastNpcRangeOverride[_overrideKey];
+                    const _override_range = !!(_prev && (Date.now() - _prev) < 10000);
+                    const doFetch = (over) => fetch(`/api/campaign/${CAMPAIGN_ID}/npc_attack`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -6431,13 +6444,33 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             damage_type: action.damage_type || '',
                             range: action.range || '',
                             target_combatant_id: _pickerTargetCombatantId,
+                            override_range: !!over,
                         }),
                     });
+                    const resp = await doFetch(_override_range);
+                    if (resp.status === 409) {
+                        let body = null;
+                        try { body = await resp.json(); } catch (_) {}
+                        if (body && body.error === 'out_of_range') {
+                            const _dist = Math.round(body.distance_ft || 0);
+                            const _max = body.range_ft || 0;
+                            window._lastNpcRangeOverride[_overrideKey] = Date.now();
+                            (window.showToast || alert)(
+                                `🚫 ${body.source_name || 'NPC'}: ${body.spell_name || 'Attack'} out of range (${_dist} ft / ${_max} ft). Click 🗡 Strike again to override.`,
+                                'error',
+                            );
+                            return;
+                        }
+                    }
                     if (!resp.ok) {
                         const txt = await resp.text();
                         (window.showToast || alert)(`NPC attack failed: ${txt}`, 'error');
                         return;
                     }
+                    // Successful attack — clear the override stash for
+                    // this combo so the next out-of-range request
+                    // starts fresh.
+                    delete window._lastNpcRangeOverride[_overrideKey];
                     // The /npc_attack endpoint already broadcasts a
                     // weapon_attack chat card; no extra /roll needed.
                     // Fall through to the per-combatant charge +
