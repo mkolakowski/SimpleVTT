@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.161] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Target-picker visual rework — per-token green availability rings (red on hover) + ruler suppressed for melee.** Three related changes: (1) the v2.49.160 cell-rect highlights are replaced by bolder green circles around each in-range token; (2) the in-range token under the cursor now turns crimson inline (no separate hover-preview pass) so the player sees "click here will pick this" in the same visual language as the picked ring; (3) the ruler line + distance chip is suppressed entirely when the spell/attack range is ≤ 5 ft, since "5 ft / 5 ft" carries no useful information and the per-token ring already tells the player which adjacent token is the target.
+**Description:** Two edits in `app/static/tabletop.js`. **(1)** Range-highlight block (~line 1626): replaced the per-cell `ctx.rect` stroke with a per-token `ctx.arc` that draws a two-pass green circle (35% halo at lineWidth 5, then a #4ade80 sharp ring at lineWidth 3 with shadowBlur 10). New `_hoveredPickableId` computed once from `cursorRaw` + `pointInToken`; if that id matches the in-range token being drawn, it gets a crimson ring instead (lineWidth 5 halo + #dc2626 inner with shadowBlur 14). Picked tokens are skipped — the existing picked-ring loop draws its own brighter ring on top. **(2)** Hover-preview block (~line 1688) restricted to the out-of-range case only (or `rangeFt === 0` for Special / unknown ranges) — in-range hover is now handled inline by the highlight loop. **(3)** Ruler block (~line 1784) gated on a new `_suppressRuler = rangeFt > 0 && rangeFt <= 5` flag.
+**Description (cont):** Why per-token circle (vs cell rect). The cell rect from v2.49.160 visually fragmented the canvas — every token cell looked like a separate UI chrome element competing with the token art. A ring is the established "ready to interact" visual in the picker already (the picked ring + the hover preview both use rings). Switching to a ring keeps the visual language unified: green ring = "available," red ring = "you're hovering / picked," no ring = "out of reach."
+**Description (cont 2):** Why merge hover state into the highlight loop. Previously the hover ring was a separate render pass that fired against `cursorRaw` regardless of in-range status, and the highlight loop always painted in-range tokens green. That meant a hovered in-range token rendered BOTH the green highlight AND the crimson hover preview on top — visual clutter. Now the highlight loop branches on `isHovered` and renders just one of the two colors per token. The separate hover-preview block still fires for out-of-range tokens (amber dashed) and for the `rangeFt === 0` case (no green-ring loop runs there).
+**Description (cont 3):** Why suppress ruler on melee. The user feedback: "on the melee selector, we can remove the ruler." The chip's "X / Y" form is informative for ranged spells (you see how much of your 120-ft range you're using) but for melee it always reads "5 ft / 5 ft" and the line just visually clutters the one-cell decision. The green/red ring on the adjacent token is already enough to tell the player which target they're picking.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.161 live. (b) Manual: Zara casts Fire Bolt (120 ft) → in-range enemy tokens get bold green rings; the one under the cursor turns crimson with a halo + shadow. Ruler still visible. (c) Pip clicks Strike on Shortsword (5 ft melee) → adjacent enemies get green rings; the hovered one turns crimson. No ruler line + chip rendered. (d) Hover an out-of-range token → still gets the amber dashed preview ring (unchanged from v2.49.143). Server-side range enforcement (`_check_cast_range`) unchanged.
+
+### Changed
+- `app/static/tabletop.js::render` — per-cell rect highlights replaced by per-token green/red circles; hover state merged inline; ruler + chip suppressed for melee range ≤ 5 ft.
+
+### Notes
+- **Visual change only.** Out-of-range gate and server-side range enforcement unchanged.
+- **Supersedes v2.49.160's cell rects.** No fragment-per-cell rendering; a single ring per available token.
+- **Hover-preview block retained** for the `rangeFt === 0` (Special / unknown) and out-of-range cases.
+
+---
+
 ## [2.49.160] - 2026-05-23
 
 **Schema version:** 56

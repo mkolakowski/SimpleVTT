@@ -1623,30 +1623,32 @@
         // candidate targets are obvious before the click. Suppressed
         // for rangeFt === 0 (self-cast, "Special", unknown ranges).
         let _tpOutOfRange = false;  // shared with the ruler + hover ring rendering below
+        // v2.49.161: per-token availability rings (was per-cell rects
+        // in v2.49.160, was a single range circle in v2.49.143). Each
+        // in-range token gets a bold green circle around it; the one
+        // currently under the cursor turns red (matching the picked
+        // ring colour) so the player sees "click here will pick this"
+        // without having to read the ruler. Out-of-range tokens get
+        // nothing — the empty space tells the player they're not in
+        // reach. Picked tokens are skipped here because the picked-
+        // ring loop (~80 lines below) draws its own brighter ring on
+        // top, so we don't want to double-stroke.
+        let _hoveredPickableId = null;
+        if (_targetPicker.active && _targetPicker.cursorRaw) {
+            for (let i = tokens.length - 1; i >= 0; i--) {
+                const t = tokens[i];
+                if (t.is_hidden && !ME.isGm) continue;
+                if (pointInToken(_targetPicker.cursorRaw.x, _targetPicker.cursorRaw.y, t)) {
+                    _hoveredPickableId = t.id;
+                    break;
+                }
+            }
+        }
+        let _hoveredOutOfRange = false;
         if (_targetPicker.active && _targetPicker.casterPos && _targetPicker.rangeFt > 0) {
-            // v2.49.160: cell highlights instead of a single range
-            // circle. The old circle approach had two problems:
-            //   (1) For melee (5 ft), a circle from the caster's
-            //       center didn't visually reach the diagonally-
-            //       adjacent token even though RAW Chebyshev says
-            //       it's in reach (v2.49.157 patched this by drawing
-            //       a 10 ft visual ring, but that lied about the
-            //       actual range).
-            //   (2) For long ranges (Fire Bolt 120 ft = 24-cell
-            //       radius), the circle dominated the screen and
-            //       washed out the canvas.
-            // New approach: stroke an accent-green cell highlight
-            // around every TOKEN within range. Out-of-range tokens
-            // get nothing; the player sees exactly which targets are
-            // reachable. Visual scales cleanly with token count
-            // instead of range size.
             ctx.save();
-            ctx.strokeStyle = 'rgba(74, 222, 128, 0.85)';
-            ctx.fillStyle = 'rgba(74, 222, 128, 0.08)';
-            ctx.lineWidth = 2;
             ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.setLineDash([6, 4]);
+            ctx.setLineDash([]);
             for (const t of tokens) {
                 if (t.is_hidden && !ME.isGm) continue;
                 // Skip the caster's own token — single-target spells
@@ -1659,13 +1661,42 @@
                     _targetPicker.casterPos, { x: tcx, y: tcy },
                 );
                 if (dist_ft > _targetPicker.rangeFt) continue;
-                const cellPx = gridSize * (t.size || 1);
-                const x = Math.round(t.x);
-                const y = Math.round(t.y);
+                // Skip already-picked tokens — the picked-ring loop
+                // below renders a brighter crimson ring on top.
+                if (_targetPicker.picks && _targetPicker.picks.has(t.id)) continue;
+                const r = (gridSize * (t.size || 1)) / 2;
+                const isHovered = (t.id === _hoveredPickableId);
+                ctx.save();
+                if (isHovered) {
+                    // Hovered in-range token → bold crimson ring with
+                    // a halo. Same visual language as the picked ring
+                    // so the player sees "click now to add this one."
+                    ctx.strokeStyle = 'rgba(220, 38, 38, 0.4)';
+                    ctx.lineWidth = 5;
+                    ctx.beginPath();
+                    ctx.arc(tcx, tcy, r + 3, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.strokeStyle = '#dc2626';
+                    ctx.lineWidth = 3.5;
+                    ctx.shadowColor = '#dc2626';
+                    ctx.shadowBlur = 14;
+                } else {
+                    // Available in-range token → bold accent-green
+                    // ring with a soft halo.
+                    ctx.strokeStyle = 'rgba(74, 222, 128, 0.35)';
+                    ctx.lineWidth = 5;
+                    ctx.beginPath();
+                    ctx.arc(tcx, tcy, r + 3, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.strokeStyle = '#4ade80';
+                    ctx.lineWidth = 3;
+                    ctx.shadowColor = 'rgba(74, 222, 128, 0.85)';
+                    ctx.shadowBlur = 10;
+                }
                 ctx.beginPath();
-                ctx.rect(x, y, cellPx, cellPx);
-                ctx.fill();
+                ctx.arc(tcx, tcy, r + 2, 0, Math.PI * 2);
                 ctx.stroke();
+                ctx.restore();
             }
             ctx.restore();
             // Compute out-of-range against the SNAPPED cursor so the
@@ -1677,27 +1708,38 @@
                 );
                 if (_dist > _targetPicker.rangeFt) _tpOutOfRange = true;
             }
+            // If the hovered token is out-of-range, flag for the
+            // separate amber-dashed hover preview below.
+            if (_hoveredPickableId) {
+                const _ht = tokens.find(tk => tk.id === _hoveredPickableId);
+                if (_ht) {
+                    const _hcx = _ht.x + gridSize / 2;
+                    const _hcy = _ht.y + gridSize / 2;
+                    const _hdist = _computeRulerDistanceFt(
+                        _targetPicker.casterPos, { x: _hcx, y: _hcy },
+                    );
+                    if (_hdist > _targetPicker.rangeFt) _hoveredOutOfRange = true;
+                }
+            }
         }
-        // v2.49.140: target picker hover preview — draw a ring around
-        // the token under the cursor so the player sees "click here
-        // will pick this." Crimson when in range (matches the picked
-        // ring), amber-warning when out of range (matches the ruler
-        // out-of-range color below). Drawn BEFORE the picked-token
-        // ring so a hovered-and-picked token still shows the stronger
-        // picked ring on top.
-        if (_targetPicker.active && _targetPicker.cursorRaw) {
-            for (let i = tokens.length - 1; i >= 0; i--) {
-                const t = tokens[i];
-                if (t.is_hidden && !ME.isGm) continue;
-                if (!pointInToken(_targetPicker.cursorRaw.x, _targetPicker.cursorRaw.y, t)) continue;
+        // v2.49.140 / v2.49.161: hover preview retained ONLY for the
+        // out-of-range case. In-range hover is handled inline above by
+        // the availability-ring loop (red ring when hovered). Here we
+        // only fire when the cursor sits on an out-of-range token, so
+        // the player sees "this token is reachable visually but out of
+        // spell range." Also fires when the picker has no rangeFt set
+        // (Special / unknown) — in that case there's no green-ring
+        // loop, so this is the only hover indicator.
+        if (_targetPicker.active && _hoveredPickableId
+            && (_hoveredOutOfRange || !_targetPicker.rangeFt)) {
+            const t = tokens.find(tk => tk.id === _hoveredPickableId);
+            if (t) {
                 const cx = t.x + gridSize / 2;
                 const cy = t.y + gridSize / 2;
                 const r = (gridSize * t.size) / 2;
                 ctx.save();
                 ctx.lineWidth = 2;
-                if (_tpOutOfRange) {
-                    // v2.49.143: out-of-range hover — amber + dashed
-                    // so the player sees the click won't connect.
+                if (_hoveredOutOfRange) {
                     ctx.strokeStyle = 'rgba(245, 158, 11, 0.85)';
                     ctx.setLineDash([4, 3]);
                 } else {
@@ -1708,7 +1750,6 @@
                 ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
                 ctx.stroke();
                 ctx.restore();
-                break;  // topmost token only
             }
         }
         // v2.49.135: multi-target picker — draw a red ring + an "×N"
@@ -1781,7 +1822,15 @@
         // v2.49.143: line + chip switch to amber when out of range.
         // Distance chip carries an "X / Y" form so the player sees
         // both the cursor distance and the spell's max range.
-        if (_targetPicker.active && _targetPicker.casterPos && _targetPicker.cursor) {
+        // v2.49.161: suppress entirely for melee (range ≤ 5 ft).
+        // The chip would always read "5 ft / 5 ft" and the line just
+        // adds visual noise to a one-cell decision. The green/red
+        // per-token availability rings (above) already tell the
+        // player which adjacent token is the target.
+        const _suppressRuler = (
+            _targetPicker.rangeFt > 0 && _targetPicker.rangeFt <= 5
+        );
+        if (_targetPicker.active && _targetPicker.casterPos && _targetPicker.cursor && !_suppressRuler) {
             const fromX = _targetPicker.casterPos.x;
             const fromY = _targetPicker.casterPos.y;
             const toX = _targetPicker.cursor.x;
