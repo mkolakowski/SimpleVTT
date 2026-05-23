@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.155] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Auto-hit multi-target damage path in `/cast_spell` — Magic Missile now applies per-dart damage to each picked target.** Previously, spells with neither `save_ability` nor `attack_roll` (just auto-hit damage, like Magic Missile) had NO engine damage path. The picker fired with the right count (v2.49.147) and `target_combatant_ids` made it to the server, but the server silently ignored damage rolls — the chat card showed the spell name with no damage applied. This commit adds the missing branch: a per-id loop that rolls `1d4+1` (or whatever the action's `damage` expression is) per dart and applies via `_apply_damage_to_combatant`. NPC-only for v1 (matches the save-spell convention; PC darts still need the chat-card manual-apply path, filed). Each per-dart outcome lands in a new `auto_hit_targets` payload field parallel to the existing `auto_save_targets`, so the chat card's per-target pill renderer can adopt it in a follow-up.
+**Description:** Two edits in `app/routes/tabletop_routes.py::cast_spell`. **(1)** New block after the save resolution + attack resolution but before the pending-AoE-placement stash. Fires only when (a) the spell has no `save_ability`, (b) `spell_attack_flag` is false, (c) `campaign.auto_apply_damage` is on. Reads `damage` + `damage_type` from the first action with a damage field. Builds the target id list from `target_combatant_ids_in` (multi-target picker output) or falls back to singular `target_combatant_id_in`. For each id, looks up the combatant via `_lookup_combatant`, skips PCs (`token_template_id` check inverts to "NPC only"), rolls damage independently per id, applies via `_apply_damage_to_combatant`, and appends `{combatant_id, target_name, rolled, breakdown, damage_applied, damage_type}` to `auto_hit_targets`. Stashes the list on `payload`. **(2)** Return-dict (line ~8712) gains `"auto_hit_targets": payload.get("auto_hit_targets", [])` so the field rides through to the chat-card renderer + the cast response.
+**Description (cont):** Why the per-dart loop rolls each die independently. RAW Magic Missile: "A dart deals 1d4 + 1 force damage to its target. The darts all strike simultaneously, and you can direct them to hit one creature or several." So each dart's damage is INDEPENDENTLY rolled. Three darts on one bandit = three separate 1d4+1 rolls, not one 3d4+3 roll. The per-id loop matches this — each id gets its own `dice_mod.roll(damage_expr)`. The chat card will show three separate damage results per target. (Bonus: this also future-proofs for spells like Crusader's Mantle that scale damage per dart differently.)
+**Description (cont 2):** Why NPC-only for v1. The save block (line ~8044) has the same `auto_save_target_kind == "npc"` gate — PCs use the chat-card "Roll Damage" button + manual apply so the player has agency. Auto-hit spells could in principle apply damage directly (no save, no roll), but the existing convention is "engine doesn't silently mutate PC HP." Magic Missile darts at a PC ally would currently land in `auto_hit_targets` but be skipped (the token_template_id check filters them). PC auto-apply for auto-hit spells is filed (would also need PC roll-acknowledgment or campaign opt-in).
+**Description (cont 3):** What the chat card looks like NOW vs after this commit. **Before**: spell name + no damage anywhere. The cast card was inert. **After**: server applies damage per dart in the response payload; the chat card's existing renderer (which handles `auto_save_targets` for save spells) can adopt `auto_hit_targets` in a follow-up to show per-dart pills. For this commit, the damage IS applied to the bandit's HP correctly even before the chat card pills land — the GM sees the HP drop in the init tracker; the response payload carries the per-dart detail.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.155 live. (b) Manual: cast Magic Missile L1 with 3 darts at one bandit → server applies 3× (1d4+1) damage independently to the bandit; init tracker shows HP drop ~12 HP avg; `auto_hit_targets` carries 3 entries. (c) 35/35 cast_spell + attack + save + aoe + metamagic tests still pass (server contract is additive only — added new field, no breaks).
+
+### Added
+- `app/routes/tabletop_routes.py::cast_spell` — auto-hit multi-target damage block (Magic Missile path).
+- Cast response gains `auto_hit_targets: list[dict]` parallel to `auto_save_targets`.
+
+### Notes
+- **NPC-only for v1.** PC darts need a chat-card manual-apply path (matches save convention).
+- **Per-dart independent rolls.** RAW says each dart's damage is rolled separately even when stacked on one target.
+- **Chat card pills filed.** The `auto_hit_targets` data is there; renderer needs to consume it.
+
+### Filed
+- **Chat card per-target pills for `auto_hit_targets`** — same renderer pattern as `auto_save_targets` save spells.
+- **PC auto-apply for auto-hit spells** — needs campaign opt-in or PC ack-modal.
+
+---
+
 ## [2.49.154] - 2026-05-23
 
 **Schema version:** 56

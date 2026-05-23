@@ -8562,6 +8562,68 @@ async def cast_spell(
         payload["auto_save_passed"] = auto_save_passed
         payload["auto_save_breakdown"] = auto_save_breakdown
 
+    # v2.49.155 — auto-hit multi-target damage path (Magic Missile,
+    # Crusader's Mantle bonus damage, etc.). Fires when the spell has
+    # damage but neither save_ability NOR attack_roll. Each entry in
+    # target_combatant_ids (or singular target_combatant_id) gets its
+    # own damage roll applied server-side — one dart per id. Matches
+    # the save block's NPC-only gate so PC darts aren't silently auto-
+    # applied (PCs get the dart via the chat card's "Roll Damage"
+    # button + manual apply, same convention as save spells against
+    # PCs). RAW says darts auto-hit any creature; PC auto-apply is
+    # filed for a future follow-up.
+    auto_hit_targets: list[dict] = []
+    if (
+        not save_ability
+        and not spell_attack_flag
+        and bool(campaign.auto_apply_damage)
+    ):
+        _ah_damage_expr = ""
+        _ah_damage_type = ""
+        for a in (spell.get("actions") or []):
+            if a.get("damage"):
+                _ah_damage_expr = a.get("damage") or ""
+                _ah_damage_type = a.get("damage_type") or ""
+                break
+        if _ah_damage_expr:
+            _ah_ids = (
+                list(target_combatant_ids_in)
+                if target_combatant_ids_in
+                else ([target_combatant_id_in] if target_combatant_id_in else [])
+            )
+            for _ah_id in _ah_ids:
+                _ah_combatant = _lookup_combatant(campaign_id, _ah_id)
+                if not _ah_combatant:
+                    continue
+                # NPC only for v1 (matches the save block's auto-
+                # apply gate). PCs need a chat-card manual-apply
+                # flow or a roll_request equivalent.
+                if not _ah_combatant.get("token_template_id"):
+                    continue
+                try:
+                    _ah_dr = dice_mod.roll(_ah_damage_expr)
+                    _ah_rolled = max(0, int(_ah_dr.total))
+                    _ah_breakdown = _ah_dr.breakdown
+                except dice_mod.DiceParseError:
+                    _ah_rolled = 0
+                    _ah_breakdown = ""
+                _ah_applied = 0
+                if _ah_rolled > 0:
+                    _ah_result = await _apply_damage_to_combatant(
+                        db, campaign_id, _ah_combatant, _ah_rolled,
+                        damage_type=_ah_damage_type, attack_id=cast_id,
+                    )
+                    _ah_applied = int(_ah_result.get("applied") or 0)
+                auto_hit_targets.append({
+                    "combatant_id": _ah_combatant.get("id"),
+                    "target_name": _ah_combatant.get("name") or "",
+                    "rolled": _ah_rolled,
+                    "breakdown": _ah_breakdown,
+                    "damage_applied": _ah_applied,
+                    "damage_type": _ah_damage_type,
+                })
+    payload["auto_hit_targets"] = auto_hit_targets
+
     # v2.48.0 Phase T.5e: stash the AoE context so the placement
     # endpoint can resolve targets later. Skipped when targets were
     # already supplied (the existing AoE multi-target path ran the
@@ -8710,6 +8772,11 @@ async def cast_spell(
         "auto_attack_damage_breakdown": payload.get("auto_attack_damage_breakdown", ""),
         # v2.40.0 multi-beam: per-beam detail for Eldritch Blast etc.
         "auto_attack_beams": payload.get("auto_attack_beams", []),
+        # v2.49.155 — auto-hit per-target damage outcomes for spells
+        # like Magic Missile (no save, no attack roll). Empty list
+        # when the spell isn't an auto-hit damage spell OR no NPC
+        # targets were picked.
+        "auto_hit_targets": payload.get("auto_hit_targets", []),
         # v2.48.0 Phase T.5e: caster-gated AoE placement. True when the
         # cast lands in pending-placement mode (AoE spell, no targets
         # supplied); the client renders a "📍 Place AoE" button on
