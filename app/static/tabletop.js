@@ -578,7 +578,8 @@
         spellName: '',
         casterCharId: 0,
         casterPos: null,    // v2.49.138 — {x, y} canvas-space center of caster's token
-        cursor: null,       // v2.49.138 — {x, y} canvas-space cursor (snapped to grid center)
+        cursor: null,       // v2.49.138 — {x, y} snapped to grid-cell center; drives ruler endpoint
+        cursorRaw: null,    // v2.49.140 — {x, y} raw cursor; drives hover-token preview ring
         picks: null,        // Map<token.id, count>
         _resolve: null,
 
@@ -604,6 +605,7 @@
                 }
             }
             this.cursor = null;
+            this.cursorRaw = null;
             this.picks = new Map();
             document.body.classList.add('target-picker-active');
             _showTargetPickerHint(this.spellName, 0, this.required);
@@ -693,6 +695,7 @@
             this.casterCharId = 0;
             this.casterPos = null;
             this.cursor = null;
+            this.cursorRaw = null;
             this.picks = null;
             this._resolve = null;
             document.body.classList.remove('target-picker-active');
@@ -1585,6 +1588,32 @@
             ctx.stroke();
             ctx.restore();
         });
+        // v2.49.140: target picker hover preview — draw a faint red
+        // ring around the token under the cursor so the player sees
+        // "click here will pick this." Same crimson as the picked
+        // ring but thinner + semi-transparent + no glow so it visually
+        // reads as "preview, not committed." Drawn BEFORE the picked-
+        // token ring below so a hovered-and-picked token still shows
+        // the stronger picked ring on top.
+        if (_targetPicker.active && _targetPicker.cursorRaw) {
+            for (let i = tokens.length - 1; i >= 0; i--) {
+                const t = tokens[i];
+                if (t.is_hidden && !ME.isGm) continue;
+                if (!pointInToken(_targetPicker.cursorRaw.x, _targetPicker.cursorRaw.y, t)) continue;
+                const cx = t.x + gridSize / 2;
+                const cy = t.y + gridSize / 2;
+                const r = (gridSize * t.size) / 2;
+                ctx.save();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'rgba(220, 38, 38, 0.55)';
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.arc(cx, cy, r + 4, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.restore();
+                break;  // topmost token only
+            }
+        }
         // v2.49.135: multi-target picker — draw a red ring + an "×N"
         // badge on every token that has at least one pick. Drawn on
         // top of the targeting ring (`_targeting` state) so a picked-
@@ -2763,15 +2792,16 @@
             // renderer block that consumed it — see the matching
             // comment in render() above. No mousemove work needed
             // when not dragging.
-            // v2.49.138: target picker — when active, snap the cursor
-            // to the hovered grid-cell's center and re-render so the
-            // caster→cursor ruler line stays live. Same snap math the
-            // ruler tool uses (_snapPointToGridCenter) so a snapped
-            // cursor matches a snapped target click.
+            // v2.49.138: target picker — when active, track the cursor
+            // for two consumers: the caster→cursor ruler line (snapped
+            // to the grid-cell center via _snapPointToGridCenter) and
+            // the hover-token preview ring (raw cursor for hit-testing
+            // against tokens via pointInToken). Both stored on the
+            // picker; render() reads them per-pass.
             if (_targetPicker.active) {
                 const [wx, wy] = clientToCanvas(ev);
-                const snapped = _snapPointToGridCenter(wx, wy);
-                _targetPicker.cursor = snapped;
+                _targetPicker.cursor = _snapPointToGridCenter(wx, wy);
+                _targetPicker.cursorRaw = { x: wx, y: wy };
                 render();
             }
             return;

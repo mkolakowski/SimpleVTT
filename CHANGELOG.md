@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.140] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Target picker — faint red ring on the token you're hovering** (preview-before-click). The picker already drew the bold red ring on PICKED tokens (v2.49.138); v2.49.140 adds a thinner semi-transparent ring on the token currently under the cursor so the player sees "if you click, this is what you'll select" before committing. Visually distinct from the picked ring: 2px (vs 3px), `rgba(220, 38, 38, 0.55)` (vs solid `#dc2626`), no shadow glow. Topmost token only — won't preview multiple overlapping tokens.
+**Description:** Three small edits in `app/static/tabletop.js`. **(1)** `_targetPicker` state — added a parallel `cursorRaw: {x,y}|null` alongside the existing `cursor` (snapped to grid-cell center). Cleared in `_cleanup`. Mousemove now stores both: snapped to `cursor` (for the ruler endpoint, where snap matters), raw to `cursorRaw` (for token hit-testing, which uses the cursor position directly via `pointInToken` — same as click resolution). **(2)** Render — new conditional block BEFORE the picked-token ring loop: iterate tokens topmost-first, find the first one under `cursorRaw`, draw the hover ring. The `break` after the first hit ensures only the topmost token previews (matches the `addPick` topmost-first behavior). **(3)** Mousemove handler — now stores both `cursor` (snapped) and `cursorRaw` (raw) on every move while the picker is active. No additional renders triggered (the existing render() call covers both).
+**Description (cont):** Why a raw cursor for hit-testing. `pointInToken(x, y, t)` tests whether a point falls inside the token's bounding box. The snapped grid-cell center USUALLY falls in the same token's box, but at cell boundaries the snap can push the test point into an adjacent cell (subtle off-by-one when the cursor straddles a grid line). Using the raw cursor for the hover hit-test matches what the click handler does (`addPick(wx, wy)` uses raw too), so "hover preview shows token X → click → picks token X" without surprise.
+**Description (cont 2):** Why preview ring drawn BEFORE picked ring (not on top). If a token is both picked AND hovered, the picked ring (3px solid + glow) should remain the dominant visual. Drawing the hover ring first lets the picked ring overlay it — the picked ring's larger radius (`+6` vs hover's `+4`) means the picked ring fully encloses the hover ring, so the visual is clean.
+**Description (cont 3):** Why topmost-token-only (not all hovered tokens). At a cell where tokens overlap (rare but possible with hidden tokens or tightly-packed combatants), the topmost token is what the click would actually pick. Showing rings on all overlapping tokens would over-promise. The `break` matches `addPick`'s topmost-first loop semantics.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.140 live. (b) Manual: cast Scorching Ray, move cursor over a bandit (no click yet) → faint red ring previews → move off → ring disappears → click → solid red picked ring + the hover ring stays (now under the picked ring). (c) Hovering off-token shows no preview ring.
+
+### Added
+- `app/static/tabletop.js::_targetPicker.cursorRaw` — raw cursor position for token hit-testing.
+- `app/static/tabletop.js::render` — hover-token preview ring block before the picked-token ring loop.
+
+### Notes
+- **Backward compat.** No state-shape change visible to callers. Hover ring is purely additive.
+- **Mouse-only.** Touch devices don't dispatch mousemove between taps, so no hover ring appears on iPad — by design (the picker still works via tap-to-pick).
+
+---
+
 ## [2.49.139] - 2026-05-22
 
 **Schema version:** 56
