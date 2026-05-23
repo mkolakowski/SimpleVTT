@@ -3017,7 +3017,31 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         // enrichment to know which truly need a target —
                         // that's loaded at cast time, too late for this
                         // gate, so a universal prompt is the right v1.
-                        if (typeof window._promptTargetPicker === 'function') {
+                        // v2.49.136: prefer the canvas crosshair picker
+                        // (single-target, required: 1) when running in
+                        // the tabletop window. Modal stays as the fall-
+                        // back for the standalone full-sheet page.
+                        if (typeof window.vttOpenMultiTargetPicker === 'function') {
+                            const _picked = await window.vttOpenMultiTargetPicker({
+                                required: 1,
+                                spellName: s.name || 'Spell',
+                                casterCharId: {{ char.id }},
+                            });
+                            if (_picked === null) {
+                                if (slotRow) {
+                                    slotRow.dataset.used = prevUsed;
+                                    if (window._ssSyncInputs) window._ssSyncInputs(slotRow);
+                                    if (window._ssRenderPips) window._ssRenderPips(slotRow);
+                                }
+                                btn.disabled = false;
+                                return;
+                            }
+                            _spTgt = {
+                                target_combatant_id: _picked[0] || '',
+                                target_character_id: null,
+                                target_name: '',
+                            };
+                        } else if (typeof window._promptTargetPicker === 'function') {
                             const picked = await window._promptTargetPicker({
                                 title: `Choose target — ${s.name || 'Spell'}`,
                                 excludeCharId: {{ char.id }},
@@ -4775,18 +4799,41 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // picker. User can pick an init combatant, skip
                     // (proceed without target — narrative attacks),
                     // or cancel the whole strike.
+                    // v2.49.136: prefer the v2.49.135 canvas crosshair
+                    // picker (single-target, click-on-map) when running
+                    // in the tabletop window (mini-sheet drawer). Falls
+                    // back to the modal `_promptTargetPicker` when the
+                    // canvas IIFE isn't loaded (standalone full-sheet
+                    // page, where there's no map to click on).
                     let _tgtBody = _targetBodyFields();
                     if (!_tgtBody.target_combatant_id && !_tgtBody.target_character_id) {
                         const _atkName = (attacks[idx] && attacks[idx].name) || 'Attack';
-                        const picked = await window._promptTargetPicker({
-                            title: `Choose target — ${_atkName}`,
-                            excludeCharId: MY_CHAR_ID,
-                        });
-                        if (picked === null) {
-                            btn.disabled = false;
-                            return;  // cancelled
+                        if (typeof window.vttOpenMultiTargetPicker === 'function') {
+                            const _picked = await window.vttOpenMultiTargetPicker({
+                                required: 1,
+                                spellName: _atkName,
+                                casterCharId: MY_CHAR_ID,
+                            });
+                            if (_picked === null) {
+                                btn.disabled = false;
+                                return;
+                            }
+                            _tgtBody = {
+                                target_combatant_id: _picked[0] || '',
+                                target_character_id: null,
+                                target_name: '',
+                            };
+                        } else if (typeof window._promptTargetPicker === 'function') {
+                            const picked = await window._promptTargetPicker({
+                                title: `Choose target — ${_atkName}`,
+                                excludeCharId: MY_CHAR_ID,
+                            });
+                            if (picked === null) {
+                                btn.disabled = false;
+                                return;
+                            }
+                            _tgtBody = picked;
                         }
-                        _tgtBody = picked;
                     }
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
                         method: 'POST',

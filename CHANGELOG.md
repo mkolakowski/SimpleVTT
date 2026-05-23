@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.136] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Canvas target picker extended to weapon attacks + single-target spells (Phase 2 of the multi-target overhaul).** v2.49.135 wired the new `vttOpenMultiTargetPicker` into the sheet's spell-cast handler only for multi-beam spells; v2.49.136 extends it to all attack/cast paths that need exactly one target when none is pre-selected. Both `.atk-strike` (weapon attacks) and the single-beam fallback in `.sp-cast` (single-target spells when no target is pre-selected via dbl-click) now prefer the canvas crosshair picker, falling back to the existing modal `_promptTargetPicker` when the canvas IIFE isn't loaded (standalone full-sheet page — no map to click on). Pattern: `if (vttOpenMultiTargetPicker) { required: 1, await pick } else if (_promptTargetPicker) { modal fallback }`.
+**Description:** Two edits in `app/templates/sheet_dnd5e.html`. **(1)** `.atk-strike` click handler (~line 4778) — replaced the unconditional `_promptTargetPicker` call with a `vttOpenMultiTargetPicker` (canvas crosshair, `required: 1`) check first, then the modal as fallback. The canvas picker returns an array of one combatant_id which gets unwrapped into singular `target_combatant_id`. **(2)** `.sp-cast` single-beam fallback branch (~line 3010, inside the v2.49.135 multi-beam else-if) — same swap: prefer canvas picker, fall back to modal. Slot-decrement-rollback logic preserved in both branches so a cancelled picker still refunds the spell slot.
+**Description (cont):** Why the modal stays as a fallback instead of being removed. The mini-sheet drawer (when the sheet renders inside the tabletop window) has access to `window.vttOpenMultiTargetPicker` because the canvas IIFE runs in the same window. The standalone full-sheet page (a separate browser tab, no canvas) doesn't — there's no map to click on, so the canvas picker would never resolve. The modal still works as a list-based fallback for that case, preserving the existing UX on the standalone page. The runtime check (`typeof window.vttOpenMultiTargetPicker === 'function'`) does the right thing in both environments.
+**Description (cont 2):** Why `required: 1` for the single-target case and not just-a-different-picker. Reusing the multi-target picker keeps the codebase simple — one picker primitive with a configurable `required` count. The picker's auto-commit-when-count-met logic means a single-target pick fires immediately on the first click (no need to press Enter). The `×N` badge never appears for required=1 since stacking is capped at the required count. UX-wise the player sees the same crosshair + hint banner ("🎯 Attack · pick 0 / 1 targets · click target · …") whether they're attacking or casting Scorching Ray; only the count changes.
+**Description (cont 3):** Scope clarification — what STILL uses the modal. Class features that target ALLIES from the roster (Bardic Inspiration, Lay on Hands, Cutting Words) still use `_promptTargetPicker` because their target list is a list of PCs (with portrait + HP), not tokens on the map. A future commit could offer the canvas picker as an alternative for those, but the modal's list-with-portraits UI is genuinely better for "pick which ally to inspire" than a map-click. The modal isn't a workaround there — it's the right tool for roster-based picks.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.136 live. (b) 35/35 cast-spell + metamagic harness tests still pass (server contract unchanged). (c) Manual smoke: cast Fire Bolt (single-beam attack-roll spell) from Zara without a pre-selected target → canvas picker opens with "pick 0 / 1 targets" hint → click a bandit → auto-commits → cast fires. (d) Same for weapon attacks: click Strike on a Greatsword without a target → canvas picker → click bandit → swings.
+
+### Changed
+- `app/templates/sheet_dnd5e.html::.atk-strike` — prefer canvas picker (vttOpenMultiTargetPicker, required:1) over modal; falls back to modal when canvas isn't loaded.
+- `app/templates/sheet_dnd5e.html::.sp-cast` single-beam fallback — same swap.
+
+### Notes
+- **Backward compat.** No HTML / server / payload changes. Pre-selected targets (via dbl-click on a token) still skip the picker entirely.
+- **Modal still used for roster-based picks.** Bardic Inspiration / Lay on Hands / Cutting Words don't change — the modal's portrait-list UI is the right tool for picking allies.
+- **Standalone full-sheet page unchanged.** No canvas there → falls through to the existing modal picker.
+
+### Filed
+- **Class-feature picker variants** — could offer the canvas picker as an alternative for enemy-targeting class features.
+- **Post-cast roll-log button** — for direct-API casts that land targetless.
+- **Magic Missile multi-dart engine work** — auto-hit per dart.
+- **GM Roller variant.**
+- **Pre-selected target as starter pick** — auto-populate the picker with `_targeting.tokenIds[0]` so the player doesn't have to re-click the token they already double-clicked.
+
+---
+
 ## [2.49.135] - 2026-05-22
 
 **Schema version:** 56
