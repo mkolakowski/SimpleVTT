@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.162] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Auto-hit spells now fire a damage toast (Magic Missile et al).** Pre-fix: casting Magic Missile auto-applied per-dart damage server-side (v2.49.155-156) and rendered per-target pills inside the chat-card body, but no toast popped to confirm the damage landed. The user had to expand the card and read the pills to confirm. v2.26.1's auto-heal path already toasted on manual-apply; this brings the auto-hit path to the same parity.
+**Description:** One block edit in `app/static/tabletop.js::appendSpellCast`, inserted right before the `_persistRollEntry` call (~line 4441). Sums `damage_applied` across `d.auto_hit_targets`, picks the first non-empty `damage_type` as the label, and emits `🎯 <spell>: <total> <type> dmg → <name|N targets>` via `showToast(..., 'info')`. Single-target casts get the target's name; multi-target get the count.
+**Description (cont):** Why gated on `!_rollLogHydrating`. `appendSpellCast` is reused for the localStorage roll-log replay path (~line 3666). On a page refresh the entire log is re-played through this function, so an unguarded toast would fire once per prior cast — every previous Magic Missile would re-toast, which is spammy noise. The flag is the same one already used elsewhere to suppress replay-time side effects.
+**Description (cont 2):** Why this path only (vs auto_attack / auto_save / multi-target AoE). The auto_attack damage applies via a separate "🎲 Roll damage" click that the player already invokes manually — they know the result. auto_save likewise prompts via the save-roll pipeline. The auto-hit path is the only one that goes from cast → applied damage with zero intermediate clicks, so it's the only one lacking surfaced confirmation. (Adding toasts to the other paths is a separate decision the user can weigh later.)
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.162 live. (b) Manual: Zara casts Magic Missile L1 (3 darts) at 3 bandits → toast reads `🎯 Magic Missile: 12 force dmg → 3 targets`; chat-card pills still render as before. (c) Cast Magic Missile L1 at one bandit (single target) → toast reads `🎯 Magic Missile: 4 force dmg → Bandit`. (d) Refresh page → no replay toast for the previously-cast Magic Missile (the `_rollLogHydrating` gate fires). (e) Cast Fire Bolt (auto_attack path) → no auto-hit toast (`auto_hit_targets` is empty); existing flow unchanged.
+
+### Added
+- `app/static/tabletop.js::appendSpellCast` — damage toast for auto-hit spells, fires once per live cast.
+
+### Notes
+- **Visual change only.** Server contract unchanged.
+- **Replay-safe.** `_rollLogHydrating` guard skips the toast during page-refresh log replay.
+- **Scope limited to auto_hit_targets** — auto_attack / auto_save / multi-target AoE damage paths unchanged.
+
+---
+
 ## [2.49.161] - 2026-05-23
 
 **Schema version:** 56

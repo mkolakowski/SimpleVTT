@@ -4438,6 +4438,38 @@
         // Stash the cast metadata on the element so the roll listener can
         // correlate save responses back to this card (matches by note prefix).
         li._spellCast = { ...d, _saveLabel: null };
+        // v2.49.162: damage toast for auto-hit spells (Magic Missile et al).
+        // Auto-heal already toasts via the manual Apply Healing click path
+        // (line ~4466) and auto-attack / auto-save damage shows in pills,
+        // but auto-hit had no surfaced confirmation that damage actually
+        // applied — the user only saw pills inside the chat-card body.
+        // Gated on !_rollLogHydrating so localStorage replay on page
+        // refresh doesn't fire a stale toast for every prior cast.
+        if (!_rollLogHydrating) {
+            const _hitTargets = Array.isArray(d.auto_hit_targets) ? d.auto_hit_targets : [];
+            if (_hitTargets.length) {
+                let _total = 0;
+                let _dtype = '';
+                for (const t of _hitTargets) {
+                    _total += (t.damage_applied || 0);
+                    if (!_dtype && t.damage_type) _dtype = t.damage_type;
+                }
+                if (_total > 0) {
+                    const _typeBit = _dtype ? ` ${_dtype}` : '';
+                    const _names = _hitTargets
+                        .map(t => t.target_name)
+                        .filter(Boolean);
+                    const _targetsLabel = _names.length === 1
+                        ? _names[0]
+                        : `${_hitTargets.length} targets`;
+                    const _spellLabel = d.spell_name || 'Spell';
+                    showToast(
+                        `🎯 ${_spellLabel}: ${_total}${_typeBit} dmg → ${_targetsLabel}`,
+                        'info',
+                    );
+                }
+            }
+        }
         _persistRollEntry('spell_cast', d);
     }
 
