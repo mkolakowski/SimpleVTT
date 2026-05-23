@@ -203,6 +203,13 @@ _FEATURE_ECONOMY: dict[str, dict] = {
         "desc": "On your first attack this turn, gain advantage on melee STR attacks but attacks against you have advantage until your next turn.",
     },
     "quickened-spell": {"slot": "bonus"},
+    # v2.49.124 Sorcery Phase 1. Empowered Spell costs no action chip —
+    # it modifies a damage roll on a spell the caster is already casting,
+    # so the slot is "free" RAW.
+    "empowered-spell": {
+        "slot": "free",
+        "desc": "Spend 1 sorcery point: reroll up to CHA-mod of the lowest damage dice on the next spell cast (you must use the new rolls). PHB p.102.",
+    },
     "arcane-recovery": {
         "slot": "free",
         "desc": "Once per day during a short rest, regain spell slots whose combined level ≤ ⌈wizard_lv/2⌉. L6+ slots are not eligible.",
@@ -1136,6 +1143,40 @@ def _get_buffs(campaign_id: int, character_id: int) -> list[dict]:
     return []
 
 
+async def _roll_spell_damage_with_metamagic(
+    campaign_id: int, character_id: int | None, expr: str,
+) -> tuple[int, str, dict | None]:
+    """v2.49.124 Sorcery Phase 1: roll a spell damage expression while
+    honoring a pending Empowered Spell metamagic buff on the caster.
+
+    Looks up ``metamagic-empowered-pending`` on the caster's combatant.
+    If found, reads ``effects.rerolls_available`` (set by
+    ``/use_metamagic_empowered_spell`` from the caster's CHA modifier)
+    and rerolls up to that many lowest damage dice. The buff is removed
+    after the roll — Empowered Spell is one-cast-per-pay (PHB p.102).
+
+    Falls back to a plain ``dice_mod.roll`` when ``character_id`` is
+    falsy or no Empowered buff is present.
+
+    Returns ``(total, breakdown, empowered_log_or_None)`` matching the
+    underlying ``_roll_with_empowered_reroll`` contract.
+    """
+    rerolls = 0
+    pending: dict | None = None
+    if character_id:
+        buffs = _get_buffs(campaign_id, int(character_id))
+        for b in buffs:
+            if (b or {}).get("key") == "metamagic-empowered-pending":
+                pending = b
+                break
+        if pending is not None:
+            rerolls = int(((pending.get("effects") or {}).get("rerolls_available")) or 0)
+    total, bd, log = _roll_with_empowered_reroll(expr, rerolls)
+    if pending is not None:
+        await _remove_buff(campaign_id, int(character_id), "metamagic-empowered-pending")
+    return (total, bd, log)
+
+
 def _lookup_combatant_name(campaign_id: int, combatant_id: str | None) -> str:
     """v2.23.0 Phase T.8: resolve a hub combatant id to its display
     name. Returns the empty string when ``combatant_id`` is falsy, no
@@ -1420,6 +1461,155 @@ def _double_dice_for_crit(expr: str) -> str:
         _re.IGNORECASE,
     )
     return pat.sub(_double, expr)
+
+
+def _parse_damage_tokens(expr: str) -> list[dict] | None:
+    """v2.49.124 Sorcery Phase 1: parse a damage expression into per-token
+    dicts so we can roll dice individually and replace the lowest N for
+    Empowered Spell. Returns ``None`` for expressions that contain
+    keep-high / keep-low / advantage modifiers (those aren't compatible
+    with the dice-pool reroll model — fall back to ``dice_mod.roll``).
+
+    Each token is ``{"kind": "dice", "sign": +1/-1, "count": N, "sides": S}``
+    or ``{"kind": "flat", "sign": +1/-1, "value": N}``.
+    """
+    import re as _re
+    raw = (expr or "").strip().replace(" ", "")
+    if not raw:
+        return None
+    tok_re = _re.compile(
+        r"\s*(?P<sign>[+-])?\s*(?:"
+        r"(?P<count>\d*)d(?P<sides>\d+)(?P<mod>(?:kh|kl)\d+|a|d)?"
+        r"|"
+        r"(?P<flat>\d+)"
+        r")",
+        _re.IGNORECASE,
+    )
+    parsed: list[dict] = []
+    pos = 0
+    while pos < len(raw):
+        m = tok_re.match(raw, pos)
+        if not m or m.end() == pos:
+            return None
+        sign = m.group("sign") or "+"
+        sign_val = -1 if sign == "-" else 1
+        if m.group("flat") is not None:
+            parsed.append({
+                "kind": "flat", "sign": sign_val,
+                "value": int(m.group("flat")),
+            })
+        else:
+            if m.group("mod"):
+                return None
+            count = int(m.group("count") or 1)
+            sides = int(m.group("sides"))
+            if count <= 0 or sides <= 0:
+                return None
+            parsed.append({
+                "kind": "dice", "sign": sign_val,
+                "count": count, "sides": sides,
+            })
+        pos = m.end()
+    return parsed or None
+
+
+def _roll_with_empowered_reroll(
+    expr: str, rerolls: int,
+) -> tuple[int, str, dict | None]:
+    """v2.49.124 Sorcery Phase 1: roll a damage expression with optional
+    Empowered Spell metamagic reroll.
+
+    Rolls each die individually, then identifies the ``rerolls`` lowest
+    dice across all dice tokens and rerolls them. PHB p.102: "you must
+    use the new rolls" — the new value replaces the old regardless of
+    whether it's higher or lower (no take-the-better safety net). Flat
+    modifiers pass through untouched.
+
+    Returns ``(total, breakdown, empowered_log)``:
+    - ``total``: final damage (clamped to >= 0)
+    - ``breakdown``: human-readable string (rerolled dice render as
+      ``old→new`` so the chat card can show the swap)
+    - ``empowered_log``: dict with ``rerolled_count``, ``original_total``,
+      ``final_total``, and ``rerolls`` (list of ``{sides, old, new}``) —
+      or ``None`` when ``rerolls<=0`` (regular roll path).
+
+    Falls back to ``dice_mod.roll`` for expressions containing
+    keep-high / keep-low / advantage modifiers (none of these appear
+    in standard spell damage expressions).
+    """
+    if rerolls <= 0:
+        r = dice_mod.roll(expr)
+        return (max(0, r.total), r.breakdown, None)
+    parsed = _parse_damage_tokens(expr)
+    if parsed is None:
+        r = dice_mod.roll(expr)
+        return (max(0, r.total), r.breakdown, None)
+
+    rng = dice_mod.get_rng()
+    rolled: list[list[int]] = []
+    for tok in parsed:
+        if tok["kind"] == "dice":
+            rolled.append([rng.randint(1, tok["sides"]) for _ in range(tok["count"])])
+        else:
+            rolled.append([])
+    original_rolled = [list(rs) for rs in rolled]
+
+    all_positions: list[tuple[int, int]] = []
+    for ti, rs in enumerate(rolled):
+        for di in range(len(rs)):
+            all_positions.append((ti, di))
+    rerolls = min(rerolls, len(all_positions))
+    sorted_positions = sorted(
+        all_positions, key=lambda p: (rolled[p[0]][p[1]], p[0], p[1]),
+    )
+    target_positions = sorted_positions[:rerolls]
+    target_set: set[tuple[int, int]] = set(target_positions)
+
+    reroll_log: list[dict] = []
+    for ti, di in target_positions:
+        sides = parsed[ti]["sides"]
+        old_v = rolled[ti][di]
+        new_v = rng.randint(1, sides)
+        rolled[ti][di] = new_v
+        reroll_log.append({"sides": sides, "old": old_v, "new": new_v})
+
+    parts: list[str] = []
+    total = 0
+    original_total = 0
+    for ti, tok in enumerate(parsed):
+        sign = tok["sign"]
+        sign_str = "-" if sign < 0 else "+"
+        if tok["kind"] == "flat":
+            total += sign * tok["value"]
+            original_total += sign * tok["value"]
+            parts.append(f"{sign_str}{tok['value']}".lstrip("+"))
+        else:
+            current = rolled[ti]
+            orig = original_rolled[ti]
+            total += sign * sum(current)
+            original_total += sign * sum(orig)
+            dice_strs: list[str] = []
+            for di, v in enumerate(current):
+                if (ti, di) in target_set:
+                    dice_strs.append(f"{orig[di]}→{v}")
+                else:
+                    dice_strs.append(str(v))
+            parts.append(
+                f"{sign_str}{tok['count']}d{tok['sides']}"
+                f"[{','.join(dice_strs)}]={sum(current)}".lstrip("+")
+            )
+
+    total = max(0, total)
+    original_total = max(0, original_total)
+    bd = " ".join(parts) + f"  =>  {total}"
+    if rerolls > 0:
+        bd += f"  (Empowered: rerolled {rerolls}, was {original_total})"
+    return (total, bd, {
+        "rerolled_count": rerolls,
+        "original_total": original_total,
+        "final_total": total,
+        "rerolls": reroll_log,
+    })
 
 
 # v2.24.0 Phase T.2: in-memory log of recent damage applications per
@@ -7850,6 +8040,11 @@ async def cast_spell(
         auto_save_damage_applied = 0
         auto_save_damage_breakdown = ""
         auto_save_damage_type = damage_type
+        # v2.49.124 Sorcery Phase 1: Empowered Spell metamagic. If the
+        # caster has a ``metamagic-empowered-pending`` buff, the helper
+        # rerolls up to CHA-mod lowest damage dice and drops the buff.
+        # No-op when no buff is present (the regular dice_mod.roll path).
+        empowered_log: dict | None = None
         if (
             damage_expr
             and auto_save_target_kind == "npc"
@@ -7858,9 +8053,11 @@ async def cast_spell(
             and bool(campaign.auto_apply_damage)
         ):
             try:
-                _dr = dice_mod.roll(damage_expr)
-                auto_save_damage_rolled = max(0, int(_dr.total))
-                auto_save_damage_breakdown = _dr.breakdown
+                auto_save_damage_rolled, auto_save_damage_breakdown, empowered_log = (
+                    await _roll_spell_damage_with_metamagic(
+                        campaign_id, char.id, damage_expr,
+                    )
+                )
             except dice_mod.DiceParseError:
                 auto_save_damage_rolled = 0
             if auto_save_damage_rolled > 0:
@@ -7883,6 +8080,8 @@ async def cast_spell(
         payload["auto_save_damage_applied"] = auto_save_damage_applied
         payload["auto_save_damage_breakdown"] = auto_save_damage_breakdown
         payload["auto_save_damage_type"] = auto_save_damage_type
+        if empowered_log is not None:
+            payload["empowered_spell"] = empowered_log
 
         # v2.44.0 Phase T.5: AoE multi-target loop. The single-target
         # path above already ran for ids[0]; loop ids[1:] now, doing
@@ -8253,6 +8452,11 @@ async def cast_spell(
         "auto_save_damage_rolled": payload.get("auto_save_damage_rolled", 0) if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} else 0,
         "auto_save_damage_applied": payload.get("auto_save_damage_applied", 0) if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} else 0,
         "auto_save_damage_type": payload.get("auto_save_damage_type", "") if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} else "",
+        "auto_save_damage_breakdown": payload.get("auto_save_damage_breakdown", "") if save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"} else "",
+        # v2.49.124 Sorcery Phase 1: Empowered Spell rerolled-dice log.
+        # Present only when the caster's metamagic-empowered-pending
+        # buff was consumed by the damage roll. Absent on a regular cast.
+        **({"empowered_spell": payload["empowered_spell"]} if "empowered_spell" in payload else {}),
         # v2.32.0 Phase T.3c: echo save-or-suck condition install.
         "auto_save_buff_key": payload.get("auto_save_buff_key", ""),
         "auto_save_buff_name": payload.get("auto_save_buff_name", ""),
@@ -10679,6 +10883,154 @@ async def use_font_of_magic_to_slot(
         "slot_total": new_total,
         "slot_used": new_used,
         "ephemeral_created": ephemeral_created,
+    }
+
+
+# ----------- API: Metamagic — Empowered Spell (Sorcerer Lv 3+) -----------
+# v2.49.124 Sorcery Phase 1. PHB p.102:
+#   "When you roll damage for a spell, you can spend 1 sorcery point to
+#    reroll a number of the damage dice up to your Charisma modifier
+#    (minimum of one). You must use the new rolls. You can use Empowered
+#    Spell even if you have already used a different Metamagic option
+#    during the casting of the spell."
+# Implementation: install a one-cast ``metamagic-empowered-pending`` buff
+# on the caster carrying ``effects.rerolls_available = max(1, CHA-mod)``.
+# The next ``/cast_spell`` damage roll reads + consumes the buff via
+# ``_roll_spell_damage_with_metamagic``. No action cost — modifies an
+# action you're already taking.
+
+@router.post("/api/campaign/{campaign_id}/use_metamagic_empowered_spell")
+async def use_metamagic_empowered_spell(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Spend 1 sorcery point to arm Empowered Spell on the caster's
+    next spell cast. Bonus-free — Empowered modifies an action you're
+    already taking.
+
+    Body: ``{character_id}``.
+
+    Validates Sorcerer Lv 3+, at least 1 sorcery point. Decrements
+    SP by 1 and installs ``metamagic-empowered-pending`` (key reserved
+    in `docs/plans/sorcery-points-and-metamagic.md` Phase 1) on the
+    caster's combatant with ``effects.rerolls_available`` = max(1, CHA-mod).
+    The pending buff is consumed by the next ``/cast_spell`` damage
+    roll (see ``_roll_spell_damage_with_metamagic``).
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Sorcerer character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+    cls = (sheet.get("class") or "").lower()
+    if cls != "sorcerer":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "sorcerer", "got": cls or "",
+        })
+    level = int(sheet.get("level") or 1)
+    if level < 3:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 3, "got": level,
+        })
+
+    # Sorcery-points resource lookup.
+    resources = list(sheet.get("resources") or [])
+    sp_row = None
+    sp_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "sorcery-points":
+            sp_row = dict(r); sp_idx = i; break
+    if sp_row is None:
+        raise HTTPException(404, "No Sorcery Points resource on this sheet")
+    sp_cur = int(sp_row.get("current") or 0)
+    sp_max = int(sp_row.get("max") or 0)
+    if sp_cur < 1:
+        return JSONResponse(status_code=409, content={
+            "error": "not_enough_points", "required": 1, "have": sp_cur,
+        })
+
+    # CHA modifier → reroll budget (min 1 per PHB).
+    abilities = dict(sheet.get("abilities") or {})
+    cha = int(abilities.get("CHA") or 10)
+    cha_mod = (cha - 10) // 2
+    rerolls = max(1, cha_mod)
+
+    new_sp = sp_cur - 1
+    sp_row["current"] = new_sp
+    resources[sp_idx] = sp_row
+    sheet["resources"] = resources
+
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Install pending buff on the caster. Duration 1 round so it doesn't
+    # linger past the next turn if the player declines to cast.
+    buff = {
+        "key": "metamagic-empowered-pending",
+        "name": "Empowered Spell (pending)",
+        "icon": "✨",
+        "source_char_id": char.id,
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "effects": {
+            "metamagic_option": "empowered-spell",
+            "rerolls_available": rerolls,
+        },
+        "desc": (
+            f"Next damaging spell rerolls up to {rerolls} of the lowest "
+            f"damage dice once (you must use the new rolls). "
+            f"PHB p.102 Empowered Spell."
+        ),
+    }
+    await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id, "key": "sorcery-points",
+            "current": new_sp, "max": sp_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id, "character_name": char.name,
+            "feature_name": f"✨ Metamagic — Empowered Spell (1 SP, reroll up to {rerolls})",
+            "feature_desc": (
+                f"Armed Empowered Spell. Next damaging spell rerolls up to "
+                f"{rerolls} lowest damage die"
+                f"{'ce' if rerolls == 1 else ''} once."
+            ),
+            "source": "metamagic-empowered-spell",
+            "remaining": new_sp, "max": sp_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "sp_cost": 1,
+        "sp_remaining": new_sp,
+        "sp_max": sp_max,
+        "rerolls_available": rerolls,
     }
 
 

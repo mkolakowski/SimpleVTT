@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 383 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.123, 2026-05-22).
+**Total tests:** 389 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.124, 2026-05-22).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -536,6 +536,17 @@ v2.49.55 — Monk class feature `POST /use_stunning_strike`. Lv 5+ + ki >= 1 + a
 | `test_stunning_strike_wrong_class` | Krieger (Barbarian) → 409 `wrong_class` with `expected=monk`. |
 | `test_stunning_strike_no_ki` | Drain Kael's ki via repeated calls (response carries `ki_remaining`); when 0, next call → 409 `no_ki` with `available=0`. |
 | `test_stunning_strike_pc_drops_own_concentration` | v2.49.56 — closes the v2.49.55 filed item. Magnus casts Hex (concentration); Kael uses Stunning Strike on Magnus → roll_request; GM-as-Magnus /responds; on save fail assert (a) Stunned lands on Magnus, (b) Magnus's Hex drops via the v2.49.51 hook's `concentration: False` branch, (c) 💀 GM log naming "stunned" + "incapacitated" fires. Retry loop because the CON save is random. |
+
+### `test_use_metamagic_empowered.py`
+v2.49.124 — Sorcerer Lv 3+ Empowered Spell metamagic (Phase 1 walking skeleton of the Sorcery Points + Metamagic plan). New endpoint `/use_metamagic_empowered_spell` spends 1 sorcery point + installs a one-cast `metamagic-empowered-pending` buff on the caster carrying `effects.rerolls_available = max(1, CHA-mod)`. The next `/cast_spell` damage roll (save-for-half single-target NPC path) consumes the buff and rerolls up to that many lowest dice via `_roll_spell_damage_with_metamagic`. Cast payload gains an `empowered_spell` block (`rerolled_count`, `original_total`, `final_total`, `rerolls` list of `{sides, old, new}`). Demo subject: Zara (CHA 17 → +3 mod, 5 SP, knows Fireball at spell index 11).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_empowered_arms_pending_buff` | 1 SP → 200, buff installed on Zara's combatant with `effects.rerolls_available=3` + `effects.metamagic_option="empowered-spell"`. SP decremented to 4. |
+| `test_empowered_409_when_no_sorcery_points` | Drain 5 SP via 5 arm calls → 6th returns 409 `not_enough_points` (`required=1`, `have=0`). |
+| `test_empowered_wrong_class` | Thalindra (Wizard) → 409 `wrong_class` with `expected="sorcerer"`. |
+| `test_empowered_buff_consumed_on_cast_fireball` | Arm Empowered → cast Fireball at a bandit → response `empowered_spell` block present, `rerolled_count==3`, each reroll entry has `sides==6` + `old/new` in 1-6. Buff removed from combatant after the cast. |
+| `test_no_empowered_block_when_buff_absent` | Control: cast Fireball without arming → `empowered_spell` key NOT present in payload (no spurious fire). |
 
 ### `test_use_font_of_magic.py`
 v2.49.120 — Sorcerer Lv 2+ Font of Magic feature (Phase 0 of the Sorcery Points + Metamagic plan). Two endpoints: `/use_font_of_magic_to_points` (spell slot → sorcery points, gain = slot level) + `/use_font_of_magic_to_slot` (sorcery points → spell slot, cost table L1=2/L2=3/L3=5/L4=6/L5=7). Both bonus actions; L6+ slots not recoverable per RAW. Demo subject: Zara Emberfire (Sorcerer L5).

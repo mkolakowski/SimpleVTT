@@ -5127,6 +5127,12 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // picker (slot → SP / SP → slot) + a slot-level
                     // input, then dispatches to the v2.49.120 endpoints.
                     const isFontOfMagic = featureKey === 'font-of-magic';
+                    // v2.49.124 Sorcery Phase 1 — Metamagic: Empowered
+                    // Spell. The button arms a pending buff on the
+                    // caster; the next spell cast's damage roll reads
+                    // the buff and rerolls up to CHA-mod lowest dice.
+                    // No picker — the option has only one behaviour.
+                    const isMetamagicEmpowered = featureKey === 'empowered-spell';
 
                     // Resolve the cutting-words target via the picker
                     // BEFORE building the fetch closure. Awaiting the
@@ -5236,6 +5242,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                        ? (fomDirection === 'to_points'
                                           ? 'use_font_of_magic_to_points'
                                           : 'use_font_of_magic_to_slot')
+                                   : isMetamagicEmpowered ? 'use_metamagic_empowered_spell'
                                    : 'use_feature';
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
                         method: 'POST',
@@ -5268,6 +5275,8 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 character_id: MY_CHAR_ID,
                                 slot_level: fomSlotLevel,
                                 override: !!override,
+                            } : isMetamagicEmpowered ? {
+                                character_id: MY_CHAR_ID,
                             } : {
                                 character_id: MY_CHAR_ID,
                                 feature_key: featureKey,
@@ -5325,6 +5334,8 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             window.showToast(`⚡ Action Surge: action chip refunded — take another action this turn.`, 'info');
                         } else if (isRage) {
                             window.showToast(`🦬 Rage activated: +${data.damage_bonus} dmg, ${data.duration_rounds} rounds (${data.remaining}/${data.max} uses left)`, 'info');
+                        } else if (isMetamagicEmpowered) {
+                            window.showToast(`✨ Empowered Spell armed (1 SP spent — reroll up to ${data.rerolls_available} lowest dice on your next damaging spell). ${data.sp_remaining}/${data.sp_max} SP left.`, 'info');
                         } else {
                             const lbl = data.feature_label || 'Feature used';
                             const slotTxt = data.slot && data.slot !== 'free' ? ` (${data.slot})` : '';

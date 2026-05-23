@@ -1794,12 +1794,22 @@ def _sorcerer_sheet(name: str) -> dict:
                 "name": "Quickened Spell (metamagic)",
                 "desc": "Spend 2 sorcery points: change a 1-action spell's casting time to 1 bonus action this turn.",
             },
+            # v2.49.124 Sorcery Phase 1 — Empowered Spell. Clickable
+            # button arms a one-cast ``metamagic-empowered-pending``
+            # buff; the next ``/cast_spell`` damage roll rerolls up
+            # to CHA-mod lowest dice. PHB p.102.
+            {
+                "key": "empowered-spell",
+                "name": "Empowered Spell (metamagic)",
+                "desc": "Spend 1 sorcery point: when you roll damage for a spell, reroll up to CHA-mod of the lowest damage dice once (you must use the new rolls).",
+            },
         ],
         # Sorcerer's Metamagic at Lv 3 picks 2 options. Zara's picks:
         # Quickened Spell (curated entry in `_FEATURE_ECONOMY`) +
-        # Twinned Spell (not yet curated; future commit). Stored on
-        # the sheet as a hint for the (future) metamagic picker.
-        "_metamagic_options": ["quickened-spell", "twinned-spell"],
+        # Empowered Spell (v2.49.124 — replaces Twinned as the second
+        # pick because Empowered ships ahead of Twinned and gives the
+        # demo a working second Metamagic option out-of-the-box).
+        "_metamagic_options": ["quickened-spell", "empowered-spell"],
         # Draconic Bloodline subclass picks an ancestor at Lv 1.
         # Red = fire (matches Tiefling's flame motif + Hellish
         # Resistance). Elemental Affinity (Lv 6) is deferred until
