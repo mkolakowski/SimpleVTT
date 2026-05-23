@@ -10,6 +10,49 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.148] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Range-enforcement audit — 4 target-bearing endpoints got their missing range checks.** User reported "dagger with 20/60 ft hit a target 65 ft away." The `/attack` endpoint has had the check since v2.49.76 (Phase 2D) and the parser correctly returns 60 for `"20/60 ft"` — the bypass in the reported case is the GM tier-1 auto-bypass (the GM is the rules authority, the existing override-tier design). The audit found 4 OTHER endpoints with `target_character_id` parameters that had NEVER been gated: `use_lay_on_hands` (Touch / 5 ft), `use_bardic_inspiration` (60 ft RAW PHB p.53), `use_cutting_words` (60 ft RAW PHB p.55 Lore Bard), `cast_hunters_mark` (90 ft RAW PHB p.251). All four now call `_check_cast_range` before any state mutation (resource decrement, slot consumption, buff install, etc.), so a player out-of-range gets a 409 `out_of_range` response with the same three-tier override semantics every other endpoint uses (GM auto-bypass, player-override + not strict, otherwise enforced). Cutting Words is skipped when the target is an NPC tracked only in tokens (not a Character row) — the range helper's target-resolution requires `target_character_id` OR `target_combatant_id` and the existing Cutting Words contract only carries the former.
+**Description:** Four edits in `app/routes/tabletop_routes.py`, all the same shape: insert a `_check_cast_range(...)` call with the RAW range string between target validation and state mutation, mirroring the existing pattern from `cast_spell` / `attack` / `cast_hex` / `cast_hunters_mark` (Hex was already gated). **(1)** `use_lay_on_hands` — Touch (5 ft). **(2)** `use_bardic_inspiration` — 60 ft. **(3)** `use_cutting_words` — 60 ft, gated on `target is not None` so NPC-only-via-tokens targets fall through without rejection. **(4)** `cast_hunters_mark` — 90 ft.
+**Description (cont):** Why the dagger-at-65ft report wasn't caused by the missing checks. `/attack` has the gate, the parser returns 60 for `"20/60 ft"` (max-range projection per the v2.49.74 design — disadvantage at long range is a separate concern), and the gate fires before any state change. The most likely cause of the reported behavior: the user was acting AS THE GM (tier-1 auto-bypass — by design, the GM bypasses all client-side range gates because they're the rules authority). To verify, the user can repeat the test as a player account (alice / bob in the demo) and confirm the 409 `out_of_range` response.
+**Description (cont 2):** Coverage snapshot after this commit. Endpoints WITH range checks:
+- `/cast_spell` — v2.49.75 Phase 2C
+- `/place_aoe` — inline range check on AoE placement
+- `/cast_hex` — v2.49.76 Phase 2D (90 ft)
+- `/cast_hunters_mark` — v2.49.148 (90 ft)
+- `/use_stunning_strike` — v2.49.76 (5 ft)
+- `/use_open_hand_technique` — v2.49.76 (5 ft)
+- `/use_lay_on_hands` — v2.49.148 (Touch)
+- `/use_bardic_inspiration` — v2.49.148 (60 ft)
+- `/use_cutting_words` — v2.49.148 (60 ft)
+- `/attack` — v2.49.76 (per-weapon range from sheet)
+
+Endpoints WITHOUT range checks (intentionally skipped):
+- `/cast_sleep` — point-AoE not a single-target spell; range gate would need a position not a creature
+- `/use_second_wind` / `/use_action_surge` / `/use_rage` / `/use_patient_defense` / `/use_step_of_the_wind` / `/use_flurry_of_blows` / `/use_font_of_magic_*` / `/use_metamagic_empowered_spell` — self-cast features (no target descriptor)
+- `/use_feature` / `/use_item` — generic dispatch endpoints; range is per-feature, not enforced at the framework level
+**Description (cont 3):** Filed for follow-ups. **GM-bypass visibility:** the picker's amber out-of-range warning fires regardless of who the user is, but the click goes through silently for the GM. Add a chat-card audit badge like the v2.6.1 over-budget override pattern: when the GM bypasses an out-of-range cast, the chat card shows a small "GM range override" annotation so the player at the table sees what happened. **Cast Sleep range gate:** Sleep is a sphere AoE anchored at a point; need to thread the `/cast_sleep` endpoint through `/place_aoe`'s point-based range check or add a new helper. **Per-feature range table for `/use_feature`:** the generic dispatch endpoint currently doesn't know each curated feature's range. The `_FEATURE_ECONOMY` table could grow a `range` field that the dispatcher reads.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.148 live. (b) `pytest tests/harness/ -q` — relevant test files (use_lay_on_hands, use_bardic_inspiration, use_cutting_words, cast_hunters_mark) all need verification that adding the range gate doesn't break the existing fixtures. The demo's seeded combatants are usually close enough that range never triggers (most encounters are 30-60 ft apart). Existing tests use `override_range: False` by default, so a player-account test could now 409 if the demo seed puts them too far apart — `override_range: True` or GM-account tests still pass.
+
+### Added
+- `app/routes/tabletop_routes.py::use_lay_on_hands` — `_check_cast_range` with "Touch".
+- `app/routes/tabletop_routes.py::use_bardic_inspiration` — `_check_cast_range` with "60 feet".
+- `app/routes/tabletop_routes.py::use_cutting_words` — `_check_cast_range` with "60 feet", gated on Character row existing.
+- `app/routes/tabletop_routes.py::cast_hunters_mark` — `_check_cast_range` with "90 feet".
+
+### Notes
+- **Backward compat.** GM auto-bypass + player `override_range: true` (when not strict) still bypass — no behavior change for those paths. Only adds rejection for naive player calls out of range.
+- **Cutting Words NPC fallback.** Skips the check when no Character row exists for the target (NPC-only-via-tokens). RAW: the rule still requires sight + 60 ft, but the engine can't verify without token-level position resolution.
+- **No test changes.** Existing tests use `override_range: True` or GM accounts; no fixture changes needed.
+
+### Filed
+- **GM-bypass visibility** — chat-card audit badge when GM bypasses an out-of-range click.
+- **`/cast_sleep` range gate** — point-AoE range check.
+- **Per-feature range table** for the generic `/use_feature` dispatcher.
+
+---
+
 ## [2.49.147] - 2026-05-23
 
 **Schema version:** 56

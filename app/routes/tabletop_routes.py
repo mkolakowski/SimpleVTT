@@ -9550,6 +9550,22 @@ async def use_lay_on_hands(
     if not target:
         raise HTTPException(404, "Target character not found")
 
+    # v2.49.148: range audit — Lay on Hands is RAW Touch (5 ft). Fires
+    # before pool decrement so a rejected call doesn't burn the pool.
+    _override_range_loh = bool(body.get("override_range"))
+    _user_is_gm_for_range_loh = _user_is_gm(user, campaign, db)
+    _strict_for_range_loh = bool(campaign.strict_action_economy)
+    _range_err_loh = _check_cast_range(
+        db, campaign, char,
+        "Touch", "Lay on Hands",
+        None, target_id, target.name,
+        override_range=_override_range_loh,
+        user_is_gm=_user_is_gm_for_range_loh,
+        strict=_strict_for_range_loh,
+    )
+    if _range_err_loh:
+        return JSONResponse(status_code=409, content=_range_err_loh)
+
     # Pool lookup. RAW: max = 5 × paladin level. We store it as a regular
     # resource entry on the sheet (`key: 'lay-on-hands'`), and the pool
     # current ticks down on use.
@@ -9800,6 +9816,22 @@ async def use_bardic_inspiration(
     if not target:
         raise HTTPException(404, "Target character not found")
 
+    # v2.49.148: range audit — Bardic Inspiration is RAW 60 ft (PHB
+    # p.53). Fires before resource decrement.
+    _override_range_bi = bool(body.get("override_range"))
+    _user_is_gm_for_range_bi = _user_is_gm(user, campaign, db)
+    _strict_for_range_bi = bool(campaign.strict_action_economy)
+    _range_err_bi = _check_cast_range(
+        db, campaign, char,
+        "60 feet", "Bardic Inspiration",
+        None, target_id, target.name,
+        override_range=_override_range_bi,
+        user_is_gm=_user_is_gm_for_range_bi,
+        strict=_strict_for_range_bi,
+    )
+    if _range_err_bi:
+        return JSONResponse(status_code=409, content=_range_err_bi)
+
     sheet = dict(char.sheet or {})
     resources = list(sheet.get("resources") or [])
     res_row = None
@@ -9984,6 +10016,27 @@ async def use_cutting_words(
                     break
     if not is_lore:
         raise HTTPException(409, "Cutting Words requires the College of Lore subclass")
+
+    # v2.49.148: range audit — Cutting Words is RAW 60 ft (PHB p.55
+    # Lore Bard, "When a creature that you can see within 60 feet of
+    # you makes an attack roll..."). Fires before reaction-chip mark.
+    # Skipped when the target isn't a Character row (NPC tracked only
+    # in tokens) — _check_cast_range's target resolution falls back to
+    # the combatant_id path which we don't have here.
+    if target is not None:
+        _override_range_cw = bool(body.get("override_range"))
+        _user_is_gm_for_range_cw = _user_is_gm(user, campaign, db)
+        _strict_for_range_cw = bool(campaign.strict_action_economy)
+        _range_err_cw = _check_cast_range(
+            db, campaign, char,
+            "60 feet", "Cutting Words",
+            None, target_id, target.name,
+            override_range=_override_range_cw,
+            user_is_gm=_user_is_gm_for_range_cw,
+            strict=_strict_for_range_cw,
+        )
+        if _range_err_cw:
+            return JSONResponse(status_code=409, content=_range_err_cw)
 
     resources = list(sheet.get("resources") or [])
     res_row = None
@@ -13152,6 +13205,22 @@ async def cast_hunters_mark(
     )
     if not has_hm:
         raise HTTPException(409, "Hunter's Mark is not on this character's spell list")
+
+    # v2.49.148: range audit — Hunter's Mark is RAW 90 ft (PHB p.251).
+    # Fires before slot consumption + buff install.
+    _override_range_hm = bool(body.get("override_range"))
+    _user_is_gm_for_range_hm = _user_is_gm(user, campaign, db)
+    _strict_for_range_hm = bool(campaign.strict_action_economy)
+    _range_err_hm = _check_cast_range(
+        db, campaign, char,
+        "90 feet", "Hunter's Mark",
+        None, target_character_id, target_name,
+        override_range=_override_range_hm,
+        user_is_gm=_user_is_gm_for_range_hm,
+        strict=_strict_for_range_hm,
+    )
+    if _range_err_hm:
+        return JSONResponse(status_code=409, content=_range_err_hm)
 
     # Decrement a Ranger slot.
     all_slots = dict(sheet.get("spell_slots") or {})
