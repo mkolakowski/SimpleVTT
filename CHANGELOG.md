@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.141] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **TODO entry — extend frosted-glass treatment to the whole tabletop interface.** User-requested follow-up to v2.49.139 (which only applied the iOS-style frosted-glass look to roll-log cards). Filed in `TODO.md` under a new `## Visual` section so the eventual implementation pass has clear scope: list of surfaces to touch (init-tracker, GM panel, sound panel, AoE/ruler hints, targeting chip), the recipe (`color-mix` + `backdrop-filter: blur(10px) saturate(140%)`), cross-theme verification requirement (9 themes), and the perf note about composite layers from v2.49.139.
+**Description:** One-line edit to `TODO.md` — appended a new `## Visual` section with a single entry "Frosted-glass treatment across the whole tabletop interface." Includes the exact CSS recipe used in v2.49.139 so the implementer can apply consistently, plus the list of surfaces that still need the treatment. No code change in this commit — the TODO entry IS the change.
+**Description (cont):** Verification. (a) Curl `/version` confirms v2.49.141 live. (b) `tail -3` on TODO.md shows the new Visual section.
+
+### Added
+- `TODO.md` — `## Visual / Frosted-glass treatment across the whole tabletop interface` entry.
+
+### Notes
+- **Code-only PATCH bump.** No behavior change; just a backlog entry to track the user-requested follow-up.
+
+---
+
 ## [2.49.140] - 2026-05-22
 
 **Schema version:** 56
