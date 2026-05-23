@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.188] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Unified-mini-sheet mockups page now interactive (click tabs, buttons, ability cells, spell-slot pips) + significantly expanded spell / weapon content.** User asked: "can you please make the elements in the sample sheets interactable? can you also add more spells and weapons to the examples?" Two coordinated changes: (a) every `.mock-mini` block now has clickable tabs that switch panels, button clicks fire a corner-toast naming the action, ability cells flash a "roll" message, and spell-slot pips toggle used/unused with the N/M counter updating live; (b) PC mockup (Zara) now ships 4 cantrips + 4 Lv 1 spells + 2 Lv 2 spells + 1 Lv 3 spell across the Spells tab, 2 attacks in Actions tab, 6 ability scores + 3 saves in Abilities, 6 skills in Skills, 4 resource counters in Resources, 3 feats in Feats. NPC mockup (Soren) ships Dagger + Inflict Wounds + Sacred Flame + 3 skills with the same chip layout.
+**Description:** Full rewrite of `docs/wiki/unified-mini-sheet-mockups.html`. Key changes from v2.49.186: **(1)** Tab strip → `data-target="..."` attribute pointing at a panel id; clicking activates the tab + shows the matching `.mock-panel`, hides siblings. **(2)** Panels wrapped in a `.mock-panels` container per mini-sheet so the JS knows which panel set to switch. **(3)** All four PC mini-sheets (Current state, Mockup A, B, C) DRY'd through a single `zaraTemplate(prefix)` JS function that fills each `<div class="mock-mini" data-pc="zara">` placeholder with the full 6-tab markup. Saves ~700 lines of duplicated HTML. **(4)** Each Mockup section's PC block now uses the shared template with a different `data-id-prefix` so the panel ids stay unique across the page. **(5)** New JS at the bottom of the file: (a) tab-switch delegated handler on `<body>`; (b) cast/strike/roll button handler that fires a corner-toast naming the row + action; (c) spell-slot pip toggle that updates the trailing N/M counter; (d) ability-cell click that shows "🎲 STR check → 1d20+2" style toast. **(6)** New transient `#notice` toast in the top-right corner with 1.8s auto-hide + fade in/out animation.
+**Description (cont):** Why the JS template instead of inline-per-block. Each PC mini-sheet has 6 tabs × ~5 rows each = ~250 lines of markup per block. With 4 blocks (Current / A / B / C) that's 1000 lines duplicated; one typo on one block breaks comparison fidelity. JS template means a single source of truth for the demonstration content + per-block parameterization (just the prefix for unique panel ids). For the NPC variants, each Mockup IS slightly different in structure (Mockup A has hidden strikethrough tabs; B has fewer tabs; C has the dense ability grid), so those stay inline so the reviewer can compare the actual structural differences side by side.
+**Description (cont 2):** Content authored to be realistic. Zara is the demo's Sorcerer Lv 5 with CHA 18 — her spell list comes straight from `demo_seed.py` (Fire Bolt / Mage Hand / Shocking Grasp / Prestidigitation cantrips; Magic Missile / Burning Hands / Shield / Sleep Lv 1; Scorching Ray / Mirror Image Lv 2; Fireball Lv 3). Computed attack bonuses (+7 from CHA mod +4 + prof +3) and save DCs (DC 15) match the v2.49.181 server-side spell-catalog enrichment.
+**Description (cont 3):** Toast UX. Cast / Strike / Roll buttons trigger a `#notice` div in the top-right corner showing the action + row name (e.g., `✨ Cast → ✨ Fireball`). 1.8s auto-hide with 200ms fade in/out via `transition`. Spell-slot pips toggle used/unused on click and update the trailing counter (e.g., "2/4" → "1/4"). Hidden tabs (Mockup A's Abilities / Res / Feats strikethrough placeholders) show a notice "Hidden tab — empty section, click suppressed" so the reviewer knows the disabled-look isn't a render bug.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.188 live. (b) Manual: `GET /wiki/unified-mini-sheet-mockups` renders the page, clicking any tab switches the panel (each tab independently per mockup), clicking 🪄 Cast on Fireball shows "✨ Cast → ✨ Fireball" toast, clicking a Lv 1 spell-slot pip toggles it + updates "2/4" counter, clicking the CHA ability cell shows "🎲 CHA check → 1d20+4". (c) Mockup A's strikethrough hidden tabs trigger the explanatory notice when clicked. (d) Harness: existing `test_wiki_unified_mini_sheet_mockups_renders` passes (asserts the 3 mockup keywords + nav menu — all still present).
+
+### Changed
+- `docs/wiki/unified-mini-sheet-mockups.html` — full rewrite. Adds JS template for the PC mini-sheet (~250 lines of generated markup), tab-switch handler, button toast handler, slot-pip toggle handler, ability-cell click handler, transient `#notice` toast. Expands spell + weapon + skill + resource + feat content for both PC and NPC.
+
+### Notes
+- **No server change.** Pure docs / template. The wiki nav injector still adds `_wiki_nav.html` and the static.css link at request time.
+- **Existing harness coverage unchanged.** The mockup smoke test asserts keywords + nav present; both still pass after the rewrite.
+- **CSS palette unchanged** — uses the same chip colors / mini-sheet conventions established in v2.49.182.
+
+---
+
 ## [2.49.187] - 2026-05-23
 
 **Schema version:** 56
