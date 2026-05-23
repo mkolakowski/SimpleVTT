@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.129] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Zebra-stripe contrast fix — readable on sepia + other warm-low-contrast themes.** v2.49.128 used `var(--bg-2)` for the alternating background, but sepia's `--bg-2: #3a2a14` over `--bg: #2c1f0e` is only a ~14-luminance lift — fine for surface separation but too subtle to read as a row stripe. Swapped all three zebra rules (`.roll-list > li:nth-child(even) > .roll-card`, `.init-row:nth-child(even)`, `.init-entry:nth-child(even)`) to `color-mix(in srgb, var(--bg) 88%, var(--fg) 12%)` so the lift is a constant perceptual amount in every palette — the stripe gets mixed with the foreground colour, which always contrasts with the background by design.
+**Description:** Three CSS one-liners in `app/templates/tabletop.html`. All three `nth-child(even)` rules added in v2.49.128 had `background: var(--bg-2)` swapped to `background: color-mix(in srgb, var(--bg) 88%, var(--fg) 12%)`. Comments updated to explain why the mix replaces the named token, with a brief explainer pointing at the sepia case as the smoking gun.
+**Description (cont):** Why mix into fg, not toward a fixed value. `var(--bg-2)` was the wrong token because its job is "the slightly-lifted surface" — distinct enough to read as a panel but not necessarily as a row stripe. Sepia's `--bg-2` is 14 luminance points above `--bg`; oled's is 10 above (#0a0a0a over #000); midnight's is also small. Mixing 12% of `--fg` borrows the theme's already-contrasting foreground colour, guaranteeing a perceptible delta regardless of where `--bg-2` sits. On sepia: `--bg: #2c1f0e` + 12% of `--fg: #e8d8b8` → ~#412e1e (warm, clearly distinct). On dark: `--bg: #15171c` + 12% of `--fg: #e8e8ee` → ~#2a2a35 (cool, also clearly distinct). The 12% knob was picked by reading the math through three theme palettes; lower than 8% becomes invisible on warm themes, higher than 15% starts to look like a button hover state.
+**Description (cont 2):** Why `color-mix` (CSS-native) instead of a fixed alpha overlay. `color-mix(in srgb, ...)` operates on resolved colours; it's evaluated per-element at render time and respects whatever `--bg` and `--fg` are in scope. An alpha overlay (`background: rgba(255,255,255,0.04)`) would override the underlying card's actual fill rather than tinting it — wrong direction. CSS variables + `color-mix` is the right tool for this. Browser support: all evergreen browsers including the iPad Safari the project's mobile flow targets (Safari 16.4+).
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.129 live after `docker compose up -d --build app`. (b) Mental colour math across dark / midnight / sepia / dim / light: all three zebra rules now produce visibly-distinct row alternation. (c) The active-turn highlight still wins on the current combatant (same source-order specificity logic as v2.49.128).
+
+### Changed
+- `app/templates/tabletop.html` — all three v2.49.128 zebra rules' `background: var(--bg-2)` swapped for `background: color-mix(in srgb, var(--bg) 88%, var(--fg) 12%)`. Comments updated.
+
+### Notes
+- **Backward compat.** No structural change; only the resolved hex shifts per theme. Card readability stays intact.
+- **Sepia + warm themes.** The original `--bg-2` lift was working on dark / midnight but invisible on sepia / oled / fire — the fix lands consistent contrast everywhere.
+
+---
+
 ## [2.49.128] - 2026-05-22
 
 **Schema version:** 56
