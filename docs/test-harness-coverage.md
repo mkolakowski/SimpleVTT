@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 393 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.127, 2026-05-22).
+**Total tests:** 400 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.164, 2026-05-23).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -115,6 +115,19 @@ T.2 hit determination + auto-applied damage + Undo. Gated by `Campaign.auto_appl
 | `test_undo_attack_damage` | `POST /undo_attack_damage` reverses the HP change for the cast id. |
 | `test_undo_unknown_attack_id` | Unknown id → 404. |
 | `test_undo_missing_attack_id_field` | Empty body → 400. |
+
+### `test_npc_attack.py`
+v2.49.164 — parallel `/api/campaign/{cid}/npc_attack` endpoint for NPC monster combatants. GM-only. Mirrors PC `/attack` (d20 + damage + hit-vs-AC + auto-apply on hit) but reads attacker context from `combatant_id` instead of `character_id` + `attack_index`. Reuses the existing `weapon_attack` broadcast type with NPC-shaped caster fields (`caster_char_id: None`, `caster_char_name: <NPC name>`, `caster_combatant_id`, `is_npc_attack: True`).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_npc_attack_happy_path` | Bandit `+3 to hit / 1d6+1 slashing` vs Pip: response carries `attack_total`, `damage_total`, `target_ac`, `hit`; broadcast carries `is_npc_attack=True`, `caster_combatant_id`, `caster_char_id=None`. Auto-apply off — no HP change. |
+| `test_npc_attack_auto_apply_on_hit` | With `campaign.auto_apply_damage=on`, probe-fires up to 12 attacks until one lands; verifies `target_hp_after` shifts + `auto_applied=True`. |
+| `test_npc_attack_no_target_still_rolls` | Endpoint called without `target_combatant_id` still rolls + broadcasts; `hit=None`, `damage_applied=0`. GM uses this for "I want the rolls in the log without committing." |
+| `test_npc_attack_missing_combatant_id` | Empty body → 400. |
+| `test_npc_attack_unknown_combatant_id` | Attacker not in battle → 404. |
+| `test_npc_attack_unknown_target_combatant_id` | Target not in battle → 404. |
+| `test_npc_attack_player_forbidden` | Non-GM caller → 403 (NPCs are GM-authorised). |
 
 ### `test_attack_force_gm_sync.py`
 v2.49.40 — `/attack` against an NPC broadcasts `battle_update` with `force_gm_sync: True` so the GM client (whose `battle_update` handler ignores broadcasts without the flag per the v2.5.5 echo-loop guard) actually applies the HP change. Pre-fix the GM's local state stayed at pre-attack HP until something else triggered `pushBattle`, then the GM's stale local state overwrote the server's new HP — the bandit visually "came back to life."

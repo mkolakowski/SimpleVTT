@@ -16479,6 +16479,247 @@ async def use_attack(
     }
 
 
+# ----------- API: NPC attack (v2.49.164) -----------
+
+@router.post("/api/campaign/{campaign_id}/npc_attack")
+async def use_npc_attack(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Resolve a structured attack from an NPC (monster) combatant.
+
+    Parallel to ``use_attack`` but for NPC attackers — used by the GM
+    init-tracker ``.monster-strike-btn``. Rolls the attack d20 +
+    damage, determines hit vs. ``target_combatant_id`` AC, and
+    auto-applies damage on hit (when ``campaign.auto_apply_damage`` is
+    on) via the shared ``_apply_damage_to_combatant`` helper.
+    Broadcasts the existing ``weapon_attack`` message so all clients
+    render the same chat-card chrome as PC attacks (caster fields are
+    populated from the NPC combatant + GM user).
+
+    Body:
+        ``combatant_id``      — attacker NPC combatant
+        ``action_id``         — informational; for log + UI attribution
+        ``action_name``       — display name ("Scimitar")
+        ``attack_bonus``      — "+3" / "5" / "" — empty rolls flat d20
+        ``damage``            — dice expression ("1d6+1"); empty skips
+                                damage block
+        ``damage_type``       — "slashing"
+        ``range``             — "5 ft" / "80/320 ft"; informational
+        ``target_combatant_id`` — required for hit determination +
+                                  auto-apply. When absent the endpoint
+                                  still rolls the attack + damage and
+                                  broadcasts, leaving the GM to apply
+                                  damage manually.
+
+    Auth: GM-only — NPCs aren't owned by players in this codebase, so
+    the action authority is the GM.
+
+    No action-economy gate yet (NPCs don't track economy in the demo
+    sheet). Range enforcement skipped for the same reason — would
+    require a `Character` row to compute caster position; NPC range
+    enforcement is filed for a follow-up.
+    """
+    body = await request.json()
+    combatant_id = str(body.get("combatant_id") or "").strip()
+    if not combatant_id:
+        raise HTTPException(400, "combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only — NPC attacks are GM-authorised")
+
+    attacker = _lookup_combatant(campaign_id, combatant_id)
+    if not attacker:
+        raise HTTPException(404, "Attacker combatant not found")
+    attacker_name = str(attacker.get("name") or "NPC")
+
+    action_id = str(body.get("action_id") or "").strip()
+    action_name = str(body.get("action_name") or "Attack").strip()
+    attack_bonus_raw = str(body.get("attack_bonus") or "").strip()
+    damage_expr_raw = str(body.get("damage") or "").strip()
+    damage_type = str(body.get("damage_type") or "").strip()
+    range_str = str(body.get("range") or "").strip()
+
+    target_combatant_id = (
+        str(body.get("target_combatant_id") or "").strip() or None
+    )
+    target_combatant = (
+        _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant_id else None
+    )
+    if target_combatant_id and not target_combatant:
+        raise HTTPException(404, "Target combatant not found")
+
+    # Dodging disadvantage on the target — same buff lookup PCs honor.
+    target_dodging = _target_has_dodging(campaign_id, target_combatant_id)
+
+    # Build the d20 attack expression. Accept "+5", "5", or "" (flat).
+    attack_total = None
+    attack_breakdown = ""
+    attack_roll_state_applied = ""
+    if attack_bonus_raw:
+        bonus_expr = (
+            attack_bonus_raw
+            if attack_bonus_raw.startswith(("+", "-"))
+            else "+" + attack_bonus_raw
+        )
+        atk_expr = "1d20" + bonus_expr
+    else:
+        atk_expr = "1d20"
+    if target_dodging:
+        atk_expr = atk_expr.replace("1d20", "2d20kl1", 1)
+        attack_roll_state_applied = "disadvantage_dodging"
+    try:
+        r = dice_mod.roll(atk_expr)
+        attack_total = r.total
+        attack_breakdown = r.breakdown
+    except dice_mod.DiceParseError:
+        attack_total = None
+        attack_breakdown = ""
+
+    # Crit detection from the kept d20 value (same regex pattern as
+    # use_attack at the v2.24.0 Phase T.2 block).
+    is_crit = False
+    if attack_breakdown:
+        import re as _re_crit
+        _crit_m = _re_crit.search(
+            r"\d*d20[^d=+ ]*=(\d+)", attack_breakdown, _re_crit.IGNORECASE,
+        )
+        if _crit_m and int(_crit_m.group(1)) == 20:
+            is_crit = True
+
+    # Roll damage. Crit doubles the dice (not the flat modifier) per
+    # RAW PHB p. 196. ``_double_dice_for_crit`` is the shared helper.
+    damage_total = None
+    damage_breakdown = ""
+    damage_expr_effective = damage_expr_raw
+    if damage_expr_raw and is_crit:
+        damage_expr_effective = _double_dice_for_crit(damage_expr_raw)
+    if damage_expr_effective:
+        try:
+            r = dice_mod.roll(damage_expr_effective)
+            damage_total = r.total
+            damage_breakdown = r.breakdown
+        except dice_mod.DiceParseError:
+            damage_total = None
+            damage_breakdown = ""
+
+    # Hit determination + auto-apply (same gating as use_attack).
+    attack_id = uuid.uuid4().hex[:12]
+    hit = None
+    target_ac = None
+    damage_applied = 0
+    target_hp_before = None
+    target_hp_after = None
+    target_resistance_applied = False
+    target_dying = False
+    target_dead = False
+    if target_combatant and attack_total is not None:
+        target_ac = _read_target_ac(db, campaign_id, target_combatant)
+        hit = is_crit or (attack_total >= target_ac)
+        if (
+            hit
+            and bool(campaign.auto_apply_damage)
+            and (damage_total or 0) > 0
+        ):
+            apply_result = await _apply_damage_to_combatant(
+                db, campaign_id, target_combatant,
+                int(damage_total or 0), damage_type,
+                is_crit=is_crit, attack_id=attack_id,
+            )
+            damage_applied = apply_result["applied"]
+            target_hp_before = apply_result["hp_before"]
+            target_hp_after = apply_result["hp_after"]
+            target_resistance_applied = apply_result["resistance_applied"]
+            target_dying = apply_result["is_dying"]
+            target_dead = apply_result["is_dead"]
+
+    # NPC casters reuse the GM's user-row identity for the chat-card
+    # avatar/color (no per-NPC player). ``caster_char_name`` carries
+    # the monster name so the card header reads "Bandit · ⚔ Attack".
+    payload = {
+        "id": attack_id,
+        "caster_user_id": user.id,
+        "caster_user_name": user.display_name,
+        "caster_user_color": campaign.gm_color,
+        "caster_portrait_url": None,
+        "caster_char_id": None,
+        "caster_char_name": attacker_name,
+        "caster_combatant_id": combatant_id,
+        "attack_index": -1,
+        "attack_name": action_name,
+        "attack_bonus": attack_bonus_raw,
+        "attack_total": attack_total,
+        "attack_breakdown": attack_breakdown,
+        "damage_expr": damage_expr_raw,
+        "damage_type": damage_type,
+        "damage_total": damage_total,
+        "damage_breakdown": damage_breakdown,
+        "bonus_damage_label": "",
+        "bonus_damage_expr": "",
+        "bonus_damage_total": None,
+        "bonus_damage_breakdown": "",
+        "slot_spent_class": "",
+        "slot_spent_level": 0,
+        "auto_uplifts": [],
+        "auto_uplift_total": 0,
+        "target_combatant_id": target_combatant_id or "",
+        "target_name": (
+            _lookup_combatant_name(campaign_id, target_combatant_id)
+            if target_combatant_id else ""
+        ),
+        "hit": hit,
+        "is_crit": is_crit,
+        "target_ac": target_ac,
+        "damage_applied": damage_applied,
+        "target_hp_before": target_hp_before,
+        "target_hp_after": target_hp_after,
+        "target_resistance_applied": target_resistance_applied,
+        "target_dying": target_dying,
+        "target_dead": target_dead,
+        "auto_applied": bool(campaign.auto_apply_damage),
+        "range": range_str,
+        "save_dc": 0,
+        "save_ability": "",
+        "desc": "",
+        "is_save": False,
+        "roll_state_applied": attack_roll_state_applied or None,
+        "over_budget": False,
+        "over_budget_slot": "",
+        "auto_attack_targets": [],
+        "is_npc_attack": True,
+        "npc_action_id": action_id,
+    }
+    await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
+    return {
+        "ok": True,
+        "id": attack_id,
+        "attack_name": action_name,
+        "attack_total": attack_total,
+        "attack_breakdown": attack_breakdown,
+        "damage_total": damage_total,
+        "damage_breakdown": damage_breakdown,
+        "damage_type": damage_type,
+        "target_combatant_id": target_combatant_id or "",
+        "target_name": (
+            _lookup_combatant_name(campaign_id, target_combatant_id)
+            if target_combatant_id else ""
+        ),
+        "hit": hit,
+        "is_crit": is_crit,
+        "target_ac": target_ac,
+        "damage_applied": damage_applied,
+        "target_hp_after": target_hp_after,
+        "auto_applied": bool(campaign.auto_apply_damage),
+        "is_npc_attack": True,
+    }
+
+
 # ----------- API: Undo applied attack damage (v2.24.0 Phase T.2) -----------
 
 @router.post("/api/campaign/{campaign_id}/undo_attack_damage")

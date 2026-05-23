@@ -6346,27 +6346,33 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             // canvas-double-click _targetingState, open the canvas
             // picker so the GM picks a target the same way PCs do
             // via .mini-strike-btn (v2.49.137). The picked target's
-            // name is folded into the roll note so the roll-log entry
-            // reads "Bandit: Scimitar attack → Pip" instead of just
-            // "Bandit: Scimitar attack". For 🎲 Dmg and 📋 Save the
-            // picker is suppressed — the GM picks once on Attack and
-            // the follow-up rolls inherit context from the cast card.
+            // combatant_id + name flow through to v2.49.164's
+            // /npc_attack endpoint so the server auto-rolls attack +
+            // damage + applies HP changes (matching PC parity).
+            // For 🎲 Dmg and 📋 Save the picker is suppressed — the
+            // GM picks once on Attack and the follow-up rolls inherit
+            // context from the cast card.
             let _pickerTargetName = '';
+            let _pickerTargetCombatantId = '';
+            // Find the attacker's combatant row first (needed for
+            // /npc_attack body even when no target is picked).
+            const _attackerRow = btn.closest('.init-row, .init-entry');
+            const _attackerIdx = parseInt(_attackerRow?.dataset.idx ?? '');
+            const _attackerComb = Number.isFinite(_attackerIdx)
+                ? (battle.combatants || [])[_attackerIdx] : null;
+            const _attackerCombId = _attackerComb && _attackerComb.id
+                ? _attackerComb.id : '';
             if (kind === 'attack' && typeof window.vttOpenMultiTargetPicker === 'function') {
-                const _row = btn.closest('.init-row, .init-entry');
-                const _idx = parseInt(_row?.dataset.idx ?? '');
-                const _comb = Number.isFinite(_idx) ? (battle.combatants || [])[_idx] : null;
-                const _combId = _comb && _comb.id ? _comb.id : '';
                 // Skip the picker if a target is already pre-selected
                 // via canvas double-click (same convention as the PC
                 // .mini-strike-btn path at line ~4438).
                 const _preTargets = (window._targetingState
                     && window._targetingState.getTargets()) || [];
-                if (!_preTargets.length && _combId) {
+                if (!_preTargets.length && _attackerCombId) {
                     const _picked = await window.vttOpenMultiTargetPicker({
                         required: 1,
                         spellName: action.name,
-                        casterCombatantId: _combId,
+                        casterCombatantId: _attackerCombId,
                         rangeStr: action.range || '',
                     });
                     if (_picked === null) {
@@ -6375,59 +6381,93 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         btn.disabled = false;
                         return;
                     }
-                    // Resolve the picked combatant_id back to a name
-                    // for the note. The picker returns combatant_ids
-                    // or "tok:<token_id>" for unknown-combatant clicks.
                     if (_picked.length > 0) {
-                        const _pickedId = _picked[0];
-                        const _tcomb = (battle.combatants || []).find(c => c.id === _pickedId);
+                        _pickerTargetCombatantId = _picked[0];
+                        const _tcomb = (battle.combatants || [])
+                            .find(c => c.id === _pickerTargetCombatantId);
                         if (_tcomb && _tcomb.name) {
                             _pickerTargetName = _tcomb.name;
                         }
                     }
                 } else if (_preTargets.length) {
-                    // Pre-selected via canvas double-click — use its name.
+                    // Pre-selected via canvas double-click — use its
+                    // combatant_id + name.
                     const _t0 = _preTargets[0];
+                    if (_t0 && _t0.combatant_id) _pickerTargetCombatantId = _t0.combatant_id;
                     if (_t0 && _t0.name) _pickerTargetName = _t0.name;
                 }
             }
             try {
-                let expression = '';
-                let note = '';
-                if (kind === 'attack') {
-                    const bonus = (action.attack_bonus || '').trim();
-                    const bonusExpr = bonus
-                        ? (bonus.startsWith('+') || bonus.startsWith('-') ? bonus : '+' + bonus)
-                        : '';
-                    expression = '1d20' + bonusExpr;
-                    note = `${action.combatant_name}: ${action.name} attack`;
-                    if (_pickerTargetName) note += ` → ${_pickerTargetName}`;
-                } else if (kind === 'damage') {
-                    expression = action.damage || '';
-                    if (!expression) return;
-                    note = `${action.combatant_name}: ${action.name} damage`;
-                    if (action.damage_type) note += ` (${action.damage_type})`;
-                } else if (kind === 'save') {
-                    // Announce-only: roll d0 so the log shows the DC X SAVE prominently.
-                    expression = '0';
-                    note = `${action.combatant_name}: ${action.name} — DC ${action.save_dc} ${action.save_ability} save`;
+                // v2.49.164: when this is an attack click AND we have
+                // both the attacker combatant_id and a picked target
+                // combatant_id, route to /npc_attack so the server
+                // rolls attack + damage + auto-applies on hit (mirror
+                // of PC /attack behavior). Falls back to the legacy
+                // /roll dice-only path when target / attacker context
+                // is missing — preserves the GM "I just want to roll
+                // this damage real quick" muscle memory.
+                if (kind === 'attack' && _attackerCombId && _pickerTargetCombatantId) {
+                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/npc_attack`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            combatant_id: _attackerCombId,
+                            action_id: action.action_id || '',
+                            action_name: action.name || 'Attack',
+                            attack_bonus: action.attack_bonus || '',
+                            damage: action.damage || '',
+                            damage_type: action.damage_type || '',
+                            range: action.range || '',
+                            target_combatant_id: _pickerTargetCombatantId,
+                        }),
+                    });
+                    if (!resp.ok) {
+                        const txt = await resp.text();
+                        (window.showToast || alert)(`NPC attack failed: ${txt}`, 'error');
+                        return;
+                    }
+                    // The /npc_attack endpoint already broadcasts a
+                    // weapon_attack chat card; no extra /roll needed.
+                    // Fall through to the per-combatant charge +
+                    // economy block below.
                 } else {
-                    return;
-                }
-                const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        expression,
-                        note,
-                        visibility: 'public',
-                        skip_roll_state: true,
-                    }),
-                });
-                if (!resp.ok) {
-                    const txt = await resp.text();
-                    (window.showToast || alert)(`Roll failed: ${txt}`, 'error');
-                    return;
+                    let expression = '';
+                    let note = '';
+                    if (kind === 'attack') {
+                        const bonus = (action.attack_bonus || '').trim();
+                        const bonusExpr = bonus
+                            ? (bonus.startsWith('+') || bonus.startsWith('-') ? bonus : '+' + bonus)
+                            : '';
+                        expression = '1d20' + bonusExpr;
+                        note = `${action.combatant_name}: ${action.name} attack`;
+                        if (_pickerTargetName) note += ` → ${_pickerTargetName}`;
+                    } else if (kind === 'damage') {
+                        expression = action.damage || '';
+                        if (!expression) return;
+                        note = `${action.combatant_name}: ${action.name} damage`;
+                        if (action.damage_type) note += ` (${action.damage_type})`;
+                    } else if (kind === 'save') {
+                        // Announce-only: roll d0 so the log shows the DC X SAVE prominently.
+                        expression = '0';
+                        note = `${action.combatant_name}: ${action.name} — DC ${action.save_dc} ${action.save_ability} save`;
+                    } else {
+                        return;
+                    }
+                    const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            expression,
+                            note,
+                            visibility: 'public',
+                            skip_roll_state: true,
+                        }),
+                    });
+                    if (!resp.ok) {
+                        const txt = await resp.text();
+                        (window.showToast || alert)(`Roll failed: ${txt}`, 'error');
+                        return;
+                    }
                 }
                 // v2.3.40: roll succeeded — if this action is limited-use,
                 // decrement the per-combatant counter once per click (we
