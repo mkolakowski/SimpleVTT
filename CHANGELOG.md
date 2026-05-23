@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.178] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **PC mini-spell-row adds a range chip (Touch / 60 feet / 120 ft).** User feedback: "for PC spells, can you show the range, damage, and dc if applicable". v2.49.177 added damage (with type) and DC to the save chip; range was the missing piece. The chip pulls from the spell catalog's `range` field — same data that the title-attribute tooltip already used, just surfaced into a visible chip so the player doesn't have to hover-and-wait.
+**Description:** Two edits. **(1)** `app/templates/tabletop.html` CSS — new `.mini-spell-tag.range { color: #7dd3c0; font-weight: 500; }` (teal — distinct from damage's pink, save's blue, attack's amber, class's muted italic). Range is informational, not a roll, so a cool teal reads as "metadata about the spell" without competing with the actionable chips. **(2)** `app/templates/_mini_sheet_card.html` `.mini-spell-row` — added `{% if s.range %}<span class="mini-spell-tag range" title="Range">{{ s.range }}</span>{% endif %}` between the multiclass label chip and the attack-bonus chip. Position chosen so the chip order reads "metadata (class · range) · actionable (atk · dmg · save) · button" — left-to-right narrative of "what is this · what does it do · cast it."
+**Description (cont):** Why teal (vs another color). The PC sheet already uses pink for damage, blue for save, amber for attack-bonus, muted italic for class. Teal is the next unused color in the palette and matches the existing CSS variable `--c-buff` (5ec1d6) family — keeps the visual vocabulary consistent across the codebase. Bonus: teal is associated with concentration AoE markers in the canvas renderer (`#5eead4`) so a player familiar with the AoE system parses "teal = informational, not an action" intuitively.
+**Description (cont 2):** Why not also add range to NPC spell rows. The NPC mini-action-row already shows range in the expand-on-click detail panel (`detailBits` block at line ~5203 in tabletop.html). The user's request was specifically PC; not adding to NPC keeps this commit's blast radius small. If parity is wanted, a follow-up can lift the NPC range from detail to row-level chip with the same teal styling.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.178 live. (b) Manual: GM expands Zara → Spells tab → Fire Bolt row reads "✨ Fire Bolt · 120 feet · +6 · 2d10 fire · 🪄 Cast" (range chip teal between name and attack). Magic Missile row: "✨ Magic Missile · 120 feet · 1d4+1 force · 🪄 Cast". Mage Hand (no damage, no save): "✨ Mage Hand · 30 feet · 🪄 Cast". (c) Regression: 18-test NPC + PC attack suite passes.
+
+### Added
+- `app/templates/tabletop.html` CSS — `.mini-spell-tag.range` color (teal `#7dd3c0`).
+- `app/templates/_mini_sheet_card.html` `.mini-spell-row` — range chip rendered when `s.range` is set.
+
+### Notes
+- **No server change.** Pure template + CSS.
+- **NPC spell rows unchanged.** Range still surfaces in the expand-on-click detail panel; not lifted to row-level chip in this commit.
+
+---
+
 ## [2.49.177] - 2026-05-23
 
 **Schema version:** 56
