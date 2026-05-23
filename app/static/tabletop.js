@@ -1025,6 +1025,36 @@
         if (m) return parseInt(m[1], 10) * 5280;
         return null;
     }
+    // v2.49.170: SRD monster actions bury range / reach in the desc
+    // sentence ("Melee Weapon Attack: +3 to hit, reach 5 ft., one
+    // target. ...") rather than carrying a structured ``range`` field.
+    // Demo-seed monsters (app/demo_seed.py) DO have an explicit range
+    // field, but SRD imports don't. Without a structured range the
+    // picker has ``rangeStr === ""`` → ``rangeFt === 0`` → no green
+    // availability rings, no ruler chip, no out-of-range warning, no
+    // server-side range enforcement. This helper regex-extracts the
+    // range from a free-text desc so SRD monsters get picker parity
+    // with both demo-seed monsters and PCs.
+    //
+    // Returns a string like "5 ft" / "80/320 ft" that _parseRangeFtJS
+    // can consume, or null if no range pattern matches.
+    //
+    // Priority order (matches RAW phrasing in SRD action blocks):
+    //   1. "range N/M ft" — thrown / ranged weapons (long range)
+    //   2. "range N ft" — pure ranged
+    //   3. "reach N ft" — melee
+    function _parseRangeFromMonsterDesc(desc) {
+        if (!desc) return null;
+        const s = String(desc);
+        let m = s.match(/range\s+(\d+)\s*\/\s*(\d+)\s*(?:ft|foot|feet)\.?/i);
+        if (m) return `${m[1]}/${m[2]} ft`;
+        m = s.match(/range\s+(\d+)\s*(?:ft|foot|feet)\.?/i);
+        if (m) return `${m[1]} ft`;
+        m = s.match(/reach\s+(\d+)\s*(?:ft|foot|feet)\.?/i);
+        if (m) return `${m[1]} ft`;
+        return null;
+    }
+    window._parseRangeFromMonsterDesc = _parseRangeFromMonsterDesc;
 
     // v2.49.82 — Phase 3C cast-button hover ring. Renders a translucent
     // ring around the caster's token at the spell's range while the

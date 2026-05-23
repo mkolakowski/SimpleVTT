@@ -5055,12 +5055,38 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         // (added below) can show the canonical SRD / homebrew description
         // text. ``range`` carried so the panel can chip "Range: 20/60 ft"
         // for thrown weapons.
+        // v2.49.170: when an action carries no structured ``range``
+        // (typical for SRD-imported monsters whose reach / range lives
+        // only in the desc sentence), regex-extract it from desc so
+        // the picker + server-side range gate get the data PCs have.
+        // The demo-seed monsters DO carry an explicit range field, so
+        // they're unaffected by the fallback.
+        const _rangeFromAction = (a) => {
+            if (a.range) return a.range;
+            if (typeof window._parseRangeFromMonsterDesc === 'function') {
+                return window._parseRangeFromMonsterDesc(a.desc || '') || '';
+            }
+            return '';
+        };
+        // v2.49.170: SRD monster actions also bury attack_bonus in the
+        // desc string ("+3 to hit"). Without the bonus the picker's
+        // title is "Roll attack — 1d20" and /npc_attack rolls a flat
+        // d20. Same fallback strategy as range.
+        const _attackBonusFromAction = (a) => {
+            if (a.attack_bonus) return a.attack_bonus;
+            const m = String(a.desc || '').match(/([+-]?\d+)\s+to\s+hit/i);
+            if (m) {
+                const n = parseInt(m[1], 10);
+                if (!isNaN(n)) return (n >= 0 ? '+' : '') + n;
+            }
+            return '';
+        };
         const fromActions = Array.isArray(sh.actions)
             ? sh.actions.filter(a => a && (a.attack_roll || a.damage || a.save_ability))
                   .map(a => ({
                       id: a.id || (a.name || 'action').toLowerCase().replace(/\s+/g, '-'),
                       name: a.name || 'Action',
-                      attack_bonus: a.attack_bonus || '',
+                      attack_bonus: _attackBonusFromAction(a),
                       damage: a.damage || '',
                       damage_type: a.damage_type || '',
                       save_ability: (a.save_ability || '').toUpperCase(),
@@ -5068,7 +5094,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                       charges_max: parseInt(a.charges_max) || 0,
                       attack_roll: !!a.attack_roll,
                       desc: a.desc || '',
-                      range: a.range || '',
+                      range: _rangeFromAction(a),
                   }))
             : [];
         const fromAttacks = (!fromActions.length && Array.isArray(sh.attacks))
@@ -5076,7 +5102,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                   .map(a => ({
                       id: a.id || (a.name || 'attack').toLowerCase().replace(/\s+/g, '-'),
                       name: a.name || 'Attack',
-                      attack_bonus: a.attack_bonus || a.atk_bonus || a.bonus || '',
+                      attack_bonus: a.attack_bonus || a.atk_bonus || a.bonus || _attackBonusFromAction(a),
                       damage: a.damage || '',
                       damage_type: a.damage_type || '',
                       save_ability: (a.save_ability || '').toUpperCase(),
@@ -5084,7 +5110,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                       charges_max: parseInt(a.charges_max) || 0,
                       attack_roll: !!(a.attack_bonus || a.atk_bonus || a.bonus) && !(a.save_dc && a.save_ability),
                       desc: a.desc || '',
-                      range: a.range || '',
+                      range: _rangeFromAction(a),
                   }))
             : [];
         const actions = fromActions.length ? fromActions : fromAttacks;

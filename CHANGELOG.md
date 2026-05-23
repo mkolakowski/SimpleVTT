@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.170] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **NPC strike picker now visualizes range for SRD monsters (Scimitar, Crossbow, etc.).** User report: "when pressing strike with a scimitar or crossbow from an NPC I don't see the same target system range visualizations as I do with a PC." Root cause: SRD-imported monster actions (`app/data/local/dnd5e/monsters/*.json`) bury range info inside the desc sentence ("reach 5 ft.", "range 80/320 ft.") instead of carrying a structured `range` field. Demo-seed monsters (`app/demo_seed.py`) DO have explicit range fields, so they worked — but SRD monsters fell through with `rangeStr=""` → `rangeFt=0` → no green availability rings, no ruler chip, no out-of-range warning, no server-side range enforcement. Same issue with `attack_bonus` ("+3 to hit" buried in desc).
+**Description:** Two coordinated edits. **(1)** `app/static/tabletop.js` — new `_parseRangeFromMonsterDesc(desc)` helper next to `_parseRangeFtJS`. Regex-extracts the range in priority order: "range N/M ft" (ranged weapons, returns "N/M ft"), "range N ft" (pure ranged), "reach N ft" (melee). Returns null if no pattern matches. Exposed as `window._parseRangeFromMonsterDesc`. **(2)** `app/templates/tabletop.html` action-stamping block (~line 5058) — two new fallback helpers: `_rangeFromAction(a)` returns `a.range || _parseRangeFromMonsterDesc(a.desc)`, and `_attackBonusFromAction(a)` returns `a.attack_bonus || regex.match(/([+-]?\d+) to hit/).group(1)` (e.g. "+3" / "-1"). Both `fromActions` and `fromAttacks` map blocks updated to use the fallbacks.
+**Description (cont):** Why client-side parsing (vs server-side normalization). The data flows: SRD JSON → `TokenTemplate.sheet` (preserved verbatim) → init-tracker render in tabletop.html → picker call with action.range. The cleanest intervention point is the render — it's the surface that needs the data, and parsing there avoids a server-side migration touching every existing TokenTemplate row. A future "normalize SRD monster sheets at import time" would be a separate refactor; this commit ships the fix where it's needed.
+**Description (cont 2):** What's now visualised for a bandit Strike: 🗡 **Scimitar (5 ft melee)** — green availability rings on all 8 adjacent enemy tokens (Chebyshev), no ruler line (v2.49.161 suppresses for ≤ 5 ft), enforced range check via `_check_npc_attack_range`. 🗡 **Light Crossbow (80/320 ft)** — green rings on enemies within 80 ft, ruler line + chip showing "X / 80 ft", amber out-of-range past 80 ft, 409 from server if click-through. Matches PC `.mini-strike-btn` behavior.
+**Description (cont 3):** Why also parse `attack_bonus` from desc. Without it the picker title reads "Roll attack — 1d20" (no bonus), and `/npc_attack` rolls a flat d20 instead of d20+3 (or whatever the monster's actual bonus is). The d20 roll matters for hit determination — a bandit's Scimitar should land at AC 14 on a roll of 11+, not on a 14+ as it would with the flat d20. Same regex priority: the `[+-]?\d+ to hit` pattern is the SRD's canonical phrasing.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.170 live. (b) Regression: 9-test `test_npc_attack.py` + 16-test `test_wiki.py` + 9-test `test_attack.py` all pass (34 total). (c) Manual: spawn a bandit (SRD) → 🗡 Strike on Scimitar → green rings on adjacent enemies, no green ring past 5 ft. 🗡 Strike on Light Crossbow → green rings out to 80 ft, ruler chip reads "60 ft / 80 ft", amber past 80 ft, click-through 409s.
+
+### Added
+- `app/static/tabletop.js::_parseRangeFromMonsterDesc` — regex extractor for SRD-style "reach / range" phrasing in monster desc strings. Exposed on `window` for any future caller.
+
+### Changed
+- `app/templates/tabletop.html` — action-stamping block now falls back to desc parsing for `range` AND `attack_bonus` when the structured fields are absent (SRD-imported monsters).
+
+### Notes
+- **No server change.** The `/npc_attack` endpoint already accepted the range body field; this commit ensures the client sends a non-empty value for SRD monsters.
+- **Demo-seed monsters unaffected** — they already have explicit `range` + `attack_bonus` fields; the fallback is a no-op for them.
+- **No new harness test required.** No new endpoint, no broadcast shape change. The fix is in the client-side template's data normalization layer.
+
+---
+
 ## [2.49.169] - 2026-05-23
 
 **Schema version:** 56
