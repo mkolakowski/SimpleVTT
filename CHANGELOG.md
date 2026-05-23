@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.121] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Sheet-side direction-picker UI for Font of Magic — closes the v2.49.120 filed item.** Zara's `font-of-magic` resource pill now dispatches to the v2.49.120 endpoints via two `window.prompt()` calls (direction first: slot→SP or SP→slot; then slot level). Mirrors the Step of the Wind direction-picker pattern from v2.49.113. Pure client-side wiring in `sheet_dnd5e.html::_bindUseButtons`; no endpoint, broadcast, or schema change. Existing 9 FoM harness tests + 2 sheet-load smoke tests pass.
+**Description:** One file edit in `app/templates/sheet_dnd5e.html::_bindUseButtons`. Added `isFontOfMagic = featureKey === 'font-of-magic'` dispatch flag, a two-step prompt block (direction, then slot level), the endpoint ternary picks `use_font_of_magic_to_points` vs `use_font_of_magic_to_slot` based on the direction, and the body-builder ternary passes `{character_id, slot_level, override?}`.
+**Description (cont):** Why native `prompt()` for v1. Same reasoning as the v2.49.113 Step of the Wind `confirm()`: works on every platform, no styling or focus-management code needed, and the input shape is simple enough (one number + one level) that a styled modal is over-engineered for the first cut. The v2.49.118 plan's Phase 4 (picker polish) covers replacing both with a styled inline picker pair if/when user feedback requests it.
+**Description (cont 2):** Direction code semantics. `1` = slot → SP (the more common direction since SP is the limiting resource); `2` = SP → slot. Default in the input field is `'1'` so a quick OK-OK flow performs the slot→SP conversion with whatever default slot level the user types.
+**Description (cont 3):** Test coverage. No new tests. Existing 9 FoM tests + 2 sheet-smoke tests pass. A Playwright test that opens Zara's sheet, clicks Font of Magic, and walks the prompts would round-trip the dispatch but needs `page.on("dialog", ...)` orchestration for the `prompt()` calls — Playwright supports it but the test would be slow + brittle. Filed for the v2.49.118 plan's Phase 4 polish work when the prompts get replaced with a styled modal.
+
+### Added
+- `app/templates/sheet_dnd5e.html::_bindUseButtons` — `isFontOfMagic` dispatch + two-step prompt + endpoint/body wiring.
+
+### Notes
+- **Backward compat.** Pure client-side wiring; existing 9 FoM harness tests + 2 sheet-smoke tests pass.
+- **Native prompts for v1.** Same approach as v2.49.113 Step of the Wind; styled picker filed under the v2.49.118 plan's Phase 4.
+
+### Filed
+- **Styled Font of Magic picker** — replace the two `prompt()` calls with a single styled modal that has direction radio buttons + a slot-level dropdown. Lives under v2.49.118 Phase 4.
+
+---
+
 ## [2.49.120] - 2026-05-22
 
 **Schema version:** 56

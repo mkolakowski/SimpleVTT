@@ -5122,6 +5122,11 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     const isPatientDefense = featureKey === 'patient-defense';
                     const isStepOfTheWind = featureKey === 'step-of-the-wind';
                     const isFlurryOfBlows = featureKey === 'flurry-of-blows';
+                    // v2.49.121 Sorcery Phase 0 sheet wiring. The
+                    // `font-of-magic` resource pill pops a direction
+                    // picker (slot → SP / SP → slot) + a slot-level
+                    // input, then dispatches to the v2.49.120 endpoints.
+                    const isFontOfMagic = featureKey === 'font-of-magic';
 
                     // Resolve the cutting-words target via the picker
                     // BEFORE building the fetch closure. Awaiting the
@@ -5167,6 +5172,43 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         }
                     }
 
+                    // v2.49.121 Font of Magic direction + slot picker.
+                    // Two ``prompt()`` calls — direction first, then
+                    // slot level. Same "good enough for v1, file a
+                    // styled modal" approach as Step of the Wind below.
+                    let fomDirection = null;
+                    let fomSlotLevel = null;
+                    if (isFontOfMagic) {
+                        const dirAns = window.prompt(
+                            '✨ Font of Magic — pick a direction\n\n' +
+                            '  1 = Slot → Sorcery Points (sacrifice a slot for N SP, N = slot level)\n' +
+                            '  2 = Sorcery Points → Slot (cost: L1=2, L2=3, L3=5, L4=6, L5=7 SP)\n\n' +
+                            'Enter 1 or 2:',
+                            '1'
+                        );
+                        if (dirAns === null) { btn.disabled = false; return; }
+                        const dirNum = parseInt(String(dirAns).trim(), 10);
+                        if (dirNum !== 1 && dirNum !== 2) {
+                            (window.showToast || function(m){ alert(m); })(
+                                'Font of Magic: pick 1 or 2', 'error');
+                            btn.disabled = false; return;
+                        }
+                        fomDirection = dirNum === 1 ? 'to_points' : 'to_slot';
+                        const slotAns = window.prompt(
+                            fomDirection === 'to_points'
+                                ? 'Which slot LEVEL to sacrifice? (1-9)'
+                                : 'Which slot LEVEL to recover? (1-5)',
+                            '1'
+                        );
+                        if (slotAns === null) { btn.disabled = false; return; }
+                        fomSlotLevel = parseInt(String(slotAns).trim(), 10);
+                        if (!Number.isFinite(fomSlotLevel) || fomSlotLevel < 1) {
+                            (window.showToast || function(m){ alert(m); })(
+                                'Font of Magic: slot level must be ≥ 1', 'error');
+                            btn.disabled = false; return;
+                        }
+                    }
+
                     // v2.49.113: Step of the Wind needs a Disengage /
                     // Dash mode pick. ``confirm()`` returns true for
                     // Disengage (the more common pick — avoid OAs) and
@@ -5190,6 +5232,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                    : isPatientDefense ? 'use_patient_defense'
                                    : isStepOfTheWind ? 'use_step_of_the_wind'
                                    : isFlurryOfBlows ? 'use_flurry_of_blows'
+                                   : isFontOfMagic
+                                       ? (fomDirection === 'to_points'
+                                          ? 'use_font_of_magic_to_points'
+                                          : 'use_font_of_magic_to_slot')
                                    : 'use_feature';
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/${endpoint}`, {
                         method: 'POST',
@@ -5217,6 +5263,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 override: !!override,
                             } : isFlurryOfBlows ? {
                                 character_id: MY_CHAR_ID,
+                                override: !!override,
+                            } : isFontOfMagic ? {
+                                character_id: MY_CHAR_ID,
+                                slot_level: fomSlotLevel,
                                 override: !!override,
                             } : {
                                 character_id: MY_CHAR_ID,
