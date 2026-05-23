@@ -351,6 +351,79 @@ async def test_empowered_pool_reroll_scorching_ray(gm_client, zara_rested):
     )
 
 
+async def test_scorching_ray_l3_slot_fires_four_beams(gm_client, zara_rested):
+    """v2.49.127 — Scorching Ray RAW PHB p.273 upcast: +1 ray per slot
+    level above 2. Engine field ``extra_beams_per_slot_above_base: 1``
+    on the action makes a L3-slot cast fire 4 beams (3 base + 1 upcast).
+
+    Doesn't arm Empowered — this test is just for the beam-count math.
+    Casts at a bandit at L3 and asserts exactly 4 beams in the response.
+    """
+    zara = zara_rested
+    await _set_auto_apply(gm_client, on=True)
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    await _seed_zara_vs_bandit(
+        gm_client, zara, bandit_tmpl["id"], bandit_tmpl["name"],
+    )
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": zara["id"],
+            "spell_index": SCORCHING_RAY_INDEX,
+            "slot_level": 3,
+            "class_slug": "sorcerer",
+            "target_combatant_id": "tok_emp_bandit",
+            "target_name": bandit_tmpl["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    beams = resp.json().get("auto_attack_beams", [])
+    assert len(beams) == 4, (
+        f"Expected 4 beams at L3 slot (3 base + 1 upcast); got {len(beams)}: {beams}"
+    )
+
+
+async def test_scorching_ray_l2_slot_fires_three_beams(gm_client, zara_rested):
+    """v2.49.127 control — Scorching Ray at its base L2 slot fires 3
+    beams (no upcast bonus). Regression guard for the slot-delta math
+    in cast_spell (off-by-one would produce 2 or 4 beams instead of 3).
+    """
+    zara = zara_rested
+    await _set_auto_apply(gm_client, on=True)
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    await _seed_zara_vs_bandit(
+        gm_client, zara, bandit_tmpl["id"], bandit_tmpl["name"],
+    )
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": zara["id"],
+            "spell_index": SCORCHING_RAY_INDEX,
+            "slot_level": 2,
+            "class_slug": "sorcerer",
+            "target_combatant_id": "tok_emp_bandit",
+            "target_name": bandit_tmpl["name"],
+            "override": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    beams = resp.json().get("auto_attack_beams", [])
+    assert len(beams) == 3, (
+        f"Expected 3 beams at base L2 slot (no upcast bonus); got {len(beams)}: {beams}"
+    )
+
+
 async def test_empowered_single_beam_fire_bolt(gm_client, zara_rested):
     """Fire Bolt is a single-beam attack-roll cantrip (2d10 at L5).
     Verifies the attack-roll Empowered path works for the single-beam

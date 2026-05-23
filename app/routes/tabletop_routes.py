@@ -7882,11 +7882,18 @@ async def cast_spell(
             auto_attack_target_ac = _read_target_ac(db, campaign_id, target_combatant)
             # Resolve damage dice from the action.
             _dmg_scaling = None
+            # v2.49.127: slot-level beam upcast (Scorching Ray RAW: +1
+            # ray per slot level above 2nd). Read alongside the damage
+            # block so the per-action lookup happens once.
+            _extra_beams_per_upcast = 0
             for a in (spell.get("actions") or []):
                 if a.get("damage"):
                     auto_attack_damage_type = a.get("damage_type") or ""
                     _dmg_base = a.get("damage") or ""
                     _dmg_scaling = a.get("damage_scaling") or None
+                    _extra_beams_per_upcast = int(
+                        a.get("extra_beams_per_slot_above_base") or 0
+                    )
                     break
             else:
                 _dmg_base = spell.get("damage") or ""
@@ -7909,6 +7916,16 @@ async def cast_spell(
             # applies once via _apply_damage_to_combatant; per-beam
             # detail surfaces in ``auto_attack_beams`` for richer UI.
             total_beams = 1 + int((_tier or {}).get("extra_beams") or 0)
+            # v2.49.127: slot-level upcast bonus beams. For Scorching
+            # Ray with ``extra_beams_per_slot_above_base: 1`` and a L3
+            # slot used to cast (spell_level=2): delta=1, add 1 beam →
+            # total_beams=4. RAW PHB p.273 "one additional ray for each
+            # slot level above 2nd". Computed independently of the
+            # character-level cantrip-scaling tier so multi-beam
+            # cantrips (Eldritch Blast) are unaffected — they have no
+            # slot level and ``_extra_beams_per_upcast`` stays at 0.
+            _slot_delta = max(0, int(slot_level) - int(spell_level))
+            total_beams += _slot_delta * _extra_beams_per_upcast
             beams: list[dict] = []
             # v2.49.125 Sorcery Phase 1.5: per-beam per-die capture for
             # multi-beam Empowered Spell pool reroll. Parallel to

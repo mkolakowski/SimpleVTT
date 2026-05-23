@@ -78,6 +78,14 @@ class Action(BaseModel):
     damage: str = ""
     damage_type: str = ""
     damage_scaling: list[ActionScalingTier] = Field(default_factory=list)
+    # v2.49.127: slot-level upcast beam scaling. When a spell adds beams
+    # per slot level above its base (Scorching Ray RAW PHB p.273: +1 ray
+    # per slot above 2), the engine computes
+    # ``total_beams += (slot_level - spell.level) * extra_beams_per_slot_above_base``.
+    # Independent of ``damage_scaling.extra_beams`` (which is keyed on
+    # character level for cantrip scaling); the two can coexist on the
+    # same action if a homebrew spell wants both axes.
+    extra_beams_per_slot_above_base: int = 0
     attack_roll: bool = False
     # To-hit string ("+5", "-1") used when ``attack_roll`` is true. Stored as
     # a string (not int) for parity with the character-sheet attack schema
