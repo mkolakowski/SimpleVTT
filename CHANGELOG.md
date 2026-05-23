@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.167] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **New wiki doc: PC vs NPC combat systems divergence audit.** Full codebase audit of every place where PCs and NPCs are handled by separate code paths, schemas, endpoints, or systems. Catalogs the divergence so a future contributor can see at a glance "PCs have X, NPCs have Y (or nothing)" without spelunking the source. Categorizes each divergence as deliberate design vs accidental tech debt.
+**Description:** New `docs/wiki/pc-vs-npc-systems.md` (~430 lines) covering: data model (Character vs TokenTemplate vs combatant dict, sheet structure), 11 endpoint categories (attack / spell casting / healing / death saves / rest / resources / class features / HP-via-sheet / concentration), server-side helpers (the unified-but-branching layer: `_apply_damage_to_combatant`, `_read_target_ac`, resistance halve variants, range gates, dodging detection, sleep wakeup, buff helpers, action economy, auto-uplifts), client-side surfaces (mini-sheet, picker integration, roll-log card, HP bar rendering, buff badges), an unsupported-features list (17 items NPCs don't support), and an explicit deliberate-vs-debt assessment.
+**Description (cont):** Surfaced through the wiki per CLAUDE.md "every doc must be on the wiki" rule: (1) added to `app/templates/wiki.html` "Available guides" landing-page table, (2) added to `docs/wiki/README.md` on-disk index, (3) added per-slug `test_wiki_pc_vs_npc_systems_doc_renders` harness test confirming the slug returns 200, body contains the H1, nav menu injected, (4) extended `test_wiki_home_renders` to assert the new slug link is in the landing-page HTML.
+**Description (cont 2):** Why a wiki doc (vs an in-code comment or design plan). The divergence touches dozens of files across endpoints, helpers, schemas, and client code — no single source file is the right home. A plan doc under `docs/plans/` is for forward-looking design work; this is a backward-looking audit of current state. A wiki doc under `docs/wiki/` is the right surface for "contributor-facing reference of how the system works today."
+**Description (cont 3):** Findings flagged as tech debt (not just design choices): (a) NPC concentration tracking is missing (PC-only `ConcentrationEffect` table + `_maybe_concentration_save`), (b) `_install_buff` / `_get_buffs` / `_remove_buff` helpers all key on `character_id` (PC-only), forcing AoE spells to mutate hub state directly when targeting NPCs, (c) legendary-action daily counter stored in template but not enforced, (d) NPC reactions stored but not tracked, (e) Multiattack chain expansion not modeled. These are filed in the doc with `> Tech debt flag:` callouts so a future contributor can pick them up.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.167 live. (b) Harness: `test_wiki.py::test_wiki_pc_vs_npc_systems_doc_renders` + extended `test_wiki_home_renders` both pass. (c) Manual: `GET /wiki/pc-vs-npc-systems` renders the doc with H1 + tables + the new nav strip. (d) The landing page at `/wiki` lists the new doc in the "Available guides" table.
+
+### Added
+- `docs/wiki/pc-vs-npc-systems.md` — comprehensive PC vs NPC divergence audit + assessment.
+- `app/templates/wiki.html` — landing-page "Available guides" row for the new doc.
+- `docs/wiki/README.md` — on-disk index row for the new doc.
+- `tests/harness/test_wiki.py::test_wiki_pc_vs_npc_systems_doc_renders` — per-slug smoke test (200 + H1 + nav).
+- `tests/harness/test_wiki.py::test_wiki_home_renders` — extended landing-page assertion for the new slug link.
+
+### Notes
+- **Per CLAUDE.md wiki-surfacing rule:** docs under `docs/wiki/<slug>.md` don't need an allowlist entry — they're served directly via `/wiki/<slug>`. Only the landing-page + on-disk-index + per-slug harness test were required.
+- **No backend change.** Pure documentation + landing-page surfacing.
+
+---
+
 ## [2.49.166] - 2026-05-23
 
 **Schema version:** 56

@@ -42,6 +42,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-sorcery-points-and-metamagic" in resp.text
     # v2.49.119: Warlock Pact Boon plan listed too.
     assert "/wiki/doc/plan-warlock-pact-boon" in resp.text
+    # v2.49.167: PC vs NPC combat systems audit doc listed.
+    assert "/wiki/pc-vs-npc-systems" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -78,6 +80,20 @@ async def test_wiki_markdown_guide_renders():
     assert "Realtime broadcasts catalog" in resp.text
     assert "<h1" in resp.text
     assert "<table" in resp.text
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_pc_vs_npc_systems_doc_renders():
+    """v2.49.167: GET /wiki/pc-vs-npc-systems — markdown source under
+    docs/wiki/ rendered + wrapped + nav-injected. Confirms the slug
+    resolves to the new audit doc."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/pc-vs-npc-systems")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # H1 contains "PC vs NPC combat systems".
+    assert "pc vs npc" in resp.text.lower()
+    assert "<h1" in resp.text
     assert 'class="wiki-nav"' in resp.text
 
 
