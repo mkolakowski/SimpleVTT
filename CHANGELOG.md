@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.152] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix: Magic Missile (and other multi-beam spells) now fire the multi-target picker even when a single target is pre-selected, AND from the init tracker too.** Two bugs: (1) the sheet's `.sp-cast` had an outer `else if (!_spTgt.target_combatant_id...)` guard that skipped the entire multi-beam path when a single target was pre-selected via dbl-click — so Magic Missile with a pre-selection went through as single-target, ignoring the 3-dart RAW. (2) The init-tracker's `.mini-cast-btn` never computed beam count at all — always passed `required: 1` to the picker. Both fixed.
+**Description:** Two file edits. **(1)** `app/templates/sheet_dnd5e.html::.sp-cast` — removed the outer `else if (!_spTgt.target_combatant_id && !_spTgt.target_character_id)` guard (changed to bare `else`) so the beam-count fetch + picker logic ALWAYS runs for non-AoE casts. The inner single-target-modal fallback still gates on `!_spTgt.target_*` so single-beam casts with a pre-selected target still skip the picker entirely. Net result: multi-beam spells (Magic Missile, Scorching Ray, Eldritch Blast L5+) always fire the picker; single-beam spells (Fire Bolt, Hold Person) only fire when no pre-selection. **(2)** `app/templates/tabletop.html::.mini-cast-btn` PC branch — added the same beam-count math the sheet uses, computed inside the existing spell-detail fetch (no extra round-trip). New `_spBeamCount` field; picker gate changed from `!_tC0 && vttOpenMultiTargetPicker` to `(_spBeamCount > 1 || !_tC0) && vttOpenMultiTargetPicker`. Also wired the multi-target picker's return value into `_aoePickedIds` so the cast body's `target_combatant_ids` field carries the picker's full list (was only setting `_tC0` to the first id, dropping the rest).
+**Description (cont):** Why the sheet bug was hidden until now. The v2.49.147 commit added the non-attack-roll branch to the beam-count math, which made Magic Missile capable of returning `_beamCount = 3`. But the math only ran inside the `!_spTgt.target_*` guard — which had been there since v2.29.0 for the single-target modal picker. v2.49.135 extended that guard to wrap the multi-beam picker too, which was correct for the original use case (multi-beam attack-roll spells like Scorching Ray, where pre-selecting a single target was nonsense anyway). But Magic Missile is multi-target NON-attack-roll, and players commonly pre-select a target to "I want to focus all three darts on this one" — the pre-selection wasn't enough to fill the beam count, but the guard short-circuited the math.
+**Description (cont 2):** The init-tracker bug. v2.49.142 added the `.mini-cast-btn` handler with hardcoded `required: 1` — never computed the beam count because the original use case was just "open picker when no target." When v2.49.147 added the non-attack-roll multi-target math to the SHEET, the init-tracker `.mini-cast-btn` wasn't updated to match. Now they're aligned.
+**Description (cont 3):** What gets the right picker count now. Casting from the sheet or init tracker:
+  - **Magic Missile L1** → picker requires 3 darts
+  - **Magic Missile L3** → picker requires 5 darts (3 base + 2 upcast)
+  - **Scorching Ray L2** → picker requires 3 beams
+  - **Scorching Ray L4** → picker requires 5 beams (3 base + 2 upcast via `extra_beams_per_slot_above_base`)
+  - **Eldritch Blast (Lv 5+ Warlock)** → picker requires 2 beams (cantrip-level scaling via `extra_beams`)
+  - **Fire Bolt / Hold Person / Healing Word / etc.** → picker requires 1, opens only when no pre-selection
+  - **Fireball / Burning Hands / Spirit Guardians / etc.** → AoE picker (v2.49.146 auto-open path)
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.152 live. (b) Manual: from Zara's sheet with no pre-selected target, cast Magic Missile L1 → picker opens with "🎯 Magic Missile · pick 0 / 3 targets". (c) From Zara's sheet with a bandit pre-selected (dbl-click), cast Magic Missile L1 → picker STILL opens (was previously short-circuited). (d) From the GM init tracker, expand Zara's row, click Cast on Magic Missile → picker opens with 3 darts. (e) Cast Fire Bolt with a pre-selected target → no picker (single-beam, single-target pre-selection sufficient). (f) Cast Scorching Ray L2 from init tracker → picker now opens with 3 beams (was opening with 1).
+
+### Changed
+- `app/templates/sheet_dnd5e.html::.sp-cast` — removed outer pre-selection guard so multi-beam math always runs for non-AoE casts; inner single-target picker still gated on no pre-selection.
+- `app/templates/tabletop.html::.mini-cast-btn` PC branch — added beam-count math (mirrors sheet `.sp-cast`) + picker gate now fires when `_spBeamCount > 1` regardless of pre-selection; multi-target picker result threaded into `target_combatant_ids` cast body field.
+
+### Notes
+- **Backward compat.** Single-beam single-target casts unchanged. AoE auto-open path (v2.49.146) unchanged. Only multi-beam + multi-target spells (Magic Missile, Scorching Ray, Eldritch Blast L5+) get the new always-fires-picker behavior.
+- **Per-dart engine damage still filed.** Picker fires with the right count, but the server's auto-hit multi-target damage for Magic Missile is still on the v2.49.147 follow-up list. The cast resolves with the picker's `target_combatant_ids` list; the engine applies single-roll damage to the first id today.
+
+---
+
 ## [2.49.151] - 2026-05-23
 
 **Schema version:** 56

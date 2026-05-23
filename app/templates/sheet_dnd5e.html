@@ -2986,7 +2986,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         // sheet page with no canvas) — fall back to the
                         // server-side pending_aoe_placement flow.
                         _spTgt = {};
-                    } else if (!_spTgt.target_combatant_id && !_spTgt.target_character_id) {
+                    } else {
                         // v2.49.135: multi-beam attack-roll spells
                         // (Scorching Ray, Eldritch Blast L5+) open the
                         // canvas multi-target picker BEFORE the cast
@@ -2997,6 +2997,13 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         // upcast). When > 1, the canvas picker fires;
                         // when == 1, falls through to the existing
                         // single-target modal picker below.
+                        // v2.49.152: removed the `!_spTgt.target_*`
+                        // outer guard so multi-beam casts ALWAYS open
+                        // the picker — even when a single target was
+                        // pre-selected via dbl-click. Magic Missile
+                        // RAW needs N darts; a single pre-selection
+                        // isn't enough. Single-beam casts still skip
+                        // the picker when target is pre-selected.
                         let _beamCount = 1;
                         let _rangeStr = '';
                         try {
@@ -3069,6 +3076,13 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 target_combatant_ids: _picked,
                             };
                         } else if (!_spTgt.target_combatant_id && !_spTgt.target_character_id) {
+                        // v2.49.152: single-beam single-target case.
+                        // The outer guard was removed (multi-beam now
+                        // fires regardless of pre-selection); this
+                        // inner gate now does the pre-selection check
+                        // so single-target spells with a pre-selected
+                        // target still skip the picker entirely.
+                        //
                         // v2.29.0: prompt the target-picker modal whenever no
                         // target is set. Self-cast / utility spells (Misty
                         // Step, Mage Armor, Detect Magic, etc.) use the

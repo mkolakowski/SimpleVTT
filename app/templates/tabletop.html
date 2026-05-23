@@ -3577,6 +3577,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // the sheet's .sp-cast (v2.45.0 / Phase T.5e) uses.
                 let _spArea = null;
                 let _spRangeStr = '';
+                let _spBeamCount = 1;  // v2.49.152: init-tracker now computes
+                                       // beam count too so multi-beam /
+                                       // multi-target spells (Scorching Ray,
+                                       // Magic Missile at L1, etc.) fire
+                                       // the picker with the right N.
                 try {
                     const _cid = (typeof CAMPAIGN_ID !== 'undefined' && CAMPAIGN_ID) ? CAMPAIGN_ID : '';
                     const _r = await fetch('/api/open5e/spells?search=' + encodeURIComponent(spellName) + '&limit=10'
@@ -3594,6 +3599,30 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         // v2.49.143: pass spell range to the target
                         // picker so the range gate ring fires.
                         if (_hit && _hit.range) _spRangeStr = _hit.range;
+                        // v2.49.152: beam-count math — mirrors the
+                        // v2.49.147 sheet .sp-cast computation. Prefer
+                        // attack-roll action (Scorching Ray) over the
+                        // first damaging action (Magic Missile fall-
+                        // back). Slot delta picks up the upcast axis.
+                        const _actsArr = _hit && Array.isArray(_hit.actions) ? _hit.actions : [];
+                        const _bcAct = _actsArr.find(a => a && a.attack_roll && a.damage)
+                            || _actsArr.find(a => a && a.damage);
+                        if (_bcAct && !_spArea) {
+                            const _slotDelta = Math.max(0, lvl - (_hit && (parseInt(_hit.level, 10) || parseInt(_hit.level_int, 10) || 1) || 1));
+                            if (_bcAct.attack_roll) {
+                                const _scaling = Array.isArray(_bcAct.damage_scaling) ? _bcAct.damage_scaling : [];
+                                const _tiers = _scaling.filter(t => t && (parseInt(t.level, 10) || 1) <= 5)
+                                    .sort((a, b) => (parseInt(b.level, 10) || 0) - (parseInt(a.level, 10) || 0));
+                                const _tier = _tiers[0];
+                                _spBeamCount = 1 + (parseInt(_tier && _tier.extra_beams, 10) || 0);
+                                const _eppba = parseInt(_bcAct.extra_beams_per_slot_above_base, 10) || 0;
+                                _spBeamCount += _slotDelta * _eppba;
+                            } else {
+                                _spBeamCount = Math.max(1, parseInt(_bcAct.aoe_targets, 10) || 1);
+                                const _etpsba = parseInt(_bcAct.extra_targets_per_slot_above_base, 10) || 0;
+                                _spBeamCount += _slotDelta * _etpsba;
+                            }
+                        }
                     }
                 } catch (_) {}
                 let _targetsC = (window._targetingState
@@ -3630,9 +3659,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     // Canvas not loaded — fall back to the server
                     // pending_aoe_placement flow.
                     _tC0 = null;
-                } else if (!_tC0 && typeof window.vttOpenMultiTargetPicker === 'function') {
+                } else if ((_spBeamCount > 1 || !_tC0) && typeof window.vttOpenMultiTargetPicker === 'function') {
+                    // v2.49.152: multi-beam casts always open the
+                    // picker even when a single target is pre-selected
+                    // (the pre-selection isn't enough to fill the beam
+                    // count). Single-beam casts only open when no
+                    // pre-selection exists.
                     const _picked = await window.vttOpenMultiTargetPicker({
-                        required: 1,
+                        required: Math.max(1, _spBeamCount),
                         spellName: spellName,
                         casterCharId: charId,
                         rangeStr: _spRangeStr,
@@ -3646,6 +3680,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         return;
                     }
                     _tC0 = { combatant_id: _picked[0] || '', character_id: null, name: '' };
+                    // v2.49.152: stash the full multi-target list for
+                    // the cast body (so Magic Missile / Scorching Ray
+                    // pass [bandit, bandit, bandit] = 3 darts/beams
+                    // on the same token, NOT just the singular field).
+                    if (_picked.length > 1) {
+                        _aoePickedIds = _picked;
+                    }
                 }
                 const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
                     method: 'POST',
@@ -3662,6 +3703,8 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             target_name: _tC0.name || '',
                         } : {}),
                         // v2.49.146: AoE picker pre-resolved targets.
+                        // v2.49.152: ALSO the multi-target picker's
+                        // list for multi-beam non-AoE spells.
                         ...(_aoePickedIds && _aoePickedIds.length ? {
                             target_combatant_id: _aoePickedIds[0],
                             target_combatant_ids: _aoePickedIds,
