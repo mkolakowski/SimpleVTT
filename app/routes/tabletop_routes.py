@@ -1612,6 +1612,145 @@ def _roll_with_empowered_reroll(
     })
 
 
+def _roll_damage_individual_dice(expr: str) -> dict | None:
+    """v2.49.125 Sorcery Phase 1.5: roll a damage expression with
+    per-die tracking. Returns:
+
+        {
+          "parsed": [token dicts from _parse_damage_tokens],
+          "rolled": [per-token lists of rolled values],
+          "total": int,
+          "breakdown": str,  # same format as dice_mod.roll
+        }
+
+    Returns ``None`` for unparseable expressions (keep-high/low /
+    advantage/disadvantage modifiers, or empty strings) so callers
+    can fall back to ``dice_mod.roll``.
+
+    Powers the multi-beam Empowered Spell pool reroll: each beam's
+    return value can be fed into ``_apply_pool_empowered_reroll``
+    which mutates the rolled lists across the whole pool, then the
+    caller reads back the updated ``total`` / ``breakdown`` per beam.
+    """
+    parsed = _parse_damage_tokens(expr)
+    if parsed is None:
+        return None
+    rng = dice_mod.get_rng()
+    rolled: list[list[int]] = []
+    for tok in parsed:
+        if tok["kind"] == "dice":
+            rolled.append([rng.randint(1, tok["sides"]) for _ in range(tok["count"])])
+        else:
+            rolled.append([])
+    total = 0
+    parts: list[str] = []
+    for ti, tok in enumerate(parsed):
+        sign = tok["sign"]
+        sign_str = "-" if sign < 0 else "+"
+        if tok["kind"] == "flat":
+            total += sign * tok["value"]
+            parts.append(f"{sign_str}{tok['value']}".lstrip("+"))
+        else:
+            subtotal = sum(rolled[ti])
+            total += sign * subtotal
+            parts.append(
+                f"{sign_str}{tok['count']}d{tok['sides']}"
+                f"[{','.join(str(v) for v in rolled[ti])}]={subtotal}".lstrip("+")
+            )
+    total = max(0, total)
+    breakdown = " ".join(parts) + f"  =>  {total}"
+    return {
+        "parsed": parsed, "rolled": rolled,
+        "total": total, "breakdown": breakdown,
+    }
+
+
+def _apply_pool_empowered_reroll(
+    beam_rolls: list[dict], rerolls: int,
+) -> dict | None:
+    """v2.49.125 Sorcery Phase 1.5: apply Empowered Spell reroll to a
+    pool of beam rolls (each from ``_roll_damage_individual_dice``).
+
+    Finds the lowest ``rerolls`` dice across every beam's every die,
+    rerolls them, and mutates each beam's ``rolled`` / ``total`` /
+    ``breakdown`` in-place. Returns the structured empowered log
+    (same shape as ``_roll_with_empowered_reroll``'s third tuple
+    element) or ``None`` when no rerolls happen (budget 0 or empty
+    pool).
+
+    PHB p.102 reads "the damage dice" singular — one cast, one pool.
+    For Scorching Ray (3 beams of 2d6) the pool is 6 dice; a CHA +3
+    Sorcerer rerolls 3 lowest from the pool, which may all land on
+    one beam or spread across beams.
+    """
+    if rerolls <= 0 or not beam_rolls:
+        return None
+    rng = dice_mod.get_rng()
+    all_positions: list[tuple[int, int, int]] = []
+    for bi, beam in enumerate(beam_rolls):
+        for ti, rolls in enumerate(beam["rolled"]):
+            for di in range(len(rolls)):
+                all_positions.append((bi, ti, di))
+    if not all_positions:
+        return None
+    rerolls = min(rerolls, len(all_positions))
+    original_total = sum(int(b.get("total") or 0) for b in beam_rolls)
+
+    sorted_positions = sorted(
+        all_positions,
+        key=lambda p: (beam_rolls[p[0]]["rolled"][p[1]][p[2]], p),
+    )
+    target_positions = sorted_positions[:rerolls]
+    target_set: set[tuple[int, int, int]] = set(target_positions)
+    originals: dict[tuple[int, int, int], int] = {}
+
+    reroll_log: list[dict] = []
+    for bi, ti, di in target_positions:
+        sides = beam_rolls[bi]["parsed"][ti]["sides"]
+        old_v = beam_rolls[bi]["rolled"][ti][di]
+        new_v = rng.randint(1, sides)
+        beam_rolls[bi]["rolled"][ti][di] = new_v
+        originals[(bi, ti, di)] = old_v
+        reroll_log.append({"sides": sides, "old": old_v, "new": new_v})
+
+    # Rebuild per-beam total + breakdown with old→new annotations.
+    for bi, beam in enumerate(beam_rolls):
+        parsed = beam["parsed"]
+        rolled = beam["rolled"]
+        total = 0
+        parts: list[str] = []
+        for ti, tok in enumerate(parsed):
+            sign = tok["sign"]
+            sign_str = "-" if sign < 0 else "+"
+            if tok["kind"] == "flat":
+                total += sign * tok["value"]
+                parts.append(f"{sign_str}{tok['value']}".lstrip("+"))
+            else:
+                subtotal = sum(rolled[ti])
+                total += sign * subtotal
+                dice_strs: list[str] = []
+                for di, v in enumerate(rolled[ti]):
+                    if (bi, ti, di) in target_set:
+                        dice_strs.append(f"{originals[(bi, ti, di)]}→{v}")
+                    else:
+                        dice_strs.append(str(v))
+                parts.append(
+                    f"{sign_str}{tok['count']}d{tok['sides']}"
+                    f"[{','.join(dice_strs)}]={subtotal}".lstrip("+")
+                )
+        total = max(0, total)
+        beam["total"] = total
+        beam["breakdown"] = " ".join(parts) + f"  =>  {total}"
+
+    final_total = sum(int(b.get("total") or 0) for b in beam_rolls)
+    return {
+        "rerolled_count": rerolls,
+        "original_total": max(0, original_total),
+        "final_total": final_total,
+        "rerolls": reroll_log,
+    }
+
+
 # v2.24.0 Phase T.2: in-memory log of recent damage applications per
 # attack_id so the rolling player can undo their last hit if they
 # misclicked. Keyed by attack_id; entry holds the campaign, the target
@@ -7703,6 +7842,11 @@ async def cast_spell(
     auto_attack_damage_type = ""
     auto_attack_damage_breakdown = ""
     beams: list[dict] = []
+    # v2.49.125: Empowered Spell log from the attack branch (multi-beam
+    # pool reroll). None outside the attack path; populated when the
+    # branch runs AND the caster's metamagic-empowered-pending buff
+    # was consumed.
+    empowered_log_attack: dict | None = None
     # Save-ability detection has to happen up front so we can gate the
     # attack block — a spell with both flags wouldn't be RAW, but the
     # gate prevents accidental double-rolling.
@@ -7766,6 +7910,28 @@ async def cast_spell(
             # detail surfaces in ``auto_attack_beams`` for richer UI.
             total_beams = 1 + int((_tier or {}).get("extra_beams") or 0)
             beams: list[dict] = []
+            # v2.49.125 Sorcery Phase 1.5: per-beam per-die capture for
+            # multi-beam Empowered Spell pool reroll. Parallel to
+            # ``beams``: ``beam_damage_rolls[i]`` is the per-die data
+            # for ``beams[i]`` (or None when the beam missed / its
+            # damage expression couldn't be parsed for individual-die
+            # tracking — those beams skip the reroll pool but still
+            # contribute to the aggregate via the dice_mod fallback).
+            beam_damage_rolls: list[dict | None] = []
+            # Pre-loop Empowered buff lookup. We capture rerolls budget
+            # BEFORE the beam loop so the pool reroll can run after all
+            # beams have rolled. The buff drops after the pool reroll
+            # (one-cast semantics — see PHB p.102 "once per spell cast").
+            _empowered_pending = None
+            if char.id:
+                for _b in _get_buffs(campaign_id, char.id):
+                    if (_b or {}).get("key") == "metamagic-empowered-pending":
+                        _empowered_pending = _b
+                        break
+            _empowered_rerolls_budget = int(
+                ((_empowered_pending or {}).get("effects") or {}).get("rerolls_available") or 0
+            ) if _empowered_pending else 0
+
             agg_damage_rolled = 0
             agg_damage_breakdown_parts: list[str] = []
             any_hit = False
@@ -7798,32 +7964,72 @@ async def cast_spell(
                     beam["hit"] = False
                 else:
                     beam["hit"] = beam["total"] >= auto_attack_target_ac
+                beam_dr_data: dict | None = None
                 if _dmg_base and beam["hit"]:
                     roll_expr = (
                         _double_dice_for_crit(_dmg_base) if beam["crit"] else _dmg_base
                     )
-                    try:
-                        _dr = dice_mod.roll(roll_expr)
-                        beam["damage_rolled"] = max(0, int(_dr.total))
-                        beam["damage_breakdown"] = _dr.breakdown
-                    except dice_mod.DiceParseError:
-                        beam["damage_rolled"] = 0
-                    agg_damage_rolled += beam["damage_rolled"]
-                    if beam["damage_breakdown"]:
-                        agg_damage_breakdown_parts.append(
-                            f"beam {beam['beam']}: {beam['damage_breakdown']}"
-                            if total_beams > 1 else beam["damage_breakdown"]
-                        )
+                    # v2.49.125: prefer the per-die roller so Empowered's
+                    # pool reroll can see individual values. Falls back
+                    # to dice_mod.roll for expressions with kh/kl/a/d
+                    # modifiers (none in standard spell damage exprs).
+                    beam_dr_data = _roll_damage_individual_dice(roll_expr)
+                    if beam_dr_data is None:
+                        try:
+                            _dr = dice_mod.roll(roll_expr)
+                            beam["damage_rolled"] = max(0, int(_dr.total))
+                            beam["damage_breakdown"] = _dr.breakdown
+                        except dice_mod.DiceParseError:
+                            beam["damage_rolled"] = 0
+                    else:
+                        beam["damage_rolled"] = beam_dr_data["total"]
+                        beam["damage_breakdown"] = beam_dr_data["breakdown"]
                 if beam["hit"]:
                     any_hit = True
                 if beam["crit"]:
                     any_crit = True
                 beams.append(beam)
-            # Aggregate fields for backward-compat. Single-beam casts
-            # behave identically to pre-v2.40.0. Multi-beam casts get
-            # the most-impressive beam's d20 (the highest total) as
-            # the headline number; per-beam detail lives in
-            # ``auto_attack_beams``.
+                beam_damage_rolls.append(beam_dr_data)
+
+            # v2.49.125 Sorcery Phase 1.5 — Empowered Spell pool reroll
+            # across every beam's dice. Runs after the beam loop so the
+            # reroll budget can pick the lowest N from the whole pool
+            # (Scorching Ray's 6 dice at L2, Eldritch Blast's 4-8 dice
+            # at L5+). Beams that used the dice_mod fallback (None
+            # entries) are skipped; the pool is the union of the
+            # parseable beams' dice. The buff is consumed regardless
+            # of whether dice rerolled (the SP was spent at arm time).
+            empowered_log_attack: dict | None = None
+            if _empowered_pending:
+                _valid_pool = [d for d in beam_damage_rolls if d is not None]
+                if _valid_pool and _empowered_rerolls_budget > 0:
+                    empowered_log_attack = _apply_pool_empowered_reroll(
+                        _valid_pool, _empowered_rerolls_budget,
+                    )
+                    # Sync per-beam display fields back from the
+                    # (mutated) per-die data. Beams with None data are
+                    # left alone (they used dice_mod and aren't in the
+                    # pool — their pre-reroll totals stand).
+                    for _beam, _dr_data in zip(beams, beam_damage_rolls):
+                        if _dr_data is not None:
+                            _beam["damage_rolled"] = _dr_data["total"]
+                            _beam["damage_breakdown"] = _dr_data["breakdown"]
+                await _remove_buff(
+                    campaign_id, char.id, "metamagic-empowered-pending",
+                )
+
+            # Aggregate fields. Computed AFTER the pool reroll so the
+            # final totals reflect any swaps. Single-beam casts behave
+            # identically to pre-v2.40.0 (one beam → one total). Multi-
+            # beam casts get the highest d20 as the headline number;
+            # per-beam detail lives in ``auto_attack_beams``.
+            for _beam in beams:
+                agg_damage_rolled += int(_beam.get("damage_rolled") or 0)
+                if _beam.get("damage_breakdown"):
+                    agg_damage_breakdown_parts.append(
+                        f"beam {_beam['beam']}: {_beam['damage_breakdown']}"
+                        if total_beams > 1 else _beam["damage_breakdown"]
+                    )
             headline = max(beams, key=lambda b: b["total"]) if beams else {}
             auto_attack_total = int(headline.get("total") or 0)
             auto_attack_breakdown = headline.get("breakdown") or ""
@@ -7855,6 +8061,12 @@ async def cast_spell(
         payload["auto_attack_damage_type"] = auto_attack_damage_type
         payload["auto_attack_damage_breakdown"] = auto_attack_damage_breakdown
         payload["auto_attack_beams"] = beams  # v2.40.0 per-beam detail
+        # v2.49.125: surface the attack-path Empowered Spell reroll log.
+        # Save-for-half path (v2.49.124) sets the same key from its own
+        # _roll_spell_damage_with_metamagic call; only one path fires
+        # per cast (save-flag and attack-flag are mutually exclusive).
+        if empowered_log_attack is not None:
+            payload["empowered_spell"] = empowered_log_attack
 
     # v2.30.0 Phase T.3: save-spell auto-resolution.
     # When the spell carries a ``save_ability`` (top-level OR on an

@@ -23,9 +23,10 @@ import pytest_asyncio
 from .conftest import CAMPAIGN_ID
 
 
-# Zara's spell list (per app/demo_seed.py:1694-1711). Fireball is
-# index 11.
-FIREBALL_INDEX = 11
+# Zara's spell list (per app/demo_seed.py:1694-1711).
+FIRE_BOLT_INDEX = 0       # 2d10 single-beam attack-roll cantrip
+SCORCHING_RAY_INDEX = 10  # 3 beams of 2d6 attack-roll spell (L2 slot)
+FIREBALL_INDEX = 11       # 8d6 DEX-save-for-half AoE (L3 slot)
 
 
 @pytest_asyncio.fixture
@@ -262,6 +263,79 @@ async def test_empowered_buff_consumed_on_cast_fireball(gm_client, zara_rested):
     )
     assert resp2.status_code == 200, resp2.text
     assert "empowered_spell" not in resp2.json()
+
+
+# ---------- Multi-beam (v2.49.125 — Phase 1.5) ----------
+#
+# Note on multi-beam coverage. The current SRD content layer treats
+# Scorching Ray as a single-beam attack (its ``damage_scaling`` carries
+# no ``extra_beams`` entry) and Zara doesn't know Eldritch Blast, so
+# there's no end-to-end demo cast that fires more than one beam through
+# the engine. The pool-reroll helper ``_apply_pool_empowered_reroll``
+# IS exercised by the single-beam case below (same code path), and the
+# cross-beam pool logic was sanity-checked manually:
+#
+#   docker exec simplevtt-app python -c "from app.routes.tabletop_routes
+#   import _apply_pool_empowered_reroll; beams=[{...3 fake 2d6 beams...}];
+#   log=_apply_pool_empowered_reroll(beams, rerolls=3); ..."
+#
+# A true multi-beam harness test will land when (a) Magnus bumps to Lv 5
+# and learns Eldritch Blast, OR (b) Scorching Ray's content JSON gains
+# the RAW ``extra_beams: 2`` damage_scaling entry. Filed in the
+# CHANGELOG for this commit.
+
+
+async def test_empowered_single_beam_fire_bolt(gm_client, zara_rested):
+    """Fire Bolt is a single-beam attack-roll cantrip (2d10 at L5).
+    Verifies the attack-roll Empowered path works for the single-beam
+    case too (same code path as Scorching Ray, just total_beams=1)."""
+    zara = zara_rested
+    await _set_auto_apply(gm_client, on=True)
+    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/templates")
+    templates = r.json()
+    bandit_tmpl = next(
+        (t for t in templates if "bandit" in t["name"].lower()),
+        templates[0],
+    )
+    emp = None
+    for _ in range(20):
+        await _seed_zara_vs_bandit(
+            gm_client, zara, bandit_tmpl["id"], bandit_tmpl["name"],
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{zara['id']}/rest",
+            json={"type": "long"},
+        )
+        arm = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_metamagic_empowered_spell",
+            json={"character_id": zara["id"]},
+        )
+        assert arm.status_code == 200, arm.text
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": zara["id"],
+                "spell_index": FIRE_BOLT_INDEX,
+                "slot_level": 0,
+                "class_slug": "sorcerer",
+                "target_combatant_id": "tok_emp_bandit",
+                "target_name": bandit_tmpl["name"],
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        emp = data.get("empowered_spell")
+        if emp is not None:
+            break
+    assert emp is not None, "Fire Bolt never hit in 20 tries?"
+    # 2d10 pool, CHA-mod +3 budget → reroll min(3, 2) = 2 dice (clipped
+    # to pool size).
+    assert emp["rerolled_count"] == 2
+    for entry in emp["rerolls"]:
+        assert entry["sides"] == 10
+        assert 1 <= entry["old"] <= 10
+        assert 1 <= entry["new"] <= 10
 
 
 async def test_no_empowered_block_when_buff_absent(gm_client, zara_rested):

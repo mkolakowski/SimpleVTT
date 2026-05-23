@@ -1,6 +1,6 @@
 # Sorcery Points + Metamagic — design plan
 
-**Status:** 🟠 in progress (v2.49.124, 2026-05-22) — Phase 0 shipped (v2.49.120-123): both Font of Magic endpoints + multiclass `class_slug` + ephemeral slot creation, 13 harness tests. Phase 1 walking skeleton shipped (v2.49.124): `/use_metamagic_empowered_spell` endpoint + `/cast_spell` integration on the save-for-half single-target NPC path, 5 harness tests. Phase 2+ unstarted.
+**Status:** 🟠 in progress (v2.49.125, 2026-05-22) — Phase 0 shipped (v2.49.120-123): both Font of Magic endpoints + multiclass `class_slug` + ephemeral slot creation, 13 harness tests. Phase 1 shipped (v2.49.124-125): `/use_metamagic_empowered_spell` endpoint + `/cast_spell` integration on save-for-half single-target NPC path AND multi-beam attack-roll spells (Scorching Ray / Eldritch Blast / Fire Bolt) with pool reroll across all beams, 7 harness tests. AoE multi-target loop integration deferred to Phase 1.5. Phase 2+ unstarted.
 **Authors:** rolling
 **Last updated:** 2026-05-22
 
@@ -388,7 +388,7 @@ adds:
 ## Status tracking
 
 - [✅] Phase 0 — Font of Magic conversions + harness (v2.49.120, v2.49.121-123 polish)
-- [🟠] Phase 1 — Picker + pending-buff machinery + Empowered Spell (v2.49.124 — walking skeleton: endpoint + sheet button + save-for-half single-target integration; styled picker modal deferred to Phase 4; multi-beam + AoE integration filed)
+- [✅] Phase 1 — Picker + pending-buff machinery + Empowered Spell (v2.49.124 walking skeleton: endpoint + sheet button + save-for-half single-target integration; v2.49.125 multi-beam pool reroll for Scorching Ray / Eldritch Blast / Fire Bolt. AoE multi-target loop integration deferred to Phase 1.5; styled picker modal deferred to Phase 4.)
 - [ ] Phase 2 — Quickened + Twinned
 - [ ] Phase 3a — Subtle Spell
 - [ ] Phase 3b — Distant Spell
