@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.131] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Desktop-only hover highlight on init-tracker rows.** CSS-only readability tweak: hovering an `.init-row` (player simple-row view) or `.init-entry` (GM combatant card) lifts the background toward the accent colour + tints the border so the cursor's target reads clearly before clicking. Gated by `@media (hover: hover) and (pointer: fine)` so iPad / touch flows don't end up with a stuck "hovered" state after a tap (the same gate every other hover-only affordance in the codebase already uses for the same reason).
+**Description:** Two CSS rule blocks in `app/templates/tabletop.html`. Each lives inside an `@media (hover: hover) and (pointer: fine)` block placed AFTER the matching `:nth-child(even)` zebra rule and BEFORE the `.active-turn` override. **(1)** `.init-row:hover` for the player simple-row view. **(2)** `.init-entry:hover` for the GM combatant-card view. Both rules use the same triple-effect: `background: color-mix(in srgb, var(--accent) 16%, var(--bg))` (accent-tinted lift, stronger than the zebra's 12% fg-mix so the hover is the more salient cue), `border-color: color-mix(in srgb, var(--accent) 55%, var(--border))` (border lift toward accent for an extra visual cue), and `cursor: pointer` (the row is already click-to-expand on the GM side; the cursor change confirms it).
+**Description (cont):** Why `@media (hover: hover) and (pointer: fine)` and not plain `:hover`. iOS Safari simulates a "hover" state on tap, leaving the just-tapped element visually stuck in the hover style until the user taps somewhere else — confusing in a list of similar rows (the GM ends up with a phantom "hovered" combatant after every tap). The `hover: hover` MQ tests the device's *primary* input modality; `pointer: fine` narrows to high-precision pointers (mouse, trackpad) and excludes coarse pointers (finger, stylus on touch tablets). Together they reliably distinguish "real desktop with a cursor" from "touch device pretending to have hover" without false negatives on Apple Magic Keyboard + iPad (which exposes pointer: fine when a trackpad is connected; user wants the hover then too, but the demo flow is touch-first so the conservative `hover: hover` check wins).
+**Description (cont 2):** Why source-order matters (again). Specificity is `0,2,0` for all three rules (`:nth-child(even)`, `:hover`, `.active-turn`) — each is one class + one pseudo-class. When two same-specificity rules both match, source order resolves. Layout per init-row + per init-entry:
+  1. `.init-row` base — background `var(--bg)`.
+  2. `.init-row:nth-child(even)` zebra — background bumps to the fg-mixed shade.
+  3. `.init-row:hover` (inside `@media`) — background bumps further to the accent-mixed shade, overrides zebra.
+  4. `.init-row.active-turn` — background bumps to `var(--accent-bg)`, overrides hover.
+The intent: hover wins over zebra (so the hovered row stands out from its neighbours), but active wins over hover (so the current combatant's highlight stays the strongest cue regardless of cursor position).
+**Description (cont 3):** Why also `cursor: pointer`. The GM init-card-sheet expands on click of the row's `.mini-header`. The player view doesn't have an expand-toggle but the row is still semantically interactive (the parent click handlers route through `.init-row` in a few places — see `app/templates/tabletop.html:6081`). Setting `cursor: pointer` on hover signals interactivity for both card types; on the GM view it correctly indicates "click to expand", on the player view it indicates "this row is part of the live combat list".
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.131 live after `docker compose up -d --build app`. (b) Visually inspected: hovering a row with mouse cursor lifts background + border noticeably; hovering the active-turn row keeps the active highlight (active wins as designed); on the iPad simulator the hover style doesn't fire after tap (the MQ gate filters it out). (c) Zebra-strip + hover combine cleanly — even-row hover overrides the zebra background as expected.
+
+### Added
+- `app/templates/tabletop.html` — `.init-row:hover` + `.init-entry:hover` rules inside `@media (hover: hover) and (pointer: fine)` blocks.
+
+### Notes
+- **Backward compat.** No HTML / JS changes; the hover rules are pure CSS. Touch-only devices see no behavioural change.
+- **Active-turn precedence.** Hovering the current combatant still shows the active-turn highlight (active wins by source order). Intentional — active is the stronger semantic state.
+- **Cross-theme.** Both rules use `color-mix(in srgb, var(--accent) N%, var(--bg))` so the lift adapts to every theme's accent colour.
+
+---
+
 ## [2.49.130] - 2026-05-22
 
 **Schema version:** 56

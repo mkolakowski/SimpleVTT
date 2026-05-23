@@ -1096,6 +1096,17 @@
        above) for cross-theme visibility — sepia's --bg-2 was too close
        to --bg for the stripe to read. */
     .init-row:nth-child(even) { background: color-mix(in srgb, var(--bg) 88%, var(--fg) 12%); }
+    /* v2.49.131: desktop-only hover highlight. ``@media (hover: hover)
+       and (pointer: fine)`` gates the rule to devices with a real
+       cursor so iPad / touch flows don't end up with a stuck "hovered"
+       state after a tap. Defined AFTER the zebra rule so hover wins
+       over the alternating background, BEFORE .active-turn so the
+       active combatant's highlight stays the strongest cue. The
+       accent-bg lift + border tint mirror the GM-tools-card hover
+       styling used elsewhere. */
+    @media (hover: hover) and (pointer: fine) {
+        .init-row:hover { background: color-mix(in srgb, var(--accent) 16%, var(--bg)); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); cursor: pointer; }
+    }
     .init-row.active-turn { background:var(--accent-bg); border-color:var(--accent); box-shadow:0 2px 10px rgba(167,139,250,.28); }
     /* GM combatant card wrapper — overrides the standalone init-row style when nested */
     /* v2.49.99: matches .roll-card — see comment on .init-row above. */
@@ -1105,6 +1116,14 @@
        current combatant. v2.49.129: same fg-mix as the other zebra
        rules for cross-theme visibility. */
     .init-entry:nth-child(even) { background: color-mix(in srgb, var(--bg) 88%, var(--fg) 12%); }
+    /* v2.49.131: same desktop-only hover treatment as .init-row above.
+       See the comment block on .init-row's @media (hover: hover) rule
+       for the source-ordering rationale (hover after zebra so it wins
+       on non-active rows; active-turn after hover so it still wins on
+       the current combatant). */
+    @media (hover: hover) and (pointer: fine) {
+        .init-entry:hover { background: color-mix(in srgb, var(--accent) 16%, var(--bg)); border-color: color-mix(in srgb, var(--accent) 55%, var(--border)); cursor: pointer; }
+    }
     .init-entry.active-turn { border-color:var(--accent); box-shadow:0 2px 10px rgba(167,139,250,.28); }
     .init-entry.active-turn .mini-header { background:linear-gradient(135deg,rgba(167,139,250,.28),rgba(108,180,255,.18)); }
     /* v2.3.33: per-entry "Open Sheet" button. Compact (32px min-height to
