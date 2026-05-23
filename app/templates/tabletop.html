@@ -3528,9 +3528,34 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     }
                 }
                 // v2.22.0 Phase T.1: include current target if set.
-                const _targetsC = (window._targetingState
+                // v2.49.137: when no target is set, open the canvas
+                // crosshair picker so the GM-side init-tracker
+                // .mini-cast-btn fires through the same pick-then-cast
+                // flow as the sheet's .sp-cast. Single-target only for
+                // now — multi-beam (Scorching Ray / Eldritch Blast)
+                // from the init tracker is filed for follow-up since
+                // the button doesn't currently carry beam-count data
+                // (the per-sheet .sp-cast fetches spell detail to
+                // compute it).
+                let _targetsC = (window._targetingState
                     && window._targetingState.getTargets()) || [];
-                const _tC0 = _targetsC[0] || null;
+                let _tC0 = _targetsC[0] || null;
+                if (!_tC0 && typeof window.vttOpenMultiTargetPicker === 'function') {
+                    const _picked = await window.vttOpenMultiTargetPicker({
+                        required: 1,
+                        spellName: spellName,
+                        casterCharId: charId,
+                    });
+                    if (_picked === null) {
+                        if (slotRow) {
+                            slotRow.dataset.used = prevUsed;
+                            _renderMiniSlotPips(slotRow);
+                        }
+                        btn.disabled = false;
+                        return;
+                    }
+                    _tC0 = { combatant_id: _picked[0] || '', character_id: null, name: '' };
+                }
                 const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -4264,9 +4289,28 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     // multi-target (T.5+ AoE) will iterate. The endpoint
                     // accepts target_combatant_id since Phase B
                     // (v2.20.0).
-                    const _targets = (window._targetingState
+                    // v2.49.137: when no target is set, open the canvas
+                    // crosshair picker (v2.49.135) so the GM-side init-
+                    // tracker .mini-strike-btn fires through the same
+                    // pick-then-fire flow as the sheet's .atk-strike.
+                    // Previously the click went through with no target
+                    // descriptors → server resolved the attack with no
+                    // auto-damage → "roll goes through but no damage".
+                    let _targets = (window._targetingState
                         && window._targetingState.getTargets()) || [];
-                    const _t0 = _targets[0] || null;
+                    let _t0 = _targets[0] || null;
+                    if (!_t0 && typeof window.vttOpenMultiTargetPicker === 'function') {
+                        const _picked = await window.vttOpenMultiTargetPicker({
+                            required: 1,
+                            spellName: atkName,
+                            casterCharId: charId,
+                        });
+                        if (_picked === null) {
+                            btn.disabled = false;
+                            return;
+                        }
+                        _t0 = { combatant_id: _picked[0] || '', character_id: null, name: '' };
+                    }
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/attack`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },

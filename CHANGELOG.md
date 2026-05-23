@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.137] - 2026-05-22
+
+**Schema version:** 56
+**Commit summary:** **Fix: target picker now fires for init-tracker action buttons** (`.mini-strike-btn` weapon attacks + `.mini-cast-btn` spell casts from the GM-side expanded init-tracker mini-sheet). The v2.49.135/v2.49.136 picker was wired into the sheet IIFE's `.atk-strike` / `.sp-cast` only — but the GM init-tracker has its own action-button event handlers (`.mini-strike-btn` and `.mini-cast-btn`) bound on `document` that bypass the sheet IIFE entirely. When the GM clicked Strike or Cast on an expanded init row with no pre-selected target, the request went through with no target descriptors → the server rolled the attack/cast against nothing → "roll goes through but no damage" with no picker shown. Both handlers now open the canvas crosshair picker (v2.49.135 `vttOpenMultiTargetPicker`, `required: 1`) when no target is set.
+**Description:** Two edits in `app/templates/tabletop.html`. **(1)** `.mini-strike-btn` document click handler (~line 4267) — replaced the `const _targets = ...; const _t0 = _targets[0] || null;` lookup with a `let` + canvas-picker fallback: if `_t0` is null AND `vttOpenMultiTargetPicker` is available, await the picker; on commit, synthesize a `_t0` from the picked combatant id. On picker cancel, abort the attack (return early so no `/attack` POST fires). **(2)** Same shape for `.mini-cast-btn` PC branch (~line 3530). Cancellation reverts the optimistic spell-slot decrement (same pattern as `.sp-cast`). Multi-beam picker is NOT wired in the init-tracker `.mini-cast-btn` for now since the button doesn't carry beam-count data — filed.
+**Description (cont):** Why the init-tracker uses different handlers from the sheet. The init tracker renders an expanded combatant card that pulls in a mini-sheet via `_renderMiniSheet`. The mini-sheet's action buttons use the `.mini-strike-btn` / `.mini-cast-btn` classes (different from the standalone sheet's `.atk-strike` / `.sp-cast`) because the GM-side flow needs to attribute the action to a different character than the page's "own" character — the document-level delegated handler reads `data-char-id` from the button to know which PC is acting. The sheet IIFE doesn't do this because it always acts as the page's character. Two parallel handler trees, two picker integrations — the v2.49.135-136 work only covered the sheet path.
+**Description (cont 2):** Why "roll goes through but no damage" not "roll fails". The server's `/attack` and `/cast_spell` endpoints accept missing target descriptors — that's the path used for narrative-only rolls (a GM emits "Bandit swings at Kael" rolls without auto-applying damage). When the player clicks without a target AND without the picker firing, the server treats it as the narrative path and skips damage application. The bug was UX-level: the picker didn't fire to let the player select a target, and the silent-skip-damage looked like "the click did nothing." Fix is purely client-side; server contract unchanged.
+**Description (cont 3):** What still doesn't fire the picker (filed). **Monster strike buttons (`.monster-strike-btn` and the monster branch of `.mini-strike-btn` / `.mini-cast-btn`):** when the GM clicks Attack on a bandit's Scimitar, the current handler fires `/roll` (a pure dice roll, no target, no damage application). This is by design pre-v2.49.135 — monsters don't go through the `/attack` endpoint; they emit narrative-only rolls and the GM manually applies damage. Wiring the picker here would require either (a) a new server endpoint that lets the GM declare an NPC attack with target + damage, or (b) reusing `/attack` with a synthetic character_id for the monster combatant. Bigger change, filed. **Multi-beam picker for init-tracker spell casts:** the `.mini-cast-btn` doesn't carry the spell's `damage_scaling.extra_beams` data so the beam-count math can't run client-side. Filed.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.137 live. (b) Manual smoke: expand a PC row in the GM init tracker, click 🗡 Strike on a weapon attack with no pre-selected target → canvas picker opens with "🎯 [weapon name] · pick 0 / 1 targets" → click a bandit → attack fires + damage applies. (c) Same for spell casts: click 🪄 Cast on a single-target spell from an expanded PC's mini-sheet → picker → click target → cast fires. (d) No regression on the per-sheet `.atk-strike` / `.sp-cast` flows from v2.49.135-136. (e) 44/44 harness tests still pass (server contract unchanged).
+
+### Changed
+- `app/templates/tabletop.html::.mini-strike-btn` PC branch — picker fallback when no target is set; preserves existing behavior when target is pre-selected via dbl-click.
+- `app/templates/tabletop.html::.mini-cast-btn` PC branch — same picker fallback; cancellation reverts the optimistic spell-slot decrement.
+
+### Notes
+- **Backward compat.** Pre-selected target (via dbl-click) still skips the picker. Standalone full-sheet page unchanged (uses `.atk-strike` / `.sp-cast` which v2.49.136 already wired).
+- **Multi-beam picker for init-tracker spells deferred.** The `.mini-cast-btn` always opens a 1-target picker today; multi-beam spell casts from the init tracker fall back to single-target behavior (one beam targets the picked token, additional beams resolve against the same target via the server's default fallback).
+- **Monster strike buttons unchanged.** `.monster-strike-btn` and the monster branch of `.mini-strike-btn` / `.mini-cast-btn` still emit pure dice rolls without target/damage application (matches pre-v2.49.135 behavior).
+
+### Filed
+- **Multi-beam picker for init-tracker `.mini-cast-btn`** — needs the button to carry `damage_scaling.extra_beams` + `extra_beams_per_slot_above_base` data so the beam count can be computed without fetching spell detail per-cast.
+- **NPC attack endpoint** — wiring the picker into `.monster-strike-btn` requires a server-side path for "the GM declares an NPC attack with target + damage application." Today's monster attacks are dice rolls only.
+- **Damage application from monster Strike/Cast buttons** — once the NPC endpoint exists, the full pick-then-fire-then-damage flow can land for monster turns too.
+
+---
+
 ## [2.49.136] - 2026-05-22
 
 **Schema version:** 56
