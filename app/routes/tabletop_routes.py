@@ -20755,7 +20755,23 @@ def _resolve_spell_slug_action(action: dict, campaign_id: int) -> dict:
     for k, v in catalog_defaults.items():
         cur = merged.get(k)
         # Empty cur (None / "" / 0 / []) → inherit from catalog.
-        if cur is None or cur == "" or cur == 0 or cur == []:
+        is_empty = cur is None or cur == "" or cur == 0 or cur == []
+        # v2.49.218: dicts stored with all-falsy values also count as
+        # absent. The homebrew Action Pydantic model defaults
+        # ``area`` to ``{"shape": "", "size_ft": 0, "secondary_ft": 0}``
+        # (explicit-present rather than None / missing) — without this
+        # guard the catalog's area overlay silently skipped for every
+        # spell_slug action stored through the homebrew editor. The
+        # symptom: Soren's Burning Hands had `area: {"shape": ""}` in
+        # the projected sheet, the `.mini-cast-btn` `data-spell-area-
+        # shape` attr was empty, the client's AoE picker branch never
+        # fired, and the GM got the single-target picker instead of the
+        # cone interface. Same shape stripping that bit v2.49.176
+        # (Pydantic stripping spell_slug). Generic enough to apply to
+        # any dict-typed overlay value going forward.
+        if not is_empty and isinstance(cur, dict):
+            is_empty = not any(cur.values())
+        if is_empty:
             merged[k] = v
     return merged
 

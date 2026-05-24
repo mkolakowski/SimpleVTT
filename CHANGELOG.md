@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.218] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Fix: `_resolve_spell_slug_action` catalog overlay now treats all-falsy dicts as absent so Soren's Burning Hands gets its area populated.** User-reported v2.49.217 regression: Burning Hands didn't trigger the cone AoE interface, falling through to the single-target picker. Root cause: the homebrew Action Pydantic model defaults `area` to `{"shape": "", "size_ft": 0, "secondary_ft": 0}` (explicit-present rather than None / missing); the overlay's `if cur is None or cur == "" or cur == 0 or cur == []` skipped these because a non-empty dict isn't any of those. The catalog area was never applied to merged actions for spell_slug entries; the partial's `data-spell-area-shape` came out empty; the client's `_isAoeSpell = !!_areaShape && _areaSizeFt > 0` gate evaluated false; the AoE branch never fired.
+**Description:** One-edit fix in `app/routes/tabletop_routes.py` `_resolve_spell_slug_action`. After the existing scalar empty checks, add a dict-specific check: when `cur` is a dict, treat it as empty if `not any(cur.values())` — i.e., all values are falsy. For `{"shape": "", "size_ft": 0, "secondary_ft": 0}` this is True (all values are falsy), so the catalog overlay fires; for a partially-populated dict (e.g., a homebrew that explicitly set `shape: "cube"` but left `size_ft: 0`) the value is preserved verbatim.
+**Description (cont):** Same shape stripping that bit v2.49.176 (Pydantic stripping spell_slug from JSON action storage). Generic enough to apply to any dict-typed overlay value going forward (if a future spell action gets a dict field like `area` — say `targets` or `effects` — the same overlay logic Just Works).
+**Description (cont 2):** Why not fix the Pydantic model. Could change the Action model to default `area: Optional[dict] = None` instead of an explicit empty dict; that would also unblock the overlay. But (a) the model is shared with the homebrew editor UI which has assumptions about the present-but-empty shape, and (b) the overlay's "what counts as absent" is the load-bearing check here — making it more correct benefits other dict-typed fields too. Fixing at the overlay site is the more surgical change.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.218 live. (b) Wiki + mini-sheet partial + npc_cast_spell harness tests still pass. (c) Manual: curl Soren's mini-sheet via the monster pool → `data-spell-area-shape="cone"` + `data-spell-area-size-ft="15"` are now present on the Burning Hands `.mini-cast-btn` (pre-fix both were empty). (d) Manual click-through: click `✨ Cast` on Burning Hands → AoE picker opens with the cone interface, anchored on Soren's token (pre-fix: single-target picker opened instead).
+
+### Changed
+- `app/routes/tabletop_routes.py` `_resolve_spell_slug_action` — catalog overlay treats all-falsy dicts (Pydantic's default empty-area shape) as absent so the catalog's real area populates the merged action.
+
+### Notes
+- **v2.49.217 was inert for stored spell_slug actions.** The wiring was correct but the data never reached the partial. Fix unblocks the entire v2.49.217 AoE pipeline for Burning Hands + any future spell_slug action that needs area data.
+- **Generic fix.** Future dict-typed overlay values (per-action `effects` / `targets` / etc.) inherit the same Pydantic-friendly behavior.
+
+---
+
 ## [2.49.217] - 2026-05-24
 
 **Schema version:** 56
