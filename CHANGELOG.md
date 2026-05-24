@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.197] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **B Phase 2.3b — extract `_tab_features.html` from `_mini_sheet_card.html`.** Follow-on to Phase 2.3 (Skills). Not in the original Phase 2 plan, which enumerated Actions / Spells / Skills only — but the Features panel was sitting inline next to three extracted partials, and consistency matters before Phase 2.4 introduces the server `tabs=[...]` projection. With Features extracted, all four PC tab panels are now Jinja includes, and the parent partial's `<div class="mini-tab-content">` block is a clean stack of `{% include %}` lines.
+**Description:** Two coordinated edits. **(1)** New file `app/templates/_tab_features.html` — 45 lines (most of which is the docstring header). Renders the class & racial feature rows with their 🪄 Use buttons that route through the mini-sheet's delegated `.mini-cf-btn` handler to the appropriate `/use_<feature>` endpoint (Rage / Second Wind / Action Surge / Cutting Words / generic `/use_feature` for the rest). The expandable `.mini-feature-detail` panel with `f.desc` or muted "No description." fallback preserved verbatim. Partial owns the `{% if _features_list %}` gate so the parent include line is unconditional and the partial no-ops cleanly when the character has no class features. **(2)** `app/templates/_mini_sheet_card.html` — lines 212-241 (29-line Features panel + the 10-line comment block above it) collapsed to a 4-line include block. Net delta: -36 lines from the PC partial, +45 lines in the new partial (the +9 difference is the partial's docstring header — pure documentation).
+**Description (cont):** Why this is "2.3b" not "2.4". The original Phase 2 plan (in the unified-mini-sheet design doc) prescribed Actions / Spells / Skills extraction in steps 2.1 / 2.2 / 2.3, then jumped to server-driven `tabs=[...]` in 2.4. Features was inline, planned to stay inline. After extracting the three planned tabs, the PC partial had three `{% include %}` lines and one inline panel block — inconsistent. The cost of extracting Features is the same as Skills (single loop, single gate), and the benefit (clean stack of four includes; Features tab also gets a re-usable partial for any future NPC-with-class-features scenario) outweighed leaving it asymmetric. Filed as 2.3b in the plan table rather than renumbering 2.4 → 2.5 etc.
+**Description (cont 2):** Verification. (a) Curl `/version` confirms v2.49.197 live. (b) Wiki harness tests pass (19/19). (c) Manual: `GET /campaign/.../battle` → PC Features tab renders identically to v2.49.196 across the demo roster — Rage (Mira Barbarian), Second Wind (Mira Fighter multiclass), Lay on Hands (Mira Paladin? No — different PC), Bardic Inspiration (any Bard in roster), Action Surge (Mira), Sneak Attack (any Rogue). The 🪄 Use button click still fires the correct endpoint via the delegated handler; the expandable detail panel still shows the `f.desc` text. (d) Plan doc gains a Phase 2.3b row marking the extraction.
+**Description (cont 3):** Per-tab partial summary at end of Phase 2.3b:
+- ✅ `_tab_actions.html`  (v2.49.193) — attack rows + 🗡 Strike + detail panels.
+- ✅ `_tab_spells.html`   (v2.49.195) — multiclass spell rows + slot pips + ✨ Cast + detail panels.
+- ✅ `_tab_skills.html`   (v2.49.196) — 18-skill grid + prof/expertise dots + roll buttons.
+- ✅ `_tab_features.html` (v2.49.197) — class & racial features + 🪄 Use buttons + detail panels.
+- Next: Phase 2.4 — server provides `tabs=[...]` list per combatant; the parent partial iterates the list to render the tab strip and `{% include %}` the right partial per tab.
+
+### Added
+- `app/templates/_tab_features.html` — new per-tab partial; canonical home for Features-panel markup; consumed by PC (today) and any future NPC-with-class-features path (Phase 2.5+).
+
+### Changed
+- `app/templates/_mini_sheet_card.html` — Features panel inline block (lines 212-241) replaced with `{% include "_tab_features.html" %}`. PC behaviour byte-identical.
+- `docs/plans/unified-mini-sheet.md` — new Phase 2.3b row marking the Features extraction with the v2.49.197 commit pointer.
+
+### Notes
+- **Pure refactor, no behaviour change.** PC mini-sheet Features tab renders identically. NPC `buildMonsterInitSheet` untouched (NPCs currently have no `class_features` data shape).
+- **All four PC tab panels now extracted.** The parent `<div class="mini-tab-content">` is now a clean stack of four `{% include %}` lines (Skills / Actions / Spells / Features). Phase 2.4's `tabs=[...]` iteration can replace the static stack with `{% for tab in tabs %}{% include "_tab_" ~ tab ~ ".html" %}{% endfor %}`.
+- **2.3b vs renumber.** Filed as 2.3b rather than renumbering 2.4 → 2.5 etc. because the original plan numbering is already referenced in v2.49.193 / .195 / .196 CHANGELOG entries; renumbering would create confusion across release notes.
+
+---
+
 ## [2.49.196] - 2026-05-23
 
 **Schema version:** 56

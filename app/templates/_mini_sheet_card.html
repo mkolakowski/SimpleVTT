@@ -209,36 +209,10 @@
                          spell_slots_map + _mc_sorted + _PREPARED_CASTERS +
                          _primary_slug + _is_caster + _spell_vis from current scope. #}
                     {% include "_tab_spells.html" %}
-                    {# ── Features panel (v2.25.0) ──
-                       Renders sheet["class_features"] entries — Rage,
-                       Reckless Attack, Second Wind, Action Surge,
-                       Lay on Hands, Bardic Inspiration, etc. Each row
-                       has a 🪄 Use button. The mini-sheet's delegated
-                       click handler routes the key to the appropriate
-                       endpoint (mirrors the full-sheet .cf-use logic):
-                       Rage → /use_rage, Second Wind → /use_second_wind,
-                       Action Surge → /use_action_surge, Cutting Words →
-                       /use_cutting_words; anything else → /use_feature. #}
-                    {% if _features_list %}
-                    <div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="features">
-                        <div class="mini-features">
-                        {% for f in _features_list %}
-                        <div class="mini-feature-row mini-row-expandable" title="{{ f.name or f.key }}">
-                            <span class="mini-feature-name">{{ f.name or f.key }}</span>
-                            <button type="button" class="mini-cf-btn"
-                                    data-char-id="{{ c.id }}"
-                                    data-feature-key="{{ f.key or '' }}"
-                                    data-feature-label="{{ f.name or '' }}"
-                                    data-feature-desc="{{ f.desc or '' }}"
-                                    title="Use {{ f.name or f.key }}">🪄 Use</button>
-                        </div>
-                        <div class="mini-feature-detail mini-row-detail">
-                            {% if f.desc %}<div class="mini-row-detail-desc">{{ f.desc }}</div>{% else %}<span class="muted">No description.</span>{% endif %}
-                        </div>
-                        {% endfor %}
-                        </div>
-                    </div>
-                    {% endif %}
+                    {# ── Features panel — v2.49.197 Phase 2.3b: extracted to
+                         _tab_features.html. Partial owns the {% if _features_list %}
+                         gate. Reads c + _features_list from current scope. #}
+                    {% include "_tab_features.html" %}
                 </div>{# /.mini-tab-content #}
                 {# ── Wild Shape / Polymorph / Revert ──
                      Uses namespace() so loop assignments are visible outside the loop.

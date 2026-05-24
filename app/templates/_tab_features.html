@@ -1,0 +1,45 @@
+{#
+  Features tab — class & racial feature rows with 🪄 Use buttons that
+  route through the mini-sheet's delegated handler to the appropriate
+  /use_<feature> endpoint (Rage / Second Wind / Action Surge / Cutting
+  Words / generic /use_feature for the rest, mirroring the full-sheet
+  .cf-use dispatcher).
+
+  Extracted from _mini_sheet_card.html in v2.49.197 as a Phase 2.3b
+  follow-on (the original Phase 2 plan enumerated Actions / Spells /
+  Skills only; this extraction lands here for consistency so all four
+  PC tab panels are includes before Phase 2.4's server-tabs[] work).
+
+  Scope contract — Jinja includes inherit the caller's local scope:
+    - c              → character-like (has id).
+    - _features_list → list of feature dicts {key, name, desc}; missing
+                       list / empty list → partial no-ops cleanly via
+                       the {% if _features_list %} gate.
+
+  Behavioural contract (preserved verbatim from the inline block):
+    - Each row is a .mini-row-expandable container that toggles a
+      sibling .mini-feature-detail panel with the description text.
+    - .mini-cf-btn data-attrs (key, label, desc) feed the JS dispatcher
+      that picks the correct /use_<key> endpoint per feature.
+    - Empty / missing desc falls back to "No description." muted text.
+#}
+{% if _features_list %}
+<div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="features">
+    <div class="mini-features">
+    {% for f in _features_list %}
+    <div class="mini-feature-row mini-row-expandable" title="{{ f.name or f.key }}">
+        <span class="mini-feature-name">{{ f.name or f.key }}</span>
+        <button type="button" class="mini-cf-btn"
+                data-char-id="{{ c.id }}"
+                data-feature-key="{{ f.key or '' }}"
+                data-feature-label="{{ f.name or '' }}"
+                data-feature-desc="{{ f.desc or '' }}"
+                title="Use {{ f.name or f.key }}">🪄 Use</button>
+    </div>
+    <div class="mini-feature-detail mini-row-detail">
+        {% if f.desc %}<div class="mini-row-detail-desc">{{ f.desc }}</div>{% else %}<span class="muted">No description.</span>{% endif %}
+    </div>
+    {% endfor %}
+    </div>
+</div>
+{% endif %}
