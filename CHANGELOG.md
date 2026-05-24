@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.207] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix: v2.49.204 didn't actually fix the NPC roll-attribution bug — the data-is-monster marker doesn't survive the .mini-body hoist into the init-card-sheet.** User reported the wrong-PC roll bug is still happening + Sacred Flame's `✨ Cast` button does nothing. Root cause: my v2.49.204 fix stamped `data-is-monster="1"` on the `.char-detail` wrapper and the click handlers checked `closest('.char-detail[data-is-monster]')`. But when the user expands an init-card, the existing hoist mechanism PHYSICALLY MOVES the `.mini-body` out of `.char-detail` into the `.init-card-sheet` inside the init-entry — so the buttons are no longer descendants of `.char-detail`. closest() walks up the init-entry chain and never finds the marker; isMonster is false; the PC code path runs (sending the wrong character_id for ability rolls, or hitting /cast_spell with a monster for Cast clicks → silent failure or attribution to a default PC). Three-edit fix: `_hydrateMonsterCard` now stamps the marker on BOTH `.char-detail` AND its `.mini-body` child; both click handlers check the broader `closest('[data-is-monster]')` selector so they find whichever marker is in scope.
+**Description:** Three coordinated edits to `app/templates/tabletop.html`. **(1)** `_hydrateMonsterCard` — after the existing `card.setAttribute('data-is-monster', '1')` on the wrapper, also find `card.querySelector('.mini-body')` and stamp the same marker on it. Two markers ensures the closest check finds something whether the body has been hoisted (then .mini-body's own marker is the nearest ancestor) or not (then .char-detail's marker is). **(2)** `.mini-roll-btn` / `.mini-sk-btn` document-level click handler — change the isMonster selector from `closest('.char-detail[data-is-monster]')` to `closest('[data-is-monster]')`. The broader selector matches any element with the attribute (the .mini-body marker in the hoisted case + the .char-detail marker in the un-hoisted case). **(3)** `.mini-cast-btn` document-level click handler — same selector change.
+**Description (cont):** Why .mini-body is the right second placement. The hoist mechanism at `tabletop.html:5648` (step ① of renderBattle) selects `.init-card-sheet .mini-body` and moves it back to `#char-detail-{slotKey} .mini-sheet`. The .mini-body is the unit that travels; stamping the marker on it means the marker is always co-located with the buttons inside (Skills / Stats / Spells / Features panels all live inside .mini-body). The wrapper marker stays useful for clicks fired from buttons that are NOT inside .mini-body (the rest button row, the death-saves tracker, etc.) which sit directly under .mini-sheet inside .char-detail without going through .mini-body — though those are PC-only and never appear on monsters anyway.
+**Description (cont 2):** Why I didn't catch this in v2.49.204. I knew the hoist mechanism existed but mis-modeled which DOM the click handler would walk. The harness can't catch DOM-mutation-after-render bugs (it asserts on static HTML response) so the v2.49.204 commit's `data-is-monster` test passed (the attribute IS in the static HTML, on the .char-detail wrapper) but the real click behavior was still broken. Filed as a callout for the eventual browser-level UI test suite expansion (the `tests/harness_ui/` suite is the right home).
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.207 live. (b) Wiki + mini-sheet partial harness tests still pass (29/29 + 11 mini-sheet partials). (c) Manual reproduction of the user-reported flow: open the demo battle as GM, expand Soren's init-card → click WIS in the ability grid → roll log entry attribution should be correct (no random PC name); click Sacred Flame's `✨ Cast` in the Spells tab → monster cast branch fires (damage roll + DC save announcement). Pre-fix both clicks silently routed through the PC path.
+
+### Changed
+- `app/templates/tabletop.html` `_hydrateMonsterCard` — also stamps `data-is-monster="1"` on the `.mini-body` child of the cloned `.char-detail` so the marker survives the hoist into the init-card-sheet.
+- `app/templates/tabletop.html` `.mini-roll-btn` / `.mini-sk-btn` click handler — uses `closest('[data-is-monster]')` instead of `closest('.char-detail[data-is-monster]')`.
+- `app/templates/tabletop.html` `.mini-cast-btn` click handler — same selector change.
+
+### Notes
+- **The v2.49.204 fix was insufficient.** Two-marker placement closes the gap.
+- **Bug 1 dup (Sacred Flame in both Actions + Spells) + Bug 3 (HP not updating on AoE damage) still open.** Filed as v2.49.208 / .209.
+
+---
+
 ## [2.49.206] - 2026-05-23
 
 **Schema version:** 56

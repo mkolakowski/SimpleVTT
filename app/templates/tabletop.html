@@ -3463,18 +3463,17 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const charEl = btn.closest('[data-char-id]');
             const charIdRaw = charEl ? charEl.dataset.charId : '';
             const charId = parseInt(charIdRaw, 10);
-            // v2.49.204 — detect monster context via the explicit
+            // v2.49.204 / v2.49.207 — detect monster context via the
             // ``data-is-monster="1"`` marker the v2.5b hydration stamps
-            // on the cloned ``.char-detail`` wrapper. Without this signal
-            // the handler can't distinguish a hydrated monster card
-            // (data-char-id="tok_..._{ts}") from a "no data-char-id at
-            // all" case — both parseInt to NaN — and the server then
-            // attributes the roll to the rolling user's default
-            // character, surfacing as the wrong PC name in the roll log.
-            // The legacy ``startsWith('monster-')`` check below stays for
-            // pre-v2.5b monster sheets (which used a "monster-{tid}"
-            // data-char-id on a nested wrapper).
-            const isMonster = !!btn.closest('.char-detail[data-is-monster]');
+            // on the cloned ``.char-detail`` wrapper AND its ``.mini-body``
+            // child. v2.49.204 only checked the wrapper, but the hoist
+            // mechanism moves the .mini-body out of .char-detail into the
+            // init-card-sheet — closest('.char-detail[data-is-monster]')
+            // from a hoisted button walks up the init-entry chain and
+            // never finds the wrapper. The broader [data-is-monster]
+            // selector finds the marker on the .mini-body in the hoisted
+            // case + on .char-detail in the un-hoisted case.
+            const isMonster = !!btn.closest('[data-is-monster]');
             btn.disabled = true;
             try {
                 const body = { expression: expr, visibility, note };
@@ -3517,14 +3516,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const btn = ev.target.closest('.mini-cast-btn');
             if (!btn) return;
             const rawCharId = btn.dataset.charId || '';
-            // v2.49.204 — see the matching note on the .mini-roll-btn /
-            // .mini-sk-btn handler above; hydrated monster cards key
-            // data-char-id to the per-combatant `tok_..._{ts}` slotKey
-            // and need the explicit `data-is-monster="1"` marker for
-            // monster detection. Legacy `startsWith('monster-')` stays
-            // for pre-v2.5b monster mini-sheets.
+            // v2.49.204 / v2.49.207 — see the matching note on the
+            // .mini-roll-btn / .mini-sk-btn handler above. The broader
+            // `[data-is-monster]` selector finds the marker on either the
+            // .char-detail wrapper (un-hoisted) or the .mini-body
+            // (hoisted into init-card-sheet).
             const isMonster = rawCharId.startsWith('monster-')
-                || !!btn.closest('.char-detail[data-is-monster]');
+                || !!btn.closest('[data-is-monster]');
             const spellName = btn.dataset.spellName || 'Spell';
             btn.disabled = true;
             try {
@@ -5692,14 +5690,22 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             card.querySelectorAll('[data-char-id="' + oldKey + '"]').forEach(el => {
                 el.setAttribute('data-char-id', slotKey);
             });
-            // v2.49.204: explicit monster marker so the .mini-roll-btn /
-            // .mini-sk-btn / .mini-cast-btn click handlers detect monster
-            // context and skip PC-style character_id attribution. Without
-            // it, parseInt(slotKey, 10) returns NaN, the handler omits
-            // character_id, and the server falls back to the rolling
-            // user's default character — surfacing as the wrong PC name
-            // in the roll log.
+            // v2.49.207: stamp the monster marker on BOTH the .char-detail
+            // wrapper AND its .mini-body child. The .mini-body is the chunk
+            // that the existing init-card-sheet hoist mechanism physically
+            // MOVES out of .char-detail into the init-entry's slot when the
+            // user expands the row. v2.49.204 only stamped the wrapper; once
+            // the body was hoisted, the click handlers' `closest('.char-detail
+            // [data-is-monster]')` walked up the init-entry chain and never
+            // found the marker — same regression as the original v2.49.203 bug
+            // the marker was supposed to fix. Stamping on .mini-body too means
+            // the marker travels with the body wherever it lives; the handlers
+            // now look for `closest('[data-is-monster]')` (any ancestor) which
+            // finds the body marker in the hoisted case AND the wrapper marker
+            // in the un-hoisted case.
             card.setAttribute('data-is-monster', '1');
+            const _bodyEl = card.querySelector('.mini-body');
+            if (_bodyEl) _bodyEl.setAttribute('data-is-monster', '1');
             // Append into the pool wrapper so the hydrated card lives next
             // to the source. The pool is display:none, but the hoist
             // mechanism (at line ~6010 below) physically MOVES the
