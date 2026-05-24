@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.222] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Pipeline test commit.** No source code, schema, or behavior changes. Bumps `APP_VERSION` 2.49.221 → 2.49.222 + README badge + this CHANGELOG entry only, exercising the version-bump + commit + push + container-rebuild loop end-to-end.
+**Description:** One-line edit to `app/version.py` (`APP_VERSION`), one-line edit to the README version badge, one new section at the top of `CHANGELOG.md`. No file under `app/` other than `version.py` is touched; no migration added so `SCHEMA_VERSION` stays at 56; no endpoints added so no harness test required (doc-only / refactor-only exempt per CLAUDE.md).
+**Description (cont):** Verification. (a) `git push` lands the commit on `origin/main`. (b) `docker compose up -d --build app` rebuilds the dev image with the new `APP_VERSION` baked in. (c) `curl -s http://localhost:8013/version` reports `2.49.222`.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.49.222`.
+- `README.md` version badge → `2.49.222`.
+
+### Notes
+- **No behavior change.** Exists purely to verify the release/push/rebuild pipeline.
+
+---
+
 ## [2.49.221] - 2026-05-24
 
 **Schema version:** 56
