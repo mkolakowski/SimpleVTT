@@ -16925,6 +16925,224 @@ async def use_npc_attack(
     }
 
 
+@router.post("/api/campaign/{campaign_id}/npc_cast_spell")
+async def use_npc_cast_spell(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.49.215: NPC-caster spell endpoint that emits a ``spell_cast``
+    WS event so the chat card renders with PC-style spell-card chrome
+    (header with spell name + level + range, target row, save chip,
+    damage pill) instead of multiple plain dice cards. Mirrors the
+    relevant subset of ``/cast_spell`` behavior — rolls attack + damage
+    server-side; on attack hit + ``campaign.auto_apply_damage`` applies
+    damage via ``_apply_damage_to_combatant``; for save spells emits
+    the DC + ability for the GM to resolve manually (server-side save
+    auto-resolution is filed for a follow-up; matches the PC AoE save
+    flow's manual-prompt fallback).
+
+    Body:
+        ``combatant_id``       — caster NPC combatant
+        ``spell_name``         — display name ("Sacred Flame")
+        ``spell_level``        — 0 for cantrips
+        ``spell_range``        — "60 feet" / "Touch"
+        ``damage``             — dice expression ("1d8"); empty skips
+        ``damage_type``        — "radiant"
+        ``save_ability``       — "DEX" (empty for attack-roll spells)
+        ``save_dc``            — int (0 for attack-roll spells)
+        ``attack_roll``        — True for attack-roll spells
+        ``attack_bonus``       — "+4" / "" for attack-roll spells
+        ``target_combatant_id``— required for hit determination +
+                                 auto-apply; absent for self-cast or
+                                 mass-target spells
+
+    Auth: GM-only — NPCs aren't owned by players. Mirrors /npc_attack's
+    GM-only stance.
+
+    Persistence: the rolled dice are NOT persisted as DiceRoll records
+    (the spell_cast WS event + the client-side localStorage replay
+    via _persistRollEntry carry the chat-card history). PC /cast_spell
+    has the same convention.
+    """
+    body = await request.json()
+    combatant_id = str(body.get("combatant_id") or "").strip()
+    if not combatant_id:
+        raise HTTPException(400, "combatant_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only — NPC casts are GM-authorised")
+
+    caster = _lookup_combatant(campaign_id, combatant_id)
+    if not caster:
+        raise HTTPException(404, "Caster combatant not found")
+    caster_name = str(caster.get("name") or "NPC")
+
+    spell_name = str(body.get("spell_name") or "Spell").strip()[:100]
+    spell_level = int(body.get("spell_level") or 0)
+    spell_range = str(body.get("spell_range") or "").strip()[:50]
+    damage_expr_raw = str(body.get("damage") or "").strip()
+    damage_type = str(body.get("damage_type") or "").strip()
+    save_ability = str(body.get("save_ability") or "").strip().upper()
+    save_dc = int(body.get("save_dc") or 0)
+    attack_roll_flag = bool(body.get("attack_roll"))
+    attack_bonus_raw = str(body.get("attack_bonus") or "").strip()
+
+    target_combatant_id = str(body.get("target_combatant_id") or "").strip() or None
+    target_combatant = (
+        _lookup_combatant(campaign_id, target_combatant_id)
+        if target_combatant_id else None
+    )
+    if target_combatant_id and not target_combatant:
+        raise HTTPException(404, "Target combatant not found")
+
+    cast_id = uuid.uuid4().hex[:12]
+
+    # Attack roll (for attack-roll spells like Inflict Wounds). Skipped
+    # for save spells (Sacred Flame) which resolve via the target's save.
+    auto_attack_total = None
+    auto_attack_breakdown = ""
+    auto_attack_hit = None
+    auto_attack_target_ac = None
+    is_crit = False
+    if attack_roll_flag:
+        bonus_expr = (
+            attack_bonus_raw
+            if attack_bonus_raw and attack_bonus_raw.startswith(("+", "-"))
+            else ("+" + attack_bonus_raw if attack_bonus_raw else "")
+        )
+        atk_expr = "1d20" + bonus_expr
+        try:
+            r = dice_mod.roll(atk_expr)
+            auto_attack_total = r.total
+            auto_attack_breakdown = r.breakdown
+            import re as _re_crit
+            _crit_m = _re_crit.search(
+                r"\d*d20[^d=+ ]*=(\d+)", auto_attack_breakdown,
+                _re_crit.IGNORECASE,
+            )
+            if _crit_m and int(_crit_m.group(1)) == 20:
+                is_crit = True
+        except dice_mod.DiceParseError:
+            pass
+        if target_combatant and auto_attack_total is not None:
+            auto_attack_target_ac = _read_target_ac(
+                db, campaign_id, target_combatant,
+            )
+            auto_attack_hit = bool(
+                is_crit or auto_attack_total >= auto_attack_target_ac
+            )
+
+    # Damage roll. Crit doubles dice per RAW.
+    auto_attack_damage_rolled = 0
+    auto_attack_damage_breakdown = ""
+    damage_expr_effective = damage_expr_raw
+    if damage_expr_raw and is_crit:
+        damage_expr_effective = _double_dice_for_crit(damage_expr_raw)
+    if damage_expr_effective:
+        try:
+            r = dice_mod.roll(damage_expr_effective)
+            auto_attack_damage_rolled = r.total
+            auto_attack_damage_breakdown = r.breakdown
+        except dice_mod.DiceParseError:
+            pass
+
+    # Auto-apply damage on attack-roll hit (matches /npc_attack pattern).
+    # Save-spell damage stays GM-manual for v1 — the GM clicks Apply or
+    # manually edits HP after the targets' saves are resolved.
+    auto_attack_damage_applied = 0
+    target_hp_after = None
+    if (
+        auto_attack_hit
+        and bool(campaign.auto_apply_damage)
+        and target_combatant
+        and auto_attack_damage_rolled > 0
+    ):
+        apply_result = await _apply_damage_to_combatant(
+            db, campaign_id, target_combatant,
+            int(auto_attack_damage_rolled), damage_type,
+            is_crit=is_crit, attack_id=cast_id,
+        )
+        auto_attack_damage_applied = int(apply_result.get("applied") or 0)
+        target_hp_after = apply_result.get("hp_after")
+
+    is_save = bool(save_ability and save_dc)
+    target_name_resolved = (
+        _lookup_combatant_name(campaign_id, target_combatant_id)
+        if target_combatant_id else ""
+    )
+
+    # Mirror /cast_spell's spell_cast payload shape so the existing
+    # client-side ``appendSpellCast`` renderer (tabletop.js:4307) handles
+    # the chat-card chrome without NPC-specific branches.
+    payload = {
+        "id": cast_id,
+        "cast_id": cast_id,
+        "caster_user_id": user.id,
+        "caster_user_name": user.display_name,
+        "caster_user_color": campaign.gm_color or "",
+        "caster_portrait_url": "",
+        "caster_char_id": None,
+        "caster_char_name": caster_name,
+        "caster_combatant_id": combatant_id,
+        "spell_name": spell_name,
+        "spell_level": spell_level,
+        "slot_level": spell_level,
+        "spell_range": spell_range,
+        "spell_damage_type": damage_type,
+        "spell_school": "",
+        "spell_casting_time": "1 action",
+        "spell_concentration": False,
+        "spell_ritual": False,
+        "target_combatant_id": target_combatant_id or "",
+        "target_name": target_name_resolved,
+        # Attack-roll auto-resolution (Inflict Wounds path).
+        "auto_attack_hit": auto_attack_hit,
+        "auto_attack_total": auto_attack_total or 0,
+        "auto_attack_breakdown": auto_attack_breakdown,
+        "auto_attack_target_ac": auto_attack_target_ac or 0,
+        "auto_attack_target_name": target_name_resolved,
+        "auto_attack_damage_rolled": auto_attack_damage_rolled,
+        "auto_attack_damage_applied": auto_attack_damage_applied,
+        "auto_attack_damage_type": damage_type,
+        "auto_attack_damage_breakdown": auto_attack_damage_breakdown,
+        # Save-spell metadata (Sacred Flame path). Resolution is GM-manual.
+        "save_dc": save_dc if is_save else 0,
+        "save_ability": save_ability if is_save else "",
+        "is_save": is_save,
+        "auto_save_target_kind": None,
+        "auto_save_targets": [],
+        # Misc — empty / None for NPC spells (no AoE / heal / auto-hit
+        # darts / per-action buttons yet).
+        "actions": [],
+        "auto_heal_applied": 0,
+        "auto_hit_targets": [],
+        "area_shape": None,
+        "area_size_ft": 0,
+        "auto_applied": bool(campaign.auto_apply_damage),
+        "is_npc_cast": True,
+        "is_crit": is_crit,
+        "target_hp_after": target_hp_after,
+    }
+    await hub.broadcast(campaign_id, {"type": "spell_cast", "data": payload})
+    return {
+        "ok": True,
+        "cast_id": cast_id,
+        "auto_attack_hit": auto_attack_hit,
+        "auto_attack_total": auto_attack_total,
+        "auto_attack_damage_rolled": auto_attack_damage_rolled,
+        "auto_attack_damage_applied": auto_attack_damage_applied,
+        "is_save": is_save,
+        "target_combatant_id": target_combatant_id or "",
+        "target_name": target_name_resolved,
+        "auto_applied": bool(campaign.auto_apply_damage),
+    }
+
+
 # ----------- API: Undo applied attack damage (v2.24.0 Phase T.2) -----------
 
 @router.post("/api/campaign/{campaign_id}/undo_attack_damage")

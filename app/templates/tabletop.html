@@ -3625,8 +3625,54 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                             if (_t0?.name) _pickedTargetName = _t0.name;
                         }
                     }
-                    const _targetSuffix = _pickedTargetName ? ` → ${_pickedTargetName}` : '';
+                    // v2.49.215: route NPC cast through /npc_cast_spell which
+                    // emits a single spell_cast WS event (PC-style spell-card
+                    // chrome) instead of the 2-3 plain /roll cards the legacy
+                    // monster branch fired. The server rolls attack + damage,
+                    // applies damage on attack-hit when auto_apply_damage is on,
+                    // and broadcasts a spell_cast payload matching what
+                    // /cast_spell emits — the existing appendSpellCast renderer
+                    // at tabletop.js:4307 handles the rendering with no NPC-
+                    // specific branches. The legacy /roll loop is only used as
+                    // the fallback when /npc_cast_spell fails or there's no
+                    // caster combatant context (e.g., click came from outside
+                    // the init tracker).
+                    const _attackerEntry2 = btn.closest('.init-entry[data-char-id]');
+                    const _attackerCombId2 = _attackerEntry2?.dataset.charId || '';
+                    if (_attackerCombId2 && (attackRoll || (saveAbility && saveDc) || damage)) {
+                        try {
+                            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/npc_cast_spell`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    combatant_id: _attackerCombId2,
+                                    spell_name: spellName,
+                                    spell_level: parseInt(btn.dataset.spellLevel || '0', 10) || 0,
+                                    spell_range: btn.dataset.spellRange || '',
+                                    damage: damage || '',
+                                    damage_type: damageType || '',
+                                    save_ability: saveAbility || '',
+                                    save_dc: saveDc || 0,
+                                    attack_roll: attackRoll,
+                                    attack_bonus: attackBonus || '',
+                                    target_combatant_id: _pickedTargetCombId || '',
+                                }),
+                            });
+                            if (resp.ok) {
+                                return;  // spell_cast broadcast handles the rest
+                            }
+                            (window.showToast || alert)(`Cast failed: ${await resp.text()}`, 'error');
+                            // Fall through to legacy /roll path on non-OK
+                        } catch (e) {
+                            console.warn('npc_cast_spell failed; falling back to /roll:', e);
+                            // Fall through to legacy /roll path on network error
+                        }
+                    }
 
+                    // Legacy fallback: fire individual /roll calls. Reached when
+                    // there's no caster combatant in scope (click came from
+                    // outside the init tracker) OR /npc_cast_spell errored.
+                    const _targetSuffix = _pickedTargetName ? ` → ${_pickedTargetName}` : '';
                     const rolls = [];
                     if (attackRoll) {
                         const bonusExpr = attackBonus

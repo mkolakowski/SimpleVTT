@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 418 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.206, 2026-05-23).
+**Total tests:** 422 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.215, 2026-05-24).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -840,6 +840,19 @@ Regression net for the v2.49.193–.198 per-tab partial extractions from `_mini_
 | `test_monster_card_pool_partial_renders_for_dnd5e_monster` | Phase 2.5a: the partial doesn't crash on `is_monster=True` against a monster sheet shape (no `classes` / `hit_dice` / etc.). Anchors on the first monster-template card, asserts the 100 KB window contains a `.mini-tabs` block + Skills tab + at least one `.mini-sk-btn` — i.e., the unified `_tabs_present` iteration produced output, `_tab_skills.html` ran against the monster's abilities dict + 18-skill grid emitted buttons. |
 | `test_renderbattle_wires_hydration_helper_for_monsters` | Phase 2.5b (v2.49.203): the tabletop page source carries the `_hydrateMonsterCard` JS helper, the slotId computation prefers `c.id` over `'monster-{tid}'` for monsters, and `renderBattle()` actually calls the helper. If a future commit removes any of the three, monster mini-sheets silently regress to `buildMonsterInitSheet` for all combatants and Phase 2.5b's user-visible benefit (unified renderer, per-tab partial parity) is lost. |
 | `test_spell_slug_npc_renders_spells_tab` | Bug 3 fix (v2.49.206): Soren the Cult Acolyte's mini-sheet in the monster pool contains a `data-tab="spells"` button + `data-panel="spells"` panel + at least one `✨ Inflict Wounds` or `✨ Sacred Flame` row. Validates that `_monster_template_to_sheet` projects spell_slug actions into `sh['spells']` AND the partial's empty-`_iter_classes` fallback fires for monsters (which have no class hierarchy). |
+
+---
+
+## NPC cast spell (Phase 2.5b finale — v2.49.215)
+
+`/api/campaign/{cid}/npc_cast_spell` — NPC-caster spell endpoint that emits a `spell_cast` WS event so the chat card renders with PC-style spell-card chrome instead of multiple plain dice cards. Mirrors `/npc_attack`'s GM-only stance; rolls attack + damage server-side; on attack hit + `auto_apply_damage` applies damage via `_apply_damage_to_combatant`; for save spells emits the DC + ability chip (save resolution stays GM-manual for v1). Tests live in `tests/harness/test_npc_cast_spell.py`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_npc_cast_spell_requires_combatant_id` | POST without `combatant_id` → 400. |
+| `test_npc_cast_spell_gm_only` | Non-GM POST → 403 (alice client). |
+| `test_npc_cast_spell_bad_combatant_404` | GM POST with an unknown combatant_id → 404. |
+| `test_npc_cast_spell_happy_path_save_spell` | GM POST for Soren (Cult Acolyte) casting Sacred Flame → 200 + `spell_cast` WS broadcast with the right shape (`spell_name=Sacred Flame`, `save_ability=DEX`, `save_dc=13`, `is_save=True`, `caster_char_name=<nickname>`, `caster_combatant_id=tok_…`, `caster_char_id=None`, `is_npc_cast=True`). Skips gracefully when the demo's battle.combatants doesn't currently include the Acolyte. |
 
 ---
 
