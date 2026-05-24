@@ -114,6 +114,17 @@ A new partial (`_combatant_sheet_card.html`) that both PCs and NPCs feed into vi
 - The action-economy chips are PC-only today (NPCs have no economy field) — placing them between HP bar and tabs is fine for PCs, but for NPCs the row would be absent, leaving a visual "gap" unless we conditionally remove the row entirely.
 - Charge counter + ↻ recharge button (NPC-only Frightful Howl / Inflict Wounds limit) needs a home in the shared Actions tab — either always render the slot or gate on `action.charges_max > 0`.
 
+> **Aesthetic exploration — pillified variants (v2.49.194).** Two
+> rounded-corner variants of Mockup B (`pillified-soft` at 12 px,
+> `pillified` at 999 px) are rendered side-by-side at
+> [/wiki/unified-mini-sheet-mockups#pillified](/wiki/unified-mini-sheet-mockups#pillified)
+> for design review. Pillification is a CSS-only modifier class on
+> the `.mock-mini` wrapper — no markup change, no functional impact,
+> applies orthogonally to whichever structural mockup wins. The
+> active-tab styling does change in both variants (underline-bottom
+> → filled-pill background) because underlines read poorly when
+> everything around them is round. See open question #5 below.
+
 ---
 
 ### Mockup C — "Hybrid Density: stat-block body for NPCs, full sheet for PCs"
@@ -253,6 +264,7 @@ Rationale: B is the right architectural endpoint (one partial, per-tab sub-parti
 2. **Charge tracker location** — Phase 2 needs to decide whether `action.charges_max` rendering belongs in `_tab_actions.html` (every action checks for it) or in a separate `_action_row.html` sub-partial.
 3. **NPC concentration sigil** — PCs get the 🧿 sigil in the header when concentrating. Should NPCs get the same (per the v2.49.167 audit, NPC concentration tracking is filed as tech debt)?
 4. **GM-only affordances** — the ↻ recharge button and the `×` remove button are GM-only. Should they live on the chrome (visible to GMs only) or on the per-action row?
+5. **Pillification (aesthetic only)** — adopt rounder corners + filled-pill active tab? Two variants explored in [the mockups page Pillified section](/wiki/unified-mini-sheet-mockups#pillified): `pillified-soft` (12 px) and `pillified` (999 px). Pillification is orthogonal to the structural choice (A/B/C) — pick whichever structural mockup wins, then apply or skip the pill modifier class. Trade-off: pillification reads as friendlier / chip-stack-like; the squared corners read as denser / more spreadsheet-like. Active-tab pattern also changes (underline → filled background) in both pill variants because underlines look awkward next to round chips.
 
 ---
 

@@ -638,23 +638,140 @@
     box-shadow: 0 4px 16px rgba(0,0,0,.4);
   }
   #notice.show { opacity: 1; transform: translateY(0); }
+
+  /* ──────────────────────────────────────────────────────────────
+     v2.49.194: pillified variants — aesthetic exploration of Mockup B.
+     Two modifier classes on .mock-mini that override the border-radius
+     of every chip / tab / button / row so reviewers can compare the
+     current squared corners against rounder alternatives without
+     duplicating the entire mockup markup. .pillified-soft = 12-14px
+     (subtle), .pillified = 999px (full pill). Tab strip behaviour also
+     changes: active tab swaps from underline-bottom to a filled-pill
+     background, since underlines read poorly when everything else is
+     round. Self-contained — base mockups are untouched.
+     ────────────────────────────────────────────────────────────── */
+  .mock-mini.pillified-soft,
+  .mock-mini.pillified-soft .mock-action-row,
+  .mock-mini.pillified-soft .mock-spell-row,
+  .mock-mini.pillified-soft .mock-skill-row,
+  .mock-mini.pillified-soft .mock-resource-row,
+  .mock-mini.pillified-soft .mock-feat-row,
+  .mock-mini.pillified-soft .mock-status-chip,
+  .mock-mini.pillified-soft .mock-chip,
+  .mock-mini.pillified-soft .mock-chip.charge,
+  .mock-mini.pillified-soft .mock-chip.resist,
+  .mock-mini.pillified-soft .mock-chip.immune,
+  .mock-mini.pillified-soft .mock-chip.cond-immune,
+  .mock-mini.pillified-soft .mock-chip.vuln,
+  .mock-mini.pillified-soft .mock-cast-btn,
+  .mock-mini.pillified-soft .mock-strike-btn,
+  .mock-mini.pillified-soft .mock-roll-btn,
+  .mock-mini.pillified-soft .mock-econ-chip,
+  .mock-mini.pillified-soft .mac-btn,
+  .mock-mini.pillified-soft .mini-sk-btn,
+  .mock-mini.pillified-soft .mini-ab-toggle,
+  .mock-mini.pillified-soft .mini-ab-toggle-btn,
+  .mock-mini.pillified-soft .mock-ability-cell {
+    border-radius: 12px;
+  }
+  .mock-mini.pillified-soft { border-radius: 14px; }
+  .mock-mini.pillified-soft .mock-tabs {
+    border-bottom: none;
+    background: color-mix(in srgb, var(--bg) 35%, var(--bg-2));
+    padding: 4px;
+    border-radius: 14px;
+    margin-bottom: 8px;
+    gap: 4px;
+  }
+  .mock-mini.pillified-soft .mock-tab {
+    padding: 4px 10px;
+    border-radius: 10px;
+  }
+  .mock-mini.pillified-soft .mock-tab.active {
+    background: color-mix(in srgb, var(--accent) 22%, transparent);
+    color: var(--accent);
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+  .mock-mini.pillified-soft .mock-hp-bar,
+  .mock-mini.pillified-soft .mock-hp-fill { border-radius: 999px; }
+
+  .mock-mini.pillified,
+  .mock-mini.pillified .mock-action-row,
+  .mock-mini.pillified .mock-spell-row,
+  .mock-mini.pillified .mock-skill-row,
+  .mock-mini.pillified .mock-resource-row,
+  .mock-mini.pillified .mock-feat-row,
+  .mock-mini.pillified .mock-status-chip,
+  .mock-mini.pillified .mock-chip,
+  .mock-mini.pillified .mock-chip.charge,
+  .mock-mini.pillified .mock-chip.resist,
+  .mock-mini.pillified .mock-chip.immune,
+  .mock-mini.pillified .mock-chip.cond-immune,
+  .mock-mini.pillified .mock-chip.vuln,
+  .mock-mini.pillified .mock-cast-btn,
+  .mock-mini.pillified .mock-strike-btn,
+  .mock-mini.pillified .mock-roll-btn,
+  .mock-mini.pillified .mock-econ-chip,
+  .mock-mini.pillified .mac-btn,
+  .mock-mini.pillified .mini-sk-btn,
+  .mock-mini.pillified .mini-ab-toggle,
+  .mock-mini.pillified .mini-ab-toggle-btn,
+  .mock-mini.pillified .mock-ability-cell {
+    border-radius: 999px;
+  }
+  .mock-mini.pillified { border-radius: 20px; }
+  .mock-mini.pillified .mock-action-row,
+  .mock-mini.pillified .mock-spell-row,
+  .mock-mini.pillified .mock-skill-row,
+  .mock-mini.pillified .mock-resource-row {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .mock-mini.pillified .mock-feat-row {
+    padding-left: 14px;
+    padding-right: 14px;
+    border-radius: 16px;
+  }
+  .mock-mini.pillified .mock-tabs {
+    border-bottom: none;
+    background: color-mix(in srgb, var(--bg) 35%, var(--bg-2));
+    padding: 4px;
+    border-radius: 999px;
+    margin-bottom: 8px;
+    gap: 2px;
+  }
+  .mock-mini.pillified .mock-tab {
+    padding: 4px 14px;
+    border-radius: 999px;
+  }
+  .mock-mini.pillified .mock-tab.active {
+    background: var(--accent);
+    color: white;
+    border-bottom: none;
+    margin-bottom: 0;
+  }
+  .mock-mini.pillified .mock-hp-bar,
+  .mock-mini.pillified .mock-hp-fill { border-radius: 999px; }
 </style>
 </head>
 <body>
 
 <div id="notice"></div>
 
-<h1>Unified mini-sheet — visual mockups <span class="version">v2.49.192</span></h1>
+<h1>Unified mini-sheet — visual mockups <span class="version">v2.49.194</span></h1>
 <p class="lede">
   Visual companion to the
   <a href="/wiki/doc/plan-unified-mini-sheet">Unified mini-sheet design plan</a>.
-  Three mockups rendered side-by-side (NPC left, PC right). Headers
-  are <strong>click-to-collapse</strong> (v2.49.192), tabs are
-  clickable, buttons fire toast feedback, spell-slot pips toggle live.
-  <strong>v2.49.189–.190:</strong> Abilities + Skills merged into a single
+  Three structural mockups rendered side-by-side (NPC left, PC right)
+  + a <a href="#pillified">pillified aesthetic exploration</a> of the
+  recommended Mockup B. Headers are <strong>click-to-collapse</strong>
+  (v2.49.192), tabs are clickable, buttons fire toast feedback,
+  spell-slot pips toggle live.
+  <strong>v2.49.189–.194:</strong> Abilities + Skills merged into a single
   <em>Stats</em> tab; Resources + Feats merged into a single <em>Features</em>
   tab; status chips under the HP bar; resistance + immunity chips at the
-  top of the Stats panel.
+  top of the Stats panel; pillified variants for rounded-corner review.
 </p>
 
 <div class="callout note">
@@ -1116,6 +1233,270 @@
   with v2.49.183. Preserves the compact NPC view users like, locks in the
   chrome-sharing architecture. Doesn't achieve full unification — Mockup B
   is the Phase 2 target.
+</div>
+
+<h2 id="pillified">Pillified — aesthetic exploration of Mockup B <span class="badge">design review only</span></h2>
+<p>
+  Same data, same markup, same chrome as
+  <a href="#mockup-b">Mockup B</a> — only the corner radii change.
+  Two intensity levels are shown so the tradeoff is visible
+  side-by-side: <strong>Soft pills (12&nbsp;px)</strong> are a subtle
+  rounding that keeps the existing dense layout's character; <strong>
+  Full pills (999&nbsp;px)</strong> push every chip + button + tab to
+  the maximum so the mini-sheet reads as a stack of rounded tokens.
+  The active tab swaps from underline-bottom to a filled-pill
+  background in both variants — underline conventions read poorly
+  when everything around them is round. Hit Points bar gets a fully
+  round cap in both variants (it already was at low radius).
+</p>
+
+<div class="callout note">
+  <strong>Aesthetic only.</strong> No structural change versus Mockup B:
+  the tabs, panels, chips, and row markup are byte-identical. The two
+  modifier classes are <code>.pillified-soft</code> and
+  <code>.pillified</code> applied to the <code>.mock-mini</code>
+  wrapper. If the team picks one of these for ship, the same modifier
+  class can be applied to the unified partial wholesale — no per-element
+  CSS changes elsewhere.
+</div>
+
+<h3 style="margin-top:18px;">Variant 1 — Soft pills (12&nbsp;px radius)</h3>
+<p>
+  Subtle rounding. Chips and tabs feel softer but the dense action /
+  spell rows still pack tightly. Closest to the current shipping look
+  while still reading as "rounded."
+</p>
+<div class="mockup-pair">
+  <div class="mockup-column">
+    <h4>NPC — pillified-soft</h4>
+    <div class="mock-mini pillified-soft">
+      <div class="mock-header">
+        <div class="mock-portrait npc">S</div>
+        <div class="mock-name">
+          <div class="mock-name-line">Soren (Cult Acolyte)</div>
+          <div class="mock-name-sub">Medium Humanoid · evil</div>
+        </div>
+        <div class="mock-arrow">▼</div>
+      </div>
+      <div class="mock-body">
+        <div class="mock-stat-row">
+          <span>HP <span class="v">18</span> / 18</span>
+          <span>AC <span class="v">12</span></span>
+          <span>Spd <span class="v">30</span></span>
+        </div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-status-row">
+          <span class="mock-status-chip aura">🌀 Divine Aura</span>
+        </div>
+        <div class="mock-tabs">
+          <span class="mock-tab active" data-target="dsoft-npc-actions">Actions</span>
+          <span class="mock-tab" data-target="dsoft-npc-spells">Spells</span>
+          <span class="mock-tab" data-target="dsoft-npc-stats">Stats</span>
+        </div>
+        <div class="mock-panels">
+          <div class="mock-panel active" id="dsoft-npc-actions">
+            <div class="mock-action-row">
+              <span class="mock-action-name">🗡 Dagger</span>
+              <span class="mock-chip range">5 ft</span>
+              <span class="mock-chip atk">+4</span>
+              <span class="mock-chip dmg">1d4+2 piercing</span>
+              <button class="mock-strike-btn">🗡 Strike</button>
+            </div>
+          </div>
+          <div class="mock-panel" id="dsoft-npc-spells">
+            <div class="mock-spell-row">
+              <span class="mock-spell-name">✨ Inflict Wounds</span>
+              <span class="mock-chip range">Touch</span>
+              <span class="mock-chip atk">+4</span>
+              <span class="mock-chip dmg">3d10 necrotic</span>
+              <span class="mock-chip charge">2/2 ↻</span>
+              <button class="mock-cast-btn">✨ Cast</button>
+            </div>
+            <div class="mock-spell-row">
+              <span class="mock-spell-name">✨ Sacred Flame</span>
+              <span class="mock-chip range">60 feet</span>
+              <span class="mock-chip dmg">1d8 radiant</span>
+              <span class="mock-chip save">DC 13 DEX</span>
+              <button class="mock-cast-btn">✨ Cast</button>
+            </div>
+          </div>
+          <div class="mock-panel" id="dsoft-npc-stats">
+            <div class="mock-resist-row">
+              <span class="label">🛡 Resist</span>
+              <span class="mock-chip resist">necrotic</span>
+            </div>
+            <div class="mock-resist-row">
+              <span class="label">🚫 Cond. Immune</span>
+              <span class="mock-chip cond-immune">charmed</span>
+              <span class="mock-chip cond-immune">frightened</span>
+            </div>
+            <div class="mini-ab-header">
+              <span class="mini-section-label" style="margin:0;flex:1;">Abilities</span>
+              <div class="mini-ab-toggle" data-toggle-group="dsoft-npc-ab">
+                <button type="button" class="mini-ab-toggle-btn active" data-mode="check" data-toggle-group="dsoft-npc-ab">Check</button>
+                <button type="button" class="mini-ab-toggle-btn" data-mode="save" data-toggle-group="dsoft-npc-ab">Save</button>
+              </div>
+            </div>
+            <div class="mini-ab-grid" data-toggle-group="dsoft-npc-ab">
+              <span class="mac-name">STR</span><span class="mac-name">DEX</span><span class="mac-name">CON</span>
+              <span class="mac-name">INT</span><span class="mac-name mac-name-prof" title="Save proficiency">WIS</span><span class="mac-name">CHA</span>
+              <span class="mac-mod mac-mod-lg">+0</span><span class="mac-mod mac-mod-lg">+2</span><span class="mac-mod mac-mod-lg">+0</span>
+              <span class="mac-mod mac-mod-lg">+0</span><span class="mac-mod mac-mod-lg">+2</span><span class="mac-mod mac-mod-lg">+0</span>
+              <button class="mac-btn mini-ab-btn" data-ab="STR" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">STR</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="DEX" data-check-mod="+2" data-save-mod="+2"><span class="mac-btn-ab">DEX</span><span class="mac-btn-mod">+2</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="CON" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">CON</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="INT" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">INT</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="WIS" data-check-mod="+2" data-save-mod="+4" title="Save proficiency"><span class="mac-btn-ab">WIS</span><span class="mac-btn-mod">+2</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="CHA" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">CHA</span><span class="mac-btn-mod">+0</span></button>
+            </div>
+            <span class="mini-section-label">Skills</span>
+            <div class="mini-skills-grid">
+              <button class="mini-sk-btn is-prof" data-skill="Medicine"><span class="mini-sk-dot"></span><span class="mini-sk-name">Medicine</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+4</span></button>
+              <button class="mini-sk-btn" data-skill="Religion"><span class="mini-sk-dot"></span><span class="mini-sk-name">Religion</span><span class="mini-sk-ab">INT</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Perception"><span class="mini-sk-dot"></span><span class="mini-sk-name">Perception</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Insight"><span class="mini-sk-dot"></span><span class="mini-sk-name">Insight</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+2</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="annotation">
+      Tab strip becomes a pill-shaped chip group. Action / spell rows
+      keep their dense layout but with softer corners.
+    </div>
+  </div>
+
+  <div class="mockup-column">
+    <h4>PC — pillified-soft</h4>
+    <div class="mock-mini pillified-soft" data-pc="zara" data-id-prefix="dsoft"></div>
+  </div>
+</div>
+
+<h3 style="margin-top:24px;">Variant 2 — Full pills (999&nbsp;px radius)</h3>
+<p>
+  Every interactive element becomes a true pill. Active tab fills with
+  accent color. The mini-sheet reads as a stack of rounded "tokens"
+  with strong visual hierarchy — chips look more like badges than
+  inline labels. Trade-off: dense lists need more horizontal padding
+  to avoid the text touching the curved edge.
+</p>
+<div class="mockup-pair">
+  <div class="mockup-column">
+    <h4>NPC — pillified</h4>
+    <div class="mock-mini pillified">
+      <div class="mock-header">
+        <div class="mock-portrait npc">S</div>
+        <div class="mock-name">
+          <div class="mock-name-line">Soren (Cult Acolyte)</div>
+          <div class="mock-name-sub">Medium Humanoid · evil</div>
+        </div>
+        <div class="mock-arrow">▼</div>
+      </div>
+      <div class="mock-body">
+        <div class="mock-stat-row">
+          <span>HP <span class="v">18</span> / 18</span>
+          <span>AC <span class="v">12</span></span>
+          <span>Spd <span class="v">30</span></span>
+        </div>
+        <div class="mock-hp-bar"><div class="mock-hp-fill" style="width:100%"></div></div>
+        <div class="mock-status-row">
+          <span class="mock-status-chip aura">🌀 Divine Aura</span>
+        </div>
+        <div class="mock-tabs">
+          <span class="mock-tab active" data-target="dfull-npc-actions">Actions</span>
+          <span class="mock-tab" data-target="dfull-npc-spells">Spells</span>
+          <span class="mock-tab" data-target="dfull-npc-stats">Stats</span>
+        </div>
+        <div class="mock-panels">
+          <div class="mock-panel active" id="dfull-npc-actions">
+            <div class="mock-action-row">
+              <span class="mock-action-name">🗡 Dagger</span>
+              <span class="mock-chip range">5 ft</span>
+              <span class="mock-chip atk">+4</span>
+              <span class="mock-chip dmg">1d4+2 piercing</span>
+              <button class="mock-strike-btn">🗡 Strike</button>
+            </div>
+          </div>
+          <div class="mock-panel" id="dfull-npc-spells">
+            <div class="mock-spell-row">
+              <span class="mock-spell-name">✨ Inflict Wounds</span>
+              <span class="mock-chip range">Touch</span>
+              <span class="mock-chip atk">+4</span>
+              <span class="mock-chip dmg">3d10 necrotic</span>
+              <span class="mock-chip charge">2/2 ↻</span>
+              <button class="mock-cast-btn">✨ Cast</button>
+            </div>
+            <div class="mock-spell-row">
+              <span class="mock-spell-name">✨ Sacred Flame</span>
+              <span class="mock-chip range">60 feet</span>
+              <span class="mock-chip dmg">1d8 radiant</span>
+              <span class="mock-chip save">DC 13 DEX</span>
+              <button class="mock-cast-btn">✨ Cast</button>
+            </div>
+          </div>
+          <div class="mock-panel" id="dfull-npc-stats">
+            <div class="mock-resist-row">
+              <span class="label">🛡 Resist</span>
+              <span class="mock-chip resist">necrotic</span>
+            </div>
+            <div class="mock-resist-row">
+              <span class="label">🚫 Cond. Immune</span>
+              <span class="mock-chip cond-immune">charmed</span>
+              <span class="mock-chip cond-immune">frightened</span>
+            </div>
+            <div class="mini-ab-header">
+              <span class="mini-section-label" style="margin:0;flex:1;">Abilities</span>
+              <div class="mini-ab-toggle" data-toggle-group="dfull-npc-ab">
+                <button type="button" class="mini-ab-toggle-btn active" data-mode="check" data-toggle-group="dfull-npc-ab">Check</button>
+                <button type="button" class="mini-ab-toggle-btn" data-mode="save" data-toggle-group="dfull-npc-ab">Save</button>
+              </div>
+            </div>
+            <div class="mini-ab-grid" data-toggle-group="dfull-npc-ab">
+              <span class="mac-name">STR</span><span class="mac-name">DEX</span><span class="mac-name">CON</span>
+              <span class="mac-name">INT</span><span class="mac-name mac-name-prof" title="Save proficiency">WIS</span><span class="mac-name">CHA</span>
+              <span class="mac-mod mac-mod-lg">+0</span><span class="mac-mod mac-mod-lg">+2</span><span class="mac-mod mac-mod-lg">+0</span>
+              <span class="mac-mod mac-mod-lg">+0</span><span class="mac-mod mac-mod-lg">+2</span><span class="mac-mod mac-mod-lg">+0</span>
+              <button class="mac-btn mini-ab-btn" data-ab="STR" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">STR</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="DEX" data-check-mod="+2" data-save-mod="+2"><span class="mac-btn-ab">DEX</span><span class="mac-btn-mod">+2</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="CON" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">CON</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="INT" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">INT</span><span class="mac-btn-mod">+0</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="WIS" data-check-mod="+2" data-save-mod="+4" title="Save proficiency"><span class="mac-btn-ab">WIS</span><span class="mac-btn-mod">+2</span></button>
+              <button class="mac-btn mini-ab-btn" data-ab="CHA" data-check-mod="+0" data-save-mod="+0"><span class="mac-btn-ab">CHA</span><span class="mac-btn-mod">+0</span></button>
+            </div>
+            <span class="mini-section-label">Skills</span>
+            <div class="mini-skills-grid">
+              <button class="mini-sk-btn is-prof" data-skill="Medicine"><span class="mini-sk-dot"></span><span class="mini-sk-name">Medicine</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+4</span></button>
+              <button class="mini-sk-btn" data-skill="Religion"><span class="mini-sk-dot"></span><span class="mini-sk-name">Religion</span><span class="mini-sk-ab">INT</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Perception"><span class="mini-sk-dot"></span><span class="mini-sk-name">Perception</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+2</span></button>
+              <button class="mini-sk-btn" data-skill="Insight"><span class="mini-sk-dot"></span><span class="mini-sk-name">Insight</span><span class="mini-sk-ab">WIS</span><span class="mini-sk-mod">+2</span></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="annotation">
+      Filled pill on the active tab is the strongest hierarchy cue.
+      Skill buttons read like membership badges. Dense action rows
+      now need extra horizontal padding to keep text away from the
+      curved edge.
+    </div>
+  </div>
+
+  <div class="mockup-column">
+    <h4>PC — pillified</h4>
+    <div class="mock-mini pillified" data-pc="zara" data-id-prefix="dfull"></div>
+  </div>
+</div>
+
+<div class="callout">
+  <strong>Decision criteria.</strong> Pillification is purely an
+  aesthetic choice — no functional change. Pick based on (a) how the
+  mini-sheet reads against the rest of the tabletop UI (which is
+  currently rectangular), (b) whether the team wants the mini-sheet to
+  feel like a "stack of token chips" (full pills) or "a slightly softer
+  card" (soft pills), and (c) whether the active-tab background-fill
+  pattern is acceptable replacement for the current underline (both
+  variants change this — there's no in-between).
 </div>
 
 <h2 id="summary">Summary</h2>
