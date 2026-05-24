@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.221] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Phase 2.5c — delete the legacy `buildMonsterInitSheet` markup body (~440 lines), leaving a tiny orphan-fallback stub.** Closes the third of the three-phase unified mini-sheet swap (2.5a = monster-card-pool, 2.5b = `_hydrateMonsterCard`, 2.5c = legacy renderer removal). The unified `_mini_sheet_card.html` partial via `_hydrateMonsterCard` now drives every NPC mini-sheet in the init tracker; the legacy JS renderer is gone except for a ~30-line stub that handles two edge cases — (a) name-substring template heal for demo-reseed cycling, (b) a placeholder message for true orphans whose template was removed from the campaign.
+**Description:** Two coordinated edits. **(1)** `app/templates/tabletop.html` `buildMonsterInitSheet` — the v2.3.17 ~440-line HTML-building body (PC-style header, HP bar, AC/Spd chips, 6-cell ability grid with Check/Save toggle, action rows with per-action expand panels, Spells tab bucketing, Actions/Spells/Skills tab bar, `monster-${tmpl.id}` data-char-id wiring) is replaced with a slim orphan-fallback stub. The stub preserves the v2.3.39 name-substring heal (localStorage combatants whose `token_template_id` no longer maps to a template — typical after a demo reseed where server-side IDs cycle) and re-attempts hydration after the heal. On success it returns a placeholder telling the GM to close + reopen the row (cheaper than re-running renderBattle mid-iteration); true orphans get a "Template missing" message that defers to the existing `📋 Sheet` link in the row above. **(2)** Inline comment refresh on the staticSheet fallback at line ~5697 to call out the new stub semantics (was "the one-line `Open full sheet` link" pre-2.49.220).
+**Description (cont):** Net delta. Pre-2.49.221 `buildMonsterInitSheet` was 440 lines (5218–5657); post is 50 lines (5218–5267). Net -390 lines in `tabletop.html`. No new endpoints, no schema changes, no broadcast-shape changes — pure JS-renderer removal made safe by Phase 2.5b's hydration helper having fully taken over the rendering path for all non-orphan NPCs.
+**Description (cont 2):** Why a stub instead of deletion. The fallback path is still reachable when `_hydrateMonsterCard` returns false (no pool source for the combatant's `token_template_id`). The two real-world triggers — campaign-level template delete and demo-reseed token_template_id cycling — happen often enough in dev that an empty fallback would mean a blank panel under the init row. The stub is the smallest thing that keeps the demo-reseed heal working AND gives the GM a clear "open the full sheet" pointer for true orphans. CLAUDE.md's "no removed-code shims" rule applies to dead-code markers; this stub is live behavior, not a shim.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.221 live. (b) Wiki + mini-sheet partial + npc_cast_spell harness tests still pass — the existing `test_renderbattle_wires_hydration_helper_for_monsters` already asserts on the `_hydrateMonsterCard` + slotId computation that drives the unified path, and `test_spell_slug_npc_renders_spells_tab` covers the partial's Spells-tab rendering. (c) Manual (after hard-refresh): expand Soren / Vex / Brother Tavik / bandits / Cult Acolyte → unified mini-sheet renders normally (header + HP bar + AC/Spd + ability grid + Actions/Spells/Skills tabs + action_charges chips from v2.49.220). (d) Manual orphan check: nothing trivial to trigger without a reseed; the stub's branches are exercised by the demo-reseed flow when it happens.
+
+### Changed
+- `app/templates/tabletop.html` `buildMonsterInitSheet` — body replaced with a slim orphan-fallback stub (~50 lines vs ~440 lines pre-fix); preserves the v2.3.39 name-substring heal + re-attempts `_hydrateMonsterCard` after heal; emits a placeholder message for true orphans.
+- `app/templates/tabletop.html` staticSheet fallback comment at `renderBattle` line ~5697 — refreshed to describe the new stub behavior.
+
+### Notes
+- **Pure JS-renderer removal.** No server changes, no schema changes, no WS broadcast changes. Plan Phase 2.5c shipped as written in `docs/plans/unified-mini-sheet.md`.
+- **The unified partial is now the only NPC mini-sheet renderer.** Future per-tab content changes only need to touch `_tab_*.html` partials; no parallel `buildMonsterInitSheet` branch to keep in sync.
+- **Orphan path is intentionally minimal.** A test that exercises it would have to either delete a TokenTemplate mid-session or trigger a demo reseed; both are out-of-band events the harness doesn't simulate. The branches are small enough that visual inspection covers them.
+
+---
+
 ## [2.49.220] - 2026-05-24
 
 **Schema version:** 56
