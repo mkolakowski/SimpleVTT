@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.213] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Monster rolls now use the per-spawn combatant nickname ("Soren") instead of the TokenTemplate name ("Cult Acolyte").** User asked for the rolled-by name to be the unique NPC nickname. v2.49.212 surfaced the TokenTemplate name from the mini-sheet's `.mini-header-name` span — fine for templates with one combatant, but if the GM renames "Cult Acolyte #1" to "Soren" via the per-spawn rename flow, the new name should win. v2.49.213 adds a `_getMonsterActorName(btn)` helper that walks up to the closest `.init-entry[data-char-id]`, looks up the matching combatant in `battle.combatants` by id, and returns `combatant.name` (the per-spawn nickname). Falls back to the mini-header name (TokenTemplate name) if the click came from outside the init tracker, then to "Monster" as a final guard. Three call sites updated to use the helper.
+**Description:** Four coordinated edits in `app/templates/tabletop.html`. **(1)** New `_getMonsterActorName(btn)` helper inserted right before the `.mini-roll-btn` / `.mini-sk-btn` click handler at line ~3450. Exposed as `window._getMonsterActorName` for potential cross-file use. **(2)** `.mini-roll-btn` / `.mini-sk-btn` handler's `body.actor_name` assignment swapped from the inline `.mini-header-name` lookup to `_getMonsterActorName(btn)`. **(3)** `.mini-cast-btn` monster branch's `monsterName` (line ~3573) swapped to use the helper — the variable is referenced in roll notes ("Soren casts Sacred Flame — damage") AND in the per-roll `actor_name` body field, so both the displayed roller name AND the embedded note now use the nickname. **(4)** `.monster-strike-btn` legacy strike handler's `monsterName` (line ~4472) — same swap. **(5)** The `_findCombatant` lookup at line ~4596 (used by `_markCombatantEconomy`) also swapped — using the per-spawn nickname disambiguates multi-combatant cases where multiple combatants share a TokenTemplate (3 bandits would otherwise all match the same template-name lookup).
+**Description (cont):** Why walking to .init-entry works. `renderBattle()` stamps `data-char-id="${slotId}"` on every init-entry (line ~5965), and v2.5b made slotId = `combatant.id` for monsters with a per-combatant id (the per-row `tok_..._{ts}` unique string). The init-entry is the canonical anchor for "which combatant am I rendering"; the combatant object in `battle.combatants` has the per-spawn nickname in `.name`. So the helper's `entry → combatant.id → battle.combatants.find → combatant.name` chain reliably surfaces the GM's rename. If the GM never renamed the spawn, `combatant.name` defaults to the TokenTemplate name at spawn time anyway, so the result matches the v2.49.212 behavior for un-renamed monsters.
+**Description (cont 2):** Why fall back to .mini-header-name. The click could fire from a mini-sheet rendered OUTSIDE the init tracker — pre-hydration when the partial is sitting in the pool but not yet hoisted, or from the Characters drawer (PC-only path that this branch never hits but defensively guards against). In those cases the init-entry lookup misses; falling back to the mini-sheet's header name gets the TokenTemplate name, which is at least the right monster (just not the per-spawn nickname). Final "Monster" fallback is for the edge case where neither lookup succeeds — unlikely but cheap to guard.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.213 live. (b) Wiki + mini-sheet partial harness tests still pass. (c) Manual (after hard-refresh): expand Soren (the demo's Cult Acolyte with a per-spawn rename) → click WIS → roll log entry shows "Soren" as the rolled-by name, not "Cult Acolyte" or the GM. Cast Sacred Flame → damage + save rolls both show "Soren". If a multi-combatant case exists (3 bandits sharing one template, each named uniquely), each bandit's rolls would surface its own nickname. PC rolls unchanged — actor_name is still gated on `no_char_attribution` server-side.
+
+### Added
+- `app/templates/tabletop.html` `_getMonsterActorName(btn)` helper + `window._getMonsterActorName` export — resolves per-spawn combatant nickname from a clicked monster mini-sheet button.
+
+### Changed
+- `app/templates/tabletop.html` `.mini-roll-btn` / `.mini-sk-btn` + `.mini-cast-btn` (monster branch) + `.monster-strike-btn` + `_findCombatant` lookup — all four sites now use `_getMonsterActorName(btn)` instead of the inline `.mini-header-name` lookup. Returns the per-spawn nickname; falls back to the template name then 'Monster'.
+
+### Notes
+- **Per-spawn nicknames work end-to-end.** "Soren" not "Cult Acolyte".
+- **Multi-combatant case disambiguated.** Each of 3 bandits with unique nicknames rolls under its own name; `_findCombatant`'s name lookup also benefits.
+- **PC behavior unchanged.** actor_name is still server-gated on `no_char_attribution`.
+
+---
+
 ## [2.49.212] - 2026-05-24
 
 **Schema version:** 56

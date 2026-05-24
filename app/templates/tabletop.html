@@ -3433,6 +3433,29 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             hdr.addEventListener('pointerup', _hdrActivate);
         });
 
+        /* v2.49.213: resolve the per-spawn combatant nickname (e.g.
+         * "Soren") for a clicked monster mini-sheet button. The hydrated
+         * partial's .mini-header-name shows the TokenTemplate name
+         * ("Cult Acolyte"); the per-spawn nickname lives on
+         * battle.combatants[i].name keyed by combatant.id, which IS the
+         * data-char-id on the surrounding .init-entry (set by renderBattle
+         * via slotId — see tabletop.html:5965). Walk up to the init-entry,
+         * use its data-char-id to look up the combatant, return its name.
+         * Falls back to the .mini-header-name (TokenTemplate name) if the
+         * click came from outside the init tracker, then to 'Monster'. */
+        function _getMonsterActorName(btn) {
+            if (!btn) return 'Monster';
+            const entry = btn.closest('.init-entry[data-char-id]');
+            if (entry && window.battle && Array.isArray(window.battle.combatants)) {
+                const cid = entry.dataset.charId;
+                const comb = window.battle.combatants.find(c => String(c.id) === String(cid));
+                if (comb && comb.name) return String(comb.name).trim();
+            }
+            const headerName = btn.closest('.mini-sheet')?.querySelector('.mini-header-name')?.textContent?.trim();
+            return headerName || 'Monster';
+        }
+        window._getMonsterActorName = _getMonsterActorName;
+
         /* Mini-sheet roll buttons (abilities) and skill buttons — post directly to the roll API.
            v2.2.2: include the rolled character's id in the payload so the
            server applies *that* character's roll_state, not the rolling
@@ -3480,15 +3503,12 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 if (!isMonster && Number.isFinite(charId) && charId > 0) body.character_id = charId;
                 if (isMonster || charIdRaw.startsWith('monster-')) {
                     body.skip_roll_state = true;
-                    // v2.49.212: pass the monster's display name so the roll-log
-                    // attribution surfaces it instead of the GM's user name.
-                    // Sourced from the .mini-header-name span inside the mini-sheet
-                    // the clicked button lives in (which is the TokenTemplate name
-                    // for hydrated cards — "Cult Acolyte" — not the combatant
-                    // nickname "Soren"; the per-spawn nickname is on the init-entry
-                    // header, separate from the mini-sheet header).
-                    const _actorName = btn.closest('.mini-sheet')?.querySelector('.mini-header-name')?.textContent?.trim();
-                    if (_actorName) body.actor_name = _actorName;
+                    // v2.49.213: prefer the per-spawn combatant nickname
+                    // ("Soren") over the TokenTemplate name ("Cult Acolyte")
+                    // via _getMonsterActorName. Falls back to the mini-header
+                    // name when the click came from outside the init tracker.
+                    const _actorName = _getMonsterActorName(btn);
+                    if (_actorName && _actorName !== 'Monster') body.actor_name = _actorName;
                 }
                 const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
                     method: 'POST',
@@ -3550,7 +3570,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     const attackRoll = btn.dataset.spellAttackRoll === '1';
                     const attackBonus = (btn.dataset.spellAttackBonus || '').trim();
                     const healing = (btn.dataset.spellHealing || '').trim();
-                    const monsterName = btn.closest('.mini-sheet')?.querySelector('.mini-header-name')?.textContent?.trim() || 'Monster';
+                    // v2.49.213: per-spawn combatant nickname ("Soren") via
+                    // _getMonsterActorName (falls back to mini-header-name then
+                    // 'Monster' if not in the init tracker).
+                    const monsterName = _getMonsterActorName(btn);
                     const rolls = [];
                     if (attackRoll) {
                         const bonusExpr = attackBonus
@@ -4449,7 +4472,10 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     const damageType = (btn.dataset.attackDamageType || '').trim();
                     const saveAbility = (btn.dataset.attackSaveAbility || '').trim().toUpperCase();
                     const saveDc = parseInt(btn.dataset.attackSaveDc || '0', 10) || 0;
-                    const monsterName = btn.closest('.mini-sheet')?.querySelector('.mini-header-name')?.textContent?.trim() || 'Monster';
+                    // v2.49.213: per-spawn combatant nickname ("Soren") via
+                    // _getMonsterActorName (falls back to mini-header-name then
+                    // 'Monster' if not in the init tracker).
+                    const monsterName = _getMonsterActorName(btn);
                     /* Three POSTs in sequence: attack, damage, and save-
                      * announcement. Each lands in the campaign roll log as
                      * its own entry so the GM and players can see the chain.
@@ -4567,9 +4593,11 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 // Act amber, doesn't ping pushBattle.
                 if (typeof window._markCombatantEconomy === 'function'
                         && typeof window._findCombatant === 'function') {
-                    const monsterName = isMonster
-                        ? (btn.closest('.mini-sheet')?.querySelector('.mini-header-name')?.textContent?.trim() || '')
-                        : '';
+                    // v2.49.213: per-spawn nickname for the _findCombatant
+                    // lookup (matches by name); nickname is unique per spawn,
+                    // so this disambiguates multi-combatant cases where the
+                    // TokenTemplate name would match multiple combatants.
+                    const monsterName = isMonster ? _getMonsterActorName(btn) : '';
                     const combatant = window._findCombatant({
                         charId: isMonster ? null : rawCharId,
                         name: isMonster ? monsterName : null,
