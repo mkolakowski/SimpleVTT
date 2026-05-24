@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.192] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Mockups: click-to-collapse headers on all 8 mini-sheet examples.** User: "can you please make all the examples expand and collapse?" The live mini-sheet's header is a click target that toggles the body show/hide (with ▶/▼ arrow indicating state). The mockup didn't replicate that — every body was always visible, no interaction available. This commit adds the toggle so the mockup matches live behavior: click any `.mock-header` → toggles `.mini-collapsed` on the parent `.mock-mini`, hides the body, flips the ▼ arrow to ▶ with a CSS rotate.
+**Description:** Two coordinated edits in `docs/wiki/unified-mini-sheet-mockups.html`. **(1)** CSS — added `cursor: pointer` + `user-select: none` + hover background tint to `.mock-header` so the click target reads as interactive; added `.mock-mini.mini-collapsed .mock-body { display: none }` rule; added `.mock-arrow { transition: transform 160ms ease }` + `.mock-mini.mini-collapsed .mock-arrow { transform: rotate(-90deg) }` so the arrow rotates from ▼ to ▶ smoothly. Also removes the header's bottom border when collapsed for a clean pill shape. **(2)** New JS delegated click handler (~10 lines) at the top of the existing `<script>` block: catches clicks on `.mock-header`, ignores child buttons / inputs / anchors (future-proof for header-side editable affordances), toggles `.mini-collapsed` on the parent `.mock-mini`, updates the arrow's text content to `▶` or `▼` to match the rotation state (belt-and-suspenders since the CSS rotate also works visually).
+**Description (cont):** Why both text-content and CSS rotate. CSS rotate is the smooth visual transition; toggling the text content keeps the markup honest if someone copy-pastes the snapshot HTML out for documentation. Either alone would work — but consistency matters because the live mini-sheet uses text toggle (no rotate), and a future Phase 1 extraction can adopt whichever convention.
+**Description (cont 2):** Initial state — all 8 mini-sheets render expanded (no `.mini-collapsed` class on first paint), matching the live mini-sheet's default behavior. Persistence intentionally NOT mocked — the live partial uses `vtt_minisheet_open_<char_id>` localStorage; the mockup keeps state session-only. A reviewer who wants to see collapsed-state appearance just clicks any header.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.192 live. (b) Manual: `GET /wiki/unified-mini-sheet-mockups` → click any of the 8 mini-sheet headers → body hides, arrow flips ▼→▶ with smooth rotate. Click again → body returns, arrow flips back. (c) Clicking the portrait, name, or sub line inside the header still triggers the toggle (they're not interactive children); future button/input additions to the header would be ignored by the guard. (d) Tab + spell + ability + status chip clicks still work after collapse + expand. (e) 19 wiki tests pass.
+
+### Added
+- `docs/wiki/unified-mini-sheet-mockups.html` CSS — `.mock-mini.mini-collapsed` rule hiding the body + arrow rotate transition; header cursor + hover state.
+- `docs/wiki/unified-mini-sheet-mockups.html` JS — delegated `.mock-header` click handler that toggles `.mini-collapsed` and updates the arrow text.
+
+### Notes
+- **All 8 examples** (4 PC + 4 NPC across Current state / Mockup A / Mockup B / Mockup C) gain expand/collapse via the shared CSS + delegated handler — no per-mockup edits required.
+- **State session-only.** The live mini-sheet persists open/closed via `vtt_minisheet_open_<char_id>` localStorage; the mockup intentionally keeps it ephemeral so reviewers see fresh expanded sheets on reload.
+- **No server / harness change.**
+
+---
+
 ## [2.49.191] - 2026-05-23
 
 **Schema version:** 56

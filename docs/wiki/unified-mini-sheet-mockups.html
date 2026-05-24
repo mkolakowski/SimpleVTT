@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>SimpleVTT — Unified mini-sheet mockups (v2.49.191)</title>
+<title>SimpleVTT — Unified mini-sheet mockups (v2.49.192)</title>
 <style>
   :root {
     --bg:        #15171c;
@@ -127,6 +127,27 @@
     padding: 8px 10px;
     background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 12%, var(--bg-2)) 0%, var(--bg-2) 100%);
     border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+    transition: background 120ms ease;
+  }
+  .mock-header:hover {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 18%, var(--bg-2)) 0%, var(--bg-2) 100%);
+  }
+  /* v2.49.192: collapse-on-click header. .mini-collapsed on the
+     .mock-mini hides the body + flips the arrow. Initial state =
+     expanded (matches the live mini-sheet's default). */
+  .mock-mini.mini-collapsed .mock-body {
+    display: none;
+  }
+  .mock-mini.mini-collapsed .mock-header {
+    border-bottom: none;
+  }
+  .mock-arrow {
+    transition: transform 160ms ease;
+  }
+  .mock-mini.mini-collapsed .mock-arrow {
+    transform: rotate(-90deg);
   }
   .mock-portrait {
     width: 36px;
@@ -623,11 +644,12 @@
 
 <div id="notice"></div>
 
-<h1>Unified mini-sheet — visual mockups <span class="version">v2.49.191</span></h1>
+<h1>Unified mini-sheet — visual mockups <span class="version">v2.49.192</span></h1>
 <p class="lede">
   Visual companion to the
   <a href="/wiki/doc/plan-unified-mini-sheet">Unified mini-sheet design plan</a>.
-  Three mockups rendered side-by-side (NPC left, PC right). Tabs are
+  Three mockups rendered side-by-side (NPC left, PC right). Headers
+  are <strong>click-to-collapse</strong> (v2.49.192), tabs are
   clickable, buttons fire toast feedback, spell-slot pips toggle live.
   <strong>v2.49.189–.190:</strong> Abilities + Skills merged into a single
   <em>Stats</em> tab; Resources + Feats merged into a single <em>Features</em>
@@ -1383,6 +1405,23 @@
   document.querySelectorAll('.mock-mini[data-pc="zara"]').forEach((el, idx) => {
     const prefix = el.dataset.idPrefix || ('z' + idx);
     el.innerHTML = zaraTemplate(prefix);
+  });
+
+  // v2.49.192: header click → toggle .mini-collapsed on the parent
+  // .mock-mini, hiding the body + flipping the ▼ arrow. Matches the
+  // live mini-sheet's expand/collapse behavior (the real partial uses
+  // localStorage to persist; the mockup keeps it session-only).
+  document.body.addEventListener('click', (ev) => {
+    const header = ev.target.closest('.mock-header');
+    if (!header) return;
+    // Ignore clicks on buttons / inputs inside the header (future-proof
+    // for editable name / portrait upload affordances).
+    if (ev.target.closest('button, input, a')) return;
+    const mini = header.closest('.mock-mini');
+    if (!mini) return;
+    mini.classList.toggle('mini-collapsed');
+    const arrow = header.querySelector('.mock-arrow');
+    if (arrow) arrow.textContent = mini.classList.contains('mini-collapsed') ? '▶' : '▼';
   });
 
   document.body.addEventListener('click', (ev) => {
