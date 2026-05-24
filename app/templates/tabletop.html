@@ -5680,55 +5680,56 @@ let CONC_DATA = {{ conc_by_char | tojson }};
     function _hydrateMonsterCard(combatant, slotKey) {
         if (!combatant || !combatant.token_template_id) return false;
         if (!slotKey) return false;
-        if (document.getElementById('char-detail-' + slotKey)) return true;
-        const sourceId = 'char-detail-monster-template-' + combatant.token_template_id;
-        const source = document.getElementById(sourceId);
-        if (!source) return false;
-        const clone = source.cloneNode(true);
-        const oldKey = 'monster-template-' + combatant.token_template_id;
-        clone.id = 'char-detail-' + slotKey;
-        if (clone.dataset && clone.dataset.charId === oldKey) clone.dataset.charId = slotKey;
-        clone.querySelectorAll('[data-char-id="' + oldKey + '"]').forEach(el => {
-            el.setAttribute('data-char-id', slotKey);
-        });
-        // v2.49.204: explicit monster marker so the .mini-roll-btn /
-        // .mini-sk-btn click handler at tabletop.html:~3450 can detect
-        // a monster context and skip PC-style character_id attribution.
-        // The legacy code path (pre-v2.5b) relied on the data-char-id
-        // string starting with "monster-{tid}" to trigger the same
-        // behavior; my hydrated cards key data-char-id to the per-
-        // combatant `slotKey` (`tok_..._{ts}`), which doesn't match
-        // the legacy prefix check. Without this marker, parseInt
-        // returns NaN (good — no character_id sent) BUT the server
-        // then attributes the roll to the user's default character,
-        // which surfaces as "Brother Tavik Stonebrow" rolled the
-        // monster's WIS check in the roll log. The marker tells the
-        // handler to also set skip_roll_state=true so the server's
-        // roll_state lookup gets short-circuited.
-        clone.setAttribute('data-is-monster', '1');
-        // HP patch: the template card carries the TokenTemplate's default
-        // HP; the combatant carries its actual current HP. Patch both the
-        // data attrs (read by the HP stepper + WS hp_update handlers) and
-        // the displayed text spans.
+        let card = document.getElementById('char-detail-' + slotKey);
+        if (!card) {
+            const sourceId = 'char-detail-monster-template-' + combatant.token_template_id;
+            const source = document.getElementById(sourceId);
+            if (!source) return false;
+            card = source.cloneNode(true);
+            const oldKey = 'monster-template-' + combatant.token_template_id;
+            card.id = 'char-detail-' + slotKey;
+            if (card.dataset && card.dataset.charId === oldKey) card.dataset.charId = slotKey;
+            card.querySelectorAll('[data-char-id="' + oldKey + '"]').forEach(el => {
+                el.setAttribute('data-char-id', slotKey);
+            });
+            // v2.49.204: explicit monster marker so the .mini-roll-btn /
+            // .mini-sk-btn / .mini-cast-btn click handlers detect monster
+            // context and skip PC-style character_id attribution. Without
+            // it, parseInt(slotKey, 10) returns NaN, the handler omits
+            // character_id, and the server falls back to the rolling
+            // user's default character — surfacing as the wrong PC name
+            // in the roll log.
+            card.setAttribute('data-is-monster', '1');
+            // Append into the pool wrapper so the hydrated card lives next
+            // to the source. The pool is display:none, but the hoist
+            // mechanism (at line ~6010 below) physically MOVES the
+            // .mini-body out into the visible init-card-sheet slot when
+            // the user expands, so the pool's display:none doesn't hide
+            // the eventual user-facing content. Same hoist pattern PC
+            // #char-detail-{char_id} blocks use.
+            source.parentNode.appendChild(card);
+        }
+        // HP patch — v2.49.205: runs on EVERY hydration call, not just
+        // the initial clone. Without this, a fireball that damages Soren
+        // mutates battle.combatants[i].hp_current and renderBattle re-
+        // runs, but the cloned card's displayed HP keeps showing the
+        // template default (or the pre-damage value) forever — the WS
+        // hp_update broadcast for NPCs comes through battle_update which
+        // doesn't reach the partial-rendered HP spans. Re-patching here
+        // on every renderBattle pass keeps the displayed HP in sync with
+        // the authoritative combatant state.
         const hpCur = parseInt(combatant.hp_current);
         const hpMax = parseInt(combatant.hp_max);
         if (Number.isFinite(hpCur)) {
-            clone.querySelectorAll('[data-hp-cur]').forEach(el => el.setAttribute('data-hp-cur', String(hpCur)));
-            const curEl = clone.querySelector('.mini-hp-cur');
+            card.querySelectorAll('[data-hp-cur]').forEach(el => el.setAttribute('data-hp-cur', String(hpCur)));
+            const curEl = card.querySelector('.mini-hp-cur');
             if (curEl) curEl.textContent = String(hpCur);
         }
         if (Number.isFinite(hpMax)) {
-            clone.querySelectorAll('[data-hp-max]').forEach(el => el.setAttribute('data-hp-max', String(hpMax)));
-            const maxEl = clone.querySelector('.mini-hp-max');
+            card.querySelectorAll('[data-hp-max]').forEach(el => el.setAttribute('data-hp-max', String(hpMax)));
+            const maxEl = card.querySelector('.mini-hp-max');
             if (maxEl) maxEl.textContent = '/ ' + hpMax;
         }
-        // Append into the pool wrapper so the hydrated card lives next to
-        // the source. The pool is display:none, but the hoist mechanism
-        // (at line ~6010 below) physically MOVES the .mini-body out into
-        // the visible init-card-sheet slot when the user expands, so the
-        // pool's display:none doesn't hide the eventual user-facing
-        // content. Same hoist pattern PC #char-detail-{char_id} blocks use.
-        source.parentNode.appendChild(clone);
         return true;
     }
 

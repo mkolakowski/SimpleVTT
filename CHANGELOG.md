@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.205] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix: hydrated NPC mini-sheet HP now updates on damage / heal.** User-reported v2.49.203 regression: Fireball damage to Soren produced no visible HP change on his mini-sheet. Root cause: `_hydrateMonsterCard` short-circuits with an idempotent early-return if `#char-detail-{slotKey}` already exists, so HP patching only ran ONCE on first hydration. Subsequent `battle_update` broadcasts (the NPC HP path) mutate `battle.combatants[i].hp_current` + trigger renderBattle, but the cloned card's `.mini-hp-cur` / `.mini-hp-max` spans + the `[data-hp-cur/max]` attrs keep showing the original template-default value. PCs use a different path (`character_hp_update` broadcast → `_onCharacterHpUpdate`) that explicitly patches `.mini-hp-cur`; NPCs have no equivalent handler. Fix: restructure `_hydrateMonsterCard` so the clone-and-rewrite step runs once (idempotent), but the HP patch step runs on EVERY call. RenderBattle's per-combatant iteration calls the helper each time, so the patch happens on every battle_update.
+**Description:** One restructure in `app/templates/tabletop.html` `_hydrateMonsterCard`. Split the function into two logical phases: (1) the clone+rewrite phase (lookup source, cloneNode, rewrite ids + data-char-ids, set data-is-monster marker, append to pool) runs only when `#char-detail-{slotKey}` doesn't exist yet; (2) the HP patch phase (data attrs + .mini-hp-cur / .mini-hp-max text spans) runs unconditionally after, on every call. The HP-patch separation is what makes battle_update propagate damage to the visible mini-sheet: renderBattle calls _hydrateMonsterCard once per monster combatant per render pass; the new structure patches HP every pass while still being idempotent on the structural clone work.
+**Description (cont):** Why this isn't a renderBattle-step-ordering issue. RenderBattle does step ① "return any open mini-bodies to their home `#char-detail-{slotKey}`" BEFORE the combatant render loop runs. So when my hydration's HP patch executes inside the loop, the mini-body is back in its home card — `card.querySelector('.mini-hp-cur')` finds the right span. Step ③ at line 6008+ then re-moves the (patched) body back into the open init-card-sheet slot if the entry was expanded before the rerender. The order is: ① body returns home → ② openIdxs captured → loop renders + hydration patches HP on the home body → list.innerHTML applied → ③ body re-moved into slot. The hydration patch reaches the body while it's home; the re-move carries the updated values into the visible slot.
+**Description (cont 2):** Why not also wire a `combatant_hp_update` WS handler. That would be the more direct fix (PCs have one, NPCs don't) but it adds new WS plumbing for a problem the hydration-patch approach solves without server changes. The hydration patch piggybacks on the existing battle_update broadcast (which already triggers renderBattle); no new broadcast type needed. If a future feature wants per-combatant HP push without a full renderBattle (e.g., to avoid the cost on a 30-combatant fight), the WS handler can be added then.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.205 live. (b) Wiki + mini-sheet partial harness tests still pass (29/29). (c) Manual: cast Fireball at Soren → roll log shows the damage application → Soren's mini-sheet HP (in the expanded init-card or the hidden pool source) updates immediately. Open Soren's expanded init-card-sheet → the visible HP matches the new value.
+
+### Changed
+- `app/templates/tabletop.html` `_hydrateMonsterCard` — restructured: clone-and-rewrite phase is idempotent (early-return if card exists); HP patch phase runs unconditionally on every call.
+
+### Notes
+- **HP patch is the leverage.** The clone is structural (do once); HP is state (do every call). Splitting them is what propagates `battle_update` damage to the visible mini-sheet.
+- **Bug 3 (Spells tab missing on NPC) still open.** Filed as v2.49.206.
+- **No new WS handler.** The fix piggybacks on the existing battle_update → renderBattle flow.
+
+---
+
 ## [2.49.204] - 2026-05-23
 
 **Schema version:** 56
