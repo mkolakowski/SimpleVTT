@@ -1,0 +1,61 @@
+{#
+  Skills tab — 18-skill grid with proficiency / expertise dots and
+  per-row roll buttons (1d20 + ability mod + prof scaled by training).
+
+  Extracted from _mini_sheet_card.html in v2.49.196 as Phase 2.3 of the
+  unified-mini-sheet plan (Mockup B / Symmetric). The PC partial now
+  includes this via {% include %}; future commits will also include it
+  from the NPC rendering path so both sources emit identical skill-row
+  markup.
+
+  Always renders — every character has a Skills tab, even non-casters
+  and zero-prof rookies. No outer gate; the partial unconditionally
+  emits the full 18-skill grid (rows without prof/expertise render with
+  a dim dot and the raw ability mod).
+
+  Scope contract — Jinja includes inherit the caller's local scope:
+    - c          → character-like (has id, name).
+    - ab_map     → ability score dict {"STR": 12, "DEX": 14, …}; missing
+                   abilities default to 10.
+    - skill_map  → skill proficiency dict {"Stealth": {"proficient": true,
+                   "expertise": false}, …}; missing skills default to {}.
+    - prof       → proficiency bonus int.
+
+  Behavioural contract (preserved verbatim from the inline block):
+    - Bonus calc: ability mod + (prof × 2 if expertise, prof × 1 if
+      proficient, 0 otherwise).
+    - Roll-button data-expr fires through the same .mini-roll-btn
+      handler as the ability buttons in the Stats tab.
+    - Sign-formatted bonus ("+3" / "-1" / "+0") in the displayed mod
+      AND in the rolled expression.
+#}
+<div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="skills">
+    {% set SKILLS_LIST = [
+        ('Acrobatics','DEX'),('Animal Handling','WIS'),('Arcana','INT'),
+        ('Athletics','STR'),('Deception','CHA'),('History','INT'),
+        ('Insight','WIS'),('Intimidation','CHA'),('Investigation','INT'),
+        ('Medicine','WIS'),('Nature','INT'),('Perception','WIS'),
+        ('Performance','CHA'),('Persuasion','CHA'),('Religion','INT'),
+        ('Sleight of Hand','DEX'),('Stealth','DEX'),('Survival','WIS')
+    ] %}
+    <div class="mini-skills-grid">
+    {% for sname, sab in SKILLS_LIST %}
+    {% set s_score = (ab_map.get(sab) or 10) | int %}
+    {% set s_mod = ((s_score - 10) // 2) %}
+    {% set sk = skill_map.get(sname) or {} %}
+    {% set is_sk_prof = sk.get('proficient', false) %}
+    {% set is_sk_exp = sk.get('expertise', false) %}
+    {% set sk_bonus = s_mod + (prof * 2 if is_sk_exp else prof if is_sk_prof else 0) %}
+    {% set sk_str = (('+' if sk_bonus >= 0 else '') ~ (sk_bonus | string)) %}
+    <button class="mini-sk-btn{{ ' is-exp' if is_sk_exp else ' is-prof' if is_sk_prof else '' }}"
+            data-expr="1d20{{ sk_str }}"
+            data-note="{{ c.name }}: {{ sname }}{{ ' (expertise)' if is_sk_exp else ' (prof)' if is_sk_prof else '' }}"
+            title="{{ 'Expertise' if is_sk_exp else 'Proficient' if is_sk_prof else '' }}">
+        <span class="mini-sk-dot"></span>
+        <span class="mini-sk-name">{{ sname }}</span>
+        <span class="mini-sk-ab">{{ sab }}</span>
+        <span class="mini-sk-mod">{{ sk_str }}</span>
+    </button>
+    {% endfor %}
+    </div>
+</div>

@@ -190,37 +190,10 @@
                     <button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="skills">Skills</button>
                 </div>
                 <div class="mini-tab-content" data-char-id="{{ c.id }}">
-                    {# ── Skills panel ── #}
-                    <div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="skills">
-                        {% set SKILLS_LIST = [
-                            ('Acrobatics','DEX'),('Animal Handling','WIS'),('Arcana','INT'),
-                            ('Athletics','STR'),('Deception','CHA'),('History','INT'),
-                            ('Insight','WIS'),('Intimidation','CHA'),('Investigation','INT'),
-                            ('Medicine','WIS'),('Nature','INT'),('Perception','WIS'),
-                            ('Performance','CHA'),('Persuasion','CHA'),('Religion','INT'),
-                            ('Sleight of Hand','DEX'),('Stealth','DEX'),('Survival','WIS')
-                        ] %}
-                        <div class="mini-skills-grid">
-                        {% for sname, sab in SKILLS_LIST %}
-                        {% set s_score = (ab_map.get(sab) or 10) | int %}
-                        {% set s_mod = ((s_score - 10) // 2) %}
-                        {% set sk = skill_map.get(sname) or {} %}
-                        {% set is_sk_prof = sk.get('proficient', false) %}
-                        {% set is_sk_exp = sk.get('expertise', false) %}
-                        {% set sk_bonus = s_mod + (prof * 2 if is_sk_exp else prof if is_sk_prof else 0) %}
-                        {% set sk_str = (('+' if sk_bonus >= 0 else '') ~ (sk_bonus | string)) %}
-                        <button class="mini-sk-btn{{ ' is-exp' if is_sk_exp else ' is-prof' if is_sk_prof else '' }}"
-                                data-expr="1d20{{ sk_str }}"
-                                data-note="{{ c.name }}: {{ sname }}{{ ' (expertise)' if is_sk_exp else ' (prof)' if is_sk_prof else '' }}"
-                                title="{{ 'Expertise' if is_sk_exp else 'Proficient' if is_sk_prof else '' }}">
-                            <span class="mini-sk-dot"></span>
-                            <span class="mini-sk-name">{{ sname }}</span>
-                            <span class="mini-sk-ab">{{ sab }}</span>
-                            <span class="mini-sk-mod">{{ sk_str }}</span>
-                        </button>
-                        {% endfor %}
-                        </div>
-                    </div>
+                    {# ── Skills panel — v2.49.196 Phase 2.3: extracted to
+                         _tab_skills.html. Reads c + ab_map + skill_map + prof
+                         from current scope. Always renders (no _is_caster gate). #}
+                    {% include "_tab_skills.html" %}
                     {# ── Actions panel — v2.49.193 Phase 2.1: extracted to
                          _tab_actions.html so the same markup can also drive the
                          NPC mini-sheet body once Phase 2.5 swaps buildMonsterInitSheet's

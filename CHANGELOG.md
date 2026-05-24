@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.196] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **B Phase 2.3 — extract `_tab_skills.html` from `_mini_sheet_card.html`.** Third and final per-tab partial extraction in the unified-mini-sheet plan's Phase 2 (Mockup B / Symmetric). The Skills tab panel — 18-skill grid with proficiency / expertise dots and per-row roll buttons — moves from the inline PC partial into a dedicated `_tab_skills.html` include. The PC partial replaces the inline block with a single `{% include "_tab_skills.html" %}`. Pure refactor: no PC behaviour change, no schema change, no new endpoints. **Per-tab partial count: 3 of 3 done.** Phase 2 now has all three per-tab partials in place; next steps are 2.4 (server-driven `tabs=[...]`) + 2.5 (NPC body swap) + 2.6 (harness snapshot test).
+**Description:** Two coordinated edits. **(1)** New file `app/templates/_tab_skills.html` — 60 lines (most of which is the docstring header). The 18-tuple `SKILLS_LIST` constant moved inside the partial (the parent didn't reference it elsewhere). Bonus calculation preserved verbatim: `ability mod + (prof × 2 if expertise else prof if proficient else 0)`. Sign-formatted "+3" / "-1" / "+0" rendering preserved for both displayed mod and rolled expression. Roll-button `data-expr` + `data-note` + `title` attrs unchanged. The `.mini-sk-btn{.is-exp,.is-prof}` class composition preserved (gates the dot color + border treatment in `tabletop.html` CSS). **(2)** `app/templates/_mini_sheet_card.html` — lines 193-223 (31-line Skills panel) collapsed to a 4-line include block with a comment explaining the extraction's purpose. Net delta: -27 lines from the PC partial, +60 lines in the new partial (the +33 difference is the docstring header — pure documentation, no runtime cost).
+**Description (cont):** Why this is the simplest of the three extractions. No `_is_caster` gate (every character — even rookies with zero prof — gets a Skills tab; the dim-dot rows just show the raw ability mod). No multiclass loop (skills are character-level, not class-level). No prepared-spell filtering. Single `{% for %}` over the 18-tuple constant. The Spells extraction in v2.49.195 took two-dozen scope variables to migrate; this one needs four (`c`, `ab_map`, `skill_map`, `prof`).
+**Description (cont 2):** Verification. (a) Curl `/version` confirms v2.49.196 live. (b) Wiki harness tests pass (19/19). (c) Manual: `GET /campaign/.../battle` → PC Skills tab renders identically to v2.49.195 across the demo roster — Stealth (Tariq DEX +2 prof), Persuasion (Zara CHA +7 prof), Athletics (Mira STR +4 expertise via Rogue subclass), unrated rows still show ability mod with dim dot. Click handlers (`.mini-sk-btn`) still fire the roll-log entry via the shared `.mini-roll-btn` dispatcher. (d) Plan doc Phase 2.3 marked ✅ done with v2.49.196 pointer.
+**Description (cont 3):** Per-tab partial summary at end of Phase 2.3:
+- ✅ `_tab_actions.html` (v2.49.193) — attack rows + 🗡 Strike + detail panels.
+- ✅ `_tab_spells.html`  (v2.49.195) — multiclass spell rows + slot pips + ✨ Cast + detail panels.
+- ✅ `_tab_skills.html`  (v2.49.196) — 18-skill grid + prof/expertise dots + roll buttons.
+- ⏳ `_tab_features.html` — also remains inline in the PC partial; not in the original Phase 2 plan but the same pattern applies. Could extract as a Phase 2.3b commit if desired before moving to 2.4.
+
+### Added
+- `app/templates/_tab_skills.html` — new per-tab partial; canonical home for Skills-panel markup; consumed by both PC (today) and NPC (Phase 2.5) renderers.
+
+### Changed
+- `app/templates/_mini_sheet_card.html` — Skills panel inline block (lines 193-223) replaced with `{% include "_tab_skills.html" %}`. PC behaviour byte-identical.
+- `docs/plans/unified-mini-sheet.md` — Phase 2.3 marked ✅ done with the v2.49.196 commit pointer.
+
+### Notes
+- **Pure refactor, no behaviour change.** PC mini-sheet Skills tab renders identically. NPC `buildMonsterInitSheet` untouched.
+- **Phase 2 per-tab partial extraction complete (3 of 3).** Next: 2.4 (server provides `tabs=[...]` list per combatant to drive the tab-strip render) + 2.5 (NPC body swap to use the three per-tab partials) + 2.6 (harness test that every demo combatant renders all advertised tabs without throwing).
+- **Features tab.** Still inline in `_mini_sheet_card.html`. The Phase 2 plan only enumerated Actions / Spells / Skills extraction; Features was not part of the original scope. Can extract as a follow-up (2.3b) before 2.4 if the same pattern is preferred for consistency, or left inline since the PC-only `class_features` data shape doesn't need to cross to NPCs.
+
+---
+
 ## [2.49.195] - 2026-05-23
 
 **Schema version:** 56
