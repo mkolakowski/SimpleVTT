@@ -2616,6 +2616,17 @@ def campaign_view(
     # 2.3.9 inline stat-block view that ``buildMonsterInitSheet``
     # produces directly from this resolved sheet.
     tmpl_data = []
+    # v2.49.202 Phase 2.5a: monster_template_cards pre-renders the same
+    # resolved sheet through _mini_sheet_card.html (with is_monster=True)
+    # into a hidden #monster-card-pool div in tabletop.html. Nothing in
+    # production references this yet — buildMonsterInitSheet keeps driving
+    # the init tracker's NPC mini-sheets. The pool's ids use the
+    # `char-detail-monster-template-{tid}` shape deliberately, so the
+    # existing `hasCharDetail` lookup at tabletop.html:5668 (which matches
+    # `char-detail-monster-{tid}`) does NOT activate — Phase 2.5b will
+    # switch renderBattle() to clone-and-patch from this pool with per-
+    # combatant id rewriting. Until then the pool is dormant.
+    monster_template_cards = []
     for t in tmpl_objs:
         raw_sheet = t.sheet or {}
         if (t.template or "dnd5e") == "dnd5e":
@@ -2633,6 +2644,22 @@ def campaign_view(
             "template": t.template,
             "sheet": resolved,
         })
+        # Only dnd5e templates render through the mini-sheet partial —
+        # the partial's body is dnd5e-specific (abilities / skills /
+        # spells / class_features). Generic templates fall through.
+        if (t.template or "dnd5e") == "dnd5e":
+            monster_template_cards.append({
+                "id": f"monster-template-{t.id}",
+                "name": t.name,
+                "sheet": resolved,
+                "template": "dnd5e",
+                "template_id": t.id,
+                # owner_user_id never matters for is_monster=True paths in
+                # the partial (every gate is `and not is_monster`), but a
+                # sentinel 0 keeps the comparison `c.owner_user_id == user.id`
+                # honest if a future partial edit drops the is_monster guard.
+                "owner_user_id": 0,
+            })
 
     user_color_map, user_portrait_map, user_char_name_map = _build_user_maps(db, campaign)
     conc_effects = db.query(ConcentrationEffect).filter(ConcentrationEffect.campaign_id == campaign_id).all()
@@ -2666,6 +2693,7 @@ def campaign_view(
             "char_data": char_data,
             "token_data": token_data,
             "tmpl_data": tmpl_data,
+            "monster_template_cards": monster_template_cards,
             "user_color_map": user_color_map,
             "user_portrait_map": user_portrait_map,
             "user_char_name_map": user_char_name_map,

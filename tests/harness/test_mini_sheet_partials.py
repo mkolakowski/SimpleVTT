@@ -172,6 +172,93 @@ async def test_skills_panel_renders_all_18_skills():
     assert btn_count == 18, f"expected 18 skill buttons, got {btn_count}"
 
 
+async def test_monster_card_pool_renders_for_gm():
+    """Phase 2.5a verification — `GET /campaign/1` as GM contains a
+    `#monster-card-pool` hidden div with at least one
+    `#char-detail-monster-template-{tid}` child per dnd5e TokenTemplate
+    in the campaign. The pool's ids use the ``-template-`` infix
+    deliberately so the existing `hasCharDetail` lookup at
+    tabletop.html:~5668 (which matches `char-detail-monster-{tid}`)
+    does NOT activate — pool is dormant until Phase 2.5b wires the
+    clone-and-patch hoist. This test is the canary for that contract:
+    if a future commit accidentally changes the id shape to match the
+    legacy lookup, multi-combatant cases (3 bandits sharing one
+    template) break and this fails."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        login = await client.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"}, follow_redirects=True)
+        assert login.status_code in (200, 303)
+        resp = await client.get(CAMPAIGN_PAGE, follow_redirects=True)
+    assert resp.status_code == 200
+    html = resp.text
+    assert 'id="monster-card-pool"' in html, "GM should see #monster-card-pool hidden div"
+    # Hidden via inline style — confirm so a future CSS edit doesn't
+    # accidentally make the pool visible in the Characters drawer.
+    pool_idx = html.find('id="monster-card-pool"')
+    assert 'display:none' in html[pool_idx : pool_idx + 200], "monster-card-pool should be display:none"
+    # At least one TokenTemplate in the demo seed → at least one pool entry
+    # with the new id shape.
+    assert 'id="char-detail-monster-template-' in html, "no pre-rendered monster template cards in pool"
+    # Critical contract: the new ids must NOT match the legacy
+    # `char-detail-monster-{tid}` lookup pattern. If a future commit
+    # accidentally drops the `-template-` infix, every multi-combatant
+    # NPC encounter breaks at hoist time.
+    legacy_pattern = re.compile(r'id="char-detail-monster-\d+"')
+    # The legacy pattern is allowed inside the buildMonsterInitSheet JS
+    # source (it's a string literal in JS). Exclude the inline `<script>`
+    # block from the check by anchoring on the pool wrapper.
+    pool_slice = html[pool_idx : pool_idx + 60000]
+    pool_end = pool_slice.find('</div>\n\n')
+    pool_slice = pool_slice[:pool_end] if pool_end > 0 else pool_slice
+    legacy_hits = legacy_pattern.findall(pool_slice)
+    assert not legacy_hits, (
+        f"monster-card-pool contains {len(legacy_hits)} card(s) with the legacy "
+        f"`char-detail-monster-{{tid}}` id shape (would activate the buildMonsterInitSheet "
+        f"hoist for the first combatant of each template + break multi-combatant cases). "
+        f"Use `char-detail-monster-template-{{tid}}` until Phase 2.5b is ready."
+    )
+
+
+async def test_monster_card_pool_hidden_from_players():
+    """Phase 2.5a verification — non-GM users (alice) don't see the
+    `#monster-card-pool` div. NPC sheets are GM-only data; players
+    have no business carrying them in their page DOM either."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        login = await client.post("/login", data={"email": "demo-alice@example.com", "password": "demopass"}, follow_redirects=True)
+        assert login.status_code in (200, 303)
+        resp = await client.get(CAMPAIGN_PAGE, follow_redirects=True)
+    assert resp.status_code == 200
+    assert 'id="monster-card-pool"' not in resp.text, "non-GM should not see the monster-card-pool"
+
+
+async def test_monster_card_pool_partial_renders_for_dnd5e_monster():
+    """Phase 2.5a verification — the partial doesn't throw when rendered
+    with `is_monster=True` against a monster sheet shape. Anchors on the
+    first ``id="char-detail-monster-template-{tid}"`` open tag in the
+    pool and takes a generous 100 KB window (single card is ~8-20 KB);
+    asserts the window contains a ``.mini-tabs`` block (the unified
+    ``_tabs_present`` iteration produced output), a Skills tab (always
+    present per Phase 2.3), and at least one ``.mini-sk-btn`` (the
+    Skills partial executed). If the partial crashed on a monster shape
+    (missing ``classes`` / ``hit_dice`` / etc.), the pool would be
+    empty or the response would 500."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        login = await client.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"}, follow_redirects=True)
+        assert login.status_code in (200, 303)
+        resp = await client.get(CAMPAIGN_PAGE, follow_redirects=True)
+    html = resp.text
+    # Anchor on the first monster-template card open tag (which appears
+    # only inside the pool — PCs use `char-detail-{int}`, monsters use
+    # `char-detail-monster-template-{int}`). 100 KB window is enough to
+    # contain one full mini-sheet (worst case Soren the spell-slug-rich
+    # acolyte is ~20 KB rendered).
+    card_idx = html.find('id="char-detail-monster-template-')
+    assert card_idx >= 0, "no monster-template card in the pool"
+    card_window = html[card_idx : card_idx + 100000]
+    assert 'class="mini-tabs"' in card_window, "no .mini-tabs in monster card — partial may have crashed"
+    assert 'data-tab="skills"' in card_window, "no Skills tab in monster card"
+    assert 'class="mini-sk-btn' in card_window, "no .mini-sk-btn in monster card — _tab_skills.html may have failed"
+
+
 async def test_features_panel_renders_for_pc_with_class_features():
     """Phase 2.3b verification — ``_tab_features.html`` produces the
     Features panel with at least one ``.mini-feature-row`` + 🪄 Use

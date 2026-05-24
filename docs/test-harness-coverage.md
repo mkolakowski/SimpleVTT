@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 413 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.200, 2026-05-23).
+**Total tests:** 416 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.202, 2026-05-23).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -835,6 +835,9 @@ Regression net for the v2.49.193–.198 per-tab partial extractions from `_mini_
 | `test_spells_panel_renders_for_caster_with_slots` | Phase 2.2: Zara renders the `data-panel="spells"` panel with at least one `.mini-spell-row` + `✨ Cast` button + a `.mini-slot-row` slot-pip bar (level ≥ 1 spell present). Validates the multiclass loop + slot-pip rendering in `_tab_spells.html`. |
 | `test_skills_panel_renders_all_18_skills` | Phase 2.3: Pip's `data-panel="skills"` contains exactly 18 `.mini-sk-btn` buttons — the `SKILLS_LIST` constant inside `_tab_skills.html` produces the full standard 5e skill grid for every PC. |
 | `test_features_panel_renders_for_pc_with_class_features` | Phase 2.3b: at least one PC in the demo roster renders the `data-panel="features"` panel with `.mini-feature-row` + `🪄 Use` button. `_features_list` is the per-character gate; the assertion doesn't hardcode which PC since the demo seed gives every PHB class some class-feature entries. |
+| `test_monster_card_pool_renders_for_gm` | Phase 2.5a (v2.49.202): GM sees a hidden `#monster-card-pool` div with at least one `#char-detail-monster-template-{tid}` child per dnd5e TokenTemplate. Canary asserts the `-template-` infix is preserved — the existing `hasCharDetail` lookup matches `char-detail-monster-{tid}` (no infix), so any commit that accidentally drops the infix would activate the legacy `buildMonsterInitSheet` hoist for the first combatant of each template + break multi-combatant cases. |
+| `test_monster_card_pool_hidden_from_players` | Phase 2.5a: non-GM users (alice) don't see the pool div in their page DOM at all. NPC sheet data is GM-only. |
+| `test_monster_card_pool_partial_renders_for_dnd5e_monster` | Phase 2.5a: the partial doesn't crash on `is_monster=True` against a monster sheet shape (no `classes` / `hit_dice` / etc.). Anchors on the first monster-template card, asserts the 100 KB window contains a `.mini-tabs` block + Skills tab + at least one `.mini-sk-btn` — i.e., the unified `_tabs_present` iteration produced output, `_tab_skills.html` ran against the monster's abilities dict + 18-skill grid emitted buttons. |
 
 ---
 

@@ -1874,7 +1874,39 @@
    ``tmpl.sheet`` (server-side projection in ``tabletop_routes.py``).
    The 2.3.33 "📋 Sheet" button on each init entry still opens the
    full read-only monster sheet in the 2.3.15 drawer, so the heavier
-   PC-style view is one click away when the GM wants it. #}
+   PC-style view is one click away when the GM wants it.
+
+   v2.49.202 Phase 2.5a (unified-mini-sheet plan, Mockup B): re-introducing
+   a hidden pool, but THIS time aimed at the Phase 2 endgame. Each entry
+   in ``monster_template_cards`` (server projection at
+   tabletop_routes.py:~2618) renders one TokenTemplate's resolved sheet
+   through ``_mini_sheet_card.html`` with ``is_monster=True`` — the same
+   partial PCs render through. The four per-tab partials extracted in
+   v2.49.193–.197 (Actions / Spells / Skills / Features) are now exercised
+   for NPCs too via the unified ``_tabs_present`` iteration.
+
+   Card ids deliberately use the ``char-detail-monster-template-{tid}``
+   shape — the existing ``hasCharDetail`` lookup at
+   ``tabletop.html:5668`` matches ``char-detail-monster-{tid}`` (no
+   ``-template-`` infix) and STAYS unmatched here, so the legacy
+   ``buildMonsterInitSheet`` path keeps driving every NPC init-card
+   today. The pool is dormant. Phase 2.5b will switch ``renderBattle()``
+   to clone-and-patch from the pool per combatant (HP / charge / status
+   are per-combatant; the pool entries are template-level).
+
+   The v2.3.34 rollback rationale (density preference) is much less
+   pressing now — v2.49.183 (PC-style header + HP bar) and v2.49.199
+   (PC-style ability grid with Check/Save toggle) already brought the
+   live NPC mini-sheet visually close to the partial. Phase 2.5b's
+   switch should feel like a natural continuation, not a re-litigation
+   of v2.3.34. #}
+{% if is_gm and monster_template_cards %}
+<div id="monster-card-pool" style="display:none;" aria-hidden="true">
+{% for c in monster_template_cards %}
+{% with is_monster=True %}{% include "_mini_sheet_card.html" %}{% endwith %}
+{% endfor %}
+</div>
+{% endif %}
 
 {% if is_gm %}
         {# Click-to-set mode banner — shown over the canvas while the GM
