@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.201] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **TODO: re-investigate demo NPC spells.** User reported during the v2.49.200 review session that the demo's NPC spells "don't seem to work right" — exact symptom not captured. Filed under TODO.md's "GM Tools" section (next to the existing monster-related TODOs) so the lead doesn't get lost while finishing Phase 2 of the unified-mini-sheet plan. The TODO body enumerates the existing surface to spot-check (Soren the Cult Acolyte's `spell_slug` action entries → `_resolve_spell_slug_action` catalog overlay → NPC mini-sheet Spells tab via `buildMonsterInitSheet` → `/npc_attack` for attack-roll spells / `/roll` announce flow for save-DC spells) plus the known gotcha trail (v2.49.176 Pydantic stripping, v2.49.180 PC catalog enrichment, v2.49.181 caster-dependent DC) so the eventual investigator doesn't re-discover history.
+**Description:** One edit to `TODO.md` — new "Re-investigate demo NPC spells (Cult Acolyte / Soren)" entry under the GM Tools section, after the "Unified Monster Sheet in Initiative Tracker" entry. The entry is dated 2026-05-23 + lists five concrete spot-checks the eventual investigator can run (verify the symptom, check demo seed `spell_slug` references, confirm the v2.49.176 Pydantic fix is still in `action_schema.py`, spot-check `_resolve_spell_slug_action`'s output, verify `/npc_attack`'s spell-action handling).
+**Description (cont):** Why this is a separate commit. Per CLAUDE.md's "one conceptually-distinct change per commit" rule, filing a TODO is a distinct change from the Phase 2.5a NPC pre-render work that's about to start. Bundling them would muddy the diff + the changelog entry; the TODO file is a lightweight bookkeeping artifact that benefits from its own commit boundary.
+**Description (cont 2):** Verification. (a) Curl `/version` confirms v2.49.201 live. (b) Wiki harness tests pass (19/19 — TODO.md is already in the wiki allowlist as `todo`, no allowlist or wiki nav edit required). (c) The TODO entry renders correctly via `/wiki/doc/todo` (uses the same markdown renderer the other repo-root docs use).
+
+### Added
+- `TODO.md` — new "Re-investigate demo NPC spells (Cult Acolyte / Soren)" entry under GM Tools.
+
+### Notes
+- **No code change.** Pure bookkeeping. The actual investigation lands in a future commit when the symptom is captured.
+- **No new harness test, no wiki allowlist edit.** TODO.md is already surfaced through the wiki.
+
+---
+
 ## [2.49.200] - 2026-05-23
 
 **Schema version:** 56
