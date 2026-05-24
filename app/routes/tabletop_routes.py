@@ -20953,6 +20953,19 @@ def _monster_template_to_sheet(tmpl: TokenTemplate, campaign_id: int) -> dict:
                 # spells (Burning Hands cone, Fireball sphere, etc.).
                 "area": a.get("area") or {},
                 "aoe_targets": int(a.get("aoe_targets") or 1),
+                # v2.49.220 action_charges migration: per-action id + max
+                # charges so the unified partial can render the
+                # 2/2 ↻ counter + spent-disabled state for limited-use
+                # spells (Inflict Wounds N/day, Frightful Howl 1/day, etc).
+                # The per-combatant current count lives in
+                # battle.combatants[i].action_charges[id] client-side;
+                # the hydration patches the counter text + spent class
+                # from there. Pre-v2.49.220 these fields weren't in the
+                # spells projection — buildMonsterInitSheet read them
+                # directly from sh.actions; the unified partial path
+                # needs them on the spell row too.
+                "id": a.get("id") or str(slug),
+                "charges_max": int(a.get("charges_max") or 0),
             })
         if spells_proj:
             sheet["spells"] = spells_proj

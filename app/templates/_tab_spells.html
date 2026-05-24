@@ -114,6 +114,19 @@
             {% if s.attack_roll and (s.attack_bonus or s.atk_bonus) %}<span class="mini-spell-tag atk">{{ s.attack_bonus or s.atk_bonus }}</span>{% endif %}
             {% if s.damage %}<span class="mini-spell-tag dmg">{{ s.damage }}{% if s.damage_type %} {{ s.damage_type }}{% endif %}</span>{% endif %}
             {% if s.save_ability %}<span class="mini-spell-tag save">{% if s.save_dc %}DC {{ s.save_dc }} {% endif %}{{ (s.save_ability | upper) if (s.save_ability | length) <= 3 else (s.save_ability | upper)[:3] }}{% if not s.save_dc %} save{% endif %}</span>{% endif %}
+            {# v2.49.220: action_charges UI for limited-use NPC spells
+               (Inflict Wounds N/day etc.). Server projection includes
+               `id` + `charges_max` on each spell entry. The hydration
+               at tabletop.html:_hydrateMonsterCard patches the
+               displayed count + spent state from the per-combatant
+               battle.combatants[i].action_charges[id] map. GM-only
+               affordances (the ↻ recharge button is the v2.3.40
+               .monster-charge-reset; the existing click handler at
+               tabletop.html:~6830 walks .init-entry → battle.combatants
+               by row idx). PCs don't see this — but PCs don't go
+               through this partial path on the unified mini-sheet
+               either (only NPCs render with is_monster=True). #}
+            {% if s.charges_max and s.charges_max > 0 %}<span class="monster-action-charges" data-action-id="{{ s.id }}" data-charges-max="{{ s.charges_max }}" aria-label="{{ s.charges_max }} of {{ s.charges_max }} charges">{{ s.charges_max }}/{{ s.charges_max }}</span><button type="button" class="monster-charge-reset" data-action-id="{{ s.id }}" title="Recharge {{ s.name }} (set to {{ s.charges_max }}/{{ s.charges_max }})">↻</button>{% endif %}
             <button type="button" class="mini-cast-btn"
                     data-char-id="{{ c.id }}"
                     data-spell-idx="{{ loop.index0 }}"
@@ -121,6 +134,8 @@
                     data-spell-level="{{ s_lvl }}"
                     data-class-slug="{{ s_cls }}"
                     data-spell-range="{{ s.range or '' }}"
+                    data-spell-action-id="{{ s.id or '' }}"
+                    data-spell-charges-max="{{ s.charges_max or 0 }}"
                     data-spell-area-shape="{{ (s.area or {}).get('shape', '') }}"
                     data-spell-area-size-ft="{{ (s.area or {}).get('size_ft', 0) | int }}"
                     data-spell-area-secondary-ft="{{ (s.area or {}).get('secondary_ft', 0) | int }}"

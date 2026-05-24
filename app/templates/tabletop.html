@@ -3678,6 +3678,31 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                                 }),
                             });
                             if (resp.ok) {
+                                // v2.49.220: decrement per-combatant charges
+                                // on successful cast. Mirrors the legacy
+                                // .monster-strike-btn decrement at
+                                // tabletop.html:~7037 — same pattern, same
+                                // saveBattle + renderBattle so the hydration's
+                                // charge-state patch re-runs and the counter
+                                // chip ticks to N-1 / N + the cast button
+                                // disables when current hits 0.
+                                const _spellActionId = btn.dataset.spellActionId || '';
+                                const _spellCMax = parseInt(btn.dataset.spellChargesMax) || 0;
+                                if (_spellActionId && _spellCMax > 0
+                                        && window.battle && Array.isArray(window.battle.combatants)) {
+                                    const _comb = window.battle.combatants.find(c => c.id === _attackerCombId);
+                                    if (_comb) {
+                                        if (!_comb.action_charges || typeof _comb.action_charges !== 'object') {
+                                            _comb.action_charges = {};
+                                        }
+                                        const _cur = (_spellActionId in _comb.action_charges)
+                                            ? (parseInt(_comb.action_charges[_spellActionId]) || 0)
+                                            : _spellCMax;
+                                        _comb.action_charges[_spellActionId] = Math.max(0, _cur - 1);
+                                        try { saveBattle(); } catch (_) {}
+                                        try { renderBattle(); } catch (_) {}
+                                    }
+                                }
                                 return;  // spell_cast broadcast handles the rest
                             }
                             (window.showToast || alert)(`Cast failed: ${await resp.text()}`, 'error');
@@ -5897,6 +5922,47 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const maxEl = card.querySelector('.mini-hp-max');
             if (maxEl) maxEl.textContent = '/ ' + hpMax;
         }
+        // Action_charges patch — v2.49.220: per-combatant charge state
+        // for limited-use NPC abilities (Inflict Wounds N/day, Frightful
+        // Howl 1/day, etc.). The partial renders the chip + recharge
+        // button at template defaults (charges_max/charges_max); the
+        // hydration overlays the per-combatant current count. Spent
+        // state (current ≤ 0) flips the chip's `.spent` class + the cast
+        // button's `disabled` attr. ↻ recharge button's `disabled` flips
+        // when current ≥ max (already-full, nothing to recharge).
+        // Closes the v2.49.203 regression where the v2.5b switch to the
+        // unified partial lost the legacy buildMonsterInitSheet's
+        // charge counter widget. Counter is now driven by the same
+        // .monster-charge-reset / decrement-on-cast handlers the legacy
+        // path used, just with the unified-partial markup.
+        const _charges = (combatant.action_charges && typeof combatant.action_charges === 'object')
+            ? combatant.action_charges : {};
+        card.querySelectorAll('.monster-action-charges[data-action-id]').forEach(chip => {
+            const actionId = chip.getAttribute('data-action-id');
+            const cmax = parseInt(chip.getAttribute('data-charges-max')) || 0;
+            if (cmax <= 0) return;
+            const cur = (actionId in _charges) ? (parseInt(_charges[actionId]) || 0) : cmax;
+            chip.textContent = `${cur}/${cmax}`;
+            chip.setAttribute('aria-label', `${cur} of ${cmax} charges`);
+            chip.classList.toggle('spent', cur <= 0);
+        });
+        card.querySelectorAll('.monster-charge-reset[data-action-id]').forEach(resetBtn => {
+            const actionId = resetBtn.getAttribute('data-action-id');
+            const chip = card.querySelector(`.monster-action-charges[data-action-id="${actionId}"]`);
+            const cmax = chip ? (parseInt(chip.getAttribute('data-charges-max')) || 0) : 0;
+            const cur = (actionId in _charges) ? (parseInt(_charges[actionId]) || 0) : cmax;
+            resetBtn.disabled = (cur >= cmax);
+        });
+        // Spent-state on the .mini-cast-btn so the user can't click a
+        // spell with 0 charges remaining. Matches the legacy
+        // .monster-strike-btn[disabled] pattern.
+        card.querySelectorAll('.mini-cast-btn[data-spell-action-id]').forEach(castBtn => {
+            const actionId = castBtn.getAttribute('data-spell-action-id');
+            const cmax = parseInt(castBtn.getAttribute('data-spell-charges-max')) || 0;
+            if (cmax <= 0) return;
+            const cur = (actionId in _charges) ? (parseInt(_charges[actionId]) || 0) : cmax;
+            castBtn.disabled = (cur <= 0);
+        });
         return true;
     }
 
