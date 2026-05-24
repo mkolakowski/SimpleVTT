@@ -3574,21 +3574,74 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     // _getMonsterActorName (falls back to mini-header-name then
                     // 'Monster' if not in the init tracker).
                     const monsterName = _getMonsterActorName(btn);
+
+                    // v2.49.214: open the target picker for attack-roll OR
+                    // save-based monster spells (Sacred Flame, Inflict Wounds,
+                    // etc.) the same way the legacy .monster-strike-btn at
+                    // tabletop.html:~6765 does for weapon attacks. Pre-fix the
+                    // monster cast branch fired raw rolls with no target
+                    // context — user-reported "Sacred Flame does not engage
+                    // the target picker." The picker provides the target's
+                    // combatant_id + name; we inject the name into the roll
+                    // notes so the chat card surfaces "Soren casts Sacred
+                    // Flame → Pip" rather than the un-targeted form.
+                    //
+                    // Healing-only and bare-announcement casts skip the
+                    // picker (no obvious target context to gather; the GM
+                    // can manually narrate). AoE spells (with .area) would
+                    // route through window._openAoePicker instead — filed
+                    // for v2.49.215 follow-up since Fireball-style NPC
+                    // AoEs need their own pipeline.
+                    let _pickedTargetName = '';
+                    let _pickedTargetCombId = '';
+                    const _needsTargetPicker = (attackRoll || (saveAbility && saveDc)) && !healing;
+                    if (_needsTargetPicker && typeof window.vttOpenMultiTargetPicker === 'function') {
+                        const _attackerEntry = btn.closest('.init-entry[data-char-id]');
+                        const _attackerCombId = _attackerEntry?.dataset.charId || '';
+                        const _preTargets = (window._targetingState
+                            && window._targetingState.getTargets()) || [];
+                        if (_attackerCombId && !_preTargets.length) {
+                            const _picked = await window.vttOpenMultiTargetPicker({
+                                required: 1,
+                                spellName,
+                                casterCombatantId: _attackerCombId,
+                                rangeStr: btn.dataset.spellRange || '',
+                            });
+                            if (_picked === null) {
+                                // Cancelled — abort the click; don't fire
+                                // rolls with no target.
+                                btn.disabled = false;
+                                return;
+                            }
+                            if (_picked.length > 0) {
+                                _pickedTargetCombId = _picked[0];
+                                const _tc = (window.battle?.combatants || [])
+                                    .find(c => c.id === _pickedTargetCombId);
+                                if (_tc && _tc.name) _pickedTargetName = String(_tc.name).trim();
+                            }
+                        } else if (_preTargets.length) {
+                            const _t0 = _preTargets[0];
+                            if (_t0?.combatant_id) _pickedTargetCombId = _t0.combatant_id;
+                            if (_t0?.name) _pickedTargetName = _t0.name;
+                        }
+                    }
+                    const _targetSuffix = _pickedTargetName ? ` → ${_pickedTargetName}` : '';
+
                     const rolls = [];
                     if (attackRoll) {
                         const bonusExpr = attackBonus
                             ? (attackBonus.startsWith('+') || attackBonus.startsWith('-') ? attackBonus : '+' + attackBonus)
                             : '';
-                        rolls.push({ expression: '1d20' + bonusExpr, note: `${monsterName} casts ${spellName} — attack roll` });
+                        rolls.push({ expression: '1d20' + bonusExpr, note: `${monsterName} casts ${spellName} — attack roll${_targetSuffix}` });
                     }
                     if (damage) {
-                        rolls.push({ expression: damage, note: `${monsterName} casts ${spellName} — damage${damageType ? ' (' + damageType + ')' : ''}` });
+                        rolls.push({ expression: damage, note: `${monsterName} casts ${spellName} — damage${damageType ? ' (' + damageType + ')' : ''}${_targetSuffix}` });
                     }
                     if (healing) {
                         rolls.push({ expression: healing, note: `${monsterName} casts ${spellName} — healing` });
                     }
                     if (saveAbility && saveDc) {
-                        rolls.push({ expression: '0', note: `${monsterName} casts ${spellName} — DC ${saveDc} ${saveAbility} save` });
+                        rolls.push({ expression: '0', note: `${monsterName} casts ${spellName} — DC ${saveDc} ${saveAbility} save${_targetSuffix}` });
                     }
                     if (!rolls.length) {
                         // No structured roll fields — emit a bare announcement

@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.214] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **NPC spell cast now engages the target picker for attack-roll and save spells (Sacred Flame, Inflict Wounds, etc.).** User asked: "can you look into why sacred flame is not behaving like a spell and using the target picking system?" Root cause: the v2.5b `.mini-cast-btn` monster branch I wrote bypassed the picker entirely — it just fired raw `/roll` calls. The legacy `.monster-strike-btn` handler at line ~6765 DOES open `vttOpenMultiTargetPicker`, but only for `kind === 'attack'` (weapon strikes); save-based actions never got a picker even in the legacy path. v2.49.214 ports the same picker invocation into the monster cast branch, AND extends it to fire for save-based spells too. Sacred Flame now opens the picker → GM selects target → roll log shows "Soren casts Sacred Flame — DC 13 DEX save → Pip" with the target attribution.
+**Description:** Two coordinated edits. **(1)** `app/templates/_tab_spells.html` — add `data-spell-range="{{ s.range or '' }}"` to the `.mini-cast-btn`. The picker needs the spell's range string to render the range-gate ring + out-of-range styling; the partial already had the range data (rendered as a chip) but never stamped it on the button. **(2)** `app/templates/tabletop.html` `.mini-cast-btn` monster branch — insert a picker invocation between the field extraction and the rolls assembly. Gate on `(attackRoll || (saveAbility && saveDc)) && !healing` so only target-needing spells trigger the picker (healing-only spells skip — narration is GM-driven; bare-announcement casts skip too). The picker call mirrors the legacy strike handler at line ~6765: required=1, spellName, casterCombatantId from the closest `.init-entry`, rangeStr from the new data attr. Pre-selected targets via canvas double-click bypass the picker (same convention). Picked target's name is injected as `→ {target}` suffix in the attack-roll / damage / save-announcement note so the chat card surfaces the target context.
+**Description (cont):** Why this isn't auto-damage yet. The picker just provides target context — the rolls still fire as `/roll` (damage roll + save announcement). For full PC parity the next step is to call `/npc_attack` (or extend it) for save-based spells so the server auto-rolls the target's save and applies damage on fail (matching the auto_apply_damage v2.49.209 + the v2.49.205 hydration HP patch). That's a larger commit because `/npc_attack` currently only handles attack-roll actions; adding save-roll + save-for-half damage paths needs server work. Filed as v2.49.215 follow-up. For now the picker UX is in place + the chat card carries the target name; the GM applies damage manually via the init-card HP input or via the auto-apply infrastructure if the spell-cast card later grows save-prompt buttons for NPCs (currently PC-only via /cast_spell).
+**Description (cont 2):** Why not also handle AoE (Fireball-style) NPC casts. AoE spells need `window._openAoePicker` (different picker) AND `/place_aoe` (different endpoint) AND the server-side AoE save-resolution loop (different code path from /cast_spell's single-target). NPC casters going through that loop is its own scope — the current /place_aoe assumes a PC caster id. Filed as v2.49.216 follow-up. Sacred Flame is single-target so today's commit handles that case.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.214 live. (b) Wiki + mini-sheet partial harness tests still pass. (c) Manual (after hard-refresh): expand Soren → click `✨ Cast` on Sacred Flame → target picker opens with caster-anchored range ring (60 ft). Click a PC token → picker closes, roll log shows "Soren casts Sacred Flame — damage (radiant) → Pip" + "Soren casts Sacred Flame — DC 13 DEX save → Pip". Click `✨ Cast` on Inflict Wounds (touch attack) → picker opens at touch range → attack roll + damage rolls both name the target. Cancel the picker by pressing Esc / clicking off-token → no rolls fire (the button re-enables for retry).
+
+### Added
+- `app/templates/_tab_spells.html` — `data-spell-range` data-attr on `.mini-cast-btn` so the picker can render the range gate.
+
+### Changed
+- `app/templates/tabletop.html` `.mini-cast-btn` monster branch — opens `vttOpenMultiTargetPicker` for attack-roll OR save-based spells before firing the rolls; picked target's name is injected as `→ {target}` suffix in roll notes. Healing-only and bare-announcement casts skip the picker.
+
+### Notes
+- **Reuses existing picker infrastructure.** `vttOpenMultiTargetPicker` was already battle-tested via PC `.mini-strike-btn` (v2.49.137) + legacy `.monster-strike-btn` (v2.49.163). No new picker code.
+- **Single-target only this commit.** AoE NPC spells (Fireball) need `_openAoePicker` + `/place_aoe` extension — v2.49.216 follow-up.
+- **No auto-damage yet on NPC save spells.** Server doesn't auto-resolve target saves for NPC casts; the picker provides target context but the GM still applies the resulting damage manually (or via the future /npc_attack save extension). Filed as v2.49.215.
+
+---
+
 ## [2.49.213] - 2026-05-24
 
 **Schema version:** 56
