@@ -278,6 +278,22 @@ async def test_spell_slug_npc_renders_spells_tab():
         "Cult Acolyte's Spells panel rendered but contains neither Inflict Wounds "
         "nor Sacred Flame — the spell projection or the partial's row template may have regressed."
     )
+    # v2.49.208: spells belong in the Spells tab only — they should NOT
+    # also appear as 🗡 Strike entries in the Actions tab. Pre-v2.49.208
+    # `_monster_template_to_sheet` folded spell_slug actions into
+    # sh["attacks"] AND sh["spells"], producing duplicate rows. The
+    # canonical signal: the partial stamps `data-attack-name="…"` on the
+    # Actions strike button and `data-spell-name="…"` on the Spells cast
+    # button; the same spell appearing in both means the dedup gate
+    # regressed.
+    assert 'data-attack-name="Sacred Flame"' not in card_window, (
+        "Sacred Flame appears in the Actions tab as well as the Spells tab — "
+        "_monster_template_to_sheet may not be skipping spell-slug actions when "
+        "folding into sh['attacks']."
+    )
+    assert 'data-attack-name="Inflict Wounds"' not in card_window, (
+        "Inflict Wounds appears in the Actions tab as well as the Spells tab — same dedup regression."
+    )
 
 
 async def test_renderbattle_wires_hydration_helper_for_monsters():

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.208] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix: NPC spells no longer appear in both Actions AND Spells tabs.** User-reported v2.49.206 regression: Sacred Flame appeared as a `✨ Cast` row in the Spells tab AND as a `🗡 Strike` row in the Actions tab on Soren's mini-sheet. Root cause: `_monster_template_to_sheet` folds every action with `attack_roll | damage | save_ability` into `sh["attacks"]` for the legacy character schema (this is what makes the partial's Actions tab render a strike row), and v2.49.206 ALSO projected spell-slug actions into `sh["spells"]` (what makes the Spells tab render a cast row). Spells with damage / save satisfy both gates → dup. Fix: skip spell-slug actions when folding into `sh["attacks"]`. They live in `sh["spells"]` and render via the Spells tab; non-spell actions (weapon attacks, Multiattack, special abilities) keep folding into attacks unchanged.
+**Description:** Two coordinated edits. **(1)** `app/routes/tabletop_routes.py` `_monster_template_to_sheet` — in the actions → attacks fold loop, add an early-`continue` when `a.get("spell_slug")` is truthy. Non-spell actions (the bulk of monster actions: melee/ranged weapon attacks, Multiattack stubs, special abilities) still fold in. **(2)** `tests/harness/test_mini_sheet_partials.py` `test_spell_slug_npc_renders_spells_tab` — add two assertions inside the Cult Acolyte card window: `data-attack-name="Sacred Flame"` MUST NOT appear (Actions strike-button data-attr) and `data-attack-name="Inflict Wounds"` MUST NOT appear (same). Pre-fix both were present alongside the Spells tab versions; post-fix only the Spells tab versions remain.
+**Description (cont):** Why server-side dedup and not partial-side. Could also handle this in the partial (filter out actions with spell_slug from `attacks_list`), but that pushes the spell-vs-non-spell distinction into the rendering layer that's supposed to be data-agnostic. Server projection is the data shape's source of truth: spells live in sh["spells"], non-spell actions live in sh["attacks"]. The partial reads the lists and renders them; it shouldn't have to know that "an action with a spell_slug" means "skip this action."
+**Description (cont 2):** Verification. (a) Curl `/version` confirms v2.49.208 live. (b) `python3 -m pytest tests/harness/test_mini_sheet_partials.py -q` → 11 passed (the strengthened spells test catches the dup). (c) Manual: expand Soren's mini-sheet → Actions tab shows only Soren's non-spell actions (none in the current demo; Soren is a pure caster); Spells tab shows Inflict Wounds + Sacred Flame with `✨ Cast` buttons. No duplicate Sacred Flame in Actions.
+
+### Changed
+- `app/routes/tabletop_routes.py` `_monster_template_to_sheet` — skip spell-slug actions when folding into `sh["attacks"]` (they live in `sh["spells"]` per v2.49.206).
+- `tests/harness/test_mini_sheet_partials.py` `test_spell_slug_npc_renders_spells_tab` — add no-duplicate assertions for the Cult Acolyte's spell entries.
+
+### Notes
+- **Spells live in sh["spells"], non-spell actions in sh["attacks"].** Clean separation; partial reads both lists agnostically.
+- **Bug 3 (HP not updating on AoE damage) still open.** Filed as v2.49.209.
+
+---
+
 ## [2.49.207] - 2026-05-23
 
 **Schema version:** 56

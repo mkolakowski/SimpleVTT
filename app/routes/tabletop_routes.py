@@ -20295,6 +20295,17 @@ def _monster_template_to_sheet(tmpl: TokenTemplate, campaign_id: int) -> dict:
             continue
         if not (a.get("attack_roll") or a.get("damage") or a.get("save_ability")):
             continue
+        # v2.49.208: skip spell-slug actions when folding into sh["attacks"].
+        # The v2.49.206 spells projection below puts them into sh["spells"]
+        # (the unified mini-sheet partial's Spells tab); folding them ALSO
+        # into sh["attacks"] makes the partial's Actions tab render a 🗡 Strike
+        # button for the same spell that already has a ✨ Cast button in the
+        # Spells tab — Sacred Flame appearing twice on Soren the Cult Acolyte
+        # was the user-reported v2.49.206 dup. Spells belong in the Spells
+        # tab; non-spell actions (weapon attacks, Multiattack, special
+        # abilities) keep folding into attacks unchanged.
+        if a.get("spell_slug"):
+            continue
         name = (a.get("name") or "Action").strip()
         save_ability_raw = (a.get("save_ability") or "").strip().upper()
         atk_bonus = a.get("attack_bonus") or ""
