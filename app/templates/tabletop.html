@@ -3478,7 +3478,18 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             try {
                 const body = { expression: expr, visibility, note };
                 if (!isMonster && Number.isFinite(charId) && charId > 0) body.character_id = charId;
-                if (isMonster || charIdRaw.startsWith('monster-')) body.skip_roll_state = true;
+                if (isMonster || charIdRaw.startsWith('monster-')) {
+                    body.skip_roll_state = true;
+                    // v2.49.212: pass the monster's display name so the roll-log
+                    // attribution surfaces it instead of the GM's user name.
+                    // Sourced from the .mini-header-name span inside the mini-sheet
+                    // the clicked button lives in (which is the TokenTemplate name
+                    // for hydrated cards — "Cult Acolyte" — not the combatant
+                    // nickname "Soren"; the per-spawn nickname is on the init-entry
+                    // header, separate from the mini-sheet header).
+                    const _actorName = btn.closest('.mini-sheet')?.querySelector('.mini-header-name')?.textContent?.trim();
+                    if (_actorName) body.actor_name = _actorName;
+                }
                 const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3565,7 +3576,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ ...r, visibility: 'public', skip_roll_state: true }),
+                            // v2.49.212: pass actor_name so the roll-log entry
+                            // surfaces the monster name instead of the GM user name.
+                            body: JSON.stringify({ ...r, visibility: 'public', skip_roll_state: true, actor_name: monsterName }),
                         });
                         if (!resp.ok) {
                             (window.showToast || alert)(`Cast failed: ${await resp.text()}`, 'error');
@@ -4468,7 +4481,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                         const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ ...r, visibility: 'public', skip_roll_state: true }),
+                            // v2.49.212: pass actor_name so the roll-log entry
+                            // surfaces the monster name instead of the GM user name.
+                            body: JSON.stringify({ ...r, visibility: 'public', skip_roll_state: true, actor_name: monsterName }),
                         });
                         if (!resp.ok) {
                             (window.showToast || alert)(`Strike failed: ${await resp.text()}`, 'error');

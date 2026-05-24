@@ -6966,6 +6966,12 @@ async def roll_dice(
     visibility_str = str(body.get("visibility", "public")).lower()
     note = str(body.get("note", ""))[:200]
     skip_roll_state = bool(body.get("skip_roll_state"))
+    # v2.49.212: monster rolls pass `actor_name` (the TokenTemplate name
+    # like "Cult Acolyte") so the roll-log entry surfaces the monster
+    # identity in the rolled-by slot instead of the GM's user_name. Only
+    # honored alongside skip_roll_state — PC rolls (which carry
+    # character_id) ignore actor_name on the server side.
+    actor_name = str(body.get("actor_name") or "").strip()[:80] or None
     try:
         visibility = Visibility(visibility_str)
     except ValueError:
@@ -7077,6 +7083,11 @@ async def roll_dice(
     # char_name because the roll is explicitly char-less" — and skip
     # the USER_CHAR_NAMES fallback in the latter case.
     _no_char_attribution = bool(skip_roll_state and _char is None)
+    # v2.49.212: only honor actor_name when this is a no-character roll.
+    # PCs (which carry character_id) get their attribution from char_name
+    # via the standard fallback chain; actor_name is exclusively for the
+    # monster-roll path.
+    _actor_name = actor_name if _no_char_attribution else None
     await hub.broadcast(
         campaign_id,
         {
@@ -7096,6 +7107,7 @@ async def roll_dice(
                 "created_at": rec.created_at.isoformat() if rec.created_at else None,
                 "roll_state_applied": roll_state_applied or None,
                 "no_char_attribution": _no_char_attribution,
+                "actor_name": _actor_name,
             },
         },
         recipient_filter=_filter,
