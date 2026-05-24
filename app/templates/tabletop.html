@@ -3463,11 +3463,23 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const charEl = btn.closest('[data-char-id]');
             const charIdRaw = charEl ? charEl.dataset.charId : '';
             const charId = parseInt(charIdRaw, 10);
+            // v2.49.204 — detect monster context via the explicit
+            // ``data-is-monster="1"`` marker the v2.5b hydration stamps
+            // on the cloned ``.char-detail`` wrapper. Without this signal
+            // the handler can't distinguish a hydrated monster card
+            // (data-char-id="tok_..._{ts}") from a "no data-char-id at
+            // all" case — both parseInt to NaN — and the server then
+            // attributes the roll to the rolling user's default
+            // character, surfacing as the wrong PC name in the roll log.
+            // The legacy ``startsWith('monster-')`` check below stays for
+            // pre-v2.5b monster sheets (which used a "monster-{tid}"
+            // data-char-id on a nested wrapper).
+            const isMonster = !!btn.closest('.char-detail[data-is-monster]');
             btn.disabled = true;
             try {
                 const body = { expression: expr, visibility, note };
-                if (Number.isFinite(charId) && charId > 0) body.character_id = charId;
-                if (charIdRaw.startsWith('monster-')) body.skip_roll_state = true;
+                if (!isMonster && Number.isFinite(charId) && charId > 0) body.character_id = charId;
+                if (isMonster || charIdRaw.startsWith('monster-')) body.skip_roll_state = true;
                 const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3505,7 +3517,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             const btn = ev.target.closest('.mini-cast-btn');
             if (!btn) return;
             const rawCharId = btn.dataset.charId || '';
-            const isMonster = rawCharId.startsWith('monster-');
+            // v2.49.204 — see the matching note on the .mini-roll-btn /
+            // .mini-sk-btn handler above; hydrated monster cards key
+            // data-char-id to the per-combatant `tok_..._{ts}` slotKey
+            // and need the explicit `data-is-monster="1"` marker for
+            // monster detection. Legacy `startsWith('monster-')` stays
+            // for pre-v2.5b monster mini-sheets.
+            const isMonster = rawCharId.startsWith('monster-')
+                || !!btn.closest('.char-detail[data-is-monster]');
             const spellName = btn.dataset.spellName || 'Spell';
             btn.disabled = true;
             try {
@@ -5672,6 +5691,21 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         clone.querySelectorAll('[data-char-id="' + oldKey + '"]').forEach(el => {
             el.setAttribute('data-char-id', slotKey);
         });
+        // v2.49.204: explicit monster marker so the .mini-roll-btn /
+        // .mini-sk-btn click handler at tabletop.html:~3450 can detect
+        // a monster context and skip PC-style character_id attribution.
+        // The legacy code path (pre-v2.5b) relied on the data-char-id
+        // string starting with "monster-{tid}" to trigger the same
+        // behavior; my hydrated cards key data-char-id to the per-
+        // combatant `slotKey` (`tok_..._{ts}`), which doesn't match
+        // the legacy prefix check. Without this marker, parseInt
+        // returns NaN (good — no character_id sent) BUT the server
+        // then attributes the roll to the user's default character,
+        // which surfaces as "Brother Tavik Stonebrow" rolled the
+        // monster's WIS check in the roll log. The marker tells the
+        // handler to also set skip_roll_state=true so the server's
+        // roll_state lookup gets short-circuited.
+        clone.setAttribute('data-is-monster', '1');
         // HP patch: the template card carries the TokenTemplate's default
         // HP; the combatant carries its actual current HP. Patch both the
         // data attrs (read by the HP stepper + WS hp_update handlers) and

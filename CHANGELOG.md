@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.204] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix: hydrated monster mini-sheet ability/skill/cast clicks no longer attribute the roll to a random PC.** User-reported v2.49.203 regression: clicking WIS on Soren the Cult Acolyte fired a roll whose log entry was attributed to "Brother Tavik Stonebrow" with the note "Cult Acolyte: WIS check". Root cause: the v2.49.199 ability-grid + the v2.49.195/.197 cast/feature buttons all post to `/roll` via the `.mini-roll-btn` / `.mini-sk-btn` / `.mini-cast-btn` handlers, which read the closest `data-char-id` to compute `character_id`. The legacy `buildMonsterInitSheet` path got monster context by checking `data-char-id.startsWith('monster-')` (the nested monster wrapper stamped `monster-{tid}` on a sub-div for exactly this purpose). v2.5b hydration writes the per-combatant `tok_..._{ts}` slotKey instead — which fails the legacy `startsWith` check, parseInt returns NaN (no character_id sent), and the server falls back to attributing the roll to the rolling user's default character — surfacing as the wrong PC name in the log. Two-edit fix: hydration adds an explicit `data-is-monster="1"` marker on the cloned `.char-detail` wrapper; both click handlers detect it via `closest('.char-detail[data-is-monster]')` and treat it as monster context (no character_id, skip_roll_state=true).
+**Description:** Three coordinated edits to `app/templates/tabletop.html`. **(1)** `_hydrateMonsterCard` — after the id + data-char-id rewrites, set `clone.setAttribute('data-is-monster', '1')` on the wrapper. This is the explicit per-card marker the click handlers test for. **(2)** `.mini-roll-btn` / `.mini-sk-btn` document-level click handler at line ~3450 — compute `isMonster = !!btn.closest('.char-detail[data-is-monster]')` after the existing `closest('[data-char-id]')` lookup. Then: skip the `body.character_id = charId` assignment when `isMonster` is true (even if charId parses to a valid integer — guards against future combatant.id formats that might collide with PC ids), and set `body.skip_roll_state = true` when `isMonster` OR the legacy `startsWith('monster-')` path matches. **(3)** `.mini-cast-btn` document-level click handler at line ~3516 — extend the `isMonster` detection to OR-in the marker check (`rawCharId.startsWith('monster-') || !!btn.closest('.char-detail[data-is-monster]')`). The monster-cast branch already short-circuits the rest of the cast logic with `return`, so this fix routes Soren's `✨ Cast` clicks into the right branch.
+**Description (cont):** Why two coexisting detection paths (legacy `startsWith('monster-')` + new `data-is-monster`). The legacy `buildMonsterInitSheet` path is still active for orphan combatants whose template was removed from the campaign (per the Phase 2.5b hydration gate `c.token_template_id && c.id`). Removing the legacy check would silently break monster-roll attribution for those orphans. The cleanest cohabitation is OR-ing both signals; both paths set the same flags (no character_id, skip_roll_state=true).
+**Description (cont 2):** Why this regression wasn't caught by the harness. The bug surfaces only when a click handler walks the DOM and posts to `/roll` — pure JS behavior the static HTML harness can't observe. A browser-level test would catch it (the `tests/harness_ui/` suite is the right home), but those are 7 tests today; adding a "monster ability click attributes correctly" case requires a Playwright fixture for the demo battle scene + a way to assert on the roll-log entry's character attribution. Filed as a follow-up; the per-bug commit ships a faster fix today.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.204 live. (b) Wiki + mini-sheet partial harness tests still pass (29/29). (c) Manual: expand Soren's mini-sheet → click WIS in the ability grid → roll log entry shows "Cult Acolyte" (or whatever name the data-note carries) attributed correctly, not "Brother Tavik Stonebrow". (d) Click Soren's `✨ Cast` on a spell row → cast branch runs (the monster-cast flow at line ~3525), not the PC-cast branch.
+
+### Changed
+- `app/templates/tabletop.html` `_hydrateMonsterCard` — stamps `data-is-monster="1"` on the cloned wrapper.
+- `app/templates/tabletop.html` `.mini-roll-btn` / `.mini-sk-btn` click handler — detects monster context via the new marker AND skips PC `character_id` attribution when set.
+- `app/templates/tabletop.html` `.mini-cast-btn` click handler — extends `isMonster` detection to include the new marker.
+
+### Notes
+- **Two coexisting detection paths.** Legacy `data-char-id.startsWith('monster-')` stays for orphan combatants on the `buildMonsterInitSheet` fallback; new `data-is-monster="1"` covers hydrated v2.5b cards. Both produce the same routing.
+- **Bug 2 (HP not updating) and Bug 3 (Spells tab missing on NPC) still open.** Filed as v2.49.205 and v2.49.206 follow-ups in the same review session.
+
+---
+
 ## [2.49.203] - 2026-05-23
 
 **Schema version:** 56
