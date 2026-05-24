@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.198] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **B Phase 2.4 — `tabs=[...]` list drives both the strip and the panel render in `_mini_sheet_card.html`.** Replaces the duplicated per-tab `{% if %}` ladder (one in the tab strip, one in the content stack) with a single `_tabs_present` list of `{file, panel, label}` dicts that drives both iterations. Adding a new tab is now a single list entry instead of two coordinated edits. The partial accepts a caller-provided `tabs=` override for Phase 2.5 NPC integration — pass `{% with tabs=npc_tabs %}{% include "_mini_sheet_card.html" %}{% endwith %}` to replace the default PC computation. Pure refactor: PC behaviour byte-identical.
+**Description:** One edit to `app/templates/_mini_sheet_card.html`. The old block (lines 176-216 — the v2.4.11 "data-tab=attacks vs label Actions" comment + the `<div class="mini-tabs">` strip with four `{% if attacks_list %}…{% endif %}` ladder entries + the `<div class="mini-tab-content">` with four `{% include %}` lines) collapses into:
+  1. A new comment block explaining the `_tabs_present` contract and the caller-override semantics.
+  2. `{% set _features_list = sh.get('class_features') or [] %}` — kept where it was.
+  3. A `{% if tabs is not defined or tabs is none %}` block that builds the default `_tabs_present` list with one `.append()` per tab gated by the same conditions that gated the inline buttons; the `{% else %}` branch assigns `_tabs_present = tabs` (caller override). The empty-list edge case `tabs=[]` is intentionally treated as "render no tabs" — caller explicitly says so.
+  4. `<div class="mini-tabs">` iterates `_tabs_present` to emit buttons.
+  5. `<div class="mini-tab-content">` iterates `_tabs_present` to `{% include "_tab_" ~ _tab.file ~ ".html" %}` — the dynamic include is what makes the per-tab partial extraction from 2.1-2.3b pay off.
+**Description (cont):** Why the tab definitions live in the partial (and not in Python). The plan originally framed 2.4 as "server provides `tabs=[...]` list per combatant" with the implementation in `tabletop_routes.py`. Looking at the actual data flow, the per-tab gates (`attacks_list`, `_is_caster and _spell_vis.any`, `_features_list`) all depend on data already computed in the partial from `sh.get(...)`. Moving the gate logic to Python would duplicate the same `sh.get(...)` reads on the server side just to produce the same boolean answers Jinja already produces. The compromise: keep the default computation in the partial, but accept a caller-provided `tabs=` parameter so Phase 2.5's NPC integration can pre-compute the tabs server-side (where the NPC sheet shape diverges enough to warrant a different list) and inject it. PCs continue using the partial's default; NPCs will use the server's pre-computation.
+**Description (cont 2):** Why "file" vs "panel" are separate keys. The visible-label "Actions" tab has historically had `data-tab="attacks"` (legacy from v2.3.7; the v2.4.11 commit renamed the label but kept the internal key to avoid coordinated edits across `tabletop.js`, the mini-sheet localStorage `vtt_minitab_<id>` key, and the monster mini-sheet path). The new per-tab partial is named `_tab_actions.html` (after the label, not the legacy key). So:
+- `file: 'actions'` → maps to `_tab_actions.html` for `{% include %}`.
+- `panel: 'attacks'` → maps to `data-tab="attacks"` + `data-panel="attacks"` for JS handler + localStorage key compatibility.
+- `label: 'Actions'` → the visible tab-button text.
+
+The other three tabs have `file == panel == lowercase(label)` so the distinction only matters for Actions today. Keeping the structure uniform across all four entries means future tabs added with mismatched file/panel keys don't need a special-case shape.
+**Description (cont 3):** Panel render order changed (cosmetically). Pre-fix: `skills → actions → spells → features` (panel stack) vs `Actions / Spells / Features / Skills` (tab strip). Post-fix: both iterate `_tabs_present` so both follow the strip order `Actions / Spells / Features / Skills`. Only one panel is visible at a time (JS tab handler toggles `.active`), so reorderings of inactive panels don't affect what users see. The localStorage active-tab key still uses `data-tab` (the `panel` key), unchanged.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.198 live. (b) Wiki harness tests pass (19/19). (c) Manual: `GET /campaign/.../battle` → PC mini-sheet tab strip renders the same four buttons (or fewer for non-casters / no-features) in the same order; clicking a tab shows the same panel; localStorage still persists the active tab. (d) Plan doc Phase 2.4 marked ✅ done with v2.49.198 pointer; note added that server-side `tabs` projection lands with 2.5 (where NPCs need it).
+
+### Changed
+- `app/templates/_mini_sheet_card.html` — tab-strip + tab-content blocks (lines 176-216) collapsed into a single `_tabs_present` computation + two iterations. Caller override via `tabs=[...]` parameter. PC behaviour byte-identical.
+- `docs/plans/unified-mini-sheet.md` — Phase 2.4 marked ✅ done with the v2.49.198 commit pointer; server-side projection note moved to Phase 2.5.
+
+### Notes
+- **Pure refactor, no behaviour change.** PC mini-sheet renders identically.
+- **Per-tab partial dynamic dispatch.** `{% include "_tab_" ~ _tab.file ~ ".html" %}` is what makes 2.1-2.3b pay off — adding a new tab (e.g., Inventory, Notes) is now: (1) create `_tab_<name>.html`, (2) add one entry to `_tabs_present`. No tab-strip ladder edit, no `<div class="mini-tab-content">` stack edit.
+- **Caller override is the Phase 2.5 integration point.** When NPCs start using this partial, the NPC renderer will pre-compute its own `tabs` list (likely no Features, conditional Spells, always Actions/Skills) and pass it via `{% with %}`. The PC path continues using the default computation — no migration needed.
+- **Server-side projection deferred.** The plan originally placed `tabs=[...]` computation in `tabletop_routes.py`. The Jinja-side default computation reads the same `sh.get(...)` data that Python would; moving it server-side would duplicate logic with no benefit while PCs are the only path. Phase 2.5 introduces server-side projection because NPCs aren't part of the PC `{% for c in characters %}` loop and need explicit per-combatant rendering.
+
+---
+
 ## [2.49.197] - 2026-05-23
 
 **Schema version:** 56

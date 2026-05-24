@@ -173,46 +173,49 @@
                 {% set _spell_vis.any = true %}
                 {% endif %}
                 {% endfor %}
-                {# v2.4.11: tab order Actions / Spells / Skills (was Skills / Attacks / Spells)
-                   and the visible label "Attacks" renamed to "Actions" — the panel hosts both
-                   weapon attacks and miscellaneous strike-style actions, so "Actions" reads
-                   more accurately. ``data-tab="attacks"`` stays as-is (it's the internal key
-                   the v2.3.7+ JS handlers + the localStorage key already use; renaming the
-                   data-tab would force coordinated edits across mini-sheet scripts + the
-                   monster mini-sheet path for no behavioural gain). #}
-                {# v2.25.0: class_features list for the Features tab. Empty
-                   sheets skip the tab entirely. #}
+                {# ── Tab strip + content (v2.49.198 Phase 2.4) ──
+                   Build a single _tabs_present list of {file, panel, label} dicts
+                   that drives BOTH the tab strip render and the tab content render.
+                   Adding a new tab is now a single list entry instead of two
+                   separate {% if %} blocks (one in the strip, one in the content
+                   stack). The unified iteration also aligns the panel render order
+                   with the tab strip order (was: skills → actions → spells →
+                   features in the panel stack vs Actions / Spells / Features /
+                   Skills in the strip).
+
+                   Each entry:
+                     - file  → partial filename suffix (_tab_<file>.html); "actions"
+                               here vs "attacks" in `panel` is the v2.4.11 rename
+                               (visible label "Actions" → the panel hosts weapon
+                               attacks + strike-style actions; JS handler + the
+                               vtt_minitab_<id> localStorage key still use "attacks"
+                               so renaming the internal key would force coordinated
+                               edits across mini-sheet scripts for no benefit).
+                     - panel → data-tab / data-panel key; must match the partial's
+                               `data-panel="..."` attribute so the JS tab handler
+                               can show/hide the right block.
+                     - label → visible tab-button text.
+
+                   Caller override: if `tabs` is defined and non-None on entry, it
+                   replaces the default computation. Phase 2.5 NPC integration will
+                   use this — NPC renderers compute a per-combatant tabs list
+                   server-side and pass it via {% with tabs=npc_tabs %}. Today
+                   (PC-only path), no caller sets `tabs` so the default is used. #}
                 {% set _features_list = sh.get('class_features') or [] %}
+                {% if tabs is not defined or tabs is none %}
+                {% set _tabs_present = [] %}
+                {% if attacks_list %}{% set _ = _tabs_present.append({'file': 'actions', 'panel': 'attacks', 'label': 'Actions'}) %}{% endif %}
+                {% if _is_caster and _spell_vis.any %}{% set _ = _tabs_present.append({'file': 'spells', 'panel': 'spells', 'label': 'Spells'}) %}{% endif %}
+                {% if _features_list %}{% set _ = _tabs_present.append({'file': 'features', 'panel': 'features', 'label': 'Features'}) %}{% endif %}
+                {% set _ = _tabs_present.append({'file': 'skills', 'panel': 'skills', 'label': 'Skills'}) %}
+                {% else %}
+                {% set _tabs_present = tabs %}
+                {% endif %}
                 <div class="mini-tabs" data-char-id="{{ c.id }}">
-                    {% if attacks_list %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="attacks">Actions</button>{% endif %}
-                    {% if _is_caster and _spell_vis.any %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="spells">Spells</button>{% endif %}
-                    {% if _features_list %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="features">Features</button>{% endif %}
-                    <button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="skills">Skills</button>
+                    {% for _tab in _tabs_present %}<button class="mini-tab-btn" data-char-id="{{ c.id }}" data-tab="{{ _tab.panel }}">{{ _tab.label }}</button>{% endfor %}
                 </div>
                 <div class="mini-tab-content" data-char-id="{{ c.id }}">
-                    {# ── Skills panel — v2.49.196 Phase 2.3: extracted to
-                         _tab_skills.html. Reads c + ab_map + skill_map + prof
-                         from current scope. Always renders (no _is_caster gate). #}
-                    {% include "_tab_skills.html" %}
-                    {# ── Actions panel — v2.49.193 Phase 2.1: extracted to
-                         _tab_actions.html so the same markup can also drive the
-                         NPC mini-sheet body once Phase 2.5 swaps buildMonsterInitSheet's
-                         Actions list to this include. Receives c + attacks_list from
-                         the current scope. #}
-                    {% include "_tab_actions.html" %}
-                    {# ── Spells panel — v2.49.195 Phase 2.2: extracted to
-                         _tab_spells.html so the same markup can also drive the
-                         NPC mini-sheet body once Phase 2.5 swaps buildMonsterInitSheet's
-                         Spells list to this include. The partial owns the
-                         {% if _is_caster and _spell_vis.any %} gate so the parent
-                         include line stays unconditional. Reads c + sh + spells_list +
-                         spell_slots_map + _mc_sorted + _PREPARED_CASTERS +
-                         _primary_slug + _is_caster + _spell_vis from current scope. #}
-                    {% include "_tab_spells.html" %}
-                    {# ── Features panel — v2.49.197 Phase 2.3b: extracted to
-                         _tab_features.html. Partial owns the {% if _features_list %}
-                         gate. Reads c + _features_list from current scope. #}
-                    {% include "_tab_features.html" %}
+                    {% for _tab in _tabs_present %}{% include "_tab_" ~ _tab.file ~ ".html" %}{% endfor %}
                 </div>{# /.mini-tab-content #}
                 {# ── Wild Shape / Polymorph / Revert ──
                      Uses namespace() so loop assignments are visible outside the loop.
