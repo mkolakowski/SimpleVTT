@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.219] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **NPC cast save-roll results now pill into the spell-cast chat card instead of appearing as a separate roll log entry.** User reported the roll-request looked correct but the resulting save roll didn't fold into the cast card like PC spells do. Three coordinated edits close the correlation gap: server emits `auto_save_label` in the `spell_cast` payload; server NPC-target save broadcast prefixes the note with `→ ` (matching the prefix `/roll_request/{id}/respond` adds for PC saves); client `appendSpellCast` initializer seeds `li._spellCast._saveLabel` from the new field.
+**Description:** Three coordinated edits. **(1)** `app/routes/tabletop_routes.py` `use_npc_cast_spell` payload — new `auto_save_label` field set to `f"{spell_name} — {save_ability} save"` when `is_save` AND a target was resolved (either PC or NPC). The label is what the client uses to match incoming save rolls back to this card via `_appendSaveResultToSpellCard`'s `r.note.startsWith("→ {saveLabel}")` check. **(2)** Same file, the NPC-target server-rolled save broadcast now prefixes the note with `→ ` (matching the prefix `/roll_request/{id}/respond` adds at line ~7451 for PC saves). Without this prefix the correlation check fails for NPC targets even when `_saveLabel` is set. **(3)** `app/static/tabletop.js` `appendSpellCast` — `li._spellCast = { ...d, _saveLabel: d.auto_save_label || null }`. Pre-fix `_saveLabel` was hardcoded `null` and only filled in when the user clicked "Prompt SAVE" client-side; NPC casts auto-prompt server-side so the click never happens and `_saveLabel` stayed null forever.
+**Description (cont):** Why three changes for one bug. The correlation contract has two ends: the cast card must know what label to match against (client-side `_saveLabel`) AND the incoming save roll must have a note matching that label with the `→ ` prefix (server-side). PC casts have a manual click flow where the user clicks "Prompt SAVE" → sets `_saveLabel` → roll_request created → response handler adds `→ ` prefix → correlation succeeds. NPC casts bypass the click but the server pieces still need to do their part: emit the label in the broadcast (so client can seed `_saveLabel`) AND prefix the NPC-target save roll's note (so it matches the PC-target shape from `/roll_request/{id}/respond`).
+**Description (cont 2):** Verification. (a) Curl `/version` confirms v2.49.219 live. (b) Wiki + mini-sheet partial + npc_cast_spell harness tests still pass. (c) Manual (hard-refresh): Soren casts Sacred Flame at Pip → Pip's roll_request lands; Pip rolls; the result appears as a `<roller>: <total> ✓ Save / ✗ Failed save` pill row INSIDE Soren's Sacred Flame cast card (not as a separate roll entry below). Soren casts Sacred Flame at a Bandit → save rolled server-side, result pills into the cast card with the same row shape. Same flow for Burning Hands AoE — each target's save shows as a pill on the single cast card.
+
+### Changed
+- `app/routes/tabletop_routes.py` `use_npc_cast_spell` — payload now includes `auto_save_label`; NPC-target server save broadcast prefixes the note with `→ `.
+- `app/static/tabletop.js` `appendSpellCast` — initializes `li._spellCast._saveLabel` from `d.auto_save_label` so NPC casts get automatic save-result correlation.
+
+### Notes
+- **Single correlation contract for both PC and NPC casts.** Same `_saveLabel` + `→ {label}` prefix matching, just seeded from different sources.
+- **PC behavior unchanged.** When `auto_save_label` is absent from a PC `/cast_spell` broadcast (it's not set there), the `|| null` fallback preserves the click-to-prompt flow.
+
+---
+
 ## [2.49.218] - 2026-05-24
 
 **Schema version:** 56

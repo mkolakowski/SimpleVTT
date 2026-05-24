@@ -4545,7 +4545,13 @@
 
         // Stash the cast metadata on the element so the roll listener can
         // correlate save responses back to this card (matches by note prefix).
-        li._spellCast = { ...d, _saveLabel: null };
+        // v2.49.219: seed _saveLabel from the server's auto_save_label when
+        // present so NPC casts (where the server auto-prompts the save via
+        // a RollRequest without the user clicking "Prompt SAVE") get the
+        // pill correlation just like PC casts do. Falls back to null —
+        // PC casts that haven't clicked "Prompt SAVE" yet keep the existing
+        // behavior of setting _saveLabel on click.
+        li._spellCast = { ...d, _saveLabel: d.auto_save_label || null };
         // v2.49.162: damage toast for auto-hit spells (Magic Missile et al).
         // Auto-heal already toasts via the manual Apply Healing click path
         // (line ~4466) and auto-attack / auto-save damage shows in pills,

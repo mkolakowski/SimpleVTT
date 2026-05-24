@@ -17195,14 +17195,20 @@ async def use_npc_cast_spell(
                 auto_save_passed = auto_save_rolled >= save_dc
                 # Broadcast as a regular roll so the chat-card's
                 # _appendSaveResultToSpellCard correlates the result
-                # back to this cast via the note prefix.
+                # back to this cast via the note prefix. v2.49.219:
+                # the `→ ` prefix is what the client's correlation
+                # check expects (`r.note.startsWith("→ {saveLabel}")`)
+                # — matches the prefix added by /roll_request/{id}/respond
+                # at line ~7451 for PC saves; we apply the same prefix
+                # for the NPC-target server-rolled saves so both paths
+                # land in the same pill row.
                 await hub.broadcast(campaign_id, {
                     "type": "roll",
                     "data": {
                         "expression": expr,
                         "total": auto_save_rolled,
                         "breakdown": auto_save_breakdown,
-                        "note": note_label
+                        "note": f"→ {note_label}"
                         + (" ✓ Pass" if auto_save_passed else " ✗ Fail"),
                         "user_name": auto_save_target_name,
                         "char_name": auto_save_target_name,
@@ -17381,6 +17387,19 @@ async def use_npc_cast_spell(
         "auto_save_damage_breakdown": auto_save_damage_breakdown,
         "auto_save_prompted": auto_save_prompted,
         "auto_save_prompt_id": auto_save_prompt_id,
+        # v2.49.219: save-result correlation label. The PC-target path
+        # creates a RollRequest with this label; the player's response
+        # produces a roll with note prefixed `→ {label}` which
+        # _appendSaveResultToSpellCard at tabletop.js:3686 matches against
+        # the cast card's _saveLabel to render the result as a pill row
+        # in-card (instead of as a separate roll-log entry). The NPC-
+        # target server-rolled save also broadcasts with the same `→ `
+        # prefix (see the roll broadcast above) so both paths pill.
+        # Set when is_save is true AND a target was actually resolved.
+        "auto_save_label": (
+            f"{spell_name} — {save_ability} save"
+            if (is_save and auto_save_target_kind) else None
+        ),
         # v2.49.217: per-target outcomes from the AoE multi-target loop.
         # Empty for single-target casts; one entry per target otherwise.
         "auto_save_targets": auto_save_targets_payload,
