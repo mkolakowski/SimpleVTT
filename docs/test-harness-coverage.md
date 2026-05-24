@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 417 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.203, 2026-05-23).
+**Total tests:** 418 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.206, 2026-05-23).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -839,6 +839,7 @@ Regression net for the v2.49.193–.198 per-tab partial extractions from `_mini_
 | `test_monster_card_pool_hidden_from_players` | Phase 2.5a: non-GM users (alice) don't see the pool div in their page DOM at all. NPC sheet data is GM-only. |
 | `test_monster_card_pool_partial_renders_for_dnd5e_monster` | Phase 2.5a: the partial doesn't crash on `is_monster=True` against a monster sheet shape (no `classes` / `hit_dice` / etc.). Anchors on the first monster-template card, asserts the 100 KB window contains a `.mini-tabs` block + Skills tab + at least one `.mini-sk-btn` — i.e., the unified `_tabs_present` iteration produced output, `_tab_skills.html` ran against the monster's abilities dict + 18-skill grid emitted buttons. |
 | `test_renderbattle_wires_hydration_helper_for_monsters` | Phase 2.5b (v2.49.203): the tabletop page source carries the `_hydrateMonsterCard` JS helper, the slotId computation prefers `c.id` over `'monster-{tid}'` for monsters, and `renderBattle()` actually calls the helper. If a future commit removes any of the three, monster mini-sheets silently regress to `buildMonsterInitSheet` for all combatants and Phase 2.5b's user-visible benefit (unified renderer, per-tab partial parity) is lost. |
+| `test_spell_slug_npc_renders_spells_tab` | Bug 3 fix (v2.49.206): Soren the Cult Acolyte's mini-sheet in the monster pool contains a `data-tab="spells"` button + `data-panel="spells"` panel + at least one `✨ Inflict Wounds` or `✨ Sacred Flame` row. Validates that `_monster_template_to_sheet` projects spell_slug actions into `sh['spells']` AND the partial's empty-`_iter_classes` fallback fires for monsters (which have no class hierarchy). |
 
 ---
 

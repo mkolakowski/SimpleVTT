@@ -49,6 +49,19 @@
     {% set _iter_classes = (_mc_sorted if _mc_sorted else (
         [{'class': sh.get('class',''), 'level': sh.get('level',1)}] if sh.get('class') else []
     )) %}
+    {# v2.49.206: NPC fallback — monsters have no `classes` list and no
+       top-level `class` field, so _iter_classes is empty even when
+       spells_list has entries (e.g., Soren the Cult Acolyte's
+       spell_slug actions projected into sh.spells by the v2.49.206
+       _monster_template_to_sheet update). Synthesize a single empty-
+       slug entry so the per-class iteration runs and renders the
+       spells. Spells projected from spell_slug actions have `class: ''`
+       which matches `_cc_slug = ''` from this fallback entry.
+       Slot-pip row (gated on `slot_total > 0` further below) stays
+       suppressed because monsters have no spell_slots_map. #}
+    {% if not _iter_classes and spells_list %}
+    {% set _iter_classes = [{'class': '', 'level': 1}] %}
+    {% endif %}
     {% set _is_multiclass = (_iter_classes | length) > 1 %}
     {% for lvl_i in range(10) %}
         {% set _level_has = namespace(any=false) %}

@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.206] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix: NPC mini-sheet now renders a Spells tab for spell-slug actions (Soren the Cult Acolyte's Inflict Wounds + Sacred Flame).** User-reported v2.49.203 regression: the unified partial showed no Spells tab on Soren, even though buildMonsterInitSheet had been displaying his spell-slug actions in a Spells panel since v2.49.182. Root cause was two-layered: (1) `_monster_template_to_sheet` folds spell-slug actions into `sh['attacks']` for the legacy character schema but never into `sh['spells']` — buildMonsterInitSheet filtered spell-slug actions client-side; the unified partial reads `sh.get('spells')` directly and got nothing. (2) Even with `sh['spells']` populated, the partial's spell iteration needs `_iter_classes` to be non-empty (it iterates `_iter_classes × range(10) × spells_list`), but for NPCs `_iter_classes` derives from `sh.get('classes')` / `sh.get('class')` — both empty. Two-edit fix: server projects spell-slug actions into `sh['spells']`; partial synthesizes a single empty-slug iteration entry when `_iter_classes` is empty but `spells_list` is non-empty.
+**Description:** Three coordinated edits. **(1)** `app/routes/tabletop_routes.py` `_resolve_spell_slug_action` — extend the catalog overlay to include spell-level metadata (level, casting_time, concentration, ritual, duration, components) that the partial's spell-row template consumes. Pre-fix the overlay only carried action-level fields (damage / save_ability / attack_roll / range / etc.); the partial's row template reads spell-level fields for the level header bucket, the ⏱ / ® sigils, and the expandable detail panel. Now they come through on the merged action and any downstream consumer (sheet projection, action button stamping) gets them for free. **(2)** `app/routes/tabletop_routes.py` `_monster_template_to_sheet` — after resolving spell-slug actions and folding into `sh['attacks']`, ALSO project them into a new `sh['spells']` list with the PC spell shape (name, level, range, damage, damage_type, save_ability, save_dc, attack_roll, attack_bonus, concentration, ritual, casting_time, duration, components, desc, _slug). `class` is intentionally empty — monsters have no class hierarchy. Skipped when `sh['spells']` already has entries (homebrew template might author them directly). **(3)** `app/templates/_tab_spells.html` — add a fallback that synthesizes `_iter_classes = [{'class': '', 'level': 1}]` when the computed list is empty but `spells_list` is non-empty. The single empty-slug entry matches against spell rows with `class: ''` (which is what the v2.49.206 projection sets), so the spell iteration runs and rows render. Slot-pip row (gated on `slot_total > 0`) stays suppressed because monsters have no `spell_slots_map`. The multiclass label (gated on `_is_multiclass`) stays suppressed because the synthesized iteration has length 1.
+**Description (cont):** Why server-side projection (not partial-side filter on `sh['actions']`). The partial's spell-row template reads `spells_list` items with the PC spell shape (level, class, range, damage, attack_roll, attack_bonus, concentration, ritual, casting_time, etc.). Filtering `sh['actions']` for spell-slug entries inside the partial would mean duplicating the field-mapping logic in Jinja (action.damage → spell row damage, action.spell_level → spell row level, etc.). Doing the projection server-side once in `_monster_template_to_sheet` gives the partial a single shape to consume regardless of whether the spell came from a PC's sheet or from an NPC's spell-slug action.
+**Description (cont 2):** Why the partial fallback (not server-side `sh['classes']` synthesis). I considered setting `sh['classes'] = [{'class': 'Monster', 'level': 1}]` for NPCs with spells, which would make `_mc_sorted` non-empty and the existing iteration would work. But the partial's header sub-line reads `_mc_sorted` to display "Cleric 5 · Tiefling" for PCs; that would surface as "Monster 1 · Humanoid" for NPCs, which is wrong (Soren is "Medium Humanoid · evil", not "Monster 1"). The partial-side fallback keeps the header logic untouched while letting the spell iteration find its matching empty-slug iteration entry.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.206 live. (b) `python3 -m pytest tests/harness/test_mini_sheet_partials.py -q` → 10 passed (1 new + 9 from prior). (c) Manual: expand Soren's mini-sheet → tab strip shows Actions / Spells / Skills (was Actions / Skills); click Spells → panel shows ✨ Inflict Wounds (with attack-bonus + damage chips) and ✨ Sacred Flame (with save-DC chip), each with a ✨ Cast button that routes through the monster cast handler (v2.49.204 fix to the cast handler ensures the monster branch is detected via the data-is-monster marker).
+
+### Added
+- `tests/harness/test_mini_sheet_partials.py` `test_spell_slug_npc_renders_spells_tab` — asserts Soren's mini-sheet in the monster pool contains the Spells tab + at least one ✨ row. Total test count 417 → 418.
+
+### Changed
+- `app/routes/tabletop_routes.py` `_resolve_spell_slug_action` — catalog overlay now includes spell-level metadata (level, casting_time, concentration, ritual, duration, components).
+- `app/routes/tabletop_routes.py` `_monster_template_to_sheet` — projects spell-slug actions into `sh['spells']` (skipped when sh already has spells).
+- `app/templates/_tab_spells.html` — fallback `_iter_classes = [{'class': '', 'level': 1}]` when empty + `spells_list` non-empty.
+- `docs/test-harness-coverage.md` — total-test-count 417 → 418; new row added under "Mini-sheet partials".
+
+### Notes
+- **Two-layered fix.** Server populates the data; partial handles the no-class iteration. Both layers are needed.
+- **`_resolve_spell_slug_action` got more fields.** This catalog overlay is now load-bearing for the partial's spell-row template (not just the action stamping). The new fields are append-only — existing consumers ignore unknown keys.
+- **Wraps up the three v2.49.203 regressions.** v2.49.204 (roll attribution), v2.49.205 (HP not updating), v2.49.206 (Spells tab missing) ship together as the Phase 2.5b debt-payoff cycle.
+
+---
+
 ## [2.49.205] - 2026-05-23
 
 **Schema version:** 56

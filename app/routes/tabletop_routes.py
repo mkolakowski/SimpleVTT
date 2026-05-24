@@ -20207,6 +20207,19 @@ def _resolve_spell_slug_action(action: dict, campaign_id: int) -> dict:
         "range": spell_range or "",
         # Append spell's short desc if the monster doesn't provide one.
         "desc": spell_dict.get("desc", ""),
+        # v2.49.206: spell-level metadata needed by the unified mini-sheet
+        # partial's Spells tab (_tab_spells.html). The PC spell shape that
+        # _tab_spells.html consumes reads level / casting_time /
+        # concentration / ritual / duration / components from the spell
+        # dict; without these the partial can't render the NPC spell row
+        # at the right level header (cantrips vs leveled) or emit the
+        # ⏱ Concentration / ® Ritual sigils.
+        "level": int(spell_dict.get("level") or 0),
+        "casting_time": spell_dict.get("casting_time", ""),
+        "concentration": bool(spell_dict.get("concentration")),
+        "ritual": bool(spell_dict.get("ritual")),
+        "duration": spell_dict.get("duration", ""),
+        "components": spell_dict.get("components", ""),
     }
     for k, v in catalog_defaults.items():
         cur = merged.get(k)
@@ -20316,6 +20329,52 @@ def _monster_template_to_sheet(tmpl: TokenTemplate, campaign_id: int) -> dict:
             by_name[key] = len(existing_attacks) - 1
 
     sheet["attacks"] = existing_attacks
+
+    # v2.49.206: also project spell_slug actions into sh["spells"] so the
+    # unified mini-sheet partial (_tab_spells.html) renders an NPC Spells
+    # tab. The partial gates the tab on `_is_caster and _spell_vis.any`,
+    # which both depend on `spells_list = sh.get("spells")`. Pre-fix, NPC
+    # actions with spell_slug ended up only in sh["attacks"] — the
+    # buildMonsterInitSheet path used to filter those into a separate
+    # spells panel client-side; the v2.5b unified partial reads sh["spells"]
+    # directly. Each entry mirrors the PC spell shape so the partial's
+    # row template (✨ name + range / atk / dmg / save chips, ⏱ / ®
+    # sigils, expandable detail) renders identically across PC + NPC.
+    # The `class` field is intentionally empty: monsters don't have a
+    # class hierarchy; the partial's empty-_iter_classes fallback
+    # (also v2.49.206) handles this case by synthesizing a single
+    # empty-slug iteration entry so the spell rows match.
+    existing_spells = sheet.get("spells") or []
+    if not existing_spells:
+        spells_proj = []
+        for a in actions:
+            if not isinstance(a, dict):
+                continue
+            slug = a.get("spell_slug")
+            if not slug:
+                continue
+            spells_proj.append({
+                "name": a.get("name") or str(slug).replace("-", " ").title(),
+                "level": int(a.get("level") or 0),
+                "class": "",
+                "range": a.get("range", ""),
+                "damage": a.get("damage", ""),
+                "damage_type": a.get("damage_type", ""),
+                "save_ability": a.get("save_ability", ""),
+                "save_dc": a.get("save_dc") or None,
+                "attack_roll": bool(a.get("attack_roll")),
+                "attack_bonus": a.get("attack_bonus", ""),
+                "concentration": bool(a.get("concentration")),
+                "ritual": bool(a.get("ritual")),
+                "casting_time": a.get("casting_time", ""),
+                "duration": a.get("duration", ""),
+                "components": a.get("components", ""),
+                "desc": a.get("desc", ""),
+                "_slug": str(slug),
+            })
+        if spells_proj:
+            sheet["spells"] = spells_proj
+
     return sheet
 
 

@@ -230,6 +230,56 @@ async def test_monster_card_pool_hidden_from_players():
     assert 'id="monster-card-pool"' not in resp.text, "non-GM should not see the monster-card-pool"
 
 
+async def test_spell_slug_npc_renders_spells_tab():
+    """Phase 2.5b Bug 3 fix (v2.49.206) — NPCs whose actions reference
+    the spell catalog via `spell_slug` (the demo's Cult Acolyte
+    TokenTemplate: Inflict Wounds + Sacred Flame) render a Spells tab in
+    the unified partial. Pre-fix the partial's tab strip skipped Spells
+    because `sh.get('spells')` was empty for NPCs — buildMonsterInitSheet
+    had its own spell-slug-action filter; the unified partial relies on
+    `_monster_template_to_sheet` projecting spell_slug actions into
+    `sh['spells']` so the `_is_caster` + `_spell_vis.any` gates fire.
+
+    Anchors on the Cult Acolyte mini-header-name inside the monster pool
+    (the partial reads `c.name` from the TokenTemplate's name field, not
+    the combatant nickname — Soren is a per-spawn rename layered on
+    top), takes a 60 KB window, and asserts the Spells tab button +
+    panel + at least one ✨ spell row appear. If the projection
+    regresses (server stops populating sh['spells']) or the partial's
+    empty-_iter_classes fallback regresses, this test fails."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        login = await client.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"}, follow_redirects=True)
+        assert login.status_code in (200, 303)
+        resp = await client.get(CAMPAIGN_PAGE, follow_redirects=True)
+    html = resp.text
+    pool_idx = html.find('id="monster-card-pool"')
+    assert pool_idx >= 0, "monster-card-pool missing"
+    # The Cult Acolyte template is in the demo seed (see v2.49.182).
+    # Anchor on the partial-emitted mini-header-name so we land inside
+    # the right card (and not on a JS string literal elsewhere in the
+    # page). The trailing space matches the partial's `{{ c.name }} `
+    # (the space precedes the optional 🧿 concentration sigil span).
+    name_marker = 'class="mini-header-name">Cult Acolyte '
+    name_idx = html.find(name_marker, pool_idx)
+    assert name_idx >= 0, "Cult Acolyte template not in the monster pool — demo seed regression?"
+    card_start = html.rfind('<div class="char-detail"', pool_idx, name_idx)
+    assert card_start >= 0, "char-detail wrapper not found before Cult Acolyte name marker"
+    card_window = html[card_start : card_start + 60000]
+    # Spells tab button rendered → _is_caster + _spell_vis.any gate fired.
+    assert 'data-tab="spells"' in card_window, (
+        "Cult Acolyte's Spells tab is missing — server's _monster_template_to_sheet "
+        "may not be projecting spell_slug actions into sh['spells']."
+    )
+    # Spells panel rendered → empty-_iter_classes fallback fired AND
+    # at least one spell row matched.
+    assert 'data-panel="spells"' in card_window, "Cult Acolyte's Spells panel missing"
+    # At least one ✨ spell row rendered for the template's spell_slug actions.
+    assert '✨ Inflict Wounds' in card_window or '✨ Sacred Flame' in card_window, (
+        "Cult Acolyte's Spells panel rendered but contains neither Inflict Wounds "
+        "nor Sacred Flame — the spell projection or the partial's row template may have regressed."
+    )
+
+
 async def test_renderbattle_wires_hydration_helper_for_monsters():
     """Phase 2.5b verification — the tabletop page source carries the
     `_hydrateMonsterCard` JS helper + the slotId computation that prefers
