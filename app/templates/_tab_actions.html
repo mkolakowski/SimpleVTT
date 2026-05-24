@@ -1,0 +1,65 @@
+{#
+  Actions tab — weapon attacks + strike-style entries.
+
+  Extracted from _mini_sheet_card.html in v2.49.193 as Phase 2.1 of the
+  unified-mini-sheet plan (B / Symmetric). The PC partial now includes this
+  via {% include %}; future commits will also include it from the NPC
+  rendering path so both sources emit identical action-row markup.
+
+  Receives from the caller's Jinja scope:
+    - c            → character-like object with at minimum ``id`` and
+                     ``name`` (PCs are SQLAlchemy Character rows; monsters
+                     are the synthetic dict built by _monster_template_card_dict).
+    - attacks_list → list of attack dicts. Each row may have:
+                     ``name``, ``attack_bonus`` or ``bonus``, ``damage``,
+                     ``damage_type``, ``save_dc``, ``save_ability``,
+                     ``range``, ``properties``, ``desc``.
+                     If empty/missing, the panel is NOT rendered (caller's
+                     tab strip should also skip the Actions tab button).
+
+  Behavioural contract (preserved verbatim from the inline block, v2.4.23):
+    - Each row is a ``.mini-row-expandable`` container that toggles a
+      sibling ``.mini-attack-detail`` panel on click. The ``.mini-strike-btn``
+      inner click is excluded via the document-level handler's skip list.
+    - For PCs the strike handler builds /attack via attack_index; for
+      monsters it builds /roll from the data attributes (TokenTemplate-
+      backed mini-sheets can't use /attack which requires a real Character
+      row). The data attrs are redundant for PCs but harmless.
+#}
+{% if attacks_list %}
+<div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="attacks">
+    <div class="mini-attacks">
+    {% for a in attacks_list %}
+    {% set a_save_dc = (a.save_dc or 0) | int %}
+    {% set a_is_save = a_save_dc > 0 and a.save_ability %}
+    {% set a_atk_bonus = a.attack_bonus or a.bonus or '' %}
+    <div class="mini-attack-row mini-row-expandable" title="{{ a.name }}{% if a.range %} · {{ a.range }}{% endif %}">
+        <span class="mini-attack-name">{{ a.name }}</span>
+        {% if a_atk_bonus and not a_is_save %}<span class="mini-attack-tag atk">{{ a_atk_bonus }}</span>{% endif %}
+        {% if a.damage %}<span class="mini-attack-tag dmg">{{ a.damage }}</span>{% endif %}
+        {% if a_is_save %}<span class="mini-attack-tag save">DC {{ a_save_dc }} {{ a.save_ability }}</span>{% endif %}
+        <button type="button" class="mini-strike-btn"
+                data-char-id="{{ c.id }}"
+                data-attack-idx="{{ loop.index0 }}"
+                data-attack-name="{{ a.name }}"
+                data-attack-bonus="{{ a_atk_bonus }}"
+                data-attack-damage="{{ a.damage or '' }}"
+                data-attack-damage-type="{{ a.damage_type or '' }}"
+                data-attack-save-ability="{{ a.save_ability or '' }}"
+                data-attack-save-dc="{{ a_save_dc if a_is_save else '' }}"
+                data-attack-range="{{ a.range or '' }}"
+                title="Strike with {{ a.name }}">🗡 Strike</button>
+    </div>
+    <div class="mini-attack-detail mini-row-detail">
+        {% set _bits = [] %}
+        {% if a.range %}{% set _ = _bits.append('<span><strong>Range:</strong> ' ~ a.range ~ '</span>') %}{% endif %}
+        {% if a.damage_type %}{% set _ = _bits.append('<span><strong>Type:</strong> ' ~ a.damage_type ~ '</span>') %}{% endif %}
+        {% if a.properties %}{% set _ = _bits.append('<span><strong>Properties:</strong> ' ~ a.properties ~ '</span>') %}{% endif %}
+        {% if _bits %}<div class="mini-row-detail-bits">{{ _bits | join(' · ') | safe }}</div>{% endif %}
+        {% if a.desc %}<div class="mini-row-detail-desc">{{ a.desc }}</div>{% endif %}
+        {% if not _bits and not a.desc %}<span class="muted">No additional details.</span>{% endif %}
+    </div>
+    {% endfor %}
+    </div>
+</div>
+{% endif %}

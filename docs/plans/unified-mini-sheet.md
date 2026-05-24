@@ -211,11 +211,11 @@ Rationale: B is the right architectural endpoint (one partial, per-tab sub-parti
 
 | # | Step | Files touched | Notes |
 |---|---|---|---|
-| 2.1 | Extract `_tab_actions.html` from both `_mini_sheet_card.html` Actions panel + JS Actions panel | `app/templates/_tab_actions.html` (new), both renderers | Renders weapon attacks + monster actions (already overlapping in structure). |
-| 2.2 | Extract `_tab_spells.html` (the v2.49.177+ chip layout) | `app/templates/_tab_spells.html` (new) | Both PCs and NPCs already use the same chip CSS classes after v2.49.183. |
+| 2.1 | ✅ **Done v2.49.193.** Extract `_tab_actions.html` from `_mini_sheet_card.html` Actions panel. (JS Actions panel swap deferred to 2.5.) | `app/templates/_tab_actions.html` (new), `_mini_sheet_card.html` (uses include) | Pure refactor; PC behaviour byte-identical. NPC still rendered client-side via `buildMonsterInitSheet`. |
+| 2.2 | Extract `_tab_spells.html` (the v2.49.177+ chip layout) | `app/templates/_tab_spells.html` (new) | Both PCs and NPCs already use the same chip CSS classes after v2.49.183. Spells extraction is more complex than 2.1: multiclass loop, slot-pip rendering, prepared-caster gating all need to migrate into the partial. |
 | 2.3 | Extract `_tab_skills.html` | `app/templates/_tab_skills.html` (new) | NPC mini-sheet already shares the `.mini-sk-btn` class. |
 | 2.4 | Server provides `tabs=[...]` list per combatant | `tabletop_routes.py` | Drives the partial's tab strip. |
-| 2.5 | Swap NPC body to the per-tab partials; delete `buildMonsterInitSheet` body section | `tabletop.html`, `tabletop_routes.py` | One-line removal once the per-tab partials handle the same data. |
+| 2.5 | Swap NPC body to the per-tab partials; delete `buildMonsterInitSheet` body section | `tabletop.html`, `tabletop_routes.py` | **Open question for this step:** the NPC mini-sheet is rendered entirely client-side today (`buildMonsterInitSheet` returns an HTML string at `renderBattle()` time). To consume Jinja partials it needs either (a) per-TokenTemplate server pre-render at page-load, hoisted into the init-card slot, with client-side HP / charge patching per combatant after hoist — same pattern as the PC `#char-detail-{id}` hoist; or (b) a new per-combatant render endpoint (`GET /api/combatant/{id}/card`) hit on-demand by `renderBattle()`. Path (a) is simpler — no new endpoint, same pattern as PCs — but requires the per-combatant patch step. This decision lands with the 2.5 commit; until then 2.1-2.4 work as pure refactors on the PC side. |
 | 2.6 | Harness test: every combatant in the demo (PC + NPC) renders all advertised tabs without throwing | `tests/harness/test_unified_mini_sheet.py` (new) | Iterates 12 PCs + 7 NPCs, asserts every advertised tab has a non-empty panel. |
 
 ### Phase 3 — Cleanup (post-B)

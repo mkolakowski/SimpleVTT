@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.193] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **B Phase 2.1 — extract `_tab_actions.html` from `_mini_sheet_card.html`.** First mechanical step of the unified-mini-sheet plan's Phase 2 (Mockup B / Symmetric). The Actions tab panel — ~50 lines of attack-row + strike-button + detail-panel markup — moves from the inline PC partial into a dedicated `_tab_actions.html` include. The PC partial replaces the inline block with a single `{% include "_tab_actions.html" %}`. Pure refactor: no PC behaviour change, no schema change, no new endpoints. Sets up the per-tab partial infrastructure that future commits (Phase 2.2 spells / 2.3 skills / 2.4 server-`tabs[]` / 2.5 NPC swap) will build on.
+**Description:** Two coordinated edits. **(1)** New file `app/templates/_tab_actions.html` — 60 lines, header docstring documents the caller contract (`c`, `attacks_list` from outer scope), preserves the v2.4.23 click-to-expand row container + sibling `.mini-attack-detail` panel, preserves the v2.3.18 data-attr stash for monster /roll fallback, preserves the save vs attack-bonus chip branching. Markup is byte-identical to the extracted block — diff-wise this is a code move, not a rewrite. **(2)** `app/templates/_mini_sheet_card.html` — lines 224-273 collapsed to a 6-line include block with a comment explaining why the extraction exists and what Phase 2.5 will use it for. Net delta: -47 lines from the PC partial, +60 lines in the new partial (+13 because of the new docstring; the rest is comment migration).
+**Description (cont):** Why this is a separate commit from Phase 2.2 / 2.3. Per CLAUDE.md's "one conceptually-distinct change per commit" rule, each tab extraction is its own commit so reviewers can see the surgical move without it being mixed in with the more complex Spells panel (multiclass loops + slot pip rendering + prepared-caster gating) or the Skills panel (18-skill grid). Each extraction also unlocks an independent harness-snapshot opportunity, so isolating them keeps regression-blame narrow.
+**Description (cont 2):** Why not also swap the NPC `buildMonsterInitSheet` actions list to this partial yet. The NPC mini-sheet is currently rendered entirely client-side (JS-built HTML, no server pre-render); making it consume a Jinja partial requires either (a) per-template pre-render with client-side HP patching or (b) a new per-combatant render endpoint. That decision belongs to Phase 2.5 once all three tab partials exist + the server-side `tabs=[...]` projection (Phase 2.4) lands. Keeping the swap out of this commit means the refactor is genuinely pure (PC behaviour unchanged, NPC untouched) and the next commit's diff is a single-purpose extraction of `_tab_spells.html`.
+**Description (cont 3):** Plan doc updated. `docs/plans/unified-mini-sheet.md` Phase 2 table marks step 2.1 as ✅ done with the commit pointer; a footnote on Phase 2.5 elaborates the NPC-render-path question so future-me doesn't have to re-litigate it.
+**Description (cont 4):** Verification. (a) Curl `/version` confirms v2.49.193 live. (b) Full harness suite reports 403 passing / 4 failing — same counts as the pre-commit baseline (the 4 failures are pre-existing attack-pip + sleep-wake-on-damage tests unrelated to mini-sheet rendering). (c) Manual: `GET /campaign/.../battle` → PC mini-sheet Actions tab renders attack rows + 🗡 Strike buttons + click-to-expand detail panels identically to v2.49.192. (d) NPC mini-sheet renders identically (no path through the new partial yet).
+
+### Added
+- `app/templates/_tab_actions.html` — new per-tab partial; canonical home for Actions-panel markup; consumed by both PC (today) and NPC (Phase 2.5) renderers.
+
+### Changed
+- `app/templates/_mini_sheet_card.html` — Actions panel inline block (lines 224-273) replaced with `{% include "_tab_actions.html" %}`. PC behaviour byte-identical.
+- `docs/plans/unified-mini-sheet.md` — Phase 2.1 marked ✅ done; Phase 2.5 footnote elaborates the NPC-render-path decision deferred to that step.
+
+### Notes
+- **Pure refactor, no behaviour change.** Harness counts unchanged. PC mini-sheet Actions tab renders identically. NPC `buildMonsterInitSheet` untouched.
+- **Per-tab extraction is a multi-commit journey.** Phase 2.2 (Spells) + 2.3 (Skills) + 2.4 (server `tabs=[...]`) + 2.5 (NPC swap) + 2.6 (harness snapshot test) remain. Each ships as its own commit per the "one conceptually-distinct change" rule.
+- **NPC rendering still client-side.** Mockup B's unification benefit only reaches NPCs once Phase 2.5 wires the per-tab partials into the NPC render path — likely via per-template server pre-render + client-side HP/charge patching after hoist. That design decision lands with 2.5.
+
+---
+
 ## [2.49.192] - 2026-05-23
 
 **Schema version:** 56
