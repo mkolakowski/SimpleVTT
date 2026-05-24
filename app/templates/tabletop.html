@@ -5628,6 +5628,76 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         return HP_THRESHOLDS[HP_THRESHOLDS.length - 1].label;
     }
 
+    /* v2.49.203 Phase 2.5b: hydrate a per-combatant #char-detail-{slotKey}
+     * by cloning the source template card from #monster-card-pool (the
+     * v2.49.202 server pre-render), rewriting every data-char-id and the
+     * wrapper id from `monster-template-{tid}` to `{slotKey}`, and patching
+     * HP from the combatant's per-row state (template carries default
+     * HP; combatant carries the actual current HP — they diverge once
+     * the bandit has been hit).
+     *
+     * Idempotent — if `#char-detail-{slotKey}` already exists in the DOM
+     * (prior hydration this render cycle, or a leftover from a previous
+     * renderBattle call), returns true without re-cloning. Returns false
+     * if no source is available in the pool (orphan combatant whose
+     * TokenTemplate was deleted from the campaign — buildMonsterInitSheet
+     * fallback handles those at the caller).
+     *
+     * Multi-combatant case: 3 bandits sharing TokenTemplate 42 each
+     * receive their OWN clone keyed by combatant.id (`tok_abc_demo`,
+     * `tok_def_demo`, `tok_ghi_demo`). Each clone's data-char-ids are
+     * rewritten to the per-combatant key so the existing _setAbMode +
+     * tab-toggle handlers query the right card by combatant.
+     *
+     * Known limitation: action_charges (per-combatant charge tracking for
+     * limited-use monster abilities like Frightful Howl or Soren's Inflict
+     * Wounds) are NOT yet rendered by the unified partial — see TODO
+     * "Migrate monster action_charges to the unified partial." The
+     * charge counter widget + the disabled-button state are lost on
+     * monsters switched to the new path. Spell/attack rolls still fire
+     * correctly (the underlying combatant.action_charges state remains
+     * authoritative server-side), but the GM doesn't see the per-combatant
+     * 2/2 ↻ counter until the migration ships. */
+    function _hydrateMonsterCard(combatant, slotKey) {
+        if (!combatant || !combatant.token_template_id) return false;
+        if (!slotKey) return false;
+        if (document.getElementById('char-detail-' + slotKey)) return true;
+        const sourceId = 'char-detail-monster-template-' + combatant.token_template_id;
+        const source = document.getElementById(sourceId);
+        if (!source) return false;
+        const clone = source.cloneNode(true);
+        const oldKey = 'monster-template-' + combatant.token_template_id;
+        clone.id = 'char-detail-' + slotKey;
+        if (clone.dataset && clone.dataset.charId === oldKey) clone.dataset.charId = slotKey;
+        clone.querySelectorAll('[data-char-id="' + oldKey + '"]').forEach(el => {
+            el.setAttribute('data-char-id', slotKey);
+        });
+        // HP patch: the template card carries the TokenTemplate's default
+        // HP; the combatant carries its actual current HP. Patch both the
+        // data attrs (read by the HP stepper + WS hp_update handlers) and
+        // the displayed text spans.
+        const hpCur = parseInt(combatant.hp_current);
+        const hpMax = parseInt(combatant.hp_max);
+        if (Number.isFinite(hpCur)) {
+            clone.querySelectorAll('[data-hp-cur]').forEach(el => el.setAttribute('data-hp-cur', String(hpCur)));
+            const curEl = clone.querySelector('.mini-hp-cur');
+            if (curEl) curEl.textContent = String(hpCur);
+        }
+        if (Number.isFinite(hpMax)) {
+            clone.querySelectorAll('[data-hp-max]').forEach(el => el.setAttribute('data-hp-max', String(hpMax)));
+            const maxEl = clone.querySelector('.mini-hp-max');
+            if (maxEl) maxEl.textContent = '/ ' + hpMax;
+        }
+        // Append into the pool wrapper so the hydrated card lives next to
+        // the source. The pool is display:none, but the hoist mechanism
+        // (at line ~6010 below) physically MOVES the .mini-body out into
+        // the visible init-card-sheet slot when the user expands, so the
+        // pool's display:none doesn't hide the eventual user-facing
+        // content. Same hoist pattern PC #char-detail-{char_id} blocks use.
+        source.parentNode.appendChild(clone);
+        return true;
+    }
+
     function renderBattle() {
         // v2.49.5 — expose battle state on window so tabletop.js
         // (canvas render loop, AoE picker combatant lookup, 0-HP
@@ -5688,15 +5758,27 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         list.innerHTML = battle.combatants.map((c, i) => {
             const isActive = battle.active && i === (battle.turn_index % battle.combatants.length);
             const col = hpColor(c.hp_current, c.hp_max);
-            /* v2.3.17: unified ``slotId`` — the data-char-id key the
-             * mini-body steal logic uses to find this combatant's
-             * pre-rendered mini-sheet. PCs use the Character id; monsters
-             * use ``monster-{token_template_id}`` matching the id stamped
-             * on ``#char-detail-monster-{tid}`` in the monster pool div
-             * rendered by the GM-only ``monster_templates`` loop. */
+            /* v2.3.17 / v2.49.203: unified ``slotId`` — the data-char-id
+             * key the mini-body steal logic uses to find this combatant's
+             * pre-rendered mini-sheet. PCs use the Character id (server-
+             * rendered into #char-detail-{char_id}); monsters use the
+             * per-combatant ``combatant.id`` (hydrated below from the
+             * v2.49.202 monster-card-pool source). Orphan monsters
+             * without an id fall through to the legacy ``monster-{tid}``
+             * key — buildMonsterInitSheet then renders inline from the
+             * combatant payload (no pool source needed). */
             const slotId = c.char_id
                 ? String(c.char_id)
-                : (c.token_template_id ? 'monster-' + c.token_template_id : '');
+                : (c.id ? String(c.id) : (c.token_template_id ? 'monster-' + c.token_template_id : ''));
+            // v2.49.203 Phase 2.5b: hydrate per-combatant char-detail for
+            // monsters by cloning + id-rewriting + HP-patching the source
+            // template card from the pool. Idempotent — no-op if the per-
+            // combatant card already exists. Returns false for orphans
+            // (template removed from campaign); those fall through to the
+            // buildMonsterInitSheet fallback below.
+            if (c.token_template_id && c.id) {
+                _hydrateMonsterCard(c, slotId);
+            }
             const hasCharDetail = !!(slotId && document.getElementById('char-detail-' + slotId));
             // v2.4.26: ``pointer-events: none`` + ``draggable="false"``
             // on the portrait IMG so clicks pass straight through to the

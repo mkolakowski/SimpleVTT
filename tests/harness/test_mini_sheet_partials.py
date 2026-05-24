@@ -230,6 +230,38 @@ async def test_monster_card_pool_hidden_from_players():
     assert 'id="monster-card-pool"' not in resp.text, "non-GM should not see the monster-card-pool"
 
 
+async def test_renderbattle_wires_hydration_helper_for_monsters():
+    """Phase 2.5b verification — the tabletop page source carries the
+    `_hydrateMonsterCard` JS helper + the slotId computation that prefers
+    `c.id` over `'monster-{tid}'` for monsters. If a future commit
+    removes the helper or reverts the slotId change, monster mini-sheets
+    silently fall back to `buildMonsterInitSheet` for all combatants —
+    Phase 2.5b's user-visible benefit (unified renderer, per-tab partial
+    parity) is lost. This test asserts both load-bearing identifiers are
+    in the JS source so the regression fails fast at CI time."""
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        login = await client.post("/login", data={"email": "demo-gm@example.com", "password": "demopass"}, follow_redirects=True)
+        assert login.status_code in (200, 303)
+        resp = await client.get(CAMPAIGN_PAGE, follow_redirects=True)
+    assert resp.status_code == 200
+    html = resp.text
+    # The helper function must exist.
+    assert 'function _hydrateMonsterCard(' in html, "_hydrateMonsterCard helper missing — monster hydration broken"
+    # The slotId computation must include the c.id branch (the Phase 2.5b
+    # change). Anchor on the new fallback chain shape; the trailing
+    # ternary on c.token_template_id is the legacy orphan fallback that
+    # MUST remain so combatants without a pool source still render via
+    # buildMonsterInitSheet.
+    assert "c.id ? String(c.id) : (c.token_template_id ? 'monster-' + c.token_template_id : '')" in html, (
+        "slotId computation in renderBattle no longer prefers c.id for monsters — "
+        "Phase 2.5b hydration won't find the per-combatant char-detail."
+    )
+    # The hydration call itself must be present in renderBattle. The
+    # gate `c.token_template_id && c.id` avoids hydrating orphan
+    # combatants (id missing) — those fall through to the legacy path.
+    assert '_hydrateMonsterCard(c, slotId)' in html, "_hydrateMonsterCard not called from renderBattle"
+
+
 async def test_monster_card_pool_partial_renders_for_dnd5e_monster():
     """Phase 2.5a verification — the partial doesn't throw when rendered
     with `is_monster=True` against a monster sheet shape. Anchors on the
