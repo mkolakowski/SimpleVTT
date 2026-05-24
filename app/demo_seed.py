@@ -226,6 +226,20 @@ def seed_campaign(db: Session, users: dict[str, User]) -> Campaign:
         gm_color="#a78bfa",
         session_active=True,
         session_started_at=datetime.utcnow(),
+        # v2.49.209: enable auto-apply-damage on the demo campaign. The
+        # Campaign model defaults this to False (per the v2.21.0
+        # rationale: "existing tables aren't surprised by unexpected
+        # HP changes; GMs opt in once they trust the flow") but the
+        # demo's whole point is to SHOWCASE the auto-apply pipeline —
+        # cast Fireball → server rolls saves per NPC → damage applies
+        # → mini-sheet HP updates → 💀 overlay on the canvas when HP
+        # hits 0. With auto_apply off the demo halts at "damage rolled,
+        # GM clicks Apply" which doesn't surface as broken behavior;
+        # it looks like the mini-sheet HP just doesn't update (the
+        # v2.49.203 Phase 2.5b regression user reported). Enabling on
+        # the demo also means the v2.49.205 _hydrateMonsterCard HP
+        # patch step has something to react to.
+        auto_apply_damage=True,
     )
     db.add(camp)
     db.flush()

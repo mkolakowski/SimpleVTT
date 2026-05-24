@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.209] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **Fix: demo campaign now has `auto_apply_damage=True` so Fireball-on-NPC actually mutates HP.** User-reported v2.49.203 regression "did damage with fireball, no change to HP in any interface." After tracing the spell-cast auto-damage path (`cast_spell` → `_apply_damage_to_combatant` → `battle_update` broadcast → client `renderBattle` → v2.49.205 hydration HP patch), the root cause turned out NOT to be a v2.5b regression at all: the `auto_apply_damage` flag at the campaign level defaults to **False** in the model (per the v2.21.0 "GMs opt in once they trust the flow" rationale) and the demo seed never set it true. So Fireball rolls damage server-side, posts the chat-card pills with "Auto-saved: N | Failed: M", but skips `_apply_damage_to_combatant` entirely — no broadcast, no HP change anywhere. The user's existing-feature regression report was actually a pre-existing demo-config gap that the v2.5b unified mini-sheet made more visible (PCs and NPCs both render through the same HP-display surface, so the "no change" stood out more clearly than it did in the legacy `buildMonsterInitSheet` path).
+**Description:** One edit in `app/demo_seed.py` — `seed_campaign` now passes `auto_apply_damage=True` when constructing the demo `Campaign` row. This means: Fireball at Soren → server rolls Soren's DEX save → applies post-save damage → broadcasts battle_update → client renderBattle → my v2.49.205 hydration patch updates the mini-sheet HP span → user sees Soren's HP drop. The full pipeline now works end-to-end on the demo.
+**Description (cont):** Why this matters for the demo specifically (vs leaving it off as a global default). The demo's entire purpose is showcasing what SimpleVTT can do; auto-apply-damage is one of the most user-visible automated features (cast a spell, watch HP change). Leaving it off forces the GM to click a separate "Apply damage" affordance per damage card, which (a) isn't the obvious flow a first-time visitor would discover and (b) hides the v2.5b unified mini-sheet's biggest benefit (NPCs now have the PC-style HP bar that visually fills/depletes on damage). The global default stays False for non-demo campaigns where the GM's mental model is "rolls are recommendations, application is GM-driven."
+**Description (cont 2):** Existing demos need a reset to pick this up. The demo campaign in the DB was created with `auto_apply_damage=False` (the model default). Container rebuild alone doesn't change existing rows; the user needs to either (a) trigger the demo-reset endpoint (which wipes + reseeds the campaign), or (b) flip the toggle manually in Campaign Settings (Tabletop Settings → "Auto-apply damage"). Either way, post-flip the auto-damage pipeline works for the existing demo too. New deploys get the flag on first seed.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.209 live. (b) Wiki + mini-sheet partial harness tests still pass (29/29 + 11 mini-sheet partials). (c) Manual: after demo reset OR toggle, GM casts Fireball at Soren → Soren's mini-sheet HP drops in real time (the v2.49.205 hydration patch + the v2.49.207 marker-survives-hoist fix together make the full pipeline visible).
+
+### Changed
+- `app/demo_seed.py` `seed_campaign` — `Campaign(auto_apply_damage=True, ...)` so the demo showcases the auto-damage pipeline. Non-demo campaigns keep the False default.
+
+### Notes
+- **Not actually a v2.5b regression.** Root cause was a demo-config gap exposed by the unified mini-sheet's more obvious HP display.
+- **Existing demos need a reset OR a manual toggle.** Container rebuild doesn't update the existing campaign row.
+- **Wraps up the user-reported v2.49.203 bug trio plus the v2.49.206 dup spell + v2.49.207 marker-survives-hoist follow-ups.** Phase 2.5b's hydration is now visibly working end-to-end on the demo.
+
+---
+
 ## [2.49.208] - 2026-05-23
 
 **Schema version:** 56
