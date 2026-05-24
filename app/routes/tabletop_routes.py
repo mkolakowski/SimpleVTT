@@ -17076,6 +17076,144 @@ async def use_npc_cast_spell(
         if target_combatant_id else ""
     )
 
+    # v2.49.216: save-spell auto-resolution for NPC casters. Adapted
+    # from the PC /cast_spell flow at line ~8277. For NPC targets the
+    # server rolls the save from the target's ability mods + applies
+    # save-for-half damage on the result. For PC targets a RollRequest
+    # is created and broadcast as a roll_request card so the player
+    # rolls in their own UI — damage application waits for the
+    # response handler (matches the PC /cast_spell behavior).
+    auto_save_target_kind = ""
+    auto_save_target_name = ""
+    auto_save_rolled = None
+    auto_save_passed = None
+    auto_save_breakdown = ""
+    auto_save_damage_rolled = 0
+    auto_save_damage_applied = 0
+    auto_save_damage_breakdown = ""
+    auto_save_prompted = False
+    auto_save_prompt_id = 0
+    if (
+        is_save
+        and target_combatant
+        and save_ability in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}
+    ):
+        auto_save_target_name = target_combatant.get("name", "") or target_name_resolved or ""
+        stat_key = f"{save_ability.lower()}_save"
+        note_label = f"{spell_name} — {save_ability} save"
+        tgt_char_id = target_combatant.get("char_id")
+        tgt_char = None
+        if tgt_char_id:
+            tgt_char = db.query(Character).filter(
+                Character.id == int(tgt_char_id),
+                Character.campaign_id == campaign_id,
+            ).first()
+
+        if tgt_char and tgt_char.owner_user_id:
+            # PC target — create a RollRequest the player rolls in their UI.
+            # No save_request_context stash for v1 (the existing context
+            # dict shape assumes a PC caster — extending it for NPC casters
+            # is filed as a follow-up; for now PC saves on NPC casts go
+            # through the standard roll_request → /roll_request/{id}/respond
+            # path without the auto-damage application). Matches PC AoE
+            # save flow's behavior on PC targets.
+            auto_save_target_kind = "pc"
+            req = RollRequest(
+                campaign_id=campaign_id,
+                created_by_user_id=user.id,
+                label=note_label,
+                base_expression="1d20",
+                stat_key=stat_key,
+                dc=save_dc,
+                visibility=Visibility.PUBLIC,
+            )
+            db.add(req)
+            db.commit()
+            db.refresh(req)
+            await hub.broadcast(campaign_id, {
+                "type": "roll_request",
+                "data": {
+                    "id": req.id,
+                    "label": req.label,
+                    "stat_key": req.stat_key,
+                    "base_expression": req.base_expression,
+                    "dc": req.dc,
+                    "visibility": req.visibility.value,
+                    "created_by_name": user.display_name,
+                    "created_by_user_id": user.id,
+                    "target_user_ids": [tgt_char.owner_user_id],
+                    "target_user_names": [tgt_char.name],
+                },
+            })
+            auto_save_prompted = True
+            auto_save_prompt_id = req.id
+        elif target_combatant.get("token_template_id"):
+            # NPC target — roll the save server-side from the monster's
+            # ability mods. Reuses _resolve_stat_modifier on the resolved
+            # monster sheet (same helper /cast_spell uses for NPC saves
+            # at line ~8399).
+            auto_save_target_kind = "npc"
+            tmpl = db.query(TokenTemplate).filter(
+                TokenTemplate.id == int(target_combatant["token_template_id"]),
+            ).first()
+            if tmpl:
+                npc_sheet = _monster_template_to_sheet(tmpl, campaign_id)
+                npc_mod, _ = _resolve_stat_modifier(npc_sheet, "dnd5e", stat_key)
+                expr = f"1d20{npc_mod:+d}"
+                try:
+                    r = dice_mod.roll(expr)
+                    auto_save_rolled = int(r.total)
+                    auto_save_breakdown = r.breakdown
+                except dice_mod.DiceParseError:
+                    auto_save_rolled = 0
+                    auto_save_breakdown = ""
+                auto_save_passed = auto_save_rolled >= save_dc
+                # Broadcast as a regular roll so the chat-card's
+                # _appendSaveResultToSpellCard correlates the result
+                # back to this cast via the note prefix.
+                await hub.broadcast(campaign_id, {
+                    "type": "roll",
+                    "data": {
+                        "expression": expr,
+                        "total": auto_save_rolled,
+                        "breakdown": auto_save_breakdown,
+                        "note": note_label
+                        + (" ✓ Pass" if auto_save_passed else " ✗ Fail"),
+                        "user_name": auto_save_target_name,
+                        "char_name": auto_save_target_name,
+                        "visibility": Visibility.PUBLIC.value,
+                        "dc": save_dc,
+                    },
+                })
+
+        # Save-for-half damage application on NPC targets when auto_apply
+        # is on. Sacred Flame is "no effect on save" not "half" — that's
+        # a per-spell distinction the action schema can express in the
+        # future; for v1 the universal save-for-half default applies.
+        if (
+            auto_save_target_kind == "npc"
+            and auto_save_passed is not None
+            and damage_expr_raw
+            and bool(campaign.auto_apply_damage)
+        ):
+            try:
+                r = dice_mod.roll(damage_expr_raw)
+                auto_save_damage_rolled = int(r.total)
+                auto_save_damage_breakdown = r.breakdown
+            except dice_mod.DiceParseError:
+                auto_save_damage_rolled = 0
+            if auto_save_damage_rolled > 0:
+                proposed = (
+                    auto_save_damage_rolled if not auto_save_passed
+                    else auto_save_damage_rolled // 2
+                )
+                if proposed > 0:
+                    apply_result = await _apply_damage_to_combatant(
+                        db, campaign_id, target_combatant, proposed,
+                        damage_type=damage_type, attack_id=cast_id,
+                    )
+                    auto_save_damage_applied = int(apply_result.get("applied") or 0)
+
     # Mirror /cast_spell's spell_cast payload shape so the existing
     # client-side ``appendSpellCast`` renderer (tabletop.js:4307) handles
     # the chat-card chrome without NPC-specific branches.
@@ -17110,11 +17248,24 @@ async def use_npc_cast_spell(
         "auto_attack_damage_applied": auto_attack_damage_applied,
         "auto_attack_damage_type": damage_type,
         "auto_attack_damage_breakdown": auto_attack_damage_breakdown,
-        # Save-spell metadata (Sacred Flame path). Resolution is GM-manual.
+        # Save-spell metadata + v2.49.216 auto-resolution. Server rolls
+        # NPC target saves + applies save-for-half damage; PC target gets
+        # a roll_request that the player rolls in their own UI.
         "save_dc": save_dc if is_save else 0,
         "save_ability": save_ability if is_save else "",
         "is_save": is_save,
-        "auto_save_target_kind": None,
+        "auto_save_target_kind": auto_save_target_kind or None,
+        "auto_save_target_name": auto_save_target_name,
+        "auto_save_rolled": auto_save_rolled,
+        "auto_save_passed": auto_save_passed,
+        "auto_save_breakdown": auto_save_breakdown,
+        "auto_save_dc": save_dc if is_save else 0,
+        "auto_save_damage_rolled": auto_save_damage_rolled,
+        "auto_save_damage_applied": auto_save_damage_applied,
+        "auto_save_damage_type": damage_type if is_save else "",
+        "auto_save_damage_breakdown": auto_save_damage_breakdown,
+        "auto_save_prompted": auto_save_prompted,
+        "auto_save_prompt_id": auto_save_prompt_id,
         "auto_save_targets": [],
         # Misc — empty / None for NPC spells (no AoE / heal / auto-hit
         # darts / per-action buttons yet).
@@ -17137,6 +17288,12 @@ async def use_npc_cast_spell(
         "auto_attack_damage_rolled": auto_attack_damage_rolled,
         "auto_attack_damage_applied": auto_attack_damage_applied,
         "is_save": is_save,
+        "auto_save_target_kind": auto_save_target_kind or None,
+        "auto_save_rolled": auto_save_rolled,
+        "auto_save_passed": auto_save_passed,
+        "auto_save_damage_rolled": auto_save_damage_rolled,
+        "auto_save_damage_applied": auto_save_damage_applied,
+        "auto_save_prompted": auto_save_prompted,
         "target_combatant_id": target_combatant_id or "",
         "target_name": target_name_resolved,
         "auto_applied": bool(campaign.auto_apply_damage),

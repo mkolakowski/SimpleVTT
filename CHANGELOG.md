@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.216] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **`/npc_cast_spell` auto-resolves target saves server-side.** v2.49.215 emitted the spell-cast chat card with a save DC + ability chip but left the actual save resolution GM-manual. v2.49.216 ports the save-resolution logic from PC `/cast_spell` into the NPC endpoint: PC targets get a `RollRequest` broadcast so the player rolls in their own UI; NPC targets get their save rolled server-side from the monster's ability mods + save-for-half damage applied when `auto_apply_damage` is on. The chat card now mutates in place with the save outcome (Pass / Fail badge + damage pill) — matching the PC AoE flow exactly.
+**Description:** Two coordinated edits in `app/routes/tabletop_routes.py` `use_npc_cast_spell`. **(1)** New ~80-line save-resolution block before the broadcast that handles both target kinds: PC target → create a `RollRequest` scoped to the target's `owner_user_id` + broadcast `roll_request` event (the player's UI surfaces the prompt). NPC target → roll the save via `_resolve_stat_modifier(npc_sheet, "dnd5e", "{ab}_save")` (same helper PC `/cast_spell` uses) + apply save-for-half damage on the result via `_apply_damage_to_combatant` when `auto_apply_damage` is on. The NPC save roll broadcasts as a regular `roll` event with the canonical note prefix (`"{spell_name} — {AB} save ✓ Pass"` / `" ✗ Fail"`) which the client's `_appendSaveResultToSpellCard` correlates back to the cast card. **(2)** Broadcast payload + endpoint response now include the `auto_save_target_kind` / `auto_save_rolled` / `auto_save_passed` / `auto_save_breakdown` / `auto_save_dc` / `auto_save_damage_rolled` / `auto_save_damage_applied` / `auto_save_damage_type` / `auto_save_prompted` / `auto_save_prompt_id` fields. The existing `appendSpellCast` renderer's save-target rendering kicks in automatically (no client-side branches).
+**Description (cont):** Why v1 doesn't stash `_save_request_context` for PC targets. The PC `/cast_spell` stashes the cast context so the `/roll_request/{id}/respond` handler can install a condition buff on the target when they fail (Hold Person → paralyzed, etc.). The dict shape assumes a PC caster (uses `caster_char_id` + `caster_char_name`). Extending it for NPC casters is straightforward but adds plumbing; for v1 NPC save spells in the demo (Sacred Flame) don't install conditions on failed saves, only damage. Auto-damage application happens regardless on the response side via the player's `/roll_request/{id}/respond` path. Filed as a follow-up if condition-installing NPC saves (Hold Person cast by a witch) become a demo need.
+**Description (cont 2):** Why save-for-half is the universal default. Per RAW PHB p. 196, the "standard" save behavior is full damage on fail, half (rounded down) on success — almost every damage-dealing save spell follows this rule (Fireball, Burning Hands, Cone of Cold). The "no effect on save" exceptions (Sacred Flame, Spiritual Weapon's bonus damage) require a per-spell flag the action schema doesn't yet carry. For v1 the universal rule applies; the GM can adjust HP manually for the few exceptions. The PC `/cast_spell` has the same v1 default; we match.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.216 live. (b) Existing tests still pass + the happy-path test now also asserts the auto-save fields are present on save-spell broadcasts. (c) Manual (after hard-refresh, with auto_apply_damage on): Soren casts Sacred Flame at Pip → roll_request appears in Pip's UI; Pip rolls DEX save; result correlates back to Soren's cast card with a Pass/Fail outcome row + damage pill if Pip failed. Soren casts Sacred Flame at another NPC (Bandit) → save rolled server-side; damage applied immediately (Bandit's HP drops by the rolled damage on fail, half on pass).
+
+### Changed
+- `app/routes/tabletop_routes.py` `use_npc_cast_spell` — new save-resolution block (~80 lines) adapted from PC `/cast_spell` (line ~8277). PC target → `roll_request` broadcast; NPC target → server-rolled save + save-for-half damage application via `_apply_damage_to_combatant`. Payload + response carry the new `auto_save_*` fields.
+
+### Notes
+- **Reuses PC save-resolution logic verbatim.** Same `_resolve_stat_modifier` helper, same broadcast shape, same chat-card correlation via note prefix.
+- **Condition installation deferred.** Hold-Person-style NPC casts that install a condition on failed save need the `_save_request_context` stash extended for NPC casters. v1 NPC save spells only do damage.
+- **AoE NPC casts (Fireball) still v2.49.217.** Single-target only this commit.
+
+---
+
 ## [2.49.215] - 2026-05-24
 
 **Schema version:** 56
