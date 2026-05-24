@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 402 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.166, 2026-05-23).
+**Total tests:** 413 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.200, 2026-05-23).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -820,6 +820,21 @@ Read-only doc-hub routes added in v2.43.3, expanded in v2.49.9 with the `/wiki/d
 | `test_wiki_doc_serves_root_doc` | v2.49.9: `GET /wiki/doc/claude` → 200, body contains CLAUDE.md's H1 ("Claude Code guidelines") + the nav menu. Resolves through the allowlist to the repo-root `CLAUDE.md`. |
 | `test_wiki_doc_unknown_slug_404` | v2.49.9: a slug that isn't in `_DOC_ALLOWLIST` → 404. Important security guarantee — the allowlist is the only way to reach a file outside `docs/wiki/`. |
 | `test_wiki_doc_traversal_blocked` | v2.49.9: directory-traversal characters in the doc slug → 404 / 400, rejected by the slug guard before the allowlist lookup. |
+
+---
+
+## Mini-sheet partials (Phase 2.6 — v2.49.200)
+
+Regression net for the v2.49.193–.198 per-tab partial extractions from `_mini_sheet_card.html` (Mockup B Phase 2 of [`docs/plans/unified-mini-sheet.md`](../plans/unified-mini-sheet.md)). Loads the demo campaign tabletop page (`GET /campaign/1`) and asserts that the four per-tab partials (`_tab_actions.html`, `_tab_spells.html`, `_tab_skills.html`, `_tab_features.html`) still produce their expected markup when iterated from the unified `_tabs_present` list. Tests live in `tests/harness/test_mini_sheet_partials.py`. NPC mini-sheets are still rendered client-side via `buildMonsterInitSheet` — Phase 2.5's NPC body swap will add matching coverage.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_tabletop_renders_all_demo_pc_mini_sheets` | `GET /campaign/1` → 200; all 12 demo PCs' `.mini-header-name` blocks present in the response. A single Jinja error in any sub-partial would 500 the page; this test fails fast. |
+| `test_tab_strip_renders_per_tabs_present_list` | Phase 2.4: Zara Emberfire (Sorcerer 5) renders all four tab buttons (`data-tab="attacks"` "Actions" / `"spells"` "Spells" / `"features"` "Features" / `"skills"` "Skills") in the documented order. Validates the `_tabs_present` iteration emits the right `{panel, label}` pairs for a full caster. |
+| `test_actions_panel_renders_when_attacks_present` | Phase 2.1: Pip Quickfingers (Rogue) renders the `data-panel="attacks"` panel with at least one `.mini-attack-row` + a `🗡 Strike` button — the partial's tell-tale markup. |
+| `test_spells_panel_renders_for_caster_with_slots` | Phase 2.2: Zara renders the `data-panel="spells"` panel with at least one `.mini-spell-row` + `✨ Cast` button + a `.mini-slot-row` slot-pip bar (level ≥ 1 spell present). Validates the multiclass loop + slot-pip rendering in `_tab_spells.html`. |
+| `test_skills_panel_renders_all_18_skills` | Phase 2.3: Pip's `data-panel="skills"` contains exactly 18 `.mini-sk-btn` buttons — the `SKILLS_LIST` constant inside `_tab_skills.html` produces the full standard 5e skill grid for every PC. |
+| `test_features_panel_renders_for_pc_with_class_features` | Phase 2.3b: at least one PC in the demo roster renders the `data-panel="features"` panel with `.mini-feature-row` + `🪄 Use` button. `_features_list` is the per-character gate; the assertion doesn't hardcode which PC since the demo seed gives every PHB class some class-feature entries. |
 
 ---
 

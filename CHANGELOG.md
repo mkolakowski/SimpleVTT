@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.200] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **B Phase 2.6 (PC-only) — harness regression test for the per-tab partial extractions.** New file `tests/harness/test_mini_sheet_partials.py` with 6 tests that hit the demo campaign's tabletop page (`GET /campaign/1`) and assert every PC mini-sheet still renders cleanly through the partial + each per-tab partial produces its expected markup when its gate is satisfied. Locks in v2.49.193 (Actions) / .195 (Spells) / .196 (Skills) / .197 (Features) / .198 (`_tabs_present` iteration) as a regression net — any future Jinja-syntax / template-include / scope-variable regression in any of the five surfaces fails the harness before it lands in production. NPC coverage waits for Phase 2.5 (the body swap that replaces `buildMonsterInitSheet` with the partial); the test file is structured so adding NPC cases later is mechanical — same fixtures, same response, just additional `_mini_sheet_block` lookups.
+**Description:** Two coordinated edits. **(1)** New file `tests/harness/test_mini_sheet_partials.py` — 6 tests. `test_tabletop_renders_all_demo_pc_mini_sheets` is the canary: any single Jinja error in any sub-partial would 500 the page and miss every assertion below; asserting the 12-PC roster catches that fast. The five remaining tests each pin one specific surface — tab-strip iteration (Phase 2.4), Actions panel (2.1), Spells panel + slot pips (2.2), 18-skill grid (2.3), Features panel (2.3b). Uses spot-checks (Pip for Actions/Skills, Zara for Spells, any-PC for Features) rather than asserting every PC has every tab — most PCs don't, by design. A `_mini_sheet_block(html, char_name=...)` helper anchors on the `class="mini-header-name">{name}` substring (the partial's header convention) and returns a 60 KB window for substring asserts. The helper uses `_` indent + `from __future__ import annotations` for the PEP 604 `int | None` type hint (Python 3.9 compat — the demo container's pytest runs on 3.9 in CI per `helpers.py`'s convention). **(2)** `docs/test-harness-coverage.md` — bumped total-test-count from 402 to 413 (PR head was at 407 before this commit's +6); added a new "Mini-sheet partials (Phase 2.6 — v2.49.200)" section under the Wiki section with a 6-row test table mirroring the assertion shape of each test.
+**Description (cont):** Why the harness HTTP path (not direct Jinja env render). The harness pattern already in use across all 19 wiki tests + the 11 spell-cast tests + the 9 attack tests is "hit the live container's HTTP surface; assert on the response." That matches the production contract (the actual user-facing render path runs through FastAPI + Jinja + middleware + the request scope). A direct `templates.env.get_template("_mini_sheet_card.html").render(...)` test would bypass the middleware + the `templates.TemplateResponse` packaging + would need its own synthetic context dict that diverges from what the real route handler builds — false-positive-prone. The HTTP test costs ~1 s per case (login + page fetch + asserts); 6 cases run in 1.8 s total — acceptable for CI.
+**Description (cont 2):** Why NPC coverage waits for 2.5. The whole point of Phase 2.6 is to lock in the partial-rendering contract. NPCs today aren't on the partial — `buildMonsterInitSheet` builds an HTML string from JS, so a "does the partial render NPCs?" assertion has nothing to assert against until Phase 2.5 server-renders the NPC mini-sheet through `_mini_sheet_card.html` with `is_monster=True`. The test file is intentionally structured (helper function + per-tab-surface tests) so adding NPC cases later is mechanical: when Phase 2.5 lands, add `test_npc_*` cases that look up Soren the Cult Acolyte in the page response and assert the same Actions / Spells / Skills panels render (NPCs don't have Features today, so that test stays PC-only).
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.200 live. (b) `python3 -m pytest tests/harness/test_mini_sheet_partials.py -q` → 6 passed in ~1.8 s. (c) `python3 -m pytest tests/harness/test_wiki.py -q` → 19 passed (sibling rendering tests still green). (d) Plan doc Phase 2.6 row marked ✅ done with the v2.49.200 pointer + a note that NPC coverage waits for 2.5.
+
+### Added
+- `tests/harness/test_mini_sheet_partials.py` — new test file, 6 cases pinning the per-tab partial extraction work from v2.49.193–.198.
+- `docs/test-harness-coverage.md` — new "Mini-sheet partials" section under the Wiki section; total-test-count bumped 402 → 413.
+
+### Changed
+- `docs/plans/unified-mini-sheet.md` — Phase 2.6 row marked ✅ done with the v2.49.200 commit pointer; note added that NPC coverage waits for 2.5.
+
+### Notes
+- **Pure additive change.** No app-code edits — only a new test file + the catalog + plan-doc bookkeeping. The five surfaces under test were locked in by v2.49.193–.198; this commit just adds the regression net.
+- **PC-only coverage (intentional).** NPC mini-sheets still render through `buildMonsterInitSheet`; covering them is mechanical once Phase 2.5's body swap lands.
+- **CI runtime cost low.** 6 tests, ~1.8 s wall clock (login + page fetch + asserts). Negligible at suite scale.
+
+---
+
 ## [2.49.199] - 2026-05-23
 
 **Schema version:** 56
