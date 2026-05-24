@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.210] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Fix: server `/roll` no longer auto-attributes character-less rolls to the user's first owned PC.** User reported v2.49.207's mini-roll fix was insufficient: clicking WIS on Soren STILL attributed the roll to a random PC (different PC than before — now one not even on the tabletop). After tracing the server-side `/roll` handler, found the root cause was actually server-side, not client-side. The client's "no character_id sent + skip_roll_state=true" signal IS reaching the server correctly (v2.49.207's marker-survives-hoist fix works), but the server then runs a fallback query (`Character.campaign_id == campaign_id AND Character.owner_user_id == user.id`) that picks the first character the rolling user owns — which for a GM testing a monster click silently maps to whichever PC was created first in the demo seed. That's the "rolls as a PC" surfacing. Same root cause also explains the user's v2.49.208 follow-up "Sacred Flame rolls as a PC in the old roll log message" — both bugs share the over-eager server fallback.
+**Description:** One edit in `app/routes/tabletop_routes.py` `roll_dice` (line 6957). The character-lookup fallback used to fire whenever `explicit_char_id` was absent: `if _char is None: _char = db.query(Character).filter(... owner_user_id == user.id).first()`. The new gate adds `and not skip_roll_state`: when the client explicitly says "this roll bypasses the per-character roll_state machine" (the universal "monster roll" signal — set by .mini-roll-btn / .mini-sk-btn / .mini-cast-btn handlers at tabletop.html:~3460 when isMonster is detected), the server now respects that as "no character context at all" — no fallback, no auto-attribution. The roll lands in the log with `char_name=None` and the roller's user_name only.
+**Description (cont):** Why this lives on the server. The client's signal can't be more explicit — "no character_id in body + skip_roll_state=true" is already the strongest "this is a monster" signal it can send. The server's fallback existed for a different use case: rolls fired from page-level controls (the global d20 button, the GM's roll-anything panel) that genuinely want auto-attribution to the user's character. Those callers DON'T set skip_roll_state. Gating the fallback on the flag preserves their behavior while fixing the monster-click case.
+**Description (cont 2):** Why I didn't catch this in v2.49.204 / .207. Both prior fixes addressed the CLIENT-side detection (data-is-monster marker + closest selector). Both correctly produced the "no character_id + skip_roll_state=true" payload. But neither traced what the server did with that payload. The over-eager fallback turned the client's correct signal into the wrong outcome silently. Lesson for the harness UI tests later: assertions need to land on the roll-log entry's character attribution, not just on the request shape.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.210 live. (b) Wiki + mini-sheet partial harness tests still pass. (c) Manual: expand Soren → click WIS → roll log shows the GM's user name (no character avatar / no "Brother Tavik Stonebrow" / no other PC attribution). The note "Cult Acolyte: WIS check" carries the monster identity. Same outcome for Sacred Flame's `✨ Cast` (the spell rolls damage + save announcement, both attributed to the GM user, neither to a PC).
+
+### Changed
+- `app/routes/tabletop_routes.py` `roll_dice` — fallback character lookup now gated on `not skip_roll_state`, so monster rolls (which always set the flag) skip the over-eager auto-attribution.
+
+### Notes
+- **Server-side fix, not client-side.** The client's "no character_id + skip_roll_state=true" payload was already correct since v2.49.207; the server's fallback was the actual bug.
+- **PC behavior unchanged.** PCs send `character_id` explicitly; the fallback never fired for them. The gate only affects callers that send `skip_roll_state=true` AND no `character_id` — exclusively the monster-click path.
+- **Sacred Flame's "no target picker" half of Bug #2 is separate.** The NPC cast handler at tabletop.html:~3524 fires the rolls but doesn't invoke the AoE / single-target picker the PC cast path uses. Filed as v2.49.211 follow-up.
+
+---
+
 ## [2.49.209] - 2026-05-23
 
 **Schema version:** 56

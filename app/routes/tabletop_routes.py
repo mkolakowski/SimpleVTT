@@ -6978,6 +6978,16 @@ async def roll_dice(
     # to single-d20 expressions and (b) attribute the roll in the log.
     # Explicit ``character_id`` in the body wins (lets a GM roll for a
     # specific char); falls back to the user's first character.
+    # v2.49.210: skip the fallback when ``skip_roll_state`` is set. The
+    # flag means "this roll doesn't belong to ANY character" (monster
+    # ability/skill clicks fired from the unified mini-sheet send it
+    # alongside an absent character_id). Without this gate the server
+    # silently auto-attributes monster rolls to the GM's first owned
+    # PC — which is what surfaced as "Cult Acolyte: WIS check" rolled
+    # by Brother Tavik Stonebrow in the user-reported v2.49.203 +
+    # v2.49.204 + v2.49.207 cycle. The fix sits on the server because
+    # the client's "no character_id" signal can't be made any more
+    # explicit; the server's fallback was always over-eager.
     _char = None
     explicit_char_id = body.get("character_id")
     if explicit_char_id:
@@ -6990,7 +7000,7 @@ async def roll_dice(
             )
         except (TypeError, ValueError):
             _char = None
-    if _char is None:
+    if _char is None and not skip_roll_state:
         _char = (
             db.query(Character)
             .filter(Character.campaign_id == campaign_id, Character.owner_user_id == user.id)
