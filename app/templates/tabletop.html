@@ -4929,16 +4929,15 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                 if (m) profSkills[m[1].trim()] = parseInt(m[2]);
             });
         }
-        // Parse ``prof_saving_throws`` — "Str +4, Dex +5, Wis +2".
-        const profSaves = {};
-        if (typeof sh.prof_saving_throws === 'string' && sh.prof_saving_throws.trim()) {
-            sh.prof_saving_throws.split(',').forEach(part => {
-                const m = part.match(/^\s*(Str|Dex|Con|Int|Wis|Cha)\s*([+-]\d+)\s*$/i);
-                if (m) profSaves[m[1].toUpperCase()] = parseInt(m[2]);
-            });
-        }
+        // v2.49.199: ``prof_saving_throws`` parser + the "Saving Throws"
+        // row that previously sat at the top of the Skills tab were
+        // removed in the same commit that added the PC-style Check/Save
+        // toggle to the ability grid in buildMonsterInitSheet above. Save
+        // mods are now accessible via the Save toggle pill on each ability
+        // button — showing them twice (once in the grid via toggle, once
+        // in a separate Skills-tab row) was redundant and pushed the
+        // skill list further down the panel for no benefit.
 
-        const STATS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
         const SKILL_LIST = [
             ['Acrobatics', 'DEX'], ['Animal Handling', 'WIS'], ['Arcana', 'INT'],
             ['Athletics', 'STR'], ['Deception', 'CHA'], ['History', 'INT'],
@@ -4949,18 +4948,6 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         ];
 
         let html = '';
-
-        // Saving throws row — all six stats. Proficient ones brighter +
-        // marker. Most monsters list 0-3 proficient saves; the rest fall
-        // back to bare ability mod.
-        html += '<div style="font-size:9px;font-weight:700;color:var(--fg-mute);text-transform:uppercase;letter-spacing:0.5px;margin:4px 0 4px;">Saving Throws</div>';
-        html += '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">';
-        STATS.forEach(s => {
-            const isPro = s in profSaves;
-            const mod = isPro ? profSaves[s] : abi(parseInt(ab[s]) || 10);
-            html += `<span style="font-size:11px;${isPro ? 'color:var(--fg);font-weight:600;' : 'color:var(--fg-mute);'}">${s} ${fmt(mod)}${isPro ? ' ◆' : ''}</span>`;
-        });
-        html += '</div>';
 
         // Skills grid — 2-column, all 18. Each skill is a ``.mini-sk-btn``
         // matching the PC mini-sheet markup so the existing document-level
@@ -5029,6 +5016,14 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         const fmt = n => (n >= 0 ? '+' : '') + n;
         const STATS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
 
+        // v2.49.199: slotKey hoisted out of the (formerly later) tab-bar
+        // block so the new PC-style ability grid below can use it as the
+        // ``data-char-id`` for the Check/Save toggle wiring. Per the
+        // v2.4.11 note further down, this is the per-combatant unique
+        // string (``tok_501_demo`` etc.) not the template id, so multiple
+        // bandits sharing one template each get independent toggle state.
+        const slotKey = combatant.id || ('monster-' + tmpl.id);
+
         let html = '<div style="padding:8px 10px 12px;">';
 
         // v2.49.183: PC-style header for NPC mini-sheets. Mirrors the
@@ -5094,17 +5089,60 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         if (sh.speed) quick.push(`<span><b>Spd</b> ${sh.speed}</span>`);
         if (quick.length) html += `<div style="display:flex;gap:14px;margin-bottom:6px;flex-wrap:wrap;font-size:11px;">${quick.join('')}</div>`;
 
-        // Ability grid — 6 cells, each showing the modifier and raw score.
+        // v2.49.199: PC-style ability grid with Check / Save toggle pill,
+        // replacing the v2.49.183 compact 6-cell grid (label / mod / score).
+        // Uses the same .mini-ab-header / .mini-ab-toggle / .mini-ab-grid /
+        // .mac-name / .mac-mod / .mac-btn markup as _mini_sheet_card.html
+        // so the existing toggle handler (_setAbMode at line ~3936) picks
+        // it up by data-char-id automatically. Save proficiency is derived
+        // from sh.prof_saving_throws ("Str +4, Dex +5") — the parsed
+        // bonus replaces the bare ability mod for proficient stats on the
+        // Save mode. Non-proficient stats show the same value for Check
+        // and Save (no prof added). The separate "Saving Throws" row in
+        // the Skills panel below was removed in the same commit because
+        // save mods are now accessible via the Save toggle here.
         if (Object.keys(ab).length) {
-            html += `<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:3px;text-align:center;margin-bottom:6px;">`;
+            const _profSaves = {};
+            if (typeof sh.prof_saving_throws === 'string' && sh.prof_saving_throws.trim()) {
+                sh.prof_saving_throws.split(',').forEach(part => {
+                    const m = part.match(/^\s*(Str|Dex|Con|Int|Wis|Cha)\s*([+-]\d+)\s*$/i);
+                    if (m) _profSaves[m[1].toUpperCase()] = parseInt(m[2]);
+                });
+            }
+            const _abName = _esc(combatant.name || tmpl.name || '?');
+            html += `<div class="mini-ab-header">
+                <span class="mini-section-label" style="margin:0;flex:1;">Abilities</span>
+                <div class="mini-ab-toggle" data-char-id="${slotKey}">
+                    <button type="button" class="mini-ab-toggle-btn active" data-char-id="${slotKey}" data-mode="check">Check</button>
+                    <button type="button" class="mini-ab-toggle-btn" data-char-id="${slotKey}" data-mode="save">Save</button>
+                </div>
+            </div>
+            <div class="mini-ab-grid" data-char-id="${slotKey}">`;
+            STATS.forEach(s => {
+                const isProf = s in _profSaves;
+                html += `<span class="mac-name${isProf ? ' mac-name-prof' : ''}" title="${isProf ? 'Save proficiency' : ''}">${s}</span>`;
+            });
+            STATS.forEach(s => {
+                const score = parseInt(ab[s]) || 10;
+                html += `<span class="mac-mod mac-mod-lg">${fmt(abi(score))}</span>`;
+            });
             STATS.forEach(s => {
                 const score = parseInt(ab[s]) || 10;
                 const mod = abi(score);
-                html += `<div style="border:1px solid var(--border);border-radius:4px;padding:2px 0;background:var(--input-bg);">
-                    <div style="font-size:8px;color:var(--fg-mute);">${s}</div>
-                    <div style="font-size:12px;font-weight:700;">${fmt(mod)}</div>
-                    <div style="font-size:8px;color:var(--fg-mute);">${score}</div>
-                </div>`;
+                const modStr = fmt(mod);
+                const isProf = s in _profSaves;
+                const saveMod = isProf ? _profSaves[s] : mod;
+                const saveStr = fmt(saveMod);
+                html += `<button class="mini-roll-btn mac-btn mini-ab-btn"
+                    data-check-expr="1d20${modStr}"
+                    data-check-note="${_abName}: ${s} check"
+                    data-check-mod="${modStr}"
+                    data-save-expr="1d20${saveStr}"
+                    data-save-note="${_abName}: ${s} save${isProf ? ' (prof)' : ''}"
+                    data-save-mod="${saveStr}"
+                    data-expr="1d20${modStr}"
+                    data-note="${_abName}: ${s} check"
+                    title="${s} · Check ${modStr} / Save ${saveStr}${isProf ? ' ★' : ''}"><span class="mac-btn-ab">${s}</span><span class="mac-btn-mod">${modStr}</span></button>`;
             });
             html += '</div>';
         }
@@ -5330,8 +5368,9 @@ let CONC_DATA = {{ conc_by_char | tojson }};
         // to-roll buttons) so the GM workflow is unchanged on default.
         // The Skills panel is new — saving throws + 18-skill grid built
         // from ``prof_skills`` / ``prof_saving_throws`` strings with the
-        // PC mini-sheet's highlighting language.
-        const slotKey = combatant.id || ('monster-' + tmpl.id);
+        // PC mini-sheet's highlighting language. (v2.49.199: ``slotKey``
+        // is now defined at the top of the function so the new ability
+        // grid above can also use it for its Check/Save toggle.)
         let savedTab = 'actions';
         try { savedTab = localStorage.getItem('vtt_minitab_' + slotKey) || 'actions'; } catch (_) {}
         // v2.49.175: the Spells tab joins Actions / Skills. Only valid
