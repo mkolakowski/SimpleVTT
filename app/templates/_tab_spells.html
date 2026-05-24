@@ -1,0 +1,137 @@
+{#
+  Spells tab — multiclass-aware spell list with per-level slot pips +
+  enriched chip layout (✨ name · range · attack-bonus · damage · save).
+
+  Extracted from _mini_sheet_card.html in v2.49.195 as Phase 2.2 of the
+  unified-mini-sheet plan (Mockup B / Symmetric). The PC partial now
+  includes this via {% include %}; future commits will also include it
+  from the NPC rendering path so both sources emit identical spell-row
+  markup.
+
+  Scope contract — Jinja includes inherit the caller's local scope, so
+  the partial reads these from outer scope without a {% with %}:
+    - c               → character-like (has id, name).
+    - sh              → sheet dict (used only for class/level fallback
+                        when _mc_sorted is empty).
+    - _is_caster      → bool gate; partial no-ops if false.
+    - _spell_vis      → namespace with `.any` bool gate (skips
+                        prepared-but-not-prepared rows).
+    - _mc_sorted      → multiclass classes sorted descending by level
+                        (may be empty for single-class casters).
+    - _PREPARED_CASTERS → list of class slugs whose spells need a
+                        `prepared=true` flag to show at level > 0.
+    - _primary_slug   → fallback class slug when a spell row has no
+                        `class` field.
+    - spells_list     → list of spell dicts (level, class, name,
+                        casting_time, range, attack_roll, attack_bonus,
+                        damage, damage_type, save_ability, save_dc,
+                        concentration, ritual, prepared, _slug, …).
+    - spell_slots_map → dict keyed by class slug → { '1': {total, used}, … }.
+
+  Behavioural contract (preserved verbatim from the inline block):
+    - v2.4.23 — spell row is a clickable container that toggles a
+      sibling ``.mini-spell-detail`` panel below. Detail panel lazy-loads
+      full SRD description via ``window._loadSpellContent`` on first
+      open when a ``_slug`` is set.
+    - v2.49.177–.181 — enriched chip layout (✨ name prefix, range chip,
+      attack-bonus chip, damage with damage_type appended, save with
+      save_dc included). Same layout as the NPC Spells tab.
+    - v2.3.21 — spell button data-attrs let the cast handler build /roll
+      posts for monster casts (TokenTemplate-backed mini-sheets can't
+      use /cast_spell which requires a real Character row); redundant
+      for PCs but harmless.
+    - Slot pip row only renders at level >= 1 (cantrips don't consume
+      slots) and only when `slot_total > 0` for the class+level pair.
+#}
+{% if _is_caster and _spell_vis.any %}
+<div class="mini-tab-panel" data-char-id="{{ c.id }}" data-panel="spells">
+    <div class="mini-spells" data-char-id="{{ c.id }}">
+    {% set _iter_classes = (_mc_sorted if _mc_sorted else (
+        [{'class': sh.get('class',''), 'level': sh.get('level',1)}] if sh.get('class') else []
+    )) %}
+    {% set _is_multiclass = (_iter_classes | length) > 1 %}
+    {% for lvl_i in range(10) %}
+        {% set _level_has = namespace(any=false) %}
+        {% for _cc in _iter_classes %}
+        {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+        {% set _cc_is_prepared = _cc_slug in _PREPARED_CASTERS %}
+        {% for s in spells_list %}
+        {% set s_lvl = (s.level or 0) | int %}
+        {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
+        {% if s_lvl == lvl_i and s_cls == _cc_slug and not (_cc_is_prepared and s_lvl > 0 and not s.prepared) %}
+        {% set _level_has.any = true %}
+        {% endif %}
+        {% endfor %}
+        {% endfor %}
+        {% if _level_has.any %}
+        <div class="mini-spell-level">{{ 'Cantrips' if lvl_i == 0 else 'Level ' ~ lvl_i ~ ' Spells' }}</div>
+        {% if lvl_i >= 1 %}
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        {% for _cc in _iter_classes %}
+        {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+        {% set _cc_label = _cc.get('class') %}
+        {% set _cc_slots = spell_slots_map.get(_cc_slug) or {} %}
+        {% set slot = _cc_slots.get(lvl_i | string) or {} %}
+        {% set slot_total = (slot.get('total') or 0) | int %}
+        {% set slot_used = (slot.get('used') or 0) | int %}
+        {% if slot_total > 0 %}
+        <div class="mini-slot-row" data-char-id="{{ c.id }}" data-class-slug="{{ _cc_slug }}" data-slot-level="{{ lvl_i }}" data-total="{{ slot_total }}" data-used="{{ slot_used }}">
+            <span class="mini-slot-label">{{ _cc_label if _is_multiclass else 'Slots' }}</span>
+            <span class="mini-slot-pips">
+            {% for i in range(slot_total) %}<span class="mini-slot-pip{{ ' used' if i < slot_used else '' }}"></span>{% endfor %}
+            </span>
+            <span class="mini-slot-count">{{ slot_total - slot_used }}/{{ slot_total }}</span>
+        </div>
+        {% endif %}
+        {% endfor %}
+        </div>
+        {% endif %}
+        {% for _cc in _iter_classes %}
+        {% set _cc_slug = ((_cc.get('class') or '') | string | lower | trim | replace(' ', '-')) %}
+        {% set _cc_label = _cc.get('class') %}
+        {% set _cc_is_prepared = _cc_slug in _PREPARED_CASTERS %}
+        {% for s in spells_list %}
+        {% set s_lvl = (s.level or 0) | int %}
+        {% set s_cls = ((s.get('class') or _primary_slug) or '') | string | lower | trim | replace(' ', '-') %}
+        {% if s_lvl == lvl_i and s_cls == _cc_slug and not (_cc_is_prepared and s_lvl > 0 and not s.prepared) %}
+        <div class="mini-spell-row mini-row-expandable" title="{{ s.name }}{% if s.casting_time %} · {{ s.casting_time }}{% endif %}{% if s.range %} · {{ s.range }}{% endif %}">
+            <span class="mini-spell-name">✨ {{ s.name }}{% if s.concentration %} <span class="mini-spell-tag" title="Concentration">⏱</span>{% endif %}{% if s.ritual %} <span class="mini-spell-tag" title="Ritual">®</span>{% endif %}</span>
+            {% if _is_multiclass %}<span class="mini-spell-tag cls">{{ _cc_label }}</span>{% endif %}
+            {% if s.range %}<span class="mini-spell-tag range" title="Range">{{ s.range }}</span>{% endif %}
+            {% if s.attack_roll and (s.attack_bonus or s.atk_bonus) %}<span class="mini-spell-tag atk">{{ s.attack_bonus or s.atk_bonus }}</span>{% endif %}
+            {% if s.damage %}<span class="mini-spell-tag dmg">{{ s.damage }}{% if s.damage_type %} {{ s.damage_type }}{% endif %}</span>{% endif %}
+            {% if s.save_ability %}<span class="mini-spell-tag save">{% if s.save_dc %}DC {{ s.save_dc }} {% endif %}{{ (s.save_ability | upper) if (s.save_ability | length) <= 3 else (s.save_ability | upper)[:3] }}{% if not s.save_dc %} save{% endif %}</span>{% endif %}
+            <button type="button" class="mini-cast-btn"
+                    data-char-id="{{ c.id }}"
+                    data-spell-idx="{{ loop.index0 }}"
+                    data-spell-name="{{ s.name }}"
+                    data-spell-level="{{ s_lvl }}"
+                    data-class-slug="{{ s_cls }}"
+                    data-spell-damage="{{ s.damage or '' }}"
+                    data-spell-damage-type="{{ s.damage_type or '' }}"
+                    data-spell-save-ability="{{ s.save_ability or '' }}"
+                    data-spell-save-dc="{{ s.save_dc or '' }}"
+                    data-spell-attack-roll="{{ '1' if s.attack_roll else '' }}"
+                    data-spell-attack-bonus="{{ s.attack_bonus or s.atk_bonus or '' }}"
+                    data-spell-healing="{{ s.healing or '' }}"
+                    data-spell-casting-time="{{ s.casting_time or '' }}"
+                    title="Cast {{ s.name }}{% if s_lvl > 0 %} (uses Lv {{ s_lvl }} slot for {{ _cc_label or 'this class' }}){% endif %}">✨ Cast</button>
+        </div>
+        <div class="mini-spell-detail mini-row-detail" data-slug="{{ s._slug or '' }}" data-content-loaded="0">
+            {% set _sbits = [] %}
+            {% if s.casting_time %}{% set _ = _sbits.append('<span><strong>Cast:</strong> ' ~ s.casting_time ~ '</span>') %}{% endif %}
+            {% if s.range %}{% set _ = _sbits.append('<span><strong>Range:</strong> ' ~ s.range ~ '</span>') %}{% endif %}
+            {% if s.duration %}{% set _ = _sbits.append('<span><strong>Duration:</strong> ' ~ s.duration ~ '</span>') %}{% endif %}
+            {% if s.components %}{% set _ = _sbits.append('<span><strong>Components:</strong> ' ~ s.components ~ '</span>') %}{% endif %}
+            {% if _sbits %}<div class="mini-row-detail-bits">{{ _sbits | join(' · ') | safe }}</div>{% endif %}
+            {% if s.desc %}<div class="mini-row-detail-desc">{{ s.desc }}</div>{% endif %}
+            <div class="mini-spell-content-slot"></div>
+        </div>
+        {% endif %}
+        {% endfor %}
+        {% endfor %}
+        {% endif %}
+    {% endfor %}
+    </div>{# /.mini-spells #}
+</div>
+{% endif %}

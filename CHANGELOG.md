@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.195] - 2026-05-23
+
+**Schema version:** 56
+**Commit summary:** **B Phase 2.2 — extract `_tab_spells.html` from `_mini_sheet_card.html`.** Second per-tab partial extraction in the unified-mini-sheet plan's Phase 2 (Mockup B / Symmetric). The Spells tab panel — ~115 lines of multiclass-aware spell-row + slot-pip-bar + enriched-chip markup — moves from the inline PC partial into a dedicated `_tab_spells.html` include. The PC partial replaces the inline block with a single `{% include "_tab_spells.html" %}`. Pure refactor: no PC behaviour change, no schema change, no new endpoints.
+**Description:** Two coordinated edits. **(1)** New file `app/templates/_tab_spells.html` — 113 lines, header docstring documents the eight scope variables the partial reads via Jinja's parent-scope inheritance (`c`, `sh`, `_is_caster`, `_spell_vis`, `_mc_sorted`, `_PREPARED_CASTERS`, `_primary_slug`, `spells_list`, `spell_slots_map`). The partial owns the outer `{% if _is_caster and _spell_vis.any %}` gate so the parent include line is unconditional and the partial no-ops cleanly when the caster check fails. All inner logic preserved verbatim: 10-level outer loop, multiclass `_iter_classes` derivation, per-level `_level_has.any` pre-pass for empty-level suppression, slot-pip row rendering at level ≥ 1, ✨-prefixed spell name with concentration ⏱ + ritual ® inline tags, range / atk / dmg / save chips with v2.49.181 caster-dependent DC, full `mini-cast-btn` data-attr stash for monster-cast /roll fallback (redundant for PCs but harmless), expandable detail panel with SRD lazy-load hook. **(2)** `app/templates/_mini_sheet_card.html` — lines 230-345 collapsed to a 9-line include block with a comment explaining the extraction's purpose and what Phase 2.5 will use it for. Net delta: -115 lines from the PC partial, +113 lines in the new partial (-2 because the inline block had a few comments that became the new partial's docstring header).
+**Description (cont):** Why Jinja parent-scope inheritance instead of `{% with %}`. The Spells panel reads eight outer-scope variables (most are derived in the PC partial's setup block at lines ~145-175 from `sh.get(...)` calls). Passing all eight via `{% with %}` would have made the include site ~10 lines instead of 1 with no scoping benefit, since the partial is only included from one place (today; tomorrow's NPC swap will be from a second place). Jinja default include semantics give the partial the parent's locals automatically — clean, idiomatic, and matches how `_roll_state_pill.html` + `_death_saves_tracker.html` were already done in this codebase.
+**Description (cont 2):** Why this is a separate commit from 2.1 (Actions) and 2.3 (Skills). Per CLAUDE.md's "one conceptually-distinct change per commit" rule, the Spells extraction is more involved than Actions (multiclass loop + slot pips + prepared-caster gate) and warrants its own diff window for review. Skills will follow as 2.3 — the simplest of the three (18-skill grid, single loop, no class-awareness needed).
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.195 live. (b) Wiki harness tests pass (19/19). (c) Manual: `GET /campaign/.../battle` → PC Spells tab renders identically to v2.49.194 for Zara (Sorcerer, multiclass), Tariq (Cleric, prepared caster), Mira (Fighter Eldritch Knight, multiclass), Soren the demo Acolyte (still client-side; untouched). Spell rows show ✨ name + range/atk/dmg/save chips; slot-pip rows render at level ≥ 1; expandable detail panel still lazy-loads SRD content on first open. (d) Plan doc Phase 2.2 marked ✅ done with v2.49.195 pointer.
+
+### Added
+- `app/templates/_tab_spells.html` — new per-tab partial; canonical home for Spells-panel markup; consumed by both PC (today) and NPC (Phase 2.5) renderers.
+
+### Changed
+- `app/templates/_mini_sheet_card.html` — Spells panel inline block (lines 230-345) replaced with `{% include "_tab_spells.html" %}`. PC behaviour byte-identical.
+- `docs/plans/unified-mini-sheet.md` — Phase 2.2 marked ✅ done with the v2.49.195 commit pointer.
+
+### Notes
+- **Pure refactor, no behaviour change.** PC mini-sheet Spells tab renders identically. NPC `buildMonsterInitSheet` untouched.
+- **Per-tab partial count: 2 of 3.** Skills (Phase 2.3) is next — the simplest extraction (single-loop 18-skill grid, no class-awareness). Then 2.4 (server `tabs=[...]`) + 2.5 (NPC swap) + 2.6 (harness snapshot test) round out Phase 2.
+- **Partial owns its gate.** The `{% if _is_caster and _spell_vis.any %}` lives inside `_tab_spells.html`, not the parent include site. Matches the v2.49.193 pattern: the parent include is unconditional, the partial decides whether to render anything. Future NPC integration just drops the include into the NPC body — no per-call gate logic needed.
+
+---
+
 ## [2.49.194] - 2026-05-23
 
 **Schema version:** 56
