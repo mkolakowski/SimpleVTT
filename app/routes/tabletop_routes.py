@@ -7062,6 +7062,21 @@ async def roll_dice(
         _filter = lambda ident: bool(ident.get("is_gm")) or ident.get("user_id") == _roller_id
     else:
         _filter = None
+    # v2.49.211: ``no_char_attribution`` flag — set when the caller
+    # explicitly opted out of character context (skip_roll_state=true +
+    # no character_id). v2.49.210 made the server stop auto-attributing
+    # these rolls to the user's first PC, BUT the client's roll-log
+    # renderer at tabletop.js:3832 falls back through
+    # ``r.char_name || USER_CHAR_NAMES[r.user_id] || r.user_name`` —
+    # USER_CHAR_NAMES is a server-rendered map of user_id → first PC
+    # name per user, which for the demo GM maps to "Brother Tavik
+    # Stonebrow" (the first PC the GM owns). So monster ability rolls
+    # still surface with the GM's PC name in the log even though the
+    # server's char_name is null. The flag lets the client distinguish
+    # "no char_name because the broadcast omitted it" from "no
+    # char_name because the roll is explicitly char-less" — and skip
+    # the USER_CHAR_NAMES fallback in the latter case.
+    _no_char_attribution = bool(skip_roll_state and _char is None)
     await hub.broadcast(
         campaign_id,
         {
@@ -7080,6 +7095,7 @@ async def roll_dice(
                 "note": rec.note,
                 "created_at": rec.created_at.isoformat() if rec.created_at else None,
                 "roll_state_applied": roll_state_applied or None,
+                "no_char_attribution": _no_char_attribution,
             },
         },
         recipient_filter=_filter,

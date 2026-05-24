@@ -3687,7 +3687,10 @@
             if (!r.note.startsWith(prefix)) continue;
             const results = li.querySelector('.spell-cast-results');
             if (!results) continue;
-            const dispName = r.char_name || USER_CHAR_NAMES[r.user_id] || r.user_name || 'Player';
+            // v2.49.211: respect server-sent no_char_attribution for monster rolls
+            // — see matching note in the roll-log render at line ~3832.
+            const dispName = r.char_name
+                || (r.no_char_attribution ? (r.user_name || 'Player') : (USER_CHAR_NAMES[r.user_id] || r.user_name || 'Player'));
             const passed = /✓ Pass/.test(r.note);
             const failed = /✗ Fail/.test(r.note);
             const outcome = passed ? '<span class="spell-cast-pass">✓ Save</span>'
@@ -3829,7 +3832,14 @@
         // Portrait and color — prefer values from the broadcast, fall back to local maps
         const portrait  = r.portrait_url || USER_PORTRAITS[r.user_id] || '';
         const color     = r.user_color   || USER_COLORS[r.user_id]   || '';
-        const dispName  = r.char_name    || USER_CHAR_NAMES[r.user_id] || r.user_name;
+        // v2.49.211: monster rolls (skip_roll_state=true + no character_id)
+        // come back from the server with no_char_attribution=true; respect
+        // that by skipping the USER_CHAR_NAMES fallback so the roll log
+        // doesn't surface the GM's first owned PC ("Brother Tavik Stonebrow"
+        // in the demo) as the rolled-by name. For PC rolls the flag is
+        // absent / false and the original fallback chain is preserved.
+        const dispName  = r.char_name
+            || (r.no_char_attribution ? r.user_name : (USER_CHAR_NAMES[r.user_id] || r.user_name));
         const avatarInner = portrait
             ? `<img src="${escapeHTML(portrait)}" alt="">`
             : '🎲';

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.211] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Fix (final piece): client roll-log render now respects `no_char_attribution` for monster rolls.** User reported v2.49.210 STILL surfaces monster ability rolls as "Brother Tavik Stonebrow" in the log. Root cause was a third layer I missed: the client's `dispName` resolver at `tabletop.js:3832` falls back through `r.char_name || USER_CHAR_NAMES[r.user_id] || r.user_name`. v2.49.210 made the server stop attributing to a PC (`r.char_name` is now null for monster rolls), but `USER_CHAR_NAMES` is a server-rendered map of `user_id → first PC name per user` and the demo GM owns 10+ PCs — `USER_CHAR_NAMES[gm.id]` = "Brother Tavik Stonebrow" (the first character in the seed loop owned by the GM). So the client silently filled in the wrong name from a stale page-load map. Server now sends `no_char_attribution: true` in the roll broadcast when the cast was explicitly char-less; client skips the `USER_CHAR_NAMES` fallback when that flag is true and lands on `user_name` (the GM's display name) instead.
+**Description:** Three coordinated edits. **(1)** `app/routes/tabletop_routes.py` `roll_dice` — compute `_no_char_attribution = bool(skip_roll_state and _char is None)` and include it in the broadcast payload as `"no_char_attribution"`. The flag is true ONLY when the caller explicitly opted out of character context AND no fallback character was resolved (so PC rolls + GM rolls with an explicit character_id keep the original behavior). **(2)** `app/static/tabletop.js` line ~3832 — `dispName` resolver gated on `r.no_char_attribution`: when true, skip the USER_CHAR_NAMES lookup and use `r.user_name` directly. When false / absent, the original fallback chain runs. **(3)** Same edit at line ~3690 (the spell-cast card's save-result row renderer) so the same monster-roll attribution fix applies there.
+**Description (cont):** Why the three-layer cascade. The bug surfaced once each because each layer is overly helpful: (1) v2.49.207 client marker — fixed isMonster detection so character_id wasn't sent. (2) v2.49.210 server fallback — stopped the server from auto-attributing to user's first PC when character_id missing. (3) v2.49.211 client render — stopped the client from falling back to USER_CHAR_NAMES (the server-rendered map of user_id → first PC name) when char_name is null. Each layer thought "I should be helpful and pick a character", and they compounded. The fix at every layer is "respect the explicit no-character signal."
+**Description (cont 2):** Why USER_CHAR_NAMES exists in the first place. The map is the snappy way to render the "rolled by X" name without the broadcast having to redundantly carry the char_name for every roll the user fires from a PC-context surface. e.g., when a player drags their token on the canvas + their UID fires a passive roll, the broadcast doesn't carry char_name (it's a passive event, not a per-roll lookup), so the client backfills from the map. The map is correct for THAT case; it just over-applied to monster rolls.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.211 live. (b) Wiki + mini-sheet partial harness tests still pass. (c) Manual: expand Soren → click WIS → roll log entry shows the GM's display name (no PC avatar / no character name). The note "Cult Acolyte: WIS check" carries the monster identity. Cast Sacred Flame → damage + save rolls both attributed to GM, neither to a PC.
+
+### Changed
+- `app/routes/tabletop_routes.py` `roll_dice` — broadcast payload includes `no_char_attribution: true` when the roll was explicitly char-less (skip_roll_state=true + no character_id).
+- `app/static/tabletop.js` `dispName` resolvers at line ~3832 (roll-log render) and ~3690 (spell-cast card save-result row) — gate the `USER_CHAR_NAMES` fallback on `!r.no_char_attribution`. PC rolls + non-monster paths keep the original fallback chain.
+
+### Notes
+- **Three-layer cascade closed.** Client marker (v2.49.207) → server fallback (v2.49.210) → client render (v2.49.211). All three layers now respect the explicit no-character signal.
+- **PC behavior unchanged.** The new flag is false / absent for any roll that came through a PC-context handler (which sends character_id).
+- **Sacred Flame's "no target picker" half of Bug #2 still open.** Filed as v2.49.212 follow-up.
+
+---
+
 ## [2.49.210] - 2026-05-24
 
 **Schema version:** 56
