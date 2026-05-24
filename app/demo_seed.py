@@ -2731,6 +2731,24 @@ def seed_homebrew_files(camp: Campaign) -> int:
                     "category": "action",
                 },
                 {
+                    # v2.49.217: AoE save-spell exercise. Burning Hands is
+                    # a 15-ft cone, 3d6 fire damage, DEX save for half.
+                    # Catalog's actions[0].area = {shape: "cone", size_ft: 15}
+                    # so the unified mini-sheet's cast handler routes
+                    # through _openAoePicker instead of single-target.
+                    # Cult Acolyte normally doesn't have this spell —
+                    # it's added here purely as a demo exercise for the
+                    # /npc_cast_spell AoE multi-target loop (the picker
+                    # passes target_combatant_ids to the server, which
+                    # loops per-target save + save-for-half damage).
+                    "id": "burning-hands",
+                    "name": "Burning Hands (Cone)",
+                    "spell_slug": "burning-hands",
+                    "save_dc": 13,
+                    "charges_max": 1,
+                    "category": "action",
+                },
+                {
                     "id": "dagger",
                     "name": "Dagger",
                     "desc": "Melee or Ranged Weapon Attack: +4 to hit, reach 5 ft. or range 20/60 ft., one target. Hit: 4 (1d4 + 2) piercing damage.",

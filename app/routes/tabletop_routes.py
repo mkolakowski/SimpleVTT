@@ -17000,6 +17000,27 @@ async def use_npc_cast_spell(
     if target_combatant_id and not target_combatant:
         raise HTTPException(404, "Target combatant not found")
 
+    # v2.49.217: AoE multi-target list from the client's _openAoePicker.
+    # When non-empty, the server loops the save+damage resolution per
+    # target (matches PC /cast_spell's Phase T.5 AoE loop at line ~8504).
+    # The single-target path above still fires for the FIRST id when
+    # both are passed — keeps the chat card's legacy single-target
+    # fields populated for non-AoE viewers; subsequent ids go through
+    # the loop and land in auto_save_targets.
+    aoe_target_ids_raw = body.get("aoe_target_combatant_ids") or []
+    aoe_target_ids = [
+        str(x).strip() for x in aoe_target_ids_raw if isinstance(x, (str, int))
+    ]
+    aoe_target_ids = [x for x in aoe_target_ids if x]
+    area_shape = str(body.get("area_shape") or "").strip()
+    area_size_ft = int(body.get("area_size_ft") or 0)
+    # If this is an AoE cast with no explicit single target, use the
+    # first AoE id as the "primary" target so the single-target path
+    # has something to act on (matches PC /cast_spell convention).
+    if aoe_target_ids and not target_combatant_id:
+        target_combatant_id = aoe_target_ids[0]
+        target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
+
     cast_id = uuid.uuid4().hex[:12]
 
     # Attack roll (for attack-roll spells like Inflict Wounds). Skipped
@@ -17075,6 +17096,10 @@ async def use_npc_cast_spell(
         _lookup_combatant_name(campaign_id, target_combatant_id)
         if target_combatant_id else ""
     )
+    # v2.49.217: collected per-target outcomes for the AoE multi-target
+    # loop. Always seeded so the client has a uniform array to iterate
+    # even for single-target casts.
+    auto_save_targets_payload: list[dict] = []
 
     # v2.49.216: save-spell auto-resolution for NPC casters. Adapted
     # from the PC /cast_spell flow at line ~8277. For NPC targets the
@@ -17214,6 +17239,96 @@ async def use_npc_cast_spell(
                     )
                     auto_save_damage_applied = int(apply_result.get("applied") or 0)
 
+    # v2.49.217: AoE multi-target loop. Adapted from PC /cast_spell's
+    # Phase T.5 at line ~8504. Seeds auto_save_targets with the single-
+    # target outcome (so the client has a uniform array even for
+    # non-AoE casts) + loops the remaining ids from the picker. NPC
+    # targets get a fresh save + save-for-half damage application;
+    # PC targets are skipped for v1 (each would need its own roll_request
+    # — filed as a follow-up). The single broadcast carries the array;
+    # the chat card renders one save-pill per target.
+    if is_save:
+        # Seed with the single-target outcome (auto_save_* fields set above).
+        if target_combatant_id:
+            auto_save_targets_payload.append({
+                "combatant_id": target_combatant_id,
+                "target_name": auto_save_target_name or target_name_resolved,
+                "rolled": auto_save_rolled,
+                "breakdown": auto_save_breakdown,
+                "passed": auto_save_passed,
+                "damage_applied": auto_save_damage_applied,
+                "damage_type": damage_type,
+                "pc_skipped": (auto_save_target_kind == "pc"),
+                "pending_request_id": auto_save_prompt_id if auto_save_prompted else 0,
+            })
+        # Loop remaining AoE ids — skip the first (already resolved above).
+        for extra_id in aoe_target_ids[1:]:
+            extra = _lookup_combatant(campaign_id, extra_id)
+            if not extra:
+                continue
+            extra_name = extra.get("name", "") or ""
+            # PC target — skipped for v1 (same as /cast_spell AoE PC handling).
+            if extra.get("char_id"):
+                auto_save_targets_payload.append({
+                    "combatant_id": extra_id,
+                    "target_name": extra_name,
+                    "rolled": None,
+                    "breakdown": "",
+                    "passed": None,
+                    "damage_applied": 0,
+                    "damage_type": damage_type,
+                    "pc_skipped": True,
+                    "pending_request_id": 0,
+                })
+                continue
+            # NPC target — server-roll save + save-for-half damage.
+            if not extra.get("token_template_id"):
+                continue
+            _tmpl = db.query(TokenTemplate).filter(
+                TokenTemplate.id == int(extra["token_template_id"]),
+            ).first()
+            if not _tmpl:
+                continue
+            _npc_sheet = _monster_template_to_sheet(_tmpl, campaign_id)
+            _npc_mod, _ = _resolve_stat_modifier(
+                _npc_sheet, "dnd5e", f"{save_ability.lower()}_save",
+            )
+            _expr = f"1d20{_npc_mod:+d}"
+            try:
+                _r = dice_mod.roll(_expr)
+                _rolled = int(_r.total)
+                _bd = _r.breakdown
+            except dice_mod.DiceParseError:
+                _rolled = 0
+                _bd = ""
+            _passed = _rolled >= save_dc
+            _dmg_applied = 0
+            if damage_expr_raw and bool(campaign.auto_apply_damage):
+                try:
+                    _dr = dice_mod.roll(damage_expr_raw)
+                    _dmg_rolled = max(0, int(_dr.total))
+                except dice_mod.DiceParseError:
+                    _dmg_rolled = 0
+                if _dmg_rolled > 0:
+                    proposed = _dmg_rolled if not _passed else _dmg_rolled // 2
+                    if proposed > 0:
+                        _dr_result = await _apply_damage_to_combatant(
+                            db, campaign_id, extra, proposed,
+                            damage_type=damage_type, attack_id=cast_id,
+                        )
+                        _dmg_applied = int(_dr_result.get("applied") or 0)
+            auto_save_targets_payload.append({
+                "combatant_id": extra_id,
+                "target_name": extra_name,
+                "rolled": _rolled,
+                "breakdown": _bd,
+                "passed": _passed,
+                "damage_applied": _dmg_applied,
+                "damage_type": damage_type,
+                "pc_skipped": False,
+                "pending_request_id": 0,
+            })
+
     # Mirror /cast_spell's spell_cast payload shape so the existing
     # client-side ``appendSpellCast`` renderer (tabletop.js:4307) handles
     # the chat-card chrome without NPC-specific branches.
@@ -17266,14 +17381,17 @@ async def use_npc_cast_spell(
         "auto_save_damage_breakdown": auto_save_damage_breakdown,
         "auto_save_prompted": auto_save_prompted,
         "auto_save_prompt_id": auto_save_prompt_id,
-        "auto_save_targets": [],
-        # Misc — empty / None for NPC spells (no AoE / heal / auto-hit
-        # darts / per-action buttons yet).
+        # v2.49.217: per-target outcomes from the AoE multi-target loop.
+        # Empty for single-target casts; one entry per target otherwise.
+        "auto_save_targets": auto_save_targets_payload,
+        "area_shape": area_shape or None,
+        "area_size_ft": area_size_ft,
+        # Misc — empty / None for NPC spells (no heal / auto-hit darts /
+        # per-action buttons yet). Area fields already set above with the
+        # real values passed in the body (v2.49.217).
         "actions": [],
         "auto_heal_applied": 0,
         "auto_hit_targets": [],
-        "area_shape": None,
-        "area_size_ft": 0,
         "auto_applied": bool(campaign.auto_apply_damage),
         "is_npc_cast": True,
         "is_crit": is_crit,
@@ -20795,6 +20913,11 @@ def _monster_template_to_sheet(tmpl: TokenTemplate, campaign_id: int) -> dict:
                 "components": a.get("components", ""),
                 "desc": a.get("desc", ""),
                 "_slug": str(slug),
+                # v2.49.217: area shape + size so the unified mini-sheet's
+                # cast handler can route through _openAoePicker for AoE
+                # spells (Burning Hands cone, Fireball sphere, etc.).
+                "area": a.get("area") or {},
+                "aoe_targets": int(a.get("aoe_targets") or 1),
             })
         if spells_proj:
             sheet["spells"] = spells_proj

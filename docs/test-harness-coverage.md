@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 422 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.215, 2026-05-24).
+**Total tests:** 423 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.217, 2026-05-24).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -853,6 +853,7 @@ Regression net for the v2.49.193–.198 per-tab partial extractions from `_mini_
 | `test_npc_cast_spell_gm_only` | Non-GM POST → 403 (alice client). |
 | `test_npc_cast_spell_bad_combatant_404` | GM POST with an unknown combatant_id → 404. |
 | `test_npc_cast_spell_happy_path_save_spell` | GM POST for Soren (Cult Acolyte) casting Sacred Flame → 200 + `spell_cast` WS broadcast with the right shape (`spell_name=Sacred Flame`, `save_ability=DEX`, `save_dc=13`, `is_save=True`, `caster_char_name=<nickname>`, `caster_combatant_id=tok_…`, `caster_char_id=None`, `is_npc_cast=True`). Skips gracefully when the demo's battle.combatants doesn't currently include the Acolyte. |
+| `test_npc_cast_spell_aoe_multi_target_save_loop` | v2.49.217: GM POST for Burning Hands with `aoe_target_combatant_ids=[tok_a, tok_b]` + `area_shape=cone` + `area_size_ft=15` → broadcast contains `area_shape="cone"` + `auto_save_targets` array with ≥1 entry. NPC target entries carry a rolled save value (PC entries pc_skipped=true). Skips when the demo doesn't have the Acolyte. |
 
 ---
 

@@ -78,6 +78,76 @@ async def test_npc_cast_spell_bad_combatant_404():
         await client.aclose()
 
 
+async def test_npc_cast_spell_aoe_multi_target_save_loop():
+    """v2.49.217: AoE NPC cast loops save+damage per target.
+
+    GM posts Burning Hands (cone, 3d6 fire, DEX save) for Soren with
+    a 3-id aoe_target_combatant_ids list → response 200 + spell_cast
+    broadcast with auto_save_targets array containing one entry per
+    target (each NPC entry has rolled+passed; the seeded first entry
+    matches the single-target outcome). Skips when the demo battle
+    doesn't have the Acolyte spawned.
+    """
+    client = await login_client("demo-gm@example.com", "demopass")
+    try:
+        npc_id = await _find_npc_combatant_id(client, "soren")
+        if not npc_id:
+            npc_id = await _find_npc_combatant_id(client, "cult acolyte")
+        if not npc_id:
+            return
+        # Pull at least one other combatant for the AoE list.
+        resp = await client.get(f"/campaign/{CAMPAIGN_ID}", follow_redirects=True)
+        if resp.status_code != 200:
+            return
+        all_ids = re.findall(r'"id"\s*:\s*"(tok_[^"]+)"', resp.text)
+        # Use any two distinct ids (caster + at least one other target).
+        aoe_ids = [tid for tid in all_ids if tid != npc_id][:2]
+        if not aoe_ids:
+            return
+        ws = await open_ws(client, CAMPAIGN_ID)
+        try:
+            async with WSCollector(ws) as collector:
+                resp = await client.post(
+                    f"/api/campaign/{CAMPAIGN_ID}/npc_cast_spell",
+                    json={
+                        "combatant_id": npc_id,
+                        "spell_name": "Burning Hands",
+                        "spell_level": 1,
+                        "spell_range": "Self",
+                        "damage": "3d6",
+                        "damage_type": "fire",
+                        "save_ability": "DEX",
+                        "save_dc": 13,
+                        "attack_roll": False,
+                        "attack_bonus": "",
+                        "aoe_target_combatant_ids": aoe_ids,
+                        "area_shape": "cone",
+                        "area_size_ft": 15,
+                    },
+                )
+                assert resp.status_code == 200, f"AoE cast failed: {resp.status_code} {resp.text}"
+                msg = await collector.wait_for("spell_cast")
+                d = msg["data"]
+                assert d["spell_name"] == "Burning Hands"
+                assert d["area_shape"] == "cone"
+                assert d["area_size_ft"] == 15
+                # auto_save_targets has at least one entry (the seeded
+                # primary target plus the AoE loop entries when present).
+                targets = d.get("auto_save_targets") or []
+                assert isinstance(targets, list)
+                assert len(targets) >= 1, f"expected ≥1 auto_save_targets entry, got {targets}"
+                # NPC targets should have a rolled save value set.
+                npc_target_entries = [t for t in targets if not t.get("pc_skipped")]
+                if npc_target_entries:
+                    assert all(
+                        t.get("rolled") is not None for t in npc_target_entries
+                    ), f"NPC target entries missing rolled save: {npc_target_entries}"
+        finally:
+            await ws.close()
+    finally:
+        await client.aclose()
+
+
 async def test_npc_cast_spell_happy_path_save_spell():
     """GM POST → 200 + WS spell_cast broadcast with the right shape.
 

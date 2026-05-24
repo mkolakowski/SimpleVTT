@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.217] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **AoE NPC casts wire `_openAoePicker` end-to-end — `/npc_cast_spell` accepts a multi-target list and loops save+damage resolution per target.** Closes the Phase 2.5b spell-cast follow-up arc. Soren now has a Burning Hands action (cone, 3d6 fire, DEX save) in the demo seed; clicking `✨ Cast` opens the AoE picker (cone shape, 15-ft size, anchored on Soren's token), the GM places the cone over enemy tokens, the picker returns the list of combatants caught in the area, and the client posts that list to `/npc_cast_spell` which loops the v2.49.216 save+damage resolution per target. The broadcast's `auto_save_targets` array carries the per-target outcomes; the existing `appendSpellCast` renderer's pill row handles it without client-side branches.
+**Description:** Five coordinated edits. **(1)** `app/demo_seed.py` Cult Acolyte actions — new Burning Hands action with `spell_slug: "burning-hands"` + `save_dc: 13` + `charges_max: 1`. The catalog already has the area definition (cone, 15 ft) on `actions[0].area`. **(2)** `app/routes/tabletop_routes.py` `_monster_template_to_sheet` spells projection — include `area` + `aoe_targets` fields on each projected spell entry so the partial knows the spell is AoE. **(3)** `app/templates/_tab_spells.html` `.mini-cast-btn` — three new data attrs (`data-spell-area-shape`, `data-spell-area-size-ft`, `data-spell-area-secondary-ft`) so the client can detect AoE without re-fetching catalog data. **(4)** `app/templates/tabletop.html` `.mini-cast-btn` monster branch — new AoE branch that invokes `window._openAoePicker({shape, size_ft, secondary_ft, name, combatant_id, range_str})` (the picker already supports NPC casters via `combatant_id` per v2.49.169) and collects `target_combatant_ids`. POST body to `/npc_cast_spell` now carries `aoe_target_combatant_ids` + `area_shape` + `area_size_ft`. **(5)** `app/routes/tabletop_routes.py` `use_npc_cast_spell` — accept `aoe_target_combatant_ids` list; loop save resolution + save-for-half damage per target (adapted from PC `/cast_spell`'s Phase T.5 AoE loop at line ~8504); populate `auto_save_targets` array on the broadcast (seeded with the single-target outcome so non-AoE casts have a uniform shape). PC targets in the loop are skipped for v1 (each would need its own `roll_request` — matches PC `/cast_spell`'s v1 behavior).
+**Description (cont):** Why the seeded entry. The single-target save block (v2.49.216) already resolves the first target via `auto_save_rolled` / `auto_save_passed` / `auto_save_damage_applied`. The AoE loop's `auto_save_targets[0]` mirrors those values so the client's per-target pill renderer has a uniform array to iterate even when only one target was picked (Sacred Flame, single-target save spell). Subsequent picker ids fall into the loop body for fresh save rolls + damage. The end result: client renders one pill row per target, consistent shape whether the cast was AoE or single-target.
+**Description (cont 2):** What's still TODO. (a) PC targets in the AoE loop — each needs its own `RollRequest` broadcast (a Fireball over 3 PCs should fire 3 prompts). Matching PC `/cast_spell`'s v1 deferral, v2.49.217 skips PCs in the loop with `pc_skipped: true`. (b) The marker persistence — `_openAoePicker` shows the placed area visually but it's ephemeral; the marker doesn't persist via `/place_aoe` for the post-cast review. (c) Sacred Flame's "no effect on save" RAW exception — universal save-for-half still applies to all save spells in this endpoint. (d) Spell scaling — Burning Hands at higher levels adds 1d6 per slot above 1st; NPCs don't have spell slots so this only matters if a future feature gives NPCs scalable cast levels.
+**Description (cont 3):** Verification. (a) Curl `/version` confirms v2.49.217 live. (b) Wiki + mini-sheet partial + npc_cast_spell harness tests still pass + new AoE multi-target test passes. (c) Manual (after demo reset to pick up the new Burning Hands action AND a hard-refresh): expand Soren → Spells tab now shows three spells (Inflict Wounds, Sacred Flame, Burning Hands). Click `✨ Cast` on Burning Hands → AoE picker opens with a cone anchored on Soren's token + the spell's range ring (Self, so no range gate). Place the cone over enemy tokens → roll log shows ONE spell-cast chat card with Burning Hands header + a save pill row per target caught in the cone (each NPC target shows their save roll + Pass/Fail + damage applied). PC targets in the cone get `pc_skipped` pills (no auto-save fired for v1).
+
+### Added
+- `app/demo_seed.py` Cult Acolyte — new Burning Hands action (cone, 3d6 fire, DEX save, charges_max: 1) for AoE NPC cast demo.
+- `app/routes/tabletop_routes.py` `_monster_template_to_sheet` spells projection — `area` + `aoe_targets` fields on each projected entry.
+- `app/templates/_tab_spells.html` — `data-spell-area-shape` / `data-spell-area-size-ft` / `data-spell-area-secondary-ft` on `.mini-cast-btn` so the client can detect AoE.
+- `app/templates/tabletop.html` `.mini-cast-btn` monster branch — AoE branch that invokes `_openAoePicker` and threads `aoe_target_combatant_ids` to `/npc_cast_spell`.
+- `app/routes/tabletop_routes.py` `use_npc_cast_spell` — `aoe_target_combatant_ids` parameter + multi-target save+damage loop; `auto_save_targets` array on the broadcast.
+- `tests/harness/test_npc_cast_spell.py` `test_npc_cast_spell_aoe_multi_target_save_loop` — asserts the loop populates `auto_save_targets` and NPC target entries carry a rolled save. Total test count 422 → 423.
+
+### Notes
+- **End-to-end AoE NPC cast.** Picker → multi-target loop → chat card with per-target pills.
+- **PC targets in AoE loop deferred to v2.49.218.** Each needs its own `RollRequest`; matches PC `/cast_spell`'s v1 PC-skip behavior.
+- **Demo reset required** to pick up the new Burning Hands action (existing demo monsters in the DB don't have it).
+
+---
+
 ## [2.49.216] - 2026-05-24
 
 **Schema version:** 56

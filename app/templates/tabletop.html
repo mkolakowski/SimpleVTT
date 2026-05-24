@@ -3575,29 +3575,44 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     // 'Monster' if not in the init tracker).
                     const monsterName = _getMonsterActorName(btn);
 
-                    // v2.49.214: open the target picker for attack-roll OR
-                    // save-based monster spells (Sacred Flame, Inflict Wounds,
-                    // etc.) the same way the legacy .monster-strike-btn at
-                    // tabletop.html:~6765 does for weapon attacks. Pre-fix the
-                    // monster cast branch fired raw rolls with no target
-                    // context — user-reported "Sacred Flame does not engage
-                    // the target picker." The picker provides the target's
-                    // combatant_id + name; we inject the name into the roll
-                    // notes so the chat card surfaces "Soren casts Sacred
-                    // Flame → Pip" rather than the un-targeted form.
-                    //
-                    // Healing-only and bare-announcement casts skip the
-                    // picker (no obvious target context to gather; the GM
-                    // can manually narrate). AoE spells (with .area) would
-                    // route through window._openAoePicker instead — filed
-                    // for v2.49.215 follow-up since Fireball-style NPC
-                    // AoEs need their own pipeline.
+                    // v2.49.214 / v2.49.217: open the target picker for
+                    // attack-roll OR save-based monster spells. v2.49.217 adds
+                    // the AoE branch — spells with an `area` field (Burning
+                    // Hands cone, Fireball sphere, etc.) route through
+                    // `_openAoePicker` instead of the single-target picker;
+                    // the AoE picker returns target_combatant_ids (the list
+                    // of combatants caught in the placed area) which we pass
+                    // to /npc_cast_spell as `aoe_target_combatant_ids` for
+                    // the server's multi-target save+damage loop.
                     let _pickedTargetName = '';
                     let _pickedTargetCombId = '';
+                    let _aoeTargetCombIds = [];
+                    const _areaShape = btn.dataset.spellAreaShape || '';
+                    const _areaSizeFt = parseInt(btn.dataset.spellAreaSizeFt || '0', 10) || 0;
+                    const _areaSecondaryFt = parseInt(btn.dataset.spellAreaSecondaryFt || '0', 10) || 0;
+                    const _isAoeSpell = !!_areaShape && _areaSizeFt > 0;
                     const _needsTargetPicker = (attackRoll || (saveAbility && saveDc)) && !healing;
-                    if (_needsTargetPicker && typeof window.vttOpenMultiTargetPicker === 'function') {
-                        const _attackerEntry = btn.closest('.init-entry[data-char-id]');
-                        const _attackerCombId = _attackerEntry?.dataset.charId || '';
+                    const _attackerEntry = btn.closest('.init-entry[data-char-id]');
+                    const _attackerCombId = _attackerEntry?.dataset.charId || '';
+
+                    if (_isAoeSpell && _attackerCombId && typeof window._openAoePicker === 'function') {
+                        // AoE branch: place the area on the canvas, collect
+                        // target_combatant_ids for the server's multi-target loop.
+                        const _placed = await window._openAoePicker({
+                            shape: _areaShape,
+                            size_ft: _areaSizeFt,
+                            secondary_ft: _areaSecondaryFt,
+                            name: spellName,
+                            combatant_id: _attackerCombId,
+                            range_str: btn.dataset.spellRange || '',
+                        });
+                        if (_placed === null) {
+                            btn.disabled = false;
+                            return;
+                        }
+                        _aoeTargetCombIds = Array.isArray(_placed.target_combatant_ids)
+                            ? _placed.target_combatant_ids : [];
+                    } else if (_needsTargetPicker && typeof window.vttOpenMultiTargetPicker === 'function') {
                         const _preTargets = (window._targetingState
                             && window._targetingState.getTargets()) || [];
                         if (_attackerCombId && !_preTargets.length) {
@@ -3637,15 +3652,13 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     // the fallback when /npc_cast_spell fails or there's no
                     // caster combatant context (e.g., click came from outside
                     // the init tracker).
-                    const _attackerEntry2 = btn.closest('.init-entry[data-char-id]');
-                    const _attackerCombId2 = _attackerEntry2?.dataset.charId || '';
-                    if (_attackerCombId2 && (attackRoll || (saveAbility && saveDc) || damage)) {
+                    if (_attackerCombId && (attackRoll || (saveAbility && saveDc) || damage)) {
                         try {
                             const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/npc_cast_spell`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
-                                    combatant_id: _attackerCombId2,
+                                    combatant_id: _attackerCombId,
                                     spell_name: spellName,
                                     spell_level: parseInt(btn.dataset.spellLevel || '0', 10) || 0,
                                     spell_range: btn.dataset.spellRange || '',
@@ -3656,6 +3669,12 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                                     attack_roll: attackRoll,
                                     attack_bonus: attackBonus || '',
                                     target_combatant_id: _pickedTargetCombId || '',
+                                    // v2.49.217: AoE multi-target list from
+                                    // _openAoePicker; server loops save+damage
+                                    // per id. Empty list for single-target casts.
+                                    aoe_target_combatant_ids: _aoeTargetCombIds,
+                                    area_shape: _areaShape,
+                                    area_size_ft: _areaSizeFt,
                                 }),
                             });
                             if (resp.ok) {
