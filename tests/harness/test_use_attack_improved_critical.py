@@ -93,23 +93,29 @@ async def _drive_attacks(gm_client, attacker, target):
     target_cid = f"tok_{target['id']}"
     results = []
     await gm_client.post("/api/test/dice/seed", json={"seed": 4321})
-    for _ in range(200):
-        resp = await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/attack",
-            json={
-                "character_id": attacker["id"],
-                "attack_index": 0,
-                "target_combatant_id": target_cid,
-                "override": True,
-            },
-        )
-        if resp.status_code != 200:
-            continue
-        data = resp.json()
-        d20 = _kept_d20(data.get("attack_breakdown") or "")
-        if d20 is None:
-            continue
-        results.append((d20, bool(data.get("is_crit"))))
+    try:
+        for _ in range(200):
+            resp = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/attack",
+                json={
+                    "character_id": attacker["id"],
+                    "attack_index": 0,
+                    "target_combatant_id": target_cid,
+                    "override": True,
+                },
+            )
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            d20 = _kept_d20(data.get("attack_breakdown") or "")
+            if d20 is None:
+                continue
+            results.append((d20, bool(data.get("is_crit"))))
+    finally:
+        # Restore non-deterministic mode so subsequent tests aren't
+        # poisoned by our seeded sequence. test_seed_endpoint_accepts_null_seed
+        # already verifies this re-seed path works.
+        await gm_client.post("/api/test/dice/seed", json={"seed": None})
     return results
 
 

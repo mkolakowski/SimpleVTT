@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.232] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Fix test-pollution from v2.49.231's seeded-dice batches.** `test_use_attack_improved_critical.py`'s `_drive_attacks` helper seeds `/api/test/dice/seed` with 4321 before firing 200 attacks but doesn't restore non-deterministic mode at the end, so any subsequent test in the same suite run inherits the seed and gets reproducible (but unintended) d20 rolls. `test_attack_pip_shortsword` happened to land on a seed-determined low roll and failed `14 <= 9` on a damage range assertion. Fix: wrap the seed scope in a try/finally that re-seeds to `None` (the v2.49.12 OS-entropy mode) so the RNG state never leaks past the test.
+**Description:** One-edit fix to `tests/harness/test_use_attack_improved_critical.py:_drive_attacks`. The 200-iteration loop is wrapped in `try:`; the `finally:` block POSTs `{"seed": None}` to `/api/test/dice/seed`. The `try/finally` shape means an exception mid-batch still triggers the re-seed — important because a flaky `/attack` 500 could otherwise leave the RNG in a deterministic state for every subsequent test. The reseed pattern is the same one `test_dice_seeding.py::test_seed_endpoint_accepts_null_seed` already validates, so no new contract surface — just applying the existing API correctly.
+**Description (cont):** Why a separate commit instead of amending v2.49.231. v2.49.231 is already on `origin/main` (just rebuilt + verified green for the new feature). Amending would require a force-push to main, which CLAUDE.md flags as destructive. New-commit pattern matches v2.49.228 (which fixed test fallout from v2.49.227 in a separate commit) — `git log --oneline` reads cleaner as "feature commit + immediate companion fix" than as a silently-amended feature.
+**Description (cont 2):** Verification. (a) `curl /version` confirms v2.49.232 live. (b) Full Kristen suite green: 436/436 passing (was 435/436 on v2.49.231 with the order-dependent `test_attack_pip_shortsword` failure). (c) Running `test_attack_pip_shortsword` in isolation already passed pre-fix; the regression only surfaces when the seeded suite runs before it. The fix exercises the leak-prevention path in every harness invocation.
+
+### Fixed
+- `tests/harness/test_use_attack_improved_critical.py:_drive_attacks` — wrap the seeded-dice batch in `try/finally` that POSTs `{"seed": None}` on exit. Closes the order-dependent failure of `test_attack_pip_shortsword`.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.49.232`.
+- `README.md` version badge → `2.49.232`.
+
+### Notes
+- **Test-only fix.** No production code changed; no schema change. Harness-discipline rule N/A (refactor of existing test infrastructure).
+- **Pattern reminder for future seeded-dice tests.** Always re-seed to `None` in a `finally:` block when a test pins a deterministic seed. Without it, the next harness file in alpha-order inherits the deterministic state.
+
+---
+
 ## [2.49.231] - 2026-05-24
 
 **Schema version:** 56
