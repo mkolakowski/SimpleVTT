@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 447 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.49.244, 2026-05-25).
+**Total tests:** 450 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.51.5, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -678,6 +678,15 @@ v2.49.244 — per-user UI preference. `POST /api/settings/roll_log_position` fli
 | `test_roll_log_position_left_then_right` | GM POSTs `{"position": "left"}` → 200 + `roll_log_position == "left"`; subsequent POST `{"position": "right"}` flips back, both persist. |
 | `test_roll_log_position_rejects_invalid_value` | `{"position": "middle"}` → 400 with the invalid value surfaced in the response body. |
 | `test_roll_log_position_persists_for_player` | Per-user isolation — Alice sets `left` independently of the GM; cleanup resets her to `right`. |
+
+### `test_use_save_evasion.py`
+v2.51.5 — Monk Lv 7+ (and Rogue Lv 7+) Evasion. Server-side intercept of save-for-half Dex-save damage via `_apply_evasion_to_dex_save_damage` (wired into all 7 save-damage call sites). With Evasion: save → 0, fail → half. Without: standard save → half, fail → full. Broadcasts `feature_used` with `source: "evasion"` on every fire (both branches).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_evasion_save_success_zero_damage` | Thalindra casts Fireball at [bandit, Kael (Monk 7)] via AoE; loop until Kael's Dex save passes → `damage_applied == 0` and feature_used(source=evasion) broadcast fires. |
+| `test_evasion_save_fail_half_damage` | Same setup; loop until Kael's save fails → `damage_applied` in 8d6's half range (4-24) and the Evasion broadcast still fires on the fail branch. |
+| `test_non_monk7_target_standard_save_for_half` | Control: Tavik (Cleric 5, no Evasion) on save success → standard half damage (not zero); no Evasion broadcast. |
 
 ### `test_use_attack_uncanny_dodge.py`
 v2.49.243 — Rogue Lv 5+ passive reaction. Server-side halving wired into `_apply_damage_to_combatant` via the new `is_attack=True` kwarg + `_target_uses_uncanny_dodge` helper. Auto-fires on the first incoming attack each round; reaction-gated (a second swing in the same round takes full damage); RAW save-spell paths intentionally don't trigger.

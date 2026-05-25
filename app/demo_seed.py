@@ -1700,6 +1700,17 @@ def _monk_sheet(name: str) -> dict:
                 "name": "Stillness of Mind",
                 "desc": "Action — end one charmed or frightened condition on yourself. Unlimited uses.",
             },
+            # v2.51.5: Evasion (Monk Lv 7+). Passive — when a Dex save
+            # would have you take half damage, you take none on success
+            # and half on failure. Fires automatically server-side
+            # inside the save-spell damage path via
+            # `_apply_evasion_to_dex_save_damage`; no /use endpoint, no
+            # counter, no UI buttons — pure description for the sheet.
+            {
+                "key": "evasion",
+                "name": "Evasion",
+                "desc": "Passive — when a Dex save would deal half damage, take none on success and half on failure. Fires automatically server-side on Dex-save spells like Fireball.",
+            },
         ],
     }
 

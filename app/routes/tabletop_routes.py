@@ -7642,7 +7642,14 @@ async def respond_roll_request(
                 except dice_mod.DiceParseError:
                     _dmg_rolled = 0
                 if _dmg_rolled > 0:
-                    proposed = _dmg_rolled if not _passed else _dmg_rolled // 2
+                    # v2.51.5: Evasion-aware save-for-half. When the
+                    # target is Monk/Rogue Lv 7+ AND the save_ability
+                    # is DEX, save → 0 damage, fail → half damage.
+                    proposed, _ev_used = await _apply_evasion_to_dex_save_damage(
+                        db, campaign_id, _combatant_id,
+                        _dmg_rolled, _passed,
+                        str(ctx.get("save_ability") or ""),
+                    )
                     if proposed > 0:
                         # Wrap the PC's character row in a combatant
                         # dict so ``_apply_damage_to_combatant`` can
@@ -8546,9 +8553,14 @@ async def cast_spell(
                 # Sacred Flame and similar "no effect on success" spells
                 # are filed for the action schema — for now save-for-
                 # half is the universal default.
-                proposed = (
-                    auto_save_damage_rolled if not auto_save_passed
-                    else auto_save_damage_rolled // 2
+                # v2.51.5: Evasion-aware (Dex saves only) — Monk/Rogue
+                # Lv 7+ targets evade entirely on a successful save,
+                # take half on a failed one.
+                proposed, _ev_used = await _apply_evasion_to_dex_save_damage(
+                    db, campaign_id,
+                    (target_combatant or {}).get("id") if target_combatant else None,
+                    auto_save_damage_rolled, bool(auto_save_passed),
+                    save_ability,
                 )
                 if proposed > 0:
                     dmg_result = await _apply_damage_to_combatant(
@@ -8711,7 +8723,11 @@ async def cast_spell(
                 except dice_mod.DiceParseError:
                     _dmg_rolled = 0
                 if _dmg_rolled > 0:
-                    proposed = _dmg_rolled if not _passed else _dmg_rolled // 2
+                    # v2.51.5: Evasion (Dex save only) for the AoE extras.
+                    proposed, _ev_used = await _apply_evasion_to_dex_save_damage(
+                        db, campaign_id, extra.get("id"),
+                        _dmg_rolled, bool(_passed), save_ability,
+                    )
                     if proposed > 0:
                         _dr_result = await _apply_damage_to_combatant(
                             db, campaign_id, extra, proposed,
@@ -9310,7 +9326,11 @@ async def place_aoe(
                 except dice_mod.DiceParseError:
                     dmg_rolled = 0
                 if dmg_rolled > 0:
-                    proposed = dmg_rolled if not passed else dmg_rolled // 2
+                    # v2.51.5: Evasion (Dex saves) for PC AoE single-target.
+                    proposed, _ev_used = await _apply_evasion_to_dex_save_damage(
+                        db, campaign_id, extra.get("id"),
+                        dmg_rolled, bool(passed), save_ability,
+                    )
                     if proposed > 0:
                         # Wrap PC character row in a combatant dict so
                         # ``_apply_damage_to_combatant`` routes through
@@ -9369,7 +9389,14 @@ async def place_aoe(
             except dice_mod.DiceParseError:
                 dmg_rolled = 0
             if dmg_rolled > 0:
-                proposed = dmg_rolled if not passed else dmg_rolled // 2
+                # v2.51.5: Evasion (Dex saves) — NPC targets won't
+                # have it but the helper short-circuits cleanly. Kept
+                # uniform across the AoE extras loop so an NPC + PC
+                # mixed cast applies the same logic per target.
+                proposed, _ev_used = await _apply_evasion_to_dex_save_damage(
+                    db, campaign_id, extra.get("id"),
+                    dmg_rolled, bool(passed), save_ability,
+                )
                 if proposed > 0:
                     dr_result = await _apply_damage_to_combatant(
                         db, campaign_id, extra, proposed,
@@ -10966,6 +10993,139 @@ def _target_uses_uncanny_dodge(
     if _rogue_level_from_sheet(sheet) < 5:
         return False, None
     return True, char
+
+
+def _monk_level_from_sheet(sheet: dict) -> int:
+    """Read the monk level out of a sheet (single-class or multiclass).
+    Mirror of ``_rogue_level_from_sheet``. Used by
+    ``_target_uses_evasion`` to gate the Monk Lv 7+ damage halver.
+    """
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "monk":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "monk":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _target_uses_evasion(
+    db: Session, campaign_id: int, target_combatant_id: str | None,
+) -> tuple[bool, "Character | None"]:
+    """v2.51.5 — Evasion (Monk Lv 7+, Rogue Lv 7+). Returns
+    ``(applies, char)`` where ``applies`` is True when the target's
+    Evasion should modify Dex-save damage. RAW: "When you are
+    subjected to an effect that allows you to make a Dexterity
+    saving throw to take only half damage, you instead take no
+    damage if you succeed on the saving throw, and only half damage
+    if you fail."
+
+    Conditions:
+      - target is a PC combatant (``char_id`` resolves to a Character)
+      - PC is Monk Lv 7+ OR Rogue Lv 7+ (single-class or multiclass)
+
+    No reaction gate — Evasion is passive, not a reaction. RAW also
+    requires "you aren't incapacitated" but the incapacitating
+    condition set (Stunned / Paralyzed / Unconscious) drops your
+    ability to take any action, so the caller's incapacitation
+    handling would already short-circuit before reaching this
+    helper. Filed for follow-up if a future condition can suppress
+    Evasion without incapacitating.
+
+    Naming: matches ``_target_uses_uncanny_dodge`` (v2.49.243); the
+    paired helper ``_apply_evasion_to_dex_save_damage`` does the
+    actual save-for-half math + broadcast.
+    """
+    if not target_combatant_id:
+        return False, None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False, None
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == target_combatant_id:
+            target = c
+            break
+    if target is None:
+        return False, None
+    char_id = target.get("char_id")
+    if not char_id:
+        return False, None
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not char:
+        return False, None
+    sheet = char.sheet or {}
+    monk_lv = _monk_level_from_sheet(sheet)
+    rogue_lv = _rogue_level_from_sheet(sheet)
+    if monk_lv < 7 and rogue_lv < 7:
+        return False, None
+    return True, char
+
+
+async def _apply_evasion_to_dex_save_damage(
+    db: Session,
+    campaign_id: int,
+    target_combatant_id: str | None,
+    rolled_damage: int,
+    save_passed: bool,
+    save_ability: str,
+) -> tuple[int, bool]:
+    """v2.51.5 — modifies the standard save-for-half damage application
+    when the target has Evasion AND the save was a Dex save.
+
+    Returns ``(proposed_damage, evasion_used)``:
+      - Default (no Evasion or non-Dex save): proposed = rolled if
+        save_passed else rolled // 2 → wait, that's backwards: standard
+        save-for-half is half on success and full on failure, so
+        ``rolled // 2 if save_passed else rolled``.
+      - With Evasion (Dex save only):
+          save_passed → proposed = 0       (was: rolled // 2)
+          save_failed → proposed = rolled // 2  (was: rolled)
+
+    Broadcasts a ``feature_used`` event when Evasion fires so the
+    chat card surfaces the trigger ("🌀 Evasion → 0 damage" on a
+    successful save, "→ N damage" on a failed save).
+
+    Caller passes ``save_ability`` (the spell's ``save`` field —
+    "DEX" / "WIS" / etc.); helper short-circuits when it's not "DEX".
+    """
+    # Standard save-for-half baseline. Stays in effect for non-Dex
+    # saves, non-PC targets, and PCs without Evasion.
+    base_proposed = rolled_damage // 2 if save_passed else rolled_damage
+    if (save_ability or "").strip().upper() != "DEX":
+        return base_proposed, False
+    applies, char = _target_uses_evasion(db, campaign_id, target_combatant_id)
+    if not applies or char is None:
+        return base_proposed, False
+    if save_passed:
+        evaded_proposed = 0
+    else:
+        evaded_proposed = rolled_damage // 2
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": (
+                f"🌀 Evasion → {evaded_proposed} damage"
+                f" ({'save' if save_passed else 'fail'})"
+            ),
+            "feature_desc": (
+                "Dex save for half: no damage on success, half on fail."
+            ),
+            "source": "evasion",
+        },
+    })
+    return evaded_proposed, True
 
 
 def _target_has_dodging(
@@ -17979,9 +18139,12 @@ async def use_npc_cast_spell(
             except dice_mod.DiceParseError:
                 auto_save_damage_rolled = 0
             if auto_save_damage_rolled > 0:
-                proposed = (
-                    auto_save_damage_rolled if not auto_save_passed
-                    else auto_save_damage_rolled // 2
+                # v2.51.5: Evasion (Dex saves) for npc_cast_spell single-target.
+                proposed, _ev_used = await _apply_evasion_to_dex_save_damage(
+                    db, campaign_id,
+                    (target_combatant or {}).get("id") if target_combatant else None,
+                    auto_save_damage_rolled, bool(auto_save_passed),
+                    save_ability,
                 )
                 if proposed > 0:
                     apply_result = await _apply_damage_to_combatant(
@@ -18061,7 +18224,11 @@ async def use_npc_cast_spell(
                 except dice_mod.DiceParseError:
                     _dmg_rolled = 0
                 if _dmg_rolled > 0:
-                    proposed = _dmg_rolled if not _passed else _dmg_rolled // 2
+                    # v2.51.5: Evasion (Dex saves) for npc_cast_spell AoE extras.
+                    proposed, _ev_used = await _apply_evasion_to_dex_save_damage(
+                        db, campaign_id, extra.get("id"),
+                        _dmg_rolled, bool(_passed), save_ability,
+                    )
                     if proposed > 0:
                         _dr_result = await _apply_damage_to_combatant(
                             db, campaign_id, extra, proposed,

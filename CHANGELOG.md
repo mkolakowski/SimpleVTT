@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.51.5] - 2026-05-25 — "The Slip"
+
+**Schema version:** 57
+**Commit summary:** **Evasion (Monk Lv 7+) wired server-side into every save-for-half damage path.** Kael (already Lv 7 from v2.49.229's Stillness of Mind bump) now takes ZERO damage from Fireball when his Dex save succeeds, and only half damage when it fails. RAW: "When you are subjected to an effect that allows you to make a Dexterity saving throw to take only half damage, you instead take no damage if you succeed on the saving throw, and only half damage if you fail." Same helper also recognizes Rogue Lv 7+ for the future Pip bump; demo Pip stays Lv 5 for now so the cascade of Sneak-Attack-die / HP / hit-dice updates can land in a separate commit.
+**Description:** Three new helpers in `app/routes/tabletop_routes.py`. **(1)** `_monk_level_from_sheet(sheet)` — mirror of `_rogue_level_from_sheet` from v2.49.243; single-class + multiclass aware. **(2)** `_target_uses_evasion(db, campaign_id, target_combatant_id) → (applies, char)` — gates on PC combatant + Monk Lv 7+ OR Rogue Lv 7+. No reaction gate (Evasion is passive, not a reaction). **(3)** `_apply_evasion_to_dex_save_damage(db, campaign_id, target_combatant_id, rolled_damage, save_passed, save_ability) → (proposed_damage, evasion_used)` async helper — short-circuits to standard save-for-half (`damage // 2` on save, `damage` on fail) when save_ability isn't DEX or target doesn't qualify; otherwise applies the Evasion modifier (0 on save, half on fail) and broadcasts `feature_used` with `source: "evasion"`.
+**Description (cont):** Wired into all 7 save-for-half call sites that previously did inline `proposed = rolled if not passed else rolled // 2`: **L 7645** (AoE PC save reroll via `/roll_request/respond` — the one the harness AoE-Fireball-on-PC test goes through), **L 8549** (`/cast_spell` single-target NPC save), **L 8714** (`/cast_spell` AoE NPC extras loop), **L 9313** (`/place_aoe` PC), **L 9372** (`/place_aoe` NPC), **L 18115** (`/npc_cast_spell` single-target), **L 18197** (`/npc_cast_spell` AoE extras). Each call site now reads `proposed, _ev_used = await _apply_evasion_to_dex_save_damage(...)` before calling `_apply_damage_to_combatant(...)`. Helper short-circuits cleanly on non-Dex saves + NPC targets so the existing test suite stays green.
+**Description (cont 2):** Demo seed. `app/demo_seed.py::_monk_sheet` gains an `evasion` row in `class_features` (description-only — Evasion is passive, no /use endpoint or button). No level bump needed — Kael is already Lv 7 from v2.49.229.
+**Description (cont 3):** Harness coverage. New `tests/harness/test_use_save_evasion.py` (3 tests): (1) happy save-success path — Thalindra casts Fireball at [bandit, Kael] via the AoE flow, GM-as-Kael responds to the prompt, loop until save passes → `damage_applied == 0` + `feature_used(source=evasion)` broadcast fires; (2) happy save-fail path — same setup, loop until save fails → `damage_applied` is in the 8d6 half range (4-24) + Evasion broadcast still fires; (3) control — Tavik (Cleric Lv 5, no Evasion) takes standard save-for-half (half on save, NOT zero) + no Evasion broadcast. All 3 green; full harness now at 450 tests (450 passed in ~3 min).
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.51.5` after `docker compose up -d --build app`. (b) `pytest tests/harness/test_use_save_evasion.py -v` → 3/3 passed. (c) Full harness suite green on second run (one flake in `test_attack_auto_apply_on_hit` that's pre-existing — Pip at full 33 HP + Uncanny-Dodge halving Greataxe min-damage keeps her above the test's hardcoded `< 30` threshold; passes on re-run and in isolation). The flake predates this commit and is filed for a separate fix.
+
+### Added
+- `_monk_level_from_sheet(sheet)` helper — mirror of `_rogue_level_from_sheet`.
+- `_target_uses_evasion(db, campaign_id, target_combatant_id) → (applies, char)` helper.
+- `_apply_evasion_to_dex_save_damage(db, campaign_id, ...) → (proposed, evasion_used)` async helper. Wraps the standard save-for-half math + the Evasion modifier + the `feature_used` broadcast.
+- 7 save-damage call sites now route through the new helper instead of inlining `proposed = rolled if not passed else rolled // 2`.
+- `tests/harness/test_use_save_evasion.py` — 3 tests (save-success → 0, save-fail → half, control non-Monk-7).
+- `app/demo_seed.py::_monk_sheet` — `evasion` `class_features` row on Kael (description only).
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.51.5`.
+- `README.md` version badge → `2.51.5`.
+- `docs/plans/class-content-status.md` — Monk Lv 7 Evasion row flipped ⚪ → ✅ with implementation notes.
+- `docs/test-harness-coverage.md` — total-test-count 447 → 450, new `test_use_save_evasion.py` entry.
+
+### Notes
+- **Rogue Evasion deferred.** Pip is Lv 5; Rogues get Evasion at Lv 7. The helper already recognizes `_rogue_level_from_sheet(sheet) >= 7` so Pip's level bump is the only thing missing. Filed for the next class-work cycle (cascades into Sneak Attack die `3d6 → 4d6`, HP, hit dice, and ~5 harness tests like the v2.49.227 Monk bumps).
+- **Pre-existing flake to fix later.** `test_attack_auto_apply_on_hit` asserts `target_hp_after < 30` but Pip's actual max HP is 33; with Uncanny Dodge halving an attack's min damage to 1-2, her HP can land at 31 or 32 (still > 30) → test fails. The flake predates v2.51.5; filed for a relative-comparison rewrite (`hp_after < hp_before`).
+
+---
+
 ## [2.51.4] - 2026-05-25 — "Glass Cabinet"
 
 **Schema version:** 57
