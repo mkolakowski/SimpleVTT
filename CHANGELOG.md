@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.58.0] - 2026-05-25 — "Channel of Healing"
+
+**Schema version:** 57
+**Commit summary:** **Life Domain Cleric heal-spell uplift hook ships — Disciple of Life (Lv 1+) auto-adds 2 + slot_level HP to outgoing heals, Blessed Healer (Lv 6+) ALSO self-heals the caster for 2 + slot_level on heals targeted at others.** Both features were descriptive at v2.57.1; this commit wires the mechanical interception at the /cast_spell heal-resolution branch. Single helper `_life_domain_heal_uplift` returns `(target_uplift, self_uplift)` driven off the caster's sheet + slot_level + a `target_is_self` boolean. Two `feature_used` broadcasts (`source=disciple-of-life`, `source=blessed-healer`) credit the chat card. Tavik (Lv 6 Life Domain) is the demo fixture and both flip from descriptive to fully-wired.
+**Description:** Two new helpers in `app/routes/tabletop_routes.py` next to `_apply_heal_to_combatant` (their consumer). **(1)** `_cleric_level_from_sheet(sheet)` — mirror of `_paladin_level_from_sheet` / `_fighter_level_from_sheet` / `_barbarian_level_from_sheet` / `_monk_level_from_sheet`. Handles single-class + multi-class sheets. **(2)** `_life_domain_heal_uplift(caster_sheet, slot_level, target_is_self)` — returns `(target_uplift, self_uplift)`. Disciple of Life applies to any target (self or other) for Cleric Lv 1+ Life Domain casting a Lv 1+ heal. Blessed Healer applies only when `target_is_self` is False and the cleric is Lv 6+. Subclass slug normalization mirrors `_ally_has_aura_of_devotion` — strip " domain" suffix, lowercase, compare to "life".
+**Description (cont):** Wiring at `/cast_spell` heal-resolution path (~L 8130 in `tabletop_routes.py`). Before the `_apply_heal_to_combatant` call, compute `_target_is_self = (target_combatant.char_id == char.id)`, then call `_life_domain_heal_uplift(char.sheet, slot_level, _target_is_self)`. Compose `heal_rolled_with_uplift = heal_rolled + _life_target_uplift` and pass that to the single existing `_apply_heal_to_combatant` call (so the cap-at-hp-max RAW behavior still applies cleanly). If `_life_self_uplift > 0`, make a SECOND `_apply_heal_to_combatant` call against the caster's own combatant — looked up by walking `hub.get_battle(campaign_id).combatants` for `char_id == char.id`, falling back to a synthesized PC dict if the caster isn't in init.
+**Description (cont 2):** Two new broadcast events per cast (when applicable). **`feature_used(source=disciple-of-life)`** carries `feature_name: "💗 Disciple of Life → +N HP on <target>"` where N = 2 + slot_level. **`feature_used(source=blessed-healer)`** carries `feature_name: "💗 Blessed Healer → +N HP to <caster>"` where N reflects the actual applied amount (post-cap). Both are character-anchored on the caster so the chat card uses Tavik's name/color, not the target's.
+**Description (cont 3):** Payload exposes `disciple_of_life_uplift` (int) and `blessed_healer_uplift` + `blessed_healer_applied` (int) on the spell_cast broadcast for client consumers. The chat card today doesn't render these explicitly — the two `feature_used` cards cover the player-facing surface. Filed for follow-up: a single combined chat card variant that shows "Cure Wounds: 1d8+3 → 11 base, +3 Disciple of Life, +3 Blessed Healer" with all three lines on one card.
+**Description (cont 4):** v1 simplifications. **(a)** AoE heals (Mass Healing Word, Mass Cure Wounds) — the AoE branch loops over targets but doesn't currently route through this hook. Filed for follow-up; needs the AoE branch to apply the per-target uplift inside the loop AND fire ONE Blessed Healer self-heal per cast (not per target). **(b)** Cure Wounds-like heals where the target is an NPC ally (e.g. animated dead, summoned beasts) — the uplift fires anyway since the helper doesn't check creature type. RAW correct (any creature qualifies); flagging for awareness. **(c)** Outgoing heals via the legacy `_heal_claims` path (caster cast Cure Wounds without picking a target) — Disciple of Life doesn't apply because the heal hasn't been claimed yet. The claim flow predates target-binding. Filed; would route through `_apply_heal_to_combatant` post-claim with the slot_level captured in `_heal_claims`.
+**Description (cont 5):** Demo coverage. Both features were descriptive class_features rows on Tavik's sheet (v2.57.1 for Blessed Healer; Disciple of Life never had one — added now). The text on the Blessed Healer row is updated from "Apply manually for now" to "Fires automatically on outgoing heals via the /cast_spell hook." A new Disciple of Life class_features row joins it with the same wording — both surface so the player sees the feature exists and understands it auto-applies.
+**Description (cont 6):** Verification. (a) `curl /version` reports `2.58.0` after `docker compose up -d --build app`. (b) Harness `tests/harness/test_life_domain_heal_uplift.py` (3 tests) — happy path with Krieger as target (both features fire), self-heal control (only Disciple of Life fires), non-Life-Domain control (Lyra casts Cure Wounds → neither fires). (c) Manual click-through: Tavik's sheet casts Cure Wounds at Krieger → chat shows three cards (Cure Wounds cast, Disciple of Life +3, Blessed Healer +3); Tavik's HP increases by 3 on the sheet automatically.
+
+### Added
+- `_cleric_level_from_sheet(sheet)` — class-level reader mirroring the other class helpers.
+- `_life_domain_heal_uplift(caster_sheet, slot_level, target_is_self)` — returns `(target_uplift, self_uplift)` for the Life Domain heal-spell hook.
+- Heal-resolution branch in `/cast_spell` extended with two `feature_used` broadcasts (`source=disciple-of-life`, `source=blessed-healer`) and a second `_apply_heal_to_combatant` call for the caster's self-heal when Blessed Healer fires.
+- Tavik's `class_features` array gains a `disciple-of-life` row; the existing `blessed-healer` row is reworded from "Apply manually for now" to "Fires automatically via /cast_spell hook".
+- Harness `tests/harness/test_life_domain_heal_uplift.py` — 3 tests covering happy path + self-heal control + non-Life-Domain control.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.58.0`.
+- `README.md` version badge → `2.58.0`.
+- `docs/plans/class-content-status.md` — Life Domain subclass row's note updated to reflect Blessed Healer + Disciple of Life now ✅; Cleric class plan section gets a wired-features paragraph.
+- `docs/test-harness-coverage.md` — total test count 473 → 476; new `test_life_domain_heal_uplift.py` section added.
+
+### Notes
+- **AoE heal interception deferred.** Mass Healing Word / Mass Cure Wounds loop over targets in a different branch from the single-target heal path. The uplift would need to apply per-target with one consolidated Blessed Healer self-heal per cast (not per target — RAW Blessed Healer triggers per spell cast, not per heal recipient). Filed for follow-up.
+- **Heal-claim flow doesn't carry uplift.** When the caster targets Cure Wounds at no one and an ally claims the heal via the chat card button, the legacy `_heal_claims` path doesn't route through `_life_domain_heal_uplift`. Filed — needs `_heal_claims` to capture `slot_level` + `caster_sheet` at cast time and route the claim through `_apply_heal_to_combatant` with the uplift applied.
+- **Why a single combined helper rather than two.** Disciple of Life + Blessed Healer share the same trigger (outgoing heal of L1+) and the same uplift formula (2 + slot level). Splitting them into separate helpers would duplicate the level / subclass-slug normalization in both places. The `target_is_self` boolean is the only branch — easier to read inline than as a second helper call.
+- **Tavik upcasts.** Cure Wounds upcast at L2 → uplift = 2 + 2 = +4 (both features). L3 → +5. Matches RAW progression.
+
+---
+
 ## [2.57.1] - 2026-05-25 — "Domain Power"
 
 **Schema version:** 57

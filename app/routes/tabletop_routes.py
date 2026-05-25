@@ -2192,6 +2192,73 @@ async def _apply_damage_to_combatant(
     }
 
 
+def _cleric_level_from_sheet(sheet: dict) -> int:
+    """Read the cleric level out of a sheet (single-class or multi-
+    class). Mirror of the other class-level helpers. Used by the
+    Life Domain heal-uplift hook (`_life_domain_heal_uplift`).
+    """
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "cleric":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "cleric":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _life_domain_heal_uplift(
+    caster_sheet: dict, slot_level: int, target_is_self: bool,
+) -> "tuple[int, int]":
+    """v2.58.0 — Life Domain heal-spell uplift hook.
+
+    Returns ``(target_uplift, self_uplift)``:
+    - ``target_uplift`` = `2 + slot_level` when the caster is a
+      Cleric Lv 1+ with subclass Life Domain casting a Lv 1+ heal.
+      Applies to ANY target (self or other) per Disciple of Life
+      RAW: "Whenever you use a spell of 1st level or higher to
+      restore hit points to a creature, the creature regains
+      additional hit points equal to 2 + the spell's level."
+    - ``self_uplift`` = `2 + slot_level` when the caster is Cleric
+      Lv 6+ Life Domain AND ``target_is_self`` is False. Per
+      Blessed Healer RAW: "the healing spells you cast on others
+      heal you as well. When you cast a spell of 1st level or
+      higher that restores hit points to a creature other than
+      you, you regain hit points equal to 2 + the spell's level."
+
+    Returns (0, 0) when the caster isn't a Life Domain Cleric, the
+    slot level is 0 (cantrip), or the inputs don't match. Caller
+    composes the values: target gets ``heal_rolled + target_uplift``,
+    caster gets a separate self-heal call of ``self_uplift`` HP.
+
+    Subclass slug normalization mirrors `_ally_has_aura_of_devotion`:
+    strip the "Oath of " / "Domain" suffixes and lowercase. Life
+    Domain's sheet field is the literal "Life Domain"; slug =
+    "life".
+    """
+    if not caster_sheet or slot_level < 1:
+        return 0, 0
+    cleric_lv = _cleric_level_from_sheet(caster_sheet)
+    if cleric_lv < 1:
+        return 0, 0
+    subclass_raw = (caster_sheet.get("subclass") or "").strip().lower()
+    subclass_slug = subclass_raw.replace(" domain", "").strip()
+    if subclass_slug != "life":
+        return 0, 0
+    target_uplift = 2 + int(slot_level)  # Disciple of Life — always.
+    self_uplift = 0
+    if cleric_lv >= 6 and not target_is_self:
+        self_uplift = 2 + int(slot_level)  # Blessed Healer.
+    return target_uplift, self_uplift
+
+
 async def _apply_heal_to_combatant(
     db: Session,
     campaign_id: int,
@@ -8128,8 +8195,21 @@ async def cast_spell(
                 "name": target_name_resolved or target_name_in or "",
             }
         if target_combatant and heal_rolled > 0:
+            # v2.58.0 — Life Domain heal-spell uplift hook. Disciple
+            # of Life (Lv 1+) adds 2 + slot_level to the target heal;
+            # Blessed Healer (Lv 6+) ALSO heals the caster for 2 +
+            # slot_level on heals where target ≠ caster. Returns
+            # (0, 0) for non-Life-Domain casters / cantrips.
+            _target_char_id = target_combatant.get("char_id")
+            _target_is_self = bool(
+                _target_char_id and int(_target_char_id) == char.id
+            )
+            _life_target_uplift, _life_self_uplift = _life_domain_heal_uplift(
+                char.sheet or {}, int(slot_level), _target_is_self,
+            )
+            heal_rolled_with_uplift = heal_rolled + _life_target_uplift
             heal_result = await _apply_heal_to_combatant(
-                db, campaign_id, target_combatant, heal_rolled,
+                db, campaign_id, target_combatant, heal_rolled_with_uplift,
                 cast_id=cast_id,
             )
             auto_heal_applied = heal_result["applied"]
@@ -8150,6 +8230,81 @@ async def cast_spell(
             payload["auto_heal_hp_before"] = auto_heal_hp_before
             payload["auto_heal_hp_after"] = auto_heal_hp_after
             payload["auto_heal_revived"] = auto_heal_revived
+            # v2.58.0 — surface Disciple of Life uplift to the chat
+            # card. The total applied amount already reflects the
+            # uplift via heal_rolled_with_uplift → _apply_heal; the
+            # field below tells the client what portion came from the
+            # class feature.
+            if _life_target_uplift > 0:
+                payload["disciple_of_life_uplift"] = _life_target_uplift
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": char.id,
+                        "character_name": char.name,
+                        "user_color": char.color,
+                        "feature_name": (
+                            f"💗 Disciple of Life → +{_life_target_uplift} "
+                            f"HP on {auto_heal_target_name}"
+                        ),
+                        "feature_desc": (
+                            f"Life Domain Lv 1+ — outgoing heals add "
+                            f"2 + spell level ({_life_target_uplift}) HP."
+                        ),
+                        "source": "disciple-of-life",
+                    },
+                })
+            # v2.58.0 — Blessed Healer self-heal. Separate
+            # _apply_heal_to_combatant call against the caster's own
+            # combatant (or synthesized PC dict if not in init).
+            if _life_self_uplift > 0:
+                caster_combatant = _lookup_combatant(
+                    campaign_id,
+                    f"tok_{char.id}",  # speculative
+                )
+                # Walk the hub state for the caster's actual combatant
+                # row when the speculative id doesn't match. Caster's
+                # token id isn't canonicalized — find it by char_id.
+                if not caster_combatant:
+                    _state = hub.get_battle(campaign_id) or {}
+                    for _c in (_state.get("combatants") or []):
+                        if _c.get("char_id") == char.id:
+                            caster_combatant = _c
+                            break
+                if not caster_combatant:
+                    caster_combatant = {
+                        "char_id": char.id,
+                        "id": "",
+                        "name": char.name,
+                    }
+                # cast_id=None on the self-heal so we don't overwrite
+                # the primary heal's _attack_damage_log entry; /undo_
+                # attack_damage reverts the TARGET heal only. Player
+                # tweaks caster HP manually if they want strict undo
+                # parity (rare — Blessed Healer is +3-9 HP per cast).
+                bh_result = await _apply_heal_to_combatant(
+                    db, campaign_id, caster_combatant, _life_self_uplift,
+                    cast_id=None,
+                )
+                payload["blessed_healer_uplift"] = _life_self_uplift
+                payload["blessed_healer_applied"] = bh_result["applied"]
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": char.id,
+                        "character_name": char.name,
+                        "user_color": char.color,
+                        "feature_name": (
+                            f"💗 Blessed Healer → +{bh_result['applied']} "
+                            f"HP to {char.name}"
+                        ),
+                        "feature_desc": (
+                            f"Life Domain Lv 6+ — healing others heals "
+                            f"you for 2 + spell level ({_life_self_uplift}) HP."
+                        ),
+                        "source": "blessed-healer",
+                    },
+                })
 
     # v2.34.0 Phase T.4b: auto-resolve spell ATTACK rolls (Fire Bolt,
     # Eldritch Blast, Inflict Wounds, Guiding Bolt, Ray of Frost,

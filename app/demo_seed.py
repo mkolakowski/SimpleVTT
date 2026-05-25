@@ -668,22 +668,24 @@ def _cleric_sheet(name: str) -> dict:
                 "manual": False,
             },
         ],
-        # v2.57.1: Blessed Healer (Life Domain Lv 6+). Pure-descriptive —
-        # surfaces on the sheet so the GM remembers to apply the temp
-        # HP. RAW: "the healing spells you cast on others heal you as
-        # well. When you cast a spell of 1st level or higher that
-        # restores HP to a creature other than you, you regain HP equal
-        # to 2 + the spell's level." No hook today — applies after the
-        # /cast_spell heal path resolves, would need a self-heal
-        # broadcast on every outgoing healing spell. Filed for follow-
-        # up alongside Disciple of Life (Lv 1 Life Domain — adds
-        # 2 + spell level to outgoing heals) which has the same
-        # outgoing-heal interception shape.
+        # v2.57.1: Blessed Healer (Life Domain Lv 6+).
+        # v2.58.0: ships with the heal-uplift hook
+        # ``_life_domain_heal_uplift`` wired at /cast_spell — both
+        # Disciple of Life (Lv 1+ — uplift the target heal) and
+        # Blessed Healer (Lv 6+ — self-heal the caster) fire
+        # automatically when Tavik casts a Lv 1+ heal. Two
+        # ``feature_used`` broadcasts surface the uplifts to the
+        # chat card.
         "class_features": [
+            {
+                "key": "disciple-of-life",
+                "name": "Disciple of Life",
+                "desc": "Passive (Life Domain Lv 1+) — your Lv 1+ heal spells restore an extra 2 + spell level HP to the target. Fires automatically via /cast_spell hook (v2.58.0).",
+            },
             {
                 "key": "blessed-healer",
                 "name": "Blessed Healer",
-                "desc": "Passive (Life Domain Lv 6+) — when you cast a spell of 1st level or higher that restores HP to a creature other than yourself, you regain 2 + the spell's level HP. Apply manually for now.",
+                "desc": "Passive (Life Domain Lv 6+) — when you cast a Lv 1+ heal spell on a creature other than yourself, you ALSO regain 2 + spell level HP. Fires automatically via /cast_spell hook (v2.58.0).",
             },
         ],
     }

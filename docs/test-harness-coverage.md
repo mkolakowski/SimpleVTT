@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 473 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.57.0, 2026-05-25).
+**Total tests:** 476 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.58.0, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -707,6 +707,15 @@ v2.57.0 — Path of the Berserker Lv 6+ Mindless Rage. **Self-targeted** conditi
 | `test_mindless_rage_blocks_charmed_install` | Krieger rages (`/use_rage`); Lyra casts Suggestion at Krieger; loop until save fails → response `auto_buff_installed=""`, Krieger's buff list has no `charmed` entry, broadcast names Krieger. |
 | `test_charmed_installs_when_not_raging` | Control: Krieger does NOT rage → failed save installs Charmed normally; no Mindless Rage broadcast. |
 | `test_mindless_rage_skips_non_charm_fright` | Krieger rages + Tavik casts Hold Person → failed save installs Paralyzed (Mindless Rage is charm/fright-only). |
+
+### `test_life_domain_heal_uplift.py`
+v2.58.0 — Life Domain Cleric heal-uplift hook. Two stacked features fire on outgoing Lv 1+ heals: **Disciple of Life** (Lv 1+) adds 2 + slot_level HP to the target heal; **Blessed Healer** (Lv 6+) ALSO self-heals the caster for 2 + slot_level when target ≠ caster. Helper `_life_domain_heal_uplift(caster_sheet, slot_level, target_is_self)` returns `(target_uplift, self_uplift)`. Wired in the /cast_spell heal-resolution branch — target gets `heal_rolled + target_uplift` via the existing single `_apply_heal_to_combatant`; caster gets a second `_apply_heal_to_combatant` call when `self_uplift > 0`. Two `feature_used` broadcasts (`source=disciple-of-life`, `source=blessed-healer`) credit the chat card.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_disciple_and_blessed_healer_on_other_target` | Tavik casts Cure Wounds (L1) at Krieger → both `disciple-of-life` (+3) and `blessed-healer` (+3) broadcasts fire. |
+| `test_blessed_healer_skips_self_target` | Tavik casts Healing Word at himself → only `disciple-of-life` fires (Blessed Healer RAW requires target ≠ caster). |
+| `test_no_uplift_for_non_life_domain_caster` | Control: Lyra (College of Lore Bard) casts Cure Wounds at Krieger → neither broadcast fires. |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.
