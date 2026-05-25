@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.51.4] - 2026-05-25 — "Glass Cabinet"
+
+**Schema version:** 57
+**Commit summary:** **Every outer card across the Battle / Characters / GM Tools drawers now uses the same frosted-glass recipe as the roll log.** Closes the inconsistency where the Battle init rows + roll-log cards were translucent but the rest of the drawer family (GM Tools panels, the sticky GM Controls block at the top of Battle, the Characters mini-sheet cards) was still on opaque `var(--bg-2)`. Also re-themes every accent gradient that was hardcoded to purple/blue (the v1 default palette) to read from `var(--accent)`, so warm-theme users (sepia / forest / hobbiton) see consistent palette-following tints across every drawer.
+**Description:** Five edits to `app/templates/tabletop.html`. **(1) `.gm-panel`** (GM Tools tab — Encounters, Token Mgmt, Music + the roll-request-panel embedded in the Battle drawer): `background: var(--bg-2)` → glass recipe (`color-mix(in srgb, var(--bg) 42%, transparent)` + `backdrop-filter: blur(16px) saturate(160%)`); border re-themed via `var(--accent) 35%`. **(2) `.gm-panel > summary` gradient**: re-themed from `rgba(167,139,250,.15) → rgba(108,180,255,.10)` (hardcoded purple+blue) to a `color-mix(... var(--accent) ...)` gradient so the header tint follows the active palette. **(3) Sticky GM Controls block** (Battle drawer, line ~1920): inline-style `background: var(--bg-2)` → same glass recipe. The `backdrop-filter: blur(16px)` is what makes the scroll-under read cleanly now — init rows scrolling beneath the sticky card blur into the frosted backdrop instead of being hidden by an opaque rect, so the v2.49.104 sticky behavior is preserved with the new translucent look. **(4) GM Tools Session controls block** (line ~2990): inline-style update — gained the glass recipe; gradient re-themed via `var(--accent)`. **(5) `.char-detail` + `.mini-header`** (Characters drawer): `.char-detail` gains the glass background (was border + shadow only); `.mini-header` gradient re-themed to use `var(--accent)`.
+**Description (cont):** Internal dense blocks stay opaque on purpose: `.mini-statblock` (`var(--bg-2)`), `.mini-cell` / `.mini-kv-pair` / `.mini-sk-btn` (`var(--bg)`), `.battle-char-panel` / `.battle-manual-panel` dropdowns (`var(--bg)`). Same v2.50.2 precedent — layered translucency compounds blur cost per paint and mushes small text; cards get glass, their contents get solid.
+**Description (cont 2):** Settings drawer (`#settings-drawer`) intentionally untouched. It currently holds only the `#player-sound-panel` divider (no card frame), and wrapping it in a glass card would change the layout structure rather than just the styling. If the Settings drawer ever grows additional cards, those should pick up the glass recipe via the precedent set here.
+**Description (cont 3):** Verification. (a) `curl /version` reports `2.51.4` after `docker compose up -d --build app`. (b) Reload the demo tabletop and click through each drawer tab — Battle (init rows + sticky GM Controls), Characters (mini-sheet cards), GM Tools (Session controls, Encounters / Token Mgmt / Music panels) — every outer card reads as glass with the map showing through. (c) Theme verification: flip `/settings/theme` to sepia and reload; the previously-purple `.gm-panel` summary gradient + `.mini-header` gradient now read in warm orange. (d) 447 harness tests untouched — no Python or endpoint surface changed.
+
+### Changed
+- `.gm-panel` (GM Tools panels + Battle's roll-request-panel) — bg `var(--bg-2)` → glass recipe; border + summary gradient re-themed via `var(--accent)`.
+- Sticky GM Controls block (Battle drawer, inline style) — bg `var(--bg-2)` → glass recipe; gradient header re-themed.
+- GM Tools Session controls block (inline style) — gained glass recipe; gradient header re-themed.
+- `.char-detail` (Characters drawer cards) — added glass background; border re-themed via `var(--accent)`.
+- `.mini-header` gradient — re-themed from hardcoded purple+blue to `color-mix(... var(--accent) ...)` so the header tint follows the active palette across both Characters and Battle drawers.
+- `app/version.py` `APP_VERSION` → `2.51.4`.
+- `README.md` version badge → `2.51.4`.
+
+### Notes
+- **Pattern: every drawer outer container is now glass.** `.roll-card` / `.spell-cast-card` / `.roll-req-card` (v2.49.246-247), `.init-row` / `.init-entry` (v2.50.2), now `.gm-panel` / `.char-detail` / the two inline sticky/session blocks. The recipe is consolidated enough that any new drawer card should just adopt it: `color-mix(in srgb, var(--bg) 42%, transparent)` + `backdrop-filter: blur(16px) saturate(160%)` + `border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent)`.
+- **Why settings drawer skipped.** No outer cards live there yet — just the inline `#player-sound-panel` divider. The next commit that adds a card to settings should pick up the recipe.
+
+---
+
 ## [2.51.3] - 2026-05-25 — "Even Light"
 
 **Schema version:** 57

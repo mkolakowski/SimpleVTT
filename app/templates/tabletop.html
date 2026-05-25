@@ -730,7 +730,21 @@
     .char-name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; cursor: pointer; }
     .char-expand-btn { background: var(--input-bg); border: 1px solid var(--border); color: var(--fg-mute); border-radius: 3px; cursor: pointer; padding: 2px 7px; font-size: 11px; flex-shrink: 0; transition: background 0.15s; min-height: 44px; }
     .char-expand-btn:hover { background: var(--surface-hover); color: var(--fg); }
-    .char-detail { display: block; margin: 0 2px 8px; border: 1px solid rgba(167,139,250,.35); border-radius: 8px; overflow: hidden; box-shadow: 0 3px 14px rgba(0,0,0,.22); }
+    /* v2.51.4: same frosted-glass treatment as the rest of the drawer
+       card family. Pre-2.51.4 this had no background (just border +
+       shadow) and let the drawer's transparent backdrop show through;
+       now picks up the bg-mix 42% + blur(16px) recipe + accent-themed
+       border so Characters cards visually match init rows + GM-Tools
+       panels. */
+    .char-detail {
+        display: block; margin: 0 2px 8px;
+        border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+        border-radius: 8px; overflow: hidden;
+        box-shadow: 0 3px 14px rgba(0,0,0,.22);
+        background: color-mix(in srgb, var(--bg) 42%, transparent);
+        -webkit-backdrop-filter: blur(16px) saturate(160%);
+        backdrop-filter: blur(16px) saturate(160%);
+    }
     .mini-body { display: none; padding: 8px 6px 12px; }
     .char-detail.open .mini-body { display: block; }
     .mini-footer { display: none; padding: 0 6px 12px; }
@@ -799,8 +813,26 @@
     /* v2.4.24: touch-action:manipulation suppresses iOS Safari's double-tap-to-zoom
        wait on this expand surface so a single iPad tap doesn't fire two clicks
        in rapid succession (which would open + immediately close the card). */
-    .mini-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 8px 10px 7px; margin: 0; background: linear-gradient(135deg, rgba(167,139,250,.15), rgba(108,180,255,.10)); border-bottom: 2px solid var(--accent); border-radius: 8px 8px 0 0; cursor: pointer; user-select: none; transition: background .15s; touch-action: manipulation; }
-    .mini-header:hover { background: linear-gradient(135deg, rgba(167,139,250,.26), rgba(108,180,255,.18)); }
+    /* v2.51.4: gradient re-themed from hardcoded purple+blue to
+       var(--accent) so the header tint follows whichever palette is
+       active (warm-orange on sepia, green on forest, purple on dark)
+       and lines up with the parallel re-theme on .gm-panel > summary. */
+    .mini-header {
+        display: flex; align-items: flex-start; justify-content: space-between;
+        gap: 8px; padding: 8px 10px 7px; margin: 0;
+        background: linear-gradient(135deg,
+            color-mix(in srgb, var(--accent) 15%, transparent),
+            color-mix(in srgb, var(--accent) 8%, transparent));
+        border-bottom: 2px solid var(--accent);
+        border-radius: 8px 8px 0 0;
+        cursor: pointer; user-select: none;
+        transition: background .15s; touch-action: manipulation;
+    }
+    .mini-header:hover {
+        background: linear-gradient(135deg,
+            color-mix(in srgb, var(--accent) 26%, transparent),
+            color-mix(in srgb, var(--accent) 16%, transparent));
+    }
     .mini-header-info { flex: 1; min-width: 0; }
     .mini-header-name { font-size: 13px; font-weight: 700; color: var(--fg); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .mini-header-sub { font-size: 10px; color: var(--accent); margin-top: 2px; opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1381,18 +1413,50 @@
     /* v2.49.94: explicit background so cards stay opaque against the
        drawer's new transparent backdrop. Was relying on the drawer's
        own ``var(--bg-2)`` showing through where the card body had no
-       fill of its own. */
-    .gm-panel { margin: 0 0 8px; border: 1px solid rgba(167,139,250,.35); border-radius: 8px; overflow: hidden; box-shadow: 0 3px 14px rgba(0,0,0,.22); background: var(--bg-2); }
+       fill of its own.
+       v2.51.4: same frosted-glass recipe as .roll-card / .init-entry
+       (bg-mix 42% + backdrop-filter blur(16px) saturate(160%) +
+       accent-themed border) so the GM Tools tab panels and the Battle
+       drawer's embedded roll-request-panel read as one consistent
+       glass family across the whole sidebar. */
+    .gm-panel {
+        margin: 0 0 8px;
+        border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 3px 14px rgba(0,0,0,.22);
+        background: color-mix(in srgb, var(--bg) 42%, transparent);
+        -webkit-backdrop-filter: blur(16px) saturate(160%);
+        backdrop-filter: blur(16px) saturate(160%);
+    }
     /* v2.4.27: ``touch-action: manipulation`` + ``-webkit-user-select: none``
        on the summary so iPad taps reliably toggle the native <details>
        open state. Without these iOS Safari was double-firing the click
        event (open → immediate close) for the same reasons documented
        on the v2.4.24/v2.4.25 expandable headers. ``user-select: none``
        was already there; the webkit-prefixed variant adds iOS-specific
-       coverage. */
-    .gm-panel > summary { display: flex; align-items: center; gap: 8px; list-style: none; cursor: pointer; padding: 8px 10px 7px; margin: 0; background: linear-gradient(135deg, rgba(167,139,250,.15), rgba(108,180,255,.10)); border-bottom: 2px solid transparent; user-select: none; -webkit-user-select: none; touch-action: manipulation; transition: background .15s; }
+       coverage.
+       v2.51.4: summary gradient re-themed via var(--accent) so the
+       header tint follows the active palette (warm-orange on sepia /
+       green on forest / purple on dark) instead of the hardcoded
+       purple+blue mix. */
+    .gm-panel > summary {
+        display: flex; align-items: center; gap: 8px; list-style: none;
+        cursor: pointer; padding: 8px 10px 7px; margin: 0;
+        background: linear-gradient(135deg,
+            color-mix(in srgb, var(--accent) 15%, transparent),
+            color-mix(in srgb, var(--accent) 8%, transparent));
+        border-bottom: 2px solid transparent;
+        user-select: none; -webkit-user-select: none;
+        touch-action: manipulation;
+        transition: background .15s;
+    }
     .gm-panel[open] > summary { border-bottom-color: var(--accent); }
-    .gm-panel > summary:hover { background: linear-gradient(135deg, rgba(167,139,250,.26), rgba(108,180,255,.18)); }
+    .gm-panel > summary:hover {
+        background: linear-gradient(135deg,
+            color-mix(in srgb, var(--accent) 26%, transparent),
+            color-mix(in srgb, var(--accent) 16%, transparent));
+    }
     .gm-panel > summary::-webkit-details-marker { display: none; }
     .gm-panel > summary::marker { content: ''; }
     .gm-panel-body { padding: 8px 8px 12px; }
@@ -1882,11 +1946,17 @@
            so the controllers in tabletop.html keep binding.
            v2.49.104 — `position: sticky; top: 0; z-index: 10` pins the
            card to the top of the scrolling `.drawer-body` so the init
-           list scrolls UNDERNEATH the controls. The opaque `var(--bg-2)`
-           backdrop is what makes the scroll-under read cleanly. #}
+           list scrolls UNDERNEATH the controls.
+           v2.51.4 — same frosted-glass treatment as the rest of the
+           drawer card family. The `backdrop-filter: blur(16px)` is
+           what makes the scroll-under read cleanly now (replacing the
+           previous opaque `var(--bg-2)` backdrop) — init rows scrolling
+           beneath blur into a frosted backdrop instead of being hidden
+           by an opaque rect, so the visual continuity with the rest
+           of the sidebar is preserved. #}
         {% if is_gm %}
-        <div style="position:sticky;top:0;z-index:10;margin:0 0 8px;border:1px solid rgba(167,139,250,.25);border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.14);background:var(--bg-2);">
-            <div style="background:linear-gradient(135deg,rgba(167,139,250,.13),rgba(108,180,255,.08));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚙ GM Controls</div>
+        <div style="position:sticky;top:0;z-index:10;margin:0 0 8px;border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.14);background:color-mix(in srgb, var(--bg) 42%, transparent);-webkit-backdrop-filter:blur(16px) saturate(160%);backdrop-filter:blur(16px) saturate(160%);">
+            <div style="background:linear-gradient(135deg,color-mix(in srgb, var(--accent) 13%, transparent),color-mix(in srgb, var(--accent) 8%, transparent));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚙ GM Controls</div>
             <div style="padding:8px;">
                 <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">
                     <button type="button" id="battle-from-map-btn" class="tt-btn" style="flex:1;font-size:11px;" title="Add all tokens from the active map">🗺 From Map</button>
@@ -2987,8 +3057,12 @@
 <div id="gm-tools-drawer" class="drawer-panel">
     <div class="drawer-body">
         <!-- ── Session controls ── -->
-        <div style="margin-bottom:10px;border:1px solid rgba(167,139,250,.25);border-radius:8px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.12);">
-            <div style="background:linear-gradient(135deg,rgba(167,139,250,.13),rgba(108,180,255,.08));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚡ Session</div>
+        {# v2.51.4: glass-card recipe matching the rest of the drawer
+           family. The session controls block had a transparent body
+           (no bg set) before — now picks up the same bg-mix 42% + blur
+           treatment so it visually pairs with .gm-panel below it. #}
+        <div style="margin-bottom:10px;border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);border-radius:8px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.12);background:color-mix(in srgb, var(--bg) 42%, transparent);-webkit-backdrop-filter:blur(16px) saturate(160%);backdrop-filter:blur(16px) saturate(160%);">
+            <div style="background:linear-gradient(135deg,color-mix(in srgb, var(--accent) 13%, transparent),color-mix(in srgb, var(--accent) 8%, transparent));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚡ Session</div>
             <div style="padding:8px 10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                 {% if campaign.session_active %}
                 <form method="post" action="/campaign/{{ campaign.id }}/session/end" style="display:contents;">
