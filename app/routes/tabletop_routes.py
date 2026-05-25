@@ -10641,7 +10641,15 @@ def _compute_attack_auto_uplifts(
         for b in attacker_buffs:
             if not isinstance(b, dict):
                 continue
-            effects = b.get("effects") or {}
+            # v2.49.230: condition buffs (Frightened / Charmed / etc.)
+            # carry `effects` as a string list, not a dict. The
+            # weapon-hit-rider lookup only applies to dict-shaped
+            # mechanical buffs — skip non-dict shapes to avoid the
+            # `'list' object has no attribute 'get'` crash that bit
+            # the Sleep wake-on-damage harness tests.
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
             dice = (effects.get("weapon_hit_bonus_dice") or "").strip()
             tgt = effects.get("weapon_hit_bonus_target_combatant_id")
             if not dice or tgt != target_combatant_id:
@@ -10778,7 +10786,17 @@ def _target_has_dodging(
         for b in (c.get("buffs") or []):
             if not isinstance(b, dict):
                 continue
-            effects = b.get("effects") or {}
+            # v2.49.230: ``effects`` has two shapes per the v2.49.61
+            # convention — condition buffs (Paralyzed / Asleep /
+            # Frightened …) carry a STRING LIST of descriptive riders;
+            # mechanical-effect buffs (Patient Defense / Rage / Hex)
+            # carry a DICT keyed by effect name. Only the dict shape
+            # advertises ``dodging``; the previous ``or {}`` fallback
+            # let a non-empty list through and crashed on ``.get()``.
+            # Matches the gate in ``_resistance_halve`` at line ~10802.
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
             if effects.get("dodging") is True:
                 return True
         return False

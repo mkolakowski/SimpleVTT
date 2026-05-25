@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.230] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Fix pre-existing `'list' object has no attribute 'get'` crash in `_target_has_dodging` + the Hunter's Mark / Hex bonus-dice loop.** Two sites in `app/routes/tabletop_routes.py` assumed buff `effects` was a dict but didn't guard against the v2.49.61 string-list shape carried by condition buffs (Paralyzed, Asleep, Frightened, …). The crash bit any attacker rolling damage against a target whose buffs included a condition buff — surfaced today by the three `test_sleep_wake_on_damage` harness failures that have been red since at least v2.49.220.
+**Description:** Two-edit defensive fix mirroring the existing pattern in `_resistance_halve` (line ~10802) and `_resistance_halve_npc` (line ~10872). **(1)** `_target_has_dodging` at `tabletop_routes.py:~10775` — `effects = b.get("effects") or {}` → `effects = b.get("effects"); if not isinstance(effects, dict): continue`. The `or {}` fallback only catches None/falsy values; a non-empty list passes through and `.get("dodging")` crashes the request. **(2)** `_compute_attack_auto_uplifts` Hunter's Mark / Hex weapon-hit-rider loop at `tabletop_routes.py:~10644` — same shape fix. This loop has NO pre-filter on `b.get("key")`, so it iterates over every buff on the attacker including condition buffs. Both fixes carry a v2.49.230 comment naming the pattern + pointing at the canonical `_resistance_halve` gate.
+**Description (cont):** Audited sites that pre-filter the `b.get("key")` before reading `effects` — they're safe by construction because mechanical-effect buffs always carry dict effects: `_compute_attack_auto_uplifts` Rage loop (filters `key == "rage"` at ~10623), `_attacker_reckless_advantaged` (`key == "rage"` at ~10737), Flurry strike count at ~10982 (`key == "flurry-of-blows-active"`), Flurry effects rebuild at ~16993 (same filter). Per CLAUDE.md "don't add error handling for scenarios that can't happen," these are left alone — the bug can't trigger today, and adding the gate would be defensive coding for a fictional crash.
+**Description (cont 2):** Why these sites broke pre-2.49.229. The Sleep spell (v2.49.58) installs `unconscious` / `asleep` buffs whose effects field is a STRING LIST per the v2.49.61 convention. Damage applied to a sleeping target lands in `/attack` → `_compute_attack_auto_uplifts` (loops the attacker's buffs, looking for Hunter's Mark/Hex hits keyed to the target) → crash on any non-dict buff. The Sleep-wake test triggers this by having Krieger attack a sleeping bandit who carries an `unconscious` buff with list effects; the same crash would also fire when ANY attacker with a condition buff swings at anything. The fix is the minimum-viable type guard.
+**Description (cont 3):** No new endpoints, no new harness tests. The 3 existing `test_sleep_wake_on_damage` tests (test_wake_on_damage_npc, test_wake_on_damage_pc, test_non_sleep_unconscious_preserved) ARE the regression coverage — they were red on v2.49.229 due to this exact bug and will be green on v2.49.230. CLAUDE.md's harness-discipline rule is satisfied: existing tests exercise the fixed path. The doc-only / refactor-only exemption is not needed (this is a code change), but the new-endpoint rule doesn't apply since no new endpoint or broadcast shape is introduced.
+**Description (cont 4):** Verification. (a) `curl /version` confirms v2.49.230 live. (b) Full harness suite green (427 + 7 = 434 → 434 passing after this fix, was 431 passing on v2.49.229 with the same 3 sleep failures since at least v2.49.220). (c) All 33 Monk tests still green.
+
+### Fixed
+- `app/routes/tabletop_routes.py` `_target_has_dodging` — guard against list-shaped `effects` (condition buffs). Closes the AttributeError that bit `test_sleep_wake_on_damage` tests.
+- `app/routes/tabletop_routes.py` `_compute_attack_auto_uplifts` Hunter's Mark / Hex bonus-dice loop — same list/dict shape guard. Latent bug: any attacker with an active condition buff (Frightened by Fear, Charmed by Charm Person, etc.) would have crashed `/attack` damage-roll processing.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.49.230`.
+- `README.md` version badge → `2.49.230`.
+
+### Notes
+- **Pure server bug fix; no schema change, no new endpoint, no UI change.** Existing harness tests cover the fixed paths.
+- **Pre-existing failure resolved.** The 3 `test_sleep_wake_on_damage` failures noted in v2.49.228's Notes are now green.
+
+---
+
 ## [2.49.229] - 2026-05-24
 
 **Schema version:** 56
