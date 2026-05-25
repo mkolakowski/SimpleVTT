@@ -209,16 +209,18 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // v2.51.0 — backing strips for all four sides. Top + left keep
-        // the dark backing + accent-color text (primary markers). The
-        // new right + bottom strips use a translucent parchment-tan
-        // backing + dark text (per user request "make the lettering
-        // dark on the new borders") so they read as a quieter "echo"
-        // of the primary markers without competing visually.
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        // v2.51.2 — unify all four backing strips to the top + left
+        // recipe (dark backing + accent text) per the user request to
+        // make the new borders match the existing ones. The v2.51.0
+        // parchment-tan + dark-text variant is dropped in favor of a
+        // single visual treatment that frames the map cleanly. Alpha
+        // also dropped from 0.55 → 0.35 so the map color reads through
+        // the gutter strips more clearly — the labels stay legible
+        // because they're rendered in the theme accent color, which
+        // is always selected to contrast with the canvas background.
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
         ctx.fillRect(0, 0, MAP_W, stripH);                          // top
         ctx.fillRect(0, 0, stripH, MAP_H);                          // left
-        ctx.fillStyle = 'rgba(245, 232, 208, 0.55)';
         ctx.fillRect(MAP_W - stripH, 0, stripH, MAP_H);             // right
         ctx.fillRect(0, MAP_H - stripH, MAP_W, stripH);             // bottom
 
@@ -287,10 +289,12 @@
             ctx.fillText(String(r + 1), stripHalf, y);
         }
 
-        // v2.51.0 — secondary border lettering on the new (right +
-        // bottom) borders. Dark text on the parchment backing so the
-        // mirror labels read as a quieter visual echo.
-        ctx.fillStyle = 'rgba(35, 22, 8, 0.92)';
+        // v2.51.2 — right + bottom border lettering uses the SAME
+        // accent color as the top + left labels (was dark text in
+        // v2.51.0; unified per user request to keep the visual
+        // treatment consistent across all four sides). `ctx.fillStyle`
+        // is still set to `accent` from the top-label pass above, so
+        // no re-set needed — the loop just reuses it.
         const rightX = MAP_W - stripHalf;
         const bottomY = MAP_H - stripHalf;
         // Right labels — row numbers, mirroring the left strip.

@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.51.2] - 2026-05-25 — "Single Pane"
+
+**Schema version:** 57
+**Commit summary:** **All four grid borders unified — same dark backing + accent text on every side, and the backing alpha is more transparent.** Walks back the parchment-tan + dark-text "secondary" treatment from v2.51.0; the user fed back that they want all four borders to read identically. Same recipe everywhere (dark backing + accent text), and the backing alpha drops `0.55 → 0.35` so the map color shows through the gutter strips more clearly.
+**Description:** Two CSS edits in `app/static/tabletop.js::drawGridCoords()`. **(1) Backing strips:** the previous code drew two passes — `rgba(0, 0, 0, 0.55)` for top + left, `rgba(245, 232, 208, 0.55)` (parchment-tan) for right + bottom. Now a single pass with `rgba(0, 0, 0, 0.35)` covers all four strips. The lighter alpha lets more of the map's color leak through the gutter without losing label legibility (the accent-color labels still contrast cleanly against the darkened backing). **(2) Label color:** the right + bottom label loops used a hardcoded near-black (`rgba(35, 22, 8, 0.92)`); removed in favor of letting `ctx.fillStyle` carry the accent color set by the earlier top-label pass. All four strips now use the theme's `var(--accent)` for their labels — purple on dark, warm orange on sepia, green on forest, …
+**Description (cont):** No behavior changes, no schema, no test surface. Existing 447 harness tests untouched. Verified by reloading the demo's square-grid map and confirming all four strips render with the same dark backing + accent text combination. The map background reads through the strips more clearly than the previous `0.55` alpha (visible especially on map images with darker tones in the gutter regions).
+
+### Changed
+- `drawGridCoords()` backing — single `rgba(0, 0, 0, 0.35)` fill for all four strips. Was `0.55` for top/left and a separate `rgba(245, 232, 208, 0.55)` parchment for right/bottom.
+- `drawGridCoords()` right + bottom label color — dropped hardcoded `rgba(35, 22, 8, 0.92)` (near-black); labels now inherit `ctx.fillStyle = accent` from the top-label pass so all four strips share the theme accent color.
+- `app/version.py` `APP_VERSION` → `2.51.2`.
+- `README.md` version badge → `2.51.2`.
+
+### Notes
+- **Visual hierarchy gone, by design.** v2.51.0 split the borders into "primary" (top/left, accent text on dark) and "secondary" (right/bottom, dark text on parchment) to give the right + bottom a quieter "echo" feel. The user prefers all four reading identically — a complete frame with no implied direction. The single-pass code path is also simpler, which is a small bonus.
+- **Alpha tuning knob.** If `0.35` lets too much map detail through and labels start hunting for contrast on bright maps, the right move is to nudge the alpha back toward `0.45` rather than re-introduce a per-side variant. One number to tune.
+
+---
+
 ## [2.51.1] - 2026-05-25 — "Southpaw"
 
 **Schema version:** 57
