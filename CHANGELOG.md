@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.223] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Retire the "Re-investigate demo NPC spells (Cult Acolyte / Soren)" TODO entry** filed 2026-05-23. All three of Soren's spells (Inflict Wounds, Sacred Flame, Burning Hands) now drive correctly end-to-end against the live demo on 2.49.222 — v2.49.217 (AoE picker), v2.49.218 (area-dict overlay), v2.49.219 (auto_save_label correlation), v2.49.220 (action_charges UI on the unified partial), and v2.49.221 (legacy renderer body removed) collectively closed every gotcha listed in the original TODO. TODO.md edit only; no source code changes.
+**Description:** One-edit doc commit removing the bullet at TODO.md:~136. Adjacent `### Migrate monster action_charges to the unified partial` bullet (TODO.md:133) is left in place — that one was also closed by v2.49.220 but is retired separately to keep the two closures reviewable on their own.
+**Description (cont):** Verification sweep methodology. Logged in as the demo GM via the harness `login_client` helper, seeded a 4-combatant battle (Soren + Pip + 2 Bandits) via PUT `/api/campaign/1/battle`, opened a WS subscription with `WSCollector`, and POSTed each of Soren's three spells through the production endpoint the live `.mini-cast-btn` handler uses. **(1) Inflict Wounds** via `/npc_cast_spell` with `attack_roll: true` — server rolled 1d20+4 (got 7 @ Pip / 11 @ Bandit), resolved target AC (Pip=14, Bandit=10), computed hit/miss correctly, rolled 3d10 necrotic damage, auto-applied 18 dmg on the Bandit-hit case. **(2) Sacred Flame** via `/npc_cast_spell` with `save_dc:13, save_ability:DEX` — PC target produced a `roll_request` broadcast (player rolls in their own UI); NPC target produced a server-rolled 1d20+3 save (got 4, failed), 5 dmg applied; broadcast carried `auto_save_label='Sacred Flame — DEX save'` and the follow-up `roll` event's note was prefixed `→ Sacred Flame — DEX save ✗ Fail` (v2.49.219's correlation contract). **(3) Burning Hands** via `/npc_cast_spell` with `area_shape:cone, area_size_ft:15, aoe_target_combatant_ids:[...]` — server's per-target AoE loop populated `auto_save_targets` with one entry per bandit (rolled, passed, breakdown, damage_applied, damage_type all set; save-for-half applied correctly: 16 dmg on fail vs 3 dmg on pass for the same 3d6 roll). Mini-sheet partial projection inspected via the GM-rendered `#monster-card-pool` for the `cult-acolyte` template: all three spells carry the right `data-spell-action-id`, `data-spell-charges-max` (2 / 0 / 1), `data-spell-attack-roll`, `data-spell-attack-bonus`, `data-spell-save-dc`, `data-spell-save-ability`, `data-spell-area-shape`, `data-spell-area-size-ft`, `data-spell-damage`, and `data-spell-damage-type` attributes; charges chips render `2/2 ↻` and `1/1 ↻`; recharge buttons present.
+**Description (cont 2):** Original TODO gotchas, item by item. **(a)** Spells tab renders for the Cult Acolyte template (verified by existing `test_spell_slug_npc_renders_spells_tab` harness test, still green on 2.49.222). **(b)** Soren's demo-seed `actions` array references the right slugs and the catalog overlay resolves them. **(c)** The v2.49.176 Pydantic `spell_slug`-preservation fix is still in `action_schema.py` (no regression). **(d)** `_resolve_spell_slug_action` returns the full overlaid dict with damage / damage_type / save_ability / area populated; the v2.49.218 dict-emptiness check correctly treats `{"shape":"","size_ft":0,"secondary_ft":0}` as absent so Burning Hands' cone overlays cleanly. **(e)** `/npc_cast_spell` (the actual routing path the unified `.mini-cast-btn` uses — not `/npc_attack` as the original TODO speculated) handles both attack-roll and save-DC spells AND the AoE multi-target loop, with `auto_apply_damage` honored throughout.
+**Description (cont 3):** Notes for future work. No additional bugs found during the sweep — closure is clean. Two minor observations not worth a follow-up TODO: (i) `weapon_attack` broadcasts for attack-roll spells carry `action_id=None` even when the body passes `action_id`, but the unified partial's charge decrement reads `data-spell-action-id` from the button itself rather than from the broadcast, so this doesn't break anything. (ii) The save breakdown string renders the bonus as a bare `3` rather than `+3` (e.g. `1d20[1]=1 3 => 4`); cosmetic and orthogonal to spell behavior.
+**Description (cont 4):** Verification. (a) `curl /version` confirms v2.49.223 live. (b) Existing harness suite (`tests/harness/test_npc_cast_spell.py` + `tests/harness/test_mini_sheet_partials.py`, 16 tests) passes against 2.49.222 and 2.49.223. (c) Live-sweep transcripts above demonstrate each spell's end-to-end behavior.
+
+### Changed
+- `TODO.md` — removed the "Re-investigate demo NPC spells (Cult Acolyte / Soren)" bullet (closed by v2.49.217–221).
+- `app/version.py` `APP_VERSION` → `2.49.223`.
+- `README.md` version badge → `2.49.223`.
+
+### Notes
+- **Doc-only commit; harness-test rule N/A.** No HTTP endpoint added or modified; existing coverage for `/npc_cast_spell` already exercises the closed contract.
+- **Adjacent stale TODO not retired here.** `### Migrate monster action_charges to the unified partial` (TODO.md:133) is also closed (v2.49.220 shipped the UI) but is left in place pending a separate retirement commit.
+
+---
+
 ## [2.49.222] - 2026-05-24
 
 **Schema version:** 56
