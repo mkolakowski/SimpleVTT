@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.56.3] - 2026-05-25 — "Pocket Sized"
+
+**Schema version:** 57
+**Commit summary:** **Roll-log-on-left preference is ignored on phones (≤ 640 px viewport).** The left sidebar is 480 px wide, which is wider than every phone in portrait orientation — relocating the roll-log drawer into it would cover the entire screen. Same 640 px breakpoint the rest of the app already uses for mobile media queries. The preference value is preserved server-side; rotating to landscape or resizing to a larger window picks the left layout back up on the next page load.
+**Description:** Two-file edit. **(1)** `app/templates/tabletop.html` drawer-system JS — added `_isMobile = window.matchMedia('(max-width: 640px)').matches` check before the `leftWrapper.appendChild(rollLog)` relocation. When mobile, skip the appendChild (roll-log stays in the right wrapper where the server rendered it) AND hide the still-rendered-server-side left sidebar via `_leftSidebar.style.display = 'none'` so it can't intercept clicks on the left edge of the map. Sets `leftWrapper = null` so the downstream `_isLeftSidebar` / `openPanel` paths skip the left sidebar entirely. **(2)** `app/templates/user_settings.html` — added a small italic muted-color note under the Roll log position toggle explaining the mobile override: "Ignored on phones (≤ 640 px viewport) — the left drawer is 480 px wide and would cover most of the screen. The preference is preserved server-side; rotating to landscape or resizing to a larger window picks it back up on the next page load."
+**Description (cont):** Why client-side detection (matchMedia) rather than a server-side User-Agent check. Server-side UA parsing is invasive (no centralized UA dispatcher in the codebase) and unreliable across browsers/proxies. `matchMedia('(max-width: 640px)')` runs on the actual rendered viewport — same source of truth the rest of the app's media queries use (`app/static/style.css:47, 276`, `app/templates/tabletop.html:1616`). Catches rotated tablets, narrow desktop windows, and split-screen iPad without any UA-specific code paths.
+**Description (cont 2):** Why preserve the preference server-side instead of resetting to "right" on mobile. RAW user intent: they want left on desktop, mobile is a temporary visit. Resetting the value would force them to re-pick "left" the next time they open the tabletop on a laptop. Override the runtime behavior, keep the stored preference intact.
+**Description (cont 3):** No mobile-side gating on the toggle itself — the radio buttons in `/settings` stay functional on a phone (the user might be queuing up a preference for when they switch to desktop). The muted-color note is the explanation. The endpoint `/api/settings/roll_log_position` POST is also unchanged (still validates `left` / `right`; ignores viewport).
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.56.3` after `docker compose up -d --build app`. (b) Mobile smoke: open `/campaign/1` in a phone-sized window (≤ 640 px) — the left sidebar is hidden, roll-log lives in the right sidebar with the other tabs. (c) Desktop smoke: same URL at full size — left sidebar visible, roll-log on the left. (d) Resize from desktop to phone width: the page needs a reload to flip behavior (the matchMedia check runs once at startup); filed for follow-up if dynamic-resize handling becomes important.
+
+### Changed
+- `app/templates/tabletop.html` drawer-system JS — gated the `leftWrapper.appendChild(rollLog)` relocation on `!matchMedia('(max-width: 640px)').matches`; when mobile, hides the left sidebar via `style.display = 'none'`.
+- `app/templates/user_settings.html` — added a muted-color italic note under the Roll log position toggle naming the 640 px override + server-side-preserved behavior.
+- `app/version.py` `APP_VERSION` → `2.56.3`.
+- `README.md` version badge → `2.56.3`.
+
+### Notes
+- **Reload-on-resize not handled.** The `matchMedia` check runs once at startup; resizing a desktop browser to phone width doesn't dynamically swap the layout. The fix would be a `window.matchMedia(...).addEventListener('change', handler)` that does the inverse relocation + show/hide. Filed for follow-up if real users hit it — same way the v2.49.244 implementation deferred dynamic preference re-apply (Roll log position changes require a tabletop reload too).
+- **Mobile breakpoint matches existing convention.** `max-width: 640px` lines up with `app/static/style.css:47` (roll-toast positioning), `style.css:276` (general mobile pass), and `tabletop.html:1616` (drawer-tab buttons). Single source of truth for "is this a phone."
+
+---
+
 ## [2.56.2] - 2026-05-25 — "Full Pantheon"
 
 **Schema version:** 57

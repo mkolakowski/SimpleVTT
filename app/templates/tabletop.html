@@ -3463,7 +3463,27 @@ let CONC_DATA = {{ conc_by_char | tojson }};
        the Roll Log tab while it's already open CLOSES the left
        sidebar entirely so the player can dismiss it. Right-side
        behavior is unchanged (mutex within the right wrapper). */
-    const leftWrapper = document.getElementById('drawer-panels-wrapper-left');
+    /* v2.56.3: ignore the roll-log-on-left preference when the
+       viewport is phone-sized (≤ 640 px). The left sidebar is
+       width: 480 px (set on .drawer-sidebar), wider than every
+       phone in portrait orientation — relocating the roll-log
+       drawer into it would cover the entire screen. Same 640 px
+       breakpoint the rest of the app already uses (see
+       app/static/style.css and tabletop.html @media rules). When
+       mobile, skip the appendChild relocation AND hide the
+       (still-rendered-server-side) left sidebar so it can't
+       intercept clicks on the left edge of the map. The preference
+       value is preserved server-side — when the user resizes to a
+       larger window or rotates a tablet, a page reload picks the
+       left sidebar back up cleanly. */
+    const _isMobile = window.matchMedia &&
+        window.matchMedia('(max-width: 640px)').matches;
+    let leftWrapper = document.getElementById('drawer-panels-wrapper-left');
+    if (leftWrapper && _isMobile) {
+        const _leftSidebar = leftWrapper.closest('.drawer-sidebar--left');
+        if (_leftSidebar) _leftSidebar.style.display = 'none';
+        leftWrapper = null;
+    }
     if (leftWrapper) {
         const rollLog = document.getElementById('roll-log-drawer');
         if (rollLog) leftWrapper.appendChild(rollLog);

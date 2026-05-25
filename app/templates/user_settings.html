@@ -497,6 +497,7 @@
 <section>
     <h2>📜 Roll log position</h2>
     <p class="muted">Where the Roll Log drawer opens on the tabletop. <strong>Right</strong> (default) stacks it with the other tabs in the shared right sidebar. <strong>Left</strong> pulls Roll Log into its own independent drawer on the left edge so it can stay open while you have Battle or Settings open on the right.</p>
+    <p class="muted" style="font-size:11px;font-style:italic;">Ignored on phones (≤ 640 px viewport) — the left drawer is 480 px wide and would cover most of the screen. The preference is preserved server-side; rotating to landscape or resizing to a larger window picks it back up on the next page load.</p>
     <div style="display:flex;align-items:center;gap:14px;margin-top:12px;">
         <div role="radiogroup" aria-label="Roll log position" style="display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
             <button type="button" class="rlp-btn" data-position="right" aria-pressed="{{ 'true' if (user.roll_log_position or 'right') == 'right' else 'false' }}" style="padding:8px 16px;background:none;border:none;cursor:pointer;color:var(--fg);font-size:13px;min-height:44px;">Right (default)</button>
