@@ -531,21 +531,30 @@ def _cleric_sheet(name: str) -> dict:
     """v2.3.25: minimal D&D 5e Cleric 5 (Life Domain) sheet for the GM's
     character — fills the obvious gap in the demo party (no divine
     healer) and gives the GM a PC to play alongside the players when
-    showing off the new mini-sheet flow."""
+    showing off the new mini-sheet flow.
+
+    v2.57.1: bumped Lv 5 → 6 to unlock Channel Divinity 2/short rest
+    (Lv 6+ RAW) + Blessed Healer (Life Domain Lv 6 — passive temp HP
+    on outgoing healing). Prof bonus stays +3 (Lv 5-8 band) so attack
+    bonus + save DCs don't drift. L3 spell slot count 2 → 3 per
+    Lv 6 cleric table (4/3/3 base).
+    """
     return {
         "class": "Cleric",
         "subclass": "Life Domain",
-        "level": 5,
+        "level": 6,
         "race": "Hill Dwarf",
         "alignment": "Lawful Good",
         "background": "Folk Hero",
         "abilities": {"STR": 14, "DEX": 10, "CON": 14, "INT": 10, "WIS": 16, "CHA": 12},
         "ac": 18,
         "speed": 25,
-        "hp": {"current": 43, "max": 43, "temp": 0},  # 8 + 4×6 (avg+CON) + 5 (Dwarven Toughness)
+        # 8 (Lv 1 d8) + 5× avg d8 (5) + CON +2 × 6 + Dwarven Toughness +1 × 6
+        # = 8 + 25 + 12 + 6 = 51. (v2.57.1: was 43 at Lv 5 — added 5 + 2 + 1 = 8 for Lv 6.)
+        "hp": {"current": 51, "max": 51, "temp": 0},
         "initiative_bonus": 0,
-        "proficiency_bonus": 3,
-        "hit_dice": {"current": 5, "max": 5},
+        "proficiency_bonus": 3,  # +3 through Lv 5-8.
+        "hit_dice": {"current": 6, "max": 6},
         "class_hit_die": "d8",
         "class_spellcasting": "WIS",
         "saving_throws": {"WIS": True, "CHA": True},
@@ -596,11 +605,12 @@ def _cleric_sheet(name: str) -> dict:
             {"name": "Spirit Guardians",  "level": 3, "prepared": True, "_slug": "spirit-guardians", "casting_time": "1 action"},
             {"name": "Mass Healing Word", "level": 3, "prepared": True, "_slug": "mass-healing-word", "casting_time": "1 bonus action"},
         ],
+        # Lv 6 cleric slot progression — 4/3/3 (v2.57.1: L3 2 → 3 per Lv 6 table).
         "spell_slots": {
             "cleric": {
                 "1": {"total": 4, "used": 0},
                 "2": {"total": 3, "used": 0},
-                "3": {"total": 2, "used": 0},
+                "3": {"total": 3, "used": 0},
             },
         },
         # v2.4.13: rich inventory items (was bare strings). Chain mail
@@ -643,19 +653,37 @@ def _cleric_sheet(name: str) -> dict:
         # the player to click "Auto-fill Resources". Shape mirrors the recipe
         # in ``app/static/dnd5e_class_resources.js`` line 67-72: cleric Lv 2-5
         # gets 1 use, Lv 6-17 gets 2, Lv 18+ gets 3, refilling on short rest.
-        # Tavik is Lv 5 → 1/1.
+        # v2.57.1: Tavik Lv 6 → 2/2 (was 1/1 at Lv 5).
         "resources": [
             {
                 "key": "channel-divinity",
                 "name": "Channel Divinity",
-                "current": 1,
-                "max": 1,
+                "current": 2,
+                "max": 2,
                 "reset": "short",
                 "source": "cleric Lv 2",
                 "class_slug": "cleric",
                 "subclass_slug": "life",
-                "desc": "Use a domain-granted effect (Turn Undead, Preserve Life).",
+                "desc": "Use a domain-granted effect (Turn Undead, Preserve Life). 2/short rest at Lv 6+.",
                 "manual": False,
+            },
+        ],
+        # v2.57.1: Blessed Healer (Life Domain Lv 6+). Pure-descriptive —
+        # surfaces on the sheet so the GM remembers to apply the temp
+        # HP. RAW: "the healing spells you cast on others heal you as
+        # well. When you cast a spell of 1st level or higher that
+        # restores HP to a creature other than you, you regain HP equal
+        # to 2 + the spell's level." No hook today — applies after the
+        # /cast_spell heal path resolves, would need a self-heal
+        # broadcast on every outgoing healing spell. Filed for follow-
+        # up alongside Disciple of Life (Lv 1 Life Domain — adds
+        # 2 + spell level to outgoing heals) which has the same
+        # outgoing-heal interception shape.
+        "class_features": [
+            {
+                "key": "blessed-healer",
+                "name": "Blessed Healer",
+                "desc": "Passive (Life Domain Lv 6+) — when you cast a spell of 1st level or higher that restores HP to a creature other than yourself, you regain 2 + the spell's level HP. Apply manually for now.",
             },
         ],
     }

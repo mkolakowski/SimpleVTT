@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.57.1] - 2026-05-25 — "Domain Power"
+
+**Schema version:** 57
+**Commit summary:** **Tavik Lv 5 → 6 unlocks Channel Divinity 2/short rest and Blessed Healer (Life Domain Lv 6 descriptive).** Small cleric bump that surfaces the Lv 6 power-spike on the demo Cleric — extra Channel Divinity charge + Blessed Healer's outgoing-heal-feeds-back-to-you passive. Pure-descriptive Blessed Healer for now (would need an outgoing-heal interception at `/cast_spell` to auto-apply); the player flags it manually after each heal cast. Tavik's prof bonus stays +3 (Lv 5-8 band) so no attack drift, save DCs unchanged.
+**Description:** Single-file edit in `app/demo_seed.py` `_cleric_sheet`. **(1)** `level: 5 → 6`. **(2)** HP 43 → 51 (+8 = avg d8 + CON +2 + Dwarven Toughness +1 per level). **(3)** `hit_dice` 5 → 6. **(4)** `spell_slots.cleric.3` total 2 → 3 per Lv 6 cleric table (4/3/3 base). **(5)** `resources.channel-divinity` current/max 1 → 2 (Lv 6+ RAW); desc updated to mention the 2/short rest cap. **(6)** New `class_features` array (Tavik didn't have one before) with a single Blessed Healer row — RAW-accurate desc explaining outgoing heals heal Tavik for 2 + spell's level, flagged manual until a heal-interception hook ships.
+**Description (cont):** Why pure-descriptive for Blessed Healer. The hook lives in the `/cast_spell` healing-resolution branch — when a Cleric Lv 6+ Life Domain caster lands a heal of L1+ on a creature other than themselves, the server would auto-add `2 + spell_level` HP to the caster and broadcast a `feature_used(source=blessed-healer)` card. Same shape as the filed Disciple of Life hook (Lv 1 Life Domain — adds 2 + spell level to outgoing heals; also still descriptive). Two heal-interception sites in one helper makes sense — filed for follow-up so both ship together.
+**Description (cont 2):** No harness churn — confirmed via `grep -rn "tavik.*hp_max\|tavik.*43\|channel.*divinity.*max\|cd_max" tests/harness/`. The harness's CD tests (`test_use_feature.py::test_channel_divinity_*`) hit the endpoint + assert the broadcast shape; they don't read Tavik's max from the response. The combatant HP refs across `test_cast_spell_save.py`, `test_concentration_cleanup.py`, `test_broadcast_payload_shapes.py`, `test_cast_spell_attack.py`, `test_danger_sense.py` all seed Tavik's combatant at `hp_current=30, hp_max=30` explicitly — independent of his sheet HP. Spell-slot tests don't hardcode the L3 count. Full harness run: 473/473 pass.
+**Description (cont 3):** Verification. (a) `curl /version` reports `2.57.1` after `docker compose up -d --build app`. (b) Tavik's sheet shows 2/2 Channel Divinity counter, 4/3/3 spell slots, 51/51 HP, and the new Blessed Healer class_features row. (c) Casting Cure Wounds at Krieger from Tavik's sheet still works (the heal interception isn't wired — outgoing heal is the same flow as before). (d) Full harness `tests/harness/`: 473 passed.
+
+### Changed
+- Brother Tavik Stonebrow (Cleric, Life Domain) bumped Lv 5 → Lv 6. HP 43 → 51; hit_dice 5 → 6; L3 spell slot total 2 → 3; Channel Divinity resource current/max 1 → 2 (Lv 6+); added `class_features` array with `blessed-healer` row.
+- `app/version.py` `APP_VERSION` → `2.57.1`.
+- `README.md` version badge → `2.57.1`.
+- `docs/plans/class-content-status.md` — Cleric Lv 1 Spellcasting note updated for Tavik Lv 6 + CD use scaling appended; Life Domain subclass row gains the Blessed Healer descriptive notation.
+
+### Notes
+- **Blessed Healer is descriptive in v1.** Outgoing-heal interception requires hooking the `/cast_spell` healing-resolution branch — same shape as the still-filed Disciple of Life Lv 1 hook ("you heal +2 + spell level"). Both ship together when the heal-intercept lands.
+- **No L3 slot test drift.** Spell-slot quantities are read from `sheet.spell_slots.cleric.<n>` directly by the cast paths and the sheet renderer; no harness test hardcodes the L3 slot count. Tavik can now cast Spirit Guardians / Beacon of Hope / Revivify / Mass Healing Word 3× per long rest instead of 2× — qualitative not quantitative.
+- **Cleric class status after this commit**: every row ✅ except Divine Intervention (Lv 10). Tavik 6 → 10 would be a substantial bump (prof +3 → +4 — would cascade into save/skill mod tests if any hardcoded; spell slots gain L4/L5; CD uses stay at 2). Filed for a future cycle.
+
+---
+
 ## [2.57.0] - 2026-05-25 — "Berserker"
 
 **Schema version:** 57
