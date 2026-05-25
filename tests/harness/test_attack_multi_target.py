@@ -149,11 +149,15 @@ async def test_attack_multi_target_fresh_rolls(gm_client, gm_ws, roster):
     names = {t["target_name"] for t in targets}
     assert names == {"Bandit Alpha", "Bandit Beta", "Bandit Gamma"}
     # Each target carries its own attack_total + damage_total.
+    # v2.49.235: relaxed upper bound on damage_total — on a crit (nat 20)
+    # `_double_dice_for_crit` widens 1d6+3 to 2d6+3, max 15. The original
+    # `<= 9` cap was correct for non-crit hits but fired in CI when any
+    # of the 3 fresh d20 rolls landed on a 20 (~14% across 3 rolls).
     for t in targets:
         assert isinstance(t["attack_total"], int)
         assert 7 <= t["attack_total"] <= 26  # 1d20+6 (Pip shortsword)
         assert isinstance(t["damage_total"], int)
-        assert 4 <= t["damage_total"] <= 9  # 1d6+3
+        assert 4 <= t["damage_total"] <= 15  # 1d6+3, or 2d6+3 on crit
         assert isinstance(t["hit"], bool)
 
 

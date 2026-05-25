@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.235] - 2026-05-25
+
+**Schema version:** 56
+**Commit summary:** **Fix the v2.49.234 harness failure `test_attack_multi_target_fresh_rolls` — assertion didn't account for crit-doubled damage.** Same shape of bug as v2.49.233's empowered-spell assertion: the test caps `damage_total` at 9 assuming 1d6+3, but `_double_dice_for_crit` widens the expression to 2d6+3 on a nat 20 (5-15). With 3 fresh d20 rolls per cast, the test has ~14% chance of catching at least one crit and tripping the cap. Local Kristen has stayed lucky for the entire history of the test; CI catches the crit case.
+**Description:** One-edit relax of the damage upper bound in `tests/harness/test_attack_multi_target.py:test_attack_multi_target_fresh_rolls`: `<= 9` → `<= 15`, with a v2.49.235 comment naming the crit-doubles-dice cause. Lower bound stays at 4 (a hit on a target with positive AC always rolls ≥1 on the d6 + 3 mod). The crit case widens both the dice count AND the max, so a missed-on-the-edge non-crit and a crit-doubled-low-roll both still fall inside [4, 15].
+**Description (cont):** Companion to v2.49.234's brace fix. CI's harness job (separate from harness-ui) reported this failure after v2.49.234 landed because the brace fix cleared the cascading sheet-load errors that had been masking the multi-target test. The pattern is the same as the empowered-spell assertion: probability-distribution edge cases that don't trigger every run.
+**Description (cont 2):** CI state. Pre-2.49.234: 8 failing tests across 3 jobs. Post-2.49.234: 6 failing (the 2 sheet-load tests passed; 3 encounter-sim tests + 2 attack-toast + 1 multi-target remained). Post-2.49.235 (this commit): expected 5 failing — the multi-target should clear. Remaining 5 are 3 encounter-sim Playwright tests + 2 attack-toast tests (`MY_CHAR_ID`/`CAMPAIGN_ID` standalone-sheet env issue).
+**Description (cont 3):** Verification. (a) `curl /version` confirms v2.49.235 live. (b) `pytest tests/harness/test_attack_multi_target.py -v` passes locally (same as v2.49.234 — the test only fails when the rolled crit lands, which is non-deterministic). (c) CI re-run is the empirical signal.
+
+### Fixed
+- `tests/harness/test_attack_multi_target.py::test_attack_multi_target_fresh_rolls` — `damage_total <= 9` → `<= 15` with a comment naming the crit-doubles-dice cause. Closes the CI failure that surfaced after v2.49.234 cleared the sheet-load parse error.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.49.235`.
+- `README.md` version badge → `2.49.235`.
+
+### Notes
+- **Test-only fix; no production behavior change.** The endpoint already crits correctly; only the assertion didn't account for it.
+- **Three CI failure categories still open.** Encounter-sim Playwright tests (3) need deeper UI investigation; attack-toast tests (2) need either standalone-sheet `MY_CHAR_ID` plumbing or a test-environment fix.
+
+---
+
 ## [2.49.234] - 2026-05-25
 
 **Schema version:** 56
