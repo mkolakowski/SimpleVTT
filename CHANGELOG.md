@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.55.0] - 2026-05-25 — "Sworn Aegis"
+
+**Schema version:** 57
+**Commit summary:** **Paladin Aura of Devotion (Oath of Devotion, Lv 7+) — first condition-install immunity gate.** When Caelan is in the active battle's init tracker, his Oath of Devotion subclass aura blocks the Charmed condition from being installed on any PC ally — even if their Wis save against Suggestion / Charm Person fails. RAW: "your allies are immune to being charmed while within 10 feet of you." Distinct mechanic from the v2.53.0 Aura of Protection (which modifies the save ROLL) — AoD acts AFTER the save resolves to bypass the consequence entirely. New MINOR for the new mechanic class (pre-install immunity, not save modifier or damage halving).
+**Description:** Two new helpers in `app/routes/tabletop_routes.py`. **(1)** `_ally_has_aura_of_devotion(db, campaign_id, saving_char_id) → (bool, Character | None)` — walks the active battle's init for any Paladin Lv 7+ with subclass slug `devotion`. The subclass check normalizes "Oath of Devotion" → "devotion" (strips the "Oath of " prefix, lowercases) to match the `_FEATURE_ECONOMY` subclass-tag convention. Returns `(True, paladin_char)` when a qualifying paladin is in init AND the saving PC is in battle too; `(False, None)` otherwise. Same v1 simplification as Aura of Protection (no 10 ft radius check; any qualifying paladin in init counts as in range). **(2)** `_broadcast_aura_of_devotion(...)` async helper for the `feature_used(source="aura-of-devotion")` event naming the paladin.
+**Description (cont):** Wired into the `/roll_request/{id}/respond` PC-failed-save condition-install block at `tabletop_routes.py:~7602`. New gate: when `cond["key"] == "charmed"`, check `_ally_has_aura_of_devotion`; if it applies, **skip the install entirely**, broadcast the immunity event, and short-circuit return with `auto_buff_installed=""`. Doesn't touch the NPC-target condition install path (RAW: AoD applies to "your allies", i.e. PCs in this codebase).
+**Description (cont 2):** Demo seed. **(a)** `app/demo_seed.py::_paladin_sheet` bumped Caelan Lv 6 → Lv 7 to unlock the aura. HP scales d10(avg 6)+CON(+2) per level × 1 more level = +8 → 60/60. hit_dice 6 → 7. Lay on Hands pool 5×lv = 30 → 35 HP. Proficiency stays +3 (Lv 5-8 = +3) — no attack-bonus test breakage. No new spell slots at Paladin Lv 7 (4/3/0/0 unchanged from Lv 6). **(b)** Caelan's `class_features` list gains an `aura-of-devotion` row (description-only — passive, no `/use` endpoint).
+**Description (cont 3):** Harness coverage. New `tests/harness/test_aura_of_devotion.py` (3 tests): (1) happy path — Caelan + Krieger in init; Lyra casts Suggestion at Krieger; save-fail iteration loop drives until Krieger fails his Wis save → assert `auto_buff_installed=""`, Krieger's buff list contains no `charmed` entry, AoD broadcast names Caelan; (2) control without paladin — Caelan absent → failed save installs Charmed normally + no AoD broadcast; (3) non-charm condition — Caelan in init + Tavik casts Hold Person → failed save installs Paralyzed (AoD is charm-only). Uses a shared `_cast_and_respond_for_save_outcome` driver that re-seeds + long-rests between iterations and clears stale buffs from prior iterations. All 3 green; full harness suite at 465 tests (was 462).
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.55.0` after `docker compose up -d --build app`. (b) `pytest tests/harness/test_aura_of_devotion.py -v` → 3/3 passed. (c) Full harness suite green: 465 passed in ~3 min on a fresh demo reseed (Caelan's Lv 7 + new pool sizes pick up cleanly; no Lv-bump regressions).
+
+### Added
+- `_ally_has_aura_of_devotion(db, campaign_id, saving_char_id) → (bool, Character | None)` helper.
+- `_broadcast_aura_of_devotion(campaign_id, paladin, saving_char)` async helper.
+- `/roll_request/{id}/respond` PC-failed-save condition-install block now gates `cond.key == "charmed"` through the AoD check before installing — skip install + broadcast + early return when AoD applies.
+- `_paladin_sheet::class_features` gains an `aura-of-devotion` row on Caelan.
+- `tests/harness/test_aura_of_devotion.py` — 3 tests.
+
+### Changed
+- Demo Caelan: level 6 → 7, hp 52 → 60, hit_dice 6 → 7, lay_on_hands pool 30 → 35.
+- `app/version.py` `APP_VERSION` → `2.55.0` (MINOR — first condition-install immunity gate).
+- `README.md` version badge → `2.55.0`.
+- `docs/plans/class-content-status.md` — Paladin Oath of Devotion row gains the Aura of Devotion ✅ note.
+- `docs/test-harness-coverage.md` — total-test-count 462 → 465; new `test_aura_of_devotion.py` entry.
+
+### Notes
+- **The save-modifier matrix grows.** Save-roll modifiers (Danger Sense → advantage on Dex saves, Aura of Protection → +CHA on all saves, Countercharm → advantage on saves vs charm/fear) act BEFORE the roll. Save-result modifiers (Evasion → halve / zero damage on Dex-save spells) act after the roll but before the consequence. **Aura of Devotion is the first condition-install immunity gate** — acts after the save resolves to bypass the consequence entirely. Three distinct classes of save plumbing now ride the same overall flow.
+- **Pattern primed for future condition immunities.** Devotion paladin's Lv 15 Purity of Spirit ("you are always under the effect of Protection from Evil and Good") would use the same shape, gated on the saving character (not allies) and protecting against a broader set of conditions (charm + fear from celestials/fiends/etc.). Holy Nimbus (Lv 20) lights up other angles. Same gate, different conditions + different ranges.
+- **Why Lv 7+ not Lv 6+.** Aura of Protection unlocks at Paladin Lv 6 (`_paladin_level_from_sheet >= 6` gates that check); Aura of Devotion is Lv 7+. Both helpers walk the same init tracker but with different level + subclass gates. The single-level gap is why Caelan needed only one more bump after v2.53.0.
+
+---
+
 ## [2.54.1] - 2026-05-25 — "Passive Pass"
 
 **Schema version:** 57

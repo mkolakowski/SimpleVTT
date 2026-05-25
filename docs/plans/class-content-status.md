@@ -333,7 +333,7 @@ have features JSON.
 | Fighter | Battle Master | ❌ | n/a | 🟢 | Superiority Dice counter exists |
 | Fighter | Eldritch Knight | ❌ | n/a | ⚪ | |
 | Monk | **Way of the Open Hand** | ✅ | n/a | 🟢 | Open Hand Technique shipped (v2.49.57). **Wholeness of Body ✅** (v2.49.227: dedicated `/use_wholeness_of_body` endpoint — Lv 6 monk, action, 1/long rest, deterministic 3 × monk-level heal via `_apply_hp_change`. Krieger bumped to Lv 6 as the demo fixture; harness in `test_use_wholeness_of_body.py`). |
-| Paladin | **Oath of Devotion** | ✅ | ✅ | 🟢 | **Sacred Weapon ✅** + **Turn the Unholy ✅** (v2.14.3 — both Channel Divinity options live under `channel-divinity.options` with `class:"paladin", subclass:"devotion"` tags; Caelan at Lv 5 is the demo test bed). Aura of Devotion (Lv 7) + Purity of Spirit (Lv 15) + Holy Nimbus (Lv 20) still descriptive. |
+| Paladin | **Oath of Devotion** | ✅ | ✅ | 🟢 | **Sacred Weapon ✅** + **Turn the Unholy ✅** (v2.14.3 — both Channel Divinity options live under `channel-divinity.options` with `class:"paladin", subclass:"devotion"` tags; Caelan at Lv 5 is the demo test bed). **Aura of Devotion ✅** (v2.55.0 — first condition-install immunity gate; allies in init can't be Charmed by failed Wis saves while Caelan is in init; `_ally_has_aura_of_devotion` gates on Paladin Lv 7+ + subclass slug `devotion`; harness in `test_aura_of_devotion.py`). Purity of Spirit (Lv 15) + Holy Nimbus (Lv 20) still descriptive. |
 | Paladin | Ancients / Vengeance / Conquest / Redemption / Glory / Watchers / Oathbreaker | ❌ | ✅ | 🟡 | Spell grants only |
 | Ranger | **Hunter** | ✅ | n/a | 🟡 | Hunter's Prey / Defensive Tactics / Multiattack descriptive |
 | Rogue | **Thief** | ✅ | n/a | 🟡 | Fast Hands / Use Magic Device descriptive |

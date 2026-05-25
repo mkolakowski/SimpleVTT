@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 462 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.54.0, 2026-05-25).
+**Total tests:** 465 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.55.0, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -678,6 +678,15 @@ v2.49.244 — per-user UI preference. `POST /api/settings/roll_log_position` fli
 | `test_roll_log_position_left_then_right` | GM POSTs `{"position": "left"}` → 200 + `roll_log_position == "left"`; subsequent POST `{"position": "right"}` flips back, both persist. |
 | `test_roll_log_position_rejects_invalid_value` | `{"position": "middle"}` → 400 with the invalid value surfaced in the response body. |
 | `test_roll_log_position_persists_for_player` | Per-user isolation — Alice sets `left` independently of the GM; cleanup resets her to `right`. |
+
+### `test_aura_of_devotion.py`
+v2.55.0 — Paladin Oath of Devotion Lv 7+ Aura of Devotion. First **condition-install immunity gate** — when a failed Wis save would install Charmed on a PC ally, and any Paladin Lv 7+ with subclass `devotion` is in init, the install is BLOCKED and a `feature_used(source=aura-of-devotion)` broadcast surfaces the immunity. Distinct from Aura of Protection (save modifier): AoD acts AFTER the save resolves to bypass the consequence.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_aura_of_devotion_blocks_charmed_install` | Caelan + Krieger in init; Lyra casts Suggestion at Krieger; loop until save fails → response `auto_buff_installed=""`, Krieger's buff list has no `charmed` entry, broadcast names Caelan. |
+| `test_charmed_installs_when_paladin_absent` | Control: Caelan NOT in init → failed save installs Charmed normally; no AoD broadcast. |
+| `test_aod_skips_non_charm_conditions` | Caelan in init + Tavik casts Hold Person → failed save installs Paralyzed (AoD is charm-only). |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

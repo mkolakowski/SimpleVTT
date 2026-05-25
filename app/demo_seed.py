@@ -673,23 +673,28 @@ def _paladin_sheet(name: str) -> dict:
     return {
         "class": "Paladin",
         "subclass": "Oath of Devotion",
-        # v2.53.0: bumped Lv 5 → Lv 6 to unlock Aura of Protection
-        # (allies within 10 ft of Caelan add his CHA mod to all
-        # saves). HP scales d10(avg 6) + CON(+2) per level × 1 = +8
-        # → 52/52. hit_dice 5 → 6. Lay on Hands pool 5×lv = 25 → 30
-        # HP. Proficiency stays +3 (Lv 5-8 = +3). No new spell slots
-        # at Paladin Lv 6 (4×L1 + 2×L2 unchanged).
-        "level": 6,
+        # v2.53.0: bumped Lv 5 → Lv 6 to unlock Aura of Protection.
+        # v2.55.0: bumped Lv 6 → Lv 7 to unlock Aura of Devotion
+        # (Oath of Devotion subclass): allies within 10 ft are immune
+        # to being charmed. HP scales d10(avg 6)+CON(+2) per level × 1
+        # more level = +8 → 60/60. hit_dice 6 → 7. Lay on Hands pool
+        # 5×lv = 30 → 35 HP. Proficiency stays +3 (Lv 5-8 = +3). No
+        # new spell slots at Paladin Lv 7 (4×L1 + 3×L2 unchanged from
+        # Lv 6 — wait, Lv 7 actually gets L3 slots... no, Lv 7
+        # paladin has 4/3/0/0). Actually Paladin Lv 7 = 4 L1 + 3 L2
+        # slots, same as Lv 6 — L3 slots unlock at Lv 9 (half-caster
+        # progression). Slot counts unchanged.
+        "level": 7,
         "race": "Human",  # standard +1 to all
         "alignment": "Lawful Good",
         "background": "Soldier",
         "abilities": {"STR": 16, "DEX": 10, "CON": 14, "INT": 10, "WIS": 12, "CHA": 16},
         "ac": 19,  # chain mail 16 + shield 2 + Fighting Style: Defense +1
         "speed": 30,
-        "hp": {"current": 52, "max": 52, "temp": 0},  # 10 + 5×(6+CON) Lv 6 paladin
+        "hp": {"current": 60, "max": 60, "temp": 0},  # 10 + 6×(6+CON) Lv 7 paladin
         "initiative_bonus": 0,
         "proficiency_bonus": 3,
-        "hit_dice": {"current": 6, "max": 6},
+        "hit_dice": {"current": 7, "max": 7},
         "class_hit_die": "d10",
         "class_spellcasting": "CHA",
         "saving_throws": {"WIS": True, "CHA": True},
@@ -764,7 +769,8 @@ def _paladin_sheet(name: str) -> dict:
                 "key": "lay-on-hands",
                 "name": "Lay on Hands",
                 # v2.53.0: Lv 6 bump → pool 5×6 = 30 HP (was 25 at Lv 5).
-                "current": 30, "max": 30, "reset": "long",
+                # v2.55.0: Lv 7 bump → pool 5×7 = 35 HP.
+                "current": 35, "max": 35, "reset": "long",
                 "source": "paladin Lv 1",
                 "class_slug": "paladin",
                 "desc": "Touch-heal pool. Spend HP from the pool to heal a creature you touch. The 5 × Lv pool refreshes on a long rest.",
@@ -801,6 +807,18 @@ def _paladin_sheet(name: str) -> dict:
                 "key": "aura-of-protection",
                 "name": "Aura of Protection",
                 "desc": "Passive — allies within 10 ft add Caelan's CHA mod (+3) to all saves. Fires automatically server-side on every save prompt that lands inside the active battle.",
+            },
+            # v2.55.0: Aura of Devotion (Oath of Devotion subclass,
+            # Lv 7+). Passive — allies within 10 ft are immune to
+            # being charmed. Fires server-side as a pre-install gate
+            # in `/roll_request/{id}/respond`: when a failed Wis save
+            # would install Charmed on an ally, AoD blocks the
+            # install and broadcasts `feature_used(source=
+            # aura-of-devotion)`.
+            {
+                "key": "aura-of-devotion",
+                "name": "Aura of Devotion",
+                "desc": "Passive (Oath of Devotion, Lv 7+) — allies within 10 ft are immune to being charmed. Fires automatically server-side when a failed save would install Charmed (e.g. Suggestion, Charm Person).",
             },
         ],
     }

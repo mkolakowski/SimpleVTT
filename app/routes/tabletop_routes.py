@@ -7600,6 +7600,39 @@ async def respond_roll_request(
             cond = _SPELL_CONDITION_MAP.get(ctx.get("spell_slug") or "")
             tgt_char_id = ctx.get("target_character_id")
             if cond and tgt_char_id:
+                # v2.55.0 — Aura of Devotion (Paladin Oath of
+                # Devotion, Lv 7+) blocks the install of a Charmed
+                # condition on an ally. RAW: "your allies are immune
+                # to being charmed while within 10 feet of you."
+                # Pre-install gate — the save still failed but the
+                # condition just doesn't land; broadcast surfaces the
+                # immunity trigger so the player isn't confused why
+                # their failed Wis save didn't apply Charmed.
+                if (cond.get("key") or "").strip().lower() == "charmed":
+                    _aod_applies, _aod_paladin = _ally_has_aura_of_devotion(
+                        db, campaign_id, int(tgt_char_id),
+                    )
+                    if _aod_applies and _aod_paladin is not None:
+                        # Look up the target's Character row for the
+                        # broadcast (the caller has the id, we need
+                        # the name).
+                        _tgt_char_for_aod = db.query(Character).filter(
+                            Character.id == int(tgt_char_id),
+                        ).first()
+                        await _broadcast_aura_of_devotion(
+                            campaign_id, _aod_paladin, _tgt_char_for_aod,
+                        )
+                        auto_buff_installed = ""  # explicit: immunity, no install
+                        # Skip the install entirely — short-circuit
+                        # past the buff dict + _install_buff call.
+                        # The ``ctx`` cleanup still happens below.
+                        _save_request_context.pop(roll_req.id, None)
+                        return {
+                            "ok": True,
+                            "total": rec.total,
+                            "breakdown": rec.breakdown,
+                            "auto_buff_installed": auto_buff_installed,
+                        }
                 buff = {
                     "key": cond["key"],
                     "name": cond["name"],
@@ -11529,6 +11562,100 @@ async def _broadcast_countercharm(
                 f"saves vs charmed / frightened."
             ),
             "source": "countercharm",
+        },
+    })
+
+
+def _ally_has_aura_of_devotion(
+    db: Session, campaign_id: int, saving_char_id: int | None,
+) -> "tuple[bool, Character | None]":
+    """v2.55.0 — Paladin Aura of Devotion (Oath of Devotion, Lv 7+).
+    RAW (PHB p.86 — Devotion subclass): "your allies are immune to
+    being charmed while within 10 feet of you. At 18th level, the
+    range increases to 30 feet."
+
+    Returns ``(applies, paladin_char)`` where ``applies`` is True
+    when ANY Paladin Lv 7+ with subclass slug ``devotion`` is in
+    the active battle's init tracker AND the saving PC is in
+    battle too. The paladin's own aura applies to themselves
+    (mirrors Aura of Protection's self-aura behavior).
+
+    Distinct from Aura of Protection (v2.53.0) in two ways:
+      1. **Subclass-gated** — only Oath of Devotion (not other
+         paladin oaths). Subclass check normalizes the sheet's
+         ``subclass`` field via slug-comparison (strips "Oath of "
+         prefix, lowercases). Mirrors the convention used by
+         `_FEATURE_ECONOMY` subclass tags ("devotion" / "ancients" /
+         etc.).
+      2. **Lv 7+ not Lv 6+** — Aura of Devotion unlocks at Paladin
+         Lv 7; Aura of Protection at Lv 6. Caelan is the demo
+         fixture for both (bumped Lv 5 → 6 in v2.53.0 then 6 → 7
+         in v2.55.0).
+
+    v1 simplification mirrors Aura of Protection: no 10 ft radius
+    check (any qualifying paladin in init counts as in range).
+    Filed for follow-up — same `_distance_ft_between_points`
+    integration point.
+    """
+    if not saving_char_id:
+        return False, None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False, None
+    combatants = state.get("combatants") or []
+    saver_in_battle = any(
+        c.get("char_id") == saving_char_id for c in combatants
+    )
+    if not saver_in_battle:
+        return False, None
+    for c in combatants:
+        char_id = c.get("char_id")
+        if not char_id:
+            continue
+        char = db.query(Character).filter(Character.id == int(char_id)).first()
+        if not char:
+            continue
+        sheet = char.sheet or {}
+        if _paladin_level_from_sheet(sheet) < 7:
+            continue
+        # Subclass check — normalize "Oath of Devotion" → "devotion"
+        # so the gate matches the `_FEATURE_ECONOMY` subclass-tag
+        # convention.
+        subclass_raw = (sheet.get("subclass") or "").strip().lower()
+        subclass_slug = subclass_raw.replace("oath of ", "").strip()
+        if subclass_slug != "devotion":
+            continue
+        return True, char
+    return False, None
+
+
+async def _broadcast_aura_of_devotion(
+    campaign_id: int, paladin: "Character", saving_char: "Character | None",
+) -> None:
+    """Companion broadcast for ``_ally_has_aura_of_devotion``. Emits
+    a `feature_used(source="aura-of-devotion")` event naming the
+    paladin (not the saver) so the chat card credits the source.
+    The broadcast fires when AoD BLOCKS a Charmed install on an
+    ally — surfaces the immunity to the player who would otherwise
+    be confused why their failed save didn't apply the condition.
+    """
+    if not paladin:
+        return
+    target_name = saving_char.name if saving_char else "ally"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": paladin.id,
+            "character_name": paladin.name,
+            "user_color": paladin.color,
+            "feature_name": (
+                f"🛡️ Aura of Devotion → {target_name} immune to charm"
+            ),
+            "feature_desc": (
+                f"Allies within 10 ft of {paladin.name} (Oath of Devotion) "
+                f"are immune to being charmed."
+            ),
+            "source": "aura-of-devotion",
         },
     })
 
