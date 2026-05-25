@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.245] - 2026-05-25
+
+**Schema version:** 57
+**Commit summary:** **Roll-log scrollbar moves to the left edge when the roll log is on the left side.** Follow-up polish to v2.49.244: with the roll log pinned to the left side of the tabletop, the default right-edge scrollbar visually conflicted with the cards' right border (the scrollbar sat between the cards and the rest of the map). Flipping it to the leftmost edge — closest to the screen border — keeps the cards visually unbroken on the side that faces the map.
+**Description:** Two-line CSS rule added to the existing `.drawer-sidebar--left` block in `tabletop.html`. Uses the standard `direction: rtl` on the scroll container (`.drawer-body`) to flip the browser-rendered scrollbar to the start side, then `direction: ltr` on `> *` to restore normal text + list flow inside the cards (without the second rule, every roll card would mirror right-to-left). Affects only the left-side sidebar; the right-side sidebar's scrollbar position is unchanged.
+**Description (cont):** No behavior or layout changes elsewhere — purely visual polish scoped to the left-sidebar code path. No new endpoint, no schema change, no test surface (CSS-only change). Verified by toggling `/settings` to left, reloading the tabletop, and confirming the scrollbar renders at the leftmost edge of the roll-log drawer with cards visually flush to the right.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.49.245` after `docker compose up -d --build app`. (b) Browser check at `position=left` shows scrollbar on the left; at `position=right` the scrollbar is on the right (unchanged). (c) Existing 447 harness tests still green — no test surface touched.
+
+### Changed
+- `app/templates/tabletop.html` — added `.drawer-sidebar--left .drawer-body { direction: rtl; }` + restoring rule on `> *`. Scrollbar of the left-side roll-log drawer now hugs the screen edge instead of sitting between the cards and the map.
+- `app/version.py` `APP_VERSION` → `2.49.245`.
+- `README.md` version badge → `2.49.245`.
+
+### Notes
+- **The `direction: rtl` + `direction: ltr` pair is the cross-browser CSS idiom for "move scrollbar to the other side without flipping content."** Supported in Chrome, Safari, and Firefox; no JS or vendor-prefix needed.
+
+---
+
 ## [2.49.244] - 2026-05-25
 
 **Schema version:** 57

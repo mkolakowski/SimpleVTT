@@ -123,6 +123,15 @@
     .drawer-sidebar--left:not(:has(.drawer-panel.open)) {
         pointer-events: none;
     }
+    /* v2.49.245: when the roll log is on the LEFT, push its scrollbar
+       to the left edge (closest to the screen edge, away from the map)
+       so it doesn't sit between the cards and the map content. The
+       standard CSS trick: ``direction: rtl`` on the scroll container
+       flips the scrollbar to the start side; ``direction: ltr`` on
+       direct children restores normal text/list flow so the roll
+       cards aren't mirrored. */
+    .drawer-sidebar--left .drawer-body { direction: rtl; }
+    .drawer-sidebar--left .drawer-body > * { direction: ltr; }
     /* v2.4.22: drawer tabs now live inline with the campaign title in the
        ``.tt-topbar`` (was a dedicated bar above the sidebar panels). No
        more bottom border or min-width — those existed to make it look
