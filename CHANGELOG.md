@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.247] - 2026-05-25
+
+**Schema version:** 57
+**Commit summary:** **Spell-cast + roll-request cards get the same frosted-glass treatment as roll cards.** Follow-up polish to v2.49.246: a screenshot from the live tabletop showed that the deeper-translucency v2.49.246 changes only applied to `.roll-card` — `.spell-cast-card` (Fireball detail cards) and `.roll-req-card` were still using `background: var(--bg)` (fully opaque), so the spell cards stood out as solid black against the surrounding glass cards. This commit brings both into parity.
+**Description:** Two CSS edits to `app/templates/tabletop.html`. **(1)** `.spell-cast-card` switched from `background: var(--bg)` to `color-mix(in srgb, var(--bg) 55%, transparent)` with `backdrop-filter: blur(16px) saturate(160%)` — matches the v2.49.246 `.roll-card` recipe exactly. Border re-themed from hardcoded `rgba(167,139,250,.35)` to `color-mix(in srgb, var(--accent) 35%, transparent)`; left-edge 3px accent strip switched from hardcoded `#a78bfa` to `var(--accent)` so the spell-card identity hue follows the theme. **(2)** Same treatment for `.roll-req-card`. The GM-ochre 3px left edge (`#c8962a`) is **preserved** — it's a semantic "GM is asking you to roll" marker used consistently across the UI (badge, header tint, log breadcrumbs); themeing it would erase that signal.
+**Description (cont):** No behavior changes, no schema changes, no new endpoint, no test surface. Pure CSS polish that closes the v2.49.246 inconsistency where one card family got the glass treatment and the rest didn't. Verified by reloading the tabletop and confirming that Fireball spell cards + roll-request cards now read through the map background like the v2.49.246 feature cards do.
+
+### Changed
+- `.spell-cast-card` — bg `var(--bg)` → `color-mix(... 55%, transparent)`; added `backdrop-filter: blur(16px) saturate(160%)`; border + 3px left-edge accent themed via `var(--accent)`.
+- `.roll-req-card` — same glass treatment; border themed via `var(--accent)`; GM-ochre `#c8962a` 3px left edge preserved (semantic marker).
+- `app/version.py` `APP_VERSION` → `2.49.247`.
+- `README.md` version badge → `2.49.247`.
+
+### Notes
+- **Pattern: every roll-log card type now uses the same glass recipe.** `.roll-card` (v2.49.246), `.spell-cast-card` (this commit), `.roll-req-card` (this commit). If a future card type is added (encounter scaffold, feature-used variant, etc.), copy the recipe: `color-mix(... var(--bg) 55%, transparent)` + `backdrop-filter: blur(16px) saturate(160%)` + accent-themed border.
+
+---
+
 ## [2.49.246] - 2026-05-25
 
 **Schema version:** 57
