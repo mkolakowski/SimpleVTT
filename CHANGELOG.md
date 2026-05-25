@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.239] - 2026-05-25
+
+**Schema version:** 56
+**Commit summary:** **Bump GitHub Actions versions to clear the Node 20 deprecation warnings before the 2026-06-02 forced-upgrade deadline.** CI was emitting noisy warnings on every run: `actions/checkout@v4`, `actions/setup-python@v5`, `actions/cache@v4`, `actions/upload-artifact@v4` all run on Node 20, which GitHub is forcing to Node 24 on June 2nd (~1 week from today; Node 20 fully removed 2026-09-16). Upgraded each action to its current major: `checkout@v4 → @v6`, `setup-python@v5 → @v6`, `cache@v4 → @v5`, `upload-artifact@v4 → @v7`. All 11 `uses:` lines across the three jobs in `.github/workflows/test-harness.yml` updated.
+**Description:** One-edit workflow config commit. Verified each new major against the actions repo via `gh api repos/{owner}/{repo}/releases/latest` before bumping. Final versions: checkout=v6.0.2, setup-python=v6.2.0, cache=v5.0.5, upload-artifact=v7.0.1. Pinned to major (e.g. `@v6` not `@v6.0.2`) so patch updates roll in automatically — matches the pattern the workflow already used.
+**Description (cont):** No functional change. The actions APIs are mostly backward-compatible across these majors; the breaking changes documented in their respective release notes are mostly around minimum runner version (now Ubuntu 22.04+ which the `runs-on: ubuntu-latest` already satisfies) and Node 20→24 runtime. The workflow's bash steps, env vars, and stage ordering are untouched. CI re-run on this push verifies the upgraded actions actually work end-to-end.
+**Description (cont 2):** Verification. (a) `curl /version` confirms v2.49.239 live (after rebuild). (b) Workflow file syntax-checks (no YAML errors). (c) CI re-run is the load-bearing signal — if any action major bump silently broke a step, the run goes red and the failure pinpoints which.
+
+### Changed
+- `.github/workflows/test-harness.yml` — `actions/checkout@v4 → @v6`, `actions/setup-python@v5 → @v6`, `actions/cache@v4 → @v5`, `actions/upload-artifact@v4 → @v7`. All 11 `uses:` lines updated across the harness / harness-ui / encounter-sim jobs.
+- `app/version.py` `APP_VERSION` → `2.49.239`.
+- `README.md` version badge → `2.49.239`.
+
+### Notes
+- **Doc-only / config-only commit.** No application code change, no harness test impact, no schema change.
+- **Beats the deadline.** GitHub forces Node 24 on 2026-06-02; the upgraded actions all support Node 24 natively, so we won't get the auto-forced runtime swap.
+
+---
+
 ## [2.49.238] - 2026-05-25
 
 **Schema version:** 56
