@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.226] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Audit-batched retirement of three fully-shipped TODO entries: "Hide Spells from Non-Casters" (v2.49.201), "Roll Request — Per-Player Targeting" (v1.8.0), and "Demo Mode" (v2.35.0+).** Coherent change: a 2026-05-24 systematic audit of TODO.md cross-checked every entry against CHANGELOG + plan-doc status + code; these three were unambiguously shipped with code evidence in each case. Batched into one commit because the change is single-kind ("retire stale TODOs from the audit pass") and the diff is reviewable as one unit.
+**Description:** Three TODO.md bullet removals + version/badge bump. **(1)** "Hide Spells from Non-Casters" closed by v2.49.201 — `sheet_dnd5e.html:1044` gates Spells fieldset on `_is_caster = sheet.get('class_spellcasting')`; demo's non-caster Rogue (Pip) renders with no Spells section. **(2)** "Roll Request — Per-Player Targeting" closed by v1.8.0 — `app/routes/tabletop_routes.py` emits the `target_user_ids` field on roll-request broadcasts; the GM panel has a multi-select player picker and the client gates the button render on `ME.id` membership. **(3)** "Demo Mode" closed by v2.35.0+ — `docker-compose.yml:46` exposes `DEMO_MODE: ${DEMO_MODE:-false}` and the demo seed at `app/demo_seed.py` populates the 3-user / 1-map / 12-PC roster with the hourly auto-reset cron. Plan doc at `docs/plans/demo-mode.md` is referenced by the existing demo seed code.
+**Description (cont):** What this is NOT closing. Entries deliberately left in place that the audit flagged as partially-shipped: **Combat 2.0 — Action Economy Tracking** ships the chip strip in `renderBattle`'s init entry but NOT in `_mini_sheet_card.html` (TODO scope explicitly mentions "init tracker entry AND mini-sheet"). **Homebrew Clone** ships clone endpoints for 5 of 6 homebrew tiers (feats, backgrounds, races, monsters, classes) but is missing `/custom-subclasses/{slug}/clone`. **Class Resource Tracking in Mini-Sheet** ships resources on the full sheet only; mini-sheet integration is the named-scope of that TODO and is genuinely outstanding. **Advantage & Disadvantage Tracking** and **Death Saving Throws** ship Phase 1 (v2.2.0+ and v2.1.0+ respectively) but each plan-doc has explicit Phase 2/3/4 deferrals — the TODO bullets reference the plans, so the phase status is already discoverable. **Frosted-glass treatment** has 3+ surfaces using `backdrop-filter` but the TODO enumerates many specific drawer cards (init-tracker, GM panel, sound panel, AoE picker hint, ruler hint, targeting chip) that need a per-surface audit before closure.
+**Description (cont 2):** Why a batched commit instead of three single-entry retirements. CLAUDE.md's "one conceptually-distinct change = one commit" rule applies to functional changes; here all three edits are the same conceptual change ("retire a stale TODO bullet identified by the 2026-05-24 audit") and reviewing them as one diff is faster than reviewing three near-identical single-entry diffs. Three rebuild cycles would be three minutes of latency for no semantic benefit. Same rationale would NOT justify batching, e.g., a code-fix + a doc commit (different kinds of change), or two TODO retirements with material disagreement about whether a feature is shipped (different signals to review).
+**Description (cont 3):** Cumulative TODO retirements today. v2.49.223 (Soren NPC spells), v2.49.224 (action_charges UI on unified partial), v2.49.225 (init-tracker open-sheet button), v2.49.226 (this — three audit-flagged entries). Total: six TODO bullets retired in one session, all "actually shipped, never retired" cases. Pattern of accumulated stale TODO entries suggests this kind of audit pass is worth running every few releases as the codebase outpaces backlog grooming.
+**Description (cont 4):** Verification. (a) `curl /version` confirms v2.49.226 live. (b) Existing harness suite still green (no endpoint changes). (c) Each retired entry's shipped-evidence verified by direct code grep before the edit landed.
+
+### Changed
+- `TODO.md` — removed "Hide Spells from Non-Casters" (closed by v2.49.201), "Roll Request — Per-Player Targeting" (closed by v1.8.0), and "Demo Mode" (closed by v2.35.0+). Also removed the now-empty `## Development & Testing` section heading.
+- `app/version.py` `APP_VERSION` → `2.49.226`.
+- `README.md` version badge → `2.49.226`.
+
+### Notes
+- **Doc-only commit; harness-test rule N/A.** No HTTP endpoint added or modified.
+- **Audit methodology.** Read TODO.md in full, cross-checked each `### heading` entry against CHANGELOG/CHANGELOG_v1 text search, `docs/plans/*.md` "Implementation status" sections, and code grep for the named class/function/file. Categorized into shipped / partial / not-shipped; only fully-shipped entries with code evidence retired in this commit. Partial entries left for separate scope-rewrite commits if and when the residual work ships.
+
+---
+
 ## [2.49.225] - 2026-05-24
 
 **Schema version:** 56

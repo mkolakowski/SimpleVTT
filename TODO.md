@@ -77,9 +77,6 @@ Two additional buttons use slightly different padding and may need individual re
 
 ## Character Sheet
 
-### Hide Spells from Non-Casters
-The spells section of the character sheet should be hidden (or collapsed) when the character's class has no spellcasting ability. Currently the spell panel is visible for all characters regardless of class. Detection should use the `class_spellcasting` field — hide the section when it is blank, and show it for any class with a spellcasting ability set (INT, WIS, CHA, etc.). Should also handle multiclass characters where at least one class is a caster.
-
 ### Ability Score Generation
 Two methods for players to generate ability scores during character creation:
 - **Point buy** — players spend a fixed pool of points (standard D&D 5e: 27 points, scores 8–15 before racial bonuses) with an interactive cost table shown in the sheet UI. Should enforce the budget in real time and show remaining points.
@@ -109,9 +106,6 @@ Admin/GM dashboard showing campaign activity: session count, token move history,
 
 ### Initiative Tracker Roll Prompt
 When a combatant is added to the initiative order without a roll (e.g. added mid-combat from the token sheet or manually), show the GM a "Prompt Roll" button next to that entry. Clicking it sends a WebSocket message to the relevant player's client asking them to roll initiative. The button disappears automatically once the player's initiative is recorded (either via self-roll or GM entry).
-
-### Roll Request — Per-Player Targeting
-The roll-request panel currently broadcasts the prompt to everyone in the campaign; only the targeted player(s) should see the click-to-roll button. Add a player picker next to the existing roll-type / DC / ability inputs that lets the GM target one specific player, multiple selected players, or "all players" (current behaviour, kept as the default). UI: a multi-select dropdown listing every player member of the campaign by display name — keep it compact so it fits inline with the rest of the roll-request form. Backend: extend the WebSocket payload with a `target_user_ids: list[int]` field; the client only renders the prompt button when `ME.id` is in that list (or the list is empty, meaning broadcast). The GM's roll log should reflect which players were prompted so it's clear who the request went to.
 
 ### Homebrew Clone
 Add a "Clone" button on every homebrew entry in the campaign settings homebrew menu — feats, backgrounds, races, subclasses, monsters, and classes (the six file-based homebrew types as of v2.0.0). Clicking it duplicates the source record as a new homebrew JSON file with a name pre-populated to "Copy of \<original\>" and a fresh auto-generated slug, then opens the new entry in the editor for the GM to tweak. Makes it trivial to spin off variants (e.g. clone "Bandit" → tweak HP / abilities → save as "Veteran Bandit") without retyping every field. Behaviour: server-side endpoint reads the source JSON, mutates the `slug`/`name` fields, writes a new file in the same campaign scope, redirects to the edit form. Existing-slug guard already applies (the existing `_existing_*` check in `homebrew/import` rejects duplicates). No clone for shipped SRD content — that lives in `app/data/local/dnd5e/` and is read-only; cloning shipped → homebrew would be a separate feature.
@@ -219,13 +213,6 @@ On small screens, replace the current sidebar with a proper slide-out drawer tri
 
 ### Darker Sepia Themes
 Add a few darker sepia/warm-brown colour themes as alternatives to the existing dark theme. Candidates: a deep parchment (dark tan background, inked-brown text), a candlelit tavern (very dark brown with amber accents), and a burnt manuscript (near-black with faded sepia highlights). Should slot into the existing theme system with new CSS variable sets — no structural changes needed.
-
----
-
-## Development & Testing
-
-### Demo Mode
-Public-demo deployment with hourly auto-reset and a pre-seeded sample campaign (3 users, 1 battle map, 2 player characters with full D&D 5e sheets, 5 NPC tokens for a starter combat encounter, sample homebrew, roll history). See [`docs/plans/demo-mode.md`](docs/plans/demo-mode.md) for the full design.
 
 ---
 
