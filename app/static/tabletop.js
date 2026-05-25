@@ -209,15 +209,22 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // Translucent dark backing strip behind the labels — wider
-        // alpha on the strip than the cards (0.55) since the labels
-        // need to be legible against busy map backgrounds.
+        // v2.51.0 — backing strips for all four sides. Top + left keep
+        // the dark backing + accent-color text (primary markers). The
+        // new right + bottom strips use a translucent parchment-tan
+        // backing + dark text (per user request "make the lettering
+        // dark on the new borders") so they read as a quieter "echo"
+        // of the primary markers without competing visually.
         ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
-        ctx.fillRect(0, 0, MAP_W, stripH);        // top row
-        ctx.fillRect(0, 0, stripH, MAP_H);        // left column
+        ctx.fillRect(0, 0, MAP_W, stripH);                          // top
+        ctx.fillRect(0, 0, stripH, MAP_H);                          // left
+        ctx.fillStyle = 'rgba(245, 232, 208, 0.55)';
+        ctx.fillRect(MAP_W - stripH, 0, stripH, MAP_H);             // right
+        ctx.fillRect(0, MAP_H - stripH, MAP_W, stripH);             // bottom
 
-        // Theme-accent border line separating the gutter from the
-        // map body. Two strokes (top horizontal + left vertical).
+        // Theme-accent border lines separating each gutter from the
+        // map body. Four strokes — one along the inside edge of each
+        // strip — so the player sees a complete frame.
         ctx.strokeStyle = accent;
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -227,6 +234,14 @@
         ctx.beginPath();
         ctx.moveTo(stripH + 0.5, 0);
         ctx.lineTo(stripH + 0.5, MAP_H);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, MAP_H - stripH - 0.5);
+        ctx.lineTo(MAP_W, MAP_H - stripH - 0.5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(MAP_W - stripH - 0.5, 0);
+        ctx.lineTo(MAP_W - stripH - 0.5, MAP_H);
         ctx.stroke();
 
         // v2.50.5 — labels centered between the gridlines, NOT
@@ -241,23 +256,56 @@
         // width, leaving them between gridlines but off-by-one from
         // the cells they were supposed to label.
         //
+        // v2.51.0 — alignment tweak: round each label's anchor point
+        // to integer pixel coordinates BEFORE fillText so sub-pixel
+        // canvas rendering doesn't leave A and 1 a fraction of a
+        // pixel out of alignment with each other. With textBaseline
+        // 'middle' the canvas uses font metrics to position the
+        // glyph; the integer rounding stabilizes that across glyphs
+        // with different visual heights (the cap-height of "A" vs.
+        // the digit-height of "1").
+        //
         // Edge case: when ``gridSize / 2 < stripH`` (very small grids),
         // the first column / row label would fall inside the
         // perpendicular gutter strip and be hidden behind its dark
         // backing. Skip drawing in that case so the user doesn't see
         // a half-clipped glyph in the corner.
+        const stripHalf = Math.round(stripH / 2);
+        // Top labels (accent color) — column letters.
         ctx.fillStyle = accent;
         for (let c = 0; c < cols; c++) {
-            const x = c * gridSize + gridSize / 2;
-            if (x > MAP_W) break;
-            if (x < stripH) continue;  // would clip into the row-label gutter
-            ctx.fillText(_colLabel(c), x, stripH / 2);
+            const x = Math.round(c * gridSize + gridSize / 2);
+            if (x > MAP_W - stripH) break;            // clips into right gutter
+            if (x < stripH) continue;                 // clips into left gutter
+            ctx.fillText(_colLabel(c), x, stripHalf);
         }
+        // Left labels (accent color) — row numbers.
         for (let r = 0; r < rows; r++) {
-            const y = r * gridSize + gridSize / 2;
-            if (y > MAP_H) break;
-            if (y < stripH) continue;  // would clip into the column-label gutter
-            ctx.fillText(String(r + 1), stripH / 2, y);
+            const y = Math.round(r * gridSize + gridSize / 2);
+            if (y > MAP_H - stripH) break;            // clips into bottom gutter
+            if (y < stripH) continue;                 // clips into top gutter
+            ctx.fillText(String(r + 1), stripHalf, y);
+        }
+
+        // v2.51.0 — secondary border lettering on the new (right +
+        // bottom) borders. Dark text on the parchment backing so the
+        // mirror labels read as a quieter visual echo.
+        ctx.fillStyle = 'rgba(35, 22, 8, 0.92)';
+        const rightX = MAP_W - stripHalf;
+        const bottomY = MAP_H - stripHalf;
+        // Right labels — row numbers, mirroring the left strip.
+        for (let r = 0; r < rows; r++) {
+            const y = Math.round(r * gridSize + gridSize / 2);
+            if (y > MAP_H - stripH) break;
+            if (y < stripH) continue;
+            ctx.fillText(String(r + 1), rightX, y);
+        }
+        // Bottom labels — column letters, mirroring the top strip.
+        for (let c = 0; c < cols; c++) {
+            const x = Math.round(c * gridSize + gridSize / 2);
+            if (x > MAP_W - stripH) break;
+            if (x < stripH) continue;
+            ctx.fillText(_colLabel(c), x, bottomY);
         }
         ctx.restore();
     }

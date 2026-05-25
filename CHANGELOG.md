@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.51.0] - 2026-05-25 — "Full Frame"
+
+**Schema version:** 57
+**Commit summary:** **Map grid now has all four coordinate borders — right + bottom mirror the existing top + left.** The top + left strips keep their dark-backing + accent-text "primary" treatment from v2.50.0; the new right + bottom strips use a translucent parchment-tan backing with dark lettering so they read as a quieter visual echo. Players reading "G7" on the top + left can now confirm the same coordinate against the right + bottom labels, closing the Battleship-style coordinate loop. Also folds in an integer-pixel rounding tweak for column A / row 1 to nudge any sub-pixel rendering drift between letters and digits.
+**Description:** Single-function edit in `app/static/tabletop.js::drawGridCoords()`. **(1) Two new backing strips:** `ctx.fillRect(MAP_W - stripH, 0, stripH, MAP_H)` for the right edge and `ctx.fillRect(0, MAP_H - stripH, MAP_W, stripH)` for the bottom edge, both painted with `rgba(245, 232, 208, 0.55)` (parchment tan). The light backing is mandatory because dark text needs a light surface to read against — the dark-on-dark backing combination used for top + left is reserved for accent-colored labels. **(2) Two new accent border lines** sealing the inside edges of the right + bottom strips so the frame reads as continuous. **(3) Two new label loops:** the right strip carries row numbers (mirroring the left strip), the bottom strip carries column letters (mirroring the top). Both use `rgba(35, 22, 8, 0.92)` for the text color — a near-black with a faint warm tint so the parchment backing reads as theme-aware (not a stark white-on-black-with-black-text mismatch on dark themes).
+**Description (cont):** **Alignment tweak for column A / row 1.** User reported "the 1 and the A are not aligned." Diagnosed as canvas sub-pixel rendering drift: with `textBaseline: 'middle'` and a 14-px font on a HiDPI canvas, the integer label coordinates that v2.50.5 computed (e.g., x=35 for column A's center) round consistently, but the `stripH/2 = 11` value on the perpendicular axis was a float that the canvas could position with a half-pixel offset that read differently for "A" (capital letter, taller cap-height) vs "1" (digit, shorter visual). Fixed by `Math.round`-ing every label anchor coordinate plus the `stripH/2` value before passing them to `fillText`. Both labels now land on integer pixel boundaries and the cap-height vs digit-height drift becomes consistent across glyphs.
+**Description (cont 2):** **Skip-when-clipped guards extended to cover all four gutters.** Before this commit, labels were guarded against rendering inside the LEFT gutter (for column labels) or TOP gutter (for row labels). Now they also guard against rendering inside the RIGHT and BOTTOM gutters, so the last column / row label doesn't clip half-into the corner block where the perpendicular gutter takes over. Concretely, `if (x > MAP_W - stripH) break;` for column labels and `if (y > MAP_H - stripH) break;` for row labels.
+**Description (cont 3):** Verification. (a) `curl /version` reports `2.51.0` after `docker compose up -d --build app`. (b) Browser smoke check on the demo's square-grid map: top strip shows A B C…, left strip shows 1 2 3…, right strip mirrors the row numbers in dark text on parchment, bottom strip mirrors the column letters in dark text on parchment. (c) Theme verification — flipping `/settings/theme` between dark + sepia + forest still draws the four-side frame; the accent-colored primary strips follow the theme, the parchment secondary strips stay constant (they're meant to read as a "physical" parchment overlay, not theme chrome). (d) 447 harness tests still untouched — pure canvas drawing.
+
+### Added
+- Right-side gutter strip in `drawGridCoords()` carrying row-number labels (1, 2, 3, …) in dark text on a parchment-tan translucent backing. Mirrors the left strip.
+- Bottom gutter strip carrying column-letter labels (A, B, C, …) in dark text. Mirrors the top strip.
+- Accent border lines along the inside edges of both new strips so the frame reads as continuous.
+- Skip-when-clipped guards covering the right + bottom gutters (previously only left + top).
+
+### Fixed
+- `drawGridCoords()` — `Math.round`-ed every label anchor coordinate and the `stripH/2` value before passing to `fillText` so sub-pixel rendering doesn't introduce visual drift between letters (e.g., "A") and digits (e.g., "1") on a HiDPI canvas. Addresses user-reported "the 1 and the A are not aligned" feedback.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.51.0` (MINOR — additive UX feature; whole map frame is a new affordance).
+- `README.md` version badge → `2.51.0`.
+
+### Notes
+- **Why dark text + parchment backing on the new borders specifically.** User explicitly asked for "the lettering dark on the new borders." Dark text on the existing dark backing is unreadable, so the backing flipped to a light parchment-tan that's theme-neutral (the rest of the UI already uses warm parchment-ish tints on sepia/hobbiton/forest themes). This creates a visual hierarchy: top + left are the "primary" coordinate markers, right + bottom are the quieter "echo" that lets a player at the far edge of the table still read their grid coordinate without scanning back across the map.
+- **Hex maps still unlabeled.** Same hex-axial-coord follow-up filed in v2.50.0 still applies; this commit only extends square-grid behavior.
+
+---
+
 ## [2.50.5] - 2026-05-25 — "True Center"
 
 **Schema version:** 57
