@@ -231,6 +231,34 @@
     }
     .drawer-header h3 { margin: 0; font-size: 14px; }
     .drawer-body { flex: 1; overflow-y: auto; padding: 10px 14px; }
+    /* v2.49.246: theme the drawer scrollbars so they match the current
+       palette's accent color instead of the browser default chrome.
+       ``scrollbar-color`` is the Firefox + standards path; the
+       ``::-webkit-scrollbar*`` rules cover Chrome / Safari / Edge.
+       Both use ``var(--accent)`` for the thumb (with reduced alpha so
+       it reads as a hint rather than a solid bar) and a near-
+       transparent track so the frosted-glass cards behind it stay
+       visible. Same treatment regardless of which side the roll log
+       lives on — consistent feel across left + right sidebars + other
+       drawers (Battle, Characters, Settings, GM Tools). */
+    .drawer-body {
+        scrollbar-width: thin;
+        scrollbar-color:
+            color-mix(in srgb, var(--accent) 55%, transparent)
+            transparent;
+    }
+    .drawer-body::-webkit-scrollbar { width: 10px; }
+    .drawer-body::-webkit-scrollbar-track { background: transparent; }
+    .drawer-body::-webkit-scrollbar-thumb {
+        background: color-mix(in srgb, var(--accent) 45%, transparent);
+        border-radius: 6px;
+        border: 2px solid transparent;
+        background-clip: padding-box;
+    }
+    .drawer-body::-webkit-scrollbar-thumb:hover {
+        background: color-mix(in srgb, var(--accent) 75%, transparent);
+        background-clip: padding-box;
+    }
 
     /* ── Roll log cards ── */
     .roll-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
@@ -238,16 +266,21 @@
 
     .roll-card {
         border-radius: 8px;
-        border: 1px solid rgba(167,139,250,.35);
-        /* v2.49.139: frosted-glass look — semi-transparent background +
-           backdrop blur so the canvas behind the drawer reads through.
-           ``color-mix`` with 78% bg makes the card readable on any
-           theme (the alpha is implicit via the transparent component
-           of the mix). The 10px blur is the iOS / macOS "Vibrancy"
-           default and matches the system-app feel users expect. */
-        background: color-mix(in srgb, var(--bg) 78%, transparent);
-        -webkit-backdrop-filter: blur(10px) saturate(140%);
-        backdrop-filter: blur(10px) saturate(140%);
+        /* v2.49.246: border + shadow themed via accent + theme tokens
+           instead of a hardcoded purple — the card now reads correctly
+           on the light + sepia + forest themes (purple borders looked
+           out of place there). 35% accent mix keeps the card outline
+           visible on dark themes too without flattening into the bg. */
+        border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+        /* v2.49.246: deeper frosted-glass — bg-mix dropped from 78%→55%
+           so more of the map shows through; blur raised 10px→16px and
+           saturate 140%→160% so the bleed-through reads as colored
+           glass, not muddy gray. Cards stay legible because text
+           tokens are still on a fully opaque token-color (--fg).
+           v2.49.139 history: original 78% + 10px tuning. */
+        background: color-mix(in srgb, var(--bg) 55%, transparent);
+        -webkit-backdrop-filter: blur(16px) saturate(160%);
+        backdrop-filter: blur(16px) saturate(160%);
         overflow: hidden;
         font-size: 12px;
         box-shadow: 0 3px 14px rgba(0,0,0,.22);
@@ -263,10 +296,12 @@
        for zebra contrast). Mixing 12% of --fg lifts the stripe by a
        constant perceptual amount in every palette.
        v2.49.139: zebra rule keeps the glass-effect alpha + blur
-       (inherited from .roll-card) and just adjusts the colour mix. */
+       (inherited from .roll-card) and just adjusts the colour mix.
+       v2.49.246: bumped the outer alpha from 78%→55% to match the
+       deeper glass effect on the odd-row baseline. */
     .roll-list > li:nth-child(even) > .roll-card {
         background: color-mix(in srgb,
-            color-mix(in srgb, var(--bg) 88%, var(--fg) 12%) 78%,
+            color-mix(in srgb, var(--bg) 88%, var(--fg) 12%) 55%,
             transparent);
     }
     /* feature-used-card has no total column — stack vertically */

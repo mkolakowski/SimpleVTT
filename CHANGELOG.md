@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.246] - 2026-05-25
+
+**Schema version:** 57
+**Commit summary:** **Roll-log polish — themed scrollbar + deeper frosted-glass cards.** Two CSS-only tweaks to the roll-log drawer (left + right sidebars): (1) scrollbar now uses `var(--accent)` for the thumb with reduced alpha, so it matches whatever theme the user is on instead of the browser default chrome gray; (2) roll cards are more translucent — the bg-mix dropped from 78%→55% and the backdrop-filter blur raised 10px→16px (saturate 140%→160%) for a deeper "frosted glass" look that lets the map read through more clearly while the cards still stay legible thanks to the opaque text tokens.
+**Description:** Three edits to `app/templates/tabletop.html`. **(1)** New `.drawer-body` scrollbar rules using `scrollbar-color` (Firefox + standards) + `::-webkit-scrollbar-*` (Chrome / Safari / Edge). Both code paths read from `var(--accent)` with `color-mix(... 45%, transparent)` for the resting thumb and `... 75%` on hover. Track is fully transparent so the cards behind it stay visible. Applied to all `.drawer-body` instances so other drawers (Battle, Characters, Settings, GM Tools) get the same themed treatment — visual consistency across the sidebar. **(2)** `.roll-card` bg-mix `78% → 55%`, blur `10px → 16px`, saturate `140% → 160%`. **(3)** Even-row zebra stripe likewise dropped from `78% → 55%` so the alternating-card pattern keeps its delta against the deeper baseline. Border also re-themed to `color-mix(in srgb, var(--accent) 35%, transparent)` instead of a hardcoded purple `rgba(167,139,250,.35)` so cards no longer have purple outlines on the forest / sepia / light themes.
+**Description (cont):** Why this matters per-theme. On dark/midnight the deeper glass effect now lets the map's color come through the cards (was barely perceptible at 78%). On sepia / forest / hobbiton the previous hardcoded purple borders looked off; switching to `var(--accent)` makes the outline match the theme accent (warm orange on sepia, green on forest). The scrollbar gray was particularly noticeable on the warmer themes; replacing it with the accent-mix lifts the visual rhythm.
+**Description (cont 2):** No behavior changes, no schema changes, no new endpoint, no test surface — purely visual CSS polish. Existing 447 harness tests untouched. Verified on the live container at the four warm-theme palettes (dark, sepia, forest, hobbiton) by toggling `/settings/theme` and reloading the tabletop.
+
+### Changed
+- `.roll-card` — bg-mix 78%→55%, blur 10px→16px, saturate 140%→160% for deeper frosted-glass; border switched from hardcoded purple to `color-mix(in srgb, var(--accent) 35%, transparent)` so it themes.
+- `.roll-list > li:nth-child(even) > .roll-card` — outer alpha 78%→55% to match the new baseline so the zebra stripe stays balanced.
+- `.drawer-body` — added themed scrollbar rules (`scrollbar-color` + `::-webkit-scrollbar-*`) using `var(--accent)` for the thumb with `color-mix(... transparent)` reductions. Track is transparent.
+- `app/version.py` `APP_VERSION` → `2.49.246`.
+- `README.md` version badge → `2.49.246`.
+
+### Notes
+- **Cross-browser scrollbar styling combines two specs.** `scrollbar-color` is the W3C standard (Firefox 64+, Chrome 121+ on opt-in) but Chrome / Safari historically only respect `::-webkit-scrollbar-*` pseudos. Shipping both covers every modern browser without polyfill.
+
+---
+
 ## [2.49.245] - 2026-05-25
 
 **Schema version:** 57
