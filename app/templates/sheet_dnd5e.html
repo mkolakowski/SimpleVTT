@@ -3139,6 +3139,26 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             _spTgt = picked;
                         }
                     }
+                    }
+                    // v2.49.234: closes the AoE if/else-if/else chain's
+                    // outer `else` body opened at the `} else {` ~~150
+                    // lines above. The chain has three branches:
+                    //   (a) `_spArea && _openAoePicker` — AoE picker UI
+                    //   (b) `_spArea`                   — AoE fallback (no canvas)
+                    //   (c) default                     — multi-beam OR single-target picker
+                    // Pre-fix the inner `} else if (!_spTgt....) {` body
+                    // (multi-beam else-if branch) closed but the outer
+                    // else body did NOT, so every subsequent line —
+                    // including the `const doFetch = ...` below, the
+                    // /cast_spell post, and the `} finally {` at the
+                    // bottom — was technically still inside the outer
+                    // else's body. Chromium reported "Unexpected token
+                    // 'finally'" because the `}` of `} finally {` was
+                    // interpreted as closing the outer else, leaving the
+                    // `finally` keyword orphaned. CI's harness-ui +
+                    // encounter-sim suites have been red since v2.7.2-ish
+                    // because the sheet failed to load (the parse error
+                    // killed the whole inline script).
                     const doFetch = (override) => fetch(`/api/campaign/${CAMPAIGN_ID}/cast_spell`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },

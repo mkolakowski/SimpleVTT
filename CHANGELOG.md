@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.234] - 2026-05-25
+
+**Schema version:** 56
+**Commit summary:** **Fix the v2.49.233 CI failure root cause — a missing `}` in the spell-cast click handler that left the AoE if/else-if/else chain's outer `else` body unclosed.** v2.49.233's first guess (the cross-line `catch {} \n finally {}` at L 9515) was a real cosmetic issue but unrelated to the CI failure: after rebuilding the container, the same `Unexpected token 'finally'` JS parse error kept firing at the same location, with my added catch making the message shift to `Unexpected token 'catch'`. Reproducing locally via Playwright + Chromium pinpointed line 4899 col 19 of the served sheet HTML, and a careful brace count from the outer try at L 4594 revealed the AoE chain's outer else body (opened by `} else {` at source L 2990) never closed — every line after the inner `} else if (!_spTgt....)` body's close at L 3141 (including the `const doFetch = ...`, `/cast_spell` fetch, over-budget handling, and the `} finally {` at L 3195) was technically still inside the outer else. The `}` at L 3195 then closed the outer else (not the outer try), making `finally` orphaned.
+**Description:** Two edits. **(1)** `app/templates/sheet_dnd5e.html` `~3141` — add the missing `}` between the inner else-if close (L 3141) and the `const doFetch = ...` (L 3142). The inserted brace closes the outer `} else {` body opened at L 2990, restoring the structural intent that doFetch runs OUTSIDE the if/else-if/else chain regardless of which branch (AoE picker, AoE fallback, or default multi-beam / single-target) set `_spTgt`. Includes a ~15-line comment explaining the bug and the chain shape so future readers don't re-introduce the same issue. **(2)** Reverts the v2.49.233 cosmetic `try { } catch (_e) { console.error(...) } finally { }` addition at the same outer try — the catch was added on a misdiagnosis; with the brace fix in place the bare `try { } finally { }` parses cleanly (as it always should have).
+**Description (cont):** Why local Kristen has been 436/436 green while CI was red for ~8 days. The Kristen suite under `tests/harness/` only covers HTTP + WS endpoints. The harness-ui suite under `tests/harness_ui/` (and the encounter-sim suite under `tests/encounter_sim/`) loads the sheet page in Playwright's Chromium — where the parse error fires. 8 days of CI red traced to a single missing `}` inside a deeply-nested if/else-if chain. Future structural-bug detection: run `pytest tests/harness_ui/ tests/encounter_sim/` locally before pushing if any sheet-template JS changed in the commit.
+**Description (cont 2):** Bug history. The missing brace traces to a chain of v2.49.135, v2.49.146, v2.49.147, v2.49.152 commits that added multi-beam pickers, AoE-picker auto-open, non-attack-roll multi-target detection, and the outer-guard removal, respectively. The chain at L 3079 `} else if (!_spTgt.target_combatant_id && !_spTgt.target_character_id) {` was added in v2.49.152 to gate the single-target picker on no-pre-selection while still allowing multi-beam casts. That commit appears to have lost the outer else's closing `}` while restructuring. CI's harness-ui workflow likely started running shortly after, so the bug landed already-red.
+**Description (cont 3):** Why not also fix the attack-toast tests this commit. `tests/harness_ui/test_attack_toast.py::test_pip_shortsword_strike_fires_roll_toast` / `test_tavik_warhammer_strike_fires_roll_toast` are still failing locally — but for an unrelated reason. The standalone sheet page (loaded by Playwright at `/campaign/1/character/{id}/sheet`) doesn't define `CAMPAIGN_ID`; the `.atk-strike` click handler at L 4862 bails immediately via `if (typeof CAMPAIGN_ID === 'undefined') return;`. `CAMPAIGN_ID` is set by the tabletop template when the sheet loads in the drawer iframe — but not on the standalone full-sheet page. This is a separate pre-existing test-environment mismatch dating to at least v2.7.x and is filed as a follow-up; the brace-fix alone takes CI from 8 failing to ~2 failing (the encounter-sim tests that cascaded from the parse error should also clear).
+**Description (cont 4):** Verification. (a) `curl /version` confirms v2.49.234 live locally. (b) Playwright direct re-test: `pageerrors=[]` on Pip's (char_id=1) + Tavik's (char_id=3) sheet loads. (c) `pytest tests/harness_ui/` locally goes from 4 failing / 5 passing to 2 failing / 7 passing — the 2 sheet-load tests now green; the 2 attack-toast tests still fail on the separate CAMPAIGN_ID issue. (d) `pytest tests/harness/` still 436/436 green. (e) CI re-run on this commit's push is the empirical signal we're really chasing.
+
+### Fixed
+- `app/templates/sheet_dnd5e.html` — added the missing `}` between source L 3141 and L 3142 to close the AoE if/else-if/else chain's outer `else` body (opened at L 2990's `} else {`). Pre-fix the sheet failed to parse in Chromium with `Unexpected token 'finally'`, breaking every Playwright sheet-load test. Includes an inline comment explaining the chain shape so the same close doesn't go missing again.
+- Reverted v2.49.233's `catch (_e) { console.error(...) }` band-aid at the spell-cast outer try — the brace fix above restores the bare-try shape's validity.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.49.234`.
+- `README.md` version badge → `2.49.234`.
+
+### Notes
+- **Pre-existing — not introduced by today's session.** The missing brace traces back through the v2.49.135 → v2.49.152 picker work.
+- **Filed for follow-up.** `test_pip_shortsword_strike_fires_roll_toast` + `test_tavik_warhammer_strike_fires_roll_toast` need either (a) the standalone sheet to define `CAMPAIGN_ID`, or (b) the tests to navigate to the tabletop and open the sheet via the drawer. Either fix is a separate commit.
+
+---
+
 ## [2.49.233] - 2026-05-25
 
 **Schema version:** 56
