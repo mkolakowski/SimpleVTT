@@ -172,7 +172,12 @@ async def test_attack_divine_smite_spends_slot(gm_client, gm_ws, roster):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["bonus_damage_label"] == "Divine Smite"
-    assert 2 <= data["bonus_damage_total"] <= 16  # 2d8 range
+    # 2d8 non-crit range = [2, 16]; on a crit `_double_dice_for_crit`
+    # widens the bonus to 4d8 → [4, 32]. v2.49.240 relaxed the cap
+    # after CI caught the crit case (assert 25 <= 16 fired in the
+    # 2026-05-25 run). Same shape as the v2.49.233 empowered + v2.49.235
+    # multi-target assertion fixes.
+    assert 2 <= data["bonus_damage_total"] <= 32
     assert data["slot_spent_class"] == "paladin"
     assert data["slot_spent_level"] == 1
 

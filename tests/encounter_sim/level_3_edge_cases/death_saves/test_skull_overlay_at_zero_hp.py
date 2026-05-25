@@ -94,15 +94,26 @@ def test_skull_overlay_renders_on_zero_hp_token(
         )
 
         canvas = CanvasReader(gm_page)
-        # Wait briefly so the canvas render loop has a frame to paint
-        # the skull AFTER the seeded battle is applied. Playwright's
-        # evaluate runs synchronously with the JS task queue; we
-        # yield briefly to give requestAnimationFrame a chance.
-        gm_page.wait_for_timeout(500)
+        # Wait for the canvas render loop to paint the skull AFTER the
+        # seeded battle is applied. v2.49.240: replaced the fixed 500ms
+        # wait with a poll-and-retry loop — CI runners are slower than
+        # local machines and the original wait was racing the canvas
+        # requestAnimationFrame on some runs (test went red 2026-05-25
+        # CI on v2.49.236 / v2.49.239 but passed locally + on v2.49.237).
+        # Polls every 250ms up to ~6s for the skull-glyph signature.
+        rgba = None
+        total = 0
+        for _ in range(24):
+            gm_page.wait_for_timeout(250)
+            rgba = canvas.pixel_at_token_center(token)
+            if rgba is None:
+                continue
+            r, g, b, _a = rgba
+            total = r + g + b
+            if total >= 700 or total <= 60:
+                break
 
-        rgba = canvas.pixel_at_token_center(token)
         assert rgba is not None, "canvas pixel sample returned None"
-
         r, g, b, a = rgba
         total = r + g + b
         # Skull-y signature: glyph fill (white, total ≥ 700) or

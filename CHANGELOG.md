@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.240] - 2026-05-25
+
+**Schema version:** 56
+**Commit summary:** **Fix two CI flakes surfaced by v2.49.239's CI run.** Same flake patterns we've already chased twice today: a damage assertion that didn't account for crit-doubled dice (`test_attack_divine_smite_spends_slot`) and a canvas-rendering test that used a too-tight fixed timeout (`test_skull_overlay_renders_on_zero_hp_token`). Both pass locally; both went red on the slower CI runner. Three fixes of this exact shape this session (v2.49.233 empowered, v2.49.235 multi-target, now v2.49.240 divine smite) suggests the wizard suite has a class of "single-fire, assert exact damage range, don't account for crit" tests that should get a future audit.
+**Description:** Two-edit commit. **(1)** `tests/harness/test_attack.py::test_attack_divine_smite_spends_slot` — `assert 2 <= total <= 16` (2d8 non-crit range) → `assert 2 <= total <= 32` (4d8 crit range), with an inline comment naming the pattern and pointing at the prior v2.49.233 / v2.49.235 sibling fixes. Lower bound stays 2 because on a min-2d8 roll (1+1) the doubled-dice min is still 2. **(2)** `tests/encounter_sim/level_3_edge_cases/death_saves/test_skull_overlay_at_zero_hp.py` — replaced the fixed `gm_page.wait_for_timeout(500)` before the canvas pixel sample with a `for _ in range(24): wait_for_timeout(250); check;` poll loop that bails as soon as the skull-glyph signature lands (or times out after ~6s). CI runners are slower than local; 500ms wasn't enough margin and the test went red on the 2026-05-25 CI runs after passing locally and on the v2.49.237 CI run.
+**Description (cont):** Why not skip the skull-overlay test (the easier path). The test was specifically written as the canary for v2.49.4's regression class — "broadcast set Pip's hp_current=0 but the canvas IIFE didn't draw the 💀 overlay" — and lives at `tests/encounter_sim/level_3_edge_cases/death_saves/`. Skipping it would lose that canary. The poll-and-retry rewrite preserves the assertion intent while tolerating CI's slower paint loop.
+**Description (cont 2):** Audit recommendation for a future commit. Search the wizard suite for `assert .* <= \d+` style damage-range assertions and verify each accounts for the crit-doubled max. Quick grep heuristic: any test that fires a single `/attack` or `/cast_spell` and asserts a fixed range. The three already-fixed tests this session were the obvious flake risks; there may be more lurking. Filed as an informal TODO — not adding to TODO.md because the audit is best done when next one surfaces in CI rather than upfront.
+**Description (cont 3):** Verification. (a) `curl /version` confirms v2.49.240 live. (b) Both fixed tests pass locally. (c) Full wizard suite + harness-ui still green. (d) CI re-run is the load-bearing signal.
+
+### Fixed
+- `tests/harness/test_attack.py::test_attack_divine_smite_spends_slot` — relax damage cap from 16 to 32 to accept crit-doubled 4d8.
+- `tests/encounter_sim/level_3_edge_cases/death_saves/test_skull_overlay_at_zero_hp.py::test_skull_overlay_renders_on_zero_hp_token` — poll-and-retry the canvas pixel sample (24 × 250ms = ~6s timeout) instead of a single 500ms wait. Preserves the v2.49.4 regression canary intent while tolerating CI's slower paint.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.49.240`.
+- `README.md` version badge → `2.49.240`.
+
+### Notes
+- **Pattern noted.** Third "test didn't account for crit" fix this session (after v2.49.233 + v2.49.235). Worth an audit pass when next one surfaces.
+
+---
+
 ## [2.49.239] - 2026-05-25
 
 **Schema version:** 56
