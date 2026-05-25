@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.50.0] - 2026-05-25
+
+**Schema version:** 57
+**Commit summary:** **Map grid now displays a LetterNumber coordinate system.** A thin themed gutter strip along the top + left edges of the map labels every column with a letter (A, B, …, Z, AA, AB, …) and every row with a number (1, 2, 3, …). Tokens, AoE markers, and spell-card target lists can now be referenced by fixed coordinates ("Pip is at G7", "drop a Fireball on M12") instead of relative descriptors. Drawn on the canvas in map coords so the labels pan + zoom with the map — the cell labeled G7 is always the same cell regardless of camera position.
+**Description:** New `drawGridCoords()` function in `app/static/tabletop.js`, called at the end of `render()` (after grid, tokens, skull overlays, breadcrumb trails) so the gutter always sits on top. Top + left strip painted in `rgba(0,0,0,0.55)` for legibility on busy maps; gutter / map separator stroked in `var(--accent)` (read at draw-time off `getComputedStyle(document.documentElement)['--accent']` so the labels match whichever theme the user has active — purple on dark, warm orange on sepia, green on forest, etc.). Labels rendered in accent fill, semi-bold 10–17 px depending on grid size.
+**Description (cont):** Column-label algorithm uses the standard spreadsheet base-26 alphabet so the system scales to any map size: 0→A, 25→Z, 26→AA, 27→AB, …, 701→ZZ, 702→AAA. Implemented as `_colLabel(idx)` with a do-until loop that prepends each letter; the off-by-one (`Math.floor(n / 26) - 1`) handles the spreadsheet quirk that "A" through "Z" don't roll into "AA" until index 26 (not 25). Row labels are simple 1-indexed integers.
+**Description (cont 2):** Gutter dimensions scale with `gridSize` — 16 px minimum, 28 px maximum, ~32% of cell size in between — so a small 35-px grid gets a compact strip and a large 140-px grid gets a roomier one. Labels are anchored at the center of each cell (with the strip's own width subtracted so column A actually sits over the first map cell rather than over the corner). Hex grids are intentionally skipped — hex coordinate systems are typically axial / offset (q,r) and don't map cleanly onto the Letter/Number Battleship convention; filed for a future hex-aware variant.
+**Description (cont 3):** Gating. The labels follow `showGrid` (the existing per-map "Show grid overlay" toggle from v2.4.0). If the GM has the grid hidden, labels are hidden too — they're a navigation aid for the grid, not a standalone overlay. Honors square-grid maps only; hex maps render the existing hex grid with no labels (no regression).
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.50.0` + schema `57` after `docker compose up -d --build app`. (b) Browser smoke check on the demo campaign map (square grid, gridSize 70): top strip shows A B C D…, left strip shows 1 2 3…, both panning/zooming with the map. (c) Theme verification — flipping `/settings/theme` to sepia and reloading the tabletop shows the strip border + label color flip to the warm-orange accent. (d) Existing 447 harness tests still green — no behavioral surface touched; pure canvas drawing.
+
+### Added
+- `drawGridCoords()` in `app/static/tabletop.js` — square-grid coordinate labels (LetterNumber) drawn at the top + left map edges. Theme-accent fill, translucent dark backing strip, base-26 column algorithm scales to any map width.
+- `_colLabel(idx)` helper — 0 → "A", 26 → "AA", 702 → "AAA" base-26 alphabet for column labels.
+- `_readThemeAccent()` helper — reads `--accent` off the document root at draw time so labels follow the active theme. Falls back to the original purple when the variable isn't resolvable.
+
+### Changed
+- `render()` now calls `drawGridCoords()` after every other draw pass when `showGrid` is on + grid type is square. Gutter strip sits on top of tokens so labels stay readable.
+- `app/version.py` `APP_VERSION` → `2.50.0` (MINOR — additive UX feature).
+- `README.md` version badge → `2.50.0`.
+
+### Notes
+- **MINOR bump per CLAUDE.md.** New backward-compatible UX feature with no schema change. The next bug fix or polish commit ships as `2.50.1`.
+- **Hex maps unchanged.** Adding labels for hex grids needs an axial-coordinate variant; filed for a follow-up when a hex map lands in the demo or test bed.
+- **Why on top of tokens.** Tokens parked on the edge of the map will pass under the strip. The trade-off was discussed during implementation: a token "behind" the coordinate strip is fine since the player can pan slightly to expose it; a token covering the labels would defeat the naming-system purpose.
+
+---
+
 ## [2.49.247] - 2026-05-25
 
 **Schema version:** 57

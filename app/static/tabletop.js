@@ -158,6 +158,96 @@
         ctx.stroke();
     }
 
+    /* v2.50.0 — grid coordinate labels (LetterNumber). Thin gutter
+       strip along the top + left edges of the map drawn AFTER the
+       grid + tokens so labels sit on top. Columns are letters
+       (A, B, …, Z, AA, AB, …); rows are 1-indexed integers. Square
+       grids only — hex coordinate systems are typically axial /
+       offset coordinates (q,r) that don't map onto the same
+       Letter/Number convention.
+
+       Style: theme accent color for the glyph fill + a translucent
+       dark backing strip (~24 px) so the labels stay legible on
+       busy / light maps. The strip pans + zooms with the map (it's
+       drawn in map coords) so "G7" always points at the same
+       logical cell. */
+    function _colLabel(idx) {
+        // 0 → A, 25 → Z, 26 → AA, 27 → AB, …
+        let s = '';
+        let n = idx;
+        while (n >= 0) {
+            s = String.fromCharCode(65 + (n % 26)) + s;
+            n = Math.floor(n / 26) - 1;
+        }
+        return s;
+    }
+    function _readThemeAccent() {
+        // Read --accent off :root so the labels follow whichever
+        // theme the user has active (dark = purple, sepia = warm
+        // orange, forest = green, …). Falls back to the v1 purple
+        // if the variable isn't resolvable (e.g. CSS not loaded yet).
+        try {
+            const v = getComputedStyle(document.documentElement)
+                .getPropertyValue('--accent').trim();
+            if (v) return v;
+        } catch (_) {}
+        return '#a78bfa';
+    }
+    function drawGridCoords() {
+        if (gridType !== 'square') return;
+        const cols = Math.ceil(MAP_W / gridSize);
+        const rows = Math.ceil(MAP_H / gridSize);
+        if (cols <= 0 || rows <= 0) return;
+        const accent = _readThemeAccent();
+        // Strip height scales with the grid so it stays visually
+        // proportional on small (35 px) and large (140 px) grids.
+        const stripH = Math.max(16, Math.min(28, Math.round(gridSize * 0.32)));
+        const fontSize = Math.max(10, Math.round(stripH * 0.62));
+
+        ctx.save();
+        ctx.font = `600 ${fontSize}px system-ui, -apple-system, sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Translucent dark backing strip behind the labels — wider
+        // alpha on the strip than the cards (0.55) since the labels
+        // need to be legible against busy map backgrounds.
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        ctx.fillRect(0, 0, MAP_W, stripH);        // top row
+        ctx.fillRect(0, 0, stripH, MAP_H);        // left column
+
+        // Theme-accent border line separating the gutter from the
+        // map body. Two strokes (top horizontal + left vertical).
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, stripH + 0.5);
+        ctx.lineTo(MAP_W, stripH + 0.5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(stripH + 0.5, 0);
+        ctx.lineTo(stripH + 0.5, MAP_H);
+        ctx.stroke();
+
+        // Column labels — letters across the top.
+        ctx.fillStyle = accent;
+        for (let c = 0; c < cols; c++) {
+            // Anchor each label at the center of the cell column,
+            // offset by the row label gutter so col-A sits over the
+            // first map cell rather than over the corner.
+            const x = stripH + c * gridSize + gridSize / 2;
+            if (x > MAP_W) break;
+            ctx.fillText(_colLabel(c), x, stripH / 2);
+        }
+        // Row labels — numbers down the left.
+        for (let r = 0; r < rows; r++) {
+            const y = stripH + r * gridSize + gridSize / 2;
+            if (y > MAP_H) break;
+            ctx.fillText(String(r + 1), stripH / 2, y);
+        }
+        ctx.restore();
+    }
+
     const _tokenImgCache = {};
 
     function _loadTokenImage(url) {
@@ -2472,6 +2562,13 @@
                 ctx.restore();
             }
         }
+
+        // v2.50.0 — grid coordinate labels drawn LAST so the gutter
+        // sits on top of every other rendered element. Tokens sliding
+        // along the map edge will pass under the strip, which is
+        // intentional — the labels need to stay visible to fulfill
+        // their "establish a fixed naming system" role.
+        if (showGrid) drawGridCoords();
 
         _updateGifOverlay();
     }
