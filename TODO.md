@@ -251,6 +251,16 @@ Output: a `CREDITS.md` file at the repo root listing every third-party asset, it
 
 ## Test Infrastructure
 
+### Install emoji font in CI for the skull-overlay test (or rework the assertion)
+**Filed 2026-05-25 (v2.49.241).** `tests/encounter_sim/level_3_edge_cases/death_saves/test_skull_overlay_at_zero_hp.py::test_skull_overlay_renders_on_zero_hp_token` is skipped pending font diagnosis. CI's Playwright Chromium consistently samples `[66, 66, 66, 255]` (gray tofu) at the token center — the ☠ emoji isn't rendering because the runner image lacks an emoji font. Locally (macOS) the skull renders fine.
+
+**Fix paths:**
+1. Add `fonts-noto-color-emoji` (or equivalent) install step to the Playwright job in `.github/workflows/test-harness.yml` before `playwright install --with-deps chromium`. Quick win — just a `sudo apt-get install -y fonts-noto-color-emoji` line.
+2. Change the test's assertion from "sample a canvas pixel" to "check window.battle + a draw-fired flag." Decouples the test from font availability entirely.
+3. Rewrite the skull overlay itself to use an SVG/HTML element on top of the canvas. Most invasive but easiest to test against.
+
+Path (1) is the smallest commit; path (2) is the most resilient long-term. The v2.49.4 regression class this test catches IS still covered locally (where macOS has the font).
+
 ### Re-tokenize Garrik Ironside (or change tokenized-six lineup to include a Fighter)
 **Filed 2026-05-25 (v2.49.236 CI cleanup).** Two encounter-sim Playwright tests are skipped pending this fix:
 - `tests/encounter_sim/level_2_encounter/test_tavern_brawl_baseline.py::test_tavern_brawl_3_pcs_3_npcs_round_cycle`

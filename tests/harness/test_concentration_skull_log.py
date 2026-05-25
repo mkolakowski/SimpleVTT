@@ -159,6 +159,14 @@ async def test_failed_con_save_still_emits_heart_log(gm_client, gm_ws, roster):
     saw_heart_log = False
     for _ in range(15):
         # Top Rowan up + reinstall the mark each loop iteration.
+        # v2.49.241: also long-rest each iteration so L1 slots refill.
+        # Pre-fix the loop drained Rowan's 4 L1 slots and the 5th cast
+        # 409'd with no_slot if the CON save passed ≥4× in a row (low-
+        # probability flake that finally bit the 2026-05-25 CI run).
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/rest",
+            json={"type": "long"},
+        )
         await gm_client.patch(
             f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/sheet-fields",
             json={"hp": {"current": 44}},
