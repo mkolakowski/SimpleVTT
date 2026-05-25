@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.238] - 2026-05-25
+
+**Schema version:** 56
+**Commit summary:** **Reckless Attack (Barbarian Lv 2+) shipped end-to-end.** New `/use_reckless_attack` endpoint installs a 1-round self-buff with both RAW effects: `effects.advantage_on=['str_attack']` (upside: advantage on barbarian's own STR melee attacks) and `effects.incoming_attacks_have_advantage=True` (downside: attackers get advantage against the reckless barbarian). Phase B integration extends the existing rage / dodging advantage layering at `use_attack` to a three-source cancel-on-conflict rule. New `_target_grants_advantage_to_attackers` helper mirrors `_target_has_dodging` for the downside; generalized `_attacker_has_str_attack_advantage` (formerly `_has_rage_str_advantage`) picks up the upside for any buff with the right effect flag — not just rage. Krieger's existing `reckless-attack` class_features entry now actually fires.
+**Description:** Eight-edit commit. **(1)** `app/routes/tabletop_routes.py` — rename `_has_rage_str_advantage` → `_attacker_has_str_attack_advantage` and remove the `key == "rage"` hardcode. The helper now iterates ALL attacker buffs and checks `effects.advantage_on` for `str_attack`. Same dict-shape guard pattern as v2.49.230 (skip non-dict effects to handle the v2.49.61 string-list condition buffs). **(2)** Same file — new `_target_grants_advantage_to_attackers` helper near `_target_has_dodging`. Same shape: walks the hub battle's combatants, finds the target, checks each buff's `effects.incoming_attacks_have_advantage`. **(3)** `use_attack` at line ~16566 — adds `target_grants_advantage = _target_grants_advantage_to_attackers(...)` alongside `target_dodging`. The advantage/disadvantage layering refactors to `has_adv = rage_advantage or target_grants_advantage`, then a clean three-case cancel-or-apply chain. Both bonused-d20 and flat-d20 branches updated. **(4)** `use_npc_cast_spell` — same helper call + advantage layering so an NPC attack-roll spell against a reckless PC gets advantage. **(5)** New endpoint `POST /api/campaign/{cid}/use_reckless_attack` near `/use_rage`. Validates class==barbarian + level≥2 (via `_barbarian_level_from_sheet`). No counter cost, no Ki cost, no action-chip mark (slot:'free' per the existing `_FEATURE_ECONOMY['reckless-attack']` curation). Installs the buff with the two effect flags, broadcasts `feature_used` + `buff_update`. **(6)** `app/templates/sheet_dnd5e.html` `_bindUseButtons` — `isRecklessAttack` branch added to the cf-use routing chain alongside `isRage`. Body shape `{character_id, override}`. Success toast reads "⚔ Reckless Attack: advantage on STR attacks until end of turn; attackers have advantage against you until your next turn." **(7)** `tests/harness/test_use_reckless_attack.py` — 4 tests: happy path asserts `buff_installed=True` + buff_update has both effect flags + feature_used source matches; wrong_class (Pip = Rogue → 409); missing_character_id (400); Phase-B integration test seeds Krieger with the pre-installed buff and verifies Pip's Shortsword attack rolls `2d20kh1` with `roll_state_applied` mentioning reckless. **(8)** Plan-doc + harness-coverage update.
+**Description (cont):** RAW deviations + design choices. (a) **Reckless Attack lasts 1 round.** RAW: "advantage on melee weapon attack rolls using Strength during this turn, but attack rolls against you have advantage until your next turn." The two halves have slightly different durations — the upside lasts "this turn" (i.e., until end of barbarian's current turn), the downside lasts "until your next turn" (one full round). v1 model: single 1-round buff carries both flags; durationally equivalent to the downside half. The upside lingers slightly longer than RAW but only matters if the barbarian gets a reaction attack between her own turns (rare, and the deviation is harmless). (b) **The Phase-B integration covers PC attackers + NPC casters, but not /npc_attack.** The plain weapon-attack endpoint for NPCs (`/npc_attack`) doesn't currently check `_target_has_dodging` or any advantage-source helper — it's a simpler attack flow. Wiring reckless into /npc_attack is a follow-up; for v1 a Bandit punching a reckless PC won't get advantage. The PC vs reckless-PC case (use_attack) and the NPC-spell vs reckless-PC case (use_npc_cast_spell) DO honor it. (c) **The generalize rename is a behavior change for any future feature** that installs a buff with `effects.advantage_on=['str_attack']`. Today only Rage and Reckless Attack do that; no other buffs use the str_attack flag in the codebase.
+**Description (cont 2):** Stacking with Rage. A raging-AND-reckless barbarian gets advantage from BOTH sources — the helper short-circuits on the first match, so advantage applies once (idempotent). The cancel logic treats `has_adv = rage or reckless_target` as a single advantage source; combined with `target_dodging` it cancels. The label string distinguishes which source fired (`advantage_rage` vs `advantage_reckless`) for debugging, but the dice math is identical.
+**Description (cont 3):** Verification. (a) `curl /version` confirms v2.49.238 live. (b) `pytest tests/harness/test_use_reckless_attack.py` — all 4 tests pass. (c) Existing rage / dodging / attack tests still pass (20 Monk/Barbarian/Fighter tests run together — all green). (d) The wizard suite 440/440 + harness-ui 13/13. (e) CI re-run is the load-bearing signal.
+
+### Added
+- `POST /api/campaign/{campaign_id}/use_reckless_attack` — Barbarian Lv 2+, no counter cost, installs the reckless-attack self-buff.
+- `_target_grants_advantage_to_attackers(campaign_id, target_combatant_id)` helper in `app/routes/tabletop_routes.py`.
+- `tests/harness/test_use_reckless_attack.py` — 4-test harness coverage.
+
+### Changed
+- `_has_rage_str_advantage` → `_attacker_has_str_attack_advantage` (generalized to any attacker buff with `advantage_on` including `str_attack`). Caller at `use_attack` updated.
+- `use_attack` advantage/disadvantage layering — three-source cancel-on-conflict rule. Both bonused and flat-d20 branches.
+- `use_npc_cast_spell` — same advantage layering extended for NPC attack-roll spells.
+- `app/templates/sheet_dnd5e.html` `_bindUseButtons` — `isRecklessAttack` branch routes to `use_reckless_attack`.
+- `docs/plans/class-content-status.md` — Barbarian Lv 2 Reckless Attack ⚪ → ✅.
+- `docs/test-harness-coverage.md` — new test section + total-test-count 436 → 440.
+- `app/version.py` `APP_VERSION` → `2.49.238`.
+- `README.md` version badge → `2.49.238`.
+
+### Notes
+- **Second Barbarian feature wired** (after Rage v2.19.0).
+- **Open follow-up.** `/npc_attack` doesn't honor the new helper yet — a Bandit attacking a reckless PC won't get advantage. PC `/attack` and NPC `/npc_cast_spell` do honor it.
+
+---
+
 ## [2.49.237] - 2026-05-25
 
 **Schema version:** 56

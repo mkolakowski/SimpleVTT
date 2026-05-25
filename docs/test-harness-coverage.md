@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 436 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.49.237, 2026-05-25).
+**Total tests:** 440 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.49.238, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -659,6 +659,16 @@ v2.49.227 — Monk subclass feature `POST /use_wholeness_of_body` (Way of the Op
 | `test_wholeness_of_body_out_of_uses` | Drain the one use; second call → 409 `error=out_of_uses` with `label="Wholeness of Body"`. |
 | `test_wholeness_of_body_wrong_class` | Pip (Rogue) → 409 `error=wrong_class`, `expected=monk`, `got=rogue`. |
 | `test_wholeness_of_body_missing_character_id` | Empty body → 400. |
+
+### `test_use_reckless_attack.py`
+v2.49.238 — Barbarian class feature `POST /use_reckless_attack` (Lv 2+). No counter cost; installs a 1-round self-buff with `effects.advantage_on=['str_attack']` + `effects.incoming_attacks_have_advantage=True`. Phase-B integration: the new `_target_grants_advantage_to_attackers` helper exposes the downside to `use_attack` so attacks AGAINST a reckless barbarian roll `2d20kh1`. The upside (advantage on the barbarian's own STR melee attacks) folds into the generalized `_attacker_has_str_attack_advantage` (formerly `_has_rage_str_advantage`).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_reckless_attack_happy_path` | Krieger → 200, `buff_installed=True`, `duration_rounds=1`. `buff_update` broadcast carries `reckless-attack` key with both effect flags; `feature_used` source=reckless-attack. |
+| `test_reckless_attack_wrong_class` | Pip (Rogue) → 409 `error=wrong_class`, `expected=barbarian`. |
+| `test_reckless_attack_missing_character_id` | Empty body → 400. |
+| `test_attack_against_reckless_target_gets_advantage` | Seeds Krieger with the reckless-attack buff pre-installed; Pip's Shortsword attack against him rolls `2d20kh1` (breakdown match) and `roll_state_applied` mentions reckless. |
 
 ### `test_use_open_hand_technique.py`
 v2.49.57 — Monk subclass feature `POST /use_open_hand_technique` (Way of the Open Hand, Lv 3+). Three modes: `prone` (DEX save → Prone via new `open-hand-prone` map entry), `push` (STR save → response carries `push_authorized` for the GM to drag the token; no buff), `no_reactions` (no save → inline install of `reaction-denied` buff). No ki cost — RAW the Flurry of Blows already paid. Same trust-the-caller convention as Stunning Strike for the "must follow a Flurry hit" gate.

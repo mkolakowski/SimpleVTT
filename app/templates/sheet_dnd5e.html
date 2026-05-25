@@ -5322,6 +5322,11 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // Phase B will read its effects to apply damage /
                     // advantage / resistance at roll time.
                     const isRage = featureKey === 'rage';
+                    // v2.49.238: Reckless Attack (Barbarian Lv 2+).
+                    // No counter cost; installs a 1-round self-buff
+                    // granting advantage on STR melee attacks AND
+                    // making incoming attacks have advantage.
+                    const isRecklessAttack = featureKey === 'reckless-attack';
                     // v2.49.113: Monk Ki spend-options route to their
                     // dedicated endpoints introduced in v2.49.112. Both
                     // install a self-buff via `_install_buff`, decrement
@@ -5495,6 +5500,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                    : isSecondWind ? 'use_second_wind'
                                    : isActionSurge ? 'use_action_surge'
                                    : isRage ? 'use_rage'
+                                   : isRecklessAttack ? 'use_reckless_attack'
                                    : isPatientDefense ? 'use_patient_defense'
                                    : isStepOfTheWind ? 'use_step_of_the_wind'
                                    : isFlurryOfBlows ? 'use_flurry_of_blows'
@@ -5521,6 +5527,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             } : isActionSurge ? {
                                 character_id: MY_CHAR_ID,
                             } : isRage ? {
+                                character_id: MY_CHAR_ID,
+                                override: !!override,
+                            } : isRecklessAttack ? {
                                 character_id: MY_CHAR_ID,
                                 override: !!override,
                             } : isPatientDefense ? {
@@ -5608,6 +5617,8 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             window.showToast(`⚡ Action Surge: action chip refunded — take another action this turn.`, 'info');
                         } else if (isRage) {
                             window.showToast(`🦬 Rage activated: +${data.damage_bonus} dmg, ${data.duration_rounds} rounds (${data.remaining}/${data.max} uses left)`, 'info');
+                        } else if (isRecklessAttack) {
+                            window.showToast(`⚔ Reckless Attack: advantage on STR attacks until end of turn; attackers have advantage against you until your next turn.`, 'info');
                         } else if (isMetamagicEmpowered) {
                             window.showToast(`✨ Empowered Spell armed (1 SP spent — reroll up to ${data.rerolls_available} lowest dice on your next damaging spell). ${data.sp_remaining}/${data.sp_max} SP left.`, 'info');
                         } else {

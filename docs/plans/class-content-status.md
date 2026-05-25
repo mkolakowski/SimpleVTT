@@ -128,7 +128,7 @@ The `### Header` names below come from the `features` field of each JSON.
 |---|---|---|---|
 | 1 | Rage | 🟢 | Resource counter exists (`key: 'rage'`); damage bonus + advantage / resistance side effects not auto-applied |
 | 1 | Unarmored Defense | 🟡 | Description visible; AC engine doesn't auto-detect this fighting style — player sets `base_ac` manually |
-| 2 | Reckless Attack | ⚪ | |
+| 2 | Reckless Attack | ✅ | v2.49.238 — `/use_reckless_attack` endpoint installs a 1-round self-buff with `effects.advantage_on=['str_attack']` + `effects.incoming_attacks_have_advantage=True`. Phase-B helper `_attacker_has_str_attack_advantage` (generalized from rage-only check) picks up the upside; new `_target_grants_advantage_to_attackers` picks up the downside. Krieger (Lv 5 Berserker) is the demo fixture; harness in `test_use_reckless_attack.py`. |
 | 2 | Danger Sense | ⚪ | |
 | 3 | Primal Path | ✅ | Subclass system shipped — see Subclasses table for per-path status. Path of the Berserker has features JSON; other paths fall back to descriptive. |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | Standard ASI flow handles every class |

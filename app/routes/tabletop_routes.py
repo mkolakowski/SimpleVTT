@@ -10775,23 +10775,70 @@ async def _mark_colossus_slayer_used(
     hub.set_battle(campaign_id, state)
 
 
-def _has_rage_str_advantage(
+def _attacker_has_str_attack_advantage(
     campaign_id: int, attacker_char_id: int, damage_type: str,
 ) -> bool:
-    """Return True if the attacker has Rage active AND the attack
-    qualifies as STR-based (physical damage type). Used to apply
-    advantage on the d20 attack roll.
+    """v2.49.238: generalized from the original v2.20.0 rage-only
+    helper. Returns True if the attacker has ANY buff with
+    ``effects.advantage_on`` containing ``"str_attack"`` AND the
+    attack qualifies as STR-based (physical damage type). Used to
+    apply advantage on the d20 attack roll.
+
+    Pre-2.49.238 this helper hardcoded ``key == "rage"``. Reckless
+    Attack (Barbarian Lv 2+, v2.49.238) installs a separate
+    ``reckless-attack`` buff with the same ``advantage_on: ["str_attack"]``
+    effect, and the generalized iteration picks it up uniformly.
+    Other future buffs (Sneak Attack rider, Hunter's Mark, etc.)
+    that grant str-attack advantage will also fold in without
+    additional plumbing.
     """
     damage_type_l = (damage_type or "").strip().lower()
     if damage_type_l not in _PHYSICAL_DAMAGE_TYPES:
         return False
     for b in _get_buffs(campaign_id, attacker_char_id):
-        if (b or {}).get("key") != "rage":
+        if not isinstance(b, dict):
             continue
-        effects = (b or {}).get("effects") or {}
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
         adv_list = effects.get("advantage_on") or []
         if "str_attack" in adv_list:
             return True
+    return False
+
+
+def _target_grants_advantage_to_attackers(
+    campaign_id: int, target_combatant_id: str | None,
+) -> bool:
+    """v2.49.238 — Phase B integration for Reckless Attack (Barbarian
+    Lv 2+). Returns True if the target combatant has a buff with
+    ``effects.incoming_attacks_have_advantage: True`` active. The
+    attack-flow caller uses this to grant the attacker advantage on
+    the d20 attack roll (RAW Reckless Attack: "attack rolls against
+    you have advantage until your next turn").
+
+    Same shape as ``_target_has_dodging`` but opposite sign — that
+    one imposes DISadvantage on attackers; this one grants ADvantage.
+    Both can fire on the same target (a dodging-AND-reckless target
+    is incoherent in RAW but the cancel logic handles it correctly).
+    """
+    if not target_combatant_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("id") != target_combatant_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            effects = b.get("effects")
+            if not isinstance(effects, dict):
+                continue
+            if effects.get("incoming_attacks_have_advantage") is True:
+                return True
+        return False
     return False
 
 
@@ -12184,6 +12231,118 @@ async def use_rage(
         "max": rage_max,
         "damage_bonus": damage_bonus,
         "duration_rounds": 10,
+        "buff_installed": installed,
+    }
+
+
+# ----------- API: Reckless Attack (Barbarian Lv 2+) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_reckless_attack")
+async def use_reckless_attack(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.49.238: install the Reckless Attack self-buff. RAW (PHB
+    p.49): "Starting at 2nd level, when you make your first attack
+    on your turn, you can decide to attack recklessly. Doing so
+    gives you advantage on melee weapon attack rolls using Strength
+    during this turn, but attack rolls against you have advantage
+    until your next turn."
+
+    Body: ``{character_id, override?}``.
+
+    No Ki / counter cost; ``_FEATURE_ECONOMY['reckless-attack'].slot
+    = 'free'`` (the per-attack decision doesn't burn an action chip).
+    The buff lasts 1 round and carries two effects: the upside
+    (``advantage_on: ['str_attack']`` — picked up by
+    ``_attacker_has_str_attack_advantage`` to grant the rager-style
+    advantage on the d20) and the downside
+    (``incoming_attacks_have_advantage: True`` — picked up by
+    ``_target_grants_advantage_to_attackers`` so attacks AGAINST
+    the reckless barbarian get advantage on their d20).
+
+    No save / damage / target component — this is purely a
+    state-flag toggle, similar in shape to Patient Defense
+    (v2.49.112) but stamped on the attacker instead of the target.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Barbarian character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    # Class + level validation. Reckless Attack unlocks at Barbarian Lv 2.
+    cls = (sheet.get("class") or "").lower()
+    if cls != "barbarian":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "barbarian", "got": cls or "",
+        })
+    barb_lv = _barbarian_level_from_sheet(sheet)
+    if barb_lv < 2:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 2, "got": barb_lv,
+        })
+
+    # No action-economy gate — slot:'free' per the curated table. The
+    # per-attack decision is the only "cost" RAW; the buff lives for
+    # 1 round and self-expires when the barbarian's next turn starts.
+    buff = {
+        "key": "reckless-attack",
+        "name": "Reckless Attack",
+        "icon": "⚔",
+        "source_caster_id": None,
+        "target_combatant_id": None,
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "effects": {
+            "advantage_on": ["str_attack"],
+            "incoming_attacks_have_advantage": True,
+        },
+        "desc": (
+            "Advantage on melee STR attacks this turn; attack rolls "
+            "against you have advantage until your next turn."
+        ),
+    }
+    installed = await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
+    # Broadcasts.
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "⚔ Reckless Attack",
+            "feature_desc": (
+                "Free — advantage on STR melee attacks until end of turn; "
+                "incoming attacks have advantage until start of next turn."
+            ),
+            "source": "reckless-attack",
+            "duration_rounds": 1,
+            "over_budget": False,
+            "over_budget_slot": "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "duration_rounds": 1,
         "buff_installed": installed,
     }
 
@@ -16523,7 +16682,7 @@ async def use_attack(
     # advantage; advantage + disadvantage = even per RAW, which
     # ``_apply_roll_state`` already handles when both directions
     # are stamped).
-    rage_advantage = _has_rage_str_advantage(campaign_id, char.id, damage_type)
+    rage_advantage = _attacker_has_str_attack_advantage(campaign_id, char.id, damage_type)
     # v2.49.115 Phase B: target's Patient Defense buff (v2.49.112)
     # → disadvantage on the d20 attack roll. RAW Dodge interaction
     # with Rage: advantage + disadvantage cancel to a straight roll
@@ -16531,6 +16690,13 @@ async def use_attack(
     # and disadvantage, you are considered to have neither of them").
     # Handled in the dice-expression patch below.
     target_dodging = _target_has_dodging(campaign_id, target_combatant_id)
+    # v2.49.238 Phase B: target's Reckless Attack buff grants the
+    # attacker advantage on the d20. Combines with rage_advantage as
+    # an OR (both fire? still one advantage source). Combines with
+    # target_dodging as a cancel (advantage + disadvantage = none).
+    target_grants_advantage = _target_grants_advantage_to_attackers(
+        campaign_id, target_combatant_id,
+    )
 
     # Build the to-hit expression. Accept "+5", "5", "1d4+3" etc.
     attack_total = None
@@ -16551,17 +16717,20 @@ async def use_attack(
         )
         # v2.49.115 Phase B: layer adv/dis from buff sources. RAW PHB
         # p.173 — if advantage AND disadvantage both apply, the roll
-        # is straight (canceled). We resolve the four cases against
-        # the pre-existing kh1/kl1 state from _apply_roll_state:
-        #   (a) Rage adv + Dodging dis     → cancel (straight 1d20)
-        #   (b) Rage adv alone             → 2d20kh1
-        #   (c) Dodging dis alone          → 2d20kl1
-        #   (d) neither                    → leave atk_expr alone
-        if rage_advantage and target_dodging:
-            attack_roll_state_applied = "canceled_rage_vs_dodging"
-        elif rage_advantage and "kh1" not in atk_expr and "kl1" not in atk_expr:
+        # is straight (canceled). v2.49.238: third source —
+        # Reckless Attack on the target — folds in alongside Rage as
+        # an advantage source. The combined OR keeps the cancel
+        # logic clean: any-advantage + any-disadvantage = straight.
+        has_adv = rage_advantage or target_grants_advantage
+        adv_label = (
+            "rage" if rage_advantage else
+            "reckless" if target_grants_advantage else ""
+        )
+        if has_adv and target_dodging:
+            attack_roll_state_applied = f"canceled_{adv_label}_vs_dodging"
+        elif has_adv and "kh1" not in atk_expr and "kl1" not in atk_expr:
             atk_expr = atk_expr.replace("1d20", "2d20kh1", 1)
-            attack_roll_state_applied = "advantage_rage"
+            attack_roll_state_applied = f"advantage_{adv_label}"
         elif target_dodging and "kh1" not in atk_expr and "kl1" not in atk_expr:
             atk_expr = atk_expr.replace("1d20", "2d20kl1", 1)
             attack_roll_state_applied = "disadvantage_dodging"
@@ -16578,11 +16747,16 @@ async def use_attack(
             "1d20", (char.sheet or {}).get("roll_state"),
         )
         # Same Phase B adv/dis layering as the bonused branch above.
-        if rage_advantage and target_dodging:
-            attack_roll_state_applied = "canceled_rage_vs_dodging"
-        elif rage_advantage and "kh1" not in atk_expr and "kl1" not in atk_expr:
+        has_adv = rage_advantage or target_grants_advantage
+        adv_label = (
+            "rage" if rage_advantage else
+            "reckless" if target_grants_advantage else ""
+        )
+        if has_adv and target_dodging:
+            attack_roll_state_applied = f"canceled_{adv_label}_vs_dodging"
+        elif has_adv and "kh1" not in atk_expr and "kl1" not in atk_expr:
             atk_expr = atk_expr.replace("1d20", "2d20kh1", 1)
-            attack_roll_state_applied = "advantage_rage"
+            attack_roll_state_applied = f"advantage_{adv_label}"
         elif target_dodging and "kh1" not in atk_expr and "kl1" not in atk_expr:
             atk_expr = atk_expr.replace("1d20", "2d20kl1", 1)
             attack_roll_state_applied = "disadvantage_dodging"
@@ -17191,6 +17365,13 @@ async def use_npc_attack(
 
     # Dodging disadvantage on the target — same buff lookup PCs honor.
     target_dodging = _target_has_dodging(campaign_id, target_combatant_id)
+    # v2.49.238 Phase B: target's Reckless Attack buff grants the
+    # attacker advantage on the d20. Combines with rage_advantage as
+    # an OR (both fire? still one advantage source). Combines with
+    # target_dodging as a cancel (advantage + disadvantage = none).
+    target_grants_advantage = _target_grants_advantage_to_attackers(
+        campaign_id, target_combatant_id,
+    )
 
     # Build the d20 attack expression. Accept "+5", "5", or "" (flat).
     attack_total = None
@@ -17205,7 +17386,15 @@ async def use_npc_attack(
         atk_expr = "1d20" + bonus_expr
     else:
         atk_expr = "1d20"
-    if target_dodging:
+    # v2.49.238 — NPC casters honor target's Reckless Attack buff too:
+    # an NPC firing Inflict Wounds at a reckless PC gets advantage.
+    # Same cancel-on-both-sources rule as use_attack.
+    if target_grants_advantage and target_dodging:
+        attack_roll_state_applied = "canceled_reckless_vs_dodging"
+    elif target_grants_advantage:
+        atk_expr = atk_expr.replace("1d20", "2d20kh1", 1)
+        attack_roll_state_applied = "advantage_reckless"
+    elif target_dodging:
         atk_expr = atk_expr.replace("1d20", "2d20kl1", 1)
         attack_roll_state_applied = "disadvantage_dodging"
     try:
