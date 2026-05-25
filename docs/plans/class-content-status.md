@@ -134,7 +134,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | Standard ASI flow handles every class |
 | 5 | Extra Attack | ✅ | RAW supported — click the attack button twice within your action; the action-economy chip is per-action (not per-attack) so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed as a future nice-to-have. |
 | 5 | Fast Movement | ✅ | v2.54.1 — pure-descriptive. +10 ft speed while not in heavy armor. Already baked into Krieger's listed sheet speed (40 ft = 30 base + 10 Fast Movement). Added a descriptive `class_features` row on `_barbarian_sheet`. No mechanic required RAW — sheet speed is GM-set / sheet-authoritative; the bonus is already reflected. |
-| 7 | Feral Instinct | ⚪ | |
+| 7 | Feral Instinct | ✅ | v2.57.0 — pure-descriptive. Advantage on initiative rolls + can act normally on a surprised round if you rage on your turn. Initiative is rolled out-of-band in v1 (GM manages init order); the bump surfaces the feature as a sheet `class_features` row so the player remembers to flag it manually. Krieger Lv 5 → 7 bump landed alongside Mindless Rage (Berserker Lv 6). |
 | 9 / 13 / 17 | Brutal Critical | ⚪ | |
 | 11 | Relentless Rage | ⚪ | |
 | 15 | Persistent Rage | ⚪ | |
@@ -316,7 +316,7 @@ have features JSON.
 
 | Class | Subclass | Features JSON | Spell-grants curated | Status | Notes |
 |---|---|---|---|---|---|
-| Barbarian | Path of the Berserker | ✅ | n/a | 🟡 | Frenzy / Mindless Rage / Intimidating Presence / Retaliation — all descriptive |
+| Barbarian | Path of the Berserker | ✅ | n/a | 🟢 | **Mindless Rage ✅** (v2.57.0 — `_pc_has_rage_active_buff` + `_broadcast_mindless_rage`; condition-install gate at `/roll_request/{id}/respond` short-circuits charmed/frightened install when target has active rage buff). Frenzy / Intimidating Presence / Retaliation still descriptive. |
 | Bard | College of Lore | ✅ | n/a | 🟢 | **Cutting Words ✅** (v2.15.7 endpoint + v2.15.10 target picker — Lyra at Lv 6 is the test bed). **Additional Magical Secrets ✅** (v2.15.0 spell-browser toggle + v2.15.1 Lyra's 2 picks). Peerless Skill (Lv 14) still descriptive — needs a Lv 14+ Bard fixture. |
 | Cleric | Knowledge Domain | ❌ | ✅ | 🟡 | Spell grants work via picker; no features JSON |
 | Cleric | **Life Domain** | ✅ | ✅ | 🟢 | Domain spells auto-grant (demo Tavik post-v2.4.15); Channel Divinity: Preserve Life is data only |
@@ -1637,11 +1637,19 @@ implementation hooks for the descriptive 🟡 / 🟢 entries that are
 / Order etc.) need no further work beyond the curated spell tables
 already shipped.
 
-- **Path of the Berserker (Frenzy / Mindless Rage / Intimidating
-  Presence / Retaliation)** — M total. Frenzy: extend Rage to grant
-  a bonus-action melee attack at the cost of exhaustion at Rage end.
-  Mindless Rage: passive immunity to charmed/frightened while raging
-  (D). Intimidating Presence: action target picker + Wis-save broadcast
+- **Path of the Berserker (Frenzy / Mindless Rage ✅ / Intimidating
+  Presence / Retaliation)** — Mindless Rage shipped v2.57.0. Krieger
+  Lv 5 → 7. `_pc_has_rage_active_buff(campaign_id, char_id)` reads the
+  active battle's combatant buff list for the rager. The condition-
+  install gate at `/roll_request/{id}/respond` (sibling of the v2.55.0
+  AoD gate) fires when (a) the save failed, (b) the cond key is
+  charmed OR frightened, (c) the rager has an active rage buff —
+  short-circuits the install, emits `feature_used(source=mindless-
+  rage)`. v1 simplification: doesn't auto-suspend pre-existing
+  charmed/frightened buffs on entering rage (RAW second sentence) —
+  filed for follow-up. Remaining: Frenzy: extend Rage to grant a
+  bonus-action melee attack at the cost of exhaustion at Rage end.
+  Intimidating Presence: action target picker + Wis-save broadcast
   (uses CD picker primitive). Retaliation: reaction-on-damage (B +
   damage-take hook).
 - **College of Lore (Cutting Words / Additional Magical Secrets / Peerless

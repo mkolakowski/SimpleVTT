@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 470 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.56.0, 2026-05-25).
+**Total tests:** 473 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.57.0, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -698,6 +698,15 @@ v2.55.0 — Paladin Oath of Devotion Lv 7+ Aura of Devotion. First **condition-i
 | `test_aura_of_devotion_blocks_charmed_install` | Caelan + Krieger in init; Lyra casts Suggestion at Krieger; loop until save fails → response `auto_buff_installed=""`, Krieger's buff list has no `charmed` entry, broadcast names Caelan. |
 | `test_charmed_installs_when_paladin_absent` | Control: Caelan NOT in init → failed save installs Charmed normally; no AoD broadcast. |
 | `test_aod_skips_non_charm_conditions` | Caelan in init + Tavik casts Hold Person → failed save installs Paralyzed (AoD is charm-only). |
+
+### `test_mindless_rage.py`
+v2.57.0 — Path of the Berserker Lv 6+ Mindless Rage. **Self-targeted** condition-install immunity gate (sibling of AoD but keyed off the saver's own active rage buff instead of an ally aura). When a failed Wis/Cha save would install Charmed or Frightened on a Barbarian and the saver has a rage buff active, the install is BLOCKED and a `feature_used(source=mindless-rage)` broadcast surfaces the immunity. Helper `_pc_has_rage_active_buff` reads the active battle combatant's buff list; gate sits next to the v2.55.0 AoD branch in `/roll_request/{id}/respond`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_mindless_rage_blocks_charmed_install` | Krieger rages (`/use_rage`); Lyra casts Suggestion at Krieger; loop until save fails → response `auto_buff_installed=""`, Krieger's buff list has no `charmed` entry, broadcast names Krieger. |
+| `test_charmed_installs_when_not_raging` | Control: Krieger does NOT rage → failed save installs Charmed normally; no Mindless Rage broadcast. |
+| `test_mindless_rage_skips_non_charm_fright` | Krieger rages + Tavik casts Hold Person → failed save installs Paralyzed (Mindless Rage is charm/fright-only). |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

@@ -1491,11 +1491,17 @@ def _barbarian_sheet(name: str) -> dict:
     picker with a crit-detection hook). Half-Orc for the canonical
     +STR + Savage Attacks (crit-die bonus) + Relentless Endurance
     (1/long-rest 1-HP save) racial. Color `#993333` (dark blood-red).
+
+    v2.57.0: bumped Lv 5 → 7 to unlock Mindless Rage (Berserker Lv 6 —
+    can't be charmed or frightened while raging) and Feral Instinct
+    (Barbarian Lv 7 — advantage on initiative + act normally on
+    surprised-round if raging). Proficiency stays +3 at Lv 5-8 so
+    attack-bonus tests don't drift; rage uses bump 3 → 4 (Lv 6+).
     """
     return {
         "class": "Barbarian",
         "subclass": "Path of the Berserker",
-        "level": 5,
+        "level": 7,
         "race": "Half-Orc",  # +2 STR, +1 CON, Savage Attacks, Relentless Endurance, Darkvision, Menacing
         "alignment": "Chaotic Neutral",
         "background": "Outlander",
@@ -1509,11 +1515,12 @@ def _barbarian_sheet(name: str) -> dict:
         # Fast Movement (Lv 5): +10 ft speed when not in heavy armor.
         # Half-Orc base 30 + Fast Movement = 40.
         "speed": 40,
-        # Lv 1 max d12 (12) + 4× avg d12 (7) + CON +3 × 5 = 12 + 28 + 15 = 55.
-        "hp": {"current": 55, "max": 55, "temp": 0},
+        # Lv 1 max d12 (12) + 6× avg d12 (7) + CON +3 × 7 = 12 + 42 + 21 = 75.
+        # (v2.57.0: was 55 at Lv 5 — added 7 + 3 = 10 per level for Lv 6/7.)
+        "hp": {"current": 75, "max": 75, "temp": 0},
         "initiative_bonus": 2,  # DEX 14 mod
-        "proficiency_bonus": 3,
-        "hit_dice": {"current": 5, "max": 5},
+        "proficiency_bonus": 3,  # +3 through Lv 5-8.
+        "hit_dice": {"current": 7, "max": 7},
         "class_hit_die": "d12",
         # Barbarian prof saves are STR + CON.
         "saving_throws": {"STR": True, "CON": True},
@@ -1571,10 +1578,10 @@ def _barbarian_sheet(name: str) -> dict:
             {
                 "key": "rage",
                 "name": "Rage",
-                "current": 3, "max": 3, "reset": "long",
+                "current": 4, "max": 4, "reset": "long",
                 "source": "barbarian Lv 1",
                 "class_slug": "barbarian",
-                "desc": "Bonus action — enter rage: +2 damage on STR melee attacks (Lv 1-8), advantage on STR checks / saves, resistance to bludgeoning / piercing / slashing. Lasts 1 min or until turn ends without attacking / taking damage. 3 uses at Lv 3-5; refreshes on long rest.",
+                "desc": "Bonus action — enter rage: +2 damage on STR melee attacks (Lv 1-8), advantage on STR checks / saves, resistance to bludgeoning / piercing / slashing. Lasts 1 min or until turn ends without attacking / taking damage. 4 uses at Lv 6-11; refreshes on long rest.",
                 "manual": False,
             },
         ],
@@ -1617,6 +1624,29 @@ def _barbarian_sheet(name: str) -> dict:
                 "key": "fast-movement",
                 "name": "Fast Movement",
                 "desc": "Passive (Lv 5+) — +10 ft speed while not in heavy armor. Already baked into Krieger's listed speed (40 ft).",
+            },
+            # v2.57.0: Mindless Rage (Berserker Lv 6+). Charm/fright
+            # immunity *while raging* — server-side gate at the
+            # condition-install site in /roll_request/{id}/respond
+            # short-circuits the buff install when the saver has an
+            # active rage buff AND the failing save would install
+            # charmed OR frightened. Pre-install gate (the save still
+            # fails RAW); broadcast surfaces the immunity.
+            {
+                "key": "mindless-rage",
+                "name": "Mindless Rage",
+                "desc": "Passive (Lv 6+) — can't be charmed or frightened while raging. Fires automatically server-side when a save vs Suggestion / Fear / etc. fails during rage.",
+            },
+            # v2.57.0: Feral Instinct (Barbarian Lv 7+). Advantage on
+            # initiative rolls + can act normally on a surprised round
+            # if Krieger rages (no action) on his turn. Initiative
+            # advantage doesn't have a wired-in hook today — initiative
+            # is rolled out-of-band in v1. Filed as descriptive; surfaces
+            # in the sheet so the player remembers to flag it manually.
+            {
+                "key": "feral-instinct",
+                "name": "Feral Instinct",
+                "desc": "Passive (Lv 7+) — advantage on initiative rolls + can act normally on a surprised round (if you rage on your turn). Initiative rolled out-of-band today; flag manually for now.",
             },
         ],
         # Frenzy is the Berserker subclass feature (Lv 3): bonus

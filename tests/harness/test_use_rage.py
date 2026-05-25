@@ -62,7 +62,9 @@ async def _seed_battle_with(gm_client, char_ids: list[int]) -> None:
 
 async def test_rage_happy_path(gm_client, gm_ws, krieger_full):
     """Krieger activates Rage. Asserts: 200 response, damage_bonus 2
-    (Lv 5), duration_rounds 10, remaining decremented from 3 to 2,
+    (Lv 7 — +2 holds through Lv 1-8), duration_rounds 10, remaining
+    decremented from 4 to 3 (v2.57.0 bumped Krieger Lv 5 → 7, which
+    in turn bumps Rage uses 3 → 4 per Lv 6+ RAW),
     feature_used + resource_update + buff_update broadcasts fire.
     """
     krieger = krieger_full
@@ -75,10 +77,10 @@ async def test_rage_happy_path(gm_client, gm_ws, krieger_full):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["ok"] is True
-    assert data["damage_bonus"] == 2  # Lv 5 Barbarian
+    assert data["damage_bonus"] == 2  # Lv 1-8 Barbarian
     assert data["duration_rounds"] == 10
-    assert data["remaining"] == 2  # was 3, decremented
-    assert data["max"] == 3
+    assert data["remaining"] == 3  # was 4, decremented
+    assert data["max"] == 4
     assert data["buff_installed"] is True
 
     fu = await gm_ws.wait_for("feature_used")
@@ -87,7 +89,7 @@ async def test_rage_happy_path(gm_client, gm_ws, krieger_full):
 
     ru = await gm_ws.wait_for("resource_update")
     assert ru["data"]["key"] == "rage"
-    assert ru["data"]["current"] == 2
+    assert ru["data"]["current"] == 3
 
     bu = await gm_ws.wait_for("buff_update")
     assert bu["data"]["character_id"] == krieger["id"]
@@ -103,10 +105,13 @@ async def test_rage_happy_path(gm_client, gm_ws, krieger_full):
 
 
 async def test_rage_out_of_uses(gm_client, krieger_full):
-    """Drain Rage to 0 then attempt again — 409 out_of_uses."""
+    """Drain Rage to 0 then attempt again — 409 out_of_uses.
+
+    v2.57.0: Krieger now has 4 rage uses at Lv 7 (was 3 at Lv 5).
+    """
     krieger = krieger_full
     await _seed_battle_with(gm_client, [krieger["id"]])
-    for _ in range(3):
+    for _ in range(4):
         resp = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/use_rage",
             json={"character_id": krieger["id"], "override": True},

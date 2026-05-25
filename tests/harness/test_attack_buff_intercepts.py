@@ -327,7 +327,11 @@ async def test_resistance_halves_damage(gm_client, krieger_full):
     data = resp.json()
     assert data["resistance_applied"] is True
     assert data["damage_amount_after_resistance"] == 5
-    assert data["hp"]["current"] == 50  # 55 - 5, not 55 - 10
+    # v2.57.0: Krieger sheet HP bumped 55 → 75 at Lv 7. When resistance
+    # is applied, server uses the sheet's stored HP and subtracts the
+    # halved damage (75 - 5 = 70), ignoring the client-supplied
+    # hp.current value.
+    assert data["hp"]["current"] == 70  # 75 - 5, not 75 - 10
 
 
 async def test_attack_broadcast_includes_target_name(gm_client, krieger_full, roster):

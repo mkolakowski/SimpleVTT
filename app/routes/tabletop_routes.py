@@ -7608,7 +7608,8 @@ async def respond_roll_request(
                 # condition just doesn't land; broadcast surfaces the
                 # immunity trigger so the player isn't confused why
                 # their failed Wis save didn't apply Charmed.
-                if (cond.get("key") or "").strip().lower() == "charmed":
+                _cond_key = (cond.get("key") or "").strip().lower()
+                if _cond_key == "charmed":
                     _aod_applies, _aod_paladin = _ally_has_aura_of_devotion(
                         db, campaign_id, int(tgt_char_id),
                     )
@@ -7626,6 +7627,29 @@ async def respond_roll_request(
                         # Skip the install entirely — short-circuit
                         # past the buff dict + _install_buff call.
                         # The ``ctx`` cleanup still happens below.
+                        _save_request_context.pop(roll_req.id, None)
+                        return {
+                            "ok": True,
+                            "total": rec.total,
+                            "breakdown": rec.breakdown,
+                            "auto_buff_installed": auto_buff_installed,
+                        }
+                # v2.57.0 — Mindless Rage (Path of the Berserker,
+                # Lv 6+) blocks the install of Charmed *or* Frightened
+                # on the rager themselves while their rage buff is
+                # active. Distinct from AoD in that the immunity is
+                # self-targeted (gate keys off the saver's own buff
+                # list, not an ally aura) AND covers both charm and
+                # fear. Same pre-install short-circuit pattern.
+                if _cond_key in ("charmed", "frightened"):
+                    if _pc_has_rage_active_buff(campaign_id, int(tgt_char_id)):
+                        _rager = db.query(Character).filter(
+                            Character.id == int(tgt_char_id),
+                        ).first()
+                        await _broadcast_mindless_rage(
+                            campaign_id, _rager, cond.get("name") or _cond_key,
+                        )
+                        auto_buff_installed = ""
                         _save_request_context.pop(roll_req.id, None)
                         return {
                             "ok": True,
@@ -11650,6 +11674,77 @@ def _ally_has_aura_of_devotion(
             continue
         return True, char
     return False, None
+
+
+def _pc_has_rage_active_buff(
+    campaign_id: int, saving_char_id: int | None,
+) -> bool:
+    """v2.57.0 — Mindless Rage (Path of the Berserker, Lv 6+).
+    Returns True if the saving PC has a rage buff active on their
+    combatant. Used by the condition-install gate in
+    ``/roll_request/{id}/respond`` to short-circuit the install of a
+    Charmed or Frightened condition while raging.
+
+    RAW: "Starting at 6th level, you can't be charmed or frightened
+    while raging. If you are charmed or frightened when you enter
+    your rage, the effect is suspended for the duration of the rage."
+    v1 implements the install-block half (gate fires when an
+    incoming save-fail would install Charmed/Frightened). The
+    "suspend on enter rage" half is filed — needs ``/use_rage`` to
+    walk existing buffs and mark suspended ones.
+
+    Subclass check is intentionally NOT required at the gate site:
+    the rage buff key is only installed by ``/use_rage`` for
+    Barbarian-class PCs, and only Berserker bumps Mindless Rage at
+    Lv 6. Future Path of the Totem Warrior / etc. won't share the
+    "charmed/fright immunity" wording — when they ship, the gate
+    grows a subclass check against the rager's sheet. Filed.
+    """
+    if not saving_char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != saving_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "rage":
+                return True
+        return False
+    return False
+
+
+async def _broadcast_mindless_rage(
+    campaign_id: int, barbarian: "Character",
+    cond_name: str = "charmed",
+) -> None:
+    """Companion broadcast for ``_pc_has_rage_active_buff``. Emits a
+    ``feature_used(source=mindless-rage)`` event naming the barbarian
+    so the chat card credits the source. Fires when Mindless Rage
+    BLOCKS a Charmed or Frightened install on the rager.
+    """
+    if not barbarian:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": barbarian.id,
+            "character_name": barbarian.name,
+            "user_color": barbarian.color,
+            "feature_name": (
+                f"🦬 Mindless Rage → immune to {cond_name.lower()}"
+            ),
+            "feature_desc": (
+                f"While raging, {barbarian.name} can't be charmed or "
+                f"frightened. The failed save doesn't install "
+                f"{cond_name.lower()}."
+            ),
+            "source": "mindless-rage",
+        },
+    })
 
 
 def _fighter_level_from_sheet(sheet: dict) -> int:
