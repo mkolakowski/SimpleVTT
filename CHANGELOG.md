@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.233] - 2026-05-25
+
+**Schema version:** 56
+**Commit summary:** **Make CI green for the first time since v2.7.2 (2026-05-17, ~8 days red).** Two pre-existing bugs cascaded into all three CI jobs failing (`harness` / `harness-ui` / `encounter-sim`): (1) a JS parse error in the v2.7.2 Layer-A economy poller at `sheet_dnd5e.html:9515` from a cross-line `catch {} \n finally {}` shape — the only such pattern in the file — broke sheet rendering under Playwright's Chromium, which cascaded into every UI / encounter-sim test that depended on a loadable sheet; (2) the v2.49.124 Empowered-Spell Fire Bolt test asserted `rerolled_count == 2` assuming a non-crit hit, but `_double_dice_for_crit` widens the pool to 4d10 on crit (~64% chance over the test's 20-attempt loop), tripping the cap into `min(3, 4) = 3` instead. Local Kristen has been lucky enough to never hit the crit path; CI hasn't.
+**Description:** Two-edit fix. **(1)** `app/templates/sheet_dnd5e.html:9515` — the v2.7.2 `_poll` helper had `} catch { /* */ }\n        finally { _inflight = false; }` (catch with optional binding + finally on the next line). Even though both parts are individually ES2019+ valid, Playwright's CI Chromium parser reported `Unexpected token 'finally'` at sheet load, which surfaced as a `console_errors` assertion failure in every `harness_ui/test_smoke.py` test. The cross-line form is also the only `catch {} \n finally` instance in the whole file (50+ other `catch {}` sites either inline or follow `try ... } catch ... }` on one line). Collapsed to canonical `try { ... } catch (_e) { /* ignore */ } finally { ... }` with each block on its own line and the catch carrying the conventional `_e` binding. The fix is purely cosmetic at the syntax level — runtime behavior is identical. **(2)** `tests/harness/test_use_metamagic_empowered.py:test_empowered_single_beam_fire_bolt` — relaxed the assertion from `rerolled_count == 2` to `in (2, 3)` with a comment explaining the crit-doubles-pool case + an added `len(emp["rerolls"]) == rerolled_count` sanity check.
+**Description (cont):** Why the JS bug surfaced ~8 days late. The v2.7.2 code path runs on every full-sheet load. `harness-ui` was added later (the workflow file inspection shows the encounter-sim + harness-ui jobs alongside the original harness job) — once it landed, the sheet's JS error stopped every UI test that depends on rendered HTML. `encounter-sim` failures cascade from the same root cause (Playwright's locator assertions can't find UI elements that never rendered because JS failed). The harness job's empowered failure is independent — same period, different bug.
+**Description (cont 2):** Why both fixes ship in one commit. CLAUDE.md prefers conceptually-distinct changes per commit, but here both edits are the same conceptual change ("make CI go green"): one fixes the cascade root cause (JS bug → every UI test fails), the other fixes the orthogonal harness assertion. Splitting into two commits would mean an intermediate commit where CI is "less red but still red" with no functional benefit. The commits-and-rebuilds budget is better spent shipping both at once + watching the full CI run go green.
+**Description (cont 3):** Verification. (a) `curl /version` confirms v2.49.233 live locally. (b) Full local Kristen suite still 436/436 green (the JS fix is runtime-equivalent; the test assertion fix doesn't regress on the non-crit path). (c) The actual proof is CI going green on this commit's push — that's the empirical signal the in-conversation `Kristen` can't catch.
+
+### Fixed
+- `app/templates/sheet_dnd5e.html` `_poll` (Layer-A economy poller from v2.7.2) — collapsed the cross-line `catch {} \n finally {}` shape to canonical `try {} catch (_e) {} finally {}` with each block on its own line. Closes the `Unexpected token 'finally'` console error that has been breaking Playwright sheet-load tests since v2.7.2.
+- `tests/harness/test_use_metamagic_empowered.py::test_empowered_single_beam_fire_bolt` — assertion accepts `rerolled_count in (2, 3)` to handle the crit-doubles-pool case (2d10 non-crit → 2; 4d10 crit → 3). Adds `len(rerolls) == rerolled_count` sanity check.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.49.233`.
+- `README.md` version badge → `2.49.233`.
+
+### Notes
+- **CI was red for ~8 days before this fix.** Both failures predate today's 2.49.220–.232 work; today's session just happened to surface them via The Kristen (harness-ui job) when ChatGPT pulled the CI annotations into the conversation.
+- **Both fixes are surgical.** No production behavior change from the JS edit (same try/catch/finally semantics, just on multiple lines with conventional binding). No new test surface from the assertion fix.
+
+---
+
 ## [2.49.232] - 2026-05-24
 
 **Schema version:** 56

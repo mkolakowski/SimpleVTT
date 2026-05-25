@@ -468,9 +468,20 @@ async def test_empowered_single_beam_fire_bolt(gm_client, zara_rested):
         if emp is not None:
             break
     assert emp is not None, "Fire Bolt never hit in 20 tries?"
-    # 2d10 pool, CHA-mod +3 budget → reroll min(3, 2) = 2 dice (clipped
-    # to pool size).
-    assert emp["rerolled_count"] == 2
+    # CHA-mod +3 budget. Fire Bolt at Lv 5 is 2d10 normally → pool 2
+    # → rerolled = min(3, 2) = 2. On a crit `_double_dice_for_crit`
+    # doubles the dice to 4d10 → pool 4 → rerolled = min(3, 4) = 3.
+    # Either is correct cap behavior; the 20-attempt loop can land on
+    # either path (a nat-20 in 20 tries is ~64% likely). v2.49.233:
+    # CI surfaced the crit-path failure that local runs had been
+    # consistently lucky enough to skip.
+    assert emp["rerolled_count"] in (2, 3), (
+        f"Expected rerolled_count in {{2 (2d10 non-crit), 3 (4d10 crit)}}; "
+        f"got {emp['rerolled_count']}"
+    )
+    # Sanity: the count matches the log length (no off-by-one in the
+    # cap → log path).
+    assert len(emp["rerolls"]) == emp["rerolled_count"]
     for entry in emp["rerolls"]:
         assert entry["sides"] == 10
         assert 1 <= entry["old"] <= 10

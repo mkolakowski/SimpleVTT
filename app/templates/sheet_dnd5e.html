@@ -9512,8 +9512,11 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                 _state = data;
             }
             _applyDim();
-        } catch { /* silently ignore — Layer A is best-effort */ }
-        finally { _inflight = false; }
+        } catch (_e) {
+            /* silently ignore — Layer A is best-effort */
+        } finally {
+            _inflight = false;
+        }
     }
 
     function _start() {
