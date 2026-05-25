@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.237] - 2026-05-25
+
+**Schema version:** 56
+**Commit summary:** **Remarkable Athlete (Champion Fighter Lv 7+) shipped client-side.** New `_hasRemarkableAthlete(form)` helper in `app/static/sheet.js` next to the existing `_hasJackOfAllTrades`; adds `ceil(PB/2)` to STR / DEX / CON ability checks AND non-proficient skill checks on those abilities. RAW (PHB p.72): "Starting at 7th level, you can add half your proficiency bonus (round up) to any Strength, Dexterity, or Constitution check you make that doesn't already use your proficiency bonus." Demo Garrik bumped Lv 5 → 7 as the fixture (HP 49 → 67, hit_dice 5 → 7; PB stays +3). 4 new Playwright UI tests (harness-ui suite 9 → 13) intercept the /roll POST and verify the dice expression's bonus matches the expected value for STR / DEX / INT (negative control — no Rmk Ath on INT) on Garrik, plus a Pip (Rogue) control. Continues the Champion subclass thread from v2.49.231's Improved Critical work.
+**Description:** Five-edit commit. **(1)** `app/static/sheet.js` — new `_hasRemarkableAthlete(form)` helper near `_hasJackOfAllTrades` (line ~422). Multiclass-aware via `window._mcRoster`; falls back to the single-class form fields when no roster is present. Gates on class==fighter + level≥7 + subclass containing "champion" (matches the v2.49.231 `_attacker_crit_threshold` shape). **(2)** Same file — `wireDnd5eRollButtons` extended in two places: the `data-roll-ability` branch (raw ability check) gates the bonus on `STR/DEX/CON` and stacks with Jack of All Trades on a Bard/Champion multiclass; the `data-roll-skill` branch applies the bonus to non-proficient skill checks on STR/DEX/CON abilities (Remarkable Athlete beats Jack on those skills because it's ceiling, larger when PB is odd). Note rendering shows `(Rmk Ath +N)` (or `(Jack +N, Rmk Ath +N)` on multiclass stack). **(3)** `app/demo_seed.py` `_fighter_sheet` — Garrik Lv 5 → 7. HP 49 → 67 (+2× d10 avg 6 + CON +3 = +18); hit_dice 5/5 → 7/7; PB stays +3 (Lv 5-8 range). Comment updated to name the v2.49.237 Remarkable Athlete unlock. **(4)** `tests/harness_ui/test_remarkable_athlete.py` — 4 new Playwright tests using `page.route` to intercept POST `/roll` and parse the `expression` field. Garrik STR check → 1d20+6 (mod +4 + Rmk Ath +2); Garrik DEX check → 1d20+4 (mod +2 + Rmk Ath +2); Garrik INT check → 1d20-1 (no Rmk Ath on INT — RAW STR/DEX/CON only); Pip STR check → 1d20-1 (non-Champion control, no Rmk Ath). **(5)** Existing harness tests updated for the Lv 7 fixture cascade: `test_use_second_wind.py` (heal expression `1d10+5` → `1d10+7`, range 6-15 → 8-17, HP 49 → 67), `test_broadcast_payload_shapes.py::test_second_wind_broadcast_carries_dice_and_heal_fields` (same `dice_expression` bump), `test_use_attack_improved_critical.py` (docstring + class-feature label refresh).
+**Description (cont):** RAW deviations + design choices. (a) **Stacking with Jack of All Trades.** A Bard 2 / Champion Fighter 7 multiclass would get BOTH bonuses on a STR check that's a raw ability check (Jack = floor(PB/2), Rmk Ath = ceil(PB/2)). RAW is unclear ("doesn't already use PB" — does Jack count as "using PB"? probably not). v1 stacks them additively + tags both in the note. A future feature-clarification commit could flip this to picking the larger of the two — but additive is the kinder reading. (b) **Beats Jack on non-proficient skill checks for STR/DEX/CON abilities** — Remarkable Athlete fires (ceiling) instead of Jack (floor) when both would apply to the same skill check. Documented in the if/else chain at the skill-bonus computation. (c) **Client-side only.** Same approach as Jack of All Trades (v2.15.2): the bonus is computed in `sheet.js` and rolled into the d20 expression before posting to `/roll`. The server never knows about Remarkable Athlete — it just sees a 1d20+N roll. Future server-side intercepts (death saves, advantage/disadvantage Phase 2) could change this, but the client-only path is consistent with the existing Jack precedent and keeps the surface small.
+**Description (cont 2):** Companion fixture updates required by the Lv 7 bump. Three existing harness tests had Lv 5-specific assertions that broke when Garrik's `fighter_level` shifted; all updated in this commit (same pattern as v2.49.228 / v2.49.229's Kael fixture fallouts). The encounter-sim tests skipped in v2.49.236 are NOT unblocked by this bump — they need Garrik *tokenized* (in `seed_tokens`), which is a separate change still filed in TODO.md.
+**Description (cont 3):** Verification. (a) `curl /version` confirms v2.49.237 live. (b) All 4 new Remarkable Athlete tests pass locally. (c) The wizard suite still 436/436 green. (d) harness-ui 13/13 green (was 9 + 4 new). (e) CI re-run is the load-bearing signal.
+
+### Added
+- `_hasRemarkableAthlete(form)` helper in `app/static/sheet.js` — gates on Champion Fighter Lv 7+ (single-class fast path + multiclass roster walk).
+- `tests/harness_ui/test_remarkable_athlete.py` — 4 Playwright UI tests intercepting POST `/roll` to verify the dice expression carries the expected bonus.
+
+### Changed
+- `app/static/sheet.js` `wireDnd5eRollButtons` — ability-check + skill-check branches apply `ceil(PB/2)` on STR/DEX/CON when Remarkable Athlete applies. Note rendering shows `(Rmk Ath +N)`.
+- `app/demo_seed.py` `_fighter_sheet` — Garrik bumped Lv 5 → 7 (HP 49 → 67, hit_dice 5 → 7).
+- `tests/harness/test_use_second_wind.py` — `1d10+5` → `1d10+7`, range 6-15 → 8-17, HP 49 → 67.
+- `tests/harness/test_broadcast_payload_shapes.py` — `dice_expression` `1d10+5` → `1d10+7`.
+- `tests/harness/test_use_attack_improved_critical.py` — docstring + assert-comment refresh for Lv 7.
+- `docs/plans/class-content-status.md` — Champion subclass row updated with Remarkable Athlete ✅; Fighter Lv 3 row note refreshed.
+- `docs/test-harness-coverage.md` — total-test-count harness-ui 7 → 13.
+- `app/version.py` `APP_VERSION` → `2.49.237`.
+- `README.md` version badge → `2.49.237`.
+
+### Notes
+- **Second Champion subclass feature wired.** Improved Critical (v2.49.231) was the first; Remarkable Athlete now joins it.
+- **Open Garrik gap.** Garrik isn't tokenized in the demo (slimmed in v2.49.172). The encounter-sim tests skipped in v2.49.236 still need a tokenized Fighter — Remarkable Athlete works against the standalone sheet which doesn't need a token.
+
+---
+
 ## [2.49.236] - 2026-05-25
 
 **Schema version:** 56

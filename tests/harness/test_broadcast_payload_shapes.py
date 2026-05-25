@@ -466,9 +466,9 @@ async def test_second_wind_broadcast_carries_dice_and_heal_fields(
     assert "rolled" in d["feature_desc"].lower(), (
         f"expected v2.43.12 feature_desc to include the rolled-dice info, got: {d['feature_desc']!r}"
     )
-    assert d["dice_expression"] == "1d10+5"  # Lv 5 fighter
+    assert d["dice_expression"] == "1d10+7"  # Lv 7 fighter (v2.49.237 bump)
     assert isinstance(d["dice_total"], int)
-    # Heal pill: amount > 0 since Garrik was at 20/49 HP.
+    # Heal pill: amount > 0 since Garrik was at 20/67 HP.
     assert d["heal_amount"] > 0
     assert d["heal_target_name"] == garrik["name"]
     assert d["heal_hp_after"] > d["heal_hp_before"]

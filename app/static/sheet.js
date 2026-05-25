@@ -433,6 +433,40 @@
         return singleClass === 'bard' && singleLevel >= 2;
     }
 
+    /**
+     * v2.49.237 — Champion Fighter Lv 7+ Remarkable Athlete. RAW
+     * (PHB p.72): "Starting at 7th level, you can add half your
+     * proficiency bonus (round up) to any Strength, Dexterity, or
+     * Constitution check you make that doesn't already use your
+     * proficiency bonus."
+     *
+     * Differs from Jack of All Trades in three ways:
+     *   - STR / DEX / CON only (Jack is any ability).
+     *   - Round up (Jack rounds down).
+     *   - Lv 7+ Champion Fighter (Jack is Lv 2+ Bard).
+     *
+     * Returns true when the live class/level + subclass tags match.
+     * Multiclass support: walks ``_mcRoster`` for a Fighter entry with
+     * level≥7 + subclass containing "champion"; falls back to single-
+     * class form fields when no roster is present. Mirrors the multi-
+     * class shape of ``_hasJackOfAllTrades``.
+     */
+    function _hasRemarkableAthlete(form) {
+        const roster = (typeof window._mcRoster === 'function') ? window._mcRoster() : null;
+        if (Array.isArray(roster) && roster.length) {
+            for (const c of roster) {
+                if ((c.class || '').trim().toLowerCase() !== 'fighter') continue;
+                if ((parseInt(c.level, 10) || 0) < 7) continue;
+                if ((c.subclass || '').trim().toLowerCase().includes('champion')) return true;
+            }
+            return false;
+        }
+        const singleClass = (readField(form, 'class') || '').trim().toLowerCase();
+        const singleLevel = parseInt(readField(form, 'level'), 10) || 0;
+        const singleSub = (readField(form, 'subclass') || '').trim().toLowerCase();
+        return singleClass === 'fighter' && singleLevel >= 7 && singleSub.includes('champion');
+    }
+
     function wireDnd5eRollButtons(form) {
         form.querySelectorAll('.roll-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
@@ -440,15 +474,28 @@
                 let note = '';
                 const prof = Number(readField(form, 'proficiency_bonus') || 2);
                 const jack = _hasJackOfAllTrades(form) ? Math.floor(prof / 2) : 0;
+                // v2.49.237: Champion Fighter Lv 7+ Remarkable Athlete.
+                // STR / DEX / CON ability checks (and non-proficient
+                // skill checks on those abilities) get +ceil(PB/2). Note:
+                // this STACKS with Jack of All Trades on a Bard/Champion
+                // multiclass — RAW unclear, but additive is the kinder
+                // reading and matches similar partial-PB stackers.
+                const remarkable = _hasRemarkableAthlete(form) ? Math.ceil(prof / 2) : 0;
+                const _isRmkAthAbility = (ab) => remarkable > 0
+                    && ['STR', 'DEX', 'CON'].includes((ab || '').toUpperCase());
 
                 if (btn.dataset.rollAbility) {
                     const ab = btn.dataset.rollAbility;
                     const mod = abilityModifier(readField(form, `abilities.${ab}`));
                     // Jack applies to raw ability checks too (RAW: "any
                     // ability check that doesn't already include PB").
-                    const total = mod + jack;
+                    const rmk = _isRmkAthAbility(ab) ? remarkable : 0;
+                    const total = mod + jack + rmk;
                     expr = `1d20${formatBonus(total)}`;
-                    note = `${ab} check${jack > 0 ? ' (Jack +' + jack + ')' : ''}`;
+                    const tags = [];
+                    if (jack > 0) tags.push('Jack +' + jack);
+                    if (rmk > 0)  tags.push('Rmk Ath +' + rmk);
+                    note = `${ab} check${tags.length ? ' (' + tags.join(', ') + ')' : ''}`;
                 } else if (btn.dataset.rollSave) {
                     const ab = btn.dataset.rollSave;
                     const mod = abilityModifier(readField(form, `abilities.${ab}`));
@@ -464,11 +511,23 @@
                     const isExp  = !!readField(form, `skills.${skill}.expertise`);
                     let bonus = 0;
                     let jackApplied = 0;
+                    let rmkApplied = 0;
                     if (isExp) bonus = prof * 2;
                     else if (isProf) bonus = prof;
+                    else if (_isRmkAthAbility(ab)) {
+                        // Remarkable Athlete beats Jack on STR/DEX/CON
+                        // because it's ceiling (larger when PB is odd).
+                        bonus = remarkable;
+                        rmkApplied = remarkable;
+                    }
                     else if (jack > 0) { bonus = jack; jackApplied = jack; }
                     expr = `1d20${formatBonus(mod + bonus)}`;
-                    note = `${skill}${isExp ? ' (expertise)' : isProf ? ' (prof)' : (jackApplied > 0 ? ' (Jack +' + jackApplied + ')' : '')}`;
+                    const skillTags = [];
+                    if (isExp) skillTags.push('expertise');
+                    else if (isProf) skillTags.push('prof');
+                    else if (rmkApplied > 0) skillTags.push('Rmk Ath +' + rmkApplied);
+                    else if (jackApplied > 0) skillTags.push('Jack +' + jackApplied);
+                    note = `${skill}${skillTags.length ? ' (' + skillTags.join(', ') + ')' : ''}`;
                 }
 
                 if (!expr) return;

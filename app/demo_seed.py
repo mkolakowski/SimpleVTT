@@ -1887,21 +1887,23 @@ def _sorcerer_sheet(name: str) -> dict:
 
 
 def _fighter_sheet(name: str) -> dict:
-    """v2.17.0: demo Fighter Lv 5 (Champion) for the GM. Added in
+    """v2.17.0: demo Fighter Garrik Ironside (Champion). Added in
     Phase A.4 to unlock per-feature work for Second Wind / Action
     Surge / Improved Critical (Champion Lv 3) and the deferred
     Indomitable (Lv 9+) when that feature finally ships with the
-    roll-time intercept. Variant Human + two-handed style + Great
-    Weapon Fighting + Greatsword. Skips a shield so Action Surge's
-    "swing twice with the same weapon" doesn't fight with the
-    sword-and-board ergonomics that Caelan already covers. Color
-    `#8a96a3` (steel grey) — distinct from every existing PC + NPC
-    palette.
+    roll-time intercept. Bumped to Lv 7 in v2.49.237 to unlock
+    Remarkable Athlete (Champion Lv 7 — +ceil(PB/2) on STR/DEX/CON
+    checks that don't already use PB). Variant Human + two-handed
+    style + Great Weapon Fighting + Greatsword. Skips a shield so
+    Action Surge's "swing twice with the same weapon" doesn't fight
+    with the sword-and-board ergonomics that Caelan already covers.
+    Color `#8a96a3` (steel grey) — distinct from every existing
+    PC + NPC palette.
     """
     return {
         "class": "Fighter",
         "subclass": "Champion",
-        "level": 5,
+        "level": 7,
         "race": "Variant Human",  # +1 STR + 1 CON at character creation
         "alignment": "Lawful Good",
         "background": "Soldier",
@@ -1912,11 +1914,12 @@ def _fighter_sheet(name: str) -> dict:
         "abilities": {"STR": 18, "DEX": 14, "CON": 16, "INT": 8, "WIS": 12, "CHA": 10},
         "ac": 16,  # chain mail 16 (no shield — two-handed Greatsword)
         "speed": 30,
-        # Lv 1 max d10 (10) + 4× avg d10 (6) + CON +3 × 5 = 13 + 36 = 49.
-        "hp": {"current": 49, "max": 49, "temp": 0},
+        # Lv 1 max d10 (10) + 6× avg d10 (6) + CON +3 × 7 = 10 + 36 + 21 = 67
+        # (Lv 7 bump v2.49.237: prior Lv 5 was 10 + 24 + 15 = 49).
+        "hp": {"current": 67, "max": 67, "temp": 0},
         "initiative_bonus": 2,  # DEX 14 mod
-        "proficiency_bonus": 3,
-        "hit_dice": {"current": 5, "max": 5},
+        "proficiency_bonus": 3,  # PB +3 holds across Lv 5-8
+        "hit_dice": {"current": 7, "max": 7},
         "class_hit_die": "d10",
         # Fighter prof saves are STR + CON.
         "saving_throws": {"STR": True, "CON": True},

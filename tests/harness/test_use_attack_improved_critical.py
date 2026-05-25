@@ -7,7 +7,7 @@ the attacker's class/subclass/level.
 
 Test strategy:
   - Seed `/api/test/dice/seed` with a fixed value so attack rolls are
-    deterministic. Fire many attacks with Garrik (Lv 5 Champion Fighter)
+    deterministic. Fire many attacks with Garrik (Lv 7 Champion Fighter post-v2.49.237 bump)
     and Pip (Lv 5 Rogue — control), parse the `attack_breakdown` to
     extract the kept d20 value, and assert the is_crit flag matches the
     expected per-class threshold.
@@ -120,7 +120,7 @@ async def _drive_attacks(gm_client, attacker, target):
 
 
 async def test_champion_crits_on_19(gm_client, roster):
-    """Garrik (Lv 5 Champion Fighter) — every d20 kept value of 19 in
+    """Garrik (Lv 7 Champion Fighter) — every d20 kept value of 19 in
     the rolled distribution must produce is_crit=True. Every d20 of 20
     likewise. d20 ≤ 18 must produce is_crit=False (regression guard).
     """

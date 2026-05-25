@@ -1,9 +1,10 @@
 """/api/campaign/{cid}/use_second_wind — Fighter Lv 1 feature tests.
 
-v2.17.1: Second Wind shipped end-to-end. Garrik (Lv 5 Fighter,
-demo PC since v2.17.0) has the resource counter at 1/1 short-rest
-refresh. The endpoint rolls 1d10 + fighter_level (so 1d10+5 for
-Garrik → 6-15 HP) and applies via _apply_hp_change.
+v2.17.1: Second Wind shipped end-to-end. Garrik (Lv 7 Fighter
+post-v2.49.237 bump for Remarkable Athlete, demo PC since v2.17.0)
+has the resource counter at 1/1 short-rest refresh. The endpoint
+rolls 1d10 + fighter_level (so 1d10+7 for Garrik → 8-17 HP) and
+applies via _apply_hp_change.
 
 Tests:
   - happy path: Garrik spends Second Wind, response carries rolled
@@ -45,9 +46,9 @@ async def test_second_wind_happy_path(gm_client, gm_ws, garrik_full):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["ok"] is True
-    assert data["expression"] == "1d10+5"  # Lv 5 fighter
-    assert 6 <= data["rolled"] <= 15
-    # Garrik starts at full HP (49/49 after the long rest), so
+    assert data["expression"] == "1d10+7"  # Lv 7 fighter (v2.49.237)
+    assert 8 <= data["rolled"] <= 17
+    # Garrik starts at full HP (67/67 after the long rest), so
     # actual_healed = 0 (can't heal past max).
     assert data["actual_healed"] == 0
     assert data["hp"]["current"] == data["hp"]["max"]
