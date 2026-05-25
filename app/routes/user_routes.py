@@ -424,3 +424,32 @@ def update_tab_color(
         user.player_tab_color = color
     db.commit()
     return {"ok": True}
+
+
+_VALID_ROLL_LOG_POSITIONS = {"left", "right"}
+
+
+class _RollLogPositionBody(BaseModel):
+    position: str
+
+
+@router.post("/api/settings/roll_log_position")
+def update_roll_log_position(
+    body: _RollLogPositionBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.49.244 — persist the user's roll-log drawer side preference.
+    "right" (default) stacks the panel with the other drawer tabs in
+    the shared right sidebar. "left" pulls it into an independent
+    left-side sidebar that opens alongside whichever right-side panel
+    is active.
+    """
+    if body.position not in _VALID_ROLL_LOG_POSITIONS:
+        raise HTTPException(
+            400, f"Invalid position '{body.position}'. "
+            f"Valid: {sorted(_VALID_ROLL_LOG_POSITIONS)}",
+        )
+    user.roll_log_position = body.position
+    db.commit()
+    return {"ok": True, "roll_log_position": body.position}

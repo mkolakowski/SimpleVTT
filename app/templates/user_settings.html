@@ -495,6 +495,47 @@
 </section>
 
 <section>
+    <h2>📜 Roll log position</h2>
+    <p class="muted">Where the Roll Log drawer opens on the tabletop. <strong>Right</strong> (default) stacks it with the other tabs in the shared right sidebar. <strong>Left</strong> pulls Roll Log into its own independent drawer on the left edge so it can stay open while you have Battle or Settings open on the right.</p>
+    <div style="display:flex;align-items:center;gap:14px;margin-top:12px;">
+        <div role="radiogroup" aria-label="Roll log position" style="display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+            <button type="button" class="rlp-btn" data-position="right" aria-pressed="{{ 'true' if (user.roll_log_position or 'right') == 'right' else 'false' }}" style="padding:8px 16px;background:none;border:none;cursor:pointer;color:var(--fg);font-size:13px;min-height:44px;">Right (default)</button>
+            <button type="button" class="rlp-btn" data-position="left"  aria-pressed="{{ 'true' if user.roll_log_position == 'left' else 'false' }}" style="padding:8px 16px;background:none;border:none;cursor:pointer;color:var(--fg);font-size:13px;min-height:44px;border-left:1px solid var(--border);">Left</button>
+        </div>
+        <span id="roll-log-position-status" style="font-size:11px;color:#6cb;min-width:9em;"></span>
+    </div>
+    <style>
+        .rlp-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg, #fff); }
+        .rlp-btn:hover:not([aria-pressed="true"]) { background: var(--bg-2); }
+    </style>
+    <script>
+    (function () {
+        const btns   = document.querySelectorAll('.rlp-btn');
+        const status = document.getElementById('roll-log-position-status');
+        btns.forEach(btn => btn.addEventListener('click', async () => {
+            const pos = btn.dataset.position;
+            if (btn.getAttribute('aria-pressed') === 'true') return;
+            status.textContent = 'saving…';
+            try {
+                const resp = await fetch('/api/settings/roll_log_position', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ position: pos }),
+                });
+                if (!resp.ok) throw new Error(await resp.text());
+                btns.forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+                status.textContent = '✓ Saved — reload the tabletop to see it.';
+                setTimeout(() => { status.textContent = ''; }, 4000);
+            } catch (e) {
+                status.textContent = '✗ Failed';
+                console.error(e);
+            }
+        }));
+    })();
+    </script>
+</section>
+
+<section>
     <h2>🎞️ Animated GIFs</h2>
     <p class="muted">When enabled, animated GIF portraits play in the character sheet and GIF tokens animate on the tabletop canvas. Disable to show a static first-frame thumbnail instead — useful if motion is distracting during play.</p>
     <div style="display:flex;align-items:center;gap:14px;margin-top:12px;">

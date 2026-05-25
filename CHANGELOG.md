@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.244] - 2026-05-25
+
+**Schema version:** 57
+**Commit summary:** **Roll Log can now be moved to the left side of the tabletop.** New per-user "Roll log position" preference in `/settings` lets each player (and the GM) pick `right` (default — stacks with the other tabs in the shared right sidebar) or `left` (independent left-side drawer that can be open simultaneously with whichever right-side panel is active). The Roll Log tab button in the topbar stays where it is; clicking it just opens whichever side the user's preference targets. Per-user (not per-campaign) so each viewer's ergonomics — monitor width, dominant hand — are honored independently.
+**Description:** New `users.roll_log_position` column (VARCHAR(10) NOT NULL DEFAULT 'right'); schema bump v56 → v57 with the matching inline-migration block in `_apply_inline_migrations`. Mapped on the User model alongside the existing `theme` / `font_preference` / `battle_tab_color` / `player_tab_color` per-user UI preferences. New `POST /api/settings/roll_log_position` endpoint (mirrors `/api/settings/font` shape; 400 on values other than `left` / `right`).
+**Description (cont):** Tabletop markup. `app/templates/tabletop.html` now renders a second `<aside class="drawer-sidebar drawer-sidebar--left">` BEFORE the existing right-side sidebar, conditional on `{% if user.roll_log_position == 'left' %}`. The left sidebar is anchored at `left: 0` (mirror of the right sidebar's `right: 0`); same 480 px width, same z-index 50, transparent background. When the JS drawer system loads, it relocates `#roll-log-drawer` from the right wrapper into the empty left wrapper via `appendChild` — no Jinja-include duplication; the panel keeps all its data-bindings (`#roll-list`, the dice form, the clear button, the WS event hooks) intact.
+**Description (cont 2):** Drawer-system JS reworked to be sidebar-scoped. `openPanel(targetId)` now closes ONLY the sibling panels in the same `.drawer-panels-wrapper` (not all `.drawer-panel` elements), and deactivates only the tabs whose targets live in that wrapper. The right sidebar's mutex behavior is preserved (one tab active at a time within the right wrapper). The left sidebar adds **toggle-on-click**: clicking the Roll Log tab while the left drawer is open CLOSES it so the player can dismiss the sidebar entirely — right-side tabs aren't toggle-able (always one active) so behavior is asymmetric but justified: the left sidebar would otherwise have no off switch.
+**Description (cont 3):** Persistence. The existing localStorage key (`simplevtt_drawer_<cid>`) still tracks the right-side last-opened tab; new key `simplevtt_drawer_<cid>_left_open` is a bool (`'1'` / `'0'`) for the left sidebar. On page load: right side restores its saved tab (or the first right-side tab); left side opens roll-log only if `_left_open === '1'`. So a reload preserves both sidebars' states independently.
+**Description (cont 4):** UI. `app/templates/user_settings.html` gains a "📜 Roll log position" section under the existing "🗂️ Tabletop tab colors" block. Two-button radio group (Right (default) / Left) wired to the new endpoint; ✓ Saved badge tells the user to reload the tabletop to see the change. Buttons honor the 44 px CLAUDE.md tap-target minimum.
+**Description (cont 5):** Harness coverage. New `tests/harness/test_settings_roll_log_position.py` (3 tests): (a) GM toggles to left then back to right, both 200 + roll_log_position echoed in the response; (b) invalid `'middle'` → 400 with the invalid value surfaced in the message; (c) per-user isolation — Alice can hold `left` independently of the GM (with cleanup to flip her back to default). Existing 444 harness tests still green (447 total).
+**Description (cont 6):** Verification. (a) `curl /version` reports `2.49.244` + schema `57` after `docker compose up -d --build app`. (b) Tabletop render smoke test: when `position=right`, the rendered HTML contains no `class="drawer-sidebar drawer-sidebar--left"` element; when `position=left`, both the left sidebar element and `id="drawer-panels-wrapper-left"` appear. (c) `pytest tests/harness/ -q` → 447 passed in ~3 min.
+
+### Added
+- `users.roll_log_position` column on the User model (VARCHAR(10), default `'right'`).
+- `POST /api/settings/roll_log_position` endpoint with `{position: 'left'|'right'}` body, mirrors the `/api/settings/font` shape (400 on invalid).
+- "📜 Roll log position" toggle in `/settings` between "🗂️ Tabletop tab colors" and "🎞️ Animated GIFs".
+- `tests/harness/test_settings_roll_log_position.py` — 3 tests (happy left↔right, invalid value, per-user isolation).
+- `app/templates/tabletop.html` — conditional `<aside class="drawer-sidebar drawer-sidebar--left">` + matching `.drawer-sidebar--left` / `.drawer-panels-wrapper--left` CSS.
+
+### Changed
+- Tabletop drawer-system JS in `tabletop.html` — `openPanel` is now sidebar-scoped (close-others only within the target's wrapper); left-side roll-log gets toggle-on-click; independent localStorage key for the left sidebar's open state.
+- `app/version.py` `APP_VERSION` → `2.49.244`, `SCHEMA_VERSION` → 57.
+- `README.md` version badge → `2.49.244` / `v57`.
+
+### Schema
+- `users.roll_log_position` `VARCHAR(10) NOT NULL DEFAULT 'right'` (added in v57 migration block in `_apply_inline_migrations`).
+
+### Notes
+- **Per-user, not per-campaign.** Position is ergonomic (monitor size, dominant hand) so each viewer picks their own — mirrors the precedent set by `theme`, `font_preference`, `battle_tab_color`, `player_tab_color` on the User model. A campaign-level alternative was considered (so the GM could enforce a layout for the whole table) but rejected: forced-on-everyone position prefs would friction-out players with different setups.
+- **Toggle behavior is asymmetric on purpose.** Right side keeps the existing "one tab always active" mutex. Left side gets toggle-on-click (Roll Log button closes the left drawer if it's already open) because otherwise there's no way to dismiss the left sidebar without flipping the setting back to `right`.
+- **Reload required.** Changing the preference doesn't live-update the tabletop — the conditional Jinja branch + the JS DOM-move both run once at page load. The /settings page ✓ badge tells the user to reload.
+
+---
+
 ## [2.49.243] - 2026-05-25
 
 **Schema version:** 56

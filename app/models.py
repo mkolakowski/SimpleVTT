@@ -81,6 +81,13 @@ class User(Base):
     # both the slider and the server-side coerce.
     zoom_speed: Mapped[float] = mapped_column(Float, default=1.0, server_default="1.0")
     animate_gifs: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # v2.49.244: per-user roll-log drawer side. "right" (default) renders
+    # roll log in the shared right sidebar with the other tabs; "left"
+    # pulls roll log into its own independent left-side sidebar so a
+    # player can view it alongside Battle / Characters / Settings on the
+    # right. Ergonomic preference (monitor size, dominant hand) — mirrors
+    # the per-user pattern for theme / font_preference / tab_color.
+    roll_log_position: Mapped[str] = mapped_column(String(10), default="right", server_default="right")
 
     characters: Mapped[list["Character"]] = relationship(
         back_populates="owner", foreign_keys="Character.owner_user_id"

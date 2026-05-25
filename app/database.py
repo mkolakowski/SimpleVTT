@@ -526,6 +526,22 @@ def _apply_inline_migrations() -> None:
                 "BOOLEAN NOT NULL DEFAULT FALSE"
             ))
 
+    # ---- Schema v57 (2.49.244): users.roll_log_position ----
+    # Per-user ergonomic preference for where the Roll Log drawer
+    # renders on the tabletop. "right" (default) keeps it stacked with
+    # the other drawer tabs in the shared right-side sidebar. "left"
+    # pulls roll log into its own independent left-side sidebar so the
+    # player can view it alongside Battle / Characters / Settings on
+    # the right. Persisted on the User row alongside theme /
+    # font_preference / battle_tab_color / player_tab_color.
+    user_cols_v57 = _column_names("users")
+    with engine.begin() as conn:
+        if user_cols_v57 and "roll_log_position" not in user_cols_v57:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN roll_log_position "
+                "VARCHAR(10) NOT NULL DEFAULT 'right'"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

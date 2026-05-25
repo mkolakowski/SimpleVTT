@@ -106,6 +106,23 @@
            don't visually compete with the sidebar's right edge. */
         z-index: 50;
     }
+    /* v2.49.244: independent left sidebar that hosts the roll-log
+       drawer when the per-user roll_log_position preference is "left".
+       Same width + z-index + transparent background as the right
+       sidebar so the visual rhythm matches; only the side anchor
+       flips. The roll-log panel inside this wrapper opens / closes
+       independently of whatever right-side panel is active so the
+       player can read rolls while interacting with Battle / Settings. */
+    .drawer-sidebar--left {
+        right: auto; left: 0;
+    }
+    .drawer-panels-wrapper--left { min-width: 480px; }
+    /* Hide the empty left sidebar entirely when the roll-log drawer
+       isn't open — without this, the left sidebar would intercept
+       clicks on the left edge of the map even with no visible panel. */
+    .drawer-sidebar--left:not(:has(.drawer-panel.open)) {
+        pointer-events: none;
+    }
     /* v2.4.22: drawer tabs now live inline with the campaign title in the
        ``.tt-topbar`` (was a dedicated bar above the sidebar panels). No
        more bottom border or min-width — those existed to make it look
@@ -1575,6 +1592,24 @@
             <p class="muted" style="padding: 20px;">No active map. {% if is_gm %}Upload one in <a href="/admin/campaign/{{ campaign.id }}">campaign settings</a>.{% endif %}</p>
         {% endif %}
     </div>
+
+    {# v2.49.244: when the user's roll_log_position preference is "left",
+       render a second independent sidebar on the left edge and rehome the
+       roll-log drawer into it at startup (see the drawer-system JS below).
+       The right sidebar continues to host the other tabs (Battle, Characters,
+       Settings, GM Tools). The Roll Log tab button itself stays in the
+       topbar where it always was; clicking it toggles the LEFT drawer
+       open/closed without disturbing whatever right-side panel is active. #}
+    {% if user.roll_log_position == 'left' %}
+    <div class="drawer-sidebar drawer-sidebar--left">
+        <div class="drawer-panels-wrapper drawer-panels-wrapper--left" id="drawer-panels-wrapper-left">
+            {# Roll-log markup is JS-relocated here from the right wrapper on
+               page load so all of its existing data-bindings (the
+               #roll-list element, the dice form, the clear button, etc.)
+               keep working without duplicating ~140 lines of Jinja. #}
+        </div>
+    </div>
+    {% endif %}
 
     <div class="drawer-sidebar">
         {# v2.4.22: the ``.drawer-tab-bar`` previously lived here (above the
@@ -3230,31 +3265,99 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 /* ── Drawer system ── */
 (function () {
     const tabs    = document.querySelectorAll('.drawer-tab-btn');
-    const panels  = document.querySelectorAll('.drawer-panel');
     const wrapper = document.getElementById('drawer-panels-wrapper');
     const STORAGE_KEY = 'simplevtt_drawer_' + CAMPAIGN_ID;
+    /* v2.49.244 — per-user roll-log-position preference. When "left",
+       the markup above rendered an empty left sidebar; we now move the
+       roll-log panel into it at startup so it lives in its own DOM
+       subtree. ``openPanel`` then scopes "close others" to the
+       sibling panels in whichever sidebar the target lives in, which
+       makes the left drawer independent of the right one (Roll Log
+       can be open while Battle / Settings is also open on the right).
+       The left drawer also gets toggle-on-click behavior — clicking
+       the Roll Log tab while it's already open CLOSES the left
+       sidebar entirely so the player can dismiss it. Right-side
+       behavior is unchanged (mutex within the right wrapper). */
+    const leftWrapper = document.getElementById('drawer-panels-wrapper-left');
+    if (leftWrapper) {
+        const rollLog = document.getElementById('roll-log-drawer');
+        if (rollLog) leftWrapper.appendChild(rollLog);
+    }
+    /* Re-query AFTER the move so ``panels`` reflects the post-move DOM. */
+    const panels = document.querySelectorAll('.drawer-panel');
+
+    function _wrapperOf(panel) {
+        return panel.parentElement;
+    }
+
+    function _isLeftSidebar(panel) {
+        return !!panel.closest('.drawer-sidebar--left');
+    }
 
     function openPanel(targetId) {
-        tabs.forEach(t => t.classList.remove('active'));
-        panels.forEach(p => p.classList.remove('open'));
-        const tab   = [...tabs].find(t => t.dataset.target === targetId);
         const panel = document.getElementById(targetId);
-        if (tab && panel) {
-            tab.classList.add('active');
-            panel.classList.add('open');
-            try { localStorage.setItem(STORAGE_KEY, targetId); } catch (e) {}
-            if (targetId === 'roll-log-drawer') {
-                const body = panel.querySelector('.drawer-body');
-                if (body) requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
+        if (!panel) return;
+        const wrap = _wrapperOf(panel);
+        const tab  = [...tabs].find(t => t.dataset.target === targetId);
+
+        /* v2.49.244 — toggle-on-click for the left-side drawer.
+           If the left-side roll-log panel is already open and the user
+           clicks Roll Log again, close it. The right-side sidebar still
+           uses the original mutex-within-wrapper behavior since one of
+           its tabs is always meant to be active. */
+        if (_isLeftSidebar(panel) && panel.classList.contains('open')) {
+            panel.classList.remove('open');
+            if (tab) tab.classList.remove('active');
+            try { localStorage.setItem(STORAGE_KEY + '_left_open', '0'); } catch (e) {}
+            return;
+        }
+
+        /* Close other panels in the SAME wrapper, deactivate the tabs
+           that target them. Panels in the OTHER wrapper are untouched. */
+        const wrapPanels = wrap ? wrap.querySelectorAll('.drawer-panel') : [];
+        const wrapPanelIds = new Set([...wrapPanels].map(p => p.id));
+        wrapPanels.forEach(p => p.classList.remove('open'));
+        tabs.forEach(t => {
+            if (wrapPanelIds.has(t.dataset.target)) t.classList.remove('active');
+        });
+
+        if (tab) tab.classList.add('active');
+        panel.classList.add('open');
+
+        /* Persist independent open-state for each wrapper. */
+        try {
+            if (_isLeftSidebar(panel)) {
+                localStorage.setItem(STORAGE_KEY + '_left_open', '1');
+            } else {
+                localStorage.setItem(STORAGE_KEY, targetId);
             }
+        } catch (e) {}
+
+        if (targetId === 'roll-log-drawer') {
+            const body = panel.querySelector('.drawer-body');
+            if (body) requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
         }
     }
 
     tabs.forEach(tab => tab.addEventListener('click', () => openPanel(tab.dataset.target)));
 
-    /* Restore last-used tab on load, defaulting to the first tab */
+    /* Restore last-used tab on load. Right side: the saved tab, or the
+       first tab whose target lives in the right wrapper. Left side:
+       only open if the user had it open in their last session. */
     const saved = (() => { try { return localStorage.getItem(STORAGE_KEY); } catch (e) { return null; } })();
-    openPanel(saved || tabs[0]?.dataset.target);
+    const rightTabs = [...tabs].filter(t => {
+        const p = document.getElementById(t.dataset.target);
+        return p && !_isLeftSidebar(p);
+    });
+    const defaultRight = saved && rightTabs.find(t => t.dataset.target === saved)
+        ? saved
+        : rightTabs[0]?.dataset.target;
+    if (defaultRight) openPanel(defaultRight);
+
+    const leftOpen = (() => { try { return localStorage.getItem(STORAGE_KEY + '_left_open'); } catch (e) { return null; } })();
+    if (leftWrapper && leftOpen === '1') {
+        openPanel('roll-log-drawer');
+    }
 
     /* v2.48.2 — expose openPanel so tabletop.js can auto-switch to
        the roll-log drawer after a local action lands a new entry.
