@@ -5318,6 +5318,13 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // atomically decrements the counter + applies HP
                     // via _apply_hp_change + marks the action slot.
                     const isWholenessOfBody = featureKey === 'wholeness-of-body';
+                    // v2.49.229: Stillness of Mind (Monk Lv 7). Action,
+                    // unlimited uses. Picks one Charmed/Frightened buff
+                    // off the monk's _buffs_active list via prompt(); a
+                    // future commit can swap the prompt for a styled
+                    // picker once there's a fixture with multiple
+                    // simultaneous charmed/frightened conditions.
+                    const isStillnessOfMind = featureKey === 'stillness-of-mind';
                     // v2.49.121 Sorcery Phase 0 sheet wiring. The
                     // `font-of-magic` resource pill pops a direction
                     // picker (slot → SP / SP → slot) + a slot-level
@@ -5427,6 +5434,43 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                         sotwMode = pickDisengage ? 'disengage' : 'dash';
                     }
 
+                    // v2.49.229: Stillness of Mind needs a buff_key pick
+                    // when the monk has BOTH charmed and frightened on.
+                    // Reads the live buff list from the v2.49.227 buffs
+                    // endpoint; the picker is OK/cancel: OK=charmed,
+                    // Cancel=frightened when both are present. Single-
+                    // condition cases skip the picker entirely. Returns
+                    // null + aborts when neither is on (RAW: the action
+                    // is wasted; we 404 instead so the chip isn't flipped).
+                    let somBuffKey = null;
+                    if (isStillnessOfMind) {
+                        let activeKeys = [];
+                        try {
+                            const buffsResp = await fetch(`/api/campaign/${CAMPAIGN_ID}/character/${MY_CHAR_ID}/buffs`);
+                            if (buffsResp.ok) {
+                                const buffsData = await buffsResp.json();
+                                activeKeys = ((buffsData.buffs || [])
+                                    .map(b => (b || {}).key)
+                                    .filter(k => k === 'charmed' || k === 'frightened'));
+                            }
+                        } catch (e) { /* fall through; server will 404 */ }
+                        if (activeKeys.length === 0) {
+                            (window.showToast || function(m){ alert(m); })(
+                                'Stillness of Mind: no Charmed or Frightened condition to end.', 'error');
+                            btn.disabled = false;
+                            return;
+                        } else if (activeKeys.length === 1) {
+                            somBuffKey = activeKeys[0];
+                        } else {
+                            const pickCharmed = window.confirm(
+                                '🧘 Stillness of Mind — pick a condition to end\n\n' +
+                                'OK = Charmed\n' +
+                                'Cancel = Frightened'
+                            );
+                            somBuffKey = pickCharmed ? 'charmed' : 'frightened';
+                        }
+                    }
+
                     const endpoint = isCuttingWords ? 'use_cutting_words'
                                    : isSecondWind ? 'use_second_wind'
                                    : isActionSurge ? 'use_action_surge'
@@ -5435,6 +5479,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                    : isStepOfTheWind ? 'use_step_of_the_wind'
                                    : isFlurryOfBlows ? 'use_flurry_of_blows'
                                    : isWholenessOfBody ? 'use_wholeness_of_body'
+                                   : isStillnessOfMind ? 'use_stillness_of_mind'
                                    : isFontOfMagic
                                        ? (fomDirection === 'to_points'
                                           ? 'use_font_of_magic_to_points'
@@ -5470,6 +5515,10 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 override: !!override,
                             } : isWholenessOfBody ? {
                                 character_id: MY_CHAR_ID,
+                                override: !!override,
+                            } : isStillnessOfMind ? {
+                                character_id: MY_CHAR_ID,
+                                buff_key: somBuffKey,
                                 override: !!override,
                             } : isFontOfMagic ? {
                                 character_id: MY_CHAR_ID,
@@ -5533,6 +5582,8 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             window.showToast(`💨 Second Wind: ${data.expression} = +${data.actual_healed} HP (now ${data.hp.current}/${data.hp.max})`, 'info');
                         } else if (isWholenessOfBody) {
                             window.showToast(`🧘 Wholeness of Body: +${data.actual_healed} HP (now ${data.hp.current}/${data.hp.max})`, 'info');
+                        } else if (isStillnessOfMind) {
+                            window.showToast(`🧘 Stillness of Mind: cleared ${data.removed_name}.`, 'info');
                         } else if (isActionSurge) {
                             window.showToast(`⚡ Action Surge: action chip refunded — take another action this turn.`, 'info');
                         } else if (isRage) {

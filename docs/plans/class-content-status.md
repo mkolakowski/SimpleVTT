@@ -208,7 +208,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 5 | Stunning Strike | ✅ | v2.49.55 — `/api/campaign/{cid}/use_stunning_strike` endpoint. After a hit with a melee weapon attack, spend 1 ki → target makes CON save against the monk's spell save DC (`8 + prof + WIS mod`); on fail, "stunned" condition applied via the Phase C condition slot until end of monk's next turn. First non-concentration incapacitating-condition buff. Harness coverage in `test_use_stunning_strike.py` including a PC integration case. |
 | 6 | Ki-Empowered Strikes | ⚪ | |
 | 7 | Evasion | ⚪ | |
-| 7 | Stillness of Mind | ⚪ | |
+| 7 | Stillness of Mind | ✅ | v2.49.229 — `/api/campaign/{cid}/use_stillness_of_mind` endpoint. Action, unlimited uses. Takes `buff_key`; validates it's in `_STILLNESS_OF_MIND_ALLOWED_BUFF_KEYS = {charmed, frightened}` (refuses paralyzed/stunned/etc.); reuses `_remove_buff` to clear the matching buff. Sheet picker pops when monk has BOTH charmed and frightened simultaneously. Demo Kael bumped Lv 6 → 7 to land the fixture. Harness: `test_use_stillness_of_mind.py`. |
 | 10 | Purity of Body | ✅ | Monk Lv 10: pure-descriptive (immunity to disease + poison). RAW: would gate the disease / poisoned conditions but SimpleVTT doesn't model those conditions today, so the description text is sufficient. Re-evaluate if a disease engine ships. |
 | 13 | Tongue of the Sun and Moon | ✅ | Monk Lv 13: pure-descriptive language feature (understand all spoken languages). No mechanic required RAW. |
 | 14 | Diamond Soul | ⚪ | |

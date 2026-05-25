@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 427 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.227, 2026-05-24).
+**Total tests:** 434 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.229, 2026-05-24).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -628,6 +628,19 @@ v2.49.112 — Monk class feature `POST /use_step_of_the_wind` (Lv 2+). Spend 1 k
 | `test_step_of_the_wind_dash_mode` | Kael, mode=dash → 200, `mode=dash` in response. `buff_update` broadcast has `step-of-the-wind-dash` key with `effects.dash=True` + `effects.jump_distance_doubled=True`. |
 | `test_step_of_the_wind_wrong_class` | Krieger → 409 `wrong_class`. |
 | `test_step_of_the_wind_invalid_mode` | mode="fly" → 400 with "mode" in the error body. |
+
+### `test_use_stillness_of_mind.py`
+v2.49.229 — Monk class feature `POST /use_stillness_of_mind` (Lv 7). Action, unlimited uses. Takes `{character_id, buff_key}`; validates buff_key is in `{charmed, frightened}` (refuses paralyzed/stunned/etc. per RAW). Removes the matching buff via `_remove_buff` (same helper /end_buff uses), syncs the sheet mirror, marks the action slot, broadcasts buff_update + feature_used.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_stillness_of_mind_clears_charmed` | Seed Kael with a Charmed buff → 200; `removed_key=charmed`, `removed_name=Charmed`. `buff_update` shows the buff gone; `feature_used` source=stillness-of-mind. |
+| `test_stillness_of_mind_clears_frightened` | Same path, Frightened buff variant → 200; `removed_key=frightened`. |
+| `test_stillness_of_mind_wrong_class` | Pip (Rogue) → 409 `error=wrong_class`, `expected=monk`, `got=rogue`. |
+| `test_stillness_of_mind_wrong_condition` | buff_key="stunned" → 409 `error=wrong_condition`, `got=stunned`, `allowed=[charmed,frightened]`. |
+| `test_stillness_of_mind_buff_not_present` | Kael with no Charmed/Frightened buff → 404 `error=buff_not_present`. |
+| `test_stillness_of_mind_missing_buff_key` | Missing buff_key → 400. |
+| `test_stillness_of_mind_missing_character_id` | Missing character_id → 400. |
 
 ### `test_use_wholeness_of_body.py`
 v2.49.227 — Monk subclass feature `POST /use_wholeness_of_body` (Way of the Open Hand, Lv 6). Action, 1/long rest, deterministic heal = 3 × monk level (no roll). Atomically decrements the `wholeness-of-body` counter, applies HP via `_apply_hp_change`, marks the action slot, broadcasts `feature_used` + `resource_update` + `character_death_save` (when applicable). Kael Brightleaf (bumped from Lv 5 to Lv 6 in the same release) is the demo fixture.

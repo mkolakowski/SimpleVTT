@@ -58,7 +58,7 @@ async def test_flurry_of_blows_happy_path(gm_client, gm_ws, kael_rested):
     body = r.json()
     assert body["ok"] is True
     assert body["unarmed_strikes_available"] == 2
-    assert body["remaining"] == 5  # Kael's max ki is 6 at Lv 6 (v2.49.227)
+    assert body["remaining"] == 6  # Kael's max ki is 7 at Lv 7 (v2.49.229)
     assert body["buff_installed"] is True
     bu = await gm_ws.wait_for("buff_update", timeout=2.0)
     data = bu.get("data") or {}
@@ -104,8 +104,8 @@ async def test_flurry_of_blows_wrong_class(gm_client, roster):
 async def test_flurry_of_blows_no_ki(gm_client, kael_rested):
     kael = kael_rested
     await _seed_kael_solo(gm_client, kael)
-    # v2.49.227: Kael bumped to Lv 6 → Ki max 6; drain takes 6 calls.
-    for _ in range(6):
+    # v2.49.229: Kael bumped to Lv 7 → Ki max 7; drain takes 7 calls.
+    for _ in range(7):
         r = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/use_flurry_of_blows",
             json={"character_id": kael["id"], "override": True},

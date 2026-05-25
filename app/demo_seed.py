@@ -1530,7 +1530,9 @@ def _barbarian_sheet(name: str) -> dict:
 
 def _monk_sheet(name: str) -> dict:
     """v2.18.0: demo Monk Kael Brightleaf (Way of the Open Hand).
-    Bumped to Lv 6 in v2.49.227 to unlock Wholeness of Body. Added in
+    Bumped to Lv 6 in v2.49.227 to unlock Wholeness of Body. Bumped to
+    Lv 7 in v2.49.229 to unlock Stillness of Mind (also unlocks
+    Evasion + Ki-Empowered Strikes for future commits). Added in
     Phase A.5
     to unlock per-feature work for Ki spending (Flurry of Blows /
     Patient Defense / Step of the Wind — all bonus-action spend-1-Ki
@@ -1544,7 +1546,7 @@ def _monk_sheet(name: str) -> dict:
     return {
         "class": "Monk",
         "subclass": "Way of the Open Hand",
-        "level": 6,
+        "level": 7,
         "race": "Wood Elf",  # +2 DEX, +1 WIS, Fleet of Foot (speed 35)
         "alignment": "Lawful Good",
         "background": "Hermit",
@@ -1559,12 +1561,12 @@ def _monk_sheet(name: str) -> dict:
         # (+10 at Lv 5) = 45 ft. Notable demo: Kael can dash 90 ft in
         # one turn with Step of the Wind.
         "speed": 45,
-        # Lv 1 max d8 (8) + 5× avg d8 (5) + CON +2 × 6 = 8 + 25 + 12 = 45
-        # (Lv 6 bump: prior Lv 5 was 8 + 20 + 10 = 38).
-        "hp": {"current": 45, "max": 45, "temp": 0},
+        # Lv 1 max d8 (8) + 6× avg d8 (5) + CON +2 × 7 = 8 + 30 + 14 = 52
+        # (Lv 7 bump v2.49.229: prior Lv 6 was 8 + 25 + 12 = 45).
+        "hp": {"current": 52, "max": 52, "temp": 0},
         "initiative_bonus": 4,  # DEX 18 mod
         "proficiency_bonus": 3,  # PB +3 holds from Lv 5-8
-        "hit_dice": {"current": 6, "max": 6},
+        "hit_dice": {"current": 7, "max": 7},
         "class_hit_die": "d8",
         # Monk prof saves are STR + DEX.
         "saving_throws": {"STR": True, "DEX": True},
@@ -1620,16 +1622,17 @@ def _monk_sheet(name: str) -> dict:
         # since v2.6.0 with slot:'bonus'). Stunning Strike (Lv 5) also
         # spends 1 Ki but it's a per-attack uplift — pending the v2.16.0
         # attack-picker pattern extending for Monks.
-        # v2.49.227: Lv 6 bump → Ki max 6 + Wholeness of Body counter
-        # (1/1 long rest, decremented by /use_wholeness_of_body).
+        # v2.49.227: Lv 6 bump → Ki max 6 + Wholeness of Body counter.
+        # v2.49.229: Lv 7 bump → Ki max 7 + Stillness of Mind unlock
+        # (no counter — RAW unlimited uses; the action chip is the gate).
         "resources": [
             {
                 "key": "ki",
                 "name": "Ki",
-                "current": 6, "max": 6, "reset": "short",
+                "current": 7, "max": 7, "reset": "short",
                 "source": "monk Lv 2",
                 "class_slug": "monk",
-                "desc": "Spend 1 Ki for Flurry of Blows / Patient Defense / Step of the Wind (bonus action). 6 points at Lv 6; refreshes on short rest.",
+                "desc": "Spend 1 Ki for Flurry of Blows / Patient Defense / Step of the Wind (bonus action). 7 points at Lv 7; refreshes on short rest.",
                 "manual": False,
             },
             {
@@ -1638,7 +1641,7 @@ def _monk_sheet(name: str) -> dict:
                 "current": 1, "max": 1, "reset": "long",
                 "source": "Way of the Open Hand Lv 6",
                 "class_slug": "monk",
-                "desc": "Action: regain 3× monk level HP (18 at Lv 6). Once per long rest.",
+                "desc": "Action: regain 3× monk level HP (21 at Lv 7). Once per long rest.",
                 "manual": False,
             },
         ],
@@ -1669,12 +1672,21 @@ def _monk_sheet(name: str) -> dict:
                 "desc": "Bonus action — spend 1 Ki to take the Disengage or Dash action; jump distance doubles for the turn.",
             },
             # v2.49.227: Wholeness of Body (Way of the Open Hand Lv 6).
-            # Action — regain HP equal to 3 × monk level (18 at Lv 6).
+            # Action — regain HP equal to 3 × monk level (21 at Lv 7).
             # Once per long rest. Decremented by /use_wholeness_of_body.
             {
                 "key": "wholeness-of-body",
                 "name": "Wholeness of Body",
-                "desc": "Action — regain 3× monk level HP (18 at Lv 6). Once per long rest.",
+                "desc": "Action — regain 3× monk level HP (21 at Lv 7). Once per long rest.",
+            },
+            # v2.49.229: Stillness of Mind (Monk Lv 7). Action — end
+            # one charmed or frightened condition on yourself. No
+            # counter — RAW unlimited uses; the action chip is the
+            # gate. Routed through /use_stillness_of_mind.
+            {
+                "key": "stillness-of-mind",
+                "name": "Stillness of Mind",
+                "desc": "Action — end one charmed or frightened condition on yourself. Unlimited uses.",
             },
         ],
     }

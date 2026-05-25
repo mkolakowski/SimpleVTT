@@ -235,6 +235,13 @@ _FEATURE_ECONOMY: dict[str, dict] = {
         "slot": "action",
         "desc": "Action: regain 3× monk level HP. Once per long rest.",
     },
+    # v2.49.229: Monk Lv 7. Action — end one charmed or frightened
+    # condition on yourself. Unlimited uses RAW; the action chip is
+    # the only gate. Routed through /use_stillness_of_mind.
+    "stillness-of-mind": {
+        "slot": "action",
+        "desc": "Action: end one charmed or frightened condition on yourself.",
+    },
 }
 
 
@@ -13431,6 +13438,163 @@ async def use_wholeness_of_body(
         "hp": hp_result["hp"],
         "remaining": wob_cur - 1,
         "max": wob_max,
+        "over_budget": was_used,
+    }
+
+
+# ----------- API: Stillness of Mind (Monk Lv 7) -----------
+
+# RAW: condition keys this feature is allowed to remove. PHB p.79:
+# "you can use your action to end one effect on yourself that is
+# causing you to be charmed or frightened." Other conditions (paralyzed,
+# stunned, etc.) are NOT in scope — the endpoint refuses non-matching
+# buff_key values to keep the gate honest.
+_STILLNESS_OF_MIND_ALLOWED_BUFF_KEYS = frozenset({"charmed", "frightened"})
+
+
+@router.post("/api/campaign/{campaign_id}/use_stillness_of_mind")
+async def use_stillness_of_mind(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.49.229: spend an action to end one charmed or frightened
+    condition on yourself. Monk Lv 7, no Ki cost, no per-rest counter.
+
+    Body: ``{character_id, buff_key, override?}``.
+
+    RAW: "Starting at 7th level, you can use your action to end one
+    effect on yourself that is causing you to be charmed or frightened"
+    (PHB p.79). The action chip is the only gate — unlike Wholeness of
+    Body there's no resource counter, so a monk can theoretically use
+    Stillness of Mind on every turn they have a qualifying condition
+    + an action available.
+
+    The ``buff_key`` parameter names the specific buff to remove
+    (typically "charmed" or "frightened" matching the
+    ``_SPELL_CONDITION_MAP`` entries Charm Person and Fear install).
+    If the caller passes a buff_key that's NOT in
+    ``_STILLNESS_OF_MIND_ALLOWED_BUFF_KEYS``, returns 409
+    ``error: "wrong_condition"`` — Stillness doesn't cure stunned /
+    paralyzed / etc.
+
+    Mirrors the v2.49.227 Wholeness of Body shape for the class +
+    level + action-slot gating; reuses ``_remove_buff`` from the
+    Phase C.1 manual-removal flow at line ~13445 + ``_mirror_buffs_to_sheet``
+    to sync the sheet's _buffs_active list.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    buff_key = str(body.get("buff_key") or "").strip().lower()
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+    if not buff_key:
+        raise HTTPException(400, "buff_key is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    # Class + level validation. Stillness of Mind unlocks at Monk Lv 7.
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "monk", "got": cls or "",
+        })
+    monk_lv = int(sheet.get("level") or 0)
+    if monk_lv < 7:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 7, "got": monk_lv,
+        })
+
+    # RAW restricts which buffs Stillness of Mind can end.
+    if buff_key not in _STILLNESS_OF_MIND_ALLOWED_BUFF_KEYS:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_condition",
+            "got": buff_key,
+            "allowed": sorted(_STILLNESS_OF_MIND_ALLOWED_BUFF_KEYS),
+        })
+
+    # The named buff must actually be on the monk for the action to
+    # have an effect. Return 404 if absent so the client doesn't
+    # waste the action chip on a no-op.
+    existing = next(
+        (b for b in _get_buffs(campaign_id, char.id)
+         if (b or {}).get("key") == buff_key),
+        None,
+    )
+    if existing is None:
+        return JSONResponse(status_code=404, content={
+            "error": "buff_not_present",
+            "buff_key": buff_key,
+        })
+
+    # Phase 4 over-budget gate (action slot).
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "stillness-of-mind",
+            "label": "Stillness of Mind",
+            "strict": strict,
+        })
+
+    # Remove the buff via the same helper /end_buff uses.
+    removed = await _remove_buff(campaign_id, char.id, buff_key)
+    if not removed:
+        # _get_buffs above succeeded but _remove_buff returned False —
+        # race condition (another request removed it between the lookup
+        # and the removal). Treat as already-cleared.
+        return JSONResponse(status_code=404, content={
+            "error": "buff_not_present",
+            "buff_key": buff_key,
+        })
+
+    # Sync sheet mirror.
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
+    # Mark the action slot.
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    # Broadcasts. _remove_buff already emits buff_update; here we add
+    # the feature_used roll-log card so the GM + table see the use.
+    buff_name = (existing.get("name") or buff_key.capitalize())
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🧘 Stillness of Mind",
+            "feature_desc": f"Action · cleared {buff_name}",
+            "source": "stillness-of-mind",
+            "removed_key": buff_key,
+            "removed_name": buff_name,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "removed_key": buff_key,
+        "removed_name": buff_name,
         "over_budget": was_used,
     }
 

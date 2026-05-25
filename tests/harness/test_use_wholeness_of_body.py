@@ -35,9 +35,9 @@ async def kael_full(gm_client, roster):
 
 async def test_wholeness_of_body_happy_path(gm_client, gm_ws, kael_full):
     """Kael spends Wholeness of Body. Asserts: 200 response,
-    rolled = 3 × monk_level (18 at Lv 6), actual_healed = min(rolled,
-    hp_gap), counter decrements, feature_used + resource_update
-    broadcasts fire.
+    rolled = 3 × monk_level (21 at Lv 7 post-v2.49.229),
+    actual_healed = min(rolled, hp_gap), counter decrements,
+    feature_used + resource_update broadcasts fire.
     """
     kael = kael_full
     gm_ws.mark()  # discard the long-rest broadcasts
@@ -48,15 +48,15 @@ async def test_wholeness_of_body_happy_path(gm_client, gm_ws, kael_full):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["ok"] is True
-    # Lv 6 monk → 3 × 6 = 18 HP regain. Deterministic (no roll).
-    assert data["rolled"] == 18
-    # Kael starts at full HP (45/45 after the long rest), so
+    # Lv 7 monk → 3 × 7 = 21 HP regain. Deterministic (no roll).
+    assert data["rolled"] == 21
+    # Kael starts at full HP (52/52 after the long rest), so
     # actual_healed = 0 (can't heal past max). The endpoint still
     # decrements the counter — burning the use at full HP is wasteful
     # but the server doesn't gate on it (matches the RAW: spending the
     # action commits the use).
     assert data["actual_healed"] == 0
-    assert data["hp"]["current"] == data["hp"]["max"] == 45
+    assert data["hp"]["current"] == data["hp"]["max"] == 52
     assert data["remaining"] == 0  # was 1, decremented
     assert data["max"] == 1
 
@@ -66,8 +66,8 @@ async def test_wholeness_of_body_happy_path(gm_client, gm_ws, kael_full):
     assert msg["data"]["heal_target_name"] == kael["name"]
     assert msg["data"]["heal_amount"] == data["actual_healed"]
     # feature_desc carries the rolled total + level annotation.
-    assert "18" in msg["data"]["feature_desc"]
-    assert "Lv 6" in msg["data"]["feature_desc"]
+    assert "21" in msg["data"]["feature_desc"]
+    assert "Lv 7" in msg["data"]["feature_desc"]
 
     ru_msg = await gm_ws.wait_for("resource_update")
     assert ru_msg["data"]["key"] == "wholeness-of-body"
