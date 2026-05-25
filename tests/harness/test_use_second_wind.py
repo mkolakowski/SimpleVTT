@@ -34,8 +34,9 @@ async def garrik_full(gm_client, roster):
 
 async def test_second_wind_happy_path(gm_client, gm_ws, garrik_full):
     """Garrik spends Second Wind. Asserts: 200 response, rolled value
-    in [6, 15] for Lv 5 (1d10+5), actual_healed = min(rolled, hp_gap),
-    feature_used + resource_update broadcasts fire.
+    in [10, 19] for Lv 9 (1d10+9, v2.56.0 bump), actual_healed =
+    min(rolled, hp_gap), feature_used + resource_update broadcasts
+    fire.
     """
     garrik = garrik_full
     gm_ws.mark()  # discard the long-rest broadcasts
@@ -46,10 +47,10 @@ async def test_second_wind_happy_path(gm_client, gm_ws, garrik_full):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["ok"] is True
-    assert data["expression"] == "1d10+7"  # Lv 7 fighter (v2.49.237)
-    assert 8 <= data["rolled"] <= 17
-    # Garrik starts at full HP (67/67 after the long rest), so
-    # actual_healed = 0 (can't heal past max).
+    assert data["expression"] == "1d10+9"  # Lv 9 fighter (v2.56.0 bump for Indomitable)
+    assert 10 <= data["rolled"] <= 19
+    # Garrik starts at full HP (85/85 after the long rest, post-v2.56.0
+    # bump from 67), so actual_healed = 0 (can't heal past max).
     assert data["actual_healed"] == 0
     assert data["hp"]["current"] == data["hp"]["max"]
     assert data["remaining"] == 0  # was 1, decremented

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 465 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.55.0, 2026-05-25).
+**Total tests:** 470 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.56.0, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -678,6 +678,17 @@ v2.49.244 — per-user UI preference. `POST /api/settings/roll_log_position` fli
 | `test_roll_log_position_left_then_right` | GM POSTs `{"position": "left"}` → 200 + `roll_log_position == "left"`; subsequent POST `{"position": "right"}` flips back, both persist. |
 | `test_roll_log_position_rejects_invalid_value` | `{"position": "middle"}` → 400 with the invalid value surfaced in the response body. |
 | `test_roll_log_position_persists_for_player` | Per-user isolation — Alice sets `left` independently of the GM; cleanup resets her to `right`. |
+
+### `test_use_indomitable.py`
+v2.56.0 — Fighter Lv 9+ Indomitable. Arm-then-consume single-use save-advantage buff (`indomitable-armed`). Save-roll hook reads + consumes the buff per-save. RAW-bent v1 (advantage on next save instead of post-roll reroll-on-failure); see TODO.md.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_use_indomitable_arms_buff` | `/use_indomitable` → 200, `remaining=0`, buff `indomitable-armed` lands on Garrik's combatant, arm-side `feature_used(source=indomitable)` broadcast. |
+| `test_use_indomitable_wrong_class` | Pip (Rogue) → 409 `wrong_class` with `expected=fighter`. |
+| `test_use_indomitable_out_of_uses` | First call burns the only use; second call → 409 `out_of_uses` with `label=Indomitable`. |
+| `test_indomitable_consumes_on_save` | Arm + cast Suggestion at Garrik → save `base_expression="2d20kh1"`, buff removed from Garrik's combatant, consume-side `feature_used(source=indomitable)` broadcast. |
+| `test_indomitable_one_save_only` | After consume, a second save in the same round has `base_expression="1d20"` (no kh1; buff already consumed). |
 
 ### `test_aura_of_devotion.py`
 v2.55.0 — Paladin Oath of Devotion Lv 7+ Aura of Devotion. First **condition-install immunity gate** — when a failed Wis save would install Charmed on a PC ally, and any Paladin Lv 7+ with subclass `devotion` is in init, the install is BLOCKED and a `feature_used(source=aura-of-devotion)` broadcast surfaces the immunity. Distinct from Aura of Protection (save modifier): AoD acts AFTER the save resolves to bypass the consequence.

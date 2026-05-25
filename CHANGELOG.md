@@ -10,6 +10,45 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.56.0] - 2026-05-25 — "Iron Will"
+
+**Schema version:** 57
+**Commit summary:** **Fighter Indomitable (Lv 9+) — first arm-then-consume save modifier.** Garrik bumped Lv 7 → Lv 9 to unlock the feature. `/use_indomitable` decrements the Indomitable counter and installs a single-use `indomitable-armed` self-buff; the save-roll construction hook reads the buff, swaps `1d20 → 2d20kh1`, and immediately removes the buff via `_remove_buff` so the arm is per-save (not per-turn). Builds on the v2.52.0/v2.53.0/v2.54.0/v2.55.0 save plumbing — composes cleanly with Danger Sense (both advantage sources collapse to the same `2d20kh1` shape) and Aura of Protection (`+N` still appends after the kh1).
+**Description:** Three new helpers in `app/routes/tabletop_routes.py`. **(1)** `_fighter_level_from_sheet(sheet)` — mirror of the other class-level helpers; single-class + multiclass aware. **(2)** `_saver_has_indomitable_armed(campaign_id, saving_char_id) → bool` — walks the active battle for the PC's combatant and checks for an `indomitable-armed` buff key. Caller swaps + removes the buff in the same pass so the next save in the same round gets no advantage. **(3)** `_broadcast_indomitable(campaign_id, fighter)` async helper for the `feature_used(source="indomitable")` consume-side broadcast (the arm-side broadcast fires from the endpoint itself).
+**Description (cont):** New `/use_indomitable` endpoint (modeled on `/use_action_surge` / `/use_second_wind`). Validates Fighter Lv 9+; verifies the Indomitable counter has uses (`out_of_uses` 409 when empty); decrements the counter; installs a 10-round `indomitable-armed` buff (long enough to let the player decide which save to spend it on; if it expires unused the player just spent the use for nothing — RAW-bent but a player-controlled risk); broadcasts `feature_used` + `resource_update`. Slot:`free` (no over-budget gate) — Indomitable is RAW free; the counter IS the gate.
+**Description (cont 2):** Wired into both `/cast_spell` PC save roll_request construction sites (single-target + AoE). Each site does `_ind_applies = _saver_has_indomitable_armed(...)`; if True, the `_ds_base` already-flipped-for-Danger-Sense logic also flips for Indomitable (`_ds_base = "2d20kh1" if (_ds_applies or _ind_applies) else "1d20"`). After the request creates, the buff is removed via `_remove_buff(campaign_id, char_id, "indomitable-armed")` and a consume-side broadcast fires naming Garrik. The interaction with Danger Sense is a no-op (both want `2d20kh1`; doubling kh1 is the same kh1) — the Aura of Protection `+N` suffix appends correctly after either swap.
+**Description (cont 3):** Demo seed. **(a)** `app/demo_seed.py::_fighter_sheet` bumped Garrik Lv 7 → 9. HP scales d10(avg 6)+CON(+3) per level × 2 levels = +18 → 85/85. hit_dice 7 → 9. **Proficiency bonus +3 → +4** (PB changes at Lv 9). Greatsword + Handaxe attack bonuses bumped `+7 → +8` (STR +4 + prof +4 = +8). Second Wind heal expression `1d10+7 → 1d10+9`. **(b)** Added `indomitable` resource entry (1 use, reset:long, class_slug:fighter). **(c)** Added `indomitable` `class_features` row.
+**Description (cont 4):** Tests fix-ups for the prof bump (only 2 broke). `test_use_second_wind.py::test_second_wind_happy_path` — hardcoded `1d10+7` and rolled range `[8, 17]` → `1d10+9` / `[10, 19]`. `test_broadcast_payload_shapes.py::test_second_wind_broadcast_carries_dice_and_heal_fields` — `dice_expression == "1d10+7"` → `"1d10+9"`. The Greatsword `+7 → +8` bump didn't break any attack tests because none had hardcoded the bonus value (they assert on the resulting `attack_total` range, which still spans the same `[8, 28]` window).
+**Description (cont 5):** New `tests/harness/test_use_indomitable.py` (5 tests): (1) arm happy path — endpoint returns 200, counter decrements, buff installs, arm-side broadcast fires; (2) wrong-class control — Pip (Rogue) → 409 `wrong_class`; (3) out-of-uses control — second arm-call returns 409 `out_of_uses`; (4) consume happy path — arm + Suggestion at Garrik → `base_expression="2d20kh1"`, buff removed, consume-side broadcast; (5) per-save semantic — second save after consume gets `base_expression="1d20"`. All 5 green; full harness suite at 470 tests (was 465).
+**Description (cont 6):** Verification. (a) `curl /version` reports `2.56.0` after `docker compose up -d --build app`. (b) `pytest tests/harness/test_use_indomitable.py -v` → 5/5 passed. (c) Full harness suite: 470 passed in ~3 min.
+
+### Added
+- `_fighter_level_from_sheet(sheet) → int` helper.
+- `_saver_has_indomitable_armed(campaign_id, saving_char_id) → bool` helper.
+- `_broadcast_indomitable(campaign_id, fighter)` async helper for the consume-side broadcast.
+- `/use_indomitable` endpoint (Fighter Lv 9+, decrements counter, installs `indomitable-armed` self-buff, slot:`free`).
+- Save-roll construction hooks in cast_spell single + AoE PC save paths now check + consume the indomitable-armed buff.
+- `_fighter_sheet::resources` gains an `indomitable` counter (1 use, reset:long).
+- `_fighter_sheet::class_features` gains an `indomitable` description row.
+- `tests/harness/test_use_indomitable.py` — 5 tests.
+
+### Changed
+- Demo Garrik: level 7 → 9, hp 67 → 85, hit_dice 7 → 9, prof bonus 3 → 4, Greatsword + Handaxe attack bonus +7 → +8, Second Wind 1d10+7 → 1d10+9.
+- `tests/harness/test_use_second_wind.py::test_second_wind_happy_path` — assertions updated for the new dice expression / rolled range.
+- `tests/harness/test_broadcast_payload_shapes.py::test_second_wind_broadcast_carries_dice_and_heal_fields` — assertion updated for the new dice expression.
+- `app/version.py` `APP_VERSION` → `2.56.0` (MINOR — first arm-then-consume save modifier).
+- `README.md` version badge → `2.56.0`.
+- `docs/plans/class-content-status.md` — Fighter Lv 9 Indomitable 🟢 → ✅ with full implementation notes.
+- `docs/test-harness-coverage.md` — total-test-count 465 → 470; new `test_use_indomitable.py` entry.
+- `TODO.md` — new "Class Features (next cycle)" section with Aura of Courage filed for the next implementation pass + Indomitable's RAW-flow follow-up.
+
+### Notes
+- **The save plumbing matrix.** Save-ROLL modifiers (Danger Sense, AoP, Countercharm, **Indomitable**) act BEFORE the d20. Save-RESULT modifier (Evasion) acts after roll, before consequence. Condition-INSTALL immunity (Aura of Devotion) acts after roll, replaces consequence. Indomitable is the first "single-use armed buff" pattern — distinct from Danger Sense (passive) and AoP (always-on aura) — but the construction-time hook composes them all without coordination.
+- **Why ship advantage-on-the-next-save instead of RAW reroll-on-failure.** Post-roll reroll needs an undo-and-reapply path for installed conditions. When Garrik fails a Wis save vs Suggestion → Charmed lands → player spends Indomitable → server needs to remove the Charmed buff, re-roll the save, possibly re-install Charmed if the new roll also fails. The expected-value difference between advantage and reroll-on-failure is small at typical DCs; the gameplay shape ("spend a use, get a better save") is the same. Filed in TODO.md::Fighter Indomitable for the precise RAW flow.
+- **Aura of Courage filed.** Per the user's "Lets do A and file B for later" — Paladin Aura of Courage (Lv 10) is queued in TODO.md::Class Features (next cycle) for the next implementation pass. Three-level bump for Caelan (7 → 10) cascades into prof bonus +3 → +4 and Divine Smite tests need an audit-and-fix pass alongside.
+
+---
+
 ## [2.55.1] - 2026-05-25 — "Field Manual"
 
 **Schema version:** 57

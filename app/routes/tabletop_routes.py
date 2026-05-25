@@ -8471,7 +8471,17 @@ async def cast_spell(
                 # that flow because the appended ``+N`` lands outside
                 # the keep-highest group.
                 _ds_applies = _pc_has_danger_sense_on_dex_save(tgt_char, save_ability)
-                _ds_base = "2d20kh1" if _ds_applies else "1d20"
+                # v2.56.0 — Fighter Indomitable (Lv 9+) armed-state
+                # check. If the saving PC has spent an Indomitable
+                # use, the next save rolls with advantage. Consume
+                # the buff immediately (per-save semantics, not
+                # per-turn) by calling _remove_buff. Composes with
+                # Danger Sense — if BOTH apply, the kh1 is the same
+                # shape (no double-stacking).
+                _ind_applies = _saver_has_indomitable_armed(
+                    campaign_id, int(tgt_char.id),
+                )
+                _ds_base = "2d20kh1" if (_ds_applies or _ind_applies) else "1d20"
                 # v2.53.0 — Aura of Protection bonus appended to
                 # base_expression. /roll_request/{id}/respond appends
                 # the stat_mod afterwards, so the final shape becomes
@@ -8532,6 +8542,11 @@ async def cast_spell(
                 # appears for the PC (before they click Roll).
                 if _ds_applies:
                     await _broadcast_danger_sense(campaign_id, tgt_char)
+                # v2.56.0: consume + broadcast Indomitable. Remove the
+                # buff immediately so the per-save arm semantic holds.
+                if _ind_applies:
+                    await _remove_buff(campaign_id, int(tgt_char.id), "indomitable-armed")
+                    await _broadcast_indomitable(campaign_id, tgt_char)
                 # v2.53.0: same for Aura of Protection. Broadcast names
                 # the paladin (not the saver) as the source character.
                 if _aop_bonus > 0 and _aop_paladin is not None:
@@ -8737,7 +8752,11 @@ async def cast_spell(
                 _aoe_ds_applies = _pc_has_danger_sense_on_dex_save(
                     extra_pc, save_ability,
                 )
-                _aoe_ds_base = "2d20kh1" if _aoe_ds_applies else "1d20"
+                # v2.56.0 — Indomitable arm check for AoE saves.
+                _aoe_ind_applies = _saver_has_indomitable_armed(
+                    campaign_id, int(extra_pc.id),
+                )
+                _aoe_ds_base = "2d20kh1" if (_aoe_ds_applies or _aoe_ind_applies) else "1d20"
                 # v2.53.0 — Aura of Protection bonus on AoE saves.
                 _aoe_aop_bonus, _aoe_aop_paladin = _aura_of_protection_bonus(
                     db, campaign_id, int(extra_pc.id),
@@ -8806,6 +8825,10 @@ async def cast_spell(
                 # appears for the PC.
                 if _aoe_ds_applies:
                     await _broadcast_danger_sense(campaign_id, extra_pc)
+                # v2.56.0: consume + broadcast Indomitable on AoE saves.
+                if _aoe_ind_applies:
+                    await _remove_buff(campaign_id, int(extra_pc.id), "indomitable-armed")
+                    await _broadcast_indomitable(campaign_id, extra_pc)
                 # v2.53.0: same for Aura of Protection on AoE saves.
                 if _aoe_aop_bonus > 0 and _aoe_aop_paladin is not None:
                     await _broadcast_aura_of_protection(
@@ -11629,6 +11652,88 @@ def _ally_has_aura_of_devotion(
     return False, None
 
 
+def _fighter_level_from_sheet(sheet: dict) -> int:
+    """Read the fighter level out of a sheet (single-class or multi-
+    class). Mirror of the other class-level helpers. Used by
+    ``/use_indomitable`` to gate the Lv 9+ unlock.
+    """
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "fighter":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "fighter":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _saver_has_indomitable_armed(
+    campaign_id: int, saving_char_id: int | None,
+) -> bool:
+    """v2.56.0 — Fighter Indomitable (Lv 9+) save-roll arm check.
+    Returns True if the saving PC has an ``indomitable-armed`` buff
+    on their combatant in the active battle. Caller swaps
+    ``1d20 → 2d20kh1`` AND immediately consumes the buff (so the
+    arm is per-save, not per-turn) via ``_remove_buff``.
+
+    RAW Indomitable is "reroll a failed save", not "advantage on
+    next save"; we ship the advantage approximation as a v1
+    simplification because post-roll reroll requires an undo-and-
+    reapply path for installed conditions (Charmed, Paralyzed, etc.)
+    that's substantial enough to defer. The expected-value
+    difference between advantage and reroll-on-failure is small at
+    typical DCs; the gameplay shape is the same ("spend Indomitable
+    for a better save"). Filed in TODO.md for the precise RAW flow.
+    """
+    if not saving_char_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    for c in state.get("combatants") or []:
+        if c.get("char_id") != saving_char_id:
+            continue
+        for b in (c.get("buffs") or []):
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "indomitable-armed":
+                return True
+        return False
+    return False
+
+
+async def _broadcast_indomitable(
+    campaign_id: int, fighter: "Character",
+) -> None:
+    """Companion broadcast for ``_saver_has_indomitable_armed`` —
+    fires when the save-roll hook consumes the armed buff. Names
+    the fighter so the chat card shows whose Indomitable just
+    fired.
+    """
+    if not fighter:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": fighter.id,
+            "character_name": fighter.name,
+            "user_color": fighter.color,
+            "feature_name": "🛡️ Indomitable — advantage on the save",
+            "feature_desc": (
+                "Spent an Indomitable use to arm this save with advantage."
+            ),
+            "source": "indomitable",
+        },
+    })
+
+
 async def _broadcast_aura_of_devotion(
     campaign_id: int, paladin: "Character", saving_char: "Character | None",
 ) -> None:
@@ -12885,6 +12990,155 @@ async def use_action_surge(
         "ok": True,
         "remaining": as_cur - 1,
         "action_chip_refunded": True,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_indomitable")
+async def use_indomitable(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.56.0 — Fighter Indomitable (Lv 9+). Arm the next save with
+    advantage by decrementing the Indomitable counter and installing
+    a single-use ``indomitable-armed`` buff. The next save the fighter
+    rolls reads the buff, swaps ``1d20 → 2d20kh1``, and consumes the
+    buff so the arm is per-save (not per-turn).
+
+    Body: ``{character_id}``.
+
+    RAW: "When you make a saving throw and fail, you can spend one
+    use of Indomitable to reroll the new roll, and you must use the
+    new roll." v1 simplification: we ship advantage-on-the-next-save
+    instead of reroll-on-failure because the post-roll reroll-with-
+    consequence-undo flow needs an undo-and-reapply path for
+    installed conditions (Charmed, Paralyzed, etc.) which is its own
+    substantial commit. Filed in `TODO.md::Fighter Indomitable` for
+    the precise RAW flow.
+
+    Slot: free (no over-budget gate) — Indomitable doesn't consume
+    an action / bonus / reaction. The Indomitable RESOURCE counter
+    IS the gate. Returns 409 ``out_of_uses`` when the counter is
+    empty.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Fighter character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    # Class + level validation. Indomitable unlocks at Fighter Lv 9.
+    cls = (sheet.get("class") or "").lower()
+    if cls != "fighter":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "fighter", "got": cls or "",
+        })
+    fighter_lv = _fighter_level_from_sheet(sheet)
+    if fighter_lv < 9:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 9, "got": fighter_lv,
+        })
+
+    # Verify indomitable counter has uses.
+    resources = list(sheet.get("resources") or [])
+    ind_idx = -1
+    ind_row = None
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "indomitable":
+            ind_row = dict(r)
+            ind_idx = i
+            break
+    if ind_row is None:
+        raise HTTPException(404, "No Indomitable resource on this sheet")
+    ind_cur = int(ind_row.get("current") or 0)
+    ind_max = int(ind_row.get("max") or 0)
+    if ind_cur <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Indomitable",
+        })
+
+    # Decrement counter.
+    ind_row["current"] = ind_cur - 1
+    resources[ind_idx] = ind_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    db.commit()
+
+    # Install the indomitable-armed buff. Long duration (10 rounds —
+    # one minute) so the player can decide which save to spend it
+    # on; the save-roll construction hook consumes it on first use.
+    # If the buff times out unused, the player just spent the
+    # counter for nothing — RAW-bent but a player-controlled risk.
+    buff = {
+        "key": "indomitable-armed",
+        "name": "Indomitable (Armed)",
+        "icon": "🛡️",
+        "source_caster_id": None,
+        "target_combatant_id": None,
+        "duration_rounds": 10,
+        "duration_max": 10,
+        "concentration": False,
+        "effects": {
+            "indomitable_armed": True,
+        },
+        "desc": (
+            "Next save rolls with advantage; buff is consumed by the "
+            "first save you make."
+        ),
+    }
+    installed = await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+
+    # Broadcasts.
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🛡️ Indomitable — armed",
+            "feature_desc": (
+                "Free — your next save rolls with advantage. The buff "
+                "consumes on the first save you make."
+            ),
+            "source": "indomitable",
+            "remaining": ind_cur - 1,
+            "max": ind_max,
+            "over_budget": False,
+            "over_budget_slot": "",
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "indomitable",
+            "current": ind_cur - 1,
+            "max": ind_max,
+        },
+    })
+
+    return {
+        "ok": True,
+        "remaining": ind_cur - 1,
+        "max": ind_max,
+        "buff_installed": installed,
     }
 
 

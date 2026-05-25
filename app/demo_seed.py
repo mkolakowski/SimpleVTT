@@ -2037,7 +2037,15 @@ def _fighter_sheet(name: str) -> dict:
     return {
         "class": "Fighter",
         "subclass": "Champion",
-        "level": 7,
+        # v2.49.237: bumped Lv 5 → Lv 7 for Remarkable Athlete.
+        # v2.56.0: bumped Lv 7 → Lv 9 to unlock Indomitable (Fighter
+        # Lv 9+: reroll a failed save, 1/long rest; 2 at Lv 13, 3 at
+        # Lv 17). HP scales d10(avg 6)+CON(+3) per level × 2 levels
+        # = +18 → 85/85. hit_dice 7 → 9. Proficiency bonus +3 → +4
+        # at Lv 9 — cascades into attack-bonus bumps (Greatsword +7
+        # → +8, Handaxe +7 → +8) + every prof-using check / save.
+        # Second Wind HP gain: 1d10 + lv = 1d10 + 9.
+        "level": 9,
         "race": "Variant Human",  # +1 STR + 1 CON at character creation
         "alignment": "Lawful Good",
         "background": "Soldier",
@@ -2048,12 +2056,12 @@ def _fighter_sheet(name: str) -> dict:
         "abilities": {"STR": 18, "DEX": 14, "CON": 16, "INT": 8, "WIS": 12, "CHA": 10},
         "ac": 16,  # chain mail 16 (no shield — two-handed Greatsword)
         "speed": 30,
-        # Lv 1 max d10 (10) + 6× avg d10 (6) + CON +3 × 7 = 10 + 36 + 21 = 67
-        # (Lv 7 bump v2.49.237: prior Lv 5 was 10 + 24 + 15 = 49).
-        "hp": {"current": 67, "max": 67, "temp": 0},
+        # Lv 1 max d10 (10) + 8× avg d10 (6) + CON +3 × 9 = 10 + 48 + 27 = 85
+        # (Lv 9 bump v2.56.0: prior Lv 7 was 10 + 36 + 21 = 67).
+        "hp": {"current": 85, "max": 85, "temp": 0},
         "initiative_bonus": 2,  # DEX 14 mod
-        "proficiency_bonus": 3,  # PB +3 holds across Lv 5-8
-        "hit_dice": {"current": 7, "max": 7},
+        "proficiency_bonus": 4,  # v2.56.0: Lv 9 bump — PB +3 → +4 (Lv 9-12 = +4)
+        "hit_dice": {"current": 9, "max": 9},
         "class_hit_die": "d10",
         # Fighter prof saves are STR + CON.
         "saving_throws": {"STR": True, "CON": True},
@@ -2066,10 +2074,11 @@ def _fighter_sheet(name: str) -> dict:
             "Survival":    {"ability": "WIS", "proficient": True, "expertise": False},
         },
         "attacks": [
-            {"name": "Greatsword", "attack_bonus": "+7", "damage": "2d6+4",
+            # v2.56.0: attack bonuses bumped +7 → +8 (STR +4 + prof +4).
+            {"name": "Greatsword", "attack_bonus": "+8", "damage": "2d6+4",
              "damage_type": "slashing", "range": "5 ft",
              "desc": "Two-handed, heavy. Great Weapon Fighting (Lv 1 style): reroll 1s and 2s on the damage roll once each — keep the new result."},
-            {"name": "Handaxe (thrown)", "attack_bonus": "+7", "damage": "1d6+4",
+            {"name": "Handaxe (thrown)", "attack_bonus": "+8", "damage": "1d6+4",
              "damage_type": "slashing", "range": "20/60 ft",
              "desc": "Light, thrown. Can also be wielded melee. Garrik carries two so an Action Surge thrown-attack combo is possible."},
         ],
@@ -2100,10 +2109,11 @@ def _fighter_sheet(name: str) -> dict:
         ],
         "feats": [],
         # v2.17.0: Fighter Lv 5 resources. Both refresh on short rest.
-        # Indomitable (Lv 9+) isn't on the sheet — Garrik is Lv 5.
+        # v2.56.0: Indomitable counter added (Lv 9 unlock): 1/long rest;
+        # 2 uses at Lv 13, 3 uses at Lv 17. Reset is "long" per RAW.
         # Champion's Improved Critical (Lv 3: crit on 19-20) is passive;
-        # it doesn't need a counter (would be a flag on the attack roll
-        # when the (B) roll-time intercept ships).
+        # it doesn't need a counter (handled at server-side via
+        # `_attacker_crit_threshold` since v2.49.231).
         "resources": [
             {
                 "key": "second-wind",
@@ -2111,7 +2121,7 @@ def _fighter_sheet(name: str) -> dict:
                 "current": 1, "max": 1, "reset": "short",
                 "source": "fighter Lv 1",
                 "class_slug": "fighter",
-                "desc": "Bonus action: regain 1d10 + fighter level (5) HP. Refreshes on a short or long rest.",
+                "desc": "Bonus action: regain 1d10 + fighter level (9) HP. Refreshes on a short or long rest.",
                 "manual": False,
             },
             {
@@ -2121,6 +2131,15 @@ def _fighter_sheet(name: str) -> dict:
                 "source": "fighter Lv 2",
                 "class_slug": "fighter",
                 "desc": "Take one additional action on this turn. Free — refreshes on a short or long rest. (Lv 17: 2 uses per rest.)",
+                "manual": False,
+            },
+            {
+                "key": "indomitable",
+                "name": "Indomitable",
+                "current": 1, "max": 1, "reset": "long",
+                "source": "fighter Lv 9",
+                "class_slug": "fighter",
+                "desc": "Free — when you'd make a saving throw, spend an Indomitable use to roll with advantage instead. 1 use per long rest (2 at Lv 13, 3 at Lv 17).",
                 "manual": False,
             },
         ],
@@ -2144,6 +2163,20 @@ def _fighter_sheet(name: str) -> dict:
                 "key": "action-surge",
                 "name": "Action Surge",
                 "desc": "Take one additional action on this turn. Free slot — refreshes on short rest.",
+            },
+            # v2.56.0: Indomitable (Fighter Lv 9+). Free — when about
+            # to make a saving throw, spend an Indomitable use to arm
+            # the next save with advantage. Server-side, /use_indomitable
+            # decrements the counter + installs a single-use
+            # ``indomitable-armed`` self-buff; the save-roll construction
+            # hook reads + consumes the buff, swapping the d20 to
+            # 2d20kh1. RAW is "reroll on failure" — we ship advantage-
+            # on-the-next-save as a v1 simplification (the post-roll
+            # reroll-with-consequence-undo flow is filed in TODO.md).
+            {
+                "key": "indomitable",
+                "name": "Indomitable",
+                "desc": "Free (Lv 9+) — arm the next save with advantage. Decrements the Indomitable counter. 1/long rest at Lv 9-12, 2 at Lv 13, 3 at Lv 17.",
             },
         ],
     }

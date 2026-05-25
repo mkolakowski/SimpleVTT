@@ -190,7 +190,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 3 | Martial Archetype | ✅ | Subclass system shipped — see Subclasses table. Champion: Improved Critical ✅ (v2.49.231) + Remarkable Athlete ✅ (v2.49.237). Battle Master has Superiority Dice counter. |
 | 4 / 6 / 8 / 12 / 14 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 5 / 11 / 20 | Extra Attack | ✅ | RAW supported — click the attack button N times within your action (2 at Lv 5, 3 at Lv 11, 4 at Lv 20); the action-economy chip is per-action so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed for the future. |
-| 9 / 13 / 17 | Indomitable | 🟢 | Resource counter (`key: 'indomitable'`); curated `_FEATURE_ECONOMY` entry shipped v2.16.2 (slot:'free' since the reroll doesn't consume an action/bonus/reaction). Full save-reroll UX waits on (B) roll-time intercept + a Fighter Lv 9+ fixture. |
+| 9 / 13 / 17 | Indomitable | ✅ | v2.56.0 — `/use_indomitable` arms a single-use `indomitable-armed` self-buff on Garrik (bumped Lv 7 → 9 in this commit). The save-roll construction hook reads the buff, swaps `1d20 → 2d20kh1`, and removes it via `_remove_buff` so the arm is per-save (not per-turn). Wired into both cast_spell single + AoE PC save roll_request paths. Counter decrements on arm; 1/long rest at Lv 9-12, 2 at Lv 13, 3 at Lv 17 (counter scaling handled on the sheet's `resources` entry — Garrik starts with max=1). **v1 simplification**: ships advantage-on-the-next-save instead of RAW reroll-on-failure, since the post-roll reroll-with-consequence-undo flow needs an undo-and-reapply path for installed conditions (Charmed, Paralyzed, etc.). Filed in TODO.md::Fighter Indomitable. Harness in `test_use_indomitable.py` (5 tests). |
 
 ### Monk
 
