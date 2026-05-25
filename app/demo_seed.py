@@ -370,6 +370,11 @@ def _rogue_sheet(name: str) -> dict:
                 "desc": "On each of your turns in combat, you can use a bonus action to take the Dash, Disengage, or Hide action.",
                 "options": ["dash", "disengage", "hide"],
             },
+            {
+                "key": "uncanny-dodge",
+                "name": "Uncanny Dodge",
+                "desc": "When an attacker that you can see hits you with an attack, you can use your reaction to halve the attack's damage against you. Fires automatically server-side on the first incoming attack each round.",
+            },
         ],
     }
 

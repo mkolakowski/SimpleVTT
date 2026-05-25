@@ -1989,6 +1989,7 @@ async def _apply_damage_to_combatant(
     damage_type: str,
     *,
     is_crit: bool = False,
+    is_attack: bool = False,
     attack_id: str | None = None,
 ) -> dict:
     """Apply ``damage_amount`` damage to the target combatant. Two
@@ -2006,8 +2007,15 @@ async def _apply_damage_to_combatant(
     Logs the applied delta in ``_attack_damage_log[attack_id]`` so
     the chat card's Undo button can revert it.
 
+    ``is_attack`` (v2.49.243): True for damage from an attack roll
+    (``/attack``, ``/npc_attack``, ``/attack_spell``, the attack-roll
+    branch of ``/cast_spell``). Gates Uncanny Dodge (Rogue Lv 5+),
+    which RAW only fires "when an attacker hits you with an attack" —
+    spell saves, environmental damage, and feature damage (Sneak
+    Attack rider) don't qualify and pass through unhalved.
+
     Returns ``{applied, hp_before, hp_after, resistance_applied,
-    is_dying, is_dead}``.
+    is_dying, is_dead, uncanny_dodge_used}``.
     """
     _purge_attack_damage_log()
     char_id = combatant.get("char_id")
@@ -2015,10 +2023,45 @@ async def _apply_damage_to_combatant(
         char = db.query(Character).filter(Character.id == char_id).first()
         if not char:
             return {"applied": 0, "hp_before": 0, "hp_after": 0,
-                    "resistance_applied": False, "is_dying": False, "is_dead": False}
+                    "resistance_applied": False, "is_dying": False,
+                    "is_dead": False, "uncanny_dodge_used": False}
         sheet = char.sheet or {}
         hp = dict(sheet.get("hp") or {})
         hp_cur = int(hp.get("current") or 0)
+        # v2.49.243 Uncanny Dodge (Rogue Lv 5+) — halve attack damage
+        # BEFORE resistance, mark the reaction, broadcast feature_used.
+        # Floor division so (n // 2) // 2 == n // 4 either way; order
+        # vs. resistance doesn't change the final integer but mirrors
+        # the RAW reading where the player reacts to the hit first.
+        uncanny_dodge_used = False
+        uncanny_pre_halve = damage_amount
+        if is_attack and damage_amount > 0:
+            _ud_applies, _ud_char = _target_uses_uncanny_dodge(
+                db, campaign_id, combatant.get("id"),
+            )
+            if _ud_applies and _ud_char is not None:
+                damage_amount = damage_amount // 2
+                uncanny_dodge_used = True
+                await _mark_battle_economy(
+                    campaign_id, _ud_char.id, "reaction",
+                )
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": _ud_char.id,
+                        "character_name": _ud_char.name,
+                        "user_color": _ud_char.color,
+                        "feature_name": (
+                            f"🛡️ Uncanny Dodge → {uncanny_pre_halve} → "
+                            f"{damage_amount} damage"
+                        ),
+                        "feature_desc": (
+                            "Reaction. Halve the damage from one "
+                            "incoming attack."
+                        ),
+                        "source": "uncanny-dodge",
+                    },
+                })
         # Apply resistance (Phase B) BEFORE _apply_hp_change so the
         # massive-damage threshold uses the post-resistance number.
         applied, resistance_applied = _resistance_halve(
@@ -2059,12 +2102,14 @@ async def _apply_damage_to_combatant(
             "resistance_applied": resistance_applied,
             "is_dying": result["death_saves"]["status"] == "dying",
             "is_dead": result["death_saves"]["status"] == "dead",
+            "uncanny_dodge_used": uncanny_dodge_used,
         }
     # NPC path: mutate hub combatant directly.
     state = hub.get_battle(campaign_id)
     if not state:
         return {"applied": 0, "hp_before": 0, "hp_after": 0,
-                "resistance_applied": False, "is_dying": False, "is_dead": False}
+                "resistance_applied": False, "is_dying": False,
+                "is_dead": False, "uncanny_dodge_used": False}
     # Re-find the combatant by id in case the caller passed a stale ref.
     target = None
     for c in state.get("combatants") or []:
@@ -2073,7 +2118,8 @@ async def _apply_damage_to_combatant(
             break
     if target is None:
         return {"applied": 0, "hp_before": 0, "hp_after": 0,
-                "resistance_applied": False, "is_dying": False, "is_dead": False}
+                "resistance_applied": False, "is_dying": False,
+                "is_dead": False, "uncanny_dodge_used": False}
     hp_cur = int(target.get("hp_current") or 0)
     hp_max = int(target.get("hp_max") or 0)
     # v2.49.109: NPCs now get resistance halving via the template's
@@ -2122,6 +2168,7 @@ async def _apply_damage_to_combatant(
         "resistance_applied": resistance_applied,
         "is_dying": False,
         "is_dead": new_hp == 0 and hp_max > 0,
+        "uncanny_dodge_used": False,
     }
 
 
@@ -8269,7 +8316,7 @@ async def cast_spell(
                     db, campaign_id, target_combatant,
                     agg_damage_rolled,
                     damage_type=auto_attack_damage_type,
-                    attack_id=cast_id,
+                    is_attack=True, attack_id=cast_id,
                 )
                 auto_attack_damage_applied = int(dmg_result.get("applied") or 0)
         payload["auto_attack_hit"] = auto_attack_hit
@@ -10840,6 +10887,85 @@ def _target_grants_advantage_to_attackers(
                 return True
         return False
     return False
+
+
+def _rogue_level_from_sheet(sheet: dict) -> int:
+    """Read the rogue level out of a sheet (single-class or multiclass).
+    Used by ``_target_uses_uncanny_dodge`` to gate the Rogue Lv 5+
+    reaction.
+    """
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "rogue":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "rogue":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _target_uses_uncanny_dodge(
+    db: Session, campaign_id: int, target_combatant_id: str | None,
+) -> tuple[bool, "Character | None"]:
+    """v2.49.243 — Uncanny Dodge (Rogue Lv 5+). Returns
+    ``(applies, char)`` where ``applies`` is True when the incoming
+    attack against ``target_combatant_id`` should be halved by the
+    target's reaction. RAW: "When an attacker that you can see hits
+    you with an attack, you can use your reaction to halve the
+    attack's damage against you."
+
+    Conditions:
+      - target is a PC combatant (``char_id`` resolves to a Character)
+      - PC is Rogue Lv 5+ (single-class or multiclass, via
+        ``_rogue_level_from_sheet``)
+      - the PC's reaction slot is currently available in the hub
+        battle ``economy`` dict (i.e. they haven't already reacted
+        this round)
+
+    Auto-fires (no player prompt) for v1 — matches the same pattern
+    other passive shields (Patient Defense → dodging on attackers,
+    template-listed resistance halving) use. Filed for follow-up:
+    a "decline reaction" toggle so the player can save their reaction
+    for Shield / Counterspell instead.
+
+    "Attacker that you can see" + "and aren't incapacitated" caveats
+    are NOT enforced here — vision modelling is a long-standing TODO
+    and the incapacitated check is implicit since
+    Stunned/Paralyzed/Unconscious buffs would have already wiped the
+    reaction slot via init turn-start. Filed.
+    """
+    if not target_combatant_id:
+        return False, None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False, None
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == target_combatant_id:
+            target = c
+            break
+    if target is None:
+        return False, None
+    char_id = target.get("char_id")
+    if not char_id:
+        return False, None
+    economy = target.get("economy") or {}
+    if bool(economy.get("reaction")):
+        return False, None
+    char = db.query(Character).filter(Character.id == char_id).first()
+    if not char:
+        return False, None
+    sheet = char.sheet or {}
+    if _rogue_level_from_sheet(sheet) < 5:
+        return False, None
+    return True, char
 
 
 def _target_has_dodging(
@@ -16954,7 +17080,7 @@ async def use_attack(
             apply_result = await _apply_damage_to_combatant(
                 db, campaign_id, target_combatant,
                 total_damage, damage_type,
-                is_crit=is_crit, attack_id=attack_id,
+                is_crit=is_crit, is_attack=True, attack_id=attack_id,
             )
             damage_applied = apply_result["applied"]
             target_hp_before = apply_result["hp_before"]
@@ -17073,7 +17199,8 @@ async def use_attack(
                 _ar = await _apply_damage_to_combatant(
                     db, campaign_id, extra_combatant,
                     int(extra_dmg_total or 0), damage_type,
-                    is_crit=extra_is_crit, attack_id=attack_id,
+                    is_crit=extra_is_crit, is_attack=True,
+                    attack_id=attack_id,
                 )
                 extra_applied = _ar["applied"]
                 extra_hp_before = _ar["hp_before"]
@@ -17453,7 +17580,7 @@ async def use_npc_attack(
             apply_result = await _apply_damage_to_combatant(
                 db, campaign_id, target_combatant,
                 int(damage_total or 0), damage_type,
-                is_crit=is_crit, attack_id=attack_id,
+                is_crit=is_crit, is_attack=True, attack_id=attack_id,
             )
             damage_applied = apply_result["applied"]
             target_hp_before = apply_result["hp_before"]
@@ -17704,7 +17831,7 @@ async def use_npc_cast_spell(
         apply_result = await _apply_damage_to_combatant(
             db, campaign_id, target_combatant,
             int(auto_attack_damage_rolled), damage_type,
-            is_crit=is_crit, attack_id=cast_id,
+            is_crit=is_crit, is_attack=True, attack_id=cast_id,
         )
         auto_attack_damage_applied = int(apply_result.get("applied") or 0)
         target_hp_after = apply_result.get("hp_after")

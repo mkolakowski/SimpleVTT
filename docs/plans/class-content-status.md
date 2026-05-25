@@ -263,7 +263,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 2 | Cunning Action | ✅ | v2.6.0 — class-features panel renders Dash/Disengage/Hide buttons that POST `/use_feature` and auto-mark Bns chip |
 | 3 | Roguish Archetype | ✅ | Subclass system shipped — see Subclasses table. Thief has features JSON (Fast Hands / Use Magic Device still descriptive); Pip is the demo Thief since v2.3.25. |
 | 4 / 8 / 10 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
-| 5 | Uncanny Dodge | ⚪ | |
+| 5 | Uncanny Dodge | ✅ | v2.49.243 — server-side reaction halving in the damage pipeline. `_target_uses_uncanny_dodge` (Rogue Lv 5+, reaction available) fires inside `_apply_damage_to_combatant` when the new `is_attack=True` kwarg is set by an attack-roll caller. Halves damage, flips reaction chip, broadcasts `feature_used`. RAW save-spell paths intentionally skip the halving (only triggers on attacker-hits-you-with-an-attack). Auto-fires on the first incoming attack each round; "decline reaction" toggle filed for follow-up. |
 | 7 | Evasion | ⚪ | |
 | 11 | Reliable Talent | ⚪ | Floor-of-10 on proficient skill checks — would need an option on skill roll |
 | 14 | Blindsense | ✅ | Rogue Lv 14: pure-descriptive (sense unseen creatures within 10 ft). RAW: would interact with a fog-of-war / hidden-token engine, but SimpleVTT doesn't model token hiding at that granularity. Re-evaluate if a hidden/seen state ships. |

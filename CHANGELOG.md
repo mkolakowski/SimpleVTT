@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.243] - 2026-05-25
+
+**Schema version:** 56
+**Commit summary:** **Uncanny Dodge (Rogue Lv 5+) — server-side halving in the damage pipeline.** Pip is Rogue Lv 5 in the demo seed; the moment an NPC hits her with an attack and her reaction is available, the damage applied is halved server-side and her reaction chip flips on. Reaction-gated so a second hit in the same round takes full damage; reset on round boundary by the existing economy refresh. RAW: "When an attacker that you can see hits you with an attack, you can use your reaction to halve the attack's damage against you."
+**Description:** New helper `_target_uses_uncanny_dodge(db, campaign_id, target_combatant_id) -> (applies, char)` next to `_target_has_dodging` and `_target_grants_advantage_to_attackers` in `app/routes/tabletop_routes.py`. Gates on (a) target is a PC combatant (`char_id` set), (b) PC is Rogue Lv 5+ via the new `_rogue_level_from_sheet` helper (mirror of `_bard_level_from_sheet` — single-class + multiclass aware), (c) PC's `combatant.economy.reaction` is not already used. Returns `(True, char)` when all three hold so the caller can broadcast a `feature_used` event named for Pip.
+**Description (cont):** Wired into `_apply_damage_to_combatant` via a new `is_attack: bool = False` kwarg. When True (attack-roll-driven damage), the helper fires BEFORE resistance halving, the damage_amount is `// 2`'d, `_mark_battle_economy(reaction=True)` flips Pip's reaction chip + emits `economy_update`, and a `feature_used` broadcast surfaces "🛡️ Uncanny Dodge → 6 → 3 damage" so the chat card shows the trigger. Order vs. resistance doesn't change the final integer (`(n//2)//2 == n//4`) but conceptually the player reacts to the raw hit first.
+**Description (cont 2):** Four call sites pass `is_attack=True`: `/attack` PC weapon-attack (`tabletop_routes.py:~17080`), the multi-target loop's extra-target damage (`:~17199`), `/npc_attack` (`:~17580`), the attack-roll branch of `/cast_spell` (`:~8315`), and `/npc_cast_spell` attack-roll branch (`:~17831`). Save-spell paths (the 7-ish other `_apply_damage_to_combatant` callers in `/cast_spell` save branches, `/npc_cast_spell` save branches, the `_resolve_spell_slug_action` rider, and `_dragon_breath` auto-hit) intentionally pass `is_attack=False` so they don't trigger Uncanny Dodge — RAW: UD only fires on attacker-hits-you-with-an-attack, not on save spells, environmental damage, or auto-hit features.
+**Description (cont 3):** Demo seed bump. `app/demo_seed.py::_rogue_sheet` adds an `uncanny-dodge` row to Pip's `class_features` list so the sheet renders it next to Cunning Action. No `options` array — Uncanny Dodge is a passive auto-fire, not a click-to-use feature, so the sheet shows desc-only with no buttons. Filed for follow-up: a "decline reaction" toggle so the player can save their reaction for Shield / Counterspell instead of auto-burning it on every incoming hit.
+**Description (cont 4):** Harness coverage. New `tests/harness/test_use_attack_uncanny_dodge.py` (4 tests): (1) happy path — NPC swings flat-6 damage at Pip, assert `damage_applied == 3`, reaction chip flipped, `feature_used` broadcast surfaced; (2) reaction-gate — second swing in same round takes full 6 damage; (3) control — non-Rogue Garrik takes full 6 damage and reaction chip stays unflipped; (4) RAW gate — `/npc_cast_spell` Sacred Flame DEX save against Pip does NOT consume her reaction (save-spell damage isn't an attack roll).
+**Description (cont 5):** Verification. (a) `curl /version` returns 2.49.243 after `docker compose up -d --build app`. (b) `pytest tests/harness/test_use_attack_uncanny_dodge.py` green locally. (c) Existing `test_npc_attack.py` still green — the `is_attack=True` plumbing doesn't change behavior against non-Rogue targets, and Pip-as-target tests in that file (the auto-apply hit probe) already accept variable `damage_applied` ranges.
+
+### Added
+- `_rogue_level_from_sheet(sheet)` helper — mirror of `_bard_level_from_sheet`, single-class + multiclass aware.
+- `_target_uses_uncanny_dodge(db, campaign_id, target_combatant_id)` helper returning `(applies, char)`.
+- `is_attack: bool = False` kwarg on `_apply_damage_to_combatant`; gates the Uncanny Dodge halving.
+- `tests/harness/test_use_attack_uncanny_dodge.py` — 4 tests (happy, once-per-round, control, RAW gate).
+- `app/demo_seed.py::_rogue_sheet` — `uncanny-dodge` `class_features` row on Pip.
+
+### Changed
+- `_apply_damage_to_combatant` return shape gains `uncanny_dodge_used: bool`.
+- `/attack` (PC weapon + multi-target extra targets), `/npc_attack`, `/attack_spell` (via attack-roll branch of `/cast_spell`), and `/npc_cast_spell` (attack-roll branch) pass `is_attack=True` to the helper.
+- `app/version.py` `APP_VERSION` → `2.49.243`.
+- `README.md` version badge → `2.49.243`.
+
+### Notes
+- **Pip's new defensive identity.** Combined with her existing Cunning Action and Sneak Attack, she now has the canonical Rogue Lv 5 kit. The auto-fire UX is intentional for v1 — a future toggle can let the player decline UD to preserve the reaction for Shield/Counterspell/Opportunity Attack.
+- **RAW caveats still filed.** "Attacker that you can see" (vision modelling) and "and you aren't incapacitated" (turn-start economy reset already handles the common cases) are not yet enforced.
+
+---
+
 ## [2.49.242] - 2026-05-25
 
 **Schema version:** 56

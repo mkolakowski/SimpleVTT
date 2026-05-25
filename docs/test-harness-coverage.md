@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 440 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.49.238, 2026-05-25).
+**Total tests:** 444 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.49.243, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -669,6 +669,16 @@ v2.49.238 — Barbarian class feature `POST /use_reckless_attack` (Lv 2+). No co
 | `test_reckless_attack_wrong_class` | Pip (Rogue) → 409 `error=wrong_class`, `expected=barbarian`. |
 | `test_reckless_attack_missing_character_id` | Empty body → 400. |
 | `test_attack_against_reckless_target_gets_advantage` | Seeds Krieger with the reckless-attack buff pre-installed; Pip's Shortsword attack against him rolls `2d20kh1` (breakdown match) and `roll_state_applied` mentions reckless. |
+
+### `test_use_attack_uncanny_dodge.py`
+v2.49.243 — Rogue Lv 5+ passive reaction. Server-side halving wired into `_apply_damage_to_combatant` via the new `is_attack=True` kwarg + `_target_uses_uncanny_dodge` helper. Auto-fires on the first incoming attack each round; reaction-gated (a second swing in the same round takes full damage); RAW save-spell paths intentionally don't trigger.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_uncanny_dodge_halves_first_attack` | `/npc_attack` Bandit hits Pip (Rogue 5) for flat 6 damage → `damage_applied == 3`, Pip's reaction chip flips on, `feature_used` broadcast carries `source=uncanny-dodge` and Pip's name. |
+| `test_uncanny_dodge_only_once_per_round` | Second swing in the same round → `damage_applied == 6` (reaction already used; no halving). |
+| `test_non_rogue_target_no_halving` | Control: Bandit hits Garrik (Fighter) for flat 6 → `damage_applied == 6`, Garrik's reaction chip stays unflipped. |
+| `test_save_spell_does_not_trigger_uncanny_dodge` | `/npc_cast_spell` Sacred Flame DEX save against Pip → Pip's reaction chip stays unflipped (RAW: UD only fires on attack rolls, not on save spells). |
 
 ### `test_use_open_hand_technique.py`
 v2.49.57 — Monk subclass feature `POST /use_open_hand_technique` (Way of the Open Hand, Lv 3+). Three modes: `prone` (DEX save → Prone via new `open-hand-prone` map entry), `push` (STR save → response carries `push_authorized` for the GM to drag the token; no buff), `no_reactions` (no save → inline install of `reaction-denied` buff). No ki cost — RAW the Flurry of Blows already paid. Same trust-the-caller convention as Stunning Strike for the "must follow a Flurry hit" gate.
