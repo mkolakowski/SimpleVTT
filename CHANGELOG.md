@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.50.3] - 2026-05-25 — "Vellum"
+
+**Schema version:** 57
+**Commit summary:** **Glass cards across the whole sidebar bumped from 55% → 42% bg opacity.** "A little bit" more transparent so the map color reads through the cards more clearly without the cards losing legibility (text is still on opaque tokens). Single-percentage shift applied to every translucent surface introduced over v2.49.246–v2.50.2 so the family stays internally consistent.
+**Description:** Three `Edit replace_all` passes against `app/templates/tabletop.html`. **(1)** The 5 baseline backgrounds — `.roll-card`, `.roll-req-card`, `.spell-cast-card`, `.init-row`, `.init-entry` — all use the same exact `background: color-mix(in srgb, var(--bg) 55%, transparent);` declaration, so a single `replace_all` flips all five to 42%. **(2)** The 3 zebra-stripe rules use a nested `color-mix(in srgb, var(--bg) 88%, var(--fg) 12%) 55%, transparent` shape; same replace_all bumps them all to 42% in lockstep. **(3)** The active-turn highlight (`.init-row.active-turn`) used a stronger 30% accent tint; bumped to 22% to keep the proportional contrast between "regular card" and "active card" intact at the new baseline.
+**Description (cont):** Why 42% specifically. 55% → 50% would be imperceptible; 55% → 30% would lose card legibility on dark themes (var(--bg) is already dim, mixing 30% with transparent leaves cards effectively floating in space). 42% sits in the middle — the user reads "a little bit more" without the slider going past the point where text starts hunting for contrast.
+**Description (cont 2):** No behavior changes, no schema, no test surface. Verified by reloading the tabletop with the demo's sepia background and confirming the roll log + spell cards + init rows all read with more map bleed-through but the text inside still anchors cleanly. The 447 harness tests aren't run since no Python code changed.
+
+### Changed
+- `.roll-card`, `.roll-req-card`, `.spell-cast-card`, `.init-row`, `.init-entry` — bg-mix 55% → 42% (more transparent baseline).
+- 3 zebra-stripe rules (`:nth-child(even)`) — same alpha drop 55% → 42%.
+- `.init-row.active-turn` — accent tint 30% → 22% to keep proportional with the new baseline.
+- `app/version.py` `APP_VERSION` → `2.50.3`.
+- `README.md` version badge → `2.50.3`.
+
+### Notes
+- **Future tuning knob.** If a user reports the cards now read "too see-through," the right move is a uniform bump back toward 50% across all 8 surfaces — not per-card tuning. The whole point of the consolidated glass recipe is that the alpha is one number you set globally.
+
+---
+
 ## [2.50.2] - 2026-05-25 — "The Glass Initiative"
 
 **Schema version:** 57
