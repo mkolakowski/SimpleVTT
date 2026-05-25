@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.228] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Fix five Monk Ki harness tests off-by-one after Kael's Lv 5 → 6 bump in v2.49.227.** Kael's Ki counter went from `5/5` to `6/6` when he gained Wholeness of Body; the existing Patient Defense / Step of the Wind / Flurry of Blows tests asserted `remaining == 4` (post-spend at Lv 5) or used `range(5)` drain loops, all of which are off-by-one against the new fixture. Pure test-file edits; no source code changes.
+**Description:** Three test-file edits + version/changelog bump. **(1)** `tests/harness/test_use_flurry_of_blows.py` — happy-path assertion `remaining == 4` → `5` with a v2.49.227 note; no_ki drain loop `range(5)` → `range(6)`. **(2)** `tests/harness/test_use_patient_defense.py` — happy-path assertion `max == 5, remaining == 4` → `max == 6, remaining == 5`; no_ki drain loop `range(5)` → `range(6)`; comment block refreshed to reference Lv 6 and the v2.49.227 bump. **(3)** `tests/harness/test_use_step_of_the_wind.py` — happy-path assertion `remaining == 4` → `5` with the same v2.49.227 note.
+**Description (cont):** Why this is a follow-up commit rather than a v2.49.227 amendment. CLAUDE.md prefers new commits over `--amend` (v2.49.227 is already on origin/main, and amending would force-push). The test-fix is also conceptually-distinct from the v2.49.227 feature (one is "add Wholeness of Body endpoint", the other is "fix tests broken by the fixture change"); separate commits make the regression-and-fix history readable.
+**Description (cont 2):** Filed for follow-up — NOT addressed in this commit. The full harness suite run (v2.49.227) surfaced 3 PRE-EXISTING failures in `tests/harness/test_sleep_wake_on_damage.py` (the npc/pc wake-on-damage tests + the non-sleep unconscious preservation test). Root cause: `_target_has_dodging` at `app/routes/tabletop_routes.py:10775` raises `AttributeError: 'list' object has no attribute 'get'` when a buff's `effects` field is a list rather than a dict. The bug predates v2.49.227 (the routes file wasn't touched between v2.49.220 and v2.49.227). Filed separately so the fix gets its own focused commit + reproduction.
+**Description (cont 3):** Verification. (a) `curl /version` confirms v2.49.228 live. (b) All 14 Monk harness tests (Flurry / Patient Defense / Step of the Wind / Wholeness of Body) pass against the live demo. (c) The 3 pre-existing sleep failures remain — they're not regressed by this commit and are flagged for a separate fix.
+
+### Changed
+- `tests/harness/test_use_flurry_of_blows.py` — `remaining == 4` → `5`; drain `range(5)` → `range(6)` for Kael's Lv 6 Ki count.
+- `tests/harness/test_use_patient_defense.py` — `max == 5, remaining == 4` → `max == 6, remaining == 5`; drain `range(5)` → `range(6)`.
+- `tests/harness/test_use_step_of_the_wind.py` — `remaining == 4` → `5`.
+- `app/version.py` `APP_VERSION` → `2.49.228`.
+- `README.md` version badge → `2.49.228`.
+
+### Notes
+- **Test-only commit; harness-test rule satisfied via the tests themselves.** No new endpoint added; no doc-only exemption needed.
+- **Sleep test failures flagged.** 3 pre-existing failures in `test_sleep_wake_on_damage.py` (`_target_has_dodging` list/dict shape mismatch). Filed as a separate fix.
+
+---
+
 ## [2.49.227] - 2026-05-24
 
 **Schema version:** 56

@@ -57,7 +57,7 @@ async def test_step_of_the_wind_disengage_mode(gm_client, gm_ws, kael_rested):
     assert body["ok"] is True
     assert body["mode"] == "disengage"
     assert body["buff_installed"] is True
-    assert body["remaining"] == 4  # Kael's max ki is 5
+    assert body["remaining"] == 5  # Kael's max ki is 6 at Lv 6 (v2.49.227)
     bu = await gm_ws.wait_for("buff_update", timeout=2.0)
     data = bu.get("data") or {}
     assert data.get("character_id") == kael["id"]

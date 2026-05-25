@@ -58,9 +58,9 @@ async def test_patient_defense_happy_path(gm_client, gm_ws, kael_rested):
     assert body["ok"] is True
     assert body["duration_rounds"] == 1
     assert body["buff_installed"] is True
-    # Ki decremented by 1. Kael L5 Monk has 5 ki total.
-    assert body["max"] == 5
-    assert body["remaining"] == 4
+    # Ki decremented by 1. v2.49.227: Kael bumped to Lv 6 Monk → Ki max 6.
+    assert body["max"] == 6
+    assert body["remaining"] == 5
     # ``_install_buff`` broadcasts ``buff_update`` (not battle_update).
     bu = await gm_ws.wait_for("buff_update", timeout=2.0)
     data = bu.get("data") or {}
@@ -110,9 +110,9 @@ async def test_patient_defense_no_ki(gm_client, kael_rested):
     kael = kael_rested
     await _seed_kael_solo(gm_client, kael)
     # Drain ki by repeated PD calls with override (bonus slot would
-    # otherwise gate on second call). 5 successful drains → ki=0;
-    # 6th → 409 no_ki.
-    for _ in range(5):
+    # otherwise gate on second call). v2.49.227: Kael bumped to Lv 6 →
+    # Ki max 6, so 6 successful drains → ki=0; 7th → 409 no_ki.
+    for _ in range(6):
         r = await gm_client.post(
             f"/api/campaign/{CAMPAIGN_ID}/use_patient_defense",
             json={"character_id": kael["id"], "override": True},
