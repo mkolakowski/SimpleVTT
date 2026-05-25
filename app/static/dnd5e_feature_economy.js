@@ -114,7 +114,16 @@ window._FEATURE_ECONOMY = {
         // wildcard on either field).
         options: {
             // ── Cleric options ────────────────────────────────
-            'turn-undead': { label: 'Turn Undead', desc: 'Each undead within 30 ft makes a Wisdom save or flees for 1 minute.', class: 'cleric', subclass: 'any' },
+            // v2.56.2: Destroy Undead (Cleric Lv 5+) rolled up into the
+            // Turn Undead option desc per the v2.56.2 plan-doc note.
+            // RAW: undead that fail their save are TURNED (flee for 1
+            // minute); if their CR is at or below the Cleric's
+            // Destroy threshold (Lv 5: CR 1/2; Lv 8: CR 1; Lv 11:
+            // CR 2; Lv 14: CR 3; Lv 17: CR 4), they're DESTROYED
+            // instead. The GM applies destruction manually after the
+            // chip flip + broadcast (same announce-only convention as
+            // the other CD options).
+            'turn-undead': { label: 'Turn Undead', desc: 'Each undead within 30 ft makes a Wisdom save or flees for 1 minute. Destroy Undead: at Lv 5+ low-CR undead are destroyed on failed save (Lv 5: CR ≤ 1/2; Lv 8: CR ≤ 1; Lv 11: CR ≤ 2; Lv 14: CR ≤ 3; Lv 17: CR ≤ 4).', class: 'cleric', subclass: 'any' },
             'preserve-life': { label: 'Preserve Life', desc: 'Distribute 5 × cleric level HP among creatures within 30 ft, none raised above half max HP.', class: 'cleric', subclass: 'life' },
             'radiance-of-the-dawn': { label: 'Radiance of the Dawn', desc: 'Dispel magical darkness, deal 2d10 + cleric level radiant damage on a failed Con save (each enemy within 30 ft).', class: 'cleric', subclass: 'light' },
             'guided-strike': { label: 'Guided Strike', desc: '+10 bonus to one attack roll, declared after seeing the d20.', class: 'cleric', subclass: 'war' },
@@ -133,6 +142,13 @@ window._FEATURE_ECONOMY = {
             'orders-demand': { label: "Order's Demand", desc: 'Action — each creature you choose within 30 ft makes a Wisdom save or is charmed by you until end of next turn (or until they take damage).', class: 'cleric', subclass: 'order' },
             'charm-animals-and-plants': { label: 'Charm Animals and Plants', desc: 'Action — each beast or plant creature within 30 ft makes a Wisdom save or is charmed by you for 1 minute (or until damaged).', class: 'cleric', subclass: 'nature' },
             'twilight-sanctuary': { label: 'Twilight Sanctuary', desc: 'Action — 30 ft sphere of dim light for 1 minute. Allies ending their turn inside gain 1d6 + cleric level temp HP OR end one charmed/frightened effect on them.', class: 'cleric', subclass: 'twilight' },
+            // v2.56.2: completes the canon Cleric domain roster.
+            // Death (DMG p.96), Arcana (SCAG p.125), Peace (TCoE p.34)
+            // — each a single Lv 2 CD option, announce-only per the
+            // existing convention.
+            'touch-of-death': { label: 'Touch of Death', desc: 'When you hit a creature with a melee weapon attack, you can spend Channel Divinity to deal extra necrotic damage equal to 5 + 2 × cleric level.', class: 'cleric', subclass: 'death' },
+            'arcane-abjuration': { label: 'Arcane Abjuration', desc: 'Action — choose a celestial, elemental, fey, or fiend within 30 ft. Wis save or be turned for 1 minute. At Lv 5+ low-CR creatures of those types are banished to their home plane on failed save (same Destroy CR thresholds as Destroy Undead).', class: 'cleric', subclass: 'arcana' },
+            'balm-of-peace': { label: 'Balm of Peace', desc: 'When you move on your turn, you can move through allies\' spaces. Each ally you move within 5 ft of can be healed 2d6 + WIS mod (once each per use of this Channel Divinity).', class: 'cleric', subclass: 'peace' },
             // ── Paladin options (v2.14.3) ─────────────────────
             'sacred-weapon': { label: 'Sacred Weapon', desc: 'Imbue a weapon you hold with positive energy for 1 minute: +CHA mod to attack rolls, deals magical damage, emits 20 ft bright light.', class: 'paladin', subclass: 'devotion' },
             'turn-the-unholy': { label: 'Turn the Unholy', desc: 'Each fiend or undead within 30 ft that can see/hear you must succeed on a Wisdom save or be turned for 1 minute.', class: 'paladin', subclass: 'devotion' },

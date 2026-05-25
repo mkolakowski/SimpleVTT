@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.56.2] - 2026-05-25 — "Full Pantheon"
+
+**Schema version:** 57
+**Commit summary:** **Channel Divinity coverage completes the canon Cleric roster + Destroy Undead rolls up into Turn Undead.** The last 3 domains (Death / Arcana / Peace) get their Lv 2 CD option entries, bringing the curated picker to 12-of-12 canon domains. Destroy Undead (Lv 5/8/11/14/17 passive uplift on Turn Undead) is captured in the Turn Undead option desc as a CR-by-level table so the GM applies destruction inline — no separate mechanic surface needed because the underlying Turn Undead is announce-only too. Both Cleric ⚪ rows in the plan doc are now ✅; **Channel Divinity itself flips 🟢 → ✅** since all 12 canon domains are covered.
+**Description:** Two edits to `app/static/dnd5e_feature_economy.js`. **(1)** Turn Undead's `desc` extended to mention Destroy Undead's effect + the full CR-by-level table (Lv 5: CR ≤ 1/2 → destroyed instead of turned; Lv 8: ≤ 1; Lv 11: ≤ 2; Lv 14: ≤ 3; Lv 17: ≤ 4). The destruction is announce-only just like Turn Undead — when an undead fails its Wis save AND meets the CR threshold for the cleric's level, the GM removes the token instead of applying the "turned for 1 minute" effect. **(2)** Three new option entries: `touch-of-death` (Death, DMG p.96; extra necrotic = 5 + 2 × cleric level on a melee weapon hit), `arcane-abjuration` (Arcana, SCAG p.125; turn celestial/elemental/fey/fiend with the same low-CR banishment thresholds as Destroy Undead), `balm-of-peace` (Peace, TCoE p.34; heal 2d6 + WIS to allies you move past on your turn).
+**Description (cont):** Plan-doc updates. **(a)** Cleric Lv 2 Channel Divinity flips 🟢 → ✅ with the "all 12 canon domains" coverage statement and a roster of which version added each domain's options. **(b)** Cleric Lv 5/8/11/14/17 Destroy Undead flips ⚪ → ✅ with the "rolled into Turn Undead desc" note. The two remaining ⚪ Cleric rows (Divine Intervention Lv 10) require a Tavik Lv 5 → 10 bump and are filed separately.
+**Description (cont 2):** Coverage by source after this commit:
+- **PHB**: Life, Knowledge, Light, Nature, Tempest, Trickery, War (all Lv 2 CD options).
+- **DMG**: Death.
+- **XGtE**: Forge, Grave.
+- **SCAG**: Arcana.
+- **TCoE**: Order, Peace, Twilight.
+
+That's the full canon 13-domain set when you include Life + the 12 expansion options. The picker's substring filter (`ce.sub.indexOf(optSub) !== -1`) routes each option to the right character via the domain slug (e.g. `subclass: 'arcana'` matches a sheet's `"Arcana Domain"`).
+**Description (cont 3):** No demo coverage for any of the 3 new entries — Tavik is Life Domain. They land for homebrew / custom Clerics, completing the announce-only CD picker UX across every canon Cleric subclass. Lv 6 CD options + a picker level-gate remain filed for a future commit (would surface options like Knowledge: Read Thoughts, Trickery: Cloak of Shadows, Death: Divine Strike interaction once shipped).
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.56.2` after `docker compose up -d --build app`. (b) Smoke check via the picker logic: `subclass: 'death'` lowercase + `"death domain".indexOf("death") = 0` = match. Same shape for arcana / peace. (c) No harness re-run needed — JS picker filter is the only consumer.
+
+### Added
+- 3 Cleric Channel Divinity option entries: `touch-of-death` (Death), `arcane-abjuration` (Arcana), `balm-of-peace` (Peace).
+
+### Changed
+- Turn Undead option `desc` — extended with the Destroy Undead CR-by-level table (Lv 5/8/11/14/17 thresholds).
+- `app/version.py` `APP_VERSION` → `2.56.2`.
+- `README.md` version badge → `2.56.2`.
+- `docs/plans/class-content-status.md` — Cleric Lv 2 Channel Divinity row 🟢 → ✅; Cleric Lv 5/8/11/14/17 Destroy Undead ⚪ → ✅.
+
+### Notes
+- **Cleric class plan status after this commit**: every row ✅ except Divine Intervention (Lv 10). The Lv 10 bump on Tavik would be substantial — prof bonus +3 → +4 (cascades into save/skill mod tests if any are hardcoded), spell slots gain L4 + L5 (4/3/3/2 → 4/3/3/3/1 at Lv 10), Channel Divinity uses 1 → 2/short rest (Lv 6 unlock missed). Filed for a future cycle alongside the other big-bump features (Aura of Courage / Improved Divine Smite).
+- **Why Arcane Abjuration's CR table mirrors Destroy Undead's.** RAW SCAG: Arcane Abjuration banishes celestials / elementals / fey / fiends to their home plane on a failed save, with the same low-CR thresholds as Destroy Undead. The desc points at the shared table rather than re-listing it.
+
+---
+
 ## [2.56.1] - 2026-05-25 — "Domain Reach"
 
 **Schema version:** 57
