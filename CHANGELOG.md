@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.52.0] - 2026-05-25 — "Sixth Sense"
+
+**Schema version:** 57
+**Commit summary:** **Danger Sense (Barbarian Lv 2+) — first save-roll advantage intercept.** Krieger now rolls his Dex saves with advantage (`2d20kh1` instead of `1d20`) against effects like Fireball, Lightning Bolt, traps, etc. Previous save plumbing (Evasion in v2.51.5-.6) modified the RESULT of a save (zero / half damage); this commit modifies the d20 ROLL itself by swapping the expression at server-side construction time. New mechanic surface → MINOR bump.
+**Description:** Three new helpers in `app/routes/tabletop_routes.py`. **(1)** `_barbarian_level_from_sheet(sheet)` — mirror of `_monk_level_from_sheet` / `_rogue_level_from_sheet`; single-class + multiclass aware. **(2)** `_pc_has_danger_sense_on_dex_save(char, save_ability) → bool` — sync gate that returns True when `save_ability == "DEX"` AND the PC has Barbarian Lv 2+. Takes a Character row directly (the caller has already resolved the PC); no combatant-id indirection. **(3)** `_broadcast_danger_sense(campaign_id, char)` — async companion that emits a `feature_used` event with `source: "danger-sense"` so the chat card surfaces the trigger.
+**Description (cont):** Wired into three save-roll construction sites in `app/routes/tabletop_routes.py`. **(A) `/place_aoe` PC branch (L 9310)** — server-rolled save: was `expr = f"1d20{pc_mod:+d}"`; now reads the gate and uses `f"2d20kh1{pc_mod:+d}"` when Danger Sense applies. Broadcast fires before the dice roll so the chat sees the trigger preceding the result. **(B) `/cast_spell` single-target PC save roll_request (L 8414)** — the request's `base_expression` was hardcoded `"1d20"`; now resolves to `"2d20kh1"` for Barbarian Lv 2+ Dex saves. The PC's `/roll_request/{id}/respond` flow at L 7498 already appends the stat modifier outside the keep-highest group, so `2d20kh1+5` rolls correctly through the unchanged dice path. **(C) `/cast_spell` AoE PC save roll_request (L 8628)** — same modification on the AoE multi-target loop. Both `(B)` and `(C)` fire `_broadcast_danger_sense` right after creating the request so the trigger shows up alongside the save prompt.
+**Description (cont 2):** Why the gate sits at request-creation time (not /respond time). The base_expression carries the d20 shape across the entire roll-request lifecycle — it's serialized into the broadcast, rendered in the player's UI ("Roll 2d20kh1+5 for your Dex save"), and parsed back when the player clicks Roll. Modifying it at construction time means every observer (caster, target, GM) sees the advantage flag from the moment the prompt appears, and no downstream code needs to know about Danger Sense. The alternative — modifying in /respond — would change the displayed expression after the player commits to roll, which is confusing and would require client-side awareness of the feature.
+**Description (cont 3):** Demo seed: `app/demo_seed.py::_barbarian_sheet` gains a `danger-sense` row in `class_features` (description-only — passive, no `/use` endpoint or button). Krieger is already Lv 5 (well over the Lv 2 threshold from v2.49.238 Reckless Attack work), so no level bump.
+**Description (cont 4):** Harness coverage. New `tests/harness/test_danger_sense.py` (3 tests): (1) happy path — Thalindra casts Fireball at Krieger → `roll_request.base_expression == "2d20kh1"` + `feature_used(source=danger-sense)` for Krieger; (2) non-Barbarian control — Fireball at Pip (Rogue 7) → `base_expression == "1d20"`, no Danger Sense broadcast (Pip has Evasion but not Danger Sense); (3) non-Dex save — Tavik casts Hold Person (Wis save) at Krieger → `base_expression == "1d20"`, no Danger Sense (it's Dex-only). All 3 green; full harness suite at 454 tests (was 451).
+**Description (cont 5):** Verification. (a) `curl /version` reports `2.52.0` after `docker compose up -d --build app`. (b) `pytest tests/harness/test_danger_sense.py -v` → 3/3 passed. (c) Full harness suite green: 454 passed in ~3 min.
+
+### Added
+- `_barbarian_level_from_sheet(sheet) → int` helper.
+- `_pc_has_danger_sense_on_dex_save(char, save_ability) → bool` gate.
+- `_broadcast_danger_sense(campaign_id, char)` async helper for the `feature_used(source=danger-sense)` event.
+- Three save-roll construction sites flip `1d20 → 2d20kh1` when Danger Sense applies: `/place_aoe` PC branch + `/cast_spell` single-target PC save + `/cast_spell` AoE PC save.
+- `tests/harness/test_danger_sense.py` — 3 tests (happy path, non-Barbarian control, non-Dex save control).
+- `_barbarian_sheet::class_features` gains a `danger-sense` row on Krieger.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.52.0` (MINOR — new save-roll advantage mechanic).
+- `README.md` version badge → `2.52.0`.
+- `docs/plans/class-content-status.md` — Barbarian Lv 2 Danger Sense ⚪ → ✅.
+- `docs/test-harness-coverage.md` — total-test-count 451 → 454; new `test_danger_sense.py` entry.
+
+### Notes
+- **Why MINOR.** Two-tier rule: PATCH for "extend an existing mechanic" (e.g. v2.50.2 extending glass to init rows), MINOR for "new mechanic surface" (e.g. v2.50.0 grid coords). Danger Sense is the first feature to intercept the d20 OF a save (Phase B advantage extends from attack rolls to saves); future save-altering features (Aura of Protection, Magic Resistance, etc.) follow this pattern.
+- **Save-roll advantage helpers ready to extend.** Aura of Protection adds CHA mod to allies' saves within 10 ft — uses the same construction-time hook on `base_expression` (or modifies the stat-key resolution). Magic Resistance grants advantage on saves vs spells specifically — same `2d20kh1` swap, narrower gate. The plumbing this commit introduces will hold for both.
+
+---
+
 ## [2.51.6] - 2026-05-25 — "Slip Two"
 
 **Schema version:** 57

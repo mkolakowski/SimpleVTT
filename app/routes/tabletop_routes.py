@@ -8411,11 +8411,19 @@ async def cast_spell(
             if tgt_char and tgt_char.owner_user_id:
                 # ---- PC target → roll-request prompt ----
                 auto_save_target_kind = "pc"
+                # v2.52.0 — Danger Sense (Barbarian Lv 2+) grants the
+                # saving PC advantage on Dex saves. base_expression
+                # carries the d20 shape; /roll_request/{id}/respond
+                # appends the stat modifier. ``2d20kh1`` works through
+                # that flow because the appended ``+N`` lands outside
+                # the keep-highest group.
+                _ds_applies = _pc_has_danger_sense_on_dex_save(tgt_char, save_ability)
+                _ds_base = "2d20kh1" if _ds_applies else "1d20"
                 req = RollRequest(
                     campaign_id=campaign_id,
                     created_by_user_id=user.id,
                     label=note_label,
-                    base_expression="1d20",
+                    base_expression=_ds_base,
                     stat_key=stat_key,
                     dc=auto_save_dc,
                     visibility=Visibility.PUBLIC,
@@ -8440,6 +8448,11 @@ async def cast_spell(
                 })
                 auto_save_prompted = True
                 auto_save_prompt_id = req.id
+                # v2.52.0: broadcast Danger Sense trigger here so the
+                # chat surfaces the trigger right when the save prompt
+                # appears for the PC (before they click Roll).
+                if _ds_applies:
+                    await _broadcast_danger_sense(campaign_id, tgt_char)
                 # v2.37.0 Phase T.3d: stash the cast context so the
                 # roll-response handler can install the matching
                 # condition buff if the PC fails. Slug + char_id +
@@ -8623,11 +8636,16 @@ async def cast_spell(
             if extra_is_pc:
                 _aoe_note = f"{payload['spell_name']} — {save_ability} save"
                 _aoe_stat = f"{save_ability.lower()}_save"
+                # v2.52.0 — Danger Sense advantage for AoE Dex saves.
+                _aoe_ds_applies = _pc_has_danger_sense_on_dex_save(
+                    extra_pc, save_ability,
+                )
+                _aoe_ds_base = "2d20kh1" if _aoe_ds_applies else "1d20"
                 _aoe_req = RollRequest(
                     campaign_id=campaign_id,
                     created_by_user_id=user.id,
                     label=_aoe_note,
-                    base_expression="1d20",
+                    base_expression=_aoe_ds_base,
                     stat_key=_aoe_stat,
                     dc=int(auto_save_dc),
                     visibility=Visibility.PUBLIC,
@@ -8671,6 +8689,11 @@ async def cast_spell(
                     "damage_type": damage_type,
                     "auto_apply_damage": bool(campaign.auto_apply_damage),
                 }
+                # v2.52.0: broadcast Danger Sense trigger here so the
+                # chat surfaces the trigger when the AoE save prompt
+                # appears for the PC.
+                if _aoe_ds_applies:
+                    await _broadcast_danger_sense(campaign_id, extra_pc)
                 auto_save_targets.append({
                     "combatant_id": extra.get("id"),
                     "target_name": extra_name,
@@ -9307,7 +9330,20 @@ async def place_aoe(
             pc_mod, _ = _resolve_stat_modifier(
                 pc_sheet, "dnd5e", f"{save_ability.lower()}_save",
             )
-            expr = f"1d20{pc_mod:+d}"
+            # v2.52.0 — Danger Sense (Barbarian Lv 2+): advantage on
+            # Dex saves vs visible effects. Server-side advantage flips
+            # the d20 expression to ``2d20kh1`` (same kh1 idiom the
+            # attack-flow uses for Reckless Attack / Rage str-attack
+            # advantage). Broadcast fires once per save roll so the
+            # chat card surfaces the trigger.
+            _ds_pc_applies = _pc_has_danger_sense_on_dex_save(
+                extra_pc, save_ability,
+            )
+            if _ds_pc_applies:
+                expr = f"2d20kh1{pc_mod:+d}"
+                await _broadcast_danger_sense(campaign_id, extra_pc)
+            else:
+                expr = f"1d20{pc_mod:+d}"
             try:
                 r = dice_mod.roll(expr)
                 rolled = int(r.total)
@@ -11126,6 +11162,83 @@ async def _apply_evasion_to_dex_save_damage(
         },
     })
     return evaded_proposed, True
+
+
+def _barbarian_level_from_sheet(sheet: dict) -> int:
+    """Read the barbarian level out of a sheet (single-class or
+    multiclass). Mirror of ``_monk_level_from_sheet`` /
+    ``_rogue_level_from_sheet``. Used by ``_target_has_danger_sense``
+    to gate the Barbarian Lv 2+ Dex-save advantage.
+    """
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "barbarian":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "barbarian":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _pc_has_danger_sense_on_dex_save(
+    char: "Character | None", save_ability: str,
+) -> bool:
+    """v2.52.0 — Danger Sense (Barbarian Lv 2+) gate. Returns True
+    when the saving PC has Danger Sense AND the save is a Dex save.
+    RAW: "you have advantage on Dexterity saving throws against
+    effects that you can see, such as traps and spells. To gain
+    this benefit, you can't be blinded, deafened, or incapacitated."
+
+    We don't model the "can see" + "blinded/deafened/incapacitated"
+    caveats — same simplification convention as Uncanny Dodge's
+    "attacker that you can see" and Evasion's incapacitation gate.
+    Callers grant advantage on the d20 (2d20kh1) when this returns
+    True; the helper itself is sync because the caller decides
+    whether to broadcast a feature_used event (avoids a noisy
+    broadcast per save when the call site already emits its own).
+
+    Takes a Character row directly — `/place_aoe` already has the
+    `extra_pc` row, `/cast_spell` has `tgt_char` when creating the
+    roll_request. No need to re-resolve through the combatant_id.
+    """
+    if (save_ability or "").strip().upper() != "DEX":
+        return False
+    if not char:
+        return False
+    sheet = char.sheet or {}
+    return _barbarian_level_from_sheet(sheet) >= 2
+
+
+async def _broadcast_danger_sense(campaign_id: int, char: "Character") -> None:
+    """Companion broadcast for ``_pc_has_danger_sense_on_dex_save``.
+    Emits a `feature_used` event with `source: "danger-sense"` so the
+    chat card shows "Krieger used 🪨 Danger Sense — advantage on Dex
+    save." Caller fires this right before/after rolling the save with
+    the kh1 modifier.
+    """
+    if not char:
+        return
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": char.color,
+            "feature_name": "🪨 Danger Sense — advantage on Dex save",
+            "feature_desc": (
+                "Advantage on Dex saves vs effects you can see "
+                "(traps, spells)."
+            ),
+            "source": "danger-sense",
+        },
+    })
 
 
 def _target_has_dodging(

@@ -1549,6 +1549,17 @@ def _barbarian_sheet(name: str) -> dict:
                 "name": "Reckless Attack",
                 "desc": "Free — declare on your first attack: gain advantage on STR melee attacks this turn; attacks against you have advantage until your next turn.",
             },
+            # v2.52.0: Danger Sense (Barbarian Lv 2+). Passive — when
+            # a Dex save is rolled vs an effect you can see, the d20
+            # rolls with advantage. Fires automatically server-side
+            # in `_pc_has_danger_sense_on_dex_save` (the /place_aoe
+            # PC branch + the cast_spell roll_request creation paths
+            # check this gate). No /use endpoint or button.
+            {
+                "key": "danger-sense",
+                "name": "Danger Sense",
+                "desc": "Passive — advantage on Dex saves vs effects you can see (traps, spells). Fires automatically server-side on Dex-save spells like Fireball.",
+            },
         ],
         # Frenzy is the Berserker subclass feature (Lv 3): bonus
         # action while raging, +1 weapon attack on every subsequent

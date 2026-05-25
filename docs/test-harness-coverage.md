@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 451 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.51.6, 2026-05-25).
+**Total tests:** 454 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.52.0, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -678,6 +678,15 @@ v2.49.244 — per-user UI preference. `POST /api/settings/roll_log_position` fli
 | `test_roll_log_position_left_then_right` | GM POSTs `{"position": "left"}` → 200 + `roll_log_position == "left"`; subsequent POST `{"position": "right"}` flips back, both persist. |
 | `test_roll_log_position_rejects_invalid_value` | `{"position": "middle"}` → 400 with the invalid value surfaced in the response body. |
 | `test_roll_log_position_persists_for_player` | Per-user isolation — Alice sets `left` independently of the GM; cleanup resets her to `right`. |
+
+### `test_danger_sense.py`
+v2.52.0 — Barbarian Lv 2+ Danger Sense. First save-roll advantage intercept; `_pc_has_danger_sense_on_dex_save(char, save_ability)` flips the d20 expression to `2d20kh1` on Dex saves. Wired into `/place_aoe` PC branch + `/cast_spell` single + AoE PC save roll_request creation. Broadcasts `feature_used` with `source: "danger-sense"`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_danger_sense_advantage_on_dex_save` | Thalindra casts Fireball at Krieger (Barbarian 5) → the roll_request broadcast carries `base_expression="2d20kh1"` AND a `feature_used(source=danger-sense)` broadcast fires for Krieger. |
+| `test_danger_sense_skips_non_barbarian` | Control: Thalindra casts Fireball at Pip (Rogue 7) → `base_expression="1d20"` (no kh1); no Danger Sense broadcast. |
+| `test_danger_sense_skips_non_dex_save` | Tavik casts Hold Person (WIS save) at Krieger → `base_expression="1d20"`; Danger Sense is Dex-only. |
 
 ### `test_use_save_evasion.py`
 v2.51.5 — Monk Lv 7+ (and Rogue Lv 7+) Evasion. Server-side intercept of save-for-half Dex-save damage via `_apply_evasion_to_dex_save_damage` (wired into all 7 save-damage call sites). With Evasion: save → 0, fail → half. Without: standard save → half, fail → full. Broadcasts `feature_used` with `source: "evasion"` on every fire (both branches).
