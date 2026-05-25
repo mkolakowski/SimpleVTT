@@ -20,13 +20,42 @@ from .conftest import sheet_url
 
 
 def _click_first_atk_strike(page: Page) -> None:
-    """Wait for the first ``.atk-strike`` button to be visible + ready,
-    then click it. ``.atk-strike`` is rendered inside the dynamic
-    Attacks panel; the sheet's IIFE populates them after the page
-    paints, so a fixed wait would race."""
+    """Click the first ``.atk-strike`` and dismiss any modal pickers
+    that pop along the way.
+
+    v2.49.236: pre-v2.29.0 this was a simple click. The v2.16.0 uplift
+    modal (Rogue Sneak Attack, Paladin Divine Smite) and v2.29.0 target
+    picker (any PC, any attack, when no target is pre-selected via the
+    tabletop's localStorage targeting mirror) now intercept the click
+    on the standalone sheet. The test's intent is "Strike fires a
+    toast", so we click through both modals with no-uplift + no-target
+    selections and let the attack land.
+
+    Order matters: uplift modal fires FIRST (immediately after the
+    .atk-strike click) and the target picker is awaited inside the
+    handler's ``try {}`` block, so it only renders after the uplift
+    modal has been resolved (or skipped, if no uplifts apply).
+    """
     strike = page.locator(".atk-strike").first
     expect(strike).to_be_visible(timeout=3000)
     strike.click()
+    # Uplift modal (Pip's Sneak Attack, etc.) — click ⚔ Strike to
+    # confirm without selecting any uplift. Skip when absent.
+    uplift_confirm = page.locator("#uplift-modal #up-confirm")
+    if uplift_confirm.count():
+        try:
+            uplift_confirm.click(timeout=1500)
+        except Exception:
+            pass  # already gone or never appeared
+    # Target picker — click "Skip (no target)" so the attack still
+    # fires against no target. Some attack handlers proceed without
+    # one; either way the toast renders.
+    skip = page.locator(".target-picker-skip")
+    if skip.count():
+        try:
+            skip.click(timeout=1500)
+        except Exception:
+            pass
 
 
 def test_pip_shortsword_strike_fires_roll_toast(gm_page: Page, roster: dict):

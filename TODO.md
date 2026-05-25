@@ -249,6 +249,24 @@ Output: a `CREDITS.md` file at the repo root listing every third-party asset, it
 
 ---
 
+## Test Infrastructure
+
+### Re-tokenize Garrik Ironside (or change tokenized-six lineup to include a Fighter)
+**Filed 2026-05-25 (v2.49.236 CI cleanup).** Two encounter-sim Playwright tests are skipped pending this fix:
+- `tests/encounter_sim/level_2_encounter/test_tavern_brawl_baseline.py::test_tavern_brawl_3_pcs_3_npcs_round_cycle`
+- `tests/encounter_sim/level_3_edge_cases/action_economy/test_action_surge_refunds_chip.py::test_action_surge_refunds_action_chip`
+
+Both seed Garrik (Fighter) into the init tracker via direct localStorage / `seed_battle_into_page`, but the tabletop's orphan-cleanup at `tabletop.html:4807` drops any combatant whose `char_id` isn't tokenized in the demo seed. v2.49.172's demo slim from 12 → 6 tokenized PCs removed Garrik (and Sir Caelan / Lyra / Mira / Kael / Rowan) from `seed_tokens()`, but didn't update these tests.
+
+**Fix paths:**
+1. Add Garrik back to `seed_tokens()` (one `tokens.append(Token(...))` block; needs a map position + image_url). Cascades: maybe also need to add him to the pre-rolled initiative in `seed_battle_state`. Cheapest if no other tokenized PC is a Fighter.
+2. Swap the test fixtures to use a currently-tokenized PC (Krieger = Barbarian, Pip = Rogue, etc.). Works for the tavern brawl test (just init-tracker rendering) but NOT for the Action Surge test (needs a tokenized Fighter — none exist in the tokenized six today).
+3. Change the demo's tokenized-six lineup to swap one of Pip/Thalindra/Tavik/Zara/Krieger/Magnus for Garrik. Plan-doc impact: `class-content-status.md` Phase-A demo-roster notes.
+
+Backbone Kristen (`tests/harness/test_use_action_surge.py`) still covers the Action Surge chip-refund contract via direct PUT `/battle`; only the Playwright UI assertion is gated on the missing token.
+
+---
+
 ## Integrations
 
 ### Philips Hue Integration

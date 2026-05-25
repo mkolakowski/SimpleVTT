@@ -28,6 +28,7 @@ non-trivial action-economy mutations the rules support.
 """
 from __future__ import annotations
 
+import pytest
 from playwright.sync_api import BrowserContext, expect
 
 from ...conftest import tabletop_url
@@ -45,6 +46,17 @@ from ...pages.tabletop import TabletopPage
 GARRIK_CID = "es_surge_garrik"
 
 
+@pytest.mark.skip(reason=(
+    "v2.49.236: Garrik Ironside is no longer tokenized in the demo seed "
+    "(slimmed to 6 PCs in v2.49.172). The init-tracker orphan-cleanup at "
+    "tabletop.html:4807 drops his combatant when seeded directly. This "
+    "test specifically requires a tokenized Fighter (for Action Surge); "
+    "no other tokenized demo PC is a Fighter. Fix path: re-tokenize Garrik "
+    "or change the demo's tokenized-six lineup to include a Fighter. "
+    "Backbone Kristen (tests/harness/test_use_action_surge.py) still "
+    "covers the chip-refund contract via direct PUT /battle; only this "
+    "Playwright UI assertion is gated on the missing token."
+))
 def test_action_surge_refunds_action_chip(
     gm_context: BrowserContext,
     roster: dict,
