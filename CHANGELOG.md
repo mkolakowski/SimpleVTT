@@ -10,7 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
-## [2.50.0] - 2026-05-25
+## [2.50.1] - 2026-05-25 — "The Christening"
+
+**Schema version:** 57
+**Commit summary:** **CLAUDE.md versioning rules now require a fun name on every release.** Each CHANGELOG entry's `## [X.Y.Z] - YYYY-MM-DD` heading is extended with `— "Fun Name"` (Title Case, 1-4 words, in straight double quotes), and the matching commit subject line carries the same fun name between the version and the one-liner summary. The fun name's job is to make scanning `CHANGELOG.md` feel like reading release notes for a game rather than a manifest — flavorful noun phrases beat literal restatements ("The Quiet Reactor" > "Add Toggle").
+**Description:** Two edits to `CLAUDE.md`. **(1)** The "Quick rules" bullet that previously read "Add a new `## [X.Y.Z] - YYYY-MM-DD` section" now requires the `— "Fun Name"` suffix, with examples drawn from the recent session (`"The Uncanny Dodge"` for v2.49.243, `"Frosted Glass"` for v2.49.246, `"The Battleship Cartographer"` for v2.50.0) so future readers see the intended tone at a glance. The rule also says don't recycle a previous release's name. **(2)** The "Always create the git commit" paragraph's commit-subject template extended from `X.Y.Z — <summary>` to `X.Y.Z — "Fun Name" — <summary>`, with a must-match clause so the handle is identical in `git log` and `CHANGELOG.md` — side-by-side scanning catches mismatches immediately.
+**Description (cont):** This commit also dogfoods the new rule — `"The Christening"` is this release's fun name (christening = naming ceremony, fitting for the commit that introduces the naming requirement). All future commits should follow suit. Doc-only change so PATCH bump is correct per CLAUDE.md (no behavior, schema, or test surface). The 447 harness tests aren't run because no production code changed; the rule change only affects how future humans + AI agents write CHANGELOG entries + commit subjects.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.50.1` after `docker compose up -d --build app`. (b) Tone smoke-check: re-read the new `CLAUDE.md` paragraph cold — does the "fun name" requirement feel like a fun-or-it-doesn't-count rule, or a tedious checklist item? Goal is the former, so the rule's prose includes the spirit ("flavorful noun phrase", "make scanning feel like release notes for a game") rather than a strict regex / enum.
+
+### Changed
+- `CLAUDE.md` — versioning rules. New CHANGELOG heading format requires `— "Fun Name"` suffix; commit subject format extends to `X.Y.Z — "Fun Name" — <summary>`; explicit must-match clause keeps the handle consistent across both surfaces.
+- `app/version.py` `APP_VERSION` → `2.50.1`.
+- `README.md` version badge → `2.50.1`.
+
+### Notes
+- **Backfill is NOT required.** Past CHANGELOG entries (pre-v2.50.1) can keep their plain `## [X.Y.Z] - YYYY-MM-DD` headings — the rule applies going forward only. Retro-naming 200+ releases would be tedious busywork with no payoff.
+- **Why straight double quotes.** Markdown renderers usually auto-curl quotes; using the straight ASCII form in source keeps grep/regex-based tooling consistent.
+
+---
+
+## [2.50.0] - 2026-05-25 — "The Battleship Cartographer"
 
 **Schema version:** 57
 **Commit summary:** **Map grid now displays a LetterNumber coordinate system.** A thin themed gutter strip along the top + left edges of the map labels every column with a letter (A, B, …, Z, AA, AB, …) and every row with a number (1, 2, 3, …). Tokens, AoE markers, and spell-card target lists can now be referenced by fixed coordinates ("Pip is at G7", "drop a Fireball on M12") instead of relative descriptors. Drawn on the canvas in map coords so the labels pan + zoom with the map — the cell labeled G7 is always the same cell regardless of camera position.
