@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 476 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.58.0, 2026-05-25).
+**Total tests:** 479 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.59.0, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -716,6 +716,15 @@ v2.58.0 — Life Domain Cleric heal-uplift hook. Two stacked features fire on ou
 | `test_disciple_and_blessed_healer_on_other_target` | Tavik casts Cure Wounds (L1) at Krieger → both `disciple-of-life` (+3) and `blessed-healer` (+3) broadcasts fire. |
 | `test_blessed_healer_skips_self_target` | Tavik casts Healing Word at himself → only `disciple-of-life` fires (Blessed Healer RAW requires target ≠ caster). |
 | `test_no_uplift_for_non_life_domain_caster` | Control: Lyra (College of Lore Bard) casts Cure Wounds at Krieger → neither broadcast fires. |
+
+### `test_mass_healing_word_aoe.py`
+v2.59.0 — Multi-target heal loop in `/cast_spell`. Extends the v2.58.0 Life Domain hook to Mass Healing Word / Mass Cure Wounds. Single-target block handles `target_combatant_ids[0]`; new extras loop walks `[1:]` applying per-target Disciple of Life uplift and one late Blessed Healer self-heal (if not already fired). Blessed Healer is per-cast, not per-target (RAW). Extras use `cast_id=None` so undo reverts the first target only.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_mass_healing_word_per_target_disciple_uplift` | Tavik casts MHW (slot 3) at Krieger + Pip → 2 `disciple-of-life` broadcasts (+5 each) + 1 `blessed-healer` broadcast. |
+| `test_aoe_heal_skips_uplift_for_non_life_domain` | Single-target MHW (one target via `target_combatant_ids`) → extras loop skipped (len == 1); 1 Disciple + 1 Blessed Healer from single-target block only. |
+| `test_mass_healing_word_blessed_healer_skips_self_first_target` | Tavik MHW at himself + Krieger → 2 Disciple broadcasts (self + Krieger), 1 late Blessed Healer fired from extras loop (single-target block skipped it because first target was caster). |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

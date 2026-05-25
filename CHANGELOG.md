@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.59.0] - 2026-05-25 — "Mass Cure"
+
+**Schema version:** 57
+**Commit summary:** **AoE heal loop in `/cast_spell` + Life Domain uplift per target.** Mass Healing Word / Mass Cure Wounds were silently single-target before this commit — the heal-resolution branch only handled `target_combatant_id` (singular). Now if the cast carries `target_combatant_ids` (multi-target list), the existing single-target block handles `[0]` and a new extras loop walks `[1:]`, applying `_apply_heal_to_combatant` per target. Disciple of Life uplift (v2.58.0) fires per target; Blessed Healer fires ONCE per cast (RAW), late-firing from the extras loop if the first target was the caster.
+**Description:** Single-file edit in `app/routes/tabletop_routes.py` adding ~80 LOC after the v2.58.0 single-target Blessed Healer broadcast (~L 8308). The extras loop is gated on `payload["spell_healing"]` non-empty AND `len(target_combatant_ids_in) > 1` AND `heal_rolled > 0` — short-circuits cleanly for single-target casts and damage spells. Per extra target: compute `_extra_target_uplift, _extra_self_uplift = _life_domain_heal_uplift(char.sheet, slot_level, extra_is_self)`, apply `heal_rolled + _extra_target_uplift` via `_apply_heal_to_combatant(cast_id=None)` so the primary heal's undo entry isn't overwritten, broadcast Disciple of Life if uplift fired.
+**Description (cont):** Blessed Healer timing nuance. RAW: "When you cast a spell of 1st level or higher that restores hit points to a creature other than you, you regain hit points equal to 2 + the spell's level" — fires **once per cast**, not once per target. The single-target block already fires Blessed Healer when the first target ≠ caster. The extras loop tracks `_bh_already_fired = bool(payload.get("blessed_healer_uplift"))`; if False AND an extra target is non-self AND caster is Life Domain Lv 6+, the loop fires Blessed Healer once and flips the flag. This handles the edge case where the caster targets themselves first + an ally second — Blessed Healer correctly fires once (from the extras loop), not zero times.
+**Description (cont 2):** Heal-rolled is computed ONCE for the cast (before the single-target block) and reused for every target — same dice roll. RAW Mass Healing Word: "regain hit points equal to 1d4 + your spellcasting ability modifier" — each target gets the same total. v1 simplification carried forward from v2.58.0: the spellcasting modifier isn't currently added to the heal expression server-side (SRD JSON has `"healing": "1d4"` with no modifier), so heal rolls 1-4 + Disciple of Life uplift. Filed for follow-up if it bites in real play — the helper signature could accept a `caster_spellcasting_mod` argument and compose it into `heal_rolled` before the per-target loop.
+**Description (cont 3):** Why cast_id=None on the extras. The primary heal's `_attack_damage_log[cast_id]` entry tracks the FIRST target only. /undo_attack_damage reverts that one. Extras + Blessed Healer self-heal don't write to the log (cast_id=None) so they survive the undo unchanged. Consistent with the v2.58.0 Blessed Healer self-heal pattern; player can manually adjust extra targets' HP if they want strict undo parity (rare — AoE heals are typically intentional, not misclicks).
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.59.0` after `docker compose up -d --build app`. (b) Harness `tests/harness/test_mass_healing_word_aoe.py` (3 tests) — happy path (Tavik MHW at Krieger + Pip → 2 Disciple broadcasts + 1 Blessed Healer), single-target-fallthrough sanity (1 target via target_combatant_ids list → extras loop skipped, only single-target broadcasts fire), self-first edge case (Tavik MHW at himself + Krieger → 2 Disciple + 1 late Blessed Healer from extras loop). (c) No regressions on the existing 476-test suite — extras loop is gated behind `len(target_combatant_ids_in) > 1` so single-target casts (the majority of demo + tests) skip the new code entirely. (d) Manual click-through: Tavik's sheet casts Mass Healing Word, picks 2 PC targets via the AoE picker — chat shows 2 Disciple of Life cards + 1 Blessed Healer card, both targets' HP bars move + Tavik's HP bar moves once.
+
+### Added
+- Multi-target heal loop in `/cast_spell` at the heal-resolution branch (~80 LOC after the v2.58.0 single-target block). Iterates `target_combatant_ids_in[1:]`, applies per-target Disciple of Life uplift via `_life_domain_heal_uplift`, calls `_apply_heal_to_combatant(cast_id=None)` per target.
+- Late Blessed Healer fire in the extras loop — only fires when the single-target block didn't (first target was caster) AND an extra is non-caster.
+- Harness `tests/harness/test_mass_healing_word_aoe.py` — 3 tests covering happy path, single-target-fallthrough sanity, and self-first edge case.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.59.0`.
+- `README.md` version badge → `2.59.0`.
+- `docs/plans/class-content-status.md` — Life Domain subclass row's "AoE heals filed for follow-up" note flips to ✅ shipped.
+- `docs/test-harness-coverage.md` — total test count 476 → 479; new `test_mass_healing_word_aoe.py` section added.
+
+### Notes
+- **Spellcasting-mod not baked into heal_rolled.** Mass Healing Word RAW heals `1d4 + WIS`; today the SRD JSON has `"healing": "1d4"` and the cast handler doesn't add the caster's spellcasting mod before rolling. Pre-existing v1 simplification — Disciple of Life uplift stacks on top of the raw die roll. Filed for follow-up.
+- **Heal-claim flow still doesn't carry slot_level.** The legacy chat-card "Heal me" button path (when the caster casts a heal without picking a target) still doesn't route through `_life_domain_heal_uplift`. Filed since v2.58.0 — would need `_heal_claims` to capture slot_level + caster sheet at cast time.
+- **Per-target undo isn't supported.** /undo_attack_damage reverts only the FIRST target's heal (the only entry written to `_attack_damage_log`). For a 6-target Mass Healing Word, undoing reverts target 0; targets 1-5 keep their HP. v1 simplification — RAW undo isn't a game concept, just a UX affordance for misclicks; for AoE heals the player manually adjusts the other targets. Filed.
+
+---
+
 ## [2.58.0] - 2026-05-25 — "Channel of Healing"
 
 **Schema version:** 57

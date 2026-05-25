@@ -8306,6 +8306,107 @@ async def cast_spell(
                     },
                 })
 
+    # v2.59.0 — multi-target heal loop (Mass Healing Word / Mass Cure
+    # Wounds). The single-target block above handled
+    # ``target_combatant_ids_in[0]``; this loop handles [1:]. Per
+    # extra target: apply Disciple of Life uplift if Life Domain
+    # (otherwise the base heal_rolled), call _apply_heal_to_combatant
+    # with cast_id=None (the primary undo entry already belongs to
+    # the first target), broadcast per-target Disciple of Life if
+    # the uplift fired. Blessed Healer fires ONCE per cast — if the
+    # single-target block already fired it (first target ≠ caster),
+    # we don't re-fire. If the first target WAS the caster, the
+    # extras loop checks and fires it once when the first non-self
+    # extra appears.
+    if (
+        payload["spell_healing"]
+        and len(target_combatant_ids_in) > 1
+        and heal_rolled > 0
+    ):
+        _bh_already_fired = bool(payload.get("blessed_healer_uplift"))
+        for extra_id in target_combatant_ids_in[1:]:
+            extra_combatant = _lookup_combatant(campaign_id, extra_id)
+            if not extra_combatant:
+                continue
+            extra_char_id = extra_combatant.get("char_id")
+            extra_is_self = bool(
+                extra_char_id and int(extra_char_id) == char.id
+            )
+            _extra_target_uplift, _extra_self_uplift = _life_domain_heal_uplift(
+                char.sheet or {}, int(slot_level), extra_is_self,
+            )
+            _extra_heal_with_uplift = heal_rolled + _extra_target_uplift
+            extra_heal_result = await _apply_heal_to_combatant(
+                db, campaign_id, extra_combatant, _extra_heal_with_uplift,
+                cast_id=None,
+            )
+            if _extra_target_uplift > 0:
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": char.id,
+                        "character_name": char.name,
+                        "user_color": char.color,
+                        "feature_name": (
+                            f"💗 Disciple of Life → +{_extra_target_uplift} "
+                            f"HP on {extra_combatant.get('name', '')}"
+                        ),
+                        "feature_desc": (
+                            f"Life Domain Lv 1+ — outgoing heals add "
+                            f"2 + spell level ({_extra_target_uplift}) HP."
+                        ),
+                        "source": "disciple-of-life",
+                    },
+                })
+            # Late Blessed Healer fire: only if the single-target
+            # block didn't already (first target was caster or non-
+            # Life caster) AND this extra qualifies (Life Domain Lv 6+
+            # AND extra ≠ caster).
+            if (
+                _extra_self_uplift > 0
+                and not _bh_already_fired
+            ):
+                _bh_caster_combatant = _lookup_combatant(
+                    campaign_id, f"tok_{char.id}",
+                )
+                if not _bh_caster_combatant:
+                    _state = hub.get_battle(campaign_id) or {}
+                    for _c in (_state.get("combatants") or []):
+                        if _c.get("char_id") == char.id:
+                            _bh_caster_combatant = _c
+                            break
+                if not _bh_caster_combatant:
+                    _bh_caster_combatant = {
+                        "char_id": char.id,
+                        "id": "",
+                        "name": char.name,
+                    }
+                _bh_result = await _apply_heal_to_combatant(
+                    db, campaign_id, _bh_caster_combatant,
+                    _extra_self_uplift,
+                    cast_id=None,
+                )
+                payload["blessed_healer_uplift"] = _extra_self_uplift
+                payload["blessed_healer_applied"] = _bh_result["applied"]
+                await hub.broadcast(campaign_id, {
+                    "type": "feature_used",
+                    "data": {
+                        "character_id": char.id,
+                        "character_name": char.name,
+                        "user_color": char.color,
+                        "feature_name": (
+                            f"💗 Blessed Healer → +{_bh_result['applied']} "
+                            f"HP to {char.name}"
+                        ),
+                        "feature_desc": (
+                            f"Life Domain Lv 6+ — healing others heals "
+                            f"you for 2 + spell level ({_extra_self_uplift}) HP."
+                        ),
+                        "source": "blessed-healer",
+                    },
+                })
+                _bh_already_fired = True
+
     # v2.34.0 Phase T.4b: auto-resolve spell ATTACK rolls (Fire Bolt,
     # Eldritch Blast, Inflict Wounds, Guiding Bolt, Ray of Frost,
     # Scorching Ray, Chill Touch, Vampiric Touch, etc. — every spell
