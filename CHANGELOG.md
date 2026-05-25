@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.225] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Retire the "Initiative Tracker — Open Sheet for Active Combatant" TODO entry.** v2.3.33 (and earlier — the per-row `📋 Sheet` button predates the TODO's filing) emits a per-entry sheet link from `renderBattle` for both PCs (`/character/{id}/sheet`) and NPCs (`/monster-template/{tid}/sheet`). The link interceptor at `tabletop.html:~3192` routes `a.character-sheet-link` / `a.monster-sheet-link` into the drawer iframe. The TODO's three required combatant types (PC / NPC-with-character / monster-without-sheet) all reach a sheet via the same button. TODO.md edit only.
+**Description:** One-edit doc commit removing the bullet at TODO.md:~110. The implementation is at `tabletop.html:5716-5735` — `sheetBtn` branch in `renderBattle`'s init-entry HTML assembly. Tests covering the live behavior: `test_renderbattle_wires_hydration_helper_for_monsters` (asserts the helper is wired up) and existing PC sheet drawer coverage. The "most prominent on active turn" wording in the TODO was a stretch option; the required "available on entries" behavior ships as a uniform-per-entry button.
+**Description (cont):** Why this kept being missed in earlier retirements. The 📋 Sheet button shipped in v2.3.33 — well before the v2.49 mini-sheet unification work — so when the unified mini-sheet plan was being written, the per-row sheet button was already an unremarkable bit of established UX. The TODO bullet was added later in 2026-05 during the unified-mini-sheet stocktake without checking whether the existing button already satisfied it. Documenting it here so future audits know to scan `renderBattle`'s init-entry HTML when evaluating "open sheet from init tracker" tickets.
+**Description (cont 2):** Verification. (a) `curl /version` confirms v2.49.225 live. (b) Existing harness suite still green (sheet-button regression would land in `test_mini_sheet_partials.py` or a player-sheet route test, no changes to either).
+
+### Changed
+- `TODO.md` — removed the "Initiative Tracker — Open Sheet for Active Combatant" bullet (already shipped in v2.3.33; verified live during 2026-05-24 stocktake).
+- `app/version.py` `APP_VERSION` → `2.49.225`.
+- `README.md` version badge → `2.49.225`.
+
+### Notes
+- **Doc-only commit; harness-test rule N/A.** No HTTP endpoint added or modified; existing coverage for sheet-link rendering is via `test_renderbattle_wires_hydration_helper_for_monsters` + the player sheet route tests.
+- **Third TODO retirement today.** v2.49.223 closed Soren NPC spells; v2.49.224 closed action_charges UI migration; v2.49.225 closes per-entry sheet button. All three were "actually shipped, just not retired from the backlog" — pattern worth keeping in mind during future stocktakes.
+
+---
+
 ## [2.49.224] - 2026-05-24
 
 **Schema version:** 56

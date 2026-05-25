@@ -107,14 +107,6 @@ GMs should be able to open and read any player's character sheet in the campaign
 ### Reporting Page
 Admin/GM dashboard showing campaign activity: session count, token move history, roll statistics, active players over time. Useful for GMs who want a post-session summary.
 
-### Initiative Tracker — Open Sheet for Active Combatant
-When it is a combatant's turn in the initiative order, the GM should be able to open that combatant's character sheet (or stat block for monsters/NPCs) directly from the initiative tracker entry without having to find and click their token on the map. A small sheet icon or "Open Sheet" button next to the active-turn entry is sufficient. Should work for all three combatant types:
-- **Player characters** — opens the full D&D 5e or generic character sheet in the existing sheet modal
-- **NPCs with an assigned character** — opens their character sheet the same way
-- **Monsters / encounter creatures without a sheet** — opens the monster stat block pulled from the encounter data (the same stat block the GM sees when spawning the creature)
-
-The button should be most prominent on the currently-active turn entry but could optionally be available on all entries for quick reference during other players' turns.
-
 ### Initiative Tracker Roll Prompt
 When a combatant is added to the initiative order without a roll (e.g. added mid-combat from the token sheet or manually), show the GM a "Prompt Roll" button next to that entry. Clicking it sends a WebSocket message to the relevant player's client asking them to roll initiative. The button disappears automatically once the player's initiative is recorded (either via self-roll or GM entry).
 
