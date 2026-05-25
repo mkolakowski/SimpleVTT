@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.51.6] - 2026-05-25 — "Slip Two"
+
+**Schema version:** 57
+**Commit summary:** **Rogue Evasion (Lv 7) lands on the demo Pip.** The v2.51.5 helper already recognized Rogue Lv 7+; this commit ships the Lv 5 → Lv 7 demo bump that makes Pip the second Evasion demo fixture alongside Kael. Sneak Attack die climbs `3d6 → 4d6` per `_sneakAttackDie(7)`. Also folds in two test-fix-ups the Pip bump exposed (the v2.49.243 Uncanny-Dodge HP flake from v2.51.5's notes + a pre-existing Fire Bolt miss flake) so the harness suite stays clean.
+**Description:** Demo seed bump in `app/demo_seed.py::_rogue_sheet`: `"level": 5 → 7`, `"hp": {"current": 33, "max": 33} → {"current": 47, "max": 47}` (Rogue d8 hit die + CON +2 per level × 2 levels = +14), `"hit_dice": {"current": 5, "max": 5} → {"current": 7, "max": 7}`. Added an `evasion` row to her `class_features` list mirroring Kael's v2.51.5 entry. Sneak Attack die isn't a sheet field — it's computed JS-side via `_sneakAttackDie(lv)` (`ceil(lv/2)d6` cap 10d6), so Lv 7 automatically renders `4d6` in the sheet's Sneak Attack picker with no template-side changes.
+**Description (cont):** Three harness updates. **(1)** `test_attack.py::test_attack_sneak_attack_uplift` — bonus_damage `"3d6" → "4d6"`, damage range cap `[3, 36] → [4, 48]` (accounting for both base + crit cases), `assert "3d6" in breakdown → "4d6"`. **(2)** `test_attack_auto_damage.py::test_attack_auto_apply_on_hit` — hardcoded `< 30` assertion replaced with relative `< pip_hp_before` (the absolute threshold was never tied to Pip's real max HP and broke after Uncanny Dodge halved damage on a fresh-rested Pip; flake predated this commit but Pip's new Lv 7 HP of 47 made it always fail). **(3)** Two AoE tests that picked Pip as the test PC (`test_aoe_pc_response_applies_damage_and_broadcasts_update` + `test_place_aoe_auto_rolls_pc_save_and_applies_damage`) switched to Krieger (Barbarian, no Evasion) — Pip's new Evasion zeros Dex-save damage on a successful save, making `assert damage_applied > 0` flaky. Test intent (the PC roll-request → /respond flow and the /place_aoe auto-roll-PC-saves flow) is unchanged with any non-Evasion PC.
+**Description (cont 2):** Bonus fix in the same commit (related to the Pip bump pushing the test-suite into a different dice-luck regime): `test_spell_catalog_damage.py::test_spell_damage_in_declared_range` for Fire Bolt now retries up to 8 times on a miss. Attack-roll spells (Fire Bolt, Eldritch Blast, etc.) populate `auto_attack_damage_rolled` only on a hit; the parametrized test had no miss-retry, so Fire Bolt at +4 vs target AC 10 flaked every ~4th run on a d20 ≤ 5. Now the test loops until it lands a hit and range-checks the damage roll, preserving the original coverage intent.
+**Description (cont 3):** Plus a new harness test: `test_use_save_evasion.py::test_evasion_rogue_save_success_zero_damage` — Pip-side mirror of the existing Monk Evasion test. Casts Fireball at [bandit, Pip] via the AoE multi-target flow, responds on Pip's behalf, loops until her Dex save passes → asserts `damage_applied == 0` and a `feature_used(source=evasion)` broadcast fires with Pip's char_id. Locks in that the helper's Rogue branch behaves identically to the Monk branch.
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.51.6` after `docker compose up -d --build app`. (b) Full harness suite green: 451 passed in ~3 min on a clean run. (c) Class plan flips Rogue Lv 7 Evasion ⚪ → ✅ with the v2.51.6 implementation notes pointing at the shared v2.51.5 helper.
+
+### Added
+- `evasion` row in `_rogue_sheet`'s `class_features` list (description-only — Evasion is passive, no /use endpoint).
+- `tests/harness/test_use_save_evasion.py::test_evasion_rogue_save_success_zero_damage` — Pip-side Evasion test.
+
+### Changed
+- `app/demo_seed.py::_rogue_sheet` — level 5 → 7, hp 33 → 47, hit_dice 5 → 7. Sneak Attack die computed JS-side (`_sneakAttackDie(7) = 4d6`).
+- `tests/harness/test_attack.py::test_attack_sneak_attack_uplift` — Sneak Attack die assertions 3d6 → 4d6, range cap 18 → 24 (and crit cap 36 → 48).
+- `tests/harness/test_attack_auto_damage.py::test_attack_auto_apply_on_hit` — `< 30` absolute → `< pip_hp_before` relative comparison.
+- `tests/harness/test_cast_spell_aoe.py::test_aoe_pc_response_applies_damage_and_broadcasts_update` + `::test_place_aoe_auto_rolls_pc_save_and_applies_damage` — PC target switched Pip → Krieger.
+- `tests/harness/test_spell_catalog_damage.py::test_spell_damage_in_declared_range` — added 8-iteration miss-retry loop for attack-roll spells.
+- `docs/plans/class-content-status.md` — Rogue Lv 7 Evasion row flipped ⚪ → ✅.
+- `docs/test-harness-coverage.md` — total-test-count 450 → 451; new Pip Evasion test entry.
+- `app/version.py` `APP_VERSION` → `2.51.6`.
+- `README.md` version badge → `2.51.6`.
+
+### Notes
+- **Pip's new Sneak Attack die.** The `_sneakAttackDie(lv)` JS helper is the single source of truth for Sneak Attack scaling; no sheet field stores the die expression. Pip's Lv 7 sneak attack renders `4d6` in the sheet's per-attack picker automatically. If a future feature needs the die expression server-side (e.g. for an auto-applied Sneak Attack damage path), the helper should be ported to Python alongside the JS version.
+- **Why Krieger instead of Magnus for the AoE tests.** Magnus is a Warlock and has Shield reaction at Lv 1 RAW; if a future commit implements Shield as a reaction the same swap-back would be needed. Krieger is a Barbarian Lv 5 with no reactionary or save-altering kit, making him the most stable AoE test PC.
+
+---
+
 ## [2.51.5] - 2026-05-25 — "The Slip"
 
 **Schema version:** 57

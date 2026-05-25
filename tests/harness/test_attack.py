@@ -108,11 +108,14 @@ async def test_attack_missing_character_id(gm_client):
 
 
 async def test_attack_sneak_attack_uplift(gm_client, gm_ws, roster):
-    """v2.16.0: Pip swings his Shortsword AND declares Sneak Attack (3d6
-    at Lv 5). Response carries bonus_damage_label + bonus_damage_total
-    in the 3-18 range; broadcast surfaces them on a separate line so the
-    chat can render the attribution. No spell slot consumed (Sneak
-    Attack isn't slot-fueled).
+    """v2.16.0: Pip swings his Shortsword AND declares Sneak Attack.
+    Response carries bonus_damage_label + bonus_damage_total; broadcast
+    surfaces them on a separate line so the chat can render the
+    attribution. No spell slot consumed (Sneak Attack isn't slot-fueled).
+
+    v2.51.6: Pip bumped Lv 5 → Lv 7 to land Rogue Evasion; her Sneak
+    Attack die scales `ceil(7/2) = 4d6` (was 3d6 at Lv 5). Non-crit
+    range = [4, 24]; crit doubles dice to 8d6 → [8, 48].
     """
     pip = roster["Pip Quickfingers"]
     resp = await gm_client.post(
@@ -120,7 +123,7 @@ async def test_attack_sneak_attack_uplift(gm_client, gm_ws, roster):
         json={
             "character_id": pip["id"],
             "attack_index": 0,
-            "bonus_damage": "3d6",
+            "bonus_damage": "4d6",
             "bonus_damage_label": "Sneak Attack",
             "override": True,
         },
@@ -130,16 +133,16 @@ async def test_attack_sneak_attack_uplift(gm_client, gm_ws, roster):
     assert data["ok"] is True
     assert data["bonus_damage_label"] == "Sneak Attack"
     assert data["bonus_damage_total"] is not None
-    # 3d6 non-crit range = [3, 18]; crit doubles to 6d6 → [6, 36].
-    assert 3 <= data["bonus_damage_total"] <= 36
-    assert "3d6" in data["bonus_damage_breakdown"]
+    # 4d6 non-crit range = [4, 24]; crit doubles to 8d6 → [8, 48].
+    assert 4 <= data["bonus_damage_total"] <= 48
+    assert "4d6" in data["bonus_damage_breakdown"]
     assert data["slot_spent_class"] == ""
     assert data["slot_spent_level"] == 0
 
     msg = await gm_ws.wait_for("weapon_attack")
     assert msg["data"]["bonus_damage_label"] == "Sneak Attack"
     assert msg["data"]["bonus_damage_total"] == data["bonus_damage_total"]
-    assert msg["data"]["bonus_damage_expr"] == "3d6"
+    assert msg["data"]["bonus_damage_expr"] == "4d6"
 
 
 async def test_attack_divine_smite_spends_slot(gm_client, gm_ws, roster):

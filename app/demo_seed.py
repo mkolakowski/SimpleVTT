@@ -289,23 +289,33 @@ def seed_map(db: Session, camp: Campaign) -> Map:
 
 
 def _rogue_sheet(name: str) -> dict:
-    """Minimal D&D 5e Rogue 5 sheet. Skips the long features text — the
+    """Minimal D&D 5e Rogue 7 sheet. Skips the long features text — the
     sheet's auto-fill flow can fetch race/class details from the local
-    SRD content tier when the player opens it."""
+    SRD content tier when the player opens it.
+
+    v2.51.6: bumped Lv 5 → Lv 7 to unlock Evasion on the demo Rogue.
+    Helper `_target_uses_evasion` (v2.51.5) already recognized Rogue
+    Lv 7+; this commit's level bump + class_features row makes Pip
+    the second Evasion demo fixture alongside Kael (Monk Lv 7).
+    HP scales d8(5)+CON(2) per level × 2 = +14 → 47/47. Hit dice
+    follow. Sneak Attack die is computed JS-side (`_sneakAttackDie(7)
+    = ceil(7/2)d6 = 4d6`); no sheet field changes for it.
+    Proficiency bonus stays +3 (Lv 5-8 = +3).
+    """
     return {
         "class": "Rogue",
         "subclass": "Thief",
-        "level": 5,
+        "level": 7,
         "race": "Halfling",
         "alignment": "Chaotic Good",
         "background": "Criminal",
         "abilities": {"STR": 8, "DEX": 16, "CON": 14, "INT": 12, "WIS": 13, "CHA": 10},
         "ac": 14,
         "speed": 25,
-        "hp": {"current": 33, "max": 33, "temp": 0},
+        "hp": {"current": 47, "max": 47, "temp": 0},
         "initiative_bonus": 3,
         "proficiency_bonus": 3,
-        "hit_dice": {"current": 5, "max": 5},
+        "hit_dice": {"current": 7, "max": 7},
         "class_hit_die": "d8",
         "saving_throws": {"DEX": True, "INT": True},
         "skills": {
@@ -381,6 +391,17 @@ def _rogue_sheet(name: str) -> dict:
                 "key": "uncanny-dodge",
                 "name": "Uncanny Dodge",
                 "desc": "When an attacker that you can see hits you with an attack, you can use your reaction to halve the attack's damage against you. Fires automatically server-side on the first incoming attack each round.",
+            },
+            # v2.51.6: Evasion (Rogue Lv 7). Mirror of Kael's Monk
+            # Lv 7 entry (v2.51.5). Helper already recognized Rogue
+            # Lv 7+; this commit's Pip level bump (5 → 7) + class_features
+            # row makes Pip the Rogue-side demo fixture. Passive — no
+            # /use endpoint or button; fires automatically inside
+            # `_apply_evasion_to_dex_save_damage` on Dex-save damage.
+            {
+                "key": "evasion",
+                "name": "Evasion",
+                "desc": "Passive — when a Dex save would deal half damage, take none on success and half on failure. Fires automatically server-side on Dex-save spells like Fireball.",
             },
         ],
     }

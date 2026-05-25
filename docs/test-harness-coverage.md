@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 450 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.51.5, 2026-05-25).
+**Total tests:** 451 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.51.6, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -686,6 +686,7 @@ v2.51.5 — Monk Lv 7+ (and Rogue Lv 7+) Evasion. Server-side intercept of save-
 |------|-----------------|
 | `test_evasion_save_success_zero_damage` | Thalindra casts Fireball at [bandit, Kael (Monk 7)] via AoE; loop until Kael's Dex save passes → `damage_applied == 0` and feature_used(source=evasion) broadcast fires. |
 | `test_evasion_save_fail_half_damage` | Same setup; loop until Kael's save fails → `damage_applied` in 8d6's half range (4-24) and the Evasion broadcast still fires on the fail branch. |
+| `test_evasion_rogue_save_success_zero_damage` | v2.51.6: Pip (Rogue Lv 7 post-bump) — Fireball at [bandit, Pip], loop until save passes → `damage_applied == 0` + feature_used(source=evasion) for Pip. Proves the helper recognizes Rogue Lv 7+ alongside Monk Lv 7+. |
 | `test_non_monk7_target_standard_save_for_half` | Control: Tavik (Cleric 5, no Evasion) on save success → standard half damage (not zero); no Evasion broadcast. |
 
 ### `test_use_attack_uncanny_dodge.py`

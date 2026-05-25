@@ -151,30 +151,37 @@ async def test_spell_damage_in_declared_range(
     char = await long_rested_caster(caster_name)
     target_id = await _seed_target_bandit(gm_client)
 
-    resp = await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
-        json={
-            "character_id": char["id"],
-            "spell_index": spell_index,
-            "slot_level": slot_level,
-            "target_combatant_id": target_id,
-            "override": True,
-        },
-    )
-    assert resp.status_code == 200, (
-        f"{caster_name} couldn't cast {spell_slug} at slot L{slot_level}: "
-        f"{resp.status_code} {resp.text[:300]}"
-    )
-    data = resp.json()
-    # Attack-roll spells write the rolled damage to
-    # ``auto_attack_damage_rolled`` (not the weapon-attack ``damage_total``
-    # field — see app/routes/tabletop_routes.py cast_spell branch at
-    # line ~7515). The test stays scoped to attack-roll spells in
-    # Phase 2A v1; save / multi-beam / auto-hit variants are filed
-    # for follow-up.
+    # v2.51.6: retry-on-miss. Attack-roll spells (Fire Bolt, Eldritch
+    # Blast, etc.) only populate ``auto_attack_damage_rolled`` when the
+    # d20 actually hits. With target AC 10 and +4 to hit, a d20 ≤ 5
+    # misses (~25%), and the response then carries
+    # ``auto_attack_damage_rolled: 0``. The pre-2.51.6 test had no
+    # retry, so this flaked roughly every 4th CI run for Fire Bolt.
+    # Loop up to 8 times to find a hit; range-check the SUCCESSFUL
+    # roll. Damage-range coverage is unchanged.
+    data = None
+    for _ in range(8):
+        await long_rested_caster(caster_name)
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": char["id"],
+                "spell_index": spell_index,
+                "slot_level": slot_level,
+                "target_combatant_id": target_id,
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, (
+            f"{caster_name} couldn't cast {spell_slug} at slot L{slot_level}: "
+            f"{resp.status_code} {resp.text[:300]}"
+        )
+        data = resp.json()
+        if int(data.get("auto_attack_damage_rolled") or 0) > 0:
+            break
     damage_rolled = data.get("auto_attack_damage_rolled")
     assert isinstance(damage_rolled, int) and damage_rolled > 0, (
-        f"{spell_slug}: response missing auto_attack_damage_rolled or it's <= 0 — "
+        f"{spell_slug}: no hit + non-zero damage in 8 attempts — "
         f"got {damage_rolled!r}. Full response: {data}"
     )
     # Sanity-check the catalog's declared expression — drift between

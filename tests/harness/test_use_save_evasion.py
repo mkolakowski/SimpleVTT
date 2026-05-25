@@ -227,6 +227,34 @@ async def test_evasion_save_fail_half_damage(
     )
 
 
+async def test_evasion_rogue_save_success_zero_damage(
+    gm_client, gm_ws, roster, thalindra_rested,
+):
+    """v2.51.6: Pip (Rogue Lv 7) — Rogue Evasion is the same RAW as
+    Monk Evasion (helper recognizes both via Lv-7+ check). On a save
+    success: damage_applied == 0 + feature_used(source=evasion).
+    """
+    await _set_auto_apply(gm_client, on=True)
+    thal = thalindra_rested
+    pip = roster["Pip Quickfingers"]
+
+    upd = await _drive_save_until_outcome(
+        gm_client, gm_ws, thal, pip, want_passed=True,
+    )
+    upd_data = upd["data"]
+    assert upd_data["passed"] is True
+    assert upd_data["damage_applied"] == 0, (
+        f"Rogue Evasion should zero out damage on save success; "
+        f"got {upd_data['damage_applied']}"
+    )
+    ev_msgs = _evasion_broadcasts(gm_ws, pip["id"])
+    assert ev_msgs, (
+        f"Expected feature_used(source=evasion) broadcast for Pip "
+        f"(Rogue Lv 7); buffered: "
+        f"{[(m.get('type'), (m.get('data') or {}).get('source')) for m in gm_ws.buffered()]}"
+    )
+
+
 async def test_non_monk7_target_standard_save_for_half(
     gm_client, gm_ws, roster, thalindra_rested,
 ):

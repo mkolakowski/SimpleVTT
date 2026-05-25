@@ -156,23 +156,34 @@ async def test_attack_hit_determination_without_auto_apply(gm_client, krieger_fu
 
 async def test_attack_auto_apply_on_hit(gm_client, krieger_full, roster, auto_apply_on):
     """auto_apply_damage on: hits trigger HP change to the PC via
-    _apply_hp_change. Drives the test deterministic by using a target
-    AC of 1 (effectively guaranteed hit)."""
+    _apply_hp_change.
+
+    v2.51.6: assertion switched from `target_hp_after < 30` (absolute,
+    hardcoded) to `target_hp_after < pip_hp_before` (relative). The
+    absolute form was wrong for two reasons:
+      1. Pip's max HP is sheet-defined (33 pre-v2.51.6, 47 post-bump);
+         the hardcoded 30 was never her actual max.
+      2. Uncanny Dodge (v2.49.243) halves Krieger's Greataxe min damage
+         (5 → 2), so a fresh-rested Pip lands at hp_max - 2 which is
+         still > 30. The flake only surfaced when Pip was at full HP
+         going into this test — visible after v2.51.6 since her max
+         climbs further from the hardcoded threshold.
+    Relative comparison stays robust regardless of Pip's starting HP
+    or whether Uncanny Dodge fires.
+    """
     krieger = krieger_full
     pip = roster["Pip Quickfingers"]
     pip_cid = f"tok_{pip['id']}"
-    # Need Pip to have a known AC + HP for the assertion. Pip's
-    # _rogue_sheet defines AC 14. We can't override here without DB
-    # access — use Pip's actual sheet. The attack might miss on a low
-    # roll. Run a few attempts and assert at least one applies damage.
-    # (deterministic via the override path on auto_apply tests.)
+    # Read Pip's actual sheet HP via the roster so the assertion is
+    # against the real pre-attack value, not a battle-state placeholder.
+    pip_hp_before = int(pip.get("hp_current") or 0)
     await _seed_battle(gm_client, [
         _mkc(f"tok_{krieger['id']}", krieger['id'], name="Krieger"),
-        _mkc(pip_cid, pip['id'], hp_cur=30, hp_max=30, name=pip['name']),
+        _mkc(pip_cid, pip['id'],
+             hp_cur=pip_hp_before, hp_max=pip_hp_before, name=pip['name']),
     ])
     # Krieger's Greataxe is +7 to hit. Pip's AC is 14. We need a d20
-    # roll of 7+ to hit (advantage from Rage would change this; we
-    # don't rage here). Run up to 8 attempts and assert at least one
+    # roll of 7+ to hit. Run up to 8 attempts and assert at least one
     # hit applied damage > 0.
     hit_seen = False
     for _ in range(8):
@@ -189,7 +200,10 @@ async def test_attack_auto_apply_on_hit(gm_client, krieger_full, roster, auto_ap
         data = resp.json()
         if data["hit"] and data["damage_applied"] > 0:
             hit_seen = True
-            assert data["target_hp_after"] < 30
+            assert data["target_hp_after"] < pip_hp_before, (
+                f"hp_after={data['target_hp_after']} should be less than "
+                f"hp_before={pip_hp_before}; damage_applied={data['damage_applied']}"
+            )
             assert data["auto_applied"] is True
             break
     assert hit_seen, "expected at least one hit + auto-apply in 8 swings"

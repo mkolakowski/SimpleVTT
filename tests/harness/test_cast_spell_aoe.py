@@ -255,30 +255,39 @@ async def test_aoe_pc_response_applies_damage_and_broadcasts_update(
     rolls save-for-half damage (auto_apply_damage is on), updates the
     PC's HP, and broadcasts a ``spell_cast_target_updated`` event so
     the client can repaint the cast card's pill for that target.
+
+    v2.51.6: switched from Pip (Rogue) to Krieger (Barbarian) as the
+    PC target. Pip's Lv 7 bump for Rogue Evasion (v2.51.6) means a
+    successful Dex save zeros her damage, and the assertion
+    ``hp_after < hp_before`` would then fail on save-success rolls.
+    Krieger has no Evasion-style halver so save-for-half always
+    leaves damage > 0 (half on save, full on fail). Test intent (PC
+    roll_request → /respond → damage applied + broadcast) is
+    unchanged.
     """
     thal = thalindra_rested
-    pip = roster["Pip Quickfingers"]
+    pc = roster["Krieger Stonefist"]
     tmpl = await _bandit_tmpl(gm_client)
     await _set_auto_apply(gm_client, on=True)
 
-    # Long-rest Pip so an earlier test's damage doesn't leave her at
-    # low HP — 8d6 fireball can one-shot a low-HP rogue, which makes
-    # damage_applied ≠ HP-delta because the HP floors at 0 in the
-    # _apply_hp_change path while the broadcast carries the rolled
-    # amount.
+    # Long-rest the PC so an earlier test's damage doesn't leave them
+    # at low HP — 8d6 fireball can one-shot a low-HP combatant, which
+    # makes damage_applied ≠ HP-delta because the HP floors at 0 in
+    # the _apply_hp_change path while the broadcast carries the
+    # rolled amount.
     await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/rest",
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pc['id']}/rest",
         json={"type": "long"},
     )
 
-    # Read Pip's starting HP via the roster so we can assert the drop.
-    async def _pip_hp():
+    # Read the PC's starting HP via the roster so we can assert the drop.
+    async def _pc_hp():
         roster_resp = await gm_client.get(
             f"/api/campaign/{CAMPAIGN_ID}/roster"
         )
         chars = roster_resp.json()["characters"]
-        return int(next(c for c in chars if c["id"] == pip["id"])["hp_current"])
-    pip_hp_before = await _pip_hp()
+        return int(next(c for c in chars if c["id"] == pc["id"])["hp_current"])
+    pc_hp_before = await _pc_hp()
 
     await _seed_battle(gm_client, [
         {"id": f"tok_t5d_{thal['id']}", "char_id": thal["id"],
@@ -290,8 +299,8 @@ async def test_aoe_pc_response_applies_damage_and_broadcasts_update(
          "name": "Bandit", "initiative": 7, "hp_current": 50, "hp_max": 50,
          "buffs": [],
          "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
-        {"id": f"tok_t5d_{pip['id']}", "char_id": pip["id"],
-         "name": pip["name"], "initiative": 8, "hp_current": pip_hp_before, "hp_max": 24,
+        {"id": f"tok_t5d_{pc['id']}", "char_id": pc["id"],
+         "name": pc["name"], "initiative": 8, "hp_current": pc_hp_before, "hp_max": pc_hp_before,
          "buffs": [],
          "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
     ])
@@ -303,7 +312,7 @@ async def test_aoe_pc_response_applies_damage_and_broadcasts_update(
             "spell_index": FIREBALL_INDEX,
             "slot_level": 3,
             "class_slug": "wizard",
-            "target_combatant_ids": ["tok_t5d_bandit", f"tok_t5d_{pip['id']}"],
+            "target_combatant_ids": ["tok_t5d_bandit", f"tok_t5d_{pc['id']}"],
             "override": True,
         },
     )
@@ -311,18 +320,18 @@ async def test_aoe_pc_response_applies_damage_and_broadcasts_update(
     cast_data = cast_resp.json()
     cast_id = cast_data["id"]
     targets = cast_data.get("auto_save_targets") or []
-    pip_entry = next(t for t in targets if t["target_name"] == pip["name"])
-    assert pip_entry["pc_skipped"] is True
-    pending_id = pip_entry["pending_request_id"]
+    pc_entry = next(t for t in targets if t["target_name"] == pc["name"])
+    assert pc_entry["pc_skipped"] is True
+    pending_id = pc_entry["pending_request_id"]
     assert isinstance(pending_id, int)
 
     gm_ws.mark()
 
-    # GM-as-Pip submits the save response. Damage gets rolled fresh
+    # GM-as-PC submits the save response. Damage gets rolled fresh
     # server-side and applied via _apply_damage_to_combatant.
     r = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/roll_request/{pending_id}/respond",
-        json={"character_id": pip["id"]},
+        json={"character_id": pc["id"]},
     )
     assert r.status_code == 200, r.text
 
@@ -333,27 +342,28 @@ async def test_aoe_pc_response_applies_damage_and_broadcasts_update(
     upd = await gm_ws.wait_for("spell_cast_target_updated", timeout=3.0)
     upd_data = upd["data"]
     assert upd_data["cast_id"] == cast_id
-    assert upd_data["combatant_id"] == f"tok_t5d_{pip['id']}"
-    assert upd_data["target_name"] == pip["name"]
+    assert upd_data["combatant_id"] == f"tok_t5d_{pc['id']}"
+    assert upd_data["target_name"] == pc["name"]
     assert isinstance(upd_data["rolled"], int)
     assert isinstance(upd_data["passed"], bool)
     assert upd_data["damage_type"] == "fire"
 
-    # Pip's HP should have dropped. Full damage on fail, half (rounded
+    # PC's HP should have dropped. Full damage on fail, half (rounded
     # down) on save — both > 0 for an 8d6 fireball.
-    pip_hp_after = await _pip_hp()
-    assert pip_hp_after < pip_hp_before, (
-        f"Pip's HP did not drop: before={pip_hp_before} after={pip_hp_after}"
+    pc_hp_after = await _pc_hp()
+    assert pc_hp_after < pc_hp_before, (
+        f"{pc['name']}'s HP did not drop: before={pc_hp_before} after={pc_hp_after}"
     )
     # damage_applied is the post-resistance amount the server tried to
     # subtract; the actual HP delta floors at 0, so the broadcast may
     # overshoot when the PC was already low. With a fresh long-rest
-    # above, Pip starts at 33 HP — 8d6 fire (avg ~28) won't usually
-    # one-shot her, so the broadcast value should match the HP delta.
-    assert upd_data["damage_applied"] >= pip_hp_before - pip_hp_after, (
+    # above, Krieger starts at full HP — 8d6 fire (avg ~28) won't
+    # one-shot a Lv 5 Barbarian, so the broadcast value should match
+    # the HP delta.
+    assert upd_data["damage_applied"] >= pc_hp_before - pc_hp_after, (
         f"damage_applied lower than HP delta: broadcast says "
         f"{upd_data['damage_applied']}, HP delta is "
-        f"{pip_hp_before - pip_hp_after}"
+        f"{pc_hp_before - pc_hp_after}"
     )
 
 
@@ -452,26 +462,34 @@ async def test_place_aoe_auto_rolls_pc_save_and_applies_damage(
     save server-side (using the PC's character sheet's save mod)
     and applies save-for-half damage exactly like NPCs. The cast
     card pill row shows the auto-rolled outcome for every target.
+
+    v2.51.6: switched from Pip (Rogue) to Krieger (Barbarian) as the
+    PC target. Pip's Lv 7 bump for Rogue Evasion (v2.51.6) means a
+    successful Dex save zeros her damage, and the assertion
+    ``damage_applied > 0`` would then fail on save-success rolls.
+    Krieger has no Evasion-style halver so save-for-half always
+    leaves damage > 0; the test's intent (PC auto-roll + damage
+    apply path) is unchanged.
     """
     thal = thalindra_rested
-    pip = roster["Pip Quickfingers"]
+    pc = roster["Krieger Stonefist"]
     tmpl = await _bandit_tmpl(gm_client)
     await _set_auto_apply(gm_client, on=True)
 
-    # Long-rest Pip so an earlier test's damage doesn't leave her at
-    # low HP — 8d6 fireball can one-shot a low-HP rogue.
+    # Long-rest the PC so an earlier test's damage doesn't leave them
+    # at low HP — 8d6 fireball can one-shot a battered combatant.
     await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/rest",
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pc['id']}/rest",
         json={"type": "long"},
     )
 
-    async def _pip_hp():
+    async def _pc_hp():
         roster_resp = await gm_client.get(
             f"/api/campaign/{CAMPAIGN_ID}/roster"
         )
         chars = roster_resp.json()["characters"]
-        return int(next(c for c in chars if c["id"] == pip["id"])["hp_current"])
-    pip_hp_before = await _pip_hp()
+        return int(next(c for c in chars if c["id"] == pc["id"])["hp_current"])
+    pc_hp_before = await _pc_hp()
 
     await _seed_battle(gm_client, [
         {"id": f"tok_pcr_{thal['id']}", "char_id": thal["id"],
@@ -483,8 +501,8 @@ async def test_place_aoe_auto_rolls_pc_save_and_applies_damage(
          "name": "Bandit", "initiative": 7, "hp_current": 50, "hp_max": 50,
          "buffs": [],
          "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
-        {"id": f"tok_pcr_{pip['id']}", "char_id": pip["id"],
-         "name": pip["name"], "initiative": 8, "hp_current": pip_hp_before, "hp_max": 24,
+        {"id": f"tok_pcr_{pc['id']}", "char_id": pc["id"],
+         "name": pc["name"], "initiative": 8, "hp_current": pc_hp_before, "hp_max": pc_hp_before,
          "buffs": [],
          "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
     ])
@@ -506,30 +524,30 @@ async def test_place_aoe_auto_rolls_pc_save_and_applies_damage(
         f"/api/campaign/{CAMPAIGN_ID}/place_aoe",
         json={
             "cast_id": cast_id,
-            "target_combatant_ids": ["tok_pcr_bandit", f"tok_pcr_{pip['id']}"],
+            "target_combatant_ids": ["tok_pcr_bandit", f"tok_pcr_{pc['id']}"],
         },
     )
     assert place_resp.status_code == 200, place_resp.text
     targets = place_resp.json().get("auto_save_targets") or []
     assert len(targets) == 2
-    pip_entry = next(t for t in targets if t["target_name"] == pip["name"])
+    pc_entry = next(t for t in targets if t["target_name"] == pc["name"])
     bandit_entry = next(t for t in targets if t["target_name"] == "Bandit")
     # Both targets are auto-rolled — pc_skipped / pending_request_id
     # never appear on the entry.
-    assert "pc_skipped" not in pip_entry
-    assert "pending_request_id" not in pip_entry
-    assert isinstance(pip_entry["rolled"], int)
-    assert isinstance(pip_entry["passed"], bool)
-    assert pip_entry["damage_applied"] > 0, f"Pip took 0 damage: {pip_entry}"
-    assert pip_entry["damage_type"] == "fire"
+    assert "pc_skipped" not in pc_entry
+    assert "pending_request_id" not in pc_entry
+    assert isinstance(pc_entry["rolled"], int)
+    assert isinstance(pc_entry["passed"], bool)
+    assert pc_entry["damage_applied"] > 0, f"{pc['name']} took 0 damage: {pc_entry}"
+    assert pc_entry["damage_type"] == "fire"
     # Bandit auto-rolled too.
     assert isinstance(bandit_entry["rolled"], int)
     assert bandit_entry["damage_applied"] > 0
 
-    # Pip's HP dropped server-side.
-    pip_hp_after = await _pip_hp()
-    assert pip_hp_after < pip_hp_before, (
-        f"Pip's HP did not drop: before={pip_hp_before} after={pip_hp_after}"
+    # PC's HP dropped server-side.
+    pc_hp_after = await _pc_hp()
+    assert pc_hp_after < pc_hp_before, (
+        f"{pc['name']}'s HP did not drop: before={pc_hp_before} after={pc_hp_after}"
     )
 
 
