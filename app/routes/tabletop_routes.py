@@ -624,6 +624,26 @@ _SPELL_CONDITION_MAP = {
             "advantage on social interactions with caster",
         ],
     },
+    # v2.54.0 — Suggestion → Charmed (Wis save). RAW: "you suggest a
+    # course of activity ... if it fails its save, it pursues the
+    # suggested course for the duration." Duration is up to 8 hours
+    # (concentration). Added now so Bard Countercharm has a save-vs-
+    # charmed spell to gate against — Lyra's spell list already
+    # includes Suggestion (demo_seed.py:~878), so the cast_spell flow
+    # auto-installs Charmed on a failed save and the Countercharm
+    # aura check can fire.
+    "suggestion": {
+        "key": "charmed",
+        "name": "Charmed (Suggestion)",
+        "icon": "💗",
+        "duration_rounds": 4800,  # 8 hours at 6 s / round
+        "concentration": True,
+        "effects": [
+            "follows the suggested course of action",
+            "regards caster as friendly",
+            "save again on damage",
+        ],
+    },
     "fear": {
         "key": "frightened",
         "name": "Frightened",
@@ -8429,6 +8449,22 @@ async def cast_spell(
                 )
                 if _aop_bonus > 0:
                     _ds_base = f"{_ds_base}+{_aop_bonus}"
+                # v2.54.0 — Bard Countercharm (Lv 6+) gives ally
+                # advantage on saves vs spells that install charmed
+                # or frightened. Gated on the SPELL's condition map
+                # (not the save ability), so Suggestion (Wis save →
+                # Charmed) triggers but Fireball (Dex save → damage)
+                # doesn't. If Danger Sense already flipped d20 →
+                # 2d20kh1 the swap is a no-op; doubling kh1 doesn't
+                # change anything.
+                _cc_applies = False
+                _cc_bard_id = None
+                if _spell_installs_countercharmed_condition(spell_slug):
+                    _cc_applies, _cc_bard_id = _ally_has_countercharm_active(
+                        campaign_id, int(tgt_char.id),
+                    )
+                    if _cc_applies and not _ds_base.startswith("2d20kh1"):
+                        _ds_base = _ds_base.replace("1d20", "2d20kh1", 1)
                 req = RollRequest(
                     campaign_id=campaign_id,
                     created_by_user_id=user.id,
@@ -8469,6 +8505,18 @@ async def cast_spell(
                     await _broadcast_aura_of_protection(
                         campaign_id, _aop_paladin, tgt_char, _aop_bonus,
                     )
+                # v2.54.0: Countercharm broadcast. Name the bard as the
+                # source. Lookup the bard's Character row here (the
+                # _ally_has_countercharm_active helper returned just the
+                # id to keep the hot path light).
+                if _cc_applies and _cc_bard_id:
+                    _cc_bard = db.query(Character).filter(
+                        Character.id == int(_cc_bard_id),
+                    ).first()
+                    if _cc_bard:
+                        await _broadcast_countercharm(
+                            campaign_id, _cc_bard, tgt_char,
+                        )
                 # v2.37.0 Phase T.3d: stash the cast context so the
                 # roll-response handler can install the matching
                 # condition buff if the PC fails. Slug + char_id +
@@ -8663,6 +8711,15 @@ async def cast_spell(
                 )
                 if _aoe_aop_bonus > 0:
                     _aoe_ds_base = f"{_aoe_ds_base}+{_aoe_aop_bonus}"
+                # v2.54.0 — Countercharm advantage on AoE saves.
+                _aoe_cc_applies = False
+                _aoe_cc_bard_id = None
+                if _spell_installs_countercharmed_condition(spell_slug):
+                    _aoe_cc_applies, _aoe_cc_bard_id = _ally_has_countercharm_active(
+                        campaign_id, int(extra_pc.id),
+                    )
+                    if _aoe_cc_applies and not _aoe_ds_base.startswith("2d20kh1"):
+                        _aoe_ds_base = _aoe_ds_base.replace("1d20", "2d20kh1", 1)
                 _aoe_req = RollRequest(
                     campaign_id=campaign_id,
                     created_by_user_id=user.id,
@@ -8721,6 +8778,15 @@ async def cast_spell(
                     await _broadcast_aura_of_protection(
                         campaign_id, _aoe_aop_paladin, extra_pc, _aoe_aop_bonus,
                     )
+                # v2.54.0: Countercharm broadcast on AoE saves.
+                if _aoe_cc_applies and _aoe_cc_bard_id:
+                    _aoe_cc_bard = db.query(Character).filter(
+                        Character.id == int(_aoe_cc_bard_id),
+                    ).first()
+                    if _aoe_cc_bard:
+                        await _broadcast_countercharm(
+                            campaign_id, _aoe_cc_bard, extra_pc,
+                        )
                 auto_save_targets.append({
                     "combatant_id": extra.get("id"),
                     "target_name": extra_name,
@@ -11375,6 +11441,98 @@ def _aura_of_protection_bonus(
     return best_bonus, best_paladin
 
 
+def _spell_installs_countercharmed_condition(spell_slug: str) -> bool:
+    """v2.54.0 — gate for Bard Countercharm. Returns True when the
+    spell's `_SPELL_CONDITION_MAP` entry installs a condition that
+    Countercharm protects against (charmed or frightened). RAW:
+    "advantage on saving throws against being frightened or charmed."
+
+    Drives the condition-gated save-aura check — Countercharm only
+    fires when the SPELL would install one of those conditions, not
+    on every save. Today this means charm-person, fear, suggestion
+    (added in this commit). Future content adds (Crown of Madness,
+    Geas, Bestow Curse with charm option, Phantasmal Killer, etc.)
+    pick up the gate automatically as their `_SPELL_CONDITION_MAP`
+    entries land.
+    """
+    if not spell_slug:
+        return False
+    entry = _SPELL_CONDITION_MAP.get(spell_slug)
+    if not entry:
+        return False
+    return (entry.get("key") or "").strip().lower() in {
+        "charmed", "frightened",
+    }
+
+
+def _ally_has_countercharm_active(
+    campaign_id: int, saving_char_id: int | None,
+) -> "tuple[bool, int | None]":
+    """v2.54.0 — Bard Countercharm (Lv 6+) ally-aura gate. Returns
+    (applies, bard_char_id). True when some PC combatant in the
+    active battle's init tracker has a buff with key
+    ``countercharm-active`` (installed by /use_countercharm), AND
+    the saving PC is in the same battle. The bard's own aura
+    protects themselves too (RAW: "you or any of your friendly
+    creatures").
+
+    v1 simplifications mirror Aura of Protection's:
+      - No 10/30 ft radius check — any countercharm-active combatant
+        in init grants the advantage to every PC in init.
+      - The bard MUST keep using their action each turn to maintain
+        Countercharm RAW; v1 installs a 1-round self-buff and lets
+        it auto-expire. Re-cast each turn.
+    """
+    if not saving_char_id:
+        return False, None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False, None
+    combatants = state.get("combatants") or []
+    saver_in_battle = any(
+        c.get("char_id") == saving_char_id for c in combatants
+    )
+    if not saver_in_battle:
+        return False, None
+    for c in combatants:
+        buffs = c.get("buffs") or []
+        for b in buffs:
+            if not isinstance(b, dict):
+                continue
+            if (b.get("key") or "").strip().lower() == "countercharm-active":
+                bard_char_id = c.get("char_id")
+                return True, (int(bard_char_id) if bard_char_id else None)
+    return False, None
+
+
+async def _broadcast_countercharm(
+    campaign_id: int, bard: "Character", saving_char: "Character | None",
+) -> None:
+    """Companion broadcast for the Countercharm aura gate. Names the
+    bard as the source ("Lyra's 🎺 Countercharm — advantage on save
+    vs charm/fear for X").
+    """
+    if not bard:
+        return
+    target_name = saving_char.name if saving_char else "ally"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": bard.id,
+            "character_name": bard.name,
+            "user_color": bard.color,
+            "feature_name": (
+                f"🎺 Countercharm → advantage on {target_name}'s save"
+            ),
+            "feature_desc": (
+                f"Allies within 30 ft of {bard.name} have advantage on "
+                f"saves vs charmed / frightened."
+            ),
+            "source": "countercharm",
+        },
+    })
+
+
 async def _broadcast_aura_of_protection(
     campaign_id: int, paladin: "Character", saving_char: "Character | None",
     bonus: int,
@@ -12902,6 +13060,129 @@ async def use_reckless_attack(
             "duration_rounds": 1,
             "over_budget": False,
             "over_budget_slot": "",
+        },
+    })
+
+    return {
+        "ok": True,
+        "duration_rounds": 1,
+        "buff_installed": installed,
+    }
+
+
+@router.post("/api/campaign/{campaign_id}/use_countercharm")
+async def use_countercharm(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.54.0: Bard Countercharm (Lv 6+). RAW (PHB p.54):
+    "As an action, you can start a performance that lasts until the
+    end of your next turn. During that time, you and any friendly
+    creatures within 30 feet of you have advantage on saving throws
+    against being frightened or charmed."
+
+    Body: ``{character_id, override?}``.
+
+    Installs a 1-round ``countercharm-active`` self-buff on the bard;
+    the v2.54.0 save-roll construction hook reads the buff via
+    ``_ally_has_countercharm_active`` and flips the d20 to ``2d20kh1``
+    on any save vs a spell whose `_SPELL_CONDITION_MAP` entry installs
+    charmed or frightened.
+
+    Action slot per RAW (over-budget gate fires when the action chip
+    is already burnt). No resource cost — Countercharm is RAW
+    "as an action" with no daily/short-rest limit; the action chip
+    IS the gate. Re-cast each turn to maintain.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Bard character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    # Class + level validation. Countercharm unlocks at Bard Lv 6.
+    cls = (sheet.get("class") or "").lower()
+    if cls != "bard":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "bard", "got": cls or "",
+        })
+    bard_lv = _bard_level_from_sheet(sheet)
+    if bard_lv < 6:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 6, "got": bard_lv,
+        })
+
+    # Phase 4 over-budget gate (action slot).
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget", "slot": "action",
+            "char_name": char.name, "source": "countercharm",
+            "label": "Countercharm", "strict": strict,
+        })
+
+    # Install the countercharm-active buff on the bard's combatant.
+    # ``_ally_has_countercharm_active`` keys off the buff's slug, so the
+    # `effects` dict here is informational (matches the v2.49.61 dict
+    # shape convention so future condition-listing UIs render cleanly).
+    buff = {
+        "key": "countercharm-active",
+        "name": "Countercharm (Performance)",
+        "icon": "🎺",
+        "source_caster_id": None,
+        "target_combatant_id": None,
+        "duration_rounds": 1,
+        "duration_max": 1,
+        "concentration": False,
+        "effects": {
+            "countercharm_aura": True,
+            "aura_save_advantage_vs": ["charmed", "frightened"],
+            "aura_radius_ft": 30,
+        },
+        "desc": (
+            "Allies within 30 ft have advantage on saves vs charmed / "
+            "frightened. Lasts until end of your next turn — re-perform "
+            "with your action to maintain."
+        ),
+    }
+    installed = await _install_buff(campaign_id, char.id, buff)
+    _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    # Broadcasts.
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": "🎺 Countercharm",
+            "feature_desc": (
+                "Action — allies within 30 ft get advantage on saves vs "
+                "charmed / frightened until end of next turn."
+            ),
+            "source": "countercharm",
+            "duration_rounds": 1,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
         },
     })
 

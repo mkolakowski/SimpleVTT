@@ -959,6 +959,17 @@ def _bard_sheet(name: str) -> dict:
                 "name": "Cutting Words",
                 "desc": "Reaction (Lore Lv 3): spend 1 Bardic Inspiration use to subtract a BI die from an enemy attack roll, ability check, or damage roll within 60 ft.",
             },
+            # v2.54.0: Countercharm (Bard Lv 6). Action — install a
+            # 1-round self-buff (countercharm-active) that grants
+            # allies within 30 ft (any PC in init under v1
+            # simplification) advantage on saves vs spells that
+            # would install charmed or frightened. Routed through
+            # /use_countercharm.
+            {
+                "key": "countercharm",
+                "name": "Countercharm",
+                "desc": "Action — allies within 30 ft get advantage on saves vs charmed / frightened until end of next turn. Re-perform with your action to maintain.",
+            },
         ],
     }
 

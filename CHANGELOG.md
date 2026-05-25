@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.54.0] - 2026-05-25 — "Concert of Wills"
+
+**Schema version:** 57
+**Commit summary:** **Bard Countercharm (Lv 6+) — first condition-gated save aura.** Lyra uses an action to start a performance; allies in init get advantage on saves against spells that would install *charmed or frightened* (not all saves). Builds on v2.52.0 Danger Sense + v2.53.0 Aura of Protection plumbing — same construction-time hook on `base_expression` — but adds a new gate dimension: the SPELL'S CONDITION (via `_SPELL_CONDITION_MAP[slug].key`), not just the saver's class or the save ability. Same commit also lands `suggestion → Charmed` in the condition map so there's a demo-coverable charm spell to gate against.
+**Description:** Three new helpers in `app/routes/tabletop_routes.py`. **(1)** `_spell_installs_countercharmed_condition(spell_slug) → bool` — looks up the spell's `_SPELL_CONDITION_MAP` entry and returns True when the installed condition key is `"charmed"` or `"frightened"`. Today triggers on `charm-person`, `fear`, and the newly-added `suggestion`. Any future content add to the map with charm/frighten payload picks up the gate automatically. **(2)** `_ally_has_countercharm_active(campaign_id, saving_char_id) → (bool, bard_char_id | None)` — walks the active battle's init for any combatant with a `countercharm-active` buff key; returns the bard's char_id so the broadcast can name them. Same v1 simplification as Aura of Protection (no 10/30 ft radius check; any PC in init counts as in range). **(3)** `_broadcast_countercharm(campaign_id, bard, saving_char)` async helper for the `feature_used(source="countercharm")` event.
+**Description (cont):** New `/use_countercharm` endpoint (modeled on `/use_reckless_attack` / `/use_patient_defense`). Validates Bard Lv 6+ (`_bard_level_from_sheet` reused); enforces the Phase 4 over-budget gate on the **action** slot (per RAW: Countercharm is an action, not a bonus action — unique slot for a self-buff-installation endpoint in this codebase); installs a 1-round `countercharm-active` self-buff via `_install_buff`; marks the action chip via `_mark_battle_economy`. No resource cost — the action chip IS the gate, and RAW lets you re-perform each turn to maintain.
+**Description (cont 2):** Wired into both `/cast_spell` PC save roll_request construction sites (single-target at L 8418 + AoE extras at L 8628). Each computes `_cc_applies = _spell_installs_countercharmed_condition(spell_slug) and _ally_has_countercharm_active(...)`, and if True, swaps `1d20 → 2d20kh1` in `base_expression`. The swap composes cleanly with existing modifiers: a Dex-save spell that installs charmed/frightened (none in canon today but possible in homebrew) would see Danger Sense's swap first, then Countercharm's would no-op since `2d20kh1` is already in place. Aura of Protection's `+N` suffix still appends correctly after either advantage swap.
+**Description (cont 3):** Demo seed. **(a)** Lyra's `class_features` list (Lore Bard) gains a `countercharm` row alongside the existing `cutting-words` entry. **(b)** `app/static/dnd5e_feature_economy.js` gets a `countercharm` entry (`slot: 'action'`, `class: 'bard'`, `unlock_level: 6`) so the sheet's class-features panel knows to mark the action chip when the player clicks the button. **(c)** `_SPELL_CONDITION_MAP` gains `suggestion` (Wis save → Charmed, 8 hr concentration, RAW-correct) — needed so there's an existing demo spell that triggers the Countercharm gate. Lyra's spell list already includes Suggestion at index 9 (v2.18.x) so no spell-list edit needed.
+**Description (cont 4):** Harness coverage. New `tests/harness/test_use_countercharm.py` (5 tests): (1) endpoint happy path — `/use_countercharm` returns 200 + `buff_installed=True` + `feature_used(source=countercharm)` broadcast; (2) end-to-end advantage — Lyra activates Countercharm, casts Suggestion at Krieger → roll_request `base_expression="2d20kh1"` + Countercharm broadcast naming Lyra; (3) control no-buff — Suggestion at Krieger without Countercharm → `base_expression="1d20"`; (4) control wrong-condition — Lyra DOES use Countercharm but casts Hold Person (Paralyzed, not Charmed/Frightened) → `base_expression="1d20"`; gate is condition-keyed, not save-ability-keyed; (5) class validation — Pip (Rogue) → 409 `wrong_class`. All 5 green; full harness suite at 462 tests (was 457). The end-to-end test uses `wait_for("roll_request")` instead of `buffered()` because the cast_spell flow emits the broadcast async after the POST returns — a flake risk we hit during development.
+**Description (cont 5):** Verification. (a) `curl /version` reports `2.54.0` after `docker compose up -d --build app`. (b) `pytest tests/harness/test_use_countercharm.py -v` → 5/5 passed. (c) Full harness suite green: 462 passed in ~3 min.
+
+### Added
+- `_spell_installs_countercharmed_condition(spell_slug)` helper.
+- `_ally_has_countercharm_active(campaign_id, saving_char_id) → (bool, bard_char_id | None)` helper.
+- `_broadcast_countercharm(...)` async helper for `feature_used(source=countercharm)`.
+- `/use_countercharm` endpoint (action slot, Bard Lv 6+, installs 1-round `countercharm-active` self-buff).
+- `_SPELL_CONDITION_MAP["suggestion"]` entry → Charmed (Wis save, 8 hr concentration).
+- 2 save-roll construction sites now check the gate and swap `1d20 → 2d20kh1`.
+- Lyra's `class_features` list gains a `countercharm` row.
+- `dnd5e_feature_economy.js`: `countercharm` entry (`slot: 'action'`).
+- `tests/harness/test_use_countercharm.py` — 5 tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.54.0` (MINOR — first condition-gated save aura).
+- `README.md` version badge → `2.54.0`.
+- `docs/plans/class-content-status.md` — Bard Lv 6 Countercharm ⚪ → ✅.
+- `docs/test-harness-coverage.md` — total-test-count 457 → 462; new `test_use_countercharm.py` entry.
+
+### Notes
+- **Construction-time hook now handles 3 modifier classes.** Danger Sense (self-advantage, save-ability-gated), Aura of Protection (ally-conferred bonus, all saves), Countercharm (ally-conferred advantage, condition-gated). Each composes cleanly with the others — Aura's `+N` always lands after any kh1 swap, multiple advantage sources collapse into a single `2d20kh1` (since `kh1` of `kh1` is still `kh1`). The pattern is now firmly the "modifier register" pattern: each feature appends to a shared `base_expression` at request creation, no further coordination needed.
+- **`wait_for` vs `buffered`** for WS assertions. cast_spell's `roll_request` broadcast is async-fired AFTER the HTTP response returns. Tests using `gm_ws.buffered("roll_request")` immediately after the POST can race the broadcast. `await gm_ws.wait_for("roll_request", timeout=3.0)` is the robust pattern — copy this for any future test that asserts on a broadcast triggered by a non-await async path.
+
+---
+
 ## [2.53.0] - 2026-05-25 — "The Aegis"
 
 **Schema version:** 57

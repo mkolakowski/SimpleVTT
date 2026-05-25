@@ -185,6 +185,18 @@ window._FEATURE_ECONOMY = {
         // No roll-time intercept yet — GM applies the subtraction
         // manually to whatever roll just triggered the reaction.
     },
+    'countercharm': {
+        slot: 'action',
+        class: 'bard',
+        unlock_level: 6,
+        label: 'Countercharm',
+        desc: 'Action — allies within 30 ft get advantage on saves vs charmed / frightened until end of next turn. Re-perform each turn to maintain.',
+        // v2.54.0: dedicated /use_countercharm endpoint installs a
+        // 1-round countercharm-active self-buff. Save-roll construction
+        // hook in cast_spell auto-applies 2d20kh1 to allies' saves vs
+        // spells whose _SPELL_CONDITION_MAP entry installs charmed or
+        // frightened. No resource cost; the action chip is the gate.
+    },
 
     /* ── Monk ────────────────────────────────────────────────────── */
     'flurry-of-blows': {
