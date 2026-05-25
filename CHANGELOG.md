@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.224] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Retire the "Migrate monster action_charges to the unified partial" TODO entry** filed 2026-05-23 (v2.49.203 Phase 2.5b regression). v2.49.220 shipped the action_charges UI on the unified partial (per-combatant `monster-action-charges` chip + `monster-charge-reset` button + cast-button `disabled` state) and v2.49.223's live sweep re-verified the rendering against Soren's Inflict Wounds (2/2 ↻) and Burning Hands (1/1 ↻) in the demo. TODO.md edit only; no source code changes.
+**Description:** One-edit doc commit removing the bullet at TODO.md:~133. Companion to v2.49.223's Soren-spells TODO retirement — both bullets were filed 2026-05-23 in the same Phase 2.5b post-mortem and both have been closed by the v2.49.217–221 surge; splitting them across two commits per CLAUDE.md's "one conceptually-distinct change per commit" rule.
+**Description (cont):** What v2.49.220 actually shipped that closed this TODO. Four coordinated edits: (1) `_monster_template_to_sheet` spells projection now includes `id` + `charges_max` on each spell entry; (2) `_tab_spells.html` renders the `.monster-action-charges` chip + `.monster-charge-reset` button when `s.charges_max > 0`, and stamps `data-spell-action-id` + `data-spell-charges-max` on `.mini-cast-btn`; (3) `_hydrateMonsterCard` patch loop walks every `.monster-action-charges` in the cloned card and updates count + aria-label + `.spent` class + cast-button `disabled` from the per-combatant `action_charges[id]` map on every render pass; (4) the `.mini-cast-btn` monster branch decrements `comb.action_charges[action_id]` on successful `/npc_cast_spell` response. The legacy `.monster-charge-reset` click handler at `tabletop.html:~6830` works unchanged because the partial's recharge button has the same `data-action-id` attr and lives inside the same `.init-entry` ancestor post-hoist.
+**Description (cont 2):** What the original TODO suggested vs. what was actually built. The TODO speculated the migration would need the server projection to pass per-combatant `action_charges` into the partial scope; v2.49.220 instead followed the HP-patch pattern from v2.49.205 — render the partial with the TokenTemplate's defaults (full charges), then patch the per-combatant overlay client-side on every `_hydrateMonsterCard` call. Cleaner because `battle.combatants` lives in client localStorage and isn't part of the server's render context; the hydration pass is already where per-combatant state diverges from template defaults.
+**Description (cont 3):** Verification. (a) `curl /version` confirms v2.49.224 live. (b) Existing harness suite still green. (c) v2.49.223's live sweep confirmed the chip + recharge button + decrement behavior for both Inflict Wounds (2 charges) and Burning Hands (1 charge).
+
+### Changed
+- `TODO.md` — removed the "Migrate monster action_charges to the unified partial" bullet (closed by v2.49.220).
+- `app/version.py` `APP_VERSION` → `2.49.224`.
+- `README.md` version badge → `2.49.224`.
+
+### Notes
+- **Doc-only commit; harness-test rule N/A.** No HTTP endpoint added or modified; existing coverage for action_charges rendering is via `test_spell_slug_npc_renders_spells_tab` which exercises the partial's Spells-tab projection for the Cult Acolyte template.
+
+---
+
 ## [2.49.223] - 2026-05-24
 
 **Schema version:** 56
