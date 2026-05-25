@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.231] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Improved Critical (Champion Fighter Lv 3+) shipped end-to-end.** New `_attacker_crit_threshold(sheet)` helper returns 19 for Champion Fighter Lv 3+ (multiclass-aware: also walks `sheet.classes[]` for the Fighter-Champion entry) and 20 for everyone else. `use_attack`'s v2.24.0 crit-detection block (line ~16564) now reads the helper instead of hardcoding `== 20`. Existing demo Garrik Ironside (Lv 5 Champion Fighter) is the fixture — no fixture bump needed. 2-test harness file using `/api/test/dice/seed` for deterministic batches verifies the new behavior + a Rogue control case.
+**Description:** Three coordinated edits. **(1)** `app/routes/tabletop_routes.py` — new `_attacker_crit_threshold(sheet)` helper near `_fighter_level_from_sheet` (line ~10460). Single-class fast path checks `sheet.class == "fighter"` + `sheet.level >= 3` + `"champion" in sheet.subclass`. Multiclass walk iterates `sheet.classes[]` looking for a Fighter entry with `level >= 3` AND subclass containing "champion" — matches the convention every other class-feature helper uses (`_fighter_level_from_sheet`, `_barbarian_level_from_sheet`, …). Returns 20 by default. **(2)** Same file — `use_attack`'s crit detection at line ~16564: pre-change `if _crit_m and int(_crit_m.group(1)) == 20` → post-change `if _crit_m: _crit_threshold = _attacker_crit_threshold(sheet); if int(_crit_m.group(1)) >= _crit_threshold`. Single 4-line edit; preserves the v2.24.0 advantage/disadvantage crit-on-kept-die behavior (the regex captures the KEPT d20 value, which is then compared against the threshold). **(3)** `tests/harness/test_use_attack_improved_critical.py` — 2 deterministic-dice tests. Each seeds `/api/test/dice/seed` with 4321, fires 200 attacks via `/attack` with `override: True`, parses the `attack_breakdown` using the same regex the server-side detection block uses (`\d*d20[^d=+ ]*=(\d+)`), and group-asserts the `is_crit` shape: every kept-d20=19 crits for Garrik (Champion) + doesn't crit for Pip (Rogue, control), every 20 crits for both, every <19 crits for neither.
+**Description (cont):** RAW (PHB p.72): "Beginning when you choose this archetype at 3rd level, your weapon attacks score a critical hit on a roll of 19 or 20." Lv 15 Superior Critical (crit on 18-20) is a separate feature with its own threshold and is NOT shipped here — Garrik is Lv 5, below the Lv 15 unlock, so the 18 floor isn't reachable in the demo. The helper has a single return-value contract (19 or 20) that a future Lv 15 commit can extend to 18 by adding another conditional branch.
+**Description (cont 2):** Scope kept minimal. The crit-threshold helper applies to `use_attack` only — NPC attackers (`/npc_attack`, `/npc_cast_spell`) keep the hardcoded 20 because no NPC in the current content tier has the Champion Fighter subclass (SRD Champion is a PC archetype). If a future homebrew monster gets the Champion archetype, threading the same helper through those endpoints is one line each.
+**Description (cont 3):** Why this is the right pick over Evasion. Evasion (Monk Lv 7) was the natural pair to v2.49.229's Stillness of Mind (same level, same Kael fixture) but the server-side save-for-half auto-apply (v2.31.0 Phase T.3b) is gated to NPC targets only — PC monk Evasion would require extending the PC save-for-half flow to auto-apply, which is substantial scope. Improved Critical bypasses the fixture-and-plumbing problem entirely: Garrik's already the demo Champion at Lv 5, and the entire change is a one-line conditional in an existing hot path.
+**Description (cont 4):** Verification. (a) `curl /version` confirms v2.49.231 live. (b) All 2 new tests pass; the 200-roll batches see ≥1 of each d20 value 1-20 typically (statistical sanity assertions confirm ≥1 of 19, 20, and <19 in each batch). (c) Full harness suite still 436/436 green.
+
+### Added
+- `_attacker_crit_threshold(sheet)` helper in `app/routes/tabletop_routes.py` — returns 19 for Champion Fighter Lv 3+ (multiclass-aware), 20 otherwise.
+- `tests/harness/test_use_attack_improved_critical.py` — 2-test harness coverage (Champion crits on 19, Rogue control does not).
+
+### Changed
+- `app/routes/tabletop_routes.py` `use_attack` crit detection — replaces hardcoded `== 20` with threshold-aware `>= _attacker_crit_threshold(sheet)`.
+- `docs/plans/class-content-status.md` — Champion subclass row flips 🟡 → 🟢 with Improved Critical ✅; Fighter Lv 3 Martial Archetype note refreshed.
+- `docs/test-harness-coverage.md` — new test section + total-test-count 434 → 436.
+- `app/version.py` `APP_VERSION` → `2.49.231`.
+- `README.md` version badge → `2.49.231`.
+
+### Notes
+- **First Fighter subclass feature with mechanical wiring.** Garrik's archetype was tagged Champion since v2.17.0 but Improved Critical's mechanical effect didn't fire until now.
+- **Server-side single source of truth.** The threshold lives in `_attacker_crit_threshold`, not split across helper code paths; future Lv 15 Superior Critical work extends that single helper.
+
+---
+
 ## [2.49.230] - 2026-05-24
 
 **Schema version:** 56

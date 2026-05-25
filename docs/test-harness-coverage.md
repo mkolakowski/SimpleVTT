@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 434 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.229, 2026-05-24).
+**Total tests:** 436 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.231, 2026-05-24).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -628,6 +628,14 @@ v2.49.112 — Monk class feature `POST /use_step_of_the_wind` (Lv 2+). Spend 1 k
 | `test_step_of_the_wind_dash_mode` | Kael, mode=dash → 200, `mode=dash` in response. `buff_update` broadcast has `step-of-the-wind-dash` key with `effects.dash=True` + `effects.jump_distance_doubled=True`. |
 | `test_step_of_the_wind_wrong_class` | Krieger → 409 `wrong_class`. |
 | `test_step_of_the_wind_invalid_mode` | mode="fly" → 400 with "mode" in the error body. |
+
+### `test_use_attack_improved_critical.py`
+v2.49.231 — Champion Fighter Lv 3+ subclass feature. Server-side crit threshold drops from 20 to 19 for Champion attackers; `_attacker_crit_threshold(sheet)` reads class/subclass/level. Tests use `/api/test/dice/seed` for deterministic dice + 200-roll batches per attacker, parse the `attack_breakdown` for the kept d20 value, then group-assert `is_crit` matches the expected threshold.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_champion_crits_on_19` | Garrik (Lv 5 Champion) — every d20=19 in the batch crits (Improved Critical fires); every d20=20 crits (baseline); every d20<19 does NOT crit (regression guard). |
+| `test_rogue_does_not_crit_on_19` | Pip (Rogue) control — d20=19 must NOT crit (Improved Critical is Champion-only); d20=20 still crits per baseline. |
 
 ### `test_use_stillness_of_mind.py`
 v2.49.229 — Monk class feature `POST /use_stillness_of_mind` (Lv 7). Action, unlimited uses. Takes `{character_id, buff_key}`; validates buff_key is in `{charmed, frightened}` (refuses paralyzed/stunned/etc. per RAW). Removes the matching buff via `_remove_buff` (same helper /end_buff uses), syncs the sheet mirror, marks the action slot, broadcasts buff_update + feature_used.

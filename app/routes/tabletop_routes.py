@@ -10492,6 +10492,50 @@ def _fighter_level_from_sheet(sheet: dict) -> int:
     return 0
 
 
+def _attacker_crit_threshold(sheet: dict) -> int:
+    """v2.49.231 — RAW: Champion Fighter Lv 3+ Improved Critical lowers
+    the natural-20 crit threshold to 19. All other attackers keep the
+    natural-20 default.
+
+    Multiclass support: if the top-level ``class`` field isn't Fighter
+    but ``classes[]`` contains a Fighter entry with subclass containing
+    "champion", the Lv-3 gate is checked against THAT entry's level
+    (matches the multiclass convention used by every other class-feature
+    helper in this file).
+
+    Returns 20 (default) or 19 (Improved Critical fires). Lv 17 Champion
+    Superior Critical (crit on 18-20) is filed for a future commit —
+    Garrik is Lv 5 in the demo, so the 18 floor isn't reachable today.
+    """
+    if not sheet:
+        return 20
+    # Single-class fast path.
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "fighter":
+        try:
+            level = int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 20
+        if level < 3:
+            return 20
+        if "champion" in (sheet.get("subclass") or "").strip().lower():
+            return 19
+        return 20
+    # Multiclass path — walk classes[] for a Fighter Champion entry.
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() != "fighter":
+            continue
+        try:
+            level = int(entry.get("level") or 0)
+        except (TypeError, ValueError):
+            continue
+        if level < 3:
+            continue
+        if "champion" in (entry.get("subclass") or "").strip().lower():
+            return 19
+    return 20
+
+
 def _barbarian_level_from_sheet(sheet: dict) -> int:
     """Barbarian-level helper (mirrors `_fighter_level_from_sheet`).
     v2.19.0: added for Rage damage scaling — +2 Lv 1-8, +3 Lv 9-15, +4
@@ -16555,14 +16599,19 @@ async def use_attack(
     # whose kept high was 20). Disadvantage where the LOW kept value is
     # 20 (both dice rolled 20) is also a crit — same =20 subtotal
     # pattern. Skipped for save-DC attacks (no d20 attack roll).
+    # v2.49.231: Champion Fighter Lv 3+ Improved Critical lowers the
+    # threshold to 19 via _attacker_crit_threshold(sheet); other classes
+    # keep the natural-20 default.
     is_crit = False
     if not is_save and attack_breakdown:
         import re as _re_crit
         _crit_m = _re_crit.search(
             r"\d*d20[^d=+ ]*=(\d+)", attack_breakdown, _re_crit.IGNORECASE,
         )
-        if _crit_m and int(_crit_m.group(1)) == 20:
-            is_crit = True
+        if _crit_m:
+            _crit_threshold = _attacker_crit_threshold(sheet)
+            if int(_crit_m.group(1)) >= _crit_threshold:
+                is_crit = True
 
     # Pre-roll damage if a dice expression is provided. v2.24.0 Phase
     # T.2: on a crit, double the dice (not the flat modifier) — RAW
