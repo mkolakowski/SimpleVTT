@@ -27,8 +27,9 @@ async def test_attack_pip_shortsword(gm_client, gm_ws, roster):
     # Breakdown format: "1d20[N]=N 6  =>  total". Just check the d20
     # part landed and the total is consistent.
     assert "1d20" in data["attack_breakdown"]
-    # Damage: 1d6+3 → 4-9
-    assert 4 <= data["damage_total"] <= 9
+    # Damage: 1d6+3 → 4-9 non-crit; crit doubles to 2d6+3 → 5-15.
+    # v2.49.242: relax for crit case (audit pass from v2.49.240 notes).
+    assert 4 <= data["damage_total"] <= 15
     assert data["damage_type"] == "piercing"
 
     msg = await gm_ws.wait_for("weapon_attack")
@@ -54,8 +55,8 @@ async def test_attack_pip_dagger(gm_client, gm_ws, roster):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["attack_name"] == "Dagger (thrown)"
-    # 1d4+3 → 4-7
-    assert 4 <= data["damage_total"] <= 7
+    # 1d4+3 → 4-7 non-crit; crit doubles to 2d4+3 → 5-11.
+    assert 4 <= data["damage_total"] <= 11
 
     msg = await gm_ws.wait_for("weapon_attack")
     assert msg["data"]["range"] == "20/60 ft"
@@ -72,8 +73,8 @@ async def test_attack_tavik_warhammer(gm_client, gm_ws, roster):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["attack_name"] == "Warhammer"
-    # 1d8+2 → 3-10
-    assert 3 <= data["damage_total"] <= 10
+    # 1d8+2 → 3-10 non-crit; crit doubles to 2d8+2 → 4-18.
+    assert 3 <= data["damage_total"] <= 18
     assert data["damage_type"] == "bludgeoning"
 
     msg = await gm_ws.wait_for("weapon_attack")
@@ -129,7 +130,8 @@ async def test_attack_sneak_attack_uplift(gm_client, gm_ws, roster):
     assert data["ok"] is True
     assert data["bonus_damage_label"] == "Sneak Attack"
     assert data["bonus_damage_total"] is not None
-    assert 3 <= data["bonus_damage_total"] <= 18  # 3d6 range
+    # 3d6 non-crit range = [3, 18]; crit doubles to 6d6 → [6, 36].
+    assert 3 <= data["bonus_damage_total"] <= 36
     assert "3d6" in data["bonus_damage_breakdown"]
     assert data["slot_spent_class"] == ""
     assert data["slot_spent_level"] == 0

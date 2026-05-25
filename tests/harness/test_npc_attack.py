@@ -113,8 +113,9 @@ async def test_npc_attack_happy_path(gm_client, gm_ws, roster, auto_apply_off):
     # 1d20+3 → 4-23
     assert 4 <= data["attack_total"] <= 23
     assert "1d20" in data["attack_breakdown"]
-    # 1d6+1 → 2-7
-    assert 2 <= data["damage_total"] <= 7
+    # 1d6+1 → 2-7 non-crit; crit doubles to 2d6+1 → 3-13.
+    # v2.49.242: relax for crit case.
+    assert 2 <= data["damage_total"] <= 13
     assert data["damage_type"] == "slashing"
     # Target AC was resolved (Pip's actual AC from the demo sheet).
     assert data["target_ac"] is not None

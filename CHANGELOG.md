@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.242] - 2026-05-25
+
+**Schema version:** 56
+**Commit summary:** **Audit pass — relax all weapon-attack damage assertions to account for crit-doubled dice.** v2.49.241 CI surfaced a fourth "test didn't account for crit" failure (`test_attack_pip_shortsword`, `assert 10 <= 9`). v2.49.240's CHANGELOG flagged this audit as a future-commit follow-up; doing it now. Five tests fixed in this batch: Pip Shortsword (1d6+3 → cap was 9, now 15), Pip Dagger (1d4+3 → was 7, now 11), Tavik Warhammer (1d8+2 → was 10, now 18), Pip Sneak Attack (3d6 → was 18, now 36), Bandit Scimitar via /npc_attack (1d6+1 → was 7, now 13). Spell-attack tests (`test_cast_spell_attack.py`) already had explicit `b["crit"]` gates and didn't need updating.
+**Description:** Two-file batch: `tests/harness/test_attack.py` (four assertion bumps) + `tests/harness/test_npc_attack.py` (one assertion bump). Each updated comment names both the non-crit and crit ranges so a future reader can trust the cap. Lower bounds left untouched — the doubled-dice min on a min-1 roll is still ≥ the non-crit min. Bumped damage caps cover the worst-case crit-doubled max for each weapon, plus the flat modifier which isn't doubled by `_double_dice_for_crit`.
+**Description (cont):** The audit method: `grep -rn 'damage_total.\] <=' tests/harness/` returned 7 matches; two were already fixed in earlier session commits (the multi-target one at v2.49.235 and the divine smite one at v2.49.240), leaving the 5 fixed here. The grep also surfaced `test_cast_spell_attack.py` and `test_cast_spell_save.py` — both already crit-aware (the spell-attack tests gate min/max on `data["auto_attack_crit"]` and `b["crit"]`; save spells don't crit so no gate needed).
+**Description (cont 2):** Pattern reminder for future commits. Every weapon-attack test that asserts a fixed damage_total range needs to account for `_double_dice_for_crit` doubling the dice (not the flat modifier) on a nat-20 d20. The flake probability per single attack is ~5% (1/20); over a session of CI runs the flake compounds. Better to relax to the crit-doubled cap upfront than chase one-test-per-CI-run for weeks. The session's running count of this exact fix: v2.49.233 (empowered) → v2.49.235 (multi-target) → v2.49.240 (divine smite) → v2.49.242 (audit pass, 5 more). Five down, hopefully none more.
+**Description (cont 3):** Verification. (a) `curl /version` confirms v2.49.242 live. (b) Each updated test still asserts a valid range that excludes implausible values (negative, 0, or above the crit-doubled max). (c) CI re-run is the load-bearing signal.
+
+### Fixed
+- `tests/harness/test_attack.py::test_attack_pip_shortsword` — damage cap 9 → 15 (1d6+3 vs 2d6+3 crit).
+- `tests/harness/test_attack.py::test_attack_pip_dagger` — damage cap 7 → 11 (1d4+3 vs 2d4+3 crit).
+- `tests/harness/test_attack.py::test_attack_tavik_warhammer` — damage cap 10 → 18 (1d8+2 vs 2d8+2 crit).
+- `tests/harness/test_attack.py::test_attack_sneak_attack_uplift` — bonus_damage cap 18 → 36 (3d6 vs 6d6 crit).
+- `tests/harness/test_npc_attack.py::test_npc_attack_happy_path` — damage cap 7 → 13 (1d6+1 vs 2d6+1 crit).
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.49.242`.
+- `README.md` version badge → `2.49.242`.
+
+### Notes
+- **End of the crit-cap whack-a-mole.** Five fixes in one session (4 reactive + this 1 proactive audit) means the obvious risk is gone. Spell-attack tests already accounted for crits via explicit `crit` gates.
+
+---
+
 ## [2.49.241] - 2026-05-25
 
 **Schema version:** 56
