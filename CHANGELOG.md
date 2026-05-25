@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.51.3] - 2026-05-25 — "Even Light"
+
+**Schema version:** 57
+**Commit summary:** **Grid border corners now match the rest of the frame's transparency.** The user's screenshot showed the four corner blocks (where adjacent gutter strips meet) reading as visibly darker than the strips themselves — two `rgba(0, 0, 0, 0.35)` fills stacked there compounded to ~58% opacity vs the strips' 35%, which is what made the A and 1 labels look misaligned against an asymmetrically shaped gutter. Fixed by painting the strips as non-overlapping rectangles so all four corners share the strips' single 35% alpha.
+**Description:** Single-function edit in `app/static/tabletop.js::drawGridCoords()`. The previous code drew four full-length strips (top: full width, bottom: full width, left: full height, right: full height) — they overlapped at all four corners. New geometry uses two FULL-HEIGHT side strips (left + right) plus two MIDDLE-ONLY top + bottom strips (between the side strips). No double-painting anywhere. Corner alpha stays at the strip's 0.35 instead of climbing to 0.58.
+**Description (cont):** Why this fixes the "1 and A not aligned" complaint. The labels themselves (anchored at `gridSize/2` for each axis) are geometrically centered between their gridlines correctly — v2.50.5's "True Center" fix nailed that. What was actually broken was the GUTTER SHAPE around the labels: the dark corner blocks formed an irregular L-shape that made the A and 1 labels appear awkwardly positioned even though their coordinates were fine. With the corners now matching the strips, the gutter reads as a clean uniform frame and the labels sit naturally within it.
+**Description (cont 2):** Edge case. The `midW > 0` guard handles maps narrower than `2 * stripH` (would happen on a tiny custom map where the left + right strips overlap each other). In that case the top + bottom middle rects are skipped — the left + right strips already cover the full width, so the gutter still renders without gaps.
+**Description (cont 3):** Verification. (a) `curl /version` reports `2.51.3` after `docker compose up -d --build app`. (b) Reload the demo tabletop with showGrid on; the four corner blocks now visually match the strips (no darker patches). (c) The A1 corner specifically reads as a uniform gutter strip with A and 1 sitting cleanly within it instead of around a darker block. (d) 447 harness tests untouched — pure canvas drawing.
+
+### Fixed
+- `drawGridCoords()` — corner blocks were 0.58-alpha (double-stacked 0.35) due to overlapping full-length strips, making them visibly darker than the rest of the frame. New geometry: left + right strips paint the full height (covering corners once); top + bottom strips paint only the middle x-range between them. Uniform 0.35 alpha everywhere.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.51.3`.
+- `README.md` version badge → `2.51.3`.
+
+### Notes
+- **The A/1 alignment was never a label-position bug.** v2.50.5 fixed the centering math; v2.51.0 added integer rounding; both of those were geometrically correct. The actual visual disturbance was the darker corner shape framing the labels. Fixing the corner painting fixes the perceived alignment.
+
+---
+
 ## [2.51.2] - 2026-05-25 — "Single Pane"
 
 **Schema version:** 57

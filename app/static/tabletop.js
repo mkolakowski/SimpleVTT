@@ -209,20 +209,29 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // v2.51.2 — unify all four backing strips to the top + left
-        // recipe (dark backing + accent text) per the user request to
-        // make the new borders match the existing ones. The v2.51.0
-        // parchment-tan + dark-text variant is dropped in favor of a
-        // single visual treatment that frames the map cleanly. Alpha
-        // also dropped from 0.55 → 0.35 so the map color reads through
-        // the gutter strips more clearly — the labels stay legible
-        // because they're rendered in the theme accent color, which
-        // is always selected to contrast with the canvas background.
+        // v2.51.2 — unified backing recipe for all four strips: dark
+        // (0.35 alpha) + accent text.
+        // v2.51.3 — paint the four strips as NON-OVERLAPPING
+        // rectangles so the corners aren't double-darkened. The
+        // previous code drew 4 full-length strips that overlapped in
+        // the 4 corner blocks; two 0.35-alpha fills stacked there
+        // produced a combined alpha of 1 - (1 - 0.35)² ≈ 0.58, which
+        // read as visibly darker corners and (per user feedback) made
+        // the A and 1 labels look misaligned against an asymmetrically
+        // shaped gutter. New geometry: left + right strips paint the
+        // full canvas height (covering the corners once); top + bottom
+        // strips paint only the MIDDLE x-range between them. Result:
+        // uniform 0.35 alpha across the whole gutter frame.
         ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-        ctx.fillRect(0, 0, MAP_W, stripH);                          // top
-        ctx.fillRect(0, 0, stripH, MAP_H);                          // left
-        ctx.fillRect(MAP_W - stripH, 0, stripH, MAP_H);             // right
-        ctx.fillRect(0, MAP_H - stripH, MAP_W, stripH);             // bottom
+        // Left + right: full height (covers all four corners).
+        ctx.fillRect(0, 0, stripH, MAP_H);
+        ctx.fillRect(MAP_W - stripH, 0, stripH, MAP_H);
+        // Top + bottom: middle only (skip corner regions already painted).
+        const midW = MAP_W - 2 * stripH;
+        if (midW > 0) {
+            ctx.fillRect(stripH, 0, midW, stripH);
+            ctx.fillRect(stripH, MAP_H - stripH, midW, stripH);
+        }
 
         // Theme-accent border lines separating each gutter from the
         // map body. Four strokes — one along the inside edge of each
