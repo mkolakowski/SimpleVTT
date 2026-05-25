@@ -8419,6 +8419,16 @@ async def cast_spell(
                 # the keep-highest group.
                 _ds_applies = _pc_has_danger_sense_on_dex_save(tgt_char, save_ability)
                 _ds_base = "2d20kh1" if _ds_applies else "1d20"
+                # v2.53.0 — Aura of Protection bonus appended to
+                # base_expression. /roll_request/{id}/respond appends
+                # the stat_mod afterwards, so the final shape becomes
+                # ``2d20kh1+3+5`` (kh1 + aura + stat) which dice_mod
+                # parses cleanly.
+                _aop_bonus, _aop_paladin = _aura_of_protection_bonus(
+                    db, campaign_id, int(tgt_char.id),
+                )
+                if _aop_bonus > 0:
+                    _ds_base = f"{_ds_base}+{_aop_bonus}"
                 req = RollRequest(
                     campaign_id=campaign_id,
                     created_by_user_id=user.id,
@@ -8453,6 +8463,12 @@ async def cast_spell(
                 # appears for the PC (before they click Roll).
                 if _ds_applies:
                     await _broadcast_danger_sense(campaign_id, tgt_char)
+                # v2.53.0: same for Aura of Protection. Broadcast names
+                # the paladin (not the saver) as the source character.
+                if _aop_bonus > 0 and _aop_paladin is not None:
+                    await _broadcast_aura_of_protection(
+                        campaign_id, _aop_paladin, tgt_char, _aop_bonus,
+                    )
                 # v2.37.0 Phase T.3d: stash the cast context so the
                 # roll-response handler can install the matching
                 # condition buff if the PC fails. Slug + char_id +
@@ -8641,6 +8657,12 @@ async def cast_spell(
                     extra_pc, save_ability,
                 )
                 _aoe_ds_base = "2d20kh1" if _aoe_ds_applies else "1d20"
+                # v2.53.0 — Aura of Protection bonus on AoE saves.
+                _aoe_aop_bonus, _aoe_aop_paladin = _aura_of_protection_bonus(
+                    db, campaign_id, int(extra_pc.id),
+                )
+                if _aoe_aop_bonus > 0:
+                    _aoe_ds_base = f"{_aoe_ds_base}+{_aoe_aop_bonus}"
                 _aoe_req = RollRequest(
                     campaign_id=campaign_id,
                     created_by_user_id=user.id,
@@ -8694,6 +8716,11 @@ async def cast_spell(
                 # appears for the PC.
                 if _aoe_ds_applies:
                     await _broadcast_danger_sense(campaign_id, extra_pc)
+                # v2.53.0: same for Aura of Protection on AoE saves.
+                if _aoe_aop_bonus > 0 and _aoe_aop_paladin is not None:
+                    await _broadcast_aura_of_protection(
+                        campaign_id, _aoe_aop_paladin, extra_pc, _aoe_aop_bonus,
+                    )
                 auto_save_targets.append({
                     "combatant_id": extra.get("id"),
                     "target_name": extra_name,
@@ -9344,6 +9371,19 @@ async def place_aoe(
                 await _broadcast_danger_sense(campaign_id, extra_pc)
             else:
                 expr = f"1d20{pc_mod:+d}"
+            # v2.53.0 — Aura of Protection (Paladin Lv 6+). Adds the
+            # paladin's CHA mod to ALL saves (not just Dex), so this
+            # path appends the bonus regardless of save_ability. The
+            # helper short-circuits cleanly when no paladin is in
+            # init OR the saver isn't in battle.
+            _aop_bonus, _aop_paladin = _aura_of_protection_bonus(
+                db, campaign_id, int(extra_pc.id),
+            )
+            if _aop_bonus > 0 and _aop_paladin is not None:
+                expr = f"{expr}+{_aop_bonus}"
+                await _broadcast_aura_of_protection(
+                    campaign_id, _aop_paladin, extra_pc, _aop_bonus,
+                )
             try:
                 r = dice_mod.roll(expr)
                 rolled = int(r.total)
@@ -11237,6 +11277,132 @@ async def _broadcast_danger_sense(campaign_id: int, char: "Character") -> None:
                 "(traps, spells)."
             ),
             "source": "danger-sense",
+        },
+    })
+
+
+def _paladin_level_from_sheet(sheet: dict) -> int:
+    """Read the paladin level out of a sheet (single-class or
+    multiclass). Mirror of ``_barbarian_level_from_sheet`` /
+    ``_monk_level_from_sheet`` / ``_rogue_level_from_sheet``. Used
+    by ``_aura_of_protection_bonus`` to gate the Paladin Lv 6+
+    ally-conferred save bonus.
+    """
+    if not sheet:
+        return 0
+    cls = (sheet.get("class") or "").strip().lower()
+    if cls == "paladin":
+        try:
+            return int(sheet.get("level") or 0)
+        except (TypeError, ValueError):
+            return 0
+    for entry in (sheet.get("classes") or []):
+        if (entry.get("class") or "").strip().lower() == "paladin":
+            try:
+                return int(entry.get("level") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def _aura_of_protection_bonus(
+    db: Session, campaign_id: int, saving_char_id: int | None,
+) -> "tuple[int, Character | None]":
+    """v2.53.0 — Paladin Aura of Protection (Lv 6+). Returns
+    ``(bonus, paladin_char)`` where bonus is the CHA modifier of
+    the highest-CHA conscious paladin in the active battle's
+    init tracker, and ``paladin_char`` is that paladin's Character
+    row (so the caller can broadcast a feature_used event naming
+    them). Returns ``(0, None)`` when no aura applies.
+
+    RAW: "You and friendly creatures within 10 feet of you gain a
+    bonus to all saving throws equal to your Charisma modifier
+    (minimum bonus of +1). You must be conscious to grant this
+    bonus." Paladin's own aura applies to themselves too.
+
+    v1 simplifications:
+      - **No 10 ft radius check** — any paladin in the same battle
+        init grants the aura to every PC making a save. Same
+        convention as Uncanny Dodge's "attacker that you can see"
+        and Evasion's incapacitation gate. Filed: distance check
+        via ``_distance_ft_between_points`` on map tokens, gated
+        on the paladin being conscious.
+      - **Multiple paladins don't stack** — if two paladins are in
+        init, the higher CHA mod wins (RAW: auras don't stack).
+        We pick the max, not the sum.
+      - **Minimum +1** RAW: even if CHA mod is 0 or negative, the
+        bonus is +1. Implemented via ``max(1, cha_mod)`` after the
+        paladin gate fires.
+
+    Saver-must-be-in-battle: if ``saving_char_id`` doesn't appear in
+    the init tracker, the helper returns (0, None) — the aura is a
+    battle-state mechanic, not a global "any paladin anywhere"
+    effect.
+    """
+    if not saving_char_id:
+        return 0, None
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return 0, None
+    combatants = state.get("combatants") or []
+    saver_in_battle = any(
+        c.get("char_id") == saving_char_id for c in combatants
+    )
+    if not saver_in_battle:
+        return 0, None
+    best_bonus = 0
+    best_paladin: "Character | None" = None
+    for c in combatants:
+        char_id = c.get("char_id")
+        if not char_id:
+            continue
+        char = db.query(Character).filter(Character.id == int(char_id)).first()
+        if not char:
+            continue
+        sheet = char.sheet or {}
+        if _paladin_level_from_sheet(sheet) < 6:
+            continue
+        abilities = sheet.get("abilities") or {}
+        cha_score = int(
+            abilities.get("CHA")
+            or abilities.get("cha")
+            or 10,
+        )
+        cha_mod = max(1, (cha_score - 10) // 2)
+        if cha_mod > best_bonus:
+            best_bonus = cha_mod
+            best_paladin = char
+    return best_bonus, best_paladin
+
+
+async def _broadcast_aura_of_protection(
+    campaign_id: int, paladin: "Character", saving_char: "Character | None",
+    bonus: int,
+) -> None:
+    """Companion broadcast for ``_aura_of_protection_bonus``. Emits
+    a `feature_used` event with `source: "aura-of-protection"` so
+    the chat card shows "Caelan's 🛡️ Aura of Protection → +3 on
+    [target]'s save." The paladin is credited as the source so the
+    name + color match the paladin (not the saving character — they
+    benefit, but the aura is the paladin's class feature).
+    """
+    if not paladin or bonus <= 0:
+        return
+    target_name = saving_char.name if saving_char else "ally"
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": paladin.id,
+            "character_name": paladin.name,
+            "user_color": paladin.color,
+            "feature_name": (
+                f"🛡️ Aura of Protection → +{bonus} on {target_name}'s save"
+            ),
+            "feature_desc": (
+                f"Allies within 10 ft of {paladin.name} add "
+                f"+{bonus} (CHA mod) to all saves."
+            ),
+            "source": "aura-of-protection",
         },
     })
 

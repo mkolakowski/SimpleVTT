@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.53.0] - 2026-05-25 — "The Aegis"
+
+**Schema version:** 57
+**Commit summary:** **Aura of Protection (Paladin Lv 6+) — first ally-conferred save-bonus mechanic.** When Caelan is in the active battle's init tracker, every PC making a save (including Caelan himself) gets +3 (his CHA mod) added to their save roll. Builds on the v2.52.0 Danger Sense plumbing — same construction-time hook on `base_expression` — but introduces a new mechanic class (ally-conferred bonuses, not just self-modifying advantage), so MINOR.
+**Description:** Three new helpers in `app/routes/tabletop_routes.py`. **(1)** `_paladin_level_from_sheet(sheet)` — mirror of `_barbarian_level_from_sheet` / `_monk_level_from_sheet` / `_rogue_level_from_sheet`; single-class + multiclass aware. **(2)** `_aura_of_protection_bonus(db, campaign_id, saving_char_id) → (int, Character | None)` — walks the active battle's init tracker, finds the highest-CHA Paladin Lv 6+, returns `max(1, cha_mod)` (RAW: minimum +1) + the paladin's Character row. Returns `(0, None)` when no paladin qualifies OR the saver isn't in battle (the aura is a battle-state mechanic, not a global "anyone with a paladin friend" effect). **(3)** `_broadcast_aura_of_protection(campaign_id, paladin, saving_char, bonus)` async helper — emits `feature_used(source="aura-of-protection")` naming the paladin as the source character (not the saver — the saver benefits, but the aura is the paladin's class feature so the chat card credits them).
+**Description (cont):** Wired into the same three save-roll construction sites as Danger Sense (the construction-time hook on `base_expression` cleanly stacks both modifiers — Danger Sense flips d20 → 2d20kh1, Aura of Protection appends +N, resulting expressions like `2d20kh1+3+5` parse correctly through dice_mod). **(A) `/place_aoe` PC branch** — appends `+{bonus}` to `expr` after the Danger Sense kh1 swap. **(B) `/cast_spell` single-target PC save roll_request** — same append to `base_expression`. **(C) `/cast_spell` AoE PC save roll_request** — same append. Broadcasts fire right after the roll_request is created so the chat shows the aura trigger alongside the save prompt (parallels Danger Sense's broadcast timing).
+**Description (cont 2):** Demo seed bump in `app/demo_seed.py::_paladin_sheet`: `"level": 5 → 6`. HP scales d10(avg 6) + CON(+2) per level × 1 level = +8 → 52/52. hit_dice 5/5 → 6/6. Lay on Hands pool 5×lv = 25 → 30 HP. Proficiency stays +3 (Lv 5-8 = +3). No new spell slots at Paladin Lv 6 (4×L1 + 2×L2 unchanged from Lv 5). Caelan also gains a new `class_features` list with a single `aura-of-protection` row (description-only).
+**Description (cont 3):** v1 simplifications. **(a) No 10 ft radius check.** RAW: "you and friendly creatures within 10 feet of you" — the aura's range matters. v1 treats "any PC in the same battle's init tracker" as within range, same convention used for Uncanny Dodge's "attacker that you can see" and Evasion's incapacitation gate. The radius check needs `_distance_ft_between_points` on map tokens; filed for follow-up. **(b) Multi-paladin doesn't stack.** If two paladins are in init (e.g. Caelan + another Paladin Lv 6+), the higher CHA mod wins (RAW: auras don't stack). Implementation picks `max(cha_mod)` not the sum. **(c) Lv 18 30 ft expansion.** Aura of Protection's range expands from 10 to 30 ft at Paladin Lv 18 — same helper, larger radius. Filed once the 10 ft check ships.
+**Description (cont 4):** Harness coverage. New `tests/harness/test_aura_of_protection.py` (3 tests): (1) happy path — Caelan + Pip both in init; Fireball at Pip → `base_expression="1d20+3"` + Aura broadcast names Caelan; (2) control — Caelan NOT in init → `base_expression="1d20"` (no bonus); no Aura broadcast; (3) self-aura — Fireball at Caelan himself → his own save carries `+3` (RAW: paladin's own aura applies to themselves). All 3 green; full harness suite at 457 tests (was 454).
+**Description (cont 5):** Verification. (a) `curl /version` reports `2.53.0` after `docker compose up -d --build app`. (b) `pytest tests/harness/test_aura_of_protection.py -v` → 3/3 passed. (c) Full harness suite green: 457 passed in ~3 min on a fresh demo reseed (Caelan's Lv 6 + new pool sizes pick up cleanly).
+
+### Added
+- `_paladin_level_from_sheet(sheet) → int` helper.
+- `_aura_of_protection_bonus(db, campaign_id, saving_char_id) → (int, Character | None)` helper.
+- `_broadcast_aura_of_protection(...)` async helper for the `feature_used(source=aura-of-protection)` event.
+- 3 save-roll construction sites now append the aura bonus to `base_expression` / `expr` when a Paladin Lv 6+ is in init.
+- `tests/harness/test_aura_of_protection.py` — 3 tests (happy, control, self-aura).
+- `_paladin_sheet::class_features` list with the `aura-of-protection` row.
+
+### Changed
+- Demo Caelan: level 5 → 6, hp 44 → 52, hit_dice 5 → 6, lay_on_hands pool 25 → 30.
+- `app/version.py` `APP_VERSION` → `2.53.0` (MINOR — first ally-conferred save modifier mechanic).
+- `README.md` version badge → `2.53.0`.
+- `docs/plans/class-content-status.md` — Paladin Lv 6 / 18 Aura of Protection ⚪ → ✅.
+- `docs/test-harness-coverage.md` — total-test-count 454 → 457; new `test_aura_of_protection.py` entry.
+
+### Notes
+- **Save modifier stacking is now multi-source.** A PC in Caelan's aura who also has Danger Sense gets BOTH: Dex save = `2d20kh1+3+stat_mod`. The construction-time hook composes cleanly — each modifier just appends to the running expression.
+- **Why MINOR and not PATCH.** Danger Sense was MINOR ("first save-roll advantage intercept"); Aura of Protection introduces "ally-conferred save bonuses" — a distinct mechanic class. Two helpers for Countercharm / Aura of Courage / Magic Resistance can now reuse this construction-time hook on `base_expression`.
+- **Pattern primed for future radius-aware features.** When `_distance_ft_between_points` integration ships, Aura of Protection's helper can swap the "any PC in init" walk for a "within X ft of the paladin" walk without changing the call sites. Same for Countercharm (30 ft) and Aura of Courage (30 ft).
+
+---
+
 ## [2.52.0] - 2026-05-25 — "Sixth Sense"
 
 **Schema version:** 57

@@ -673,17 +673,23 @@ def _paladin_sheet(name: str) -> dict:
     return {
         "class": "Paladin",
         "subclass": "Oath of Devotion",
-        "level": 5,
+        # v2.53.0: bumped Lv 5 → Lv 6 to unlock Aura of Protection
+        # (allies within 10 ft of Caelan add his CHA mod to all
+        # saves). HP scales d10(avg 6) + CON(+2) per level × 1 = +8
+        # → 52/52. hit_dice 5 → 6. Lay on Hands pool 5×lv = 25 → 30
+        # HP. Proficiency stays +3 (Lv 5-8 = +3). No new spell slots
+        # at Paladin Lv 6 (4×L1 + 2×L2 unchanged).
+        "level": 6,
         "race": "Human",  # standard +1 to all
         "alignment": "Lawful Good",
         "background": "Soldier",
         "abilities": {"STR": 16, "DEX": 10, "CON": 14, "INT": 10, "WIS": 12, "CHA": 16},
         "ac": 19,  # chain mail 16 + shield 2 + Fighting Style: Defense +1
         "speed": 30,
-        "hp": {"current": 44, "max": 44, "temp": 0},  # 10 + 4×(6+CON) Lv 5 paladin
+        "hp": {"current": 52, "max": 52, "temp": 0},  # 10 + 5×(6+CON) Lv 6 paladin
         "initiative_bonus": 0,
         "proficiency_bonus": 3,
-        "hit_dice": {"current": 5, "max": 5},
+        "hit_dice": {"current": 6, "max": 6},
         "class_hit_die": "d10",
         "class_spellcasting": "CHA",
         "saving_throws": {"WIS": True, "CHA": True},
@@ -757,7 +763,8 @@ def _paladin_sheet(name: str) -> dict:
             {
                 "key": "lay-on-hands",
                 "name": "Lay on Hands",
-                "current": 25, "max": 25, "reset": "long",
+                # v2.53.0: Lv 6 bump → pool 5×6 = 30 HP (was 25 at Lv 5).
+                "current": 30, "max": 30, "reset": "long",
                 "source": "paladin Lv 1",
                 "class_slug": "paladin",
                 "desc": "Touch-heal pool. Spend HP from the pool to heal a creature you touch. The 5 × Lv pool refreshes on a long rest.",
@@ -781,6 +788,19 @@ def _paladin_sheet(name: str) -> dict:
                 "subclass_slug": "devotion",
                 "desc": "Channel a domain effect (Sacred Weapon, Turn the Unholy). One use per short rest.",
                 "manual": False,
+            },
+        ],
+        # v2.53.0: Aura of Protection (Paladin Lv 6+). Passive aura —
+        # allies within 10 ft of Caelan add his CHA mod (+3 with CHA 16)
+        # to all saving throws. Fires automatically server-side via
+        # `_aura_of_protection_bonus` (v1 simplification: any PC in the
+        # active battle's init counts as "within range"; 10 ft radius
+        # check filed for follow-up).
+        "class_features": [
+            {
+                "key": "aura-of-protection",
+                "name": "Aura of Protection",
+                "desc": "Passive — allies within 10 ft add Caelan's CHA mod (+3) to all saves. Fires automatically server-side on every save prompt that lands inside the active battle.",
             },
         ],
     }

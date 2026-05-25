@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 454 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.52.0, 2026-05-25).
+**Total tests:** 457 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.53.0, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -678,6 +678,15 @@ v2.49.244 — per-user UI preference. `POST /api/settings/roll_log_position` fli
 | `test_roll_log_position_left_then_right` | GM POSTs `{"position": "left"}` → 200 + `roll_log_position == "left"`; subsequent POST `{"position": "right"}` flips back, both persist. |
 | `test_roll_log_position_rejects_invalid_value` | `{"position": "middle"}` → 400 with the invalid value surfaced in the response body. |
 | `test_roll_log_position_persists_for_player` | Per-user isolation — Alice sets `left` independently of the GM; cleanup resets her to `right`. |
+
+### `test_aura_of_protection.py`
+v2.53.0 — Paladin Lv 6+ Aura of Protection. First ally-conferred save-bonus mechanic. `_aura_of_protection_bonus(db, campaign_id, saving_char_id)` returns the CHA mod of the highest-CHA Paladin Lv 6+ in init (min +1 per RAW); 0 when no paladin qualifies or saver isn't in battle. Bonus appended to `base_expression` at roll_request creation time; same hook as Danger Sense.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_aura_of_protection_grants_bonus_to_ally_save` | Caelan + Pip both in init; Thalindra casts Fireball at Pip → roll_request `base_expression == "1d20+3"` (Caelan CHA 16 → +3 mod) and feature_used(source=aura-of-protection) broadcast names Caelan. |
+| `test_aura_skips_when_paladin_absent` | Control: Caelan NOT in init → `base_expression == "1d20"` (no bonus); no Aura broadcast. |
+| `test_paladin_own_aura_applies_to_self` | Fireball at Caelan himself → his own aura applies (`base_expression == "1d20+3"`); broadcast still names Caelan. |
 
 ### `test_danger_sense.py`
 v2.52.0 — Barbarian Lv 2+ Danger Sense. First save-roll advantage intercept; `_pc_has_danger_sense_on_dex_save(char, save_ability)` flips the d20 expression to `2d20kh1` on Dex saves. Wired into `/place_aoe` PC branch + `/cast_spell` single + AoE PC save roll_request creation. Broadcasts `feature_used` with `source: "danger-sense"`.
