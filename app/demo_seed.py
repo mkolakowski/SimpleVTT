@@ -1591,6 +1591,15 @@ def _barbarian_sheet(name: str) -> dict:
                 "name": "Danger Sense",
                 "desc": "Passive — advantage on Dex saves vs effects you can see (traps, spells). Fires automatically server-side on Dex-save spells like Fireball.",
             },
+            # v2.54.1: Fast Movement (Barbarian Lv 5+). Passive
+            # +10 ft speed while not in heavy armor. Already baked
+            # into Krieger's listed speed (40 ft = 30 base + 10
+            # Fast Movement). Descriptive entry for the sheet.
+            {
+                "key": "fast-movement",
+                "name": "Fast Movement",
+                "desc": "Passive (Lv 5+) — +10 ft speed while not in heavy armor. Already baked into Krieger's listed speed (40 ft).",
+            },
         ],
         # Frenzy is the Berserker subclass feature (Lv 3): bonus
         # action while raging, +1 weapon attack on every subsequent
@@ -1773,6 +1782,27 @@ def _monk_sheet(name: str) -> dict:
                 "key": "evasion",
                 "name": "Evasion",
                 "desc": "Passive — when a Dex save would deal half damage, take none on success and half on failure. Fires automatically server-side on Dex-save spells like Fireball.",
+            },
+            # v2.54.1: pure-descriptive Monk passives. RAW values
+            # already reflected on the sheet (speed reflects the
+            # Unarmored Movement bonus; no fall-damage or
+            # magical-vs-mundane resistance system in app today).
+            # See `docs/plans/class-content-status.md` for the
+            # "would need system X" rationales per feature.
+            {
+                "key": "unarmored-movement",
+                "name": "Unarmored Movement",
+                "desc": "Passive (Lv 2+) — +10 ft speed while not wearing armor or carrying a shield. Already baked into Kael's listed speed (40 ft). Scales to +15 ft at Lv 6+ (45 ft), +20 ft at Lv 10+, +25 ft at Lv 14+, +30 ft at Lv 18+.",
+            },
+            {
+                "key": "slow-fall",
+                "name": "Slow Fall",
+                "desc": "Reaction (Lv 4+) — reduce fall damage by 5 × monk level (35 at Lv 7). SimpleVTT doesn't model fall damage yet; descriptive only until a fall-damage system ships.",
+            },
+            {
+                "key": "ki-empowered-strikes",
+                "name": "Ki-Empowered Strikes",
+                "desc": "Passive (Lv 6+) — unarmed strikes count as magical for the purpose of bypassing resistance / immunity to nonmagical attacks. SimpleVTT doesn't gate resistance on magical-vs-mundane today; descriptive only until that gate ships.",
             },
         ],
     }

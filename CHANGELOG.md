@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.54.1] - 2026-05-25 — "Passive Pass"
+
+**Schema version:** 57
+**Commit summary:** **Audit pass — 4 pure-descriptive class features flipped ⚪ → ✅** with sheet descriptions and rationale. Monk Unarmored Movement (Lv 2), Slow Fall (Lv 4), Ki-Empowered Strikes (Lv 6), and Barbarian Fast Movement (Lv 5) are all RAW-as-described features whose mechanics either need a system SimpleVTT doesn't model yet (fall damage, magical-vs-mundane resistance gate) or are already reflected on the sheet (speed bonuses baked into the listed `speed` field). Clears 4 ⚪ rows on the plan doc; descriptive entries make the features visible to players reading the Class abilities panel.
+**Description:** Two files touched. **(1)** `app/demo_seed.py::_monk_sheet` (Kael) gains three `class_features` rows: `unarmored-movement`, `slow-fall`, `ki-empowered-strikes`. Each describes the RAW mechanic + notes the system gap where applicable ("SimpleVTT doesn't model fall damage yet", "doesn't gate resistance on magical-vs-mundane today"). **(2)** `_barbarian_sheet` (Krieger) gains a `fast-movement` row mirroring the same pattern.
+**Description (cont):** Plan-doc edits in `docs/plans/class-content-status.md`: 4 rows flipped ⚪ → ✅ with the v2.54.1 implementation note. Each note explains the simplification rationale so future readers know whether to revisit when the underlying system (fall damage, magical resistance) eventually ships.
+**Description (cont 2):** No code surface, no helpers, no endpoints, no tests. Pure plan-doc + sheet-text cleanup. The Class abilities panel on Kael's + Krieger's sheets will now show the descriptive rows alongside their existing active features (Open Hand Technique, Wholeness of Body, Stillness of Mind, Evasion for Kael; Rage, Reckless Attack, Danger Sense for Krieger).
+**Description (cont 3):** Verification. (a) `curl /version` reports `2.54.1` after `docker compose up -d --build app`. (b) Demo reseed picks up the new class_features rows on next boot — Kael's sheet now lists 7 entries (was 4), Krieger's lists 4 (was 3). (c) Plan doc shows the 4 newly-flipped rows under Monk / Barbarian sections. No harness re-run needed — no functional surface changed.
+
+### Changed
+- `app/demo_seed.py::_monk_sheet` — added `unarmored-movement`, `slow-fall`, `ki-empowered-strikes` to Kael's `class_features`.
+- `app/demo_seed.py::_barbarian_sheet` — added `fast-movement` to Krieger's `class_features`.
+- `docs/plans/class-content-status.md` — 4 rows flipped ⚪ → ✅: Monk Unarmored Movement, Slow Fall, Ki-Empowered Strikes; Barbarian Fast Movement.
+- `app/version.py` `APP_VERSION` → `2.54.1`.
+- `README.md` version badge → `2.54.1`.
+
+### Notes
+- **Per CLAUDE.md exception**: bundled 4 features as one "audit pass" commit because they're all the same type of work (pure-descriptive flip with rationale) and there's no functional surface to test independently. Individual PATCH commits per feature would be 4× the rebuild + CHANGELOG overhead for zero review benefit.
+- **System-gap inventory** captured in the plan-doc notes. The two would-be triggers for promoting these from descriptive to mechanical:
+  1. Fall-damage system → Slow Fall becomes a real reaction endpoint (`_use_slow_fall` reducing damage by `5 * monk_level`).
+  2. Magical-vs-mundane resistance gate (an extra field on `_resistance_halve` checking source-magicality) → Ki-Empowered Strikes becomes mechanically meaningful for monks attacking creatures with "resistant to nonmagical bludgeoning."
+  Unarmored Movement + Fast Movement stay descriptive because the bonus is structurally a sheet field (speed) the GM authors anyway.
+
+---
+
 ## [2.54.0] - 2026-05-25 — "Concert of Wills"
 
 **Schema version:** 57
