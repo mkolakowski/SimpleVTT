@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.51.1] - 2026-05-25 — "Southpaw"
+
+**Schema version:** 57
+**Commit summary:** **Demo GM defaults to the left-side roll log.** New visitors who log in as the demo GM now land on a tabletop with the roll log streaming up the left edge and the GM's right-side panels (Battle, Characters, Settings, GM Tools) where the GM workflow expects them. Mirrors the user's own pref shipped in v2.49.244 — the demo's first impression now showcases the layout the feature was built for instead of stacking everything on the right by default.
+**Description:** Single-field edit in `app/demo_seed.py::seed_users()`. The `gm = User(...)` constructor gains `roll_log_position="left"`. Demo players (Alice + Bob) keep the model default of `"right"` because each demo player represents a different ergonomic setup; the GM-side default is a concrete UX choice for the demo's showcase rather than a per-player preference.
+**Description (cont):** Why demo seed and not a migration. The `roll_log_position` column was added in v2.49.244 with a `DEFAULT 'right'` server default, so every existing user (and every NEW user created by the demo wipe-and-reseed loop) gets `"right"` unless explicitly overridden. The constructor override here is the cleanest way to pick the demo-specific default without re-running the inline migration or perturbing real users on a non-demo deployment. The demo reseeds every `DEMO_RESET_INTERVAL_MINUTES` minutes via the lifespan hook, so this takes effect on the next reset cycle (currently 30 min on the public instance) or immediately on any `docker compose up -d --build app` since the seed runs at boot.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.51.1` after rebuild. (b) Hit `/api/test/wipe_demo` (if exposed) or wait for the next reset, then log in as `demo-gm@example.com`/`demopass` — the tabletop loads with the left sidebar visible holding the roll log, and the right sidebar holding Battle/Characters/Settings/GM Tools as expected. (c) Log in as Alice or Bob to confirm players still see the default right-side layout (no regression on the player path). (d) 447 harness tests untouched — no endpoint or schema surface changed; the new column-value is exercised by the existing `test_settings_roll_log_position` happy path.
+
+### Changed
+- `app/demo_seed.py::seed_users()` — demo GM `User(...)` constructor gains `roll_log_position="left"`. Player users (Alice, Bob) unchanged (default `"right"`).
+- `app/version.py` `APP_VERSION` → `2.51.1`.
+- `README.md` version badge → `2.51.1`.
+
+### Notes
+- **Takes effect on next demo reseed.** The demo wipes + re-seeds on the schedule set by `DEMO_RESET_INTERVAL_MINUTES`; the new GM-pref-default is baked into the next reseed cycle. To force-apply immediately on a dev container, restart the app (`docker compose up -d --build app`) so the seed re-runs at boot.
+
+---
+
 ## [2.51.0] - 2026-05-25 — "Full Frame"
 
 **Schema version:** 57

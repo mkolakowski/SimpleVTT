@@ -191,11 +191,18 @@ def seed_users(db: Session) -> dict[str, User]:
     login page can advertise it. ``is_admin`` is True for the GM so the
     GM tools panel is reachable; the two players are non-admin."""
     pw = hash_password(DEMO_PASSWORD)
+    # v2.51.1: default the demo GM's roll-log drawer to the left side
+    # so the GM controls + initiative + characters tabs sit on the
+    # right where the GM expects them, and roll history streams up
+    # the left. Players still default to "right" (the User model
+    # default) since each player has their own ergonomic preference
+    # to pick from /settings.
     gm = User(
         email=DEMO_GM_EMAIL,
         display_name="Demo GM",
         password_hash=pw,
         is_admin=True,
+        roll_log_position="left",
     )
     alice = User(
         email=DEMO_ALICE_EMAIL,
