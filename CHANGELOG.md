@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.50.4] - 2026-05-25 — "Hush"
+
+**Schema version:** 57
+**Commit summary:** **Demo-mode warning banner gets a dismiss button.** A small ✕ on the right edge of the orange demo banner hides it for the current tab. Dismissal is session-scoped (`sessionStorage`) — opening a new tab or closing + reopening the current one brings the banner back, which preserves the v2.3.0 rationale that the banner exists as a safeguard against an operator accidentally leaving `DEMO_MODE` on in production. A permanent dismiss could go unnoticed for months on a misconfigured deploy; per-tab dismiss is just polite UX.
+**Description:** Two-file edit. **(1)** `app/templates/_demo_banner.html` — added a `<button>` immediately after the countdown span, marked up with `aria-label` + `title` that name the session-scope behavior so a hover preview tells the user "Hide for this tab session (reopens on a new tab)" rather than the ambiguous "Dismiss." The inline `<script>` block gains a `sessionStorage.getItem('demo-banner-dismissed')` check at top so the banner hides immediately on page load if previously dismissed (no flash-of-banner). The dismiss button's click handler sets the same key and `display: none`s the banner with no animation — the v2.3.0 banner had no animation either, so adding fade-out here would feel inconsistent.
+**Description (cont):** **(2)** `app/static/style.css` — new `.demo-banner-dismiss` rule. Translucent dark background tinted to fit the existing banner gradient (gold/brown), the same `#ffd28a` font color the rest of the banner uses, hover state with a stronger backdrop + gold border. 32 px tap target floor (not the usual 44 px CLAUDE.md minimum) — comment explains: the demo banner is a thin strip across the top of every page and shouldn't reflow the whole layout just to host its own ✕. Compact-panel exception precedent set by `.drawer-tab-btn` and `.init-sheet-btn` (both 32 px).
+**Description (cont 3):** No behavior changes elsewhere; no schema; no test surface. Verified by reloading `/` with `DEMO_MODE=true` and confirming (a) banner renders with a ✕ on the right, (b) click hides it with no animation, (c) reload preserves dismissal in the same tab, (d) opening a new tab on `/` re-shows the banner.
+
+### Added
+- `app/templates/_demo_banner.html` — `<button id="demo-banner-dismiss">` and a `sessionStorage`-backed click handler. Session-scoped so the production-safeguard intent of the original banner is preserved.
+- `app/static/style.css` — `.demo-banner-dismiss` rule (32 px compact-panel tap target, gold/brown palette matching the banner).
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.50.4`.
+- `README.md` version badge → `2.50.4`.
+
+### Notes
+- **Why sessionStorage instead of localStorage.** `localStorage` would persist the dismissal across browser restarts — which on a misconfigured prod deploy would mean the operator never sees the banner again after dismissing once. `sessionStorage` clears when the tab closes, so the safeguard re-fires on any fresh session.
+- **Accessibility.** The ✕ button has both `aria-label` and `title` set to a sentence that explains the session-scope behavior, so a screen reader doesn't just hear "X button" without context.
+
+---
+
 ## [2.50.3] - 2026-05-25 — "Vellum"
 
 **Schema version:** 57

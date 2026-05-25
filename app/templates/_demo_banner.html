@@ -1,19 +1,49 @@
 {# Demo-mode banner (v2.3.0). Rendered on every page when DEMO_MODE
-   is enabled. Non-dismissible by design — it's the only safeguard
-   against an operator accidentally leaving DEMO_MODE on in production.
+   is enabled.
+
+   v2.50.4: dismissible via the ✕ button on the right. Dismissal is
+   session-scoped (``sessionStorage``) — closing + reopening the tab
+   or opening a new tab brings the banner back. That preserves the
+   v2.3.0 "operator left DEMO_MODE on in production" safeguard: a
+   permanently-dismissed banner could go unnoticed for months on a
+   misconfigured deploy. Session scope keeps the safeguard alive
+   while letting a player who's just opened the tab quiet it down
+   for the rest of their playtime.
+
    The countdown auto-reloads the page at T+0 so the user sees the
    fresh dataset immediately. #}
 {% if DEMO_MODE %}
-<div class="demo-banner" role="status" aria-live="polite">
+<div class="demo-banner" role="status" aria-live="polite" id="demo-banner">
     <span class="demo-banner-icon" aria-hidden="true">🎲</span>
     <strong>Demo mode</strong> — this instance resets every {{ DEMO_RESET_INTERVAL_MINUTES }} minutes. Changes will be wiped.
     <span class="demo-banner-spacer"></span>
     <span class="demo-banner-countdown">
         Next reset in <span id="demo-banner-countdown-val">…</span>
     </span>
+    <button type="button" class="demo-banner-dismiss" id="demo-banner-dismiss" aria-label="Dismiss demo-mode banner for this tab session" title="Hide for this tab session (reopens on a new tab)">✕</button>
 </div>
 <script>
     (function () {
+        // v2.50.4: session-scoped dismiss. The page renders the banner
+        // unconditionally when DEMO_MODE is on; this script hides it
+        // immediately if the current tab has dismissed it. New tab
+        // → fresh sessionStorage → banner reappears.
+        const banner = document.getElementById('demo-banner');
+        if (banner) {
+            try {
+                if (sessionStorage.getItem('demo-banner-dismissed') === '1') {
+                    banner.style.display = 'none';
+                }
+            } catch (_) {}
+        }
+        const dismissBtn = document.getElementById('demo-banner-dismiss');
+        if (dismissBtn && banner) {
+            dismissBtn.addEventListener('click', () => {
+                banner.style.display = 'none';
+                try { sessionStorage.setItem('demo-banner-dismissed', '1'); } catch (_) {}
+            });
+        }
+
         // Server's next-reset timestamp (UTC, ISO 8601). The lifespan
         // hook stores this on app.state and each page render echoes it
         // here. Falls back to "interval minutes from now" if absent.
