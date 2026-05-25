@@ -229,20 +229,34 @@
         ctx.lineTo(stripH + 0.5, MAP_H);
         ctx.stroke();
 
-        // Column labels — letters across the top.
+        // v2.50.5 — labels centered between the gridlines, NOT
+        // offset by the perpendicular strip width. The gridlines that
+        // drawSquareGrid() paints sit at x = 0, gridSize, 2*gridSize,
+        // … (and the same in y). Each cell is the span between two
+        // consecutive gridlines; the visual center of cell ``c`` is at
+        // x = c*gridSize + gridSize/2. Anchoring labels there makes
+        // each letter / number line up directly with its column /
+        // row's gridlines on the map. The previous implementation
+        // (+ stripH offset) shifted labels right/down by the gutter
+        // width, leaving them between gridlines but off-by-one from
+        // the cells they were supposed to label.
+        //
+        // Edge case: when ``gridSize / 2 < stripH`` (very small grids),
+        // the first column / row label would fall inside the
+        // perpendicular gutter strip and be hidden behind its dark
+        // backing. Skip drawing in that case so the user doesn't see
+        // a half-clipped glyph in the corner.
         ctx.fillStyle = accent;
         for (let c = 0; c < cols; c++) {
-            // Anchor each label at the center of the cell column,
-            // offset by the row label gutter so col-A sits over the
-            // first map cell rather than over the corner.
-            const x = stripH + c * gridSize + gridSize / 2;
+            const x = c * gridSize + gridSize / 2;
             if (x > MAP_W) break;
+            if (x < stripH) continue;  // would clip into the row-label gutter
             ctx.fillText(_colLabel(c), x, stripH / 2);
         }
-        // Row labels — numbers down the left.
         for (let r = 0; r < rows; r++) {
-            const y = stripH + r * gridSize + gridSize / 2;
+            const y = r * gridSize + gridSize / 2;
             if (y > MAP_H) break;
+            if (y < stripH) continue;  // would clip into the column-label gutter
             ctx.fillText(String(r + 1), stripH / 2, y);
         }
         ctx.restore();

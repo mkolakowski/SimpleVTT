@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.50.5] - 2026-05-25 — "True Center"
+
+**Schema version:** 57
+**Commit summary:** **Grid coordinate labels now sit dead-center between the gridlines that bound their cells.** The v2.50.0 introduction of LetterNumber labels anchored each label at `stripH + c * gridSize + gridSize/2` — i.e., the column gutter shifted them right by the row-gutter width, so the letter labeled "A" was actually centered over the second column on the map (and the same off-by-one in y for rows). This commit drops the `+ stripH` offset so labels line up with the gridlines the player actually sees.
+**Description:** Single-function edit in `app/static/tabletop.js::drawGridCoords()`. Column labels now sit at `x = c * gridSize + gridSize/2`; row labels at `y = r * gridSize + gridSize/2`. The strip-height offset is preserved only for the dark backing-strip rectangle (so the gutter still extends `stripH` deep, just for the visual frame — not for label positioning).
+**Description (cont):** New edge-case guard. When `gridSize / 2 < stripH` (e.g., a very small 30 px grid with the 16 px minimum strip height), the FIRST column / row label would fall inside the perpendicular gutter strip and be hidden behind the dark backing. The fix loops `continue;` past labels whose center is inside the gutter rather than letting a half-clipped glyph render in the corner. For all default grid sizes (≥ 50 px) the guard is a no-op since `gridSize/2 ≥ 25 > 28 px max strip height`.
+**Description (cont 2):** No behavior changes outside the rendering pass, no schema, no test surface. Verified by reloading the demo's square-grid map and confirming each column letter sits between its column's gridlines (visible directly when zooming the canvas) and each row number sits between its row's gridlines. The 447 harness tests aren't run since no Python code changed.
+
+### Fixed
+- `app/static/tabletop.js::drawGridCoords()` — labels were offset right/down by `stripH` (the perpendicular gutter width), so the letter labeled "A" was visually centered over the SECOND map column rather than the first. Removed the offset so labels sit at the true cell center.
+
+### Added
+- `drawGridCoords()` skip-when-clipped guard — labels whose center falls inside the perpendicular gutter strip are skipped to avoid a half-clipped glyph on very small grid sizes (`gridSize/2 < stripH`).
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.50.5`.
+- `README.md` version badge → `2.50.5`.
+
+### Notes
+- **Why the off-by-one shipped.** v2.50.0's first implementation read the label position as "the center of the column, shifted past the row-label gutter so it's not inside the corner." That gives a visually plausible result but is geometrically wrong: gridlines on the canvas are at `x = c*gridSize` (no gutter offset), so the cell at `c=0` spans `[0, gridSize]` and its center is `gridSize/2` — which IS already past the typical 16-28 px strip width for any reasonable grid size. The shift was overcorrecting a problem that didn't exist on default-grid maps.
+
+---
+
 ## [2.50.4] - 2026-05-25 — "Hush"
 
 **Schema version:** 57
