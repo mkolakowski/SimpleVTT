@@ -177,8 +177,8 @@ The `### Header` names below come from the `features` field of each JSON.
 | 2 | Druid Circle | ✅ | Subclass system shipped — see Subclasses table. Circle of the Moon has full Wild Shape integration (Combat Wild Shape v2.14.5; Circle Forms CR cap raised to 1 at Lv 2); Circle of the Land has Natural Recovery counter. |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 18 | Timeless Body | ✅ | Druid Lv 18: pure-descriptive (you age more slowly). No mechanic required RAW — description text on the sheet is sufficient. |
-| 18 | Beast Spells | ⚪ | |
-| 20 | Archdruid | ⚪ | |
+| 18 | Beast Spells | ✅ | v2.55.1 — pure-descriptive. RAW: cast spells while in Wild Shape (verbal/somatic components flow through the beast form). The existing v2.14.4 `/transform` Wild Shape flow doesn't gate spellcasting on form anyway — a Wild-Shaped Druid CAN already cast their spells through SimpleVTT today — so Beast Spells lands as a no-op behavioral default. Descriptive only; no demo Lv 18+ Druid fixture. |
+| 20 | Archdruid | ✅ | v2.55.1 — pure-descriptive. RAW: unlimited Wild Shape per day + ignore verbal/somatic/material components on Druid spells + age cap. Wild Shape uses are already not enforced as a strict resource in the demo (Mira's Wild Shape counter is descriptive — `/transform` allows the swap without decrementing); Archdruid's "unlimited" property is the default. Component-cost ignoring isn't modeled (no component-tracking system). Descriptive; no Lv 20 Druid fixture. |
 
 ### Fighter
 
@@ -239,15 +239,15 @@ The `### Header` names below come from the `features` field of each JSON.
 
 | Lv | Feature | Status | Notes |
 |---|---|---|---|
-| 1 | Favored Enemy | ⚪ | |
-| 1 | Natural Explorer | ⚪ | |
+| 1 | Favored Enemy | ✅ | v2.55.1 — pure-descriptive. RAW: "advantage on Wisdom (Survival) checks to track favored enemies, as well as on Intelligence checks to recall information about them." SimpleVTT doesn't model tracking-check workflows or recall checks (no `_creature_type` taxonomy on monster templates either), so the descriptive `favored-enemy` class_features row on Rowan's sheet (already shipped v2.18.3) is sufficient. Re-evaluate if a tracking/lore-check system ships. |
+| 1 | Natural Explorer | ✅ | v2.55.1 — pure-descriptive. RAW: terrain-expertise bonuses on Int/Wis checks involving the chosen terrain + party travel speed + foraging perks. SimpleVTT doesn't model terrain type, party travel time, or foraging today. Descriptive `natural-explorer` row on Rowan's sheet (v2.18.3). |
 | 2 | Fighting Style | 🟡 | |
 | 2 | Spellcasting | ✅ | |
 | 3 | Ranger Archetype | ✅ | Subclass system shipped — see Subclasses table. Hunter has features JSON (Hunter's Prey / Defensive Tactics / Multiattack still descriptive). |
 | 3 | Primeval Awareness | ⚪ | |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 5 | Extra Attack | ✅ | RAW supported — click the attack button twice within your action; the action-economy chip is per-action so it doesn't double-mark. UI polish (auto-suggest, "attacks remaining" badge) is filed for the future. |
-| 8 | Land's Stride | ⚪ | |
+| 8 | Land's Stride | ✅ | v2.55.1 — pure-descriptive. RAW: ignore difficult terrain, advantage on saves vs plant-based magical impediments. SimpleVTT doesn't model difficult terrain on the canvas (no `terrain_difficulty` field on map cells, no movement-cost gating), so the descriptive entry is sufficient. Re-evaluate if a difficult-terrain system ships. No demo Lv 8+ Ranger fixture today. |
 | 10 | Hide in Plain Sight | ⚪ | |
 | 14 | Vanish | ⚪ | |
 | 18 | Feral Senses | ⚪ | |

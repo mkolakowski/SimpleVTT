@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.55.1] - 2026-05-25 — "Field Manual"
+
+**Schema version:** 57
+**Commit summary:** **Passive Pass II — 5 more ⚪ → ✅ flips** in the class-content plan doc. Ranger Lv 1 (Favored Enemy, Natural Explorer), Ranger Lv 8 (Land's Stride), Druid Lv 18 (Beast Spells), Druid Lv 20 (Archdruid). Same pattern as v2.54.1: pure-descriptive features whose mechanics either need a system SimpleVTT doesn't model yet (terrain difficulty, party travel speed, creature-type taxonomy) or are already RAW-default behaviors of the existing systems (Wild Shape spellcasting, unlimited Wild Shape uses).
+**Description:** Plan-doc-only changes in `docs/plans/class-content-status.md`. Each flipped row carries a v2.55.1 implementation note explaining the simplification rationale + the SimpleVTT system that would need to ship to promote the feature from descriptive to mechanical. **(1)** Ranger Lv 1 Favored Enemy + Natural Explorer — already documented on Rowan's sheet via v2.18.3's `class_features` rows; just needed plan-doc flips. **(2)** Ranger Lv 8 Land's Stride — descriptive without a difficult-terrain system. **(3)** Druid Lv 18 Beast Spells — observation that the existing `/transform` flow doesn't actually gate spellcasting on form, so a Wild-Shaped Druid can already cast their spells today, which means Beast Spells lands as a no-op behavioral default. **(4)** Druid Lv 20 Archdruid — same observation for "unlimited Wild Shape" (Mira's Wild Shape counter is already descriptive, not a hard resource cap).
+**Description (cont):** No code surface, no helpers, no endpoints, no tests. Pure plan-doc cleanup. The class-content-status doc is the project's roadmap for class work, so keeping the ⚪/✅ marks accurate makes future feature prioritization clearer — these 5 rows had ⚪ but were actually shipped behaviors, just not credited.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.55.1` after `docker compose up -d --build app`. (b) No harness re-run needed — no functional surface changed. (c) Plan doc spot-check: 5 newly-flipped rows visible under Ranger / Druid sections.
+
+### Changed
+- `docs/plans/class-content-status.md` — 5 rows flipped ⚪ → ✅ with v2.55.1 implementation notes: Ranger Lv 1 Favored Enemy, Ranger Lv 1 Natural Explorer, Ranger Lv 8 Land's Stride, Druid Lv 18 Beast Spells, Druid Lv 20 Archdruid.
+- `app/version.py` `APP_VERSION` → `2.55.1`.
+- `README.md` version badge → `2.55.1`.
+
+### Notes
+- **Pattern: "system would need to ship" notes.** Most of these features will stay ✅-with-rationale forever because the underlying systems (terrain, travel-time, creature-type taxonomy) are large bodies of work the demo doesn't need. The plan-doc note captures the trigger for revisiting — if SimpleVTT ever ships a difficult-terrain canvas overlay, Land's Stride becomes a real reaction-style endpoint with a server-side speed check.
+- **Bundled per CLAUDE.md exception**: 5 plan-doc rows are "one audit pass" by the same logic as v2.54.1. No functional surface, single review unit.
+
+---
+
 ## [2.55.0] - 2026-05-25 — "Sworn Aegis"
 
 **Schema version:** 57
