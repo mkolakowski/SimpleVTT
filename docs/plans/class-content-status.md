@@ -200,7 +200,7 @@ The `### Header` names below come from the `features` field of each JSON.
 | 1 | Martial Arts | 🟡 | |
 | 2 | Ki | ✅ | All three Lv 2 Ki spend-options now wired: Patient Defense + Step of the Wind (v2.49.112) and Flurry of Blows (v2.49.114). Endpoints `/use_patient_defense`, `/use_step_of_the_wind`, `/use_flurry_of_blows` — each installs a 1-round self-buff via `_install_buff`, marks the bonus slot, decrements the Ki counter, and broadcasts feature_used + resource_update + buff_update. Phase B effect integration (attack-roll path consuming `effects.dodging` / `flurry-of-blows-active.unarmed_strikes_available`) is filed. |
 | 2 | Unarmored Movement | ⚪ | |
-| 3 | Monastic Tradition | ✅ | Subclass system shipped — see Subclasses table. Way of the Open Hand: Open Hand Technique now mechanically wired (v2.49.57); Wholeness of Body still waiting on Ki spend-picker. |
+| 3 | Monastic Tradition | ✅ | Subclass system shipped — see Subclasses table. Way of the Open Hand: Open Hand Technique mechanically wired (v2.49.57); Wholeness of Body ✅ (v2.49.227). |
 | 3 | Deflect Missiles | ⚪ | |
 | 4 / 8 / 12 / 16 / 19 | Ability Score Improvement | ✅ | |
 | 4 | Slow Fall | ⚪ | |
@@ -332,7 +332,7 @@ have features JSON.
 | Fighter | **Champion** | ✅ | n/a | 🟡 | Improved Critical / Remarkable Athlete — needs attack-roll intercept |
 | Fighter | Battle Master | ❌ | n/a | 🟢 | Superiority Dice counter exists |
 | Fighter | Eldritch Knight | ❌ | n/a | ⚪ | |
-| Monk | **Way of the Open Hand** | ✅ | n/a | 🟢 | Open Hand Technique shipped (v2.49.57: three picker modes — prone / disengage / lose reaction — per Flurry-of-Blows action). Wholeness of Body still waiting on the Ki spend-picker. |
+| Monk | **Way of the Open Hand** | ✅ | n/a | 🟢 | Open Hand Technique shipped (v2.49.57). **Wholeness of Body ✅** (v2.49.227: dedicated `/use_wholeness_of_body` endpoint — Lv 6 monk, action, 1/long rest, deterministic 3 × monk-level heal via `_apply_hp_change`. Krieger bumped to Lv 6 as the demo fixture; harness in `test_use_wholeness_of_body.py`). |
 | Paladin | **Oath of Devotion** | ✅ | ✅ | 🟢 | **Sacred Weapon ✅** + **Turn the Unholy ✅** (v2.14.3 — both Channel Divinity options live under `channel-divinity.options` with `class:"paladin", subclass:"devotion"` tags; Caelan at Lv 5 is the demo test bed). Aura of Devotion (Lv 7) + Purity of Spirit (Lv 15) + Holy Nimbus (Lv 20) still descriptive. |
 | Paladin | Ancients / Vengeance / Conquest / Redemption / Glory / Watchers / Oathbreaker | ❌ | ✅ | 🟡 | Spell grants only |
 | Ranger | **Hunter** | ✅ | n/a | 🟡 | Hunter's Prey / Defensive Tactics / Multiattack descriptive |

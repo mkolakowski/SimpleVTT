@@ -5312,6 +5312,12 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     const isPatientDefense = featureKey === 'patient-defense';
                     const isStepOfTheWind = featureKey === 'step-of-the-wind';
                     const isFlurryOfBlows = featureKey === 'flurry-of-blows';
+                    // v2.49.227: Way of the Open Hand Lv 6. Action,
+                    // 1/long rest, heal = 3 × monk level. Mirrors the
+                    // v2.17.1 Second Wind shape: dedicated endpoint
+                    // atomically decrements the counter + applies HP
+                    // via _apply_hp_change + marks the action slot.
+                    const isWholenessOfBody = featureKey === 'wholeness-of-body';
                     // v2.49.121 Sorcery Phase 0 sheet wiring. The
                     // `font-of-magic` resource pill pops a direction
                     // picker (slot → SP / SP → slot) + a slot-level
@@ -5428,6 +5434,7 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                    : isPatientDefense ? 'use_patient_defense'
                                    : isStepOfTheWind ? 'use_step_of_the_wind'
                                    : isFlurryOfBlows ? 'use_flurry_of_blows'
+                                   : isWholenessOfBody ? 'use_wholeness_of_body'
                                    : isFontOfMagic
                                        ? (fomDirection === 'to_points'
                                           ? 'use_font_of_magic_to_points'
@@ -5459,6 +5466,9 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                                 mode: sotwMode,
                                 override: !!override,
                             } : isFlurryOfBlows ? {
+                                character_id: MY_CHAR_ID,
+                                override: !!override,
+                            } : isWholenessOfBody ? {
                                 character_id: MY_CHAR_ID,
                                 override: !!override,
                             } : isFontOfMagic ? {
@@ -5503,10 +5513,11 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                     // Surface a lightweight toast so the rolling player sees
                     // confirmation without needing the roll log open.
                     let data; try { data = await resp.json(); } catch { data = null; }
-                    if (data && isSecondWind && data.hp) {
+                    if (data && (isSecondWind || isWholenessOfBody) && data.hp) {
                         // v2.17.1: sync the sheet's HP input to the
                         // server's view so the player sees their HP
                         // change immediately without a refresh.
+                        // v2.49.227: same sync for Wholeness of Body.
                         const hpInp = document.querySelector('[name="hp.current"]');
                         if (hpInp) {
                             hpInp.value = data.hp.current;
@@ -5520,6 +5531,8 @@ window._savedBeastFavorites = {{ (sheet.get('favorite_beasts') or []) | tojson }
                             window.showToast(`🎭 Cutting Words: rolled -${data.rolled}${tgt} (reaction)`, 'info');
                         } else if (isSecondWind) {
                             window.showToast(`💨 Second Wind: ${data.expression} = +${data.actual_healed} HP (now ${data.hp.current}/${data.hp.max})`, 'info');
+                        } else if (isWholenessOfBody) {
+                            window.showToast(`🧘 Wholeness of Body: +${data.actual_healed} HP (now ${data.hp.current}/${data.hp.max})`, 'info');
                         } else if (isActionSurge) {
                             window.showToast(`⚡ Action Surge: action chip refunded — take another action this turn.`, 'info');
                         } else if (isRage) {

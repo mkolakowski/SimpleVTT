@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.49.227] - 2026-05-24
+
+**Schema version:** 56
+**Commit summary:** **Wholeness of Body (Monk Way of the Open Hand Lv 6) shipped end-to-end.** Dedicated `/api/campaign/{cid}/use_wholeness_of_body` endpoint (action, 1/long rest, deterministic 3 × monk-level heal), `_FEATURE_ECONOMY['wholeness-of-body']` curated entry (slot:'action'), sheet `cf-use` routing for the `wholeness-of-body` feature key, demo Monk Kael Brightleaf bumped Lv 5 → Lv 6 (HP 38 → 45, Ki 5 → 6, +Wholeness of Body counter), and a 4-test harness file. Flips Way of the Open Hand subclass status from `Open Hand Technique ✅ / Wholeness of Body 🟢` to both features `✅` in `docs/plans/class-content-status.md`.
+**Description:** Six coordinated edits. **(1)** `app/routes/tabletop_routes.py` — new `use_wholeness_of_body` endpoint mirrors the v2.17.1 Second Wind shape: validates class==monk + subclass contains "open hand" + level≥6, gates the wholeness-of-body counter (404 if absent, 409 `out_of_uses` if zero), Phase 4 action-slot over-budget gate, atomically decrements counter + applies HP via `_apply_hp_change` + commits, marks action slot, broadcasts `feature_used` + `resource_update` + `character_death_save` (when the heal wakes a dying monk). Heal is deterministic — RAW reads "regain hit points equal to three times your monk level" (PHB p.79), no dice roll, no CON mod. **(2)** Same file — `_FEATURE_ECONOMY` adds the `wholeness-of-body` entry (slot:'action', desc as RAW summary) so `/use_feature` knows the slot binding and the option falls into the curated description table that powers the feature_used roll-log card's inline tail. **(3)** `app/demo_seed.py` `_monk_sheet` — Kael Brightleaf Lv 5 → 6, HP `{current:38, max:38}` → `{current:45, max:45}` (Lv 6 d8 avg 5 + CON +2), `hit_dice 5/5` → `6/6`, Ki counter `current:5, max:5` → `6/6`, new `wholeness-of-body` resource entry (`current:1, max:1, reset:'long', class_slug:'monk'`), new `class_features` entry with `key:'wholeness-of-body'` so the ⚡ Use button renders. Proficiency bonus stays +3 (holds across Lv 5-8). **(4)** `app/templates/sheet_dnd5e.html` `_bindUseButtons` — `isWholenessOfBody` branch added to the cf-use routing chain: routes to `use_wholeness_of_body` endpoint, body shape matches Second Wind (`{character_id, override}`), HP-input sync mirrors v2.17.1 (assigning `data.hp.current` back to the sheet's `hp.current` input on success), toast reads "🧘 Wholeness of Body: +X HP (now Y/Z)". **(5)** `tests/harness/test_use_wholeness_of_body.py` — 4 tests: happy path asserts `rolled=18` deterministic, `actual_healed=0` (Kael starts at full HP after the long-rest fixture), counter decrements to 0, `feature_used` broadcast carries `source=wholeness-of-body` + `heal_target_name=Kael` + `feature_desc` containing "18" and "Lv 6", `resource_update` confirms `current=0`+`max=1`. Error paths: `out_of_uses` (drain + retry → 409 with label), `wrong_class` (Pip is Rogue → 409 `expected=monk` `got=rogue`), missing `character_id` → 400. **(6)** `docs/plans/class-content-status.md` — Way of the Open Hand subclass row flips Wholeness of Body to ✅ with the version + endpoint pointer; Monk Lv 3 row (Monastic Tradition) refreshed to reflect Open Hand status. **(7)** `docs/test-harness-coverage.md` — new section for `test_use_wholeness_of_body.py` in the Monk class-features cluster, total-test-count bumped 423 → 427.
+**Description (cont):** RAW deviations + design choices. (a) No partial-heal cap when at full HP — RAW reads "as an action, you can regain", and v1 takes the action commit semantics: spending the action burns the use even when no HP is needed. A future commit can add a confirmation dialog ("you're at full HP — spend anyway?") if play-testing surfaces the misclick. (b) No subclass-feature plumbing in the SRD `way-of-the-open-hand.json` — the JSON's existing Wholeness of Body entry (level 6, RAW description) is descriptive content rendered on the sheet; the mechanical wiring is via the `class_features` array on the character sheet pointing to the curated `_FEATURE_ECONOMY` entry. Matches the pattern used by every other dedicated-endpoint feature (Lay on Hands, Second Wind, Patient Defense). (c) Action slot (not bonus) per RAW — Wholeness of Body explicitly uses an action; contrast with Second Wind (bonus action). The over-budget gate flips the action chip, so a monk who's already attacked this turn hits the gate.
+**Description (cont 2):** Verification. (a) `curl /version` confirms v2.49.227 live. (b) Existing harness suite still green (no endpoint signature changes — pure additive). (c) New `test_use_wholeness_of_body.py` suite (4 tests) runs green against the live demo. (d) Manual click-through: log in as Kael's owner; open Kael's sheet; the Wholeness of Body resource pill shows 1/1; the class-feature row renders an ⚡ Use button; click → toast confirms heal + chip flips + sheet HP updates inline.
+
+### Added
+- New endpoint `POST /api/campaign/{campaign_id}/use_wholeness_of_body` — Monk Way of the Open Hand Lv 6, action, 1/long rest, deterministic 3 × monk-level heal via `_apply_hp_change`.
+- `_FEATURE_ECONOMY['wholeness-of-body']` curated entry (slot:'action').
+- Demo Monk Kael Brightleaf: bumped Lv 5 → 6 with HP, Ki, hit_dice, wholeness-of-body counter, and class_features entry.
+- `tests/harness/test_use_wholeness_of_body.py` — 4-test harness coverage (happy path, out_of_uses, wrong_class, missing_character_id).
+
+### Changed
+- `app/templates/sheet_dnd5e.html` — `cf-use` routing chain extended with the `isWholenessOfBody` branch (endpoint + body + HP sync + toast).
+- `docs/plans/class-content-status.md` — Way of the Open Hand subclass row flips Wholeness of Body to ✅; Monk Lv 3 row note refreshed.
+- `docs/test-harness-coverage.md` — new section for `test_use_wholeness_of_body.py`; total-test-count 423 → 427.
+- `app/version.py` `APP_VERSION` → `2.49.227`.
+- `README.md` version badge → `2.49.227`.
+
+### Notes
+- **Continues the v2.49.55 → v2.49.114 Monk feature thread.** Stunning Strike (v2.49.55), Open Hand Technique (v2.49.57), Patient Defense (v2.49.112), Step of the Wind (v2.49.112), Flurry of Blows (v2.49.114), now Wholeness of Body (v2.49.227). Open Hand subclass is fully wired through Lv 6; Lv 11 Tranquility + Lv 17 Quivering Palm remain.
+- **First Lv 6 monk feature.** The demo Monk fixture now exercises Lv 6 unlocks; future commits adding Ki-Empowered Strikes (Lv 6 passive) won't need an additional fixture bump.
+- **Plan-doc status table updates only when fully shipped.** Per the `class-content-status.md` audit convention, 🟢 → ✅ requires both the endpoint AND the sheet wiring AND harness coverage; partial shipments stay at 🟢 with a note.
+
+---
+
 ## [2.49.226] - 2026-05-24
 
 **Schema version:** 56

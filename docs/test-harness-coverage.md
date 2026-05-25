@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 423 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.217, 2026-05-24).
+**Total tests:** 427 in `tests/harness/` + 7 in `tests/harness_ui/` (as of v2.49.227, 2026-05-24).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -628,6 +628,16 @@ v2.49.112 — Monk class feature `POST /use_step_of_the_wind` (Lv 2+). Spend 1 k
 | `test_step_of_the_wind_dash_mode` | Kael, mode=dash → 200, `mode=dash` in response. `buff_update` broadcast has `step-of-the-wind-dash` key with `effects.dash=True` + `effects.jump_distance_doubled=True`. |
 | `test_step_of_the_wind_wrong_class` | Krieger → 409 `wrong_class`. |
 | `test_step_of_the_wind_invalid_mode` | mode="fly" → 400 with "mode" in the error body. |
+
+### `test_use_wholeness_of_body.py`
+v2.49.227 — Monk subclass feature `POST /use_wholeness_of_body` (Way of the Open Hand, Lv 6). Action, 1/long rest, deterministic heal = 3 × monk level (no roll). Atomically decrements the `wholeness-of-body` counter, applies HP via `_apply_hp_change`, marks the action slot, broadcasts `feature_used` + `resource_update` + `character_death_save` (when applicable). Kael Brightleaf (bumped from Lv 5 to Lv 6 in the same release) is the demo fixture.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_wholeness_of_body_happy_path` | Kael spends WoB → 200, `rolled=18` (3 × Lv 6), `actual_healed=0` (at full HP), `remaining=0`, `max=1`. `feature_used` broadcast carries `source=wholeness-of-body`, heal_target_name=Kael, `feature_desc` includes "18" and "Lv 6". `resource_update` broadcast confirms `current=0`, `max=1`. |
+| `test_wholeness_of_body_out_of_uses` | Drain the one use; second call → 409 `error=out_of_uses` with `label="Wholeness of Body"`. |
+| `test_wholeness_of_body_wrong_class` | Pip (Rogue) → 409 `error=wrong_class`, `expected=monk`, `got=rogue`. |
+| `test_wholeness_of_body_missing_character_id` | Empty body → 400. |
 
 ### `test_use_open_hand_technique.py`
 v2.49.57 — Monk subclass feature `POST /use_open_hand_technique` (Way of the Open Hand, Lv 3+). Three modes: `prone` (DEX save → Prone via new `open-hand-prone` map entry), `push` (STR save → response carries `push_authorized` for the GM to drag the token; no buff), `no_reactions` (no save → inline install of `reaction-denied` buff). No ki cost — RAW the Flurry of Blows already paid. Same trust-the-caller convention as Stunning Strike for the "must follow a Flurry hit" gate.

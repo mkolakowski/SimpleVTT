@@ -226,6 +226,15 @@ _FEATURE_ECONOMY: dict[str, dict] = {
         "slot": "free",
         "desc": "Spend or gain sorcery points; convert sorcery points to spell slots and vice-versa.",
     },
+    # v2.49.227: Way of the Open Hand Lv 6. Action — regain 3 × monk
+    # level HP, once per long rest. Routed through dedicated
+    # /use_wholeness_of_body endpoint (mirrors Lay on Hands / Second
+    # Wind shape: atomic counter decrement + HP apply via
+    # _apply_hp_change + action chip flip).
+    "wholeness-of-body": {
+        "slot": "action",
+        "desc": "Action: regain 3× monk level HP. Once per long rest.",
+    },
 }
 
 
@@ -13234,6 +13243,195 @@ async def use_flurry_of_blows(
         "duration_rounds": 1,
         "buff_installed": installed,
         "unarmed_strikes_available": 2,
+    }
+
+
+# ----------- API: Wholeness of Body (Monk Way of the Open Hand Lv 6) -----------
+
+@router.post("/api/campaign/{campaign_id}/use_wholeness_of_body")
+async def use_wholeness_of_body(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.49.227: spend the Wholeness of Body use to regain HP equal
+    to 3 × monk level. Way of the Open Hand Lv 6, action, 1/long rest.
+
+    Body: ``{character_id, override?}``.
+
+    RAW: "As an action, you can regain hit points equal to three times
+    your monk level. You must finish a long rest before you can use
+    this feature again." (PHB p.79).
+
+    Mirrors the Second Wind / Lay on Hands shape: validates class +
+    subclass + level, gates on the wholeness-of-body counter, gates the
+    action slot per the Phase 4 over-budget pattern, atomically
+    decrements the counter, applies HP via ``_apply_hp_change`` so the
+    death-save state machine wakes a dying monk cleanly, marks the
+    action slot, and broadcasts feature_used + resource_update +
+    character_death_save when applicable.
+    """
+    body = await request.json()
+    char_id = int(body.get("character_id") or 0)
+    override = bool(body.get("override"))
+    if char_id <= 0:
+        raise HTTPException(400, "character_id is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    char = db.query(Character).filter(
+        Character.id == char_id, Character.campaign_id == campaign_id,
+    ).first()
+    if not char:
+        raise HTTPException(404, "Monk character not found")
+    if not (_user_is_gm(user, campaign, db) or char.owner_user_id == user.id):
+        raise HTTPException(403, "Not your character")
+
+    sheet = dict(char.sheet or {})
+
+    # Class + subclass + level validation. Wholeness of Body unlocks
+    # at Monk Lv 6 for Way of the Open Hand only.
+    cls = (sheet.get("class") or "").lower()
+    if cls != "monk":
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_class", "expected": "monk", "got": cls or "",
+        })
+    monk_lv = int(sheet.get("level") or 0)
+    if monk_lv < 6:
+        return JSONResponse(status_code=409, content={
+            "error": "level_too_low", "required": 6, "got": monk_lv,
+        })
+    subclass = (sheet.get("subclass") or "").lower()
+    if "open hand" not in subclass:
+        return JSONResponse(status_code=409, content={
+            "error": "wrong_subclass",
+            "expected": "way of the open hand",
+            "got": subclass or "",
+        })
+
+    # Wholeness of Body counter lookup + spend.
+    resources = list(sheet.get("resources") or [])
+    wob_row = None
+    wob_idx = -1
+    for i, r in enumerate(resources):
+        if (r.get("key") or "").lower() == "wholeness-of-body":
+            wob_row = dict(r); wob_idx = i; break
+    if wob_row is None:
+        raise HTTPException(404, "No Wholeness of Body resource on this sheet")
+    wob_cur = int(wob_row.get("current") or 0)
+    wob_max = int(wob_row.get("max") or 0)
+    if wob_cur <= 0:
+        return JSONResponse(status_code=409, content={
+            "error": "out_of_uses",
+            "label": "Wholeness of Body",
+        })
+
+    # Phase 4 over-budget gate (action slot).
+    was_used = _is_slot_used(campaign_id, char.id, "action")
+    user_is_gm = _user_is_gm(user, campaign, db)
+    strict = bool(campaign.strict_action_economy)
+    effective_override = override and not strict
+    if was_used and not user_is_gm and not effective_override:
+        return JSONResponse(status_code=409, content={
+            "error": "over_budget",
+            "slot": "action",
+            "char_name": char.name,
+            "source": "wholeness-of-body",
+            "label": "Wholeness of Body",
+            "strict": strict,
+        })
+
+    # RAW: deterministic heal = 3 × monk level. No roll, no CON mod.
+    recovered = 3 * monk_lv
+
+    # Apply HP via _apply_hp_change so the death-save state machine
+    # picks up a dying monk waking up cleanly.
+    hp = dict(sheet.get("hp") or {})
+    hp_max = int(hp.get("max") or 0)
+    hp_cur = int(hp.get("current") or 0)
+    new_hp = min(hp_max, hp_cur + recovered) if hp_max > 0 else (hp_cur + recovered)
+
+    # Decrement counter.
+    wob_row["current"] = wob_cur - 1
+    resources[wob_idx] = wob_row
+    sheet["resources"] = resources
+    from sqlalchemy.orm.attributes import flag_modified
+    char.sheet = sheet
+    flag_modified(char, "sheet")
+    hp_result = _apply_hp_change(char, new_hp)
+    db.commit()
+
+    # Mark the action slot.
+    await _mark_battle_economy(campaign_id, char.id, "action")
+
+    # Broadcasts.
+    membership = (
+        db.query(CampaignMembership)
+        .filter(CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.user_id == user.id)
+        .first()
+    )
+    player_color = (
+        membership.color if membership and membership.color
+        else (campaign.gm_color if user.id == campaign.gm_user_id else None)
+    )
+    caster_color = char.color or player_color
+    actual_healed = hp_result["hp"]["current"] - hp_cur
+
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "user_color": caster_color,
+            "feature_name": "🧘 Wholeness of Body",
+            "feature_desc": f"Action · regain {recovered} HP (3 × monk Lv {monk_lv})",
+            "heal_amount": actual_healed,
+            "heal_target_name": char.name,
+            "heal_hp_before": hp_cur,
+            "heal_hp_after": hp_result["hp"]["current"],
+            "source": "wholeness-of-body",
+            "remaining": wob_cur - 1,
+            "max": wob_max,
+            "over_budget": was_used,
+            "over_budget_slot": "action" if was_used else "",
+        },
+    })
+
+    await hub.broadcast(campaign_id, {
+        "type": "resource_update",
+        "data": {
+            "character_id": char.id,
+            "key": "wholeness-of-body",
+            "current": wob_cur - 1,
+            "max": wob_max,
+        },
+    })
+
+    if hp_result.get("status_changed"):
+        await hub.broadcast(campaign_id, {
+            "type": "character_death_save",
+            "data": {
+                "character_id": char.id,
+                "status": hp_result["death_saves"]["status"],
+                "successes": int(hp_result["death_saves"]["successes"]),
+                "failures": int(hp_result["death_saves"]["failures"]),
+                "hp": hp_result["hp"],
+                "source": "wholeness_of_body",
+            },
+        })
+
+    return {
+        "ok": True,
+        "rolled": recovered,
+        "actual_healed": actual_healed,
+        "hp": hp_result["hp"],
+        "remaining": wob_cur - 1,
+        "max": wob_max,
+        "over_budget": was_used,
     }
 
 
