@@ -1186,15 +1186,35 @@
        --bg-2 → --bg, shadow deepened (3 px / 14 px blur, .22 alpha),
        and the inter-card gap goes 4 → 7 px to match .roll-list's
        gap: 7px. */
-    .init-row { display:flex; align-items:center; gap:5px; padding:6px 8px; border:1px solid rgba(167,139,250,.35); border-radius:8px; margin-bottom:7px; box-shadow:0 3px 14px rgba(0,0,0,.22); background:var(--bg); }
+    /* v2.50.2: frosted-glass treatment matching the v2.49.246 / .247
+       roll-log family. bg-mix 55% + backdrop blur(16px) lets the map
+       behind the sidebar read through the init rows; border themed
+       via var(--accent) so warm-theme users (sepia / forest / hobbiton)
+       no longer see the hardcoded purple outline. */
+    .init-row {
+        display: flex; align-items: center; gap: 5px;
+        padding: 6px 8px;
+        border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+        border-radius: 8px;
+        margin-bottom: 7px;
+        box-shadow: 0 3px 14px rgba(0,0,0,.22);
+        background: color-mix(in srgb, var(--bg) 55%, transparent);
+        -webkit-backdrop-filter: blur(16px) saturate(160%);
+        backdrop-filter: blur(16px) saturate(160%);
+    }
     /* v2.49.128: zebra-strip alternating init-tracker rows so a long
        combatant list reads easier. Defined BEFORE the .active-turn
        overrides below so the active-turn highlight always wins on the
        current combatant (same CSS specificity → source-order decides).
        v2.49.129: fg-mixed background (see .roll-card zebra comment
        above) for cross-theme visibility — sepia's --bg-2 was too close
-       to --bg for the stripe to read. */
-    .init-row:nth-child(even) { background: color-mix(in srgb, var(--bg) 88%, var(--fg) 12%); }
+       to --bg for the stripe to read.
+       v2.50.2: outer alpha 55% to match the new glass baseline. */
+    .init-row:nth-child(even) {
+        background: color-mix(in srgb,
+            color-mix(in srgb, var(--bg) 88%, var(--fg) 12%) 55%,
+            transparent);
+    }
     /* v2.49.131: desktop-only hover highlight. ``@media (hover: hover)
        and (pointer: fine)`` gates the rule to devices with a real
        cursor so iPad / touch flows don't end up with a stuck "hovered"
@@ -1208,16 +1228,47 @@
     }
     /* v2.49.149: thicker accent border + brighter glow so the active
        combatant stands out at a glance. Pair with the .init-entry
-       version below — both card types share the look. */
-    .init-row.active-turn { background:var(--accent-bg); border:2px solid var(--accent); padding:5px 7px; box-shadow:0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 4px 18px color-mix(in srgb, var(--accent) 50%, rgba(0,0,0,.28)); }
+       version below — both card types share the look.
+       v2.50.2: accent-tinted glass (was opaque var(--accent-bg)) so the
+       active row keeps the frosted-glass feel of the surrounding cards
+       while the accent tint + thicker border + glow still mark it as
+       the active combatant. The backdrop blur inherits from .init-row
+       above. */
+    .init-row.active-turn {
+        background: color-mix(in srgb, var(--accent) 30%, transparent);
+        border: 2px solid var(--accent);
+        padding: 5px 7px;
+        box-shadow:
+            0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent),
+            0 4px 18px color-mix(in srgb, var(--accent) 50%, rgba(0,0,0,.28));
+    }
     /* GM combatant card wrapper — overrides the standalone init-row style when nested */
-    /* v2.49.99: matches .roll-card — see comment on .init-row above. */
-    .init-entry { margin-bottom:7px; border:1px solid rgba(167,139,250,.35); border-radius:8px; overflow:hidden; box-shadow:0 3px 14px rgba(0,0,0,.22); background:var(--bg); }
+    /* v2.49.99: matches .roll-card — see comment on .init-row above.
+       v2.50.2: same frosted-glass treatment as .init-row (bg-mix 55% +
+       blur 16 px + accent-themed border) so GM combatant cards
+       visually match the player-side roll cards + init rows. The
+       inner .mini-header gradient keeps its own faint accent tint
+       so the header still reads as a clickable surface. */
+    .init-entry {
+        margin-bottom: 7px;
+        border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 3px 14px rgba(0,0,0,.22);
+        background: color-mix(in srgb, var(--bg) 55%, transparent);
+        -webkit-backdrop-filter: blur(16px) saturate(160%);
+        backdrop-filter: blur(16px) saturate(160%);
+    }
     /* v2.49.128: GM combatant cards zebra-strip too. Same source-order
        logic as .init-row above — .active-turn rules below win on the
        current combatant. v2.49.129: same fg-mix as the other zebra
-       rules for cross-theme visibility. */
-    .init-entry:nth-child(even) { background: color-mix(in srgb, var(--bg) 88%, var(--fg) 12%); }
+       rules for cross-theme visibility.
+       v2.50.2: outer alpha 55% to match the glass baseline. */
+    .init-entry:nth-child(even) {
+        background: color-mix(in srgb,
+            color-mix(in srgb, var(--bg) 88%, var(--fg) 12%) 55%,
+            transparent);
+    }
     /* v2.49.131: desktop-only hover treatment. v2.49.132 (this commit):
        the .init-entry's own background is hidden behind .mini-header's
        opaque gradient — so hovering the card needs to also lift the

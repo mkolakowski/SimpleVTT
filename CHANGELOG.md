@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.50.2] - 2026-05-25 — "The Glass Initiative"
+
+**Schema version:** 57
+**Commit summary:** **Frosted-glass treatment extends to the Battle tab combatant cards.** The `.init-row` (player-side init list) and `.init-entry` (GM-side combatant wrapper) cards now use the same glass recipe established for `.roll-card` / `.spell-cast-card` / `.roll-req-card` over v2.49.246–.247 — bg-mix 55%, backdrop-filter blur 16 px + saturate 160%, accent-themed border. The whole sidebar reads as one cohesive material now instead of "translucent roll log, opaque battle list."
+**Description:** Four CSS edits to `app/templates/tabletop.html`. **(1)** `.init-row` — `background: var(--bg)` → `color-mix(in srgb, var(--bg) 55%, transparent)`, added `backdrop-filter: blur(16px) saturate(160%)`, border re-themed from hardcoded `rgba(167,139,250,.35)` to `color-mix(in srgb, var(--accent) 35%, transparent)`. **(2)** `.init-row:nth-child(even)` zebra rule — outer alpha 88%/100% → 88%/55% so the zebra stripe sits at the same translucency layer as the baseline card. **(3)** `.init-entry` — same treatment as `.init-row`. **(4)** `.init-entry:nth-child(even)` — same alpha adjustment.
+**Description (cont):** Active-turn highlight (`.init-row.active-turn`) brought into the glass family too — its previous `background: var(--accent-bg)` (opaque) made the current combatant stand out as the only opaque card in a sea of glass. New treatment is `color-mix(in srgb, var(--accent) 30%, transparent)` so the accent tint + thicker 2px border + glow combination still flags the active turn while the backdrop blur (inherited from `.init-row`) keeps the frosted feel. `.init-entry.active-turn` doesn't need a background override (it already inherits the glass from `.init-entry`); only the border + glow strengthen.
+**Description (cont 2):** Internal sub-blocks left as-is: `.mini-statblock` (`var(--bg-2)`), `.mini-cell` / `.mini-kv-pair` / `.mini-sk-btn` (`var(--bg)`) all stay opaque because they need solid contrast for the dense statblock + skill rows inside the expanded sheet. The outer card glass + inner opaque blocks creates a layered "frosted frame around a solid pane" look that matches every other glass card in the sidebar.
+**Description (cont 3):** No behavior changes, no schema, no test surface. Existing 447 harness tests untouched. Verified by reloading the tabletop with the battle list open on both the player-side (init-row only) and GM-side (init-entry with mini-sheet expanded) views.
+
+### Changed
+- `.init-row` — opaque `var(--bg)` → glass bg-mix 55% + backdrop blur(16px) saturate(160%); border themed via `var(--accent)`.
+- `.init-row:nth-child(even)` — outer alpha 100% → 55% to match the glass baseline.
+- `.init-row.active-turn` — opaque `var(--accent-bg)` → `color-mix(var(--accent) 30%, transparent)` so the active highlight stays glass.
+- `.init-entry` — same glass treatment as `.init-row`.
+- `.init-entry:nth-child(even)` — same alpha adjustment.
+- `app/version.py` `APP_VERSION` → `2.50.2`.
+- `README.md` version badge → `2.50.2`.
+
+### Notes
+- **Pattern: every drawer card family is now glass.** `.roll-card` (v2.49.246), `.spell-cast-card` + `.roll-req-card` (v2.49.247), now `.init-row` + `.init-entry` (this commit). The recipe — `color-mix(... 55%, transparent)` + `backdrop-filter: blur(16px) saturate(160%)` + accent-themed border — is consolidated enough that a future card type should just copy it.
+- **Internal dense blocks stay opaque on purpose.** Layered translucency (glass card → glass inner block → glass deeper block) compounds blur cost on every paint and turns small text mushy. Cards get glass; their contents (statblock, kv pairs, skill rows) get solid.
+
+---
+
 ## [2.50.1] - 2026-05-25 — "The Christening"
 
 **Schema version:** 57
