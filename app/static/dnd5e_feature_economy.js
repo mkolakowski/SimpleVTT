@@ -118,6 +118,21 @@ window._FEATURE_ECONOMY = {
             'preserve-life': { label: 'Preserve Life', desc: 'Distribute 5 × cleric level HP among creatures within 30 ft, none raised above half max HP.', class: 'cleric', subclass: 'life' },
             'radiance-of-the-dawn': { label: 'Radiance of the Dawn', desc: 'Dispel magical darkness, deal 2d10 + cleric level radiant damage on a failed Con save (each enemy within 30 ft).', class: 'cleric', subclass: 'light' },
             'guided-strike': { label: 'Guided Strike', desc: '+10 bonus to one attack roll, declared after seeing the d20.', class: 'cleric', subclass: 'war' },
+            // ── v2.56.1: remaining domains. Each Lv 2 CD option
+            //    described per PHB / XGtE / TCoE. Mechanically these
+            //    are announce-only just like Turn Undead — the GM
+            //    applies the effect manually after the chip flip +
+            //    broadcast. Lv 6+ options (Knowledge: Read Thoughts,
+            //    Trickery: Cloak of Shadows) are filed for follow-up
+            //    along with the picker level-gate ─────────────────
+            'knowledge-of-the-ages': { label: 'Knowledge of the Ages', desc: 'Touch a creature (or yourself) and grant proficiency in one skill or tool for 10 minutes.', class: 'cleric', subclass: 'knowledge' },
+            'destructive-wrath': { label: 'Destructive Wrath', desc: 'When you roll lightning or thunder damage, deal MAXIMUM damage instead of rolling.', class: 'cleric', subclass: 'tempest' },
+            'invoke-duplicity': { label: 'Invoke Duplicity', desc: 'Action — create a perfect illusory duplicate in an unoccupied space within 30 ft for 1 minute (concentration). Use as a target / cast-from / threat-grant anchor.', class: 'cleric', subclass: 'trickery' },
+            'artisans-blessing': { label: "Artisan's Blessing", desc: '1-hour ritual — craft a nonmagical metal item (weapon, armor, ammo, tools) up to 100 gp value.', class: 'cleric', subclass: 'forge' },
+            'path-to-the-grave': { label: 'Path to the Grave', desc: 'Action — curse a creature within 30 ft. Next attack vs the cursed creature has vulnerability to that damage type.', class: 'cleric', subclass: 'grave' },
+            'orders-demand': { label: "Order's Demand", desc: 'Action — each creature you choose within 30 ft makes a Wisdom save or is charmed by you until end of next turn (or until they take damage).', class: 'cleric', subclass: 'order' },
+            'charm-animals-and-plants': { label: 'Charm Animals and Plants', desc: 'Action — each beast or plant creature within 30 ft makes a Wisdom save or is charmed by you for 1 minute (or until damaged).', class: 'cleric', subclass: 'nature' },
+            'twilight-sanctuary': { label: 'Twilight Sanctuary', desc: 'Action — 30 ft sphere of dim light for 1 minute. Allies ending their turn inside gain 1d6 + cleric level temp HP OR end one charmed/frightened effect on them.', class: 'cleric', subclass: 'twilight' },
             // ── Paladin options (v2.14.3) ─────────────────────
             'sacred-weapon': { label: 'Sacred Weapon', desc: 'Imbue a weapon you hold with positive energy for 1 minute: +CHA mod to attack rolls, deals magical damage, emits 20 ft bright light.', class: 'paladin', subclass: 'devotion' },
             'turn-the-unholy': { label: 'Turn the Unholy', desc: 'Each fiend or undead within 30 ft that can see/hear you must succeed on a Wisdom save or be turned for 1 minute.', class: 'paladin', subclass: 'devotion' },

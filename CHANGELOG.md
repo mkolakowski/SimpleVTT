@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.56.1] - 2026-05-25 — "Domain Reach"
+
+**Schema version:** 57
+**Commit summary:** **Channel Divinity option entries for the remaining 8 Cleric domains.** Knowledge / Tempest / Trickery / Forge / Grave / Order / Nature / Twilight all get their Lv 2 CD option added to `_FEATURE_ECONOMY.channel-divinity.options`. Every Lv 2+ Cleric of any domain (canon + most homebrew) now sees a curated CD entry in the option picker; before this commit, only Life / Light / War clerics had a tailored option and others fell back to the defensive "no options matched" branch.
+**Description:** Single-file edit in `app/static/dnd5e_feature_economy.js`. Eight new option entries inside the `channel-divinity` block, each tagged `class: 'cleric'` + `subclass: <domain slug>`. Domain slugs picked to match the substring filter in `sheet_dnd5e.html`'s picker logic (`ce.sub.indexOf(optSub) !== -1`), so `subclass: 'knowledge'` matches a sheet's `"Knowledge Domain"` subclass field via the same lowercase-substring path that `'life'` matches `"Life Domain"` today.
+**Description (cont):** New entries (Lv 2 each per PHB / XGtE / TCoE):
+- **Knowledge of the Ages** (Knowledge) — 10-min skill/tool proficiency.
+- **Destructive Wrath** (Tempest) — max lightning/thunder damage instead of rolling.
+- **Invoke Duplicity** (Trickery) — illusory duplicate at 30 ft for 1 minute (concentration).
+- **Artisan's Blessing** (Forge, XGtE) — 1-hour ritual crafting metal item.
+- **Path to the Grave** (Grave, XGtE) — curse a creature; next attack has vulnerability.
+- **Order's Demand** (Order, TCoE) — Wis-save charm to all in 30 ft until end of next turn.
+- **Charm Animals and Plants** (Nature) — Wis-save charm vs beasts/plants in 30 ft for 1 min.
+- **Twilight Sanctuary** (Twilight, TCoE) — 30 ft sphere; allies ending turn inside get 1d6+lv temp HP or end charmed/frightened.
+
+**Description (cont 2):** All eight entries are **announce-only** (same convention as Turn Undead / Preserve Life): the picker surfaces the option, the player clicks, the chip flips, the broadcast announces in the roll log; the GM applies the mechanical effect manually. RAW-accurate text in each `desc` field gives the GM + player enough to adjudicate without leaving the chat card. No demo coverage — Tavik is Life Domain so these new entries land for homebrew / custom Clerics; the picker filter ensures Life Domain clerics see only their existing Turn Undead + Preserve Life pair.
+**Description (cont 3):** Lv 6 follow-ups deferred. Knowledge's Read Thoughts and Trickery's Cloak of Shadows are Lv 6+ CD options. The picker today has no level-gate (it filters by class + subclass only), so adding Lv 6 entries would surface them to Lv 2-5 clerics too — RAW-wrong but acceptable. Filed for a future commit that adds an `unlock_level` field on individual options + teaches the picker to honor it.
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.56.1` after `docker compose up -d --build app`. (b) Smoke check via the picker code path: subclass `"knowledge domain"` lowercase + `indexOf("knowledge")` = 0 = match. Same for tempest / trickery / forge / grave / order / nature / twilight. (c) No harness re-run needed — no Python or endpoint surface changed; the JS picker filter is the only consumer.
+
+### Added
+- 8 Cleric Channel Divinity option entries in `dnd5e_feature_economy.js`: `knowledge-of-the-ages`, `destructive-wrath`, `invoke-duplicity`, `artisans-blessing`, `path-to-the-grave`, `orders-demand`, `charm-animals-and-plants`, `twilight-sanctuary`.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.56.1`.
+- `README.md` version badge → `2.56.1`.
+- `docs/plans/class-content-status.md` — Cleric Lv 2 Channel Divinity note expanded with the v2.56.1 domain-coverage roster.
+
+### Notes
+- **Coverage status by Cleric domain after this commit**: Life (Turn Undead + Preserve Life — auto), Light (+ Radiance of the Dawn), War (+ Guided Strike), Knowledge / Tempest / Trickery / Forge / Grave / Order / Nature / Twilight (+ one each). Death / Arcana / Peace domains still uncovered — they're less common and filed for a future commit if user demand surfaces. The Death Domain in particular needs careful handling (Reaper at Lv 1 changes spell-attack mechanics — out of scope for a CD-option-only pass).
+- **Why no level-gate on Lv 6 options now**. The picker filter is class+subclass only. Adding an `unlock_level` per option would need the picker to read the character's level (already accessible via the existing `classEntries` walker) + skip options whose `unlock_level` exceeds it. Single-line conditional, but worth shipping as its own commit alongside the Lv 6 option content so the changes are reviewable together.
+
+---
+
 ## [2.56.0] - 2026-05-25 — "Iron Will"
 
 **Schema version:** 57
