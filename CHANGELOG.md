@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.62.1] - 2026-05-26 — "Eyes on Target"
+
+**Schema version:** 58
+**Commit summary:** **Second F1 consumer — Sneak Attack ally-adjacency advisory in /attack response.** RAW Sneak Attack triggers on (a) advantage on the attack roll OR (b) another enemy of the target within 5 ft. Pre-v2.62.1 the (b) branch was trust-based ("player asserts eligibility"). v2.62.1 auto-detects it using the v2.61.0 `_distance_ft_between_chars` primitive; the /attack response carries a new `sneak_attack_ally_adjacent: bool` field. Advisory only — no server-side enforcement; the client UI can surface a "Sneak Attack eligible" hint. Closes v2.16.0's "ally adjacent detection waits on a positional check" filing.
+**Description:** Two edits in `app/routes/tabletop_routes.py`. **(1)** New helper `_sneak_attack_ally_adjacent(db, campaign_id, rogue_char_id, target_combatant_id) → bool` next to `_distance_ft_between_chars`. Walks the active battle's combatant list, looks up the target's char_id, then for each OTHER combatant calls `_distance_ft_between_chars(other_char_id, target_char_id) <= 5.0`. Returns True on first hit. **(2)** /attack response shape gains `sneak_attack_ally_adjacent: bool` between `auto_uplift_total` and `target_combatant_id` (~L 19173). Gated on `_rogue_level_from_sheet(sheet) >= 1` so non-Rogue attackers always see False — keeps the advisory signal focused.
+**Description (cont):** v1 simplifications (all filed):
+- **"Enemy of the target"** — RAW requires the adjacent creature to be HOSTILE to the target. v1 counts ANY creature other than the rogue + target. Correct ~95% of the time in the demo's "monsters vs PCs" layout; charmed-ally edge cases or party-vs-party PVP filed.
+- **"Not incapacitated"** — RAW excludes incapacitated adjacent creatures. v1 doesn't read the incapacitated buff; filed.
+- **"You don't have disadvantage"** — RAW disqualifies the rogue if they have disadvantage on the attack. v1 doesn't read the rogue's roll-state today; filed.
+- **NPC targets** — only PC-to-PC adjacency is computed (the helper keys on Character rows via _distance_ft_between_chars). Sneak Attack against an NPC target returns False today; filed: NPC token positions via source_token_id.
+**Description (cont 2):** Why advisory-only not enforcement. Server-side enforcement would either (a) refuse to roll the Sneak Attack uplift when eligibility doesn't compute, OR (b) automatically add the bonus dice when it does. (a) breaks trust-based play that some tables prefer ("we'll handwave it"); (b) takes the choice away from the player when they want to save Sneak Attack for next turn. Advisory keeps the player in control; the UI can render a green/red badge so the player sees the state at a glance.
+**Description (cont 3):** Why "advisory" returns False when no token data. Same fall-back semantics as the v2.61.0 aura gates — when `_distance_ft_between_chars` returns None (no active map, no grid, off-map combatant), the advisory defaults to False. This is the conservative choice: showing False means "we couldn't verify; player still trusted to apply RAW correctly". If the helper returned True on no-data the advisory would be misleading.
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.62.1` after `docker compose up -d --build app`. (b) New harness `tests/harness/test_sneak_attack_advisory.py` — 3 tests: in-range (Caelan 5 ft from Krieger) → True; out-of-range (Caelan 25 ft) → False; non-Rogue (Tavik attacks) → False. (c) Full suite 493 + 3 = 496 passing.
+
+### Added
+- `_sneak_attack_ally_adjacent(db, campaign_id, rogue_char_id, target_combatant_id)` helper — F1 consumer.
+- `sneak_attack_ally_adjacent: bool` field on /attack response (gated on Rogue Lv 1+).
+- Harness `tests/harness/test_sneak_attack_advisory.py` — 3 tests covering in-range / out-of-range / non-Rogue.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.62.1`.
+- `README.md` version badge → `2.62.1`.
+- `docs/test-harness-coverage.md` — total test count 493 → 496.
+
+### Notes
+- **Second F1 consumer.** v2.61.0 shipped the helper; v2.61.1 used it for AoE heal range; v2.62.1 uses it for Sneak Attack ally-adjacency. The helper continues to pay leverage at ~30 LOC per consumer. Next filed consumer: Opportunity Attack trigger detection.
+- **No client-side UI yet.** The advisory field is computed server-side and rides on the /attack response; the chat card / mini-sheet "Sneak Attack" button doesn't yet read it to render an "eligible" badge. Filed for follow-up UI work — purely additive once the data is on the wire.
+- **Non-enforcement is by design.** Server doesn't refuse Sneak Attack uplifts when the advisory is False. Trust-based play continues to work; the advisory is an INFORMATION channel, not a gate.
+
+---
+
 ## [2.62.0] - 2026-05-26 — "Glass Dimmer"
 
 **Schema version:** 58

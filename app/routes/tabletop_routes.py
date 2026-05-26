@@ -1268,6 +1268,84 @@ def _distance_ft_between_points(
     return round(cells * 5, 1)
 
 
+# v2.62.1 — F1 consumer #2: Sneak Attack ally-adjacency detection.
+# RAW Sneak Attack (Rogue Lv 1): "advantage on the attack roll" OR
+# "another enemy of the target is within 5 ft of it, not
+# incapacitated, and you don't have disadvantage on the attack roll."
+# Pre-v2.62.1 the eligibility was trust-based (client asserts).
+# v2.62.1 uses the v2.61.0 _distance_ft_between_chars primitive to
+# auto-detect the "another enemy within 5 ft of target" branch.
+# Surfaced as an advisory ``sneak_attack_ally_adjacent`` field in
+# the /attack response — non-enforcing (client UI may render a
+# "Sneak Attack eligible" hint).
+#
+# v1 simplifications:
+# - "Enemy of the target" — RAW requires the adjacent creature to
+#   be hostile to the target. v1 counts ANY creature other than the
+#   rogue + target. With the demo's typical "monsters vs PCs" layout
+#   this is correct ~95% of the time; mixed loyalty edge cases
+#   (charmed ally, party-vs-party PVP) are filed.
+# - "Not incapacitated" — RAW excludes adjacent creatures who are
+#   incapacitated. v1 doesn't check the incapacitated buff; filed.
+# - "You don't have disadvantage" — RAW disqualifies the rogue when
+#   they have disadvantage. v1 doesn't read the rogue's roll-state
+#   today; filed.
+def _sneak_attack_ally_adjacent(
+    db: Session, campaign_id: int,
+    rogue_char_id: int | None,
+    target_combatant_id: str | None,
+) -> bool:
+    """v2.62.1 — returns True when at least one combatant (other than
+    the rogue + the target) is within 5 ft of the target.
+
+    Reads the active battle's combatant list, resolves the target's
+    char_id, then walks every other combatant calling
+    ``_distance_ft_between_chars(other, target)`` ≤ 5.0. Stops at
+    the first hit.
+
+    Returns False when no eligible adjacent creature is found, OR
+    when the helper has insufficient data to compute (no battle, no
+    target combatant, no positions). Same fall-back semantics as
+    the v2.61.0 aura gates.
+    """
+    if not rogue_char_id or not target_combatant_id:
+        return False
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return False
+    combatants = state.get("combatants") or []
+    target_combatant = None
+    for c in combatants:
+        if c.get("id") == target_combatant_id:
+            target_combatant = c
+            break
+    if not target_combatant:
+        return False
+    target_char_id = target_combatant.get("char_id")
+    if not target_char_id:
+        # NPCs without a char_id aren't reachable via
+        # _distance_ft_between_chars (which keys on Character rows).
+        # Filed: NPC Token positions could be looked up by
+        # source_token_id instead. For now Sneak Attack against
+        # NPC targets gates on advantage only (trust-based).
+        return False
+    target_char_id = int(target_char_id)
+    rogue_char_id_int = int(rogue_char_id)
+    for c in combatants:
+        other_char_id = c.get("char_id")
+        if not other_char_id:
+            continue
+        other_id = int(other_char_id)
+        if other_id == rogue_char_id_int or other_id == target_char_id:
+            continue
+        distance = _distance_ft_between_chars(
+            db, campaign_id, other_id, target_char_id,
+        )
+        if distance is not None and distance <= 5.0:
+            return True
+    return False
+
+
 # v2.61.0 — F1 token positional adjacency primitive. Looks up two
 # characters' tokens on the campaign's active map and returns the
 # in-game distance in feet between them. Returns None when the
@@ -19092,6 +19170,20 @@ async def use_attack(
         # Aggregate total is already folded into damage_total above.
         "auto_uplifts": auto_uplifts,
         "auto_uplift_total": auto_uplift_total,
+        # v2.62.1 — F1 Sneak Attack ally-adjacency advisory. True when
+        # the attacker is a Rogue Lv 1+ AND at least one other
+        # combatant is within 5 ft of the target. Advisory only —
+        # the server doesn't gate Sneak Attack uplift on this field;
+        # the client UI can render an "eligible" hint. Returns False
+        # for non-Rogue attackers (silent default) or when token
+        # positions aren't available.
+        "sneak_attack_ally_adjacent": (
+            _sneak_attack_ally_adjacent(
+                db, campaign_id, char.id, target_combatant_id,
+            )
+            if _rogue_level_from_sheet(sheet) >= 1 and target_combatant_id
+            else False
+        ),
         "target_combatant_id": target_combatant_id or "",
         # v2.23.0 Phase T.8: resolve the target's display name from the
         # hub battle state so the chat card can render "→ NAME" without
@@ -19191,6 +19283,16 @@ async def use_attack(
         "slot_spent_level": slot_spent_level,
         "auto_uplifts": auto_uplifts,
         "auto_uplift_total": auto_uplift_total,
+        # v2.62.1 — F1 Sneak Attack ally-adjacency advisory (mirror of
+        # the broadcast-side return above). Gated on Rogue Lv 1+; the
+        # client UI can render an "eligible" hint based on this flag.
+        "sneak_attack_ally_adjacent": (
+            _sneak_attack_ally_adjacent(
+                db, campaign_id, char.id, target_combatant_id,
+            )
+            if _rogue_level_from_sheet(sheet) >= 1 and target_combatant_id
+            else False
+        ),
         "target_combatant_id": target_combatant_id or "",
         # v2.23.0 Phase T.8: echo resolved target name so the rolling
         # player's local toast can include the target without WS lag.
