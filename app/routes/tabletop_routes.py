@@ -20405,6 +20405,66 @@ async def use_attack(
     }
 
 
+async def _broadcast_sentinel_attack_triggers_npc(
+    db: Session, campaign_id: int,
+    attacker_combatant_id: str,
+    target_combatant_id: str | None,
+    attack_name: str,
+) -> list[dict]:
+    """v2.66.6 — NPC variant of the v2.66.5 PC helper. Same logic;
+    identifies the attacker by combatant id (NPCs have no char_id)
+    and uses the combatant's `name` as the attacker name in the
+    broadcast desc.
+    """
+    triggers = _check_sentinel_attack_triggers(
+        db, campaign_id, attacker_combatant_id, None, target_combatant_id,
+    )
+    if not triggers:
+        return []
+    attacker_combatant = _lookup_combatant(campaign_id, attacker_combatant_id)
+    attacker_name = ""
+    if attacker_combatant:
+        attacker_name = str(attacker_combatant.get("name") or "")
+    target_name = (
+        _lookup_combatant_name(campaign_id, target_combatant_id)
+        if target_combatant_id else ""
+    )
+    for trig in triggers:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": trig.get("watcher_char_id"),
+                "character_name": trig.get("watcher_name"),
+                "user_color": trig.get("watcher_color"),
+                "feature_name": "⚔ Sentinel reaction available",
+                "feature_desc": (
+                    f"{attacker_name or 'Attacker'} attacked "
+                    f"{target_name or 'another target'} within 5 ft of you. "
+                    f"Sentinel lets you use your reaction to make a melee "
+                    f"attack against them."
+                ),
+                "source": "sentinel-attack-trigger",
+                "watcher_combatant_id": trig.get("watcher_combatant_id"),
+                "watcher_token_id": trig.get("watcher_token_id"),
+                "attacker_combatant_id": attacker_combatant_id,
+                "attacker_name": attacker_name,
+                "attack_name": attack_name,
+                "target_combatant_id": target_combatant_id,
+                "target_name": target_name,
+            },
+        })
+    return [
+        {
+            "watcher_combatant_id": t.get("watcher_combatant_id"),
+            "watcher_name": t.get("watcher_name"),
+            "watcher_char_id": t.get("watcher_char_id"),
+            "watcher_token_id": t.get("watcher_token_id"),
+            "dist_ft": t.get("dist_ft"),
+        }
+        for t in triggers
+    ]
+
+
 async def _broadcast_sentinel_attack_triggers(
     db: Session, campaign_id: int, attacker_char_id: int,
     target_combatant_id: str | None, attack_name: str,
@@ -20718,6 +20778,17 @@ async def use_npc_attack(
         "npc_action_id": action_id,
     }
     await hub.broadcast(campaign_id, {"type": "weapon_attack", "data": payload})
+    # v2.66.6 — Sentinel feat advisory for NPC attacks. Mirrors the
+    # v2.66.5 hook on /attack. Fires when a Sentinel watcher (PC) is
+    # within 5 ft of the NPC attacker and isn't the target.
+    try:
+        _sentinel_triggers_for_response = (
+            await _broadcast_sentinel_attack_triggers_npc(
+                db, campaign_id, combatant_id, target_combatant_id, action_name,
+            )
+        )
+    except Exception:
+        _sentinel_triggers_for_response = []
     return {
         "ok": True,
         "id": attack_id,
@@ -20739,6 +20810,7 @@ async def use_npc_attack(
         "target_hp_after": target_hp_after,
         "auto_applied": bool(campaign.auto_apply_damage),
         "is_npc_attack": True,
+        "sentinel_triggers": _sentinel_triggers_for_response,
     }
 
 

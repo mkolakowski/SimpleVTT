@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.66.6] - 2026-05-26 — "The Sentinel's Watch (NPC Edition)"
+
+**Schema version:** 59
+**Commit summary:** **Sentinel effect 3 wired into `/npc_attack` too.** v2.66.5 added the trigger on `/attack` (PC weapon attacks); this commit adds the parallel hook on `/npc_attack` so a PC Sentinel near a striking NPC still gets the advisory. New `_broadcast_sentinel_attack_triggers_npc(...)` async helper mirrors the PC variant but resolves the attacker by combatant id (NPCs have no `char_id`) and uses the combatant's `name` as the attacker label in the broadcast desc. `/npc_attack` calls the helper just before its return; `sentinel_triggers` appears on the response identically to the `/attack` path.
+**Description:** Two edits in `app/routes/tabletop_routes.py`. **(1)** New `_broadcast_sentinel_attack_triggers_npc(db, campaign_id, attacker_combatant_id, target_combatant_id, attack_name)` async helper. Calls `_check_sentinel_attack_triggers` (unchanged from v2.66.5 — already accepts both attacker_combatant_id and attacker_char_id) with the combatant id branch. Looks up the attacker combatant via `_lookup_combatant` for the attacker name; everything else mirrors the PC variant. **(2)** `/npc_attack` (~L 20780) calls the NPC variant just before the return, catches exceptions to a sentinel-empty list (defensive), and adds `sentinel_triggers` to the response dict. Symmetric to the v2.66.5 `/attack` integration.
+**Description (cont):** Still filed:
+- **Spell attacks (/cast_spell, /npc_cast_spell)**. RAW Sentinel fires on any attack including spell-attack rolls; v1 only weapon attacks. Same helper would extend with `attacker_char_id` (PC casters) or `attacker_combatant_id` (NPC casters). Filed.
+- **Effect 1 (OA-hit speed-0)**, **Effect 2 (Disengage bypass denial)** — still filed pending auto-fire / Disengage modeling.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.66.6` after `docker compose up -d --build app`. (b) New test `test_sentinel_fires_on_npc_attack` — creates a Bandit template via SRD slug, spawns a token, seeds battle with the bandit attacking Pip + Tavik 5 ft from the bandit, asserts `sentinel_triggers` includes Tavik + broadcast desc mentions "Bandit". (c) Suite count 517 + 1 = 518.
+
+### Added
+- `_broadcast_sentinel_attack_triggers_npc(...)` async helper — NPC variant of the v2.66.5 PC wrapper.
+- `sentinel_triggers` field on `/npc_attack` response.
+- Harness `test_sentinel_fires_on_npc_attack` — covers the new path end-to-end (NPC token spawn + battle seed + attack + assertions).
+
+### Changed
+- `/npc_attack` calls `_broadcast_sentinel_attack_triggers_npc` just before its return.
+- `app/version.py` `APP_VERSION` → `2.66.6`.
+- `README.md` version badge → `2.66.6`.
+- `docs/plans/class-content-status.md` — Sentinel filing note reflects /npc_attack landed; only spell-attack hook remains.
+- `docs/test-harness-coverage.md` — total test count 517 → 518.
+
+### Notes
+- **Spell-attack hook still filed.** Same helper works; needs the call site added in `/cast_spell` + `/npc_cast_spell`.
+- **Effects 1 + 2 still filed.** Both blocked on infrastructure (auto-fire, Disengage modeling).
+
+---
+
 ## [2.66.5] - 2026-05-26 — "The Sentinel's Watch"
 
 **Schema version:** 59

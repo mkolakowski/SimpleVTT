@@ -828,3 +828,113 @@ async def test_sentinel_skips_without_feat_flag(
     assert not triggers, (
         f"Sentinel should NOT fire without the feat flag; got {triggers}"
     )
+
+
+async def test_sentinel_fires_on_npc_attack(
+    gm_client, gm_ws, roster,
+):
+    """v2.66.6 — Sentinel effect 3 wired into /npc_attack too. A
+    bandit NPC strikes Pip; Tavik (PC sentinel) is 5 ft from the
+    bandit. /npc_attack response carries sentinel_triggers + the
+    feature_used broadcast fires.
+    """
+    pip = roster["Pip Quickfingers"]
+    tavik = roster["Brother Tavik Stonebrow"]
+
+    # Create a bandit template + token, place it at (350, 350).
+    tmpl_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/templates",
+        json={
+            "name": "Bandit (Sentinel test)",
+            "template": "dnd5e",
+            "tags": ["npc", "harness"],
+            "sheet": {"monster_slug": "bandit"},
+        },
+    )
+    assert tmpl_resp.status_code == 200, tmpl_resp.text
+    tmpl = tmpl_resp.json()
+    tok_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/tokens",
+        json={
+            "token_template_id": tmpl["id"],
+            "label": "Bandit",
+            "x": 350.0,
+            "y": 350.0,
+            "color": "#a23030",
+            "size": 1,
+        },
+    )
+    assert tok_resp.status_code == 200, tok_resp.text
+    bandit_tok = tok_resp.json()
+
+    # Place Tavik 5 ft east of the bandit; Pip 5 ft south (target).
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    await _place_token(gm_client, pip["id"], 350.0, 420.0)
+
+    # Seed battle: bandit NPC (with source_token_id), Tavik (sentinel),
+    # Pip (target). The bandit combatant has no char_id — pure NPC.
+    bandit_combatant_id = "tok_oa_bandit_sent"
+    tavik_combatant = _make_combatant(tavik["name"], tavik["id"], init=8)
+    tavik_combatant["sentinel"] = True
+    await _seed_battle(gm_client, [
+        {
+            "id": bandit_combatant_id,
+            "char_id": None,
+            "source_token_id": bandit_tok["id"],
+            "token_template_id": tmpl["id"],
+            "name": "Bandit",
+            "initiative": 12,
+            "hp_current": 11, "hp_max": 11,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+        _make_combatant(pip["name"], pip["id"], init=10),
+        tavik_combatant,
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    pip_combatant_id = f"tok_oa_{pip['id']}"
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/npc_attack",
+        json={
+            "combatant_id": bandit_combatant_id,
+            "action_id": "scimitar",
+            "action_name": "Scimitar",
+            "attack_bonus": "+3",
+            "damage": "1d6+1",
+            "damage_type": "slashing",
+            "range": "5 ft",
+            "target_combatant_id": pip_combatant_id,
+            "override_range": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    triggers = [
+        t for t in (data.get("sentinel_triggers") or [])
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert triggers, (
+        f"expected Sentinel trigger on NPC attack; got "
+        f"sentinel_triggers={data.get('sentinel_triggers')}"
+    )
+
+    await asyncio.sleep(0.2)
+    sentinel_msgs = _sentinel_broadcasts(gm_ws)
+    tv_msgs = [
+        m for m in sentinel_msgs
+        if (m.get("data") or {}).get("character_id") == tavik["id"]
+    ]
+    assert tv_msgs, (
+        f"expected sentinel-attack-trigger broadcast for Tavik on NPC "
+        f"attack; got: "
+        f"{[(m.get('data') or {}).get('character_name') for m in sentinel_msgs]}"
+    )
+    desc = (tv_msgs[0].get("data") or {}).get("feature_desc") or ""
+    assert "Bandit" in desc, (
+        f"broadcast desc should name the bandit attacker; got {desc!r}"
+    )

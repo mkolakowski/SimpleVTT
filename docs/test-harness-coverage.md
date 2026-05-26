@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 517 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.66.5, 2026-05-26).
+**Total tests:** 518 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.66.6, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -775,6 +775,7 @@ v2.66.0 — F1 follow-ups: Aura conscious-check + Opportunity Attack trigger. `_
 | `test_sentinel_fires_when_ally_attacks_target_near_watcher` | v2.66.5 — Tavik flagged with `sentinel=True`; placed 5 ft from Krieger. Krieger attacks Pip → `sentinel_triggers` lists Tavik + broadcast `feature_used(source=sentinel-attack-trigger)` desc references "Sentinel". |
 | `test_sentinel_skips_when_watcher_is_the_target` | Control — Krieger attacks Tavik (the sentinel) directly → no trigger (RAW: watcher must not be the target). |
 | `test_sentinel_skips_without_feat_flag` | Control — same geometry without the `sentinel` flag → no trigger. |
+| `test_sentinel_fires_on_npc_attack` | v2.66.6 — Bandit NPC (SRD slug) spawned via TokenTemplate + `/npc_attack` against Pip, Tavik (sentinel) 5 ft from the bandit → response carries `sentinel_triggers` + broadcast desc names the bandit. |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.
