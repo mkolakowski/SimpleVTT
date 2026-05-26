@@ -1444,6 +1444,40 @@ def _distance_ft_between_chars(
 #     the attack. Player UI decides whether to spend.
 #   - Watchers whose reaction is already used in this round are
 #     skipped (no spam broadcasts).
+# v2.66.4 — Polearm Master feat detection. RAW (PHB feat):
+# "While you are wielding a glaive, halberd, pike, quarterstaff, or
+# spear, other creatures provoke an opportunity attack from you when
+# they enter your reach." Returns True when the combatant has the
+# feat set: either an explicit ``polearm_master: True`` on the
+# combatant dict (GM flag for NPCs) or a PC sheet with a
+# ``feats`` entry whose slug normalizes to "polearm-master".
+def _combatant_has_polearm_master(
+    db: Session, combatant: dict,
+) -> bool:
+    explicit = combatant.get("polearm_master")
+    if explicit is not None:
+        return bool(explicit)
+    char_id = combatant.get("char_id")
+    if char_id:
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(char_id),
+            ).first()
+        except Exception:
+            char = None
+        if char and char.sheet:
+            for f in (char.sheet.get("feats") or []):
+                if not isinstance(f, dict):
+                    continue
+                slug = (f.get("slug") or "").strip().lower()
+                if slug == "polearm-master":
+                    return True
+                name = (f.get("name") or "").strip().lower().replace(" ", "-")
+                if name == "polearm-master":
+                    return True
+    return False
+
+
 # v2.66.2 — Regex for NPC monster action desc strings. The SRD
 # convention is "reach N ft." (e.g. "Melee Weapon Attack: +8 to hit,
 # reach 10 ft., one target."). Pulls the first integer after "reach"
@@ -1662,6 +1696,7 @@ def _check_opportunity_attack_triggers(
             grid_size_px, grid_type, wx, wy, to_x, to_y,
         )
         reach_ft = _combatant_melee_reach_ft(db, c)
+        # Exit-reach transition (standard OA, every watcher).
         if dist_from <= reach_ft and dist_to > reach_ft:
             triggers.append({
                 "watcher_combatant_id": c.get("id"),
@@ -1672,7 +1707,27 @@ def _check_opportunity_attack_triggers(
                 "watcher_reach_ft": reach_ft,
                 "dist_from_ft": dist_from,
                 "dist_to_ft": dist_to,
+                "trigger_type": "exit",
             })
+            continue
+        # v2.66.4 — Polearm Master enter-reach OA. Fires when a
+        # creature ENTERS the watcher's reach (the inverse of the
+        # exit transition). Only watchers with the Polearm Master
+        # feat trigger this; standard combatants don't get OA on
+        # entry. The watcher's reach is still per-combatant.
+        if dist_from > reach_ft and dist_to <= reach_ft:
+            if _combatant_has_polearm_master(db, c):
+                triggers.append({
+                    "watcher_combatant_id": c.get("id"),
+                    "watcher_name": c.get("name") or "Combatant",
+                    "watcher_char_id": c.get("char_id"),
+                    "watcher_color": c.get("color"),
+                    "watcher_token_id": int(watcher_token.id),
+                    "watcher_reach_ft": reach_ft,
+                    "dist_from_ft": dist_from,
+                    "dist_to_ft": dist_to,
+                    "trigger_type": "enter",
+                })
     return triggers
 
 
@@ -6456,19 +6511,35 @@ async def move_token(
         reach_display = (
             int(reach_ft) if float(reach_ft).is_integer() else reach_ft
         )
+        trigger_type = trig.get("trigger_type") or "exit"
+        if trigger_type == "enter":
+            # v2.66.4 — Polearm Master enter-reach OA. Different chat
+            # card copy makes the source crystal clear.
+            feature_name = (
+                "⚔ Opportunity Attack triggered (Polearm Master)"
+            )
+            feature_desc = (
+                f"{mover_name} entered {trig.get('watcher_name')}'s "
+                f"{reach_display} ft polearm reach. Polearm Master lets "
+                f"you use your reaction to make a melee attack on entry."
+            )
+        else:
+            feature_name = "⚔ Opportunity Attack triggered"
+            feature_desc = (
+                f"{mover_name} moved out of {trig.get('watcher_name')}'s "
+                f"{reach_display} ft reach. Use your reaction to make a "
+                f"melee attack?"
+            )
         await hub.broadcast(campaign_id, {
             "type": "feature_used",
             "data": {
                 "character_id": trig.get("watcher_char_id"),
                 "character_name": trig.get("watcher_name"),
                 "user_color": trig.get("watcher_color"),
-                "feature_name": "⚔ Opportunity Attack triggered",
-                "feature_desc": (
-                    f"{mover_name} moved out of {trig.get('watcher_name')}'s "
-                    f"{reach_display} ft reach. Use your reaction to make a "
-                    f"melee attack?"
-                ),
+                "feature_name": feature_name,
+                "feature_desc": feature_desc,
                 "source": "opportunity-attack-trigger",
+                "trigger_type": trigger_type,
                 "watcher_combatant_id": trig.get("watcher_combatant_id"),
                 "watcher_token_id": trig.get("watcher_token_id"),
                 "watcher_reach_ft": reach_ft,
@@ -6546,6 +6617,7 @@ async def move_token(
                 "watcher_char_id": t.get("watcher_char_id"),
                 "watcher_token_id": t.get("watcher_token_id"),
                 "watcher_reach_ft": t.get("watcher_reach_ft"),
+                "trigger_type": t.get("trigger_type") or "exit",
             }
             for t in oa_triggers
         ],

@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.66.4] - 2026-05-26 — "The Quarterstaff"
+
+**Schema version:** 59
+**Commit summary:** **Polearm Master enter-reach OA trigger.** RAW: "While you are wielding a glaive, halberd, pike, quarterstaff, or spear, other creatures provoke an opportunity attack from you when they enter your reach." `_check_opportunity_attack_triggers` now detects the INVERSE transition (from > reach, to ≤ reach) and emits a trigger when the watcher has Polearm Master. New `_combatant_has_polearm_master(db, combatant)` helper reads an explicit `polearm_master: True` field on the combatant (GM flag for NPCs) or, for PCs, scans `sheet.feats` for a slug normalizing to "polearm-master". Trigger entries now carry `trigger_type: "exit"` or `"enter"`; the chat-card broadcast renders distinct copy for the enter case ("entered NAME's N ft polearm reach. Polearm Master lets you use your reaction…").
+**Description:** Three blocks of edits in `app/routes/tabletop_routes.py`. **(1)** New `_combatant_has_polearm_master(db, combatant) -> bool` helper. Explicit-override tier reads `combatant["polearm_master"]` first. For PCs, walks `sheet.feats` checking `slug == "polearm-master"` (or `name` normalized to the same when no slug). **(2)** `_check_opportunity_attack_triggers` gains an enter-reach branch after the exit branch (mutually exclusive — a single token move can only be one or the other for a given watcher). Enter-reach triggers carry `trigger_type: "enter"` and are gated on the watcher having Polearm Master; exit-reach carry `trigger_type: "exit"` (default for backward compat). **(3)** Move endpoint's broadcast loop branches on `trigger_type`: enter triggers get a "(Polearm Master)" suffix on the feature_name and an "entered NAME's polearm reach" desc; exit triggers keep the v2.66.0 copy.
+**Description (cont):** v1 simplifications still apply (filed):
+- **Polearm wielding not enforced.** RAW Polearm Master requires the watcher to be wielding a glaive/halberd/pike/quarterstaff/spear; v1 trusts the `polearm_master` flag without checking the equipped weapon. A future helper could read `sheet.equipped_weapon` or scan `sheet.attacks` for a polearm slug match.
+- **Sentinel feat not modeled.** Sentinel removes the speed-on-hit penalty + can OA on Disengage; both filed separately.
+- **Quarterstaff caveat.** RAW Polearm Master with a quarterstaff still has 5 ft reach (quarterstaff isn't a reach weapon); the OA fires at 5 ft. v1 honors whatever reach the watcher resolves to — a Polearm Master with no reach weapon (default 5 ft) still gets enter-reach OA at 5 ft, which matches RAW.
+- **Mutual exclusivity.** A token can't trigger both enter AND exit on a single move (the geometry rules them out), so the `continue` after the exit branch is safe.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.66.4` after `docker compose up -d --build app`. (b) Two new tests in `tests/harness/test_opportunity_attack.py`: `test_oa_polearm_master_fires_on_enter_reach` seeds Tavik with the feat + 10 ft reach + Krieger moves from 15 ft → 10 ft → enter-reach OA fires with `trigger_type="enter"` and broadcast desc mentions "Polearm Master"; `test_oa_enter_reach_skips_without_polearm_master` is the control — same geometry without the feat → no enter trigger. (c) Suite count 512 + 2 = 514.
+
+### Added
+- `_combatant_has_polearm_master(db, combatant) -> bool` helper — explicit override + PC sheet.feats slug detection.
+- Enter-reach branch in `_check_opportunity_attack_triggers` gated on Polearm Master.
+- `trigger_type` field on each trigger entry (`"exit"` default, `"enter"` for Polearm Master).
+- `trigger_type` field on `feature_used(source="opportunity-attack-trigger")` broadcasts.
+- Differentiated chat-card copy for enter vs. exit triggers.
+- Harness `tests/harness/test_opportunity_attack.py` — 2 new tests (`test_oa_polearm_master_fires_on_enter_reach`, `test_oa_enter_reach_skips_without_polearm_master`).
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.66.4`.
+- `README.md` version badge → `2.66.4`.
+- `docs/plans/class-content-status.md` — F1 row reflects Polearm Master landed.
+- `docs/test-harness-coverage.md` — total test count 512 → 514.
+
+### Notes
+- **Polearm wielding not enforced.** GM-set `polearm_master` flag is trusted; weapon check filed.
+- **Sentinel feat still filed.** Removes speed-on-hit penalty + Disengage OA — both separate from this work.
+- **Default 5 ft reach honored.** A PC with Polearm Master + no reach weapon (default 5 ft) still gets enter-reach OA at 5 ft.
+
+---
+
 ## [2.66.3] - 2026-05-26 — "The Pull-Down Menu"
 
 **Schema version:** 59

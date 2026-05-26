@@ -535,3 +535,119 @@ async def test_oa_npc_reach_parses_from_monster_action_desc(
         f"trigger should carry watcher_reach_ft=10.0; got "
         f"{matching[0].get('watcher_reach_ft')!r}"
     )
+
+
+async def test_oa_polearm_master_fires_on_enter_reach(
+    gm_client, gm_ws, roster,
+):
+    """v2.66.4 — Polearm Master enter-reach OA. RAW: "While you are
+    wielding a glaive, halberd, pike, quarterstaff, or spear, other
+    creatures provoke an opportunity attack from you when they enter
+    your reach."
+
+    Tavik seeded with ``polearm_master=True`` and
+    ``melee_reach_ft=10`` (glaive-wielding). Krieger starts 15 ft
+    away (out of reach), moves to 10 ft (enters reach). OA should
+    fire with trigger_type="enter" and the chat card should mention
+    Polearm Master.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+
+    tavik_combatant = _make_combatant(tavik["name"], tavik["id"], init=8)
+    tavik_combatant["polearm_master"] = True
+    tavik_combatant["melee_reach_ft"] = 10.0
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        tavik_combatant,
+    ])
+
+    # Tavik at (350, 350); Krieger starts at (560, 350) — 3 cells
+    # = 15 ft away, OUT of Tavik's 10 ft reach.
+    await _place_token(gm_client, tavik["id"], 350.0, 350.0)
+    await _place_token(gm_client, krieger["id"], 560.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok, "Krieger token must exist"
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Move Krieger 1 cell closer → (490, 350), distance = 2 cells
+    # = 10 ft → exactly within Tavik's 10 ft reach. Enter-reach
+    # transition triggers Polearm Master OA.
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 490.0, "y": 350.0},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    matching = [
+        t for t in (data.get("opportunity_attack_triggers") or [])
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert matching, (
+        f"expected Polearm Master enter-reach OA trigger; "
+        f"got {data.get('opportunity_attack_triggers')}"
+    )
+    assert matching[0].get("trigger_type") == "enter", (
+        f"trigger should carry trigger_type='enter'; got "
+        f"{matching[0].get('trigger_type')!r}"
+    )
+
+    # Broadcast assertions.
+    await asyncio.sleep(0.15)
+    oa_msgs = _oa_broadcasts(gm_ws)
+    tv_msgs = [
+        m for m in oa_msgs
+        if (m.get("data") or {}).get("character_id") == tavik["id"]
+        and (m.get("data") or {}).get("trigger_type") == "enter"
+    ]
+    assert tv_msgs, (
+        f"expected enter-reach feature_used broadcast for Tavik; "
+        f"got: {[(m.get('data') or {}).get('trigger_type') for m in oa_msgs]}"
+    )
+    desc = (tv_msgs[0].get("data") or {}).get("feature_desc") or ""
+    assert "Polearm Master" in desc, (
+        f"broadcast desc should reference Polearm Master; got {desc!r}"
+    )
+
+
+async def test_oa_enter_reach_skips_without_polearm_master(
+    gm_client, gm_ws, roster,
+):
+    """Control: same geometry as the Polearm Master test, but Tavik
+    DOESN'T have the feat. Enter-reach transition should NOT fire
+    an OA — only the standard exit-reach trigger covers normal
+    combatants.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+
+    # Reach 10 ft but no polearm_master flag.
+    tavik_combatant = _make_combatant(tavik["name"], tavik["id"], init=8)
+    tavik_combatant["melee_reach_ft"] = 10.0
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        tavik_combatant,
+    ])
+
+    await _place_token(gm_client, tavik["id"], 350.0, 350.0)
+    await _place_token(gm_client, krieger["id"], 560.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok, "Krieger token must exist"
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 490.0, "y": 350.0},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    matching = [
+        t for t in (data.get("opportunity_attack_triggers") or [])
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert not matching, (
+        f"enter-reach OA should NOT fire without Polearm Master; "
+        f"got {matching}"
+    )
