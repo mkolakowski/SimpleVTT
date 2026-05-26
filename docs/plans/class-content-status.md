@@ -1338,7 +1338,9 @@ gate keyed on `cond.key == "diseased"`.
 Restoration update). Low priority — niche RAW; mostly a content
 hook.
 
-### F6. Magical-vs-mundane-source resistance gating
+### F6. Magical-vs-mundane-source resistance gating — ✅ SHIPPED (v2.63.0)
+
+**Status:** Helper `_resistance_matches_damage` shipped v2.63.0; `is_magical` plumbed through `_apply_damage_to_combatant` → `_resistance_halve_npc`. First consumer **Ki-Empowered Strikes (Monk Lv 6+)** wired. Follow-up consumers (Magic Weapon spell buff, Pact of the Blade, Druid Primal Strike, Improved Divine Smite) filed — each is a single-line addition to `_attack_is_magical`.
 
 **What it is:** A `magical: True` flag on attacks + spells (already
 present on spells implicitly — they're magical); plus a resistance-

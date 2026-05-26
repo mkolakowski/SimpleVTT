@@ -2157,6 +2157,7 @@ async def _apply_damage_to_combatant(
     is_crit: bool = False,
     is_attack: bool = False,
     attack_id: str | None = None,
+    is_magical: bool = False,
 ) -> dict:
     """Apply ``damage_amount`` damage to the target combatant. Two
     paths:
@@ -2297,6 +2298,7 @@ async def _apply_damage_to_combatant(
     # (filed for follow-up).
     applied, resistance_applied = _resistance_halve_npc(
         damage_amount, damage_type, target, db,
+        is_magical=is_magical,
     )
     new_hp = max(0, hp_cur - applied)
     target["hp_current"] = new_hp
@@ -12564,8 +12566,50 @@ def _resistance_halve(
     return damage_amount, False
 
 
+def _resistance_matches_damage(
+    resist_entry: str, damage_type_l: str, *, is_magical: bool,
+) -> bool:
+    """v2.63.0 — F6 magical-source resistance matcher. Returns True
+    when ``resist_entry`` (a resistance string from a template or a
+    buff's ``effects.resistance_to`` list) matches ``damage_type_l``,
+    taking the attack's ``is_magical`` flag into account.
+
+    Recognized resistance shapes (all lowercased, stripped):
+      - ``"bludgeoning"`` — applies to any bludgeoning attack
+        regardless of magical/mundane source.
+      - ``"nonmagical-bludgeoning"`` (hyphenated) — only applies to
+        non-magical sources. Skipped when ``is_magical=True``.
+      - ``"nonmagical bludgeoning"`` (space) — same as hyphenated.
+      - ``"bludgeoning from nonmagical attacks"`` — SRD stat-block
+        phrasing. Same as hyphenated.
+
+    The ``is_magical=True`` flag is set by callers when the attack
+    qualifies as a magical source: spells (RAW: always magical),
+    weapon attacks with a magical weapon, attacks from a class
+    feature that grants magical-source status (Monk Ki-Empowered
+    Strikes Lv 6+, Druid Primal Strike Lv 6+, Warlock Pact of the
+    Blade, etc.).
+    """
+    if not resist_entry or not damage_type_l:
+        return False
+    r = resist_entry.strip().lower()
+    if r == damage_type_l:
+        return True
+    # Nonmagical-X variants — only fire when the attack is NOT magical.
+    nonmagical_variants = (
+        f"nonmagical-{damage_type_l}",
+        f"nonmagical {damage_type_l}",
+        f"{damage_type_l} from nonmagical attacks",
+        f"{damage_type_l} from nonmagical weapons",
+    )
+    if r in nonmagical_variants:
+        return not is_magical
+    return False
+
+
 def _resistance_halve_npc(
     damage_amount: int, damage_type: str, combatant: dict, db: Session,
+    *, is_magical: bool = False,
 ) -> tuple[int, bool]:
     """NPC-side resistance halving. Mirror of ``_resistance_halve``
     for non-PC combatants. The PC path reads ``_buffs_active`` off
@@ -12582,7 +12626,16 @@ def _resistance_halve_npc(
     with the comment "NPCs don't have resistance buffs yet"). A bandit
     with template-listed fire resistance still took full damage from a
     Fireball — the v2.49.107 damage review flagged this as the highest-
-    impact in-play gameplay bug. This helper closes that gap.
+    impact in-play gameplay bug. v2.49.109 closed that gap.
+
+    v2.63.0 (F6): ``is_magical`` kwarg threads the attack's magical-
+    source flag through the helper. Resistance entries phrased as
+    "nonmagical-X" / "nonmagical X" / "X from nonmagical attacks"
+    are SKIPPED when the attack is magical (per RAW: a Werewolf's
+    "resistance to bludgeoning damage from nonmagical attacks"
+    doesn't apply to a Monk Lv 6+ unarmed strike or a Magic Weapon
+    cast greataxe). Falls back to the v2.49.109 behavior (plain
+    type-match) for the non-conditional resistances.
 
     Returns ``(halved, True)`` if matched, else ``(damage_amount, False)``.
     Floor division per RAW. Immunity (sets to 0) and vulnerability
@@ -12597,13 +12650,11 @@ def _resistance_halve_npc(
         tmpl = db.query(TokenTemplate).filter(TokenTemplate.id == tmpl_id).first()
         if tmpl:
             tmpl_sheet = tmpl.sheet or {}
-            perm = [
-                str(r).strip().lower()
-                for r in (tmpl_sheet.get("damage_resistances") or [])
-                if isinstance(r, str)
-            ]
-            if damage_type_l in perm:
-                return damage_amount // 2, True
+            for r in (tmpl_sheet.get("damage_resistances") or []):
+                if isinstance(r, str) and _resistance_matches_damage(
+                    r, damage_type_l, is_magical=is_magical,
+                ):
+                    return damage_amount // 2, True
     # (2) Combatant-level buff resistances. Same dict-shaped
     # ``effects.resistance_to`` contract as PC ``_buffs_active`` buffs.
     for b in (combatant.get("buffs") or []):
@@ -12612,10 +12663,46 @@ def _resistance_halve_npc(
         effects = b.get("effects")
         if not isinstance(effects, dict):
             continue
-        resists = [str(r).strip().lower() for r in (effects.get("resistance_to") or [])]
-        if damage_type_l in resists:
-            return damage_amount // 2, True
+        for r in (effects.get("resistance_to") or []):
+            if isinstance(r, str) and _resistance_matches_damage(
+                r, damage_type_l, is_magical=is_magical,
+            ):
+                return damage_amount // 2, True
     return damage_amount, False
+
+
+def _attack_is_magical(attacker_sheet: dict, attack_name: str) -> bool:
+    """v2.63.0 — F6 magical-source detector. Returns True when the
+    attacker's class/level combination makes this attack count as
+    magical for resistance / immunity purposes.
+
+    Current detectors:
+      - **Ki-Empowered Strikes** (Monk Lv 6+): unarmed strikes count
+        as magical. Matches via ``_monk_level_from_sheet(sheet) >= 6``
+        AND attack_name slug == "unarmed strike" (case-insensitive,
+        whitespace-tolerant).
+
+    Future detectors filed:
+      - **Magic Weapon** spell — caster targets a weapon; weapon
+        gets magical for 1h. Needs a buff carrying the magical flag.
+      - **Pact of the Blade** (Warlock) — pact weapons are magical
+        by default.
+      - **Druid Primal Strike** (Circle of the Moon Lv 6+) — beast-
+        form attacks are magical.
+      - **Monk Lv 6+ ANY martial weapon** — RAW Ki-Empowered Strikes
+        covers monk weapons too, not just unarmed strikes. Filed.
+
+    Returns False for non-matching combinations — callers default to
+    is_magical=False.
+    """
+    if not attacker_sheet or not attack_name:
+        return False
+    attack_slug = attack_name.strip().lower()
+    # Ki-Empowered Strikes (Monk Lv 6+).
+    if _monk_level_from_sheet(attacker_sheet) >= 6:
+        if attack_slug in ("unarmed strike", "unarmed-strike", "unarmed"):
+            return True
+    return False
 
 
 @router.post("/api/campaign/{campaign_id}/use_arcane_recovery")
@@ -18973,10 +19060,19 @@ async def use_attack(
             and (damage_total or 0) + (bonus_damage_total or 0) > 0
         ):
             total_damage = int((damage_total or 0) + (bonus_damage_total or 0))
+            # v2.63.0 — F6 magical-source flag. Lets the resistance
+            # gate skip "nonmagical-X" entries when the attack is
+            # magical (Ki-Empowered Strikes Lv 6+, Magic Weapon spell
+            # buff, Pact of the Blade, etc.). Currently the only
+            # attacker-side detector is Ki-Empowered Strikes — see
+            # `_attack_is_magical` for the full list + filed
+            # follow-ups (Magic Weapon, Pact of the Blade, etc.).
+            attack_is_magical = _attack_is_magical(sheet, name)
             apply_result = await _apply_damage_to_combatant(
                 db, campaign_id, target_combatant,
                 total_damage, damage_type,
                 is_crit=is_crit, is_attack=True, attack_id=attack_id,
+                is_magical=attack_is_magical,
             )
             damage_applied = apply_result["applied"]
             target_hp_before = apply_result["hp_before"]
@@ -19097,6 +19193,7 @@ async def use_attack(
                     int(extra_dmg_total or 0), damage_type,
                     is_crit=extra_is_crit, is_attack=True,
                     attack_id=attack_id,
+                    is_magical=_attack_is_magical(sheet, name),
                 )
                 extra_applied = _ar["applied"]
                 extra_hp_before = _ar["hp_before"]
@@ -19304,6 +19401,11 @@ async def use_attack(
         "target_ac": target_ac,
         "damage_applied": damage_applied,
         "target_hp_after": target_hp_after,
+        # v2.63.0 — echo `target_resistance_applied` on this return
+        # path too (the broadcast-side return at L ~19303 already
+        # included it). Chat-card render reads this to label the
+        # damage as "resisted" or "full".
+        "target_resistance_applied": target_resistance_applied,
         "auto_applied": bool(campaign.auto_apply_damage),
         "attack_name": name,
         "damage_type": damage_type,

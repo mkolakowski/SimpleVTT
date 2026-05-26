@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.63.0] - 2026-05-26 — "Argent Knuckles"
+
+**Schema version:** 58
+**Commit summary:** **F6 framework lands — magical-vs-mundane-source resistance gating + first consumer: Ki-Empowered Strikes (Monk Lv 6+).** Pre-v2.63.0 a creature with "resistance to nonmagical bludgeoning" halved damage from every bludgeoning attack regardless of source. v2.63.0 plumbs an `is_magical` flag through `_apply_damage_to_combatant` → `_resistance_halve_npc`; the resistance gate recognizes `nonmagical-X` / `nonmagical X` / `X from nonmagical attacks` resistance phrasings and skips them when the attacker's class feature makes the attack count as magical. Closes the v2.54.1 Ki-Empowered Strikes "still descriptive" filing.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. **(1)** New `_resistance_matches_damage(resist_entry, damage_type_l, *, is_magical)` helper that handles all 4 phrasings of "nonmagical-X" resistance (hyphenated, space-separated, "from nonmagical attacks", "from nonmagical weapons") AND falls back to plain type-match for non-conditional resistances. **(2)** `_resistance_halve_npc` gains an `is_magical: bool = False` kwarg + reuses the new matcher across both branches (template-listed `damage_resistances` + combatant-level buffs). **(3)** New `_attack_is_magical(attacker_sheet, attack_name) → bool` source-side detector. Returns True for Monk Lv 6+ unarmed strikes (Ki-Empowered Strikes RAW). Other detectors filed: Magic Weapon spell buff, Pact of the Blade (Warlock), Druid Primal Strike (Circle of the Moon Lv 6+), Monk Lv 6+ monk weapons (RAW Ki-Empowered Strikes covers monk weapons too).
+**Description (cont):** Wiring at the use_attack damage call: `_attack_is_magical(sheet, name)` is evaluated and passed as `is_magical=` to BOTH the primary-target `_apply_damage_to_combatant` call (~L 19063) AND the multi-target extras loop call (~L 19191). The /attack response's `target_resistance_applied` field flips from True to False when the magical gate fires — chat-card render reads this directly to show "resistance bypassed" vs "halved".
+**Description (cont 2):** Why NPC-side only. The PC-side `_resistance_halve` reads from `sheet._buffs_active` — PC buffs don't currently carry `nonmagical-X` resistance entries (Stoneskin etc. are pure-type resistance, not source-conditional). Spells like Stoneskin grant "resistance to bludgeoning, piercing, slashing from nonmagical attacks" RAW, but the PC sheet's buff schema today represents this as plain "bludgeoning/piercing/slashing" — filed for follow-up when Stoneskin gets wired. Today's commit keeps the PC path unchanged.
+**Description (cont 3):** Why source-side `_attack_is_magical` rather than a flag on the weapon dict. Weapons don't currently carry a `magical: True` field; adding one requires a content-format migration that's out of scope. The detector approach reads the attacker's sheet for class+level (Monk Lv 6+ → magical for unarmed strikes) — works today without content changes. When Magic Weapon spell lands, it'd install a buff carrying `effects.attacks_count_as_magical: True` that the detector also reads. Pact of the Blade adds a sheet-level boolean. Both pluggable into the existing `_attack_is_magical` body.
+**Description (cont 4):** v1 simplifications (filed):
+- **Spell damage paths not wired**. RAW spells are always magical (the SRD describes most as "magical effects"). The 14 spell-damage `_apply_damage_to_combatant` call sites in this file (`/cast_spell` single, AoE extras, save branches, attack branches, etc.) still default `is_magical=False`. Spells deal magical-type damage anyway (fire/cold/lightning/radiant/etc. — not bludgeoning/piercing/slashing), so the nonmagical-resistance gate rarely matters for spells in practice. Filed for cleanup.
+- **PC-side resistance** (`_resistance_halve`) doesn't yet thread `is_magical` — PC buffs don't carry nonmagical-X today.
+- **Damage immunity** (sets damage to 0) and **vulnerability** (doubles) — already filed; same gate would apply for nonmagical immunity (e.g. Will-o'-Wisp's "immunity to nonmagical attacks").
+**Description (cont 5):** Verification. (a) `curl /version` reports `2.63.0` after `docker compose up -d --build app`. (b) New harness `tests/harness/test_magical_resistance_gate.py` (2 tests): Tavik Warhammer (non-magical) → resistance fires (halved); Kael Unarmed Strike (magical via Ki-Empowered) → resistance bypassed (full damage). Both loop-until-hit since attack rolls can miss. (c) Full suite 496 → 498 passing.
+
+### Added
+- `_resistance_matches_damage(resist_entry, damage_type_l, *, is_magical)` helper — recognizes 4 nonmagical-X resistance phrasings + plain type-match. Skips the nonmagical-conditional variants when `is_magical=True`.
+- `_attack_is_magical(attacker_sheet, attack_name)` source-side detector — currently fires for Monk Lv 6+ Unarmed Strike (Ki-Empowered Strikes).
+- `is_magical: bool = False` kwarg on `_apply_damage_to_combatant`; passed through to `_resistance_halve_npc`.
+- `is_magical=_attack_is_magical(sheet, name)` wired into both /attack damage call sites (primary + extras loop).
+- Harness `tests/harness/test_magical_resistance_gate.py` — 2 tests covering non-magical fires + magical bypasses.
+
+### Changed
+- `_resistance_halve_npc` signature: gained `*, is_magical: bool = False` keyword arg.
+- `app/version.py` `APP_VERSION` → `2.63.0`.
+- `README.md` version badge → `2.63.0`.
+- `docs/test-harness-coverage.md` — total test count 496 → 498.
+- `docs/plans/class-content-status.md` — F6 row in "Missing system frameworks" flips from ⚪ to ✅ shipped; Monk Lv 6 Ki-Empowered Strikes flips from descriptive ✅ to mechanically-wired ✅.
+
+### Notes
+- **First F6 consumer ships with the framework.** Ki-Empowered Strikes is now mechanically gated; Kael's Unarmed Strike against a werewolf-style NPC deals full damage where Tavik's Warhammer is halved.
+- **Filed follow-up consumers** for the same `_attack_is_magical` helper: Magic Weapon spell (1h buff makes any weapon magical), Pact of the Blade (Warlock — pact weapons magical by default), Druid Primal Strike (Circle of the Moon Lv 6+ — beast-form attacks magical), Improved Divine Smite (Paladin Lv 11 — passive +1d8 radiant which is itself magical).
+- **Spell-side `is_magical=True` wiring deferred.** RAW spells are always magical; 14 call sites in `/cast_spell` would each need the kwarg. In practice spell damage rarely hits "nonmagical-X" resistance (spells deal elemental/force/radiant damage, not B/P/S). Filed for a follow-up cleanup commit.
+- **Resistance phrasings**: the matcher recognizes `nonmagical-bludgeoning`, `nonmagical bludgeoning`, `bludgeoning from nonmagical attacks`, and `bludgeoning from nonmagical weapons`. All four shapes appear in SRD monster stat blocks. Add another canonical phrasing to the matcher's `nonmagical_variants` tuple if a new pattern surfaces.
+
+---
+
 ## [2.62.1] - 2026-05-26 — "Eyes on Target"
 
 **Schema version:** 58
