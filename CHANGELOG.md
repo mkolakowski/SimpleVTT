@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.68.4] - 2026-05-26 — "Edge to Edge"
+
+**Schema version:** 60
+**Commit summary:** **Both sidebars get more breathing room toward the browser-window edges + the right sidebar matches the left's auto-hide scrollbar pattern.** Three coordinated CSS/JS tweaks in `app/templates/tabletop.html`. (1) Left-side roll log: card horizontal padding 10 → 6 px so cards sit closer to the browser's left edge; the dice-roller wrapper's inline padding also drops 10 → 6 px so the two surfaces keep their flush alignment. (2) Right-side sidebar (Battle / Characters / Settings / GM Tools / right-side Roll Log): scrollbar moves from the right edge to the LEFT edge of the panel (toward the canvas, inner side) via the `direction: rtl` flip with `direction: ltr` on direct children. (3) Right-side sidebar `.drawer-body` padding goes `10px 14px` → `10px 14px left / 6px right` so cards sit closer to the browser's right edge. Same auto-hide / scroll-reveal pattern applies — transparent thumb until panel hover OR active scroll (JS `.scrolling` class).
+**Description:** Three blocks of edits, all in `app/templates/tabletop.html`. **(1)** `#roll-log-drawer .drawer-body` `padding-left/right: 10px → 6px`. The inline dice-roller wrapper at the bottom of the roll log drawer (now class `roll-log-dice-wrap`) drops its `padding:8px 10px 10px` → `padding:8px 6px 10px` so it matches. **(2)** New rule block: `.drawer-sidebar:not(.drawer-sidebar--left) .drawer-body` gets `direction: rtl` + `padding-left: 14px / padding-right: 6px` + `scrollbar-color: transparent transparent` (auto-hide default). Children get `direction: ltr` so content reads normally. On `.drawer-panel:hover` and on `.scrolling` the accent-tinted thumb fades in (200 ms transition). **(3)** The JS `_wireScrollReveal` IIFE expanded from "wire just the left roll log" to "wire every `.drawer-body`" so the scroll-reveal class toggles on the right-side bodies too. CSS scopes the actual transparency rules; bodies in drawers that opt out simply ignore the class harmlessly.
+**Description (cont):** Result for users:
+- **Left roll log:** cards + dice roller sit 4 px closer to the screen edge. Scrollbar still on the right (inner) edge, still auto-hides.
+- **Right sidebar:** scrollbar moved from the screen-right edge to the inner left edge (away from the screen border, toward the canvas). Auto-hides until you hover the panel or actively scroll. Cards pushed 8 px to the right so they hug the browser window's right edge.
+**Description (cont 2):** Why scope the right-sidebar treatment via `:not(.drawer-sidebar--left)`. Two sidebars share the same `.drawer-sidebar` base class — left + right. The left already had its own auto-hide rules from v2.68.3. The new rules need to apply only to the right one, which is `.drawer-sidebar` without the `--left` modifier.
+**Description (cont 3):** Verification. (a) `curl /version` reports `2.68.4`. (b) Pure CSS + JS edit; harness suite unaffected. Manual check in the dev container: left roll log cards now slim against the screen edge (with the scrollbar still on the inner right); right-side panels (open Battle / GM Tools) now show their scrollbar on the LEFT, auto-hidden, with cards pushed to the right edge.
+
+### Changed
+- Left-side roll log card padding `10 → 6 px` (matches dice-roller wrapper).
+- Dice-roller wrapper inline padding `10 → 6 px`.
+- Right-side sidebar scrollbar moved to LEFT edge of panel via `direction: rtl`.
+- Right-side sidebar `.drawer-body` padding `10px 14px` → `10px 14px left / 6px right`.
+- Right-side sidebar scrollbar auto-hides; same hover + scroll-reveal pattern as v2.68.3's left treatment.
+- JS `_wireScrollReveal` extended to wire every `.drawer-body` (was left-only).
+- `app/version.py` `APP_VERSION` → `2.68.4`.
+- `README.md` version badge → `2.68.4`.
+
+### Notes
+- **Mobile (≤ 640 px viewport):** the left sidebar is already hidden by the v2.56.3 mobile shim; right-sidebar treatment is unaffected (still uses standard panel layout).
+- **Children flip preserved.** `direction: rtl` on `.drawer-body` + `direction: ltr` on `> *` keeps content rendering LTR while only the scroll gutter moves.
+
+---
+
 ## [2.68.3] - 2026-05-26 — "The Hidden Rail"
 
 **Schema version:** 60

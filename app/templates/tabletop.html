@@ -131,13 +131,15 @@
        (transparent thumb until panel hover) so it doesn't compete
        with the cards visually. */
     /* v2.68.3 — left-side roll log: align the roll-list horizontal
-       padding to the dice-roller card wrapper's 10 px so the roll
-       cards and the dice-roller card share a left/right edge. The
-       generic `.drawer-body` 14 px padding still applies to other
-       drawers (Battle / Characters / Settings / GM Tools). */
+       padding to the dice-roller card wrapper so the roll cards and
+       the dice-roller card share a left/right edge.
+       v2.68.4: tightened to 6 px so the cards sit closer to the
+       browser-window left edge (more screen for the map).
+       Dice-roller wrapper's inline padding was also dropped 10→6 px
+       in sync so the two surfaces keep their flush alignment. */
     #roll-log-drawer .drawer-body {
-        padding-left: 10px;
-        padding-right: 10px;
+        padding-left: 6px;
+        padding-right: 6px;
     }
     /* Auto-hide scrollbar for the left-side roll log: invisible by
        default, fades in on panel hover. Same accent colors as the
@@ -173,6 +175,56 @@
             transparent;
     }
     .drawer-sidebar--left #roll-log-drawer .drawer-body.scrolling::-webkit-scrollbar-thumb {
+        background: color-mix(in srgb, var(--accent) 45%, transparent);
+        background-clip: padding-box;
+    }
+
+    /* v2.68.4 — RIGHT sidebar drawer polish (Battle / Characters /
+       Settings / GM Tools / right-side Roll Log).
+       (1) Scrollbar moves to the LEFT edge of the panel (inner side,
+           toward the canvas) via the same direction:rtl trick used
+           historically for the left roll log. Direct children get
+           direction:ltr so content reads normally.
+       (2) Scrollbar auto-hides — transparent by default, fades in
+           on `.drawer-sidebar:not(.drawer-sidebar--left) .drawer-panel:hover`
+           or while actively scrolling (JS adds .scrolling).
+       (3) Padding shrunk on the right side so cards sit closer to
+           the browser-window right edge; padding kept on the left
+           so the (now-left) scrollbar has room to overlay. */
+    .drawer-sidebar:not(.drawer-sidebar--left) .drawer-body {
+        direction: rtl;
+        padding-left: 14px;  /* room for the now-left scrollbar */
+        padding-right: 6px;  /* push cards toward the screen edge */
+        scrollbar-color: transparent transparent;
+        transition: scrollbar-color 0.2s;
+    }
+    .drawer-sidebar:not(.drawer-sidebar--left) .drawer-body > * {
+        direction: ltr;
+    }
+    .drawer-sidebar:not(.drawer-sidebar--left)
+        .drawer-panel:hover .drawer-body {
+        scrollbar-color:
+            color-mix(in srgb, var(--accent) 55%, transparent)
+            transparent;
+    }
+    .drawer-sidebar:not(.drawer-sidebar--left)
+        .drawer-body::-webkit-scrollbar-thumb {
+        background: transparent;
+        transition: background 0.2s;
+    }
+    .drawer-sidebar:not(.drawer-sidebar--left)
+        .drawer-panel:hover .drawer-body::-webkit-scrollbar-thumb {
+        background: color-mix(in srgb, var(--accent) 45%, transparent);
+        background-clip: padding-box;
+    }
+    .drawer-sidebar:not(.drawer-sidebar--left)
+        .drawer-body.scrolling {
+        scrollbar-color:
+            color-mix(in srgb, var(--accent) 55%, transparent)
+            transparent;
+    }
+    .drawer-sidebar:not(.drawer-sidebar--left)
+        .drawer-body.scrolling::-webkit-scrollbar-thumb {
         background: color-mix(in srgb, var(--accent) 45%, transparent);
         background-clip: padding-box;
     }
@@ -1878,7 +1930,7 @@
             {% endfor %}
         </ul>
     </div>
-    <div style="padding:8px 10px 10px;border-top:1px solid var(--border);flex-shrink:0;">
+    <div class="roll-log-dice-wrap" style="padding:8px 6px 10px;border-top:1px solid var(--border);flex-shrink:0;">
         <div style="border:1px solid rgba(167,139,250,.35);border-radius:8px;overflow:hidden;box-shadow:0 3px 14px rgba(0,0,0,.22);">
             <!-- Card header -->
             <div style="display:flex;align-items:center;padding:6px 10px 5px;background:linear-gradient(135deg,rgba(167,139,250,.15),rgba(108,180,255,.10));border-bottom:2px solid var(--accent);">
@@ -3752,19 +3804,23 @@ let CONC_DATA = {{ conc_by_char | tojson }};
        Adds .scrolling for ~1.2 s after a scroll event so the bar
        fades in while the user is actively scrolling, then fades out
        again on idle. CSS handles the visual; this just toggles the
-       class. Skips when the roll log is on the right side (the
-       drawer there has the always-on bar already). */
+       class. v2.68.4: wire EVERY .drawer-body in the post-relocation
+       DOM (left roll log + every right-side panel) so the auto-hide
+       behavior works on both sidebars. CSS scopes the actual
+       transparency rules — this script just toggles the class
+       universally; bodies in drawers that opt out of auto-hide
+       simply ignore the class. */
     (function _wireScrollReveal() {
-        const rollLog = document.getElementById('roll-log-drawer');
-        if (!rollLog || !rollLog.closest('.drawer-sidebar--left')) return;
-        const body = rollLog.querySelector('.drawer-body');
-        if (!body) return;
-        let timer = null;
-        body.addEventListener('scroll', () => {
-            body.classList.add('scrolling');
-            if (timer) clearTimeout(timer);
-            timer = setTimeout(() => body.classList.remove('scrolling'), 1200);
-        }, { passive: true });
+        document.querySelectorAll('.drawer-body').forEach(body => {
+            let timer = null;
+            body.addEventListener('scroll', () => {
+                body.classList.add('scrolling');
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(
+                    () => body.classList.remove('scrolling'), 1200,
+                );
+            }, { passive: true });
+        });
     })();
 
     tabs.forEach(tab => tab.addEventListener('click', () => openPanel(tab.dataset.target)));
