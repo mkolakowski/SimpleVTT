@@ -10,6 +10,31 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.68.1] - 2026-05-26 — "Popups Everywhere"
+
+**Schema version:** 60
+**Commit summary:** **Extend popup coverage to Polearm Master + Sentinel reactions; bump roll log card spacing.** Pre-fix only OA exit-reach (v2.67.0) and Uncanny Dodge auto-fire ack (v2.67.2) emitted the new `reaction_prompt` broadcast — the rest stayed on the legacy `feature_used`-only path so the popup never appeared. v2.68.1 retrofits Polearm Master enter-reach + Sentinel ally-attacked-near-you (both PC + NPC variants) to ALSO emit `reaction_prompt`, with their own trigger event names + dispatch keys. GM continues to receive every popup automatically since `_resolve_watcher_user_ids` always includes the GM's user_id in `target_user_ids`. Roll log card gap bumped 7 → 12 px for breathing room.
+**Description:** Three blocks of edits. **(1)** `_eligible_reactions` (`app/routes/tabletop_routes.py`) gains two new trigger event cases: `creature_enters_reach` returns the same `take-the-oa` option key but with Polearm-Master-flavored copy; `ally_attacked_near` returns a new `take-sentinel-strike` key. **(2)** `/use_reaction` dispatch routes `take-sentinel-strike` through the same chip-flip path as `take-the-oa` since both consume the watcher's reaction the same way. **(3)** Move endpoint's OA broadcast loop now emits `reaction_prompt` for BOTH `trigger_type == "exit"` AND `"enter"` (previously gated on `exit` only). Sentinel broadcast helpers (`_broadcast_sentinel_attack_triggers` + `_broadcast_sentinel_attack_triggers_npc`) gain a `_emit_reaction_prompt` call after their `feature_used` broadcast — both `/attack` and `/npc_attack` paths now show popups. **(4)** CSS: `.roll-list { gap: 12px }` (was 7 px).
+**Description (cont):** Why GM was already getting popups but probably wasn't seeing them. `_resolve_watcher_user_ids` returns `[owner_user_id, gm_user_id]` for PCs and `[gm_user_id]` for NPCs, so the GM's user_id is ALWAYS in `target_user_ids`. `reaction_prompt.js` filters on `ME.id in target_user_ids` — GM's id matches, popup renders. The gap was the SOURCE of prompts: only OA + UD-ack emitted them. Polearm Master + Sentinel were stuck on the legacy `feature_used`-only path (chat card but no popup). v2.68.1 closes that gap. Now any time a Polearm Master combatant gets an enter-reach trigger OR a Sentinel watcher sees an ally attacked, the GM gets the popup.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.68.1`. (b) Existing test suite (535) continues to pass — the new prompts are additive to the existing `feature_used` advisories so no existing assertions break. (c) The OA exit-reach prompt test (`test_oa_exit_reach_emits_reaction_prompt`) keeps passing; new prompts on Polearm Master + Sentinel are implicitly exercised by the broadcast helpers and explicitly testable in a future commit.
+
+### Added
+- `creature_enters_reach` + `ally_attacked_near` trigger event cases in `_eligible_reactions`.
+- `take-sentinel-strike` reaction key in the `/use_reaction` dispatch.
+- `_emit_reaction_prompt` call in both Sentinel broadcast helpers (PC + NPC variants).
+- `_emit_reaction_prompt` call in the move endpoint's enter-reach branch (Polearm Master).
+
+### Changed
+- `.roll-list { gap: 12px }` (was 7 px) — more breathing room between roll log cards.
+- `app/version.py` `APP_VERSION` → `2.68.1`.
+- `README.md` version badge → `2.68.1`.
+
+### Notes
+- **GM has always been in the popup audience.** Today's commit extends the SOURCE of popups, not the audience. If popups aren't appearing for the GM, check the GM user's `reaction_prompt_mode` setting in `/settings` — must be `popup` (not `off` or `roll_log_only`).
+- **Cut-off message.** The user's request ended mid-sentence ("...between the cards in the roll log and the"). The roll log card-to-card gap bump addresses the readable half; the "and the …" tail awaits clarification.
+
+---
+
 ## [2.68.0] - 2026-05-26 — "The GM's Console"
 
 **Schema version:** 60

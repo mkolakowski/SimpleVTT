@@ -2018,6 +2018,34 @@ def _eligible_reactions(
             "available": True,
             "unavailable_reason": None,
         }]
+    # v2.68.1 — Polearm Master enter-reach. Same option key as the
+    # exit-reach trigger (same mechanic, same dispatch handler) but
+    # different copy + trigger event so the prompt summary can
+    # explain the Polearm-Master-specific provoke.
+    if trigger_event == "creature_enters_reach":
+        return [{
+            "key": "take-the-oa",
+            "label": "⚔ Take the Opportunity Attack (Polearm Master)",
+            "kind": "implicit",
+            "resource_cost": "Reaction",
+            "params": {},
+            "available": True,
+            "unavailable_reason": None,
+        }]
+    # v2.68.1 — Sentinel ally-attacked-near-you. Different option key
+    # (`take-sentinel-strike`) so the dispatch can distinguish it
+    # from an OA if needed in future phases; today both flow through
+    # the same chip-flip path.
+    if trigger_event == "ally_attacked_near":
+        return [{
+            "key": "take-sentinel-strike",
+            "label": "⚔ Take the Sentinel reaction (melee attack)",
+            "kind": "implicit",
+            "resource_cost": "Reaction",
+            "params": {},
+            "available": True,
+            "unavailable_reason": None,
+        }]
     # v2.67.2 Phase 2a — Uncanny Dodge auto-fire announcement.
     # The trigger fires AFTER the v2.49.243 auto-halve has already
     # happened (server applies the half + marks the reaction). The
@@ -6985,28 +7013,39 @@ async def move_token(
         # advisory for backward compat (existing harness tests +
         # chat-card render path); the new broadcast adds the
         # popup + roll-log "Take the OA" button path.
-        if trigger_type == "exit":
-            watcher_combatant = None
-            for c in (hub.get_battle(campaign_id) or {}).get(
-                "combatants", []
-            ) or []:
-                if c.get("id") == trig.get("watcher_combatant_id"):
-                    watcher_combatant = c
-                    break
-            if watcher_combatant is not None:
-                try:
-                    await _emit_reaction_prompt(
-                        db, campaign, watcher_combatant,
-                        trigger_event="creature_exits_reach",
-                        summary=feature_desc,
-                        context={
-                            "mover_token_id": int(token.id),
-                            "mover_name": mover_name,
-                            "watcher_reach_ft": reach_ft,
-                        },
-                    )
-                except Exception:
-                    pass
+        # v2.68.1 — emit the reaction prompt for BOTH exit (OA) and
+        # enter (Polearm Master) transitions so the GM + the watcher's
+        # owning user get a popup either way. The prompt's trigger
+        # event name + context distinguishes the two so the player UI
+        # can adapt copy if needed; v1's `_eligible_reactions` returns
+        # the same "take-the-oa" option for either transition since
+        # the reaction mechanic (one melee attack) is identical.
+        watcher_combatant = None
+        for c in (hub.get_battle(campaign_id) or {}).get(
+            "combatants", []
+        ) or []:
+            if c.get("id") == trig.get("watcher_combatant_id"):
+                watcher_combatant = c
+                break
+        if watcher_combatant is not None:
+            try:
+                if trigger_type == "exit":
+                    _evt = "creature_exits_reach"
+                else:  # "enter" — Polearm Master
+                    _evt = "creature_enters_reach"
+                await _emit_reaction_prompt(
+                    db, campaign, watcher_combatant,
+                    trigger_event=_evt,
+                    summary=feature_desc,
+                    context={
+                        "mover_token_id": int(token.id),
+                        "mover_name": mover_name,
+                        "watcher_reach_ft": reach_ft,
+                        "trigger_type": trigger_type,
+                    },
+                )
+            except Exception:
+                pass
 
     # v2.8.0: strict-mode movement audit. When the campaign has
     # strict_action_economy on AND this drag pushes the combatant past
@@ -12314,15 +12353,15 @@ async def use_reaction(
     # extend this table. v2.67.3 extends the slot-flip to NPC
     # watchers — PCs use the character_id-keyed helper, NPCs use
     # the combatant_id-keyed helper.
-    if reaction_key == "take-the-oa":
+    if reaction_key in ("take-the-oa", "take-sentinel-strike"):
+        # Both reactions consume the watcher's reaction slot the
+        # same way; the option-key distinction is for telemetry +
+        # future per-reaction handlers.
         if watcher_char_id:
-            # PC watcher: PC's character_id keys the slot flip.
             await _mark_battle_economy(
                 campaign_id, int(watcher_char_id), "reaction",
             )
         else:
-            # NPC watcher: combatant_id keys the slot flip directly
-            # on the hub combatant since there's no Character row.
             watcher_combatant_id = entry.get("watcher_combatant_id")
             if watcher_combatant_id:
                 await _mark_battle_economy_by_combatant_id(
@@ -21199,6 +21238,37 @@ async def _broadcast_sentinel_attack_triggers_npc(
                 "target_name": target_name,
             },
         })
+        # v2.68.1 — NPC variant: emit reaction_prompt too.
+        try:
+            state = hub.get_battle(campaign_id) or {}
+            watcher_cb = None
+            for c in (state.get("combatants") or []):
+                if c.get("id") == trig.get("watcher_combatant_id"):
+                    watcher_cb = c
+                    break
+            if watcher_cb is not None:
+                campaign_row = db.query(Campaign).filter(
+                    Campaign.id == campaign_id,
+                ).first()
+                if campaign_row:
+                    await _emit_reaction_prompt(
+                        db, campaign_row, watcher_cb,
+                        trigger_event="ally_attacked_near",
+                        summary=(
+                            f"{attacker_name or 'Attacker'} attacked "
+                            f"{target_name or 'someone'} within 5 ft of "
+                            f"{trig.get('watcher_name') or 'you'}."
+                        ),
+                        context={
+                            "attacker_combatant_id": attacker_combatant_id,
+                            "attacker_name": attacker_name,
+                            "attack_name": attack_name,
+                            "target_combatant_id": target_combatant_id,
+                            "target_name": target_name,
+                        },
+                    )
+        except Exception:
+            pass
     return [
         {
             "watcher_combatant_id": t.get("watcher_combatant_id"),
@@ -21264,6 +21334,40 @@ async def _broadcast_sentinel_attack_triggers(
                 "target_name": target_name,
             },
         })
+        # v2.68.1 — also emit a reaction_prompt so the watcher's
+        # owning user + the GM get a popup with a "Take the Sentinel
+        # melee attack" button. Legacy feature_used above still fires
+        # for the chat-card path; this adds the prompt path.
+        try:
+            state = hub.get_battle(campaign_id) or {}
+            watcher_cb = None
+            for c in (state.get("combatants") or []):
+                if c.get("id") == trig.get("watcher_combatant_id"):
+                    watcher_cb = c
+                    break
+            if watcher_cb is not None:
+                campaign_row = db.query(Campaign).filter(
+                    Campaign.id == campaign_id,
+                ).first()
+                if campaign_row:
+                    await _emit_reaction_prompt(
+                        db, campaign_row, watcher_cb,
+                        trigger_event="ally_attacked_near",
+                        summary=(
+                            f"{attacker_name or 'Attacker'} attacked "
+                            f"{target_name or 'someone'} within 5 ft of "
+                            f"{trig.get('watcher_name') or 'you'}."
+                        ),
+                        context={
+                            "attacker_char_id": attacker_char_id,
+                            "attacker_name": attacker_name,
+                            "attack_name": attack_name,
+                            "target_combatant_id": target_combatant_id,
+                            "target_name": target_name,
+                        },
+                    )
+        except Exception:
+            pass
     return [
         {
             "watcher_combatant_id": t.get("watcher_combatant_id"),

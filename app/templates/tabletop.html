@@ -261,7 +261,11 @@
     }
 
     /* ── Roll log cards ── */
-    .roll-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+    /* v2.68.1: roll log card gap bumped 7 → 12 px so cards have more
+       visual breathing room. Tight gap from v2.51.x worked when the
+       cards were monolithic; now that they carry chip rows + buttons +
+       reaction prompts the extra space scans better. */
+    .roll-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
     .roll-list li { padding: 0; border: none; }
 
     .roll-card {
