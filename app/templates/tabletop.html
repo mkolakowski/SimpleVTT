@@ -3078,6 +3078,158 @@
                 <a href="/campaign/{{ campaign.id }}/settings" class="btn-link" style="flex-shrink:0;font-size:12px;">⚙ Settings</a>
             </div>
         </div>
+        {# v2.68.0 — GM Reactions Panel.
+           Lists every combatant in init with reaction-bearing
+           features / feats / spells / monster reactions. One click
+           on a button calls /spend_reaction_manual which marks the
+           reaction chip + broadcasts a feature_used card. #}
+        <details id="gm-reactions-panel" class="gm-panel">
+            <summary>
+                <span class="rxn-chevron" style="font-size:9px;color:var(--fg-mute);transition:transform .15s;">▼</span>
+                <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚡ Reactions</h4>
+                <span id="rxn-count-chip" title="Combatants with reactions available" style="margin-left:auto;font-size:9px;padding:1px 6px;border-radius:8px;background:#2a3a4a;color:#9bc;border:1px solid #4a6a8a;display:none;"></span>
+            </summary>
+            <div class="gm-panel-body">
+                <p style="font-size:10px;color:var(--fg-mute);margin:0 0 8px 0;line-height:1.4;">
+                    Every combatant's available reactions. Click to spend — flips the reaction chip + posts a chat card. GM-only.
+                </p>
+                <div id="gm-reactions-list" style="font-size:11px;color:var(--fg);">
+                    <em style="color:var(--fg-mute);">No active battle.</em>
+                </div>
+            </div>
+        </details>
+        <script>
+        (function () {
+            if (!window.ME || !ME.isGm) return;  // GM-only panel
+            const panel = document.getElementById('gm-reactions-panel');
+            if (!panel) return;
+            const list = document.getElementById('gm-reactions-list');
+            const chip = document.getElementById('rxn-count-chip');
+            const chevron = panel.querySelector('.rxn-chevron');
+            const cid = (typeof CAMPAIGN_ID === 'number') ? CAMPAIGN_ID : null;
+            if (cid == null) return;
+
+            // Toggle chevron rotation on expand.
+            panel.addEventListener('toggle', () => {
+                if (chevron) {
+                    chevron.style.transform = panel.open ? 'rotate(-90deg)' : 'rotate(0deg)';
+                }
+                if (panel.open) refresh();
+            });
+
+            async function refresh() {
+                try {
+                    const resp = await fetch(`/api/campaign/${cid}/available_reactions`, {
+                        credentials: 'same-origin',
+                    });
+                    if (!resp.ok) {
+                        list.innerHTML = `<em style="color:var(--fg-mute);">Unable to load reactions (${resp.status}).</em>`;
+                        return;
+                    }
+                    const data = await resp.json();
+                    const cbs = data.combatants || [];
+                    chip.style.display = cbs.length ? '' : 'none';
+                    const available = cbs.filter(c => !c.reaction_used);
+                    chip.textContent = `${available.length} available`;
+                    if (!cbs.length) {
+                        list.innerHTML = '<em style="color:var(--fg-mute);">No combatants with reactions are in the active battle.</em>';
+                        return;
+                    }
+                    list.innerHTML = cbs.map(_renderCombatant).join('');
+                    list.querySelectorAll('.spend-rxn-btn').forEach(b => {
+                        b.addEventListener('click', _onSpend);
+                    });
+                } catch (err) {
+                    console.error('Reactions panel refresh failed', err);
+                }
+            }
+
+            function _renderCombatant(c) {
+                const used = c.reaction_used;
+                const headerColor = c.color || 'var(--fg)';
+                const rxns = (c.reactions || []).map(r => {
+                    const safeKey = String(r.key || '').replace(/"/g, '&quot;');
+                    const safeLabel = String(r.label || '').replace(/</g, '&lt;');
+                    const safeSource = String(r.source || '').replace(/</g, '&lt;');
+                    const safeDesc = String(r.desc || '').replace(/</g, '&lt;');
+                    return `
+                      <button type="button" class="spend-rxn-btn"
+                              data-combatant-id="${c.combatant_id}"
+                              data-reaction-key="${safeKey}"
+                              data-reaction-label="${safeLabel.replace(/"/g, '&quot;')}"
+                              title="${safeDesc}"
+                              ${used ? 'disabled' : ''}
+                              style="display:block;width:100%;text-align:left;margin-top:4px;padding:6px 8px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:rgba(255,255,255,0.04);color:var(--fg);cursor:${used ? 'not-allowed' : 'pointer'};opacity:${used ? '0.45' : '1'};">
+                          ${safeLabel}
+                          <span style="display:block;font-size:9px;color:var(--fg-mute);margin-top:2px;">${safeSource}</span>
+                      </button>`;
+                }).join('');
+                const usedBadge = used
+                    ? '<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:#4a2a2a;color:#cc9;border:1px solid #6e3030;">reaction spent</span>'
+                    : '<span style="font-size:9px;padding:1px 6px;border-radius:8px;background:#2a4a2a;color:#9c9;border:1px solid #306030;">available</span>';
+                return `
+                  <div style="margin-bottom:10px;padding:6px;border-radius:4px;background:rgba(255,255,255,0.03);border:1px solid var(--border);">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:4px;">
+                      <strong style="color:${headerColor};font-size:11px;">${String(c.name || '').replace(/</g, '&lt;')}</strong>
+                      ${usedBadge}
+                    </div>
+                    ${rxns}
+                  </div>`;
+            }
+
+            async function _onSpend(ev) {
+                const btn = ev.currentTarget;
+                const combatantId = btn.dataset.combatantId;
+                const reactionKey = btn.dataset.reactionKey;
+                const reactionLabel = btn.dataset.reactionLabel || '';
+                btn.disabled = true;
+                btn.style.opacity = '0.6';
+                try {
+                    const resp = await fetch(`/api/campaign/${cid}/spend_reaction_manual`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({
+                            combatant_id: combatantId,
+                            reaction_key: reactionKey,
+                            reaction_label: reactionLabel,
+                        }),
+                    });
+                    if (!resp.ok) {
+                        console.warn('spend_reaction_manual failed', resp.status, await resp.text());
+                    }
+                } catch (err) {
+                    console.error('spend_reaction_manual errored', err);
+                } finally {
+                    // Refresh after a beat regardless — the
+                    // economy_update broadcast also lands and the
+                    // listener below would refresh too.
+                    setTimeout(refresh, 250);
+                }
+            }
+
+            // Refresh on economy_update so the spent badges flip
+            // in real time when a reaction is spent via another
+            // path (chip click, /use_reaction, auto-fire, etc.).
+            document.addEventListener('vtt:ws-message', (ev) => {
+                const msg = ev && ev.detail;
+                if (!msg || typeof msg !== 'object') return;
+                if (!panel.open) return;
+                const t = msg.type;
+                if (
+                    t === 'economy_update'
+                    || t === 'battle_update'
+                    || t === 'reaction_prompt_resolved'
+                ) {
+                    refresh();
+                }
+            });
+
+            // Initial load if the panel is already open at mount.
+            if (panel.open) refresh();
+        })();
+        </script>
+
         <!-- ── Encounters ── -->
         <details id="encounters-panel" class="gm-panel">
             <summary>

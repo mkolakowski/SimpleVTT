@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 528 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.67.3, 2026-05-26).
+**Total tests:** 535 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.68.0, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -791,6 +791,19 @@ v2.67.0 — Phase 1a of the reactions-automation plan (see [`docs/plans/reaction
 | `test_reaction_prompt_mode_setting_invalid` | Invalid mode → 400. |
 | `test_uncanny_dodge_emits_reaction_prompt` | v2.67.2 — Phase 2a. NPC attacks Pip (Rogue Lv 5) for flat 6 → UD auto-halves to 3 AND emits `reaction_prompt(damage_taken)` with `uncanny-dodge-ack` option; ack POSTs cleanly resolve the prompt. |
 | `test_use_reaction_marks_npc_economy_via_combatant_id` | v2.67.3 — spawn bandit NPC + Krieger 5 ft adjacent + move Krieger out of reach → OA prompt fires for the bandit → POST `/use_reaction` (no `watcher_char_id`) → bandit's `economy.reaction` flips True via `economy_update` carrying `combatant_id`. |
+
+### `test_gm_reactions_panel.py`
+v2.68.0 — GM Reactions Panel (see [`docs/plans/reactions-automation.md`](plans/reactions-automation.md)). New `GET /available_reactions` + `POST /spend_reaction_manual` endpoints surface every combatant's reaction catalog to the GM and let the GM flip any reaction chip with one click. PC class features (Uncanny Dodge / Cutting Words / Indomitable), PC feats (Sentinel / Polearm Master / etc.), PC reaction spells (Shield / Counterspell / etc. via `casting_time` scan), NPC monster reactions (Parry / etc. via `category == "reaction"` walk).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_available_reactions_lists_pc_class_features` | Pip (Rogue Lv 7) catalog contains `uncanny-dodge` + `reaction_used: false`. |
+| `test_available_reactions_lists_npc_monster_reaction` | Bandit Captain TokenTemplate spawned + added to init → catalog includes at least one `monster-*` keyed reaction (Parry). |
+| `test_spend_reaction_manual_pc` | POST `/spend_reaction_manual` for Pip's uncanny-dodge → 200, `economy_update` for Pip's reaction = True, `feature_used(source=manual-reaction)` broadcast. |
+| `test_spend_reaction_manual_already_used` | Pip with `economy.reaction=True` seeded → 409 `reaction_already_used`. |
+| `test_spend_reaction_manual_unknown_key` | POST with a bogus reaction_key → 400 `unknown_reaction_key`. |
+| `test_available_reactions_gm_only` | alice_client (non-GM) GET → 403. |
+| `test_spend_reaction_manual_gm_only` | alice_client (non-GM) POST → 403. |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

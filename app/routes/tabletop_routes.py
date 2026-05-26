@@ -12355,6 +12355,323 @@ async def use_reaction(
     }
 
 
+# ── v2.68.0 — GM Reactions Panel ──
+#
+# Surfaces every combatant's available reactions to the GM, regardless
+# of whether a trigger event has fired. Phase 1 of the reactions plan
+# wires reactions behind specific triggers (OA exit-reach, Uncanny
+# Dodge auto-fire ack); this panel is the GM's bypass for narrative
+# reactions ("the lich casts Counterspell as the wizard fires Fireball
+# from a bookshelf") or for reactions whose triggers aren't yet
+# automated (Shield, Counterspell, Hellish Rebuke, Riposte, etc.).
+#
+# Catalog scope (v1):
+#   - PC class features detected by existing level helpers:
+#       Uncanny Dodge (Rogue Lv 5+)
+#       Cutting Words (Bard Lv 3+ Lore)
+#       Indomitable (Fighter Lv 9+)
+#   - PC feats from sheet.feats by slug:
+#       Sentinel, Polearm Master, Lucky, War Caster, Defensive Duelist,
+#       Mage Slayer
+#   - PC reaction spells: walk sheet.spells where
+#     casting_time contains "reaction" (case-insensitive)
+#   - NPC monster reactions: walk projected sheet.actions where
+#     category == "reaction"
+def _combatant_reactions_catalog(
+    db: Session, combatant: dict,
+) -> list[dict]:
+    """Return a list of reaction option dicts for the given combatant.
+
+    Each dict: ``{key, label, source, kind, desc}``. Keys are
+    intended to be unique within a combatant; the GM panel uses
+    them as React keys + the manual-spend dispatch key.
+    """
+    out: list[dict] = []
+    char_id = combatant.get("char_id")
+    if char_id:
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(char_id),
+            ).first()
+        except Exception:
+            char = None
+        if not char or not char.sheet:
+            return out
+        sheet = char.sheet or {}
+        # Class features (level-gated)
+        if _rogue_level_from_sheet(sheet) >= 5:
+            out.append({
+                "key": "uncanny-dodge",
+                "label": "🛡️ Uncanny Dodge",
+                "source": "Rogue Lv 5+ class feature",
+                "kind": "class_feature",
+                "desc": "Halve damage from one attack you can see.",
+            })
+        # Cutting Words — Bard Lv 3+ College of Lore.
+        try:
+            bard_lv = _bard_level_from_sheet(sheet)
+        except Exception:
+            bard_lv = 0
+        if bard_lv >= 3:
+            subclass = (sheet.get("subclass") or "").strip().lower()
+            if "lore" in subclass:
+                out.append({
+                    "key": "cutting-words",
+                    "label": "🗣 Cutting Words",
+                    "source": "Bard Lv 3+ College of Lore",
+                    "kind": "class_feature",
+                    "desc": (
+                        "Subtract a BI die from an attack / check / "
+                        "damage roll within 60 ft."
+                    ),
+                })
+        # Indomitable — Fighter Lv 9+.
+        try:
+            ftr_lv = _fighter_level_from_sheet(sheet)
+        except Exception:
+            ftr_lv = 0
+        if ftr_lv >= 9:
+            out.append({
+                "key": "indomitable",
+                "label": "🛡 Indomitable",
+                "source": "Fighter Lv 9+ class feature",
+                "kind": "class_feature",
+                "desc": "Reroll a failed save (limited uses per rest).",
+            })
+        # Feats (PC sheet.feats list)
+        for f in (sheet.get("feats") or []):
+            if not isinstance(f, dict):
+                continue
+            slug = (f.get("slug") or "").strip().lower()
+            name = (f.get("name") or "").strip()
+            normalized = (
+                slug or name.lower().replace(" ", "-")
+            )
+            feat_map = {
+                "sentinel": "🛡 Sentinel reaction",
+                "polearm-master": "⚔ Polearm Master OA",
+                "lucky": "🍀 Lucky (reroll d20)",
+                "war-caster": "✨ War Caster OA cantrip",
+                "defensive-duelist": "⚔ Defensive Duelist (+PB AC)",
+                "mage-slayer": "🗡 Mage Slayer (cast → strike)",
+            }
+            label = feat_map.get(normalized)
+            if label:
+                out.append({
+                    "key": f"feat-{normalized}",
+                    "label": label,
+                    "source": name or normalized.replace("-", " ").title() + " feat",
+                    "kind": "feat",
+                    "desc": (f.get("desc") or "").strip()[:160],
+                })
+        # Reaction spells (casting_time contains "reaction")
+        for sp in (sheet.get("spells") or []):
+            if not isinstance(sp, dict):
+                continue
+            ct = (sp.get("casting_time") or "").lower()
+            if "reaction" not in ct:
+                continue
+            spell_name = sp.get("name") or ""
+            spell_slug = (
+                sp.get("_slug") or spell_name.lower().replace(" ", "-")
+            )
+            out.append({
+                "key": f"spell-{spell_slug}",
+                "label": f"✨ {spell_name}",
+                "source": f"Spell · L{sp.get('level') or 0}",
+                "kind": "spell",
+                "desc": (sp.get("desc") or "").strip()[:160],
+            })
+        return out
+    # NPC path — walk projected sheet.actions for category="reaction".
+    src_id = combatant.get("source_token_id")
+    tmpl = None
+    if src_id:
+        try:
+            t = db.query(Token).filter(Token.id == int(src_id)).first()
+            if t and t.token_template_id:
+                tmpl = db.query(TokenTemplate).filter(
+                    TokenTemplate.id == int(t.token_template_id),
+                ).first()
+        except Exception:
+            tmpl = None
+    if tmpl is None:
+        return out
+    try:
+        proj = _monster_template_to_sheet(tmpl, 0)
+    except Exception:
+        return out
+    if not isinstance(proj, dict):
+        return out
+    for a in (proj.get("actions") or []):
+        if not isinstance(a, dict):
+            continue
+        cat = (a.get("category") or "").strip().lower()
+        if cat != "reaction":
+            continue
+        action_name = (a.get("name") or "Reaction").strip()
+        action_id = (
+            a.get("id") or action_name.lower().replace(" ", "-")
+        )
+        out.append({
+            "key": f"monster-{action_id}",
+            "label": f"⚡ {action_name}",
+            "source": tmpl.name or "Monster reaction",
+            "kind": "monster_reaction",
+            "desc": (a.get("desc") or "").strip()[:200],
+        })
+    return out
+
+
+@router.get("/api/campaign/{campaign_id}/available_reactions")
+def list_available_reactions(
+    campaign_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.68.0 — GM-only endpoint listing every combatant's available
+    reactions for the GM Reactions Panel.
+
+    Returns:
+    ```
+    {
+      "combatants": [
+        {
+          "combatant_id": "tok_oa_3",
+          "name": "Sir Caelan",
+          "char_id": 4,
+          "color": "#aaaa00",
+          "reaction_used": false,
+          "reactions": [
+            {"key": "uncanny-dodge", "label": "...", "source": "...", "kind": "...", "desc": "..."}
+          ]
+        }, ...
+      ]
+    }
+    ```
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    state = hub.get_battle(campaign_id) or {}
+    out: list[dict] = []
+    for c in (state.get("combatants") or []):
+        reactions = _combatant_reactions_catalog(db, c)
+        if not reactions:
+            continue
+        economy = c.get("economy") or {}
+        out.append({
+            "combatant_id": c.get("id"),
+            "name": c.get("name"),
+            "char_id": c.get("char_id"),
+            "color": c.get("color"),
+            "reaction_used": bool(economy.get("reaction")),
+            "reactions": reactions,
+        })
+    return {"combatants": out}
+
+
+@router.post("/api/campaign/{campaign_id}/spend_reaction_manual")
+async def spend_reaction_manual(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.68.0 — GM-only manual-spend for the Reactions Panel.
+
+    Body:
+      ``combatant_id``  — hub combatant id (PC or NPC)
+      ``reaction_key``  — must be in the combatant's reactions catalog
+      ``reaction_label`` — optional display label for the chat card
+                          (falls back to the catalog lookup)
+
+    Marks the reaction slot used (combatant_id-keyed flipper for NPCs,
+    character_id-keyed for PCs) and broadcasts a feature_used card so
+    the table sees what reaction the GM spent. Does NOT execute the
+    reaction's mechanical effect — the GM follows up with whatever
+    rolls / damage the reaction implies (e.g. they click Attack
+    manually after spending an OA). Future phases may auto-resolve
+    specific reactions; v1 is purely state-tracking.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+    if not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    body = await request.json()
+    combatant_id = str(body.get("combatant_id") or "").strip()
+    reaction_key = str(body.get("reaction_key") or "").strip()
+    reaction_label_override = (body.get("reaction_label") or "").strip()
+    if not combatant_id:
+        raise HTTPException(400, "combatant_id is required")
+    if not reaction_key:
+        raise HTTPException(400, "reaction_key is required")
+    state = hub.get_battle(campaign_id) or {}
+    target = None
+    for c in (state.get("combatants") or []):
+        if c.get("id") == combatant_id:
+            target = c
+            break
+    if target is None:
+        raise HTTPException(404, "combatant not found in battle")
+    # Validate the reaction_key is in this combatant's catalog.
+    catalog = _combatant_reactions_catalog(db, target)
+    matching = next(
+        (r for r in catalog if r.get("key") == reaction_key), None,
+    )
+    if matching is None:
+        return JSONResponse(status_code=400, content={
+            "error": "unknown_reaction_key",
+            "reaction_key": reaction_key,
+            "available_keys": [r.get("key") for r in catalog],
+        })
+    # Reaction slot must be available.
+    economy = target.get("economy") or {}
+    if bool(economy.get("reaction")):
+        return JSONResponse(status_code=409, content={
+            "error": "reaction_already_used",
+            "combatant_id": combatant_id,
+        })
+    # Flip the slot — PC vs NPC path.
+    char_id = target.get("char_id")
+    if char_id:
+        await _mark_battle_economy(
+            campaign_id, int(char_id), "reaction",
+        )
+    else:
+        await _mark_battle_economy_by_combatant_id(
+            campaign_id, combatant_id, "reaction",
+        )
+    # Broadcast a feature_used card so the chat reflects the spend.
+    label = reaction_label_override or matching.get("label") or reaction_key
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char_id,
+            "character_name": target.get("name"),
+            "user_color": target.get("color"),
+            "feature_name": label,
+            "feature_desc": (
+                matching.get("desc")
+                or f"Reaction spent by {target.get('name') or 'combatant'}."
+            ),
+            "source": "manual-reaction",
+            "reaction_kind": matching.get("kind"),
+            "reaction_source": matching.get("source"),
+            "combatant_id": combatant_id,
+        },
+    })
+    return {
+        "ok": True,
+        "combatant_id": combatant_id,
+        "reaction_key": reaction_key,
+        "label": label,
+    }
+
+
 @router.post("/api/campaign/{campaign_id}/use_cutting_words")
 async def use_cutting_words(
     campaign_id: int,

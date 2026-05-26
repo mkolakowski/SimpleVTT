@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.68.0] - 2026-05-26 — "The GM's Console"
+
+**Schema version:** 60
+**Commit summary:** **GM Reactions Panel — every combatant's reactions surfaced in the GM Tools drawer as one-click spend buttons.** Bypasses the trigger-event pipeline entirely so the GM can spend ANY reaction for ANY combatant whenever they want (narrative reactions, reactions not yet automated like Shield / Counterspell / Hellish Rebuke / Riposte, monster stat-block reactions like Parry, etc.). New `_combatant_reactions_catalog(db, combatant)` walks PC class features / feats / reaction spells + NPC monster actions where `category == "reaction"`. New `GET /api/campaign/{cid}/available_reactions` returns the catalog per combatant + `reaction_used` flag. New `POST /api/campaign/{cid}/spend_reaction_manual` validates the reaction key + flips the chip + broadcasts a `feature_used` card with `source="manual-reaction"`. Both endpoints are GM-only. New `<details id="gm-reactions-panel">` section in the GM Tools drawer that loads the catalog on expand, lazy-renders one card per combatant with their reaction buttons, refreshes on `economy_update` / `battle_update` / `reaction_prompt_resolved` broadcasts so the spent badges flip in real-time.
+**Description:** Four blocks. **(1)** `app/routes/tabletop_routes.py` — new `_combatant_reactions_catalog(db, combatant) -> list[dict]`. PC path: scans `sheet.feats` for slug matches against `{sentinel, polearm-master, lucky, war-caster, defensive-duelist, mage-slayer}`; level-gated class features (Uncanny Dodge Rogue Lv 5+, Cutting Words Bard Lv 3+ Lore subclass, Indomitable Fighter Lv 9+); walks `sheet.spells` for `casting_time` containing "reaction" (case-insensitive). NPC path: `Token` → `TokenTemplate` → `_monster_template_to_sheet` → iterate `sheet.actions` filtering `category == "reaction"`. Returns dicts of `{key, label, source, kind, desc}`. **(2)** `GET /available_reactions` GM-only endpoint walks `hub.get_battle(campaign_id)` combatants, runs the catalog, returns `{combatants: [{combatant_id, name, char_id, color, reaction_used, reactions}]}`. **(3)** `POST /spend_reaction_manual` GM-only endpoint validates the reaction key is in the catalog, returns 409 if the slot is already used, flips via the PC- or NPC-keyed flipper depending on `char_id`, broadcasts a `feature_used` card with `source="manual-reaction"`. **(4)** `app/templates/tabletop.html` — new `<details id="gm-reactions-panel" class="gm-panel">` section at the top of the GM Tools drawer above Encounters. ~125 lines of inline `<script>` build the panel JS: GM-gated load-once IIFE, fetch-on-expand, click-to-spend, refresh-on-WS-event listener for `economy_update` / `battle_update` / `reaction_prompt_resolved`.
+**Description (cont):** v1 catalog scope:
+- **Hand-rolled feat slug list** — Sentinel, Polearm Master, Lucky, War Caster, Defensive Duelist, Mage Slayer. Future commits add the rest as content lands (Heavy Armor Master is passive, not a reaction; Inspiring Leader is also passive; Shield Master is action/bonus, not reaction).
+- **Hand-rolled class-feature triggers** — three today (Uncanny Dodge, Cutting Words, Indomitable). Phase 2+ of the reactions plan adds Riposte / Parry / Brace (Battle Master), Deflect Missiles (Monk), Slow Fall (Monk), Protection/Interception fighting styles, Misty Escape, Warding Flare, Wrath of the Storm, Channel Divinity reactions, etc.
+- **Spell scan reads `sheet.spells[].casting_time`** — any string containing "reaction" qualifies. Catches Shield, Counterspell, Hellish Rebuke, Absorb Elements, Feather Fall, Silvery Barbs out of the box (they're all in the SRD content layer with the right casting_time string).
+- **NPC walk reads projected sheet** — `_monster_template_to_sheet` already populates `sheet.actions` with the raw stat-block actions including the `category` field. Bandit Captain's Parry, Knight's Parry, Spy's Uncanny Dodge, Aboleth's Tentacle, etc. all surface automatically.
+**Description (cont 2):** Manual spend behavior:
+- **Flips the chip + broadcasts a chat card. Does NOT execute the reaction's mechanical effect.** RAW Shield grants +5 AC vs the triggering attack; the GM's job is to apply that to their narration / next die roll. Cutting Words rolls a BI die — GM rolls it manually. The panel is a *state tracker*, not a rules engine.
+- **Manual spend is over-budget-tolerant** — the v1 endpoint validates the chip is False (returns 409 if already used) but doesn't fire the v2.7.1 over-budget Confirm modal. GM-only contexts don't need it; the GM is the rules authority.
+- **Catalog refresh on broadcasts.** When ANY combatant's reaction chip flips (via the chip click, `/use_reaction`, the v2.49.243 Uncanny Dodge auto-fire, or this panel itself), the panel re-fetches the catalog so the spent badges reflect reality.
+**Description (cont 3):** Verification. (a) `curl /version` reports `{"app_version":"2.68.0","schema_version":60}`. (b) New `tests/harness/test_gm_reactions_panel.py` — 7 tests: PC catalog includes Uncanny Dodge for Pip (Rogue Lv 7), NPC catalog walks Bandit Captain's Parry, manual spend for PC flips the chip + broadcasts the card, 409 on already-used, 400 on unknown key, GM-only auth on both endpoints. (c) Suite count 528 → 535.
+
+### Added
+- `_combatant_reactions_catalog(db, combatant) -> list[dict]` helper — PC + NPC reaction catalog walk.
+- `GET /api/campaign/{cid}/available_reactions` endpoint — GM-only catalog list.
+- `POST /api/campaign/{cid}/spend_reaction_manual` endpoint — GM-only manual spend + broadcast.
+- GM Tools drawer `<details id="gm-reactions-panel">` section with ~125 lines of inline JS.
+- Harness `tests/harness/test_gm_reactions_panel.py` — 7 tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.68.0`.
+- `README.md` version badge → `2.68.0`.
+- `docs/plans/reactions-automation.md` — adds the v2.68.0 manual-spend bypass to the status note.
+- `docs/test-harness-coverage.md` — total test count 528 → 535.
+
+### Notes
+- **State tracker, not rules engine.** Manual spend flips the chip + posts a chat card; GM applies the mechanical effect themselves.
+- **Catalog v1 is hand-rolled.** Class features + feats are detected by slug; future content additions need a catalog row added explicitly. Reaction spells are auto-detected via `casting_time` scan; monster reactions via `category == "reaction"` walk.
+- **GM-only.** Player views still see prompts via v2.67.0/v2.67.1 popup flow; the panel is GM-only because it exposes NPC stat-block reactions.
+
+---
+
 ## [2.67.3] - 2026-05-26 — "GM Reacts Too"
 
 **Schema version:** 60
