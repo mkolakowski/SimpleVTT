@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.59.1] - 2026-05-25 — "Empowered Heal"
+
+**Schema version:** 57
+**Commit summary:** **Heal spells now correctly add the caster's spellcasting modifier — Tavik's Cure Wounds heals `1d8 + WIS` (RAW) instead of bare `1d8`.** Pre-v2.59.1, the SRD JSON's `"healing": "1d8"` expression rolled bare via `dice_mod.roll`. The /cast_spell heal-resolution branch now reads `_caster_spellcasting_mod(char.sheet)` and adds it to `heal_rolled` before the v2.58.0 Disciple of Life uplift composition. Affects every heal cast across every caster: Cure Wounds, Healing Word, Mass Healing Word, Mass Cure Wounds, Heal, Healing Spirit, Aid, Prayer of Healing, etc.
+**Description:** Two-edit change in `app/routes/tabletop_routes.py`. **(1)** New helper `_caster_spellcasting_mod(caster_sheet)` next to `_life_domain_heal_uplift`. Reads `spellcasting_ability` or `class_spellcasting` from the sheet, normalizes to 3-letter uppercase ability slug, computes `(score - 10) // 2`. Returns 0 if the slug isn't a valid ability or the sheet is malformed. **(2)** Heal-resolution branch at L 8175 now does `_spc_mod = _caster_spellcasting_mod(char.sheet)`, then `if heal_rolled > 0 and _spc_mod > 0: heal_rolled += _spc_mod` + extends the breakdown string with `+N (spellcasting mod)`.
+**Description (cont):** Why `_spc_mod > 0` gate. Negative spellcasting modifiers don't reduce heals in RAW (the heal floor is "the rolled value"). A caster with WIS 8 (mod -1) still heals the full die roll — the modifier doesn't subtract. Skipping the addition when mod ≤ 0 keeps the v1 simplification (no negative-mod handling) while correcting the common case (every demo caster has +2 to +4 spellcasting mod).
+**Description (cont 2):** AoE extras-loop interaction. The v2.59.0 extras loop uses the same `heal_rolled` value computed once at the top of the heal block, so the modifier propagates to every target in a Mass Healing Word / Mass Cure Wounds cast. RAW: "regain hit points equal to 1d4 + your spellcasting ability modifier" applies per target. Verified — no extras-loop code change needed.
+**Description (cont 3):** Disciple of Life interaction (v2.58.0). The +2+slot_level uplift is added AFTER the modifier-baked `heal_rolled` value reaches the target. Total target heal for Tavik's Cure Wounds at L1: `1d8 (1-8) + 3 (WIS) + 3 (Disciple of Life) = 7-14` per target. RAW correct.
+**Description (cont 4):** Test impact survey. The harness's heal-assertion shapes use `auto_heal_applied > 0` (range-style, not exact) + the cap-at-max test `== 1` which is robust to the change (heal still saturates at hp_max). No tests in the 479-test suite broke. New test `test_heal_spellcasting_mod.py::test_cure_wounds_adds_wis_modifier_to_heal` loops 5 casts of Cure Wounds at L1 and asserts `4 ≤ auto_heal_rolled ≤ 11` (= 1d8 + WIS +3) on every roll — proves the modifier is being added.
+**Description (cont 5):** Verification. (a) `curl /version` reports `2.59.1` after `docker compose up -d --build app`. (b) Harness `tests/harness/test_heal_spellcasting_mod.py` — 1 test, 5-cast loop. (c) Full suite 479 + 1 = 480 passing. (d) Manual click-through: Tavik's sheet casts Cure Wounds at Krieger; chat shows `Cure Wounds — applied N HP` where N is in [7, 14] (was [3, 11] pre-v2.59.1: 1-8 die + 2-3 uplift only).
+
+### Added
+- `_caster_spellcasting_mod(caster_sheet)` helper in `app/routes/tabletop_routes.py` — reads the caster's spellcasting ability slug + score, returns the modifier.
+- Heal-resolution branch in `/cast_spell` adds the spellcasting modifier to `heal_rolled` before the v2.58.0 Disciple of Life uplift composition.
+- Harness `tests/harness/test_heal_spellcasting_mod.py` — 5-cast loop asserts Cure Wounds heals ≥ 4 (1 + WIS 3) on every roll.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.59.1`.
+- `README.md` version badge → `2.59.1`.
+- `docs/test-harness-coverage.md` — total test count 479 → 480; new `test_heal_spellcasting_mod.py` section added.
+
+### Notes
+- **Negative spellcasting modifiers stay 0.** A caster with WIS 8 (mod -1) doesn't reduce the heal die — RAW heal floor is the rolled value. Filed if anyone surfaces an edge case (e.g. a homebrew low-stat caster).
+- **Heal-claim flow still doesn't pick up the modifier.** The legacy chat-card "Heal me" button path goes through `_heal_claims` + `/apply_healing`, which rolls the heal at claim-time and doesn't currently read the caster's spellcasting mod. Filed alongside the slot-level capture work (same code path, same TODO).
+- **Why now and not at v2.58.0.** The Disciple of Life work surfaced the bare-dice-only heal as a quality issue, but fixing it required surveying the test suite for exact-value assertions. v2.59.1 ships after that survey (clean — no exact heal-applied asserts beyond the cap-at-max test which is robust).
+
+---
+
 ## [2.59.0] - 2026-05-25 — "Mass Cure"
 
 **Schema version:** 57

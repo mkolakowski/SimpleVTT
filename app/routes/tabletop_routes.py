@@ -2214,6 +2214,37 @@ def _cleric_level_from_sheet(sheet: dict) -> int:
     return 0
 
 
+def _caster_spellcasting_mod(caster_sheet: dict) -> int:
+    """v2.59.1 — return the caster's spellcasting ability modifier.
+
+    Reads ``class_spellcasting`` (single-class sheets) or
+    ``spellcasting_ability`` (canonical sheet field), normalizes to
+    a 3-letter uppercase ability slug, then reads
+    ``abilities[<slug>]`` and computes `(ability_score - 10) // 2`.
+
+    Returns 0 when no spellcasting ability can be identified (e.g.
+    non-caster classes, malformed sheets). Used by the heal-
+    resolution branch in /cast_spell to bake the spellcasting mod
+    into ``heal_rolled`` per RAW (Cure Wounds heals `1d8 + your
+    spellcasting modifier`, etc.) — pre-v2.59.1 the dice rolled
+    bare without the modifier.
+    """
+    if not caster_sheet:
+        return 0
+    spc_raw = (
+        caster_sheet.get("spellcasting_ability")
+        or caster_sheet.get("class_spellcasting")
+        or ""
+    ).strip().upper()[:3]
+    if spc_raw not in {"STR", "DEX", "CON", "INT", "WIS", "CHA"}:
+        return 0
+    try:
+        score = int((caster_sheet.get("abilities") or {}).get(spc_raw, 10))
+    except (TypeError, ValueError):
+        return 0
+    return (score - 10) // 2
+
+
 def _life_domain_heal_uplift(
     caster_sheet: dict, slot_level: int, target_is_self: bool,
 ) -> "tuple[int, int]":
@@ -8178,6 +8209,21 @@ async def cast_spell(
         except dice_mod.DiceParseError:
             heal_rolled = 0
             heal_breakdown = ""
+        # v2.59.1 — RAW heal = dice + spellcasting modifier (Cure
+        # Wounds heals "1d8 + your spellcasting modifier"; Healing
+        # Word, Mass Healing Word, Mass Cure Wounds, Heal, etc. all
+        # follow the same shape). Pre-v2.59.1 the SRD JSON's bare
+        # ``"healing": "1d8"`` expression rolled without the modifier
+        # — corrected here by adding the caster's spellcasting mod
+        # to ``heal_rolled``. Modifier ≥ 0 only (negative mods stay
+        # 0 per RAW heal floor).
+        _spc_mod = _caster_spellcasting_mod(char.sheet or {})
+        if heal_rolled > 0 and _spc_mod > 0:
+            heal_rolled += _spc_mod
+            heal_breakdown = (
+                f"{heal_breakdown} + {_spc_mod} (spellcasting mod)"
+                if heal_breakdown else f"+{_spc_mod}"
+            )
         target_combatant = _lookup_combatant(campaign_id, target_combatant_id)
         # v2.27.2: when the target isn't currently in the init tracker
         # (e.g. the GM hasn't run "From Map" yet, or the targeted PC

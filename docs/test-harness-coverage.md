@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 479 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.59.0, 2026-05-25).
+**Total tests:** 480 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.59.1, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -725,6 +725,13 @@ v2.59.0 — Multi-target heal loop in `/cast_spell`. Extends the v2.58.0 Life Do
 | `test_mass_healing_word_per_target_disciple_uplift` | Tavik casts MHW (slot 3) at Krieger + Pip → 2 `disciple-of-life` broadcasts (+5 each) + 1 `blessed-healer` broadcast. |
 | `test_aoe_heal_skips_uplift_for_non_life_domain` | Single-target MHW (one target via `target_combatant_ids`) → extras loop skipped (len == 1); 1 Disciple + 1 Blessed Healer from single-target block only. |
 | `test_mass_healing_word_blessed_healer_skips_self_first_target` | Tavik MHW at himself + Krieger → 2 Disciple broadcasts (self + Krieger), 1 late Blessed Healer fired from extras loop (single-target block skipped it because first target was caster). |
+
+### `test_heal_spellcasting_mod.py`
+v2.59.1 — Heal expressions bake the caster's spellcasting modifier. Pre-v2.59.1, /cast_spell rolled SRD JSON heal dice bare (e.g. Cure Wounds `1d8`). RAW: heal = dice + spellcasting modifier. `_caster_spellcasting_mod(caster_sheet)` reads the ability slug + score from the sheet; the heal-resolution branch adds the modifier to `heal_rolled` before the v2.58.0 Disciple of Life uplift. Modifier > 0 gate keeps negative-mod behavior at RAW heal floor.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_cure_wounds_adds_wis_modifier_to_heal` | Tavik (WIS 16 = +3) casts Cure Wounds (L1) at Krieger 5 times. Every `auto_heal_rolled` is in [4, 11] (= 1d8 + 3). Pre-fix min was 1. |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.
