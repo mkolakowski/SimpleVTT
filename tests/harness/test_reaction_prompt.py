@@ -465,3 +465,122 @@ async def test_uncanny_dodge_emits_reaction_prompt(
             f"/campaign/{CAMPAIGN_ID}/settings",
             data=form, follow_redirects=False,
         )
+
+
+# ── v2.67.3 — NPC reaction slot consumption ──
+
+
+async def test_use_reaction_marks_npc_economy_via_combatant_id(
+    gm_client, gm_ws, roster,
+):
+    """v2.67.3 — When a Krieger (PC) moves out of an NPC bandit's
+    reach, the OA prompt fires for the bandit (NPC watcher). GM
+    clicks "Take the OA" → POST /use_reaction with the prompt_id
+    (no watcher_char_id since NPCs don't have one) → server flips
+    the bandit's reaction chip via the new combatant_id-keyed
+    helper and broadcasts an economy_update.
+    """
+    krieger = roster["Krieger Stonefist"]
+
+    # Create a bandit NPC token at (350, 350).
+    tmpl_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/templates",
+        json={
+            "name": "Bandit (NPC OA test)",
+            "template": "dnd5e",
+            "tags": ["npc", "harness"],
+            "sheet": {"monster_slug": "bandit"},
+        },
+    )
+    assert tmpl_resp.status_code == 200, tmpl_resp.text
+    tmpl = tmpl_resp.json()
+    tok_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/tokens",
+        json={
+            "token_template_id": tmpl["id"],
+            "label": "Bandit",
+            "x": 350.0, "y": 350.0,
+            "color": "#a23030", "size": 1,
+        },
+    )
+    assert tok_resp.status_code == 200, tok_resp.text
+    bandit_tok = tok_resp.json()
+
+    bandit_cid = "tok_npc_oa_bandit"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        {
+            "id": bandit_cid,
+            "char_id": None,
+            "source_token_id": bandit_tok["id"],
+            "token_template_id": tmpl["id"],
+            "name": "Bandit",
+            "initiative": 8,
+            "hp_current": 11, "hp_max": 11,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+
+    # Krieger 5 ft east of the bandit, then moves 25 ft → 30 ft.
+    await _place_token(gm_client, krieger["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Move Krieger out of the bandit's 5 ft reach.
+    move = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 700.0, "y": 350.0},
+    )
+    assert move.status_code == 200, move.text
+    await asyncio.sleep(0.2)
+
+    # Find the bandit's OA prompt.
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_combatant_id") == bandit_cid
+    ]
+    assert prompts, (
+        f"expected OA prompt for the bandit; got "
+        f"{[(m.get('data') or {}).get('watcher_combatant_id') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    # GM resolves the NPC reaction. watcher_char_id intentionally
+    # omitted — NPCs don't have one.
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "take-the-oa",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    # economy_update broadcast on the bandit's combatant_id with
+    # slot=reaction + used=true. Note the new payload field
+    # `combatant_id` (introduced in v2.67.3).
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("combatant_id") == bandit_cid
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, (
+        f"expected economy_update with combatant_id={bandit_cid}; "
+        f"buffered: "
+        f"{[(m.get('data') or {}) for m in gm_ws.buffered('economy_update')]}"
+    )
+    assert econ[-1]["data"]["used"] is True
+
+    # resolved broadcast confirms the prompt cleared.
+    assert any(
+        (m.get("data") or {}).get("prompt_id") == prompt_id
+        for m in _resolved_broadcasts(gm_ws)
+    ), "expected reaction_prompt_resolved for the NPC OA prompt"

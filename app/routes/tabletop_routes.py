@@ -314,6 +314,52 @@ def _is_slot_used(campaign_id: int, character_id: int, slot: str) -> bool:
     return False
 
 
+async def _mark_battle_economy_by_combatant_id(
+    campaign_id: int, combatant_id: str, slot: str, *, used: bool = True,
+) -> None:
+    """v2.67.3 — sister to ``_mark_battle_economy`` keyed on the hub
+    combatant's ``id`` instead of a PC ``character_id``. Lets NPC
+    watchers consume their reaction slot when the GM resolves a
+    reaction prompt for them — NPCs have no Character row so the
+    PC-keyed helper can't find them.
+
+    Same idempotence + broadcast shape as ``_mark_battle_economy``;
+    the ``economy_update`` payload carries ``combatant_id`` instead
+    of ``character_id`` so client code can branch.
+    """
+    if slot not in ("action", "bonus", "reaction"):
+        return
+    if not combatant_id:
+        return
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("id") == combatant_id:
+            target = c
+            break
+    if target is None:
+        return
+    economy = target.get("economy")
+    if not isinstance(economy, dict):
+        economy = {"action": False, "bonus": False, "reaction": False, "movement": 0}
+        target["economy"] = economy
+    if bool(economy.get(slot)) == bool(used):
+        return
+    economy[slot] = bool(used)
+    hub.set_battle(campaign_id, state)
+    await hub.broadcast(campaign_id, {
+        "type": "economy_update",
+        "data": {
+            "combatant_id": combatant_id,
+            "character_id": target.get("char_id"),
+            "slot": slot,
+            "used": bool(used),
+        },
+    })
+
+
 async def _mark_battle_economy(
     campaign_id: int, character_id: int, slot: str, *, used: bool = True,
 ) -> None:
@@ -12265,14 +12311,23 @@ async def use_reaction(
     entry["resolved_reaction_key"] = reaction_key
 
     # Dispatch. Phase 1 only routes ``take-the-oa``; future phases
-    # extend this table.
-    if reaction_key == "take-the-oa" and watcher_char_id:
-        # Mark the watcher's reaction slot used. The player will
-        # click Attack manually to actually swing — Phase 1 doesn't
-        # auto-fire the follow-up attack.
-        await _mark_battle_economy(
-            campaign_id, int(watcher_char_id), "reaction",
-        )
+    # extend this table. v2.67.3 extends the slot-flip to NPC
+    # watchers — PCs use the character_id-keyed helper, NPCs use
+    # the combatant_id-keyed helper.
+    if reaction_key == "take-the-oa":
+        if watcher_char_id:
+            # PC watcher: PC's character_id keys the slot flip.
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+        else:
+            # NPC watcher: combatant_id keys the slot flip directly
+            # on the hub combatant since there's no Character row.
+            watcher_combatant_id = entry.get("watcher_combatant_id")
+            if watcher_combatant_id:
+                await _mark_battle_economy_by_combatant_id(
+                    campaign_id, str(watcher_combatant_id), "reaction",
+                )
     elif reaction_key == "uncanny-dodge-ack":
         # v2.67.2 Phase 2a — informational ack. Uncanny Dodge already
         # auto-fired in ``_apply_damage_to_combatant``; this resolves

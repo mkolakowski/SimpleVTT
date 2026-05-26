@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 527 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.67.2, 2026-05-26).
+**Total tests:** 528 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.67.3, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -790,6 +790,7 @@ v2.67.0 — Phase 1a of the reactions-automation plan (see [`docs/plans/reaction
 | `test_reaction_prompt_mode_setting_valid` | v2.67.1 — POST `/api/settings/reaction_prompt_mode` with each of `popup` / `roll_log_only` / `off` → 200 + persisted. |
 | `test_reaction_prompt_mode_setting_invalid` | Invalid mode → 400. |
 | `test_uncanny_dodge_emits_reaction_prompt` | v2.67.2 — Phase 2a. NPC attacks Pip (Rogue Lv 5) for flat 6 → UD auto-halves to 3 AND emits `reaction_prompt(damage_taken)` with `uncanny-dodge-ack` option; ack POSTs cleanly resolve the prompt. |
+| `test_use_reaction_marks_npc_economy_via_combatant_id` | v2.67.3 — spawn bandit NPC + Krieger 5 ft adjacent + move Krieger out of reach → OA prompt fires for the bandit → POST `/use_reaction` (no `watcher_char_id`) → bandit's `economy.reaction` flips True via `economy_update` carrying `combatant_id`. |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

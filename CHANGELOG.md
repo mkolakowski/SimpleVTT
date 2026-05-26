@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.67.3] - 2026-05-26 — "GM Reacts Too"
+
+**Schema version:** 60
+**Commit summary:** **NPC reaction slot consumption.** Closes the audit gap surfaced in the previous turn — the v2.67.0+ reaction prompt pipeline already fired triggers + broadcast + endpoint-authorized resolution for NPC watchers, but the resulting `/use_reaction` dispatch couldn't flip the reaction chip because `_mark_battle_economy` is keyed on PC `character_id`. NPCs (no Character row) silently kept their reaction available after the GM "spent" it. New `_mark_battle_economy_by_combatant_id(campaign_id, combatant_id, slot)` walks the hub state matching `c.get("id") == combatant_id` and flips the chip directly. `/use_reaction` dispatch now routes through it when `watcher_char_id` is absent. `economy_update` broadcast payload gains a `combatant_id` field alongside `character_id` so client code can render the right chip.
+**Description:** Two edits in `app/routes/tabletop_routes.py`. **(1)** New `_mark_battle_economy_by_combatant_id` helper. Sister to the PC-keyed `_mark_battle_economy` — identical idempotence + broadcast shape, just walks by `c.get("id") == combatant_id` instead of `c.get("char_id") == character_id`. Broadcasts `economy_update` with both `combatant_id` AND `character_id` (which is None for NPCs) so existing client handlers that filter on `character_id` continue working AND new handlers can branch on `combatant_id` when needed. **(2)** `/use_reaction` dispatch for `take-the-oa` reaction_key now branches: if `watcher_char_id` is set (PC), the PC-keyed flipper runs as before; otherwise (NPC), the new combatant_id-keyed flipper runs against `entry["watcher_combatant_id"]`. The endpoint's existing auth gate (NPC watcher → GM only) already protects this path.
+**Description (cont):** Two-way reaction support now covers all four layers per the audit:
+- ✅ Trigger detection (PCs + NPCs)
+- ✅ Broadcast routing (`target_user_ids` always includes GM)
+- ✅ Endpoint authorization (`/use_reaction` allows GM for NPC watchers)
+- ✅ Slot consumption (this commit — NPCs now flip via combatant_id)
+
+GMs running monster reactions get the same popup → click → chip-flip flow that players get for their PCs.
+**Description (cont 2):** v1 simplifications still apply:
+- **Uncanny Dodge stays PC-only.** Monster stat blocks with "Uncanny Dodge" (Spy, Assassin) carry it as a `category: "reaction"` action in their `actions` list rather than a class feature; the v2.49.243 helper reads PC sheets specifically. Future commits could surface monster reactions through the prompt pipeline by walking `sheet.actions` with `category == "reaction"`.
+- **Only `take-the-oa` is dispatched today.** Phase 2+ extends the dispatch table to spell / feat / class-feature / item / monster reactions per the plan doc catalog.
+**Description (cont 3):** Verification. (a) `curl /version` reports `2.67.3`. (b) New test `test_use_reaction_marks_npc_economy_via_combatant_id`: spawn bandit NPC token, place Krieger 5 ft from it, move Krieger out of reach → OA prompt fires for the bandit → GM POSTs `/use_reaction` with the prompt_id (no `watcher_char_id`) → bandit's `economy.reaction` flips True via `economy_update` carrying `combatant_id: "tok_npc_oa_bandit"`. (c) The existing PC OA test (`test_use_reaction_marks_economy_and_resolves_prompt`) continues to pass — the PC dispatch path is unchanged. (d) Suite count 527 → 528.
+
+### Added
+- `_mark_battle_economy_by_combatant_id(campaign_id, combatant_id, slot, *, used=True)` helper — NPC-keyed slot flipper.
+- `combatant_id` field on `economy_update` broadcasts (alongside `character_id`).
+- NPC branch in `/use_reaction` dispatch for `take-the-oa` when `watcher_char_id` is absent.
+- Harness `test_use_reaction_marks_npc_economy_via_combatant_id`.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.67.3`.
+- `README.md` version badge → `2.67.3`.
+- `docs/test-harness-coverage.md` — total test count 527 → 528.
+- `docs/plans/reactions-automation.md` — status note adds the v2.67.3 NPC slot consumption.
+
+### Notes
+- **Monster reactions filed.** Stat-block reactions like Bandit Captain's Parry need a `category: "reaction"` walk over `sheet.actions` — future Phase 6 work per the plan doc.
+- **Backward-compat preserved.** Existing client code that filters `economy_update` on `character_id` still works because the field is still present (`null` for NPCs).
+
+---
+
 ## [2.67.2] - 2026-05-26 — "Dodged It"
 
 **Schema version:** 60
