@@ -12512,6 +12512,70 @@ def _combatant_reactions_catalog(
                 "kind": "class_feature",
                 "desc": "Reroll a failed save (limited uses per rest).",
             })
+        # v2.68.6 — Battle Master maneuvers (Fighter Lv 3+ subclass).
+        # Three of the four maneuvers RAW gate on a reaction (Riposte,
+        # Parry, Brace); the fourth (Deflect Missiles below) is Monk.
+        # Subclass detection mirrors the convention used by the
+        # _FEATURE_ECONOMY subclass tag ("battle-master").
+        if ftr_lv >= 3:
+            subclass_raw = (sheet.get("subclass") or "").strip().lower()
+            subclass_slug = (
+                subclass_raw.replace("martial archetype: ", "")
+                .replace("martial archetype ", "")
+                .strip()
+            )
+            if "battle" in subclass_slug or "battle-master" in subclass_slug:
+                out.extend([
+                    {
+                        "key": "riposte",
+                        "label": "⚔ Riposte",
+                        "source": "Battle Master maneuver",
+                        "kind": "class_feature",
+                        "desc": (
+                            "When an attacker misses you with a melee "
+                            "attack, spend a superiority die to make "
+                            "a melee attack against them."
+                        ),
+                    },
+                    {
+                        "key": "parry",
+                        "label": "🛡 Parry",
+                        "source": "Battle Master maneuver",
+                        "kind": "class_feature",
+                        "desc": (
+                            "When you take damage from a melee attack, "
+                            "spend a superiority die to reduce damage "
+                            "by 1d8 + DEX mod."
+                        ),
+                    },
+                    {
+                        "key": "brace",
+                        "label": "⚔ Brace",
+                        "source": "Battle Master maneuver",
+                        "kind": "class_feature",
+                        "desc": (
+                            "When a creature enters your reach, spend "
+                            "a superiority die to make a melee attack "
+                            "against them."
+                        ),
+                    },
+                ])
+        # v2.68.6 — Deflect Missiles (Monk Lv 3+).
+        try:
+            monk_lv = _monk_level_from_sheet(sheet)
+        except Exception:
+            monk_lv = 0
+        if monk_lv >= 3:
+            out.append({
+                "key": "deflect-missiles",
+                "label": "🪶 Deflect Missiles",
+                "source": "Monk Lv 3+ class feature",
+                "kind": "class_feature",
+                "desc": (
+                    "When hit by a ranged weapon attack, reduce damage "
+                    "by 1d10 + DEX + Monk Lv. Catch if reduced to 0."
+                ),
+            })
         # Feats (PC sheet.feats list)
         for f in (sheet.get("feats") or []):
             if not isinstance(f, dict):

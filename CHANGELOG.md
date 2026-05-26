@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.68.6] - 2026-05-26 — "Stance and Sting"
+
+**Schema version:** 60
+**Commit summary:** **Phase 2b continuation — Battle Master maneuvers + Deflect Missiles in the GM Reactions catalog.** `_combatant_reactions_catalog` extended with: Riposte / Parry / Brace (Fighter Lv 3+ Battle Master subclass) and Deflect Missiles (Monk Lv 3+). All four appear as one-click spend buttons in the GM Reactions Panel (v2.68.0) and on the v2.67.x reaction-prompt popup when triggered through the manual-spend endpoint. No new per-maneuver endpoints — same "state tracker, not rules engine" stance as v2.68.0: clicking the button flips the reaction chip + posts a chat card; the GM rolls the maneuver's superiority die / Deflect Missiles d10 manually like Cutting Words pre-v2.54.0.
+**Description:** One block of edits in `app/routes/tabletop_routes.py` — `_combatant_reactions_catalog`'s PC path gains two appends. **(1)** After the Indomitable check, a Battle Master subclass gate: normalize `sheet.subclass` (strip "Martial Archetype: " prefix), check for "battle" or "battle-master" in the slug, append three reactions (Riposte, Parry, Brace) with `kind: "class_feature"` + descriptive text. Subclass slug normalization mirrors the convention used by `_FEATURE_ECONOMY` subclass tags. **(2)** After the feat scan, a Monk Lv 3+ gate: `_monk_level_from_sheet(sheet) >= 3` → append Deflect Missiles. **Plus** one harness test: `test_available_reactions_lists_monk_deflect_missiles` confirms Kael (Monk Lv 7) gets the new option in his catalog.
+**Description (cont):** No Battle Master in the demo today. Garrik is Eldritch Knight (or similar non-Battle-Master); no Battle Master fixture PC exists. So the new Battle Master catalog code paths are exercised only by the subclass detection conditional — a future commit can either bump a demo PC to Battle Master OR add a fresh fixture for end-to-end testing of the Riposte / Parry / Brace appearance.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.68.6`. (b) New Kael Deflect Missiles test passes; existing 537 tests pass unchanged. (c) Suite count 537 → 538.
+
+### Added
+- Riposte / Parry / Brace entries in `_combatant_reactions_catalog` gated on Fighter Lv 3+ Battle Master subclass.
+- Deflect Missiles entry gated on Monk Lv 3+.
+- Harness `test_available_reactions_lists_monk_deflect_missiles`.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.68.6`.
+- `README.md` version badge → `2.68.6`.
+- `docs/plans/reactions-automation.md` — Phase 2b note expanded to cover the maneuver catalog landing.
+- `docs/test-harness-coverage.md` — total test count 537 → 538.
+
+### Notes
+- **State tracker, not rules engine.** Spend buttons flip the chip + post a chat card; the GM rolls the die manually.
+- **Battle Master demo fixture filed.** No demo PC exercises the Riposte / Parry / Brace path end-to-end today; only the Monk's Deflect Missiles has live coverage.
+- **Future per-maneuver endpoints filed.** Like `/use_cutting_words` (v2.54.0), each maneuver could grow a dedicated endpoint that rolls the superiority die + applies the mechanical effect. v1 v2.68.6 surfaces them through the catalog only.
+
+---
+
 ## [2.68.5] - 2026-05-26 — "Bards and Bulwarks"
 
 **Schema version:** 60

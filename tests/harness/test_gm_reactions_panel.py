@@ -251,3 +251,33 @@ async def test_spend_reaction_manual_gm_only(alice_client, roster):
         },
     )
     assert resp.status_code == 403, resp.text
+
+
+async def test_available_reactions_lists_monk_deflect_missiles(
+    gm_client, roster,
+):
+    """v2.68.6 — Kael is Monk Lv 7. His catalog now surfaces
+    Deflect Missiles (added in Phase 2b continuation alongside
+    Battle Master maneuvers for Fighter Lv 3+ Battle Masters).
+    """
+    kael = roster["Kael Brightleaf"]
+    await _seed_battle(gm_client, [
+        _make_combatant(kael["name"], kael["id"], init=10),
+    ])
+    resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/available_reactions",
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    kael_entry = next(
+        (c for c in data["combatants"] if c["char_id"] == kael["id"]),
+        None,
+    )
+    assert kael_entry, (
+        f"expected Kael in catalog; got "
+        f"{[c['name'] for c in data['combatants']]}"
+    )
+    keys = [r["key"] for r in kael_entry["reactions"]]
+    assert "deflect-missiles" in keys, (
+        f"expected deflect-missiles in Kael's catalog; got {keys}"
+    )
