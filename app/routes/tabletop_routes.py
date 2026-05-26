@@ -24886,6 +24886,17 @@ _SHEET_PATCH_KEYS = {
     # Feats list — auto-saved on add/remove so the player's selection
     # persists across refreshes without an explicit Save.
     "feats",
+    # v2.68.11 — high-level identity fields (subclass / fighting style /
+    # level). Primarily for the harness to mutate during tests so the
+    # GM Reactions catalog gates (subclass + level) can be exercised
+    # end-to-end without seed bumps. Tests should restore the original
+    # value in a finally block — these fields drive sheet machinery
+    # across many features, so a leaked mutation would surprise other
+    # tests. Production sheet-edit flows use the dedicated subclass
+    # cache keys (subclass_name + subclass_features) above, not these.
+    "subclass",
+    "fighting_style",
+    "level",
 }
 
 # Keys that route into a specific entry of ``sheet["classes"]`` when the

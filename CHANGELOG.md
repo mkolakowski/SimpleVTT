@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.68.11] - 2026-05-26 — "The Shapeshifter's Drawer"
+
+**Schema version:** 60
+**Commit summary:** **Demo fixture consolidation v2 — `/sheet-fields` PATCH allowlist extended with `subclass`, `fighting_style`, `level` so the harness can mutate per-test.** Closes all six remaining v2.68.6–v2.68.9 catalog gaps with PATCH-and-restore harness tests. Each test mutates a demo PC's subclass/level/style, asserts the catalog now contains the gated reaction, then restores the original value in a finally block. No demo seed bumps; no breakage of other tests that depend on the demo PCs' current subclass-driven wiring (Garrik's Champion, Magnus's Fiend, Tavik's Life, Lyra's Lore, Caelan's Devotion).
+**Description:** One block of edits in `app/routes/tabletop_routes.py` — `_SHEET_PATCH_KEYS` allowlist gains three top-level identity keys: `subclass`, `fighting_style`, `level`. Comment notes the intent (harness mutation for catalog gate exercise) + that production sheet-edit flows use the dedicated subclass-cache keys (`subclass_name`, `subclass_features`) not these. Six new tests in `tests/harness/test_gm_reactions_panel.py`:
+- `test_battle_master_maneuvers_via_patch` — Garrik → Battle Master → riposte/parry/brace appear.
+- `test_interception_via_patch` — Caelan fighting_style → "interception" → fighting-style-interception appears.
+- `test_cleric_light_via_patch` — Tavik subclass → "Light Domain" → warding-flare appears.
+- `test_cleric_tempest_via_patch` — Tavik subclass → "Tempest Domain" → wrath-of-the-storm appears.
+- `test_warlock_archfey_via_patch` — Magnus subclass → "The Archfey" + level → 6 → misty-escape appears.
+- `test_bard_valor_via_patch` — Lyra subclass → "College of Valor" → mantle-of-inspiration appears.
+- `test_paladin_crown_via_patch` — Caelan subclass → "Oath of the Crown" → rebuke-the-violent appears.
+
+Each follows the same shape: helper `_patch_sheet_field(...)` PATCH's the key(s), helper `_catalog_keys_for(...)` queries `/available_reactions` and pulls the combatant's reaction key list, the assertion checks for the new key, and the `finally` block PATCHes back to the original value so subsequent tests see clean state.
+**Description (cont):** Why PATCH-and-restore vs. demo seed bumps. The six demo PCs that map to the remaining gaps (Garrik, Magnus, Tavik, Lyra, Caelan x2) all have non-trivial wiring tied to their current subclasses: Champion's crit threshold (v2.49.231), Fiend's temp HP, Life Domain's spell uplift (v2.58.0+) + Divine Strike (v2.60.0), Lore's Cutting Words (v2.54.0), Devotion's Aura of Devotion (v2.55.0) + Channel Divinity. Permanent subclass swaps would cascade through dozens of existing tests. Per-test mutation with restore keeps the demo's primary identity intact while exercising every catalog code path.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.68.11`. (b) Seven new tests + existing 539 tests pass. Total 539 + 7 = 546.
+
+### Added
+- `subclass`, `fighting_style`, `level` to `_SHEET_PATCH_KEYS` allowlist for harness use.
+- Helper `_patch_sheet_field` + `_catalog_keys_for` in `test_gm_reactions_panel.py` for test reuse.
+- 7 new harness tests covering the v2.68.6–v2.68.9 catalog gaps via PATCH-and-restore.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.68.11`.
+- `README.md` version badge → `2.68.11`.
+- `docs/plans/reactions-automation.md` — all Phase 2 catalog entries now have live coverage; demo fixture filings closed.
+- `docs/test-harness-coverage.md` — total test count 539 → 546.
+
+### Notes
+- **Production sheet edits unaffected.** Real sheet edits still flow through the dedicated subclass-cache keys (`subclass_name`, `subclass_features`, etc.) — the new top-level `subclass` / `level` / `fighting_style` keys are an additional path the harness uses, but no production UI sets them directly.
+- **Phase 2 catalog coverage is now 100%.** Every reaction in the plan doc's category A has a live harness assertion.
+
+---
+
 ## [2.68.10] - 2026-05-26 — "The Defender's Pivot"
 
 **Schema version:** 60
