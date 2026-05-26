@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 524 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.67.0, 2026-05-26).
+**Total tests:** 526 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.67.1, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -787,6 +787,8 @@ v2.67.0 — Phase 1a of the reactions-automation plan (see [`docs/plans/reaction
 | `test_use_reaction_replay_guard` | Second POST with the same prompt_id → 409 `prompt_already_resolved`. |
 | `test_use_reaction_unknown_prompt_id` | POST with a fake prompt_id → 409 `prompt_expired_or_unknown`. |
 | `test_use_reaction_missing_prompt_id` | POST with no prompt_id → 400. |
+| `test_reaction_prompt_mode_setting_valid` | v2.67.1 — POST `/api/settings/reaction_prompt_mode` with each of `popup` / `roll_log_only` / `off` → 200 + persisted. |
+| `test_reaction_prompt_mode_setting_invalid` | Invalid mode → 400. |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

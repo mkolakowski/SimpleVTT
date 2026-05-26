@@ -291,3 +291,31 @@ async def test_use_reaction_missing_prompt_id(gm_client):
         },
     )
     assert resp.status_code == 400, resp.text
+
+
+# ── Phase 1b — per-user reaction_prompt_mode setting ──
+
+
+async def test_reaction_prompt_mode_setting_valid(gm_client):
+    """v2.67.1 — /api/settings/reaction_prompt_mode persists the
+    user's prompt-UX preference. Accepts the three valid values."""
+    for mode in ("popup", "roll_log_only", "off"):
+        resp = await gm_client.post(
+            "/api/settings/reaction_prompt_mode",
+            json={"mode": mode},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["reaction_prompt_mode"] == mode
+    # Restore default so subsequent tests see "popup".
+    await gm_client.post(
+        "/api/settings/reaction_prompt_mode", json={"mode": "popup"},
+    )
+
+
+async def test_reaction_prompt_mode_setting_invalid(gm_client):
+    """400 when the mode is not in the allowed set."""
+    resp = await gm_client.post(
+        "/api/settings/reaction_prompt_mode",
+        json={"mode": "spam-the-popup"},
+    )
+    assert resp.status_code == 400, resp.text

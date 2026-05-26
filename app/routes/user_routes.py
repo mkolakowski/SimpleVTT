@@ -481,3 +481,34 @@ def update_glass_alpha(
     user.glass_alpha = body.alpha
     db.commit()
     return {"ok": True, "glass_alpha": body.alpha}
+
+
+_VALID_REACTION_PROMPT_MODES = {"popup", "roll_log_only", "off"}
+
+
+class _ReactionPromptModeBody(BaseModel):
+    mode: str
+
+
+@router.post("/api/settings/reaction_prompt_mode")
+def update_reaction_prompt_mode(
+    body: _ReactionPromptModeBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.67.1 — persist the user's reaction-prompt UX preference.
+    Values:
+      "popup"          — popup toast + roll-log entry (default)
+      "roll_log_only"  — roll-log entry only (no popup)
+      "off"            — no prompts (legacy chip-click only)
+    See docs/plans/reactions-automation.md.
+    """
+    if body.mode not in _VALID_REACTION_PROMPT_MODES:
+        raise HTTPException(
+            400,
+            f"Invalid mode '{body.mode}'. "
+            f"Valid: {sorted(_VALID_REACTION_PROMPT_MODES)}",
+        )
+    user.reaction_prompt_mode = body.mode
+    db.commit()
+    return {"ok": True, "reaction_prompt_mode": body.mode}

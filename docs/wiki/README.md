@@ -34,7 +34,7 @@ Per-subsystem design docs + implementation roadmaps. Working docs that explain "
 | [Demo mode](../plans/demo-mode.md) | Markdown (design) | Contributors | ✅ shipped (v2.3.0) |
 | [Encounter-sim test suite](../plans/encounter-sim-test-suite.md) | Markdown (design) | Contributors | ⚪ plan finalized · Phase 1 PoC pending |
 | [Player simulacrum](../plans/player-simulacrum.md) | Markdown (design) | Contributors | ⚪ design only · all phases unstarted |
-| [Reactions automation](../plans/reactions-automation.md) | Markdown (design) | Contributors | 🟠 Phase 1a shipped (v2.67.0); 1b + 2-7 pending |
+| [Reactions automation](../plans/reactions-automation.md) | Markdown (design) | Contributors | 🟠 Phases 1a + 1b shipped (v2.67.0 + v2.67.1); 2-7 pending |
 | [Ruler & range enforcement](../plans/ruler-and-range.md) | Markdown (design) | Contributors | ✅ All phases shipped (1, 2, 3A–E) |
 | [Spell-validation test suite](../plans/spell-validation-suite.md) | Markdown (design) | Contributors | ⚪ proposed · Phase 0–5 unstarted |
 | [Sorcery Points + Metamagic](../plans/sorcery-points-and-metamagic.md) | Markdown (design) | Contributors | 🟠 Phase 0 shipped (v2.49.120); 1-5 unstarted |

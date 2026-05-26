@@ -589,6 +589,48 @@
 </section>
 
 <section>
+    <h2>⚡ Reaction prompts</h2>
+    <p class="muted">When a trigger event fires for which one of your characters has a reaction available (an opportunity attack, an incoming attack, a save, etc.), how should we surface the options? <strong>Popup</strong> (default) shows a glass-card toast in the corner with one-click spend buttons. <strong>Roll log only</strong> writes the entry to the roll log without the popup — useful if you watch the log closely and find popups distracting. <strong>Off</strong> suppresses both; the action-economy chip click is still the manual fallback.</p>
+    <div style="display:flex;align-items:center;gap:14px;margin-top:12px;">
+        <div role="radiogroup" aria-label="Reaction prompt mode" style="display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+            <button type="button" class="rpm-btn" data-mode="popup"          aria-pressed="{{ 'true' if (user.reaction_prompt_mode or 'popup') == 'popup' else 'false' }}" style="padding:8px 16px;background:none;border:none;cursor:pointer;color:var(--fg);font-size:13px;min-height:44px;">Popup (default)</button>
+            <button type="button" class="rpm-btn" data-mode="roll_log_only"  aria-pressed="{{ 'true' if user.reaction_prompt_mode == 'roll_log_only' else 'false' }}" style="padding:8px 16px;background:none;border:none;cursor:pointer;color:var(--fg);font-size:13px;min-height:44px;border-left:1px solid var(--border);">Roll log only</button>
+            <button type="button" class="rpm-btn" data-mode="off"            aria-pressed="{{ 'true' if user.reaction_prompt_mode == 'off' else 'false' }}" style="padding:8px 16px;background:none;border:none;cursor:pointer;color:var(--fg);font-size:13px;min-height:44px;border-left:1px solid var(--border);">Off</button>
+        </div>
+        <span id="rpm-status" style="font-size:11px;color:#6cb;min-width:9em;"></span>
+    </div>
+    <style>
+        .rpm-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg, #fff); }
+        .rpm-btn:hover:not([aria-pressed="true"]) { background: var(--bg-2); }
+    </style>
+    <script>
+    (function () {
+        const btns   = document.querySelectorAll('.rpm-btn');
+        const status = document.getElementById('rpm-status');
+        btns.forEach(btn => btn.addEventListener('click', async () => {
+            const mode = btn.dataset.mode;
+            if (btn.getAttribute('aria-pressed') === 'true') return;
+            status.textContent = 'saving…';
+            try {
+                const resp = await fetch('/api/settings/reaction_prompt_mode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mode }),
+                });
+                if (!resp.ok) throw new Error(await resp.text());
+                btns.forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+                status.textContent = '✓ Saved — reload the tabletop to see it.';
+                setTimeout(() => { status.textContent = ''; }, 4000);
+            } catch (e) {
+                status.textContent = '✗ Failed';
+                console.error(e);
+            }
+        }));
+    })();
+    </script>
+</section>
+
+<section>
     <h2>🎞️ Animated GIFs</h2>
     <p class="muted">When enabled, animated GIF portraits play in the character sheet and GIF tokens animate on the tabletop canvas. Disable to show a static first-frame thumbnail instead — useful if motion is distracting during play.</p>
     <div style="display:flex;align-items:center;gap:14px;margin-top:12px;">

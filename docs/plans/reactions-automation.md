@@ -1,6 +1,6 @@
 # Reactions Automation — Design Plan
 
-**Status:** 🟠 Phase 1a shipped in **v2.67.0** (server-side foundation: `reaction_prompt` broadcast + `/use_reaction` endpoint + `_eligible_reactions` + `_emit_reaction_prompt` + schema v60 `users.reaction_prompt_mode` + OA exit-reach retrofit). Phase 1b (client popup UI + settings toggle) + Phases 2-7 still ⚪.
+**Status:** 🟠 Phases 1a (v2.67.0) + 1b (v2.67.1) shipped. Phase 1a: server-side foundation — `reaction_prompt` broadcast + `/use_reaction` endpoint + `_eligible_reactions` + `_emit_reaction_prompt` + schema v60 `users.reaction_prompt_mode` + OA exit-reach retrofit. Phase 1b: client popup UI (`reaction_prompt.js`) + `/api/settings/reaction_prompt_mode` endpoint + radio-group toggle on `/settings`. Phases 2-7 still ⚪.
 **Companion to:** [`docs/plans/class-content-status.md`](class-content-status.md) (the content catalog) and the v2.66.0+ OA/Sentinel trigger work.
 
 ---

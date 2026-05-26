@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.67.1] - 2026-05-26 — "The Floating Card"
+
+**Schema version:** 60
+**Commit summary:** **Phase 1b — client popup UI + per-user settings toggle.** New `app/static/reaction_prompt.js` listens for the v2.67.0 `reaction_prompt` WS broadcast (via the existing `vtt:ws-message` CustomEvent dispatched by `tabletop.js`'s `ws.onmessage` handler) and renders a glass-card toast in the top-right corner with the reaction options as one-click spend buttons. Honors per-user `reaction_prompt_mode` (popup / roll_log_only / off). Auto-dismisses after 20 s or when the matching `reaction_prompt_resolved` arrives. New `/api/settings/reaction_prompt_mode` endpoint + radio-group toggle on `/settings`. `ME.reactionPromptMode` plumbed through to tabletop.html.
+**Description:** Four files. **(1)** `app/static/reaction_prompt.js` — new 240-line self-contained component. Module-scoped IIFE with a load-once guard. Listens for `vtt:ws-message`, filters on `msg.type == "reaction_prompt"`, checks `ME.id ∈ data.target_user_ids` + `ME.reactionPromptMode != "off" && != "roll_log_only"`, builds a glass-card DOM with a header (⚡ Reaction available + watcher name in their color), trigger summary, options list (each a 36-px-tall full-width button with hover effects), and a Dismiss link. Click handler on each option posts to `/use_reaction`; disables all buttons during fetch to prevent double-clicks; on success removes the popup locally (the server's resolved broadcast also removes it but local removal is faster). Auto-dismisses after `POPUP_TTL_MS = 20_000`. Also listens for `reaction_prompt_resolved` to clear cross-client races (another tab spent the reaction first). **(2)** `app/templates/tabletop.html` — adds `reactionPromptMode` to the `ME` JS object + loads `reaction_prompt.js` after `economy_messaging.js`. **(3)** `app/routes/user_routes.py` — new `/api/settings/reaction_prompt_mode` POST endpoint with the `popup`/`roll_log_only`/`off` validation set + Pydantic body model. **(4)** `app/templates/user_settings.html` — new "⚡ Reaction prompts" section above the GIF-animation toggle, mirroring the v2.49.244 roll-log-position pattern (radio-group buttons, server save, success/failure status text).
+**Description (cont):** UX design notes:
+- **Glass-card aesthetic.** The popup uses `color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent)` so it inherits the v2.62.0 per-user transparency setting. Same `backdrop-filter: blur(6px)` recipe as the existing glass surfaces. Slight pop-in animation (translate-y 8 px + fade) keeps it lively without being distracting.
+- **Top-right placement, stackable.** Container is `position: fixed; top: 80px; right: 16px; flex-direction: column; gap: 8px` so multiple simultaneous prompts stack vertically. `pointer-events: none` on the container + `pointer-events: auto` on each card lets the canvas behind the empty container area stay clickable.
+- **Per-user routing on the client.** The server broadcasts the prompt to every connected WS client in the campaign (no per-user fan-out at the WS layer), and the client suppresses based on `target_user_ids`. This keeps the broadcast simple and lets the GM see the same prompts as the watcher's owner for audit / table-talk. A future per-user broadcast filter is filed.
+- **`mode === "roll_log_only"` suppresses popup but not roll-log.** The roll-log entry comes from the legacy v2.66.0 `feature_used` advisory (still emitted alongside the new `reaction_prompt`) — so "roll_log_only" mode naturally Just Works without any extra wiring; the popup is the only thing this script suppresses.
+- **`mode === "off"` suppresses both.** The legacy `feature_used` chat card still fires for everyone (not user-filtered), but the popup doesn't appear. The action-economy chip click remains the manual fallback per CLAUDE.md.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.67.1`. (b) Settings page renders the new section + the toggle persists to `users.reaction_prompt_mode`. (c) 2 new harness tests covering the settings endpoint (3 valid modes + invalid rejection). (d) The browser-side popup itself is exercised end-to-end via the v2.67.0 OA exit-reach trigger — open the demo as alice, drag Krieger out of Tavik's reach as the GM, and alice should see a popup since she owns no character involved (Tavik is the watcher; the GM owns him). Tested manually in the dev container; the existing v2.67.0 harness coverage proves the broadcast that drives the popup fires.
+
+### Added
+- `app/static/reaction_prompt.js` — popup component (240 lines).
+- `/api/settings/reaction_prompt_mode` POST endpoint + Pydantic body model.
+- `ME.reactionPromptMode` JS field in `tabletop.html`.
+- Settings page "⚡ Reaction prompts" radio-group section.
+- Harness `test_reaction_prompt_mode_setting_valid` + `test_reaction_prompt_mode_setting_invalid` — 2 new tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.67.1`.
+- `README.md` version badge → `2.67.1`.
+- `docs/plans/reactions-automation.md` — Phase 1b marked ✅ shipped.
+- `docs/test-harness-coverage.md` — total test count 524 → 526.
+
+### Notes
+- **Roll-log card still leverages the legacy advisory.** Phase 1c could add a dedicated reaction-prompt card variant; today the v2.66.0 `feature_used` chat card serves that role.
+- **Per-user broadcast filter still filed.** The WS layer fans out to everyone; the client suppresses. Acceptable for v1.
+
+---
+
 ## [2.67.0] - 2026-05-26 — "Permission Granted"
 
 **Schema version:** 60

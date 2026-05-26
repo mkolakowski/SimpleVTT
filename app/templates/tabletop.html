@@ -3428,7 +3428,7 @@
 <script>
 const CAMPAIGN_ID = {{ campaign.id }};
 const MAP_ID = {{ active_map.id if active_map else 'null' }};
-const ME = { id: {{ user.id }}, name: {{ user.display_name|tojson }}, isGm: {{ 'true' if is_gm else 'false' }}, animateGifs: {{ 'true' if user.animate_gifs else 'false' }}, zoomSpeed: {{ user.zoom_speed or 1.0 }} };
+const ME = { id: {{ user.id }}, name: {{ user.display_name|tojson }}, isGm: {{ 'true' if is_gm else 'false' }}, animateGifs: {{ 'true' if user.animate_gifs else 'false' }}, zoomSpeed: {{ user.zoom_speed or 1.0 }}, reactionPromptMode: {{ (user.reaction_prompt_mode or 'popup')|tojson }} };
 const GAME_SYSTEM = {{ system.key|tojson }};
 const ROLLABLE_SHEET = {{ 'true' if system.rollable_sheet else 'false' }};
 const MEMBERS = [{% for m in members %}{"id":{{ m.id }},"name":{{ m.display_name|tojson }}}{% if not loop.last %},{% endif %}{% endfor %}];
@@ -3443,6 +3443,7 @@ let CONC_DATA = {{ conc_by_char | tojson }};
 <script src="/static/action_buttons.js?v={{ APP_VERSION }}"></script>
 <script src="/static/roll_toast.js?v={{ APP_VERSION }}"></script>
 <script src="/static/economy_messaging.js?v={{ APP_VERSION }}"></script>
+<script src="/static/reaction_prompt.js?v={{ APP_VERSION }}"></script>
 <script src="/static/beast_picker.js?v={{ APP_VERSION }}"></script>
 <script src="/static/tabletop.js?v={{ APP_VERSION }}"></script>
 <script src="/static/audio.js?v={{ APP_VERSION }}"></script>
