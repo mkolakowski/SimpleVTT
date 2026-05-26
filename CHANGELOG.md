@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.68.5] - 2026-05-26 — "Bards and Bulwarks"
+
+**Schema version:** 60
+**Commit summary:** **Phase 2b — Cutting Words + Indomitable surfacing through the reaction-prompt pipeline.** Both endpoints (v2.54.0 / v2.56.0) now emit a `reaction_prompt(trigger_event="reaction_used")` ack alongside their existing `feature_used` broadcasts so the v2.67.1 popup + roll-log UX captures them on every use. Mirrors the v2.67.2 Uncanny Dodge ack pattern — informational only; the original endpoints already mutated state (BI die rolled + resource decremented for Cutting Words, Indomitable buff armed + indomitable resource decremented). Ack option keys (`cutting-words-ack`, `indomitable-ack`) dispatch as no-ops in `/use_reaction`. New `reaction_used` trigger event in `_eligible_reactions` looks up the right ack option via `context.reaction_key`.
+**Description:** Four edits in `app/routes/tabletop_routes.py`. **(1)** `/use_cutting_words` (~L 12936) calls `_emit_reaction_prompt(trigger_event="reaction_used", context={reaction_key: "cutting-words", die, rolled, target_name})` just before its return. Resolves the bard's combatant by `char_id == char.id` walk over `state.combatants`. Exception-swallowed so a prompt failure doesn't break the endpoint. **(2)** `/use_indomitable` (~L 15675) does the same with `reaction_key: "indomitable"` and remaining/max context. **(3)** `_eligible_reactions` gains a `reaction_used` trigger event branch — looks up `context.reaction_key`, returns the matching ack option (currently two: `cutting-words-ack` + `indomitable-ack`). Future Phase 2b reactions extend the lookup table here. **(4)** `/use_reaction` dispatch case extends `elif reaction_key in ("cutting-words-ack", "indomitable-ack"): pass` — no-op, prompt resolves but state isn't touched (already mutated by the original endpoint).
+**Description (cont):** Why ack-only vs. prompt-first. Cutting Words + Indomitable are PLAYER-INITIATED — the player explicitly clicks the action button on their sheet, then the endpoint mutates state. There's no implicit trigger event the server could intercept to delay state changes for a prompt-first decision. The pattern is: spend it → see the ack popup confirming you spent → click OK or let it fade. Same as Uncanny Dodge: the auto-fire branch ran, the ack confirms. The GM and the owning player both get the popup (per `_resolve_watcher_user_ids` returning `[owner, gm]`).
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.68.5`. (b) New `test_cutting_words_emits_reaction_prompt` + `test_indomitable_emits_reaction_prompt` cover the post-action prompt + ack-resolve flow end-to-end. (c) Existing v2.54.0 + v2.56.0 endpoint tests pass unchanged — the new prompt emission is additive, no existing assertions break.
+
+### Added
+- `reaction_used` trigger event branch in `_eligible_reactions` with lookup by `context.reaction_key`.
+- `cutting-words-ack` + `indomitable-ack` ack options returned from the new trigger branch.
+- `_emit_reaction_prompt` calls in `/use_cutting_words` and `/use_indomitable` right before their returns.
+- `cutting-words-ack` + `indomitable-ack` dispatch cases in `/use_reaction` (no-op pass-through).
+- Harness `test_cutting_words_emits_reaction_prompt` + `test_indomitable_emits_reaction_prompt` — 2 new tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.68.5`.
+- `README.md` version badge → `2.68.5`.
+- `docs/plans/reactions-automation.md` — Phase 2b status note updated.
+- `docs/test-harness-coverage.md` — total test count 535 → 537.
+
+### Notes
+- **Mirrors the v2.67.2 Uncanny Dodge ack pattern.** Pure surfacing; mechanic unchanged.
+- **Future Phase 2b reactions extend the same hook.** Riposte / Parry / Brace / Deflect Missiles would add to the `_eligible_reactions[reaction_used]` lookup table + a dispatch case.
+
+---
+
 ## [2.68.4] - 2026-05-26 — "Edge to Edge"
 
 **Schema version:** 60

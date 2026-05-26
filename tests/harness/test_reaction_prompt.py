@@ -467,6 +467,116 @@ async def test_uncanny_dodge_emits_reaction_prompt(
         )
 
 
+# ── v2.68.5 — Phase 2b: Cutting Words + Indomitable prompt ack ──
+
+
+async def test_cutting_words_emits_reaction_prompt(
+    gm_client, gm_ws, roster,
+):
+    """v2.68.5 — `/use_cutting_words` (v2.54.0) now ALSO emits a
+    `reaction_prompt(reaction_used)` ack alongside its existing
+    `feature_used` advisory so the popup + roll-log UX captures it.
+    Lyra is the demo's Bard Lv 7 (College of Lore) with a 1d8 BI die.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    # Long rest so BI uses are full.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
+        json={"type": "long"},
+    )
+    await _seed_battle(gm_client, [
+        _make_combatant(lyra["name"], lyra["id"], init=12, hp=40),
+    ])
+    await asyncio.sleep(0.1)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_cutting_words",
+        json={"character_id": lyra["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == lyra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "reaction_used"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(reaction_used) for Lyra after "
+        f"Cutting Words; buffered prompts: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+    assert "cutting-words-ack" in keys, (
+        f"expected cutting-words-ack option; got {keys}"
+    )
+
+    # Ack resolves cleanly.
+    prompt_id = prompts[0]["data"]["prompt_id"]
+    ack = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "cutting-words-ack",
+            "watcher_char_id": lyra["id"],
+        },
+    )
+    assert ack.status_code == 200, ack.text
+
+
+async def test_indomitable_emits_reaction_prompt(
+    gm_client, gm_ws, roster,
+):
+    """v2.68.5 — `/use_indomitable` (v2.56.0) now ALSO emits a
+    `reaction_prompt(reaction_used)` ack alongside its existing
+    `feature_used` advisory. Garrik is the demo's Fighter Lv 9.
+    """
+    garrik = roster["Garrik Ironside"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/rest",
+        json={"type": "long"},
+    )
+    await _seed_battle(gm_client, [
+        _make_combatant(garrik["name"], garrik["id"], init=12, hp=85),
+    ])
+    await asyncio.sleep(0.1)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_indomitable",
+        json={"character_id": garrik["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+        and (m.get("data") or {}).get("trigger_event") == "reaction_used"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(reaction_used) for Garrik after "
+        f"Indomitable arm; buffered prompts: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+    assert "indomitable-ack" in keys, (
+        f"expected indomitable-ack option; got {keys}"
+    )
+
+    prompt_id = prompts[0]["data"]["prompt_id"]
+    ack = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "indomitable-ack",
+            "watcher_char_id": garrik["id"],
+        },
+    )
+    assert ack.status_code == 200, ack.text
+
+
 # ── v2.67.3 — NPC reaction slot consumption ──
 
 

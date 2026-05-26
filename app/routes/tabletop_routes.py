@@ -2046,6 +2046,35 @@ def _eligible_reactions(
             "available": True,
             "unavailable_reason": None,
         }]
+    # v2.68.5 Phase 2b — informational ack for class-feature reactions
+    # that already have dedicated endpoints (Cutting Words v2.54.0,
+    # Indomitable v2.56.0). The endpoint mutates state; the prompt
+    # is purely visibility — popup + roll-log entry capture which
+    # reaction was used. The ack option key is derived from
+    # ``context.reaction_key`` so a future phase can wire more
+    # reactions without touching this helper.
+    if trigger_event == "reaction_used":
+        reaction_key = (context.get("reaction_key") or "").strip().lower()
+        if reaction_key == "cutting-words":
+            return [{
+                "key": "cutting-words-ack",
+                "label": "🎭 Cutting Words spent (acknowledge)",
+                "kind": "ack",
+                "resource_cost": "Reaction (already spent)",
+                "params": {},
+                "available": True,
+                "unavailable_reason": None,
+            }]
+        if reaction_key == "indomitable":
+            return [{
+                "key": "indomitable-ack",
+                "label": "🛡 Indomitable armed (acknowledge)",
+                "kind": "ack",
+                "resource_cost": "Indomitable use (already spent)",
+                "params": {},
+                "available": True,
+                "unavailable_reason": None,
+            }]
     # v2.67.2 Phase 2a — Uncanny Dodge auto-fire announcement.
     # The trigger fires AFTER the v2.49.243 auto-halve has already
     # happened (server applies the half + marks the reaction). The
@@ -12373,6 +12402,12 @@ async def use_reaction(
         # the prompt without touching state. Reaction is already
         # marked, damage is already halved.
         pass
+    elif reaction_key in ("cutting-words-ack", "indomitable-ack"):
+        # v2.68.5 Phase 2b — informational acks for Cutting Words +
+        # Indomitable. The original endpoint already mutated state
+        # (resource decremented, reaction or use slot marked); this
+        # branch just resolves the prompt cleanly.
+        pass
 
     await hub.broadcast(campaign_id, {
         "type": "reaction_prompt_resolved",
@@ -12932,6 +12967,32 @@ async def use_cutting_words(
             "max": mx,
         },
     })
+
+    # v2.68.5 Phase 2b — surface Cutting Words through the v2.67.x
+    # reaction-prompt pipeline so the popup + roll-log UX captures
+    # it for both the bard's owning user AND the GM. Informational
+    # ack — endpoint already mutated state.
+    try:
+        state = hub.get_battle(campaign_id) or {}
+        bard_cb = None
+        for c in (state.get("combatants") or []):
+            if c.get("char_id") == char.id:
+                bard_cb = c
+                break
+        if bard_cb is not None:
+            await _emit_reaction_prompt(
+                db, campaign, bard_cb,
+                trigger_event="reaction_used",
+                summary=feature_name,
+                context={
+                    "reaction_key": "cutting-words",
+                    "die": f"d{die_size}",
+                    "rolled": rolled,
+                    "target_name": display_name or "",
+                },
+            )
+    except Exception:
+        pass
 
     return {
         "ok": True,
@@ -15645,6 +15706,32 @@ async def use_indomitable(
             "max": ind_max,
         },
     })
+
+    # v2.68.5 Phase 2b — surface Indomitable arming through the
+    # reaction-prompt pipeline. The arming itself is free (Indomitable
+    # is its own use-slot, not a reaction), but the popup + roll log
+    # entry give the GM + the fighter's owning user the same
+    # visibility as other reaction events.
+    try:
+        state = hub.get_battle(campaign_id) or {}
+        fighter_cb = None
+        for c in (state.get("combatants") or []):
+            if c.get("char_id") == char.id:
+                fighter_cb = c
+                break
+        if fighter_cb is not None:
+            await _emit_reaction_prompt(
+                db, campaign, fighter_cb,
+                trigger_event="reaction_used",
+                summary="🛡️ Indomitable armed — next save rolls with advantage.",
+                context={
+                    "reaction_key": "indomitable",
+                    "remaining": ind_cur - 1,
+                    "max": ind_max,
+                },
+            )
+    except Exception:
+        pass
 
     return {
         "ok": True,
