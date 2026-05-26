@@ -152,6 +152,34 @@ Am I editing a doc under docs/ or a repo-root doc?
 
 **When NOT to apply.** Files that aren't reader-facing documents: test files (`tests/`), code (`app/`), config (`docker-compose.yml`, `pytest.ini`, `.env.example`), the homebrew JSON content layer, asset files (images, fonts, demo media), the changelog archive (`CHANGELOG_v1.md` is already surfaced). If you're not sure whether a file is a "doc," ask — the rule of thumb is "would a contributor want to find this from the wiki landing page?" If yes, surface it. If no, skip it.
 
+## Offer "what's next" as multiple-choice questions
+
+When wrapping a commit, presenting candidates for the next piece of work, or surfacing a list of options the user might want to pursue, **use the `AskUserQuestion` tool to format the choices as a multiple-choice menu** rather than embedding the candidates as a Markdown bullet list at the end of a chat response. The user has stated this preference explicitly: bulleted "candidates queued" lists at the end of every commit reply force them to retype their choice in prose, while a multiple-choice picker is one click.
+
+**When to use it:**
+
+- After shipping a version bump, when offering 2–4 follow-up candidates for the next commit.
+- When the user has said "what's next?" or similar, and there's more than one reasonable next step.
+- When you're about to pick between multiple implementation approaches and want explicit guidance (e.g. "Phase A only" vs. "Full F8" vs. "Phase A + B").
+- Whenever you'd otherwise write a closing paragraph like "What's next? Candidates queued: ..." or "Say the word for any of these: ...".
+
+**When NOT to use it:**
+
+- Single-option follow-ups (no choice to make — just state the next step in prose).
+- Confirmations that don't have alternatives ("Should I commit?" — just commit per the per-commit rule).
+- Clarifying questions where the option space isn't enumerable (those stay as free-form text).
+- When the user has already chosen what's next and you're mid-implementation.
+
+**Format:**
+
+- 2–4 options. If you have more than 4 candidates, pick the 3–4 highest-leverage ones and mention the rest in the "Other" overflow.
+- Lead with the option you'd recommend, suffix the label with `(Recommended)` so the user sees the steer first.
+- Use the `header` field for a short chip label (e.g. `"Next bump"`, `"F8 scope"`, `"Approach"`).
+- Keep `description` to one short sentence on what that choice triggers.
+- One question per AskUserQuestion call unless the choices are genuinely independent (rare).
+
+**Why this exists.** The user told the assistant in this conversation: "when a choice is needed, can you format you response to include a multiple choice". That preference is now durable — every "what's next" reply that lists 2+ candidates should use AskUserQuestion. A trailing prose-bullet list at the bottom of a commit reply is the anti-pattern.
+
 ## Third-party APIs must be Docker Compose services
 
 When integrating any external API or data service, add it as a named service in

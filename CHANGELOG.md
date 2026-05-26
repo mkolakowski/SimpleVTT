@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.66.3] - 2026-05-26 — "The Pull-Down Menu"
+
+**Schema version:** 59
+**Commit summary:** **CLAUDE.md gains an "offer next-step candidates as multiple-choice" rule.** Doc-only PATCH bump capturing a user preference stated mid-session: when wrapping a commit and offering 2-4 follow-up candidates, use the `AskUserQuestion` tool to render the choices as a multiple-choice picker rather than a trailing Markdown bullet list. Includes when-to-use / when-not-to-use guidance + format conventions (recommend the first option, 2-4 max, short header chips).
+**Description:** One file edited (`CLAUDE.md`). New section "Offer 'what's next' as multiple-choice questions" inserted right before the "Third-party APIs must be Docker Compose services" section. Captures the durable preference established in the v2.66.0+ working session: bulleted "candidates queued" lists at the end of commit replies forced the user to retype their choice in prose. Format: 2-4 options, recommended one first with `(Recommended)` suffix, header field for short chip label, single AskUserQuestion call per choice point.
+**Description (cont):** Verification. (a) `curl /version` reports `2.66.3` after `docker compose up -d --build app`. (b) No code changed — no harness test required (the CLAUDE.md change is meta-tooling guidance, not a runtime surface). (c) Suite count unchanged at 512.
+
+### Added
+- `CLAUDE.md` — new "Offer 'what's next' as multiple-choice questions" rule with when-to-use / when-not-to-use guidance + format conventions.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.66.3`.
+- `README.md` version badge → `2.66.3`.
+
+### Notes
+- **Captures a user preference, not a new feature.** The behavior is for the AI assistant working with this repo to honor when offering candidates; no runtime change.
+
+---
+
 ## [2.66.2] - 2026-05-26 — "Greatclub Geometry"
 
 **Schema version:** 59
