@@ -1400,7 +1400,9 @@ school/class. Skip silence-zone validation for v1 (too positional).
 
 **Effort estimate:** 1 commit. Mostly schema + a single gate.
 
-### F8. Condition-buff undo / reversal
+### F8. Condition-buff undo / reversal — 🟢 PARTIAL (v2.65.0 Phase A+B shipped)
+
+**Status:** Phase A (snapshot pipeline + multi-target undo) + Phase B (condition install undo on save-fail) shipped v2.65.0. Phase C (RAW Indomitable reroll endpoint) + Phase D (death-save override concentration drop undo) filed as v2.65.x follow-ups — both are additive consumers of the v2.65.0 snapshot helpers.
 
 **What it is:** A reverse-install pipeline for buffs that hold state.
 Today `/undo_attack_damage` reverts HP changes but doesn't un-install

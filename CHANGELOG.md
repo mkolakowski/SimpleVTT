@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.65.0] - 2026-05-26 — "The Rewind"
+
+**Schema version:** 59
+**Commit summary:** **F8 condition undo / reversal framework — Phase A (snapshot pipeline) + Phase B (condition install undo).** Refactors `_attack_damage_log` from `dict[str, dict]` (one entry per cast_id, overwritten on each apply) to `dict[str, list[dict]]` (append-only, per-target snapshots). `/undo_attack_damage` walks the list in reverse and applies each undo. Closes the v2.59.0 multi-target heal undo file (Mass Cure Wounds at 6 targets → undo reverts ALL 6, not just target 0) + the v2.49.243 condition-undo-on-save-fail file. Phase C (RAW Indomitable reroll) + Phase D (death-save override undo) filed as v2.65.x follow-ups.
+**Description:** Three blocks of edits in `app/routes/tabletop_routes.py`. **(1) Phase A foundation:** new `_log_damage_entry(cast_id, entry)` helper APPENDS to a per-cast list (replaces the 4 in-place dict-write sites in `_apply_damage_to_combatant` PC/NPC + `_apply_heal_to_combatant` PC/NPC). `_purge_attack_damage_log` walks lists' newest `ts` for the 8-hour TTL. Entry shape: `{kind: "damage"|"heal"|"buff_install", ts, campaign_id, target_*, applied, ...}`. The legacy heal-claim "already auto-applied" detection (~L 17833) now walks the list for any matching is_heal entry instead of looking up a single dict. **(2) Phase B condition install:** new `_snapshot_target_buffs(db, campaign_id, target_combatant) → list[dict]` reads the target's current buff list (from hub combatant); new `_restore_target_buffs(db, campaign_id, target_char_id, target_combatant_id, buffs_before)` mutates the combatant's buffs back to the snapshot + mirrors to the sheet + broadcasts `buff_update(source="undo")`. At the save-fail condition-install site in `/roll_request/{id}/respond` (~L 8237), the target's pre-install buff list is snapshotted into `_attack_damage_log[str(roll_req.id)]` as a `kind: "buff_install"` entry. **(3) Undo endpoint rewrite:** `/undo_attack_damage` walks entries in REVERSE order. Per entry: damage → restore HP; heal → remove HP; buff_install → restore buff snapshot. Per-target results aggregate into a new `per_target` list in the response so the chat card can render "Reverted Krieger / Pip / Tavik (3 targets)". Legacy `hp_after` + `was_heal` fields preserved for backward compat (now reflect the last undone entry).
+**Description (cont):** Why the dict→list refactor closes multi-target undo. Pre-v2.65.0, `_attack_damage_log[cast_id] = {target_X, applied_X}` on the FIRST target; the SECOND target's apply overwrote with `{target_Y, applied_Y}`. Undo reverted Y only; X kept its damage/heal. The v2.59.0 multi-target heal loop sidestepped this by passing `cast_id=None` for extras (no undo trail), which is why undo on Mass Healing Word only reverted target 0 + a chat-card warning surfaced the limitation as a v1 sim. v2.65.0 turns the dict value into a list and every apply appends — full undo per cast.
+**Description (cont 2):** Why snapshot the entire buff list, not just the installed buff. Other code paths might install / mutate / remove buffs between the original install and the undo (concentration cascade, buff TTL expiration mid-turn, GM manual edits). A snapshot of the FULL list at install-time is robust against intervening changes — undo restores exactly what existed before, regardless of what happened after. The shallow-dict copy + list-of-dicts shape is light (~1 KB per snapshot on a buffed PC).
+**Description (cont 3):** Phase C+D scope deferred. The "Full F8" choice from the planning question included RAW Indomitable reroll (Phase C) + death-save override concentration drop undo (Phase D). Both need additional design work — Phase C touches the existing v2.56.0 arm-then-consume model + needs a UI flow for "after-fail declare"; Phase D needs the death-save override path to know which cast_id's concentration drops to undo. Filed as v2.65.1 / v2.65.2 follow-ups. The Phase A+B foundation in this commit is what BOTH Phase C and D will reuse — they're additive consumers of the snapshot pipeline.
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.65.0` after `docker compose up -d --build app`. (b) New harness `tests/harness/test_undo_multi_entry.py` (3 tests): multi-target heal undo (Tavik MHW at Krieger + Pip → undo reverts both); condition install undo (Lyra Suggestion at Krieger fail → Charmed installs → undo restores buff list); single-target backward-compat (Tavik attacks NPC → undo reverts + legacy `hp_after`/`was_heal` fields populate). (c) The v2.59.2 / v2.58.0 heal-claim flow tests continue to pass (the heal-claim "already auto-applied" detection now walks the list instead of looking up a single dict). (d) Full suite 502 + 3 = 505 passing.
+
+### Added
+- `_log_damage_entry(cast_id, entry)` helper — appends snapshot entries to the per-cast undo list.
+- `_snapshot_target_buffs(db, campaign_id, target_combatant)` + `_restore_target_buffs(db, campaign_id, target_char_id, target_combatant_id, buffs_before)` helpers — Phase B condition-undo plumbing.
+- Buff-install snapshot at `/roll_request/{id}/respond`'s condition-install branch — pre-install buff list logged for undo.
+- `per_target` array on `/undo_attack_damage` response — per-entry undo results so chat cards can render "Reverted N targets."
+- Harness `tests/harness/test_undo_multi_entry.py` — 3 tests covering multi-target undo + condition install undo + single-target backward-compat.
+
+### Changed
+- `_attack_damage_log` shape: `dict[str, dict]` → `dict[str, list[dict]]`. All 4 write sites updated to use `_log_damage_entry` (append) instead of in-place overwrite.
+- `_purge_attack_damage_log` walks list of entries per cast_id, drops the whole list when the newest entry is stale.
+- `/undo_attack_damage` rewritten to walk entries in REVERSE order. Damage → restore HP; heal → remove HP; buff_install → restore buff snapshot. Legacy `hp_after` / `was_heal` fields preserved.
+- Heal-claim "already auto-applied" detection (~L 17833) walks the entry list instead of reading a single dict.
+- `app/version.py` `APP_VERSION` → `2.65.0`.
+- `README.md` version badge → `2.65.0`.
+- `docs/plans/class-content-status.md` — F8 row in "Missing system frameworks" flips from ⚪ to 🟢 partial (Phase A+B shipped; C+D filed).
+- `docs/test-harness-coverage.md` — total test count 502 → 505.
+
+### Notes
+- **Phase A+B foundation; C+D filed.** Full F8 was the planning choice but the snapshot pipeline (A+B) is the load-bearing piece. Phases C (RAW Indomitable reroll endpoint reusing the undo log) and D (death-save override drops cascaded concentration via the undo log) are now small additive consumers — filed as v2.65.1 / v2.65.2 follow-ups.
+- **Backward compat preserved.** All existing undo callers (chat card "↶ Undo" button) keep working — the response still carries `hp_after` + `was_heal` + `reverted`. New callers can read `per_target` for per-target detail.
+- **Buff-install undo currently covers ONLY save-fail condition installs.** The same pattern can be wired at every `_install_buff` call site (Rage, Hex, Hunter's Mark, etc.) but the gameplay value is highest at save-fail (RAW Indomitable, Lay on Hands cure disease, etc.). Filed for the per-site pass.
+- **8-hour TTL applies to the whole list.** A cast_id's entries all expire together when the newest entry's ts crosses the cutoff.
+
+---
+
 ## [2.64.0] - 2026-05-26 — "The Veil"
 
 **Schema version:** 59

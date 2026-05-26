@@ -2031,16 +2031,135 @@ def _apply_pool_empowered_reroll(
 # (char_id OR combatant_id), and the actual HP delta applied. Capped
 # implicitly by clear-on-restart + the ``_purge_attack_damage_log``
 # call at write time (drops entries older than 8 hours).
-_attack_damage_log: dict[str, dict] = {}
+# v2.65.0 — F8 condition undo / reversal framework. The log was a
+# dict[str, dict] (one entry per cast_id) pre-v2.65.0; multi-target
+# AoE writes silently overwrote earlier entries, so undo could only
+# revert the LAST target hit. Now dict[str, list[dict]] — each
+# apply APPENDS a snapshot entry; ``/undo_attack_damage`` walks the
+# list in REVERSE order and applies each undo. Entry shapes:
+#   - damage:  {kind: "damage", ts, campaign_id, target_char_id |
+#               target_combatant_id, applied, was_resistance}
+#   - heal:    {kind: "heal", ts, campaign_id, target_char_id |
+#               target_combatant_id, applied}
+#   - buff:    {kind: "buff_install", ts, campaign_id, target_char_id,
+#               buffs_before: list[dict], buff_installed_key: str}
+#                (snapshot of the target's buff list before install,
+#                 so undo can restore exactly even with stacking).
+# The 8-hour purge sweep drops entire cast_id lists when their
+# newest entry is stale.
+_attack_damage_log: dict[str, list] = {}
 
 
 def _purge_attack_damage_log() -> None:
-    """Drop entries older than 8 hours so an idle demo doesn't grow
-    the dict unbounded. Called at every write site."""
+    """Drop entire cast_id entries whose newest snapshot is older
+    than 8 hours so an idle demo doesn't grow the dict unbounded.
+    Called at every write site.
+    """
     cutoff = _time.time() - 8 * 3600
-    stale = [k for k, v in _attack_damage_log.items() if v.get("ts", 0) < cutoff]
+    stale: list[str] = []
+    for k, entries in _attack_damage_log.items():
+        if not entries:
+            stale.append(k)
+            continue
+        newest_ts = max((e.get("ts", 0) for e in entries), default=0)
+        if newest_ts < cutoff:
+            stale.append(k)
     for k in stale:
         _attack_damage_log.pop(k, None)
+
+
+def _log_damage_entry(cast_id: str | None, entry: dict) -> None:
+    """v2.65.0 — append a snapshot entry to the per-cast undo log.
+    No-op when cast_id is falsy. Each entry carries a ``ts`` for
+    the 8-hour purge sweep. Callers stamp ``kind``, ``campaign_id``,
+    and the per-shape payload (damage / heal / buff install).
+    """
+    if not cast_id:
+        return
+    entry.setdefault("ts", _time.time())
+    _attack_damage_log.setdefault(cast_id, []).append(entry)
+
+
+def _snapshot_target_buffs(
+    db: Session, campaign_id: int, target_combatant: dict,
+) -> "list[dict]":
+    """v2.65.0 — return a deep-ish copy of a target's buff list so
+    a follow-up ``_restore_target_buffs`` can reproduce the exact
+    pre-install state. Reads PC buffs from `char.sheet["_buffs_active"]`
+    + the hub combatant's buffs list (NPCs); merges both for PCs so
+    the buff-install undo restores combined state cleanly.
+
+    Returns a list of dicts; each dict is a shallow copy of the
+    original buff entry (effects sub-dict is also shallow-copied).
+    Sufficient for undo: buffs are append-only between snapshot
+    and undo, and the structural keys (key, name, effects, etc.)
+    don't mutate in place.
+    """
+    out: list[dict] = []
+    char_id = target_combatant.get("char_id")
+    if char_id:
+        # PC: read from combatant.buffs (the in-init state).
+        state = hub.get_battle(campaign_id) or {}
+        for c in state.get("combatants") or []:
+            if c.get("char_id") == char_id:
+                for b in (c.get("buffs") or []):
+                    if isinstance(b, dict):
+                        out.append(dict(b))
+                break
+    else:
+        # NPC: read from the hub combatant's buffs.
+        state = hub.get_battle(campaign_id) or {}
+        tid = target_combatant.get("id")
+        for c in state.get("combatants") or []:
+            if c.get("id") == tid:
+                for b in (c.get("buffs") or []):
+                    if isinstance(b, dict):
+                        out.append(dict(b))
+                break
+    return out
+
+
+async def _restore_target_buffs(
+    db: Session, campaign_id: int,
+    target_char_id: int | None,
+    target_combatant_id: str | None,
+    buffs_before: "list[dict]",
+) -> None:
+    """v2.65.0 — restore a target's buff list to the snapshot taken
+    pre-install. Used by ``/undo_attack_damage`` to walk back any
+    condition installs (Charmed / Paralyzed / Stunned / etc.) that
+    landed alongside the damage/save being undone.
+
+    PC path: overwrites the combatant's buffs in-place + mirrors to
+    the sheet via the existing ``_mirror_buffs_to_sheet`` helper,
+    then broadcasts ``buff_update``. NPC path: same, sans the sheet
+    mirror.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return
+    target = None
+    for c in state.get("combatants") or []:
+        if (target_char_id and c.get("char_id") == target_char_id) or (
+            target_combatant_id and c.get("id") == target_combatant_id
+        ):
+            target = c
+            break
+    if not target:
+        return
+    target["buffs"] = list(buffs_before)
+    hub.set_battle(campaign_id, state)
+    if target_char_id:
+        _mirror_buffs_to_sheet(db, int(target_char_id), list(buffs_before))
+    await hub.broadcast(campaign_id, {
+        "type": "buff_update",
+        "data": {
+            "character_id": target_char_id,
+            "combatant_id": target_combatant_id or target.get("id"),
+            "buffs": list(buffs_before),
+            "source": "undo",
+        },
+    })
 
 
 # v2.37.0 Phase T.3d: side-channel context for PC save-or-suck spells.
@@ -2264,13 +2383,13 @@ async def _apply_damage_to_combatant(
                 db, campaign_id, attacker_char_id, combatant,
             )
         if attack_id:
-            _attack_damage_log[attack_id] = {
-                "ts": _time.time(),
+            _log_damage_entry(attack_id, {
+                "kind": "damage",
                 "campaign_id": campaign_id,
                 "target_char_id": char.id,
                 "applied": applied,
                 "was_resistance": resistance_applied,
-            }
+            })
         return {
             "applied": applied,
             "hp_before": hp_cur,
@@ -2331,13 +2450,13 @@ async def _apply_damage_to_combatant(
     # v2.49.61: RAW Sleep — taking damage wakes the sleeper.
     await _wake_sleeping_on_damage(campaign_id, None, target.get("id"), applied)
     if attack_id:
-        _attack_damage_log[attack_id] = {
-            "ts": _time.time(),
+        _log_damage_entry(attack_id, {
+            "kind": "damage",
             "campaign_id": campaign_id,
             "target_combatant_id": target.get("id"),
             "applied": applied,
             "was_resistance": resistance_applied,
-        }
+        })
     return {
         "applied": applied,
         "hp_before": hp_cur,
@@ -2499,13 +2618,13 @@ async def _apply_heal_to_combatant(
             },
         })
         if cast_id:
-            _attack_damage_log[cast_id] = {
-                "ts": _time.time(),
+            _log_damage_entry(cast_id, {
+                "kind": "heal",
                 "campaign_id": campaign_id,
                 "target_char_id": char.id,
                 "applied": actual,
                 "is_heal": True,
-            }
+            })
         return {
             "applied": actual,
             "hp_before": hp_cur,
@@ -2539,13 +2658,13 @@ async def _apply_heal_to_combatant(
         "force_gm_sync": True,
     })
     if cast_id:
-        _attack_damage_log[cast_id] = {
-            "ts": _time.time(),
+        _log_damage_entry(cast_id, {
+            "kind": "heal",
             "campaign_id": campaign_id,
             "target_combatant_id": target.get("id"),
             "applied": actual,
             "is_heal": True,
-        }
+        })
     return {
         "applied": actual,
         "hp_before": hp_cur,
@@ -8127,10 +8246,31 @@ async def respond_roll_request(
                     "concentration": bool(cond.get("concentration")),
                     "effects": list(cond.get("effects", [])),
                 }
+                # v2.65.0 Phase B — snapshot the target's pre-install
+                # buff list so the undo pipeline can restore it. The
+                # roll_req.id (the save's roll_request) is the natural
+                # cast_id for this log entry. Caster-side concentration
+                # buff (below) isn't logged separately because the
+                # cleanup helper drops it when the target's condition
+                # ends — but the target-side install is the one we
+                # need to undo for an Indomitable reroll path.
+                _target_combatant_for_snapshot = {
+                    "char_id": int(tgt_char_id),
+                }
+                _buffs_before = _snapshot_target_buffs(
+                    db, campaign_id, _target_combatant_for_snapshot,
+                )
                 installed = await _install_buff(
                     campaign_id, int(tgt_char_id), buff,
                 )
                 if installed:
+                    _log_damage_entry(str(roll_req.id), {
+                        "kind": "buff_install",
+                        "campaign_id": campaign_id,
+                        "target_char_id": int(tgt_char_id),
+                        "buffs_before": _buffs_before,
+                        "buff_installed_key": cond["key"],
+                    })
                     auto_buff_installed = cond["name"]
                     _mirror_buffs_to_sheet(
                         db, int(tgt_char_id),
@@ -8789,9 +8929,15 @@ async def cast_spell(
                 char.sheet or {}, int(slot_level), extra_is_self,
             )
             _extra_heal_with_uplift = heal_rolled + _extra_target_uplift
+            # v2.65.0 — log under the SAME cast_id as the primary
+            # heal so /undo_attack_damage walks both. Pre-v2.65.0
+            # this passed cast_id=None to avoid overwriting the
+            # primary's log entry (the log was a dict, not a list).
+            # Now the log is dict[str, list[dict]] — append works
+            # cleanly for multi-target undo.
             extra_heal_result = await _apply_heal_to_combatant(
                 db, campaign_id, extra_combatant, _extra_heal_with_uplift,
-                cast_id=None,
+                cast_id=cast_id,
             )
             if _extra_target_uplift > 0:
                 await hub.broadcast(campaign_id, {
@@ -17711,12 +17857,22 @@ async def apply_healing(
         # a matching is_heal entry, and return a friendly 200 instead
         # of the alarming "expired" 404.
         _purge_attack_damage_log()
-        log_entry = _attack_damage_log.get(cast_id)
-        if log_entry and log_entry.get("is_heal") and log_entry.get("campaign_id") == campaign_id:
+        # v2.65.0: log shape changed to list[dict]. Detect "already
+        # auto-applied" by walking entries for an is_heal record
+        # matching this campaign.
+        log_entries = _attack_damage_log.get(cast_id) or []
+        heal_entry = next(
+            (e for e in log_entries
+             if isinstance(e, dict)
+             and e.get("is_heal")
+             and e.get("campaign_id") == campaign_id),
+            None,
+        )
+        if heal_entry:
             return {
                 "ok": True,
                 "already_auto_applied": True,
-                "applied": int(log_entry.get("applied") or 0),
+                "applied": int(heal_entry.get("applied") or 0),
                 "message": "Heal was already auto-applied to the targeted ally — use ↶ Undo to revert.",
             }
         raise HTTPException(404, "Unknown spell cast — it may have expired")
@@ -20461,82 +20617,135 @@ async def undo_attack_damage(
         raise HTTPException(403, "Not a member")
 
     _purge_attack_damage_log()
-    entry = _attack_damage_log.get(attack_id)
-    if not entry or entry.get("campaign_id") != campaign_id:
+    entries = _attack_damage_log.get(attack_id) or []
+    # v2.65.0 — log shape is now list[dict] (Phase A refactor). Walk
+    # entries in REVERSE order so the most recent apply is undone
+    # first. Each entry is independent: damage / heal / buff_install.
+    # Entries are filtered to this campaign so cross-campaign cast_id
+    # collisions don't leak.
+    entries = [
+        e for e in entries
+        if isinstance(e, dict) and e.get("campaign_id") == campaign_id
+    ]
+    if not entries:
         raise HTTPException(404, "Damage log entry not found or expired")
-    applied = int(entry.get("applied") or 0)
-    if applied <= 0:
-        # Nothing was actually applied (e.g. miss). Treat as no-op.
+
+    # No-op path: every entry has applied=0 (all misses). Drop the
+    # log and return early so the client can render "nothing to undo."
+    if not any(int(e.get("applied") or 0) > 0 or e.get("kind") == "buff_install" for e in entries):
         _attack_damage_log.pop(attack_id, None)
         return {"ok": True, "no_op": True}
 
-    target_char_id = entry.get("target_char_id")
-    target_combatant_id = entry.get("target_combatant_id")
-    # v2.26.0 Phase T.4: heal entries undo in reverse (damage the
-    # target by the same amount). Damage entries undo by healing.
-    is_heal_entry = bool(entry.get("is_heal"))
-    delta_sign = -1 if is_heal_entry else +1  # +1 = restore HP (undo damage); -1 = remove HP (undo heal)
+    # Track aggregate stats for the response payload — caller's chat-
+    # card needs to know the total reverted + whether the last entry
+    # was a heal (legacy `was_heal` field for the chat card icon).
+    last_heal_entry: dict | None = None
+    total_reverted = 0
+    last_hp_after: int | None = None
+    per_target_undone: list[dict] = []
 
-    if target_char_id:
-        char = db.query(Character).filter(Character.id == target_char_id).first()
-        if not char:
-            raise HTTPException(404, "Target character not found")
-        sheet = char.sheet or {}
-        hp_cur = int((sheet.get("hp") or {}).get("current") or 0)
-        hp_max = int((sheet.get("hp") or {}).get("max") or 0)
-        if delta_sign > 0:
-            new_hp = min(hp_max, hp_cur + applied) if hp_max > 0 else (hp_cur + applied)
-        else:
-            new_hp = max(0, hp_cur - applied)
-        result = _apply_hp_change(char, new_hp)
-        db.commit()
-        await hub.broadcast(campaign_id, {
-            "type": "character_hp_update",
-            "data": {
-                "character_id": char.id,
-                "hp": result["hp"],
-                "delta": delta_sign * applied,
-                "source": "undo_heal" if is_heal_entry else "undo_attack",
-            },
-        })
-        _attack_damage_log.pop(attack_id, None)
-        return {"ok": True, "reverted": applied, "hp_after": result["hp"]["current"],
-                "was_heal": is_heal_entry}
+    for entry in reversed(entries):
+        kind = entry.get("kind") or ("heal" if entry.get("is_heal") else "damage")
+        # v2.65.0 — Phase B: buff_install entries restore the target's
+        # buff list to the snapshot taken pre-install.
+        if kind == "buff_install":
+            await _restore_target_buffs(
+                db, campaign_id,
+                entry.get("target_char_id"),
+                entry.get("target_combatant_id"),
+                entry.get("buffs_before") or [],
+            )
+            per_target_undone.append({
+                "kind": "buff_install",
+                "target_char_id": entry.get("target_char_id"),
+                "buff_key": entry.get("buff_installed_key"),
+            })
+            continue
 
-    if target_combatant_id:
-        state = hub.get_battle(campaign_id)
-        if not state:
-            raise HTTPException(404, "No active battle to revert into")
-        target = None
-        for c in state.get("combatants") or []:
-            if c.get("id") == target_combatant_id:
-                target = c
-                break
-        if target is None:
-            raise HTTPException(404, "Target combatant no longer in init")
-        hp_cur = int(target.get("hp_current") or 0)
-        hp_max = int(target.get("hp_max") or 0)
-        if delta_sign > 0:
-            new_hp = min(hp_max, hp_cur + applied) if hp_max > 0 else (hp_cur + applied)
-        else:
-            new_hp = max(0, hp_cur - applied)
-        target["hp_current"] = new_hp
-        hub.set_battle(campaign_id, state)
-        # v2.49.40 — see the _apply_damage_to_combatant fix for the
-        # same reasoning. NPC HP changes need force_gm_sync so the
-        # GM's local battle state stays in sync; otherwise the undo
-        # appears to "not work" in the GM's view until they push
-        # something else.
-        await hub.broadcast(campaign_id, {
-            "type": "battle_update",
-            "data": state,
-            "force_gm_sync": True,
-        })
-        _attack_damage_log.pop(attack_id, None)
-        return {"ok": True, "reverted": applied, "hp_after": new_hp,
-                "was_heal": is_heal_entry}
+        applied = int(entry.get("applied") or 0)
+        if applied <= 0:
+            continue
+        is_heal_entry = bool(entry.get("is_heal")) or kind == "heal"
+        if is_heal_entry:
+            last_heal_entry = entry
+        delta_sign = -1 if is_heal_entry else +1
+        target_char_id = entry.get("target_char_id")
+        target_combatant_id = entry.get("target_combatant_id")
 
-    raise HTTPException(404, "Damage log entry has no target reference")
+        if target_char_id:
+            char = db.query(Character).filter(Character.id == target_char_id).first()
+            if not char:
+                continue
+            sheet = char.sheet or {}
+            hp_cur = int((sheet.get("hp") or {}).get("current") or 0)
+            hp_max = int((sheet.get("hp") or {}).get("max") or 0)
+            if delta_sign > 0:
+                new_hp = min(hp_max, hp_cur + applied) if hp_max > 0 else (hp_cur + applied)
+            else:
+                new_hp = max(0, hp_cur - applied)
+            result = _apply_hp_change(char, new_hp)
+            db.commit()
+            await hub.broadcast(campaign_id, {
+                "type": "character_hp_update",
+                "data": {
+                    "character_id": char.id,
+                    "hp": result["hp"],
+                    "delta": delta_sign * applied,
+                    "source": "undo_heal" if is_heal_entry else "undo_attack",
+                },
+            })
+            total_reverted += applied
+            last_hp_after = result["hp"]["current"]
+            per_target_undone.append({
+                "kind": kind, "target_char_id": target_char_id,
+                "applied": applied, "hp_after": last_hp_after,
+            })
+            continue
+
+        if target_combatant_id:
+            state = hub.get_battle(campaign_id)
+            if not state:
+                continue
+            target = None
+            for c in state.get("combatants") or []:
+                if c.get("id") == target_combatant_id:
+                    target = c
+                    break
+            if target is None:
+                continue
+            hp_cur = int(target.get("hp_current") or 0)
+            hp_max = int(target.get("hp_max") or 0)
+            if delta_sign > 0:
+                new_hp = min(hp_max, hp_cur + applied) if hp_max > 0 else (hp_cur + applied)
+            else:
+                new_hp = max(0, hp_cur - applied)
+            target["hp_current"] = new_hp
+            hub.set_battle(campaign_id, state)
+            await hub.broadcast(campaign_id, {
+                "type": "battle_update",
+                "data": state,
+                "force_gm_sync": True,
+            })
+            total_reverted += applied
+            last_hp_after = new_hp
+            per_target_undone.append({
+                "kind": kind, "target_combatant_id": target_combatant_id,
+                "applied": applied, "hp_after": last_hp_after,
+            })
+
+    _attack_damage_log.pop(attack_id, None)
+    return {
+        "ok": True,
+        "reverted": total_reverted,
+        # Legacy fields for backward-compat with the chat card's undo
+        # button. ``hp_after`` matches the FINAL undone entry; pre-
+        # v2.65.0 there was only one entry per cast_id so ``hp_after``
+        # was unambiguous. For multi-target undo, the per_target list
+        # carries the full picture.
+        "hp_after": last_hp_after if last_hp_after is not None else 0,
+        "was_heal": bool(last_heal_entry),
+        "per_target": per_target_undone,
+    }
 
 
 # ----------- API: Open5e item proxy (weapons / armor / magic items) -----------
