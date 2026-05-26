@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.68.8] - 2026-05-26 — "Faith and Fey"
+
+**Schema version:** 60
+**Commit summary:** **Phase 2d — three subclass reactions added to the GM Reactions catalog.** Warding Flare (Cleric Light Lv 1+), Wrath of the Storm (Cleric Tempest Lv 1+), Misty Escape (Warlock Archfey Lv 6+). Subclass slug normalization extends the v2.55.0 Aura of Devotion / v2.68.6 Battle Master conventions — strips common subclass prefixes ("Path of the ", "Oath of ", "College of ", "Circle of the ", "the ", " domain", " patron") + lowercases for substring matching. Class + level gates filter false positives. Same "state tracker, not rules engine" stance — clicking flips the reaction chip + posts a chat card; the GM applies the disadvantage / save / teleport manually.
+**Description:** One block of edits in `app/routes/tabletop_routes.py` — `_combatant_reactions_catalog`'s PC path gains a subclass-detection branch after the fighting-style block. Reads `sheet.subclass`, normalizes through the prefix-strip pipeline (covers "Light Domain" → "light", "The Archfey" → "archfey", "Oath of Devotion" → "devotion" etc.), then three subclass-gated appends. The class gate (`sheet.class == "Cleric"` or `"Warlock"`) keeps Light from firing on a Bard college, and the Warlock Archfey check adds `warlock_lv >= 6` since Misty Escape unlocks at Lv 6.
+**Description (cont):** Demo PC coverage status:
+- **Tavik** = Cleric **Life** Domain — no match for Light/Tempest.
+- **Magnus** = Warlock **The Fiend** Lv 5 — no match for Archfey, also below Lv 6.
+
+So no live end-to-end coverage on the new catalog rows today; the code paths are gated and won't fire on the existing demo. Same status as the Phase 2c filing — needs a demo PC bump or fresh fixture.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.68.8`. (b) Existing 538 tests pass unchanged — the new branches are additive + gated on class + subclass + level combos no demo PC matches. (c) No new tests this commit; live coverage filed alongside the Phase 2b/2c Battle Master + fighting-style filings.
+
+### Added
+- Warding Flare entry in `_combatant_reactions_catalog` (Cleric Light Lv 1+).
+- Wrath of the Storm entry (Cleric Tempest Lv 1+).
+- Misty Escape entry (Warlock Archfey Lv 6+).
+- Subclass slug normalization pipeline in the catalog helper (handles "Path of / Oath of / College of / Circle of / The / Martial Archetype: / Domain / Patron" prefix variants).
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.68.8`.
+- `README.md` version badge → `2.68.8`.
+- `docs/plans/reactions-automation.md` — Phase 2d status flipped to ✅ shipped (catalog).
+
+### Notes
+- **Live coverage filed.** Demo PC bumps needed: Tavik → Light/Tempest variant OR new Cleric Light/Tempest fixture; Magnus → Archfey + Lv 6 OR new Warlock Archfey fixture. Filed alongside Phase 2b/2c gaps.
+- **Subclass slug pipeline shared.** The same `subclass_slug` normalization in the helper now handles all three branches; future subclass-gated reactions (Phase 2e Mantle of Inspiration, Rebuke the Violent) can reuse the same pattern.
+
+---
+
 ## [2.68.7] - 2026-05-26 — "Stand and Shield"
 
 **Schema version:** 60

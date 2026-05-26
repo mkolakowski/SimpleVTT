@@ -12612,6 +12612,76 @@ def _combatant_reactions_catalog(
                     "shield, melee weapon, or simple weapon."
                 ),
             })
+        # v2.68.8 Phase 2d — subclass reactions.
+        # Subclass slug normalization mirrors the v2.68.6 Battle
+        # Master + v2.55.0 Aura of Devotion conventions.
+        subclass_raw = (sheet.get("subclass") or "").strip().lower()
+        subclass_slug = (
+            subclass_raw
+            .replace("path of the ", "")
+            .replace("oath of ", "")
+            .replace("college of ", "")
+            .replace("circle of the ", "")
+            .replace("circle of ", "")
+            .replace("the ", "")
+            .replace("martial archetype: ", "")
+            .replace("martial archetype ", "")
+            .replace(" domain", "")
+            .replace(" patron", "")
+            .strip()
+        )
+        # Cleric Light — Warding Flare (Lv 1+). Reaction; uses-per-day
+        # equal to WIS mod (limited resource).
+        cleric_cls = (sheet.get("class") or "").strip().lower() == "cleric"
+        if cleric_cls and "light" in subclass_slug:
+            out.append({
+                "key": "warding-flare",
+                "label": "✨ Warding Flare",
+                "source": "Cleric Light Lv 1+ subclass feature",
+                "kind": "class_feature",
+                "desc": (
+                    "When an attacker targets you within 30 ft, "
+                    "impose disadvantage on the attack. WIS mod "
+                    "uses per long rest."
+                ),
+            })
+        # Cleric Tempest — Wrath of the Storm (Lv 1+). Reaction;
+        # uses-per-day equal to WIS mod.
+        if cleric_cls and "tempest" in subclass_slug:
+            out.append({
+                "key": "wrath-of-the-storm",
+                "label": "⚡ Wrath of the Storm",
+                "source": "Cleric Tempest Lv 1+ subclass feature",
+                "kind": "class_feature",
+                "desc": (
+                    "When a creature within 5 ft damages you, force "
+                    "a DEX save or take 2d8 lightning or thunder. "
+                    "WIS mod uses per long rest."
+                ),
+            })
+        # Warlock Archfey — Misty Escape (Lv 6+).
+        warlock_cls = (sheet.get("class") or "").strip().lower() == "warlock"
+        warlock_lv = 0
+        if warlock_cls:
+            try:
+                warlock_lv = int(sheet.get("level") or 0)
+            except (TypeError, ValueError):
+                warlock_lv = 0
+        if (
+            warlock_lv >= 6
+            and ("archfey" in subclass_slug or "fey" in subclass_slug)
+        ):
+            out.append({
+                "key": "misty-escape",
+                "label": "🌫 Misty Escape",
+                "source": "Warlock Archfey Lv 6+ subclass feature",
+                "kind": "class_feature",
+                "desc": (
+                    "When you take damage, teleport 60 ft and turn "
+                    "invisible until end of next turn (or you attack / "
+                    "cast). Once per short rest."
+                ),
+            })
         # Feats (PC sheet.feats list)
         for f in (sheet.get("feats") or []):
             if not isinstance(f, dict):
