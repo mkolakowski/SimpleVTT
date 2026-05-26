@@ -1268,6 +1268,74 @@ def _distance_ft_between_points(
     return round(cells * 5, 1)
 
 
+# v2.61.0 — F1 token positional adjacency primitive. Looks up two
+# characters' tokens on the campaign's active map and returns the
+# in-game distance in feet between them. Returns None when the
+# distance can't be computed (no active map, no grid_size_px, either
+# character has no token on the map). Callers should treat None as
+# "no position data — fall back to the v1 'any in init' simplification"
+# rather than blocking the feature; positional gating is opt-in
+# enrichment, not a hard requirement.
+#
+# Plan source: docs/plans/class-content-status.md "F1. Token positional
+# adjacency / 5-ft-range checking". Unblocks the 10/30 ft radius
+# gates filed against Aura of Protection (v2.53.0), Aura of Devotion
+# (v2.55.0), Countercharm (v2.54.0), plus future Sneak Attack
+# ally-adjacency (v2.16.0 filed) + Bardic Inspiration recipient
+# range + Mass Cure target range + Opportunity Attack trigger.
+def _distance_ft_between_chars(
+    db: Session, campaign_id: int,
+    char_a_id: int | None, char_b_id: int | None,
+) -> "float | None":
+    """v2.61.0 — distance in feet between two characters' tokens on
+    the campaign's active map. Returns None when:
+      - either char_id is falsy / not provided,
+      - no active map on the campaign,
+      - active map has no grid_size_px (no-grid maps are off-grid),
+      - either character has no Token row on the active map.
+
+    Returns 0.0 when both ids point to the same character (a self-aura
+    target is always in range).
+
+    Uses ``_distance_ft_between_points`` under the hood — square grids
+    use Chebyshev distance (RAW 5e 5-5-5 diagonals), hex grids use
+    Euclidean. 5 ft per cell, rounded to 0.1 ft.
+    """
+    if not char_a_id or not char_b_id:
+        return None
+    if int(char_a_id) == int(char_b_id):
+        return 0.0
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not campaign.active_map_id:
+        return None
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        return None
+    token_a = (
+        db.query(Token)
+        .filter(Token.character_id == int(char_a_id), Token.map_id == map_row.id)
+        .first()
+    )
+    if not token_a:
+        return None
+    token_b = (
+        db.query(Token)
+        .filter(Token.character_id == int(char_b_id), Token.map_id == map_row.id)
+        .first()
+    )
+    if not token_b:
+        return None
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+    return _distance_ft_between_points(
+        int(map_row.grid_size_px),
+        grid_type,
+        float(token_a.x or 0), float(token_a.y or 0),
+        float(token_b.x or 0), float(token_b.y or 0),
+    )
+
+
 # v2.49.75 — Phase 2C range-enforcement helper. Given a caster + a
 # spell / weapon range string + a target descriptor, returns either
 # None (in range / unchecked / overridden) or an error dict suitable
@@ -8837,7 +8905,7 @@ async def cast_spell(
                 _cc_bard_id = None
                 if _spell_installs_countercharmed_condition(spell_slug):
                     _cc_applies, _cc_bard_id = _ally_has_countercharm_active(
-                        campaign_id, int(tgt_char.id),
+                        db, campaign_id, int(tgt_char.id),
                     )
                     if _cc_applies and not _ds_base.startswith("2d20kh1"):
                         _ds_base = _ds_base.replace("1d20", "2d20kh1", 1)
@@ -9101,7 +9169,7 @@ async def cast_spell(
                 _aoe_cc_bard_id = None
                 if _spell_installs_countercharmed_condition(spell_slug):
                     _aoe_cc_applies, _aoe_cc_bard_id = _ally_has_countercharm_active(
-                        campaign_id, int(extra_pc.id),
+                        db, campaign_id, int(extra_pc.id),
                     )
                     if _aoe_cc_applies and not _aoe_ds_base.startswith("2d20kh1"):
                         _aoe_ds_base = _aoe_ds_base.replace("1d20", "2d20kh1", 1)
@@ -11873,7 +11941,20 @@ def _aura_of_protection_bonus(
         if not char:
             continue
         sheet = char.sheet or {}
-        if _paladin_level_from_sheet(sheet) < 6:
+        paladin_lv = _paladin_level_from_sheet(sheet)
+        if paladin_lv < 6:
+            continue
+        # v2.61.0 — F1 range gate. Aura radius is 10 ft at Lv 6-17,
+        # 30 ft at Lv 18+ per RAW. ``_distance_ft_between_chars``
+        # returns None when token data is unavailable (no active map,
+        # no grid, or either token off-map); we fall back to the
+        # pre-v2.61.0 "any paladin in init" behavior in that case so
+        # the aura still applies during off-grid narrative scenes.
+        aura_radius_ft = 30.0 if paladin_lv >= 18 else 10.0
+        distance_ft = _distance_ft_between_chars(
+            db, campaign_id, int(char_id), int(saving_char_id),
+        )
+        if distance_ft is not None and distance_ft > aura_radius_ft:
             continue
         abilities = sheet.get("abilities") or {}
         cha_score = int(
@@ -11913,7 +11994,7 @@ def _spell_installs_countercharmed_condition(spell_slug: str) -> bool:
 
 
 def _ally_has_countercharm_active(
-    campaign_id: int, saving_char_id: int | None,
+    db: Session, campaign_id: int, saving_char_id: int | None,
 ) -> "tuple[bool, int | None]":
     """v2.54.0 — Bard Countercharm (Lv 6+) ally-aura gate. Returns
     (applies, bard_char_id). True when some PC combatant in the
@@ -11923,9 +12004,13 @@ def _ally_has_countercharm_active(
     protects themselves too (RAW: "you or any of your friendly
     creatures").
 
-    v1 simplifications mirror Aura of Protection's:
-      - No 10/30 ft radius check — any countercharm-active combatant
-        in init grants the advantage to every PC in init.
+    v2.61.0 (F1) — adds a 30 ft radius gate. ``db: Session`` is now
+    a required first arg so the helper can look up token positions
+    via ``_distance_ft_between_chars``. When token positions are
+    unavailable (no active map / no grid / either token off-map),
+    falls back to the pre-v2.61.0 "any in init" behavior.
+
+    v1 simplifications still apply:
       - The bard MUST keep using their action each turn to maintain
         Countercharm RAW; v1 installs a 1-round self-buff and lets
         it auto-expire. Re-cast each turn.
@@ -11946,9 +12031,21 @@ def _ally_has_countercharm_active(
         for b in buffs:
             if not isinstance(b, dict):
                 continue
-            if (b.get("key") or "").strip().lower() == "countercharm-active":
-                bard_char_id = c.get("char_id")
-                return True, (int(bard_char_id) if bard_char_id else None)
+            if (b.get("key") or "").strip().lower() != "countercharm-active":
+                continue
+            bard_char_id = c.get("char_id")
+            if not bard_char_id:
+                continue
+            # v2.61.0 — F1 range gate at 30 ft. RAW Countercharm
+            # protects creatures "within 30 feet" — distinct from
+            # AoP/AoD's 10 ft default. Same fall-back-to-no-position
+            # semantics.
+            distance_ft = _distance_ft_between_chars(
+                db, campaign_id, int(bard_char_id), int(saving_char_id),
+            )
+            if distance_ft is not None and distance_ft > 30.0:
+                continue
+            return True, int(bard_char_id)
     return False, None
 
 
@@ -12030,7 +12127,8 @@ def _ally_has_aura_of_devotion(
         if not char:
             continue
         sheet = char.sheet or {}
-        if _paladin_level_from_sheet(sheet) < 7:
+        paladin_lv = _paladin_level_from_sheet(sheet)
+        if paladin_lv < 7:
             continue
         # Subclass check — normalize "Oath of Devotion" → "devotion"
         # so the gate matches the `_FEATURE_ECONOMY` subclass-tag
@@ -12038,6 +12136,14 @@ def _ally_has_aura_of_devotion(
         subclass_raw = (sheet.get("subclass") or "").strip().lower()
         subclass_slug = subclass_raw.replace("oath of ", "").strip()
         if subclass_slug != "devotion":
+            continue
+        # v2.61.0 — F1 range gate. AoD radius 10 ft (Lv 7-17), 30 ft
+        # (Lv 18+). Same fall-back-to-no-position semantics as AoP.
+        aura_radius_ft = 30.0 if paladin_lv >= 18 else 10.0
+        distance_ft = _distance_ft_between_chars(
+            db, campaign_id, int(char_id), int(saving_char_id),
+        )
+        if distance_ft is not None and distance_ft > aura_radius_ft:
             continue
         return True, char
     return False, None

@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 485 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.60.0, 2026-05-25).
+**Total tests:** 487 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.61.0, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -749,6 +749,14 @@ v2.60.0 — Divine Strike (Life Domain Cleric Lv 8+). +1d8 radiant on first weap
 | `test_divine_strike_fires_on_first_weapon_hit` | Tavik (Lv 8 Life Domain) attacks Krieger with Warhammer → /attack `auto_uplifts` carries a divine-strike entry with `1d8` expression + `radiant` damage_type. |
 | `test_divine_strike_locks_after_first_hit` | Same turn, second attack → divine-strike NOT in auto_uplifts (once-per-turn lock). |
 | `test_divine_strike_skips_non_cleric` | Pip (Rogue) attacks Krieger → no divine-strike uplift fires (subclass gate). |
+
+### `test_aura_range_gate.py`
+v2.61.0 — F1 framework lands. New helper `_distance_ft_between_chars(db, campaign_id, char_a_id, char_b_id) → float | None` wraps the existing `_distance_ft_between_points` with Token-position lookup. Wired into AoP / AoD / Countercharm as a range gate (10/30 ft / 10/30 ft / 30 ft). Fall-back-to-no-position when token data is unavailable preserves the pre-v2.61.0 "any in init" behavior, so existing aura tests continue to pass.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_aura_of_devotion_blocks_when_paladin_within_10_ft` | Caelan + Krieger 5 ft apart (1 cell on demo 70 px / 5 ft grid) → AoD range gate passes → Suggestion save-fail does NOT install Charmed, broadcast fires. |
+| `test_aura_of_devotion_skips_when_paladin_outside_10_ft` | Caelan + Krieger 25 ft apart (5 cells) → AoD range gate skips → Charmed install proceeds, no broadcast. |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

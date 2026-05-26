@@ -1178,14 +1178,18 @@ Format per framework: **what it is**, **what features it blocks**,
 RAW-correct system — the v1 simplification that ships the dependent
 features cheaply).
 
-### F1. Token positional adjacency / 5-ft-range checking
+### F1. Token positional adjacency / 5-ft-range checking — ✅ SHIPPED (v2.61.0)
 
-**What it is:** A `_distance_ft_between_points(token_a, token_b) → ft`
-helper that reads the canvas token-position state and returns the
-in-game distance in feet between two combatants. Today
-`hub.get_battle(campaign_id)` carries combatants but no canonical
-position field — token positions live in the canvas overlay state,
-not in the battle state shared with feature helpers.
+**Status:** Primitive `_distance_ft_between_chars(db, campaign_id, char_a_id, char_b_id) → float | None` shipped v2.61.0. Wired into AoP / AoD / Countercharm. Follow-up consumers (Sneak Attack ally-adjacency, Bardic recipient range, Mass Cure target range, Opportunity Attack trigger) still filed — each is now a one-call addition reusing the helper.
+
+**What it is:** A `_distance_ft_between_chars(db, campaign_id, char_a_id, char_b_id) → float | None`
+helper that resolves both characters' tokens on the active map (via
+`Token.character_id + Token.map_id` queries) and computes the
+in-game distance in feet using the existing `_distance_ft_between_points`
+math (Chebyshev on square grids, Euclidean on hex). Returns None
+when distance can't be computed (no active map, no grid_size_px,
+either token off-map) so callers fall back to the pre-F1 "any in
+init" behavior gracefully.
 
 **Blocks:**
 - **Sneak Attack ally-adjacency validation** (Rogue Lv 1) — filed

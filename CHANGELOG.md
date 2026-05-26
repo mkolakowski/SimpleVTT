@@ -10,6 +10,39 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.61.0] - 2026-05-25 — "Within Reach"
+
+**Schema version:** 57
+**Commit summary:** **F1 framework lands — token positional adjacency primitive `_distance_ft_between_chars` + wired into all three aura range gates (Aura of Protection 10/30 ft, Aura of Devotion 10/30 ft, Countercharm 30 ft).** First step from the v2.60.2 "Missing system frameworks" section. Pre-v2.61.0 every aura applied to ANY ally in the active battle's init tracker regardless of position; post-v2.61.0 the gate looks up each character's token on the active map and short-circuits the aura when the ally is out of range. Fall-back-to-no-position semantics preserve existing tests + off-grid narrative behavior — when token data is unavailable, the aura still applies as before.
+**Description:** Two edits in `app/routes/tabletop_routes.py`. **(1)** New helper `_distance_ft_between_chars(db, campaign_id, char_a_id, char_b_id) → float | None` next to the existing `_distance_ft_between_points`. Resolves both characters' tokens via `Token.character_id + Token.map_id` lookup, then calls `_distance_ft_between_points` with the map's grid_size_px + grid_type. Returns None when: either char_id is missing, no active map, no grid_size_px (off-grid map), or either character has no token on the active map. Returns 0.0 when both ids point to the same character. **(2)** Wired into three aura helpers: `_aura_of_protection_bonus` (10 ft at Lv 6-17, 30 ft at Lv 18+), `_ally_has_aura_of_devotion` (10 ft at Lv 7-17, 30 ft at Lv 18+), `_ally_has_countercharm_active` (30 ft per RAW). Each gate adds a `distance_ft = _distance_ft_between_chars(...)` lookup + `if distance_ft is not None and distance_ft > radius: continue` skip.
+**Description (cont):** Signature change: `_ally_has_countercharm_active` gains a `db: Session` first arg (was `campaign_id, saving_char_id` → now `db, campaign_id, saving_char_id`). The 2 call sites in `/cast_spell` (single-target line ~8907, AoE line ~9171) updated to pass `db` through. The other two aura helpers already had `db` as the first arg.
+**Description (cont 2):** Fall-back semantics. F1 is opt-in enrichment, not a hard requirement. When `_distance_ft_between_chars` returns None (off-map narrative scenes, no active map, no grid, untoken'd characters), the gate's `is not None` check short-circuits and the aura applies as before. This keeps the v1 "any in init" simplification working for campaigns that don't use map placement. The existing test_aura_of_devotion.py / test_aura_of_protection.py / test_use_countercharm.py harness tests don't place tokens, so they all continue to pass via the None fallback path — verified.
+**Description (cont 3):** Demo grid math. The demo map uses `grid_size_px=70` + `grid_type=square` + 5 ft/cell. Chebyshev distance on square grids per RAW 5-5-5 diagonals. So a token at (350, 350) and another at (420, 350) are 70 px = 1 cell = 5 ft apart; (350, 350) and (700, 350) are 350 px = 5 cells = 25 ft apart. The new harness uses these exact coordinates to drive the in-range / out-of-range branches.
+**Description (cont 4):** What unlocks. F1 is the framework piece that the v2.60.2 plan flagged as **highest-ROI next infrastructure investment** — unblocks 6+ filed v1 simplifications:
+- ✅ This commit: Aura of Protection 10/30 ft, Aura of Devotion 10/30 ft, Countercharm 30 ft.
+- Filed for follow-up: Sneak Attack ally-adjacency validation (Rogue Lv 1; replaces the trust-based current behavior), Bardic Inspiration recipient 60 ft range, Mass Healing Word / Mass Cure Wounds target 60 ft range, Opportunity Attack trigger detection. Each of those is a one-call addition reusing the same `_distance_ft_between_chars` helper — small commits to follow.
+**Description (cont 5):** Verification. (a) `curl /version` reports `2.61.0` after `docker compose up -d --build app`. (b) New harness `tests/harness/test_aura_range_gate.py` — 2 tests covering AoD in-range (5 ft apart) → blocks Charmed install + broadcast fires; AoD out-of-range (25 ft apart) → install proceeds + no broadcast. (c) Existing aura tests (test_aura_of_devotion.py, test_aura_of_protection.py, test_use_countercharm.py) continue to pass via the None-fallback path. (d) Full suite 485 + 2 = 487 passing.
+
+### Added
+- `_distance_ft_between_chars(db, campaign_id, char_a_id, char_b_id)` helper in `app/routes/tabletop_routes.py` — F1 framework primitive. Resolves token positions via the Token model + reuses the existing `_distance_ft_between_points` math.
+- Range gates wired into 3 aura helpers: `_aura_of_protection_bonus` (10/30 ft), `_ally_has_aura_of_devotion` (10/30 ft), `_ally_has_countercharm_active` (30 ft).
+- Harness `tests/harness/test_aura_range_gate.py` — 2 tests covering in-range vs out-of-range AoD gates with explicit token placement.
+
+### Changed
+- `_ally_has_countercharm_active` signature: gained a `db: Session` first arg. Both call sites updated.
+- `app/version.py` `APP_VERSION` → `2.61.0`.
+- `README.md` version badge → `2.61.0`.
+- `docs/plans/class-content-status.md` — F1 row in "Missing system frameworks" flips from ⚪ to ✅ shipped with this commit as the reference.
+- `docs/test-harness-coverage.md` — total test count 485 → 487; new `test_aura_range_gate.py` section added.
+
+### Notes
+- **Fall-back semantics matter.** Pre-v2.61.0 tests that don't place tokens still pass — when `_distance_ft_between_chars` returns None, the gate short-circuits to the v1 "any in init" behavior. This is intentional: F1 is opt-in enrichment.
+- **Helper is reusable across all 6+ blocked features.** The same `_distance_ft_between_chars` will be the single call site for Sneak Attack ally-adjacency, Bardic recipient range, Mass Cure target range, Opportunity Attack trigger. Each follow-up commit is a one-call addition.
+- **Square grid Chebyshev** matches the RAW 5-5-5 diagonals convention. Hex grids use Euclidean. Hex maps are rare in the demo but supported.
+- **Self-aura case**: `_distance_ft_between_chars(db, c, X, X) → 0.0`. AoP/AoD/Countercharm all explicitly apply to the source character themselves per RAW; the helper returns 0 (always in range) rather than None (which would trip the fallback).
+
+---
+
 ## [2.60.2] - 2026-05-25 — "The Atlas"
 
 **Schema version:** 57
