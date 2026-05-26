@@ -12682,6 +12682,39 @@ def _combatant_reactions_catalog(
                     "cast). Once per short rest."
                 ),
             })
+        # v2.68.9 Phase 2e — Bard Valor's Mantle of Inspiration +
+        # Paladin Crown's Channel Divinity: Rebuke the Violent.
+        # Both gate on class + subclass + level. Subclass_slug
+        # already normalized above (v2.68.8 pipeline).
+        if bard_lv >= 3 and "valor" in subclass_slug:
+            out.append({
+                "key": "mantle-of-inspiration",
+                "label": "🎻 Mantle of Inspiration",
+                "source": "Bard Valor Lv 3+ subclass feature",
+                "kind": "class_feature",
+                "desc": (
+                    "Expend a Bardic Inspiration to grant up to 5 "
+                    "creatures (5 + CHA mod) temp HP and a free "
+                    "reaction move toward you."
+                ),
+            })
+        try:
+            paladin_lv = _paladin_level_from_sheet(sheet)
+        except Exception:
+            paladin_lv = 0
+        if paladin_lv >= 7 and "crown" in subclass_slug:
+            out.append({
+                "key": "rebuke-the-violent",
+                "label": "👑 Rebuke the Violent",
+                "source": "Paladin Crown Lv 7+ Channel Divinity",
+                "kind": "class_feature",
+                "desc": (
+                    "When an attacker within 30 ft damages an ally, "
+                    "force a WIS save. On a fail, the attacker takes "
+                    "the same damage; on a success, half. Channel "
+                    "Divinity use."
+                ),
+            })
         # Feats (PC sheet.feats list)
         for f in (sheet.get("feats") or []):
             if not isinstance(f, dict):

@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.68.9] - 2026-05-26 — "Crown and Chorus"
+
+**Schema version:** 60
+**Commit summary:** **Phase 2e — Mantle of Inspiration + Rebuke the Violent in the GM Reactions catalog.** Two more subclass-gated catalog entries, completing the Phase 2 class/subclass coverage from the plan doc. Mantle of Inspiration (Bard Valor Lv 3+) — grants temp HP + reaction-move to up to 5 creatures by expending a Bardic Inspiration. Rebuke the Violent (Paladin Crown Lv 7+) — Channel Divinity reaction forcing a WIS save on an attacker who damaged an ally, mirroring the damage back on a fail (half on success). Reuses the v2.68.8 subclass-slug normalization pipeline; same "state tracker, not rules engine" stance.
+**Description:** One block of edits in `app/routes/tabletop_routes.py` — `_combatant_reactions_catalog`'s PC path gains two final subclass-gated appends after the Misty Escape branch. Both use the already-normalized `subclass_slug` from v2.68.8. Mantle of Inspiration: `bard_lv >= 3 and "valor" in subclass_slug`. Rebuke the Violent: `_paladin_level_from_sheet(sheet) >= 7 and "crown" in subclass_slug`. Each appends a single catalog row with `kind: "class_feature"`, source name, and a descriptive line for the popup tooltip.
+**Description (cont):** Demo PC coverage status (consistent with Phase 2b–2d): no demo PC has Bard Valor or Paladin Crown subclass today. Lyra is Bard **Lore**; Caelan is Paladin **Devotion**. The new code paths are gated and won't spuriously fire. Live end-to-end coverage filed alongside the v2.68.6–v2.68.8 fixture gaps — Phase 2 is now ✅ on the catalog side, ⚪ on the live-fire side pending demo PC bumps.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.68.9`. (b) Existing 538 tests pass unchanged. (c) No new tests; live coverage filed with the consolidated fixture work.
+
+### Added
+- Mantle of Inspiration entry in `_combatant_reactions_catalog` (Bard Valor Lv 3+).
+- Rebuke the Violent entry (Paladin Crown Lv 7+ Channel Divinity).
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.68.9`.
+- `README.md` version badge → `2.68.9`.
+- `docs/plans/reactions-automation.md` — Phase 2 (all sub-phases) marked ✅ shipped on the catalog side; Phase 3+ next.
+
+### Notes
+- **Phase 2 catalog complete.** Class-feature + subclass reactions from the plan doc's category A are all surfaced now (or filed with explicit per-mechanic notes).
+- **Demo fixture work filed.** Live end-to-end coverage for v2.68.6 (Battle Master) + v2.68.7 (Protection/Interception) + v2.68.8 (Light/Tempest/Archfey) + v2.68.9 (Valor/Crown) all wait on the consolidated demo PC bump.
+
+---
+
 ## [2.68.8] - 2026-05-26 — "Faith and Fey"
 
 **Schema version:** 60
