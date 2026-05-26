@@ -18,6 +18,18 @@
 
 **Always create the git commit at the end of the change.** A version bump that isn't committed isn't actually a release — it's just an uncommitted working-tree edit that disappears on the next `git reset` or context loss. After finishing the changes for a version bump (code + version + README + CHANGELOG, plus the harness test required by the harness-discipline rule below), `git add` the affected files and `git commit` them as a single commit. The commit message should match the convention seen in `git log --oneline` — short subject line of the form `X.Y.Z — "Fun Name" — <one-line summary>`, body optional but encouraged for non-trivial changes. The fun name in the subject line **must match** the fun name in the corresponding CHANGELOG entry so a reader scanning `git log` and `CHANGELOG.md` side-by-side sees the same handle on both. Do this even if the user didn't say "please commit" — the per-commit / per-bump rule above already implies a commit happens. If the change is mid-flight (broken tests, half-written feature) say so and don't bump the version yet rather than landing an uncommitted bump. **Never run more than one version bump without committing in between** — if you've bumped to `2.50.0` and want to also ship `2.50.1`, commit `2.50.0` first, then start the next change. The "one bump = one commit" rule is meaningless if multiple bumps stack in the working tree.
 
+**Push every commit to `origin/main` immediately after the local commit lands.** A commit that only lives on the local laptop isn't actually a release — GitHub is the canonical source of truth for collaborators, the CI workflow (`.github/workflows/test-harness.yml`), and anyone scanning the project's commit history. A long backlog of unpushed commits is a coordination failure: collaborators see a stale tip, CI doesn't run, and a laptop crash or `git reset --hard` loses all of them at once. After `git commit` (and the container rebuild — both can happen in parallel), run:
+
+```bash
+git push origin main
+```
+
+Do this for **every** commit, including doc-only bumps. The "every commit ships a bump" rule above is paired with this one: every bump → one commit → one push. No batching: don't accumulate 5 local commits then push the lot at the end of the session, because if the session ends abruptly (context loss, machine reboot, hook failure) the unpushed commits are stranded. Push as you go.
+
+If the push fails (network blip, auth, non-fast-forward because someone else pushed) investigate before retrying. **Never** use `git push --force` to "fix" a non-fast-forward against `origin/main` — fetch first, see what's upstream, and rebase or merge cleanly. Force-push to `main` overwrites collaborators' work and is one of the few git operations that's genuinely unrecoverable for them. The user must explicitly authorize force-push for it to happen.
+
+The CI workflow at `.github/workflows/test-harness.yml` runs the harness suite on every push to `main` — pushing keeps the regression net hot. Skipping pushes lets a broken main accumulate without the GitHub-side signal.
+
 **Restart the app container after every version bump.** The dev image bakes the code at build time (no live-reload mount on the `app` service in `docker-compose.yml`) — so a `git commit` that bumps `APP_VERSION` does **not** propagate to the running container automatically. After committing a version bump, run:
 
 ```bash

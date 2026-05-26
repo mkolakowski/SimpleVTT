@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.60.1] - 2026-05-25 — "Push It"
+
+**Schema version:** 57
+**Commit summary:** **CLAUDE.md gains a "push every commit to origin/main immediately" rule.** Surfaced after v2.57.0 → v2.60.0 shipped (7 commits, Berserker through Divine Strike) all stacked locally for ~3 hours before getting pushed — the GitHub tip read v2.56.3 while the local working tree was at v2.60.0. Collaborators couldn't see the work, CI didn't run, and a laptop crash would have stranded all 7 commits.
+**Description:** Single-file edit in `CLAUDE.md`. New section inserted between the existing "Always create the git commit at the end of the change" rule and the "Restart the app container after every version bump" rule. The new rule states: every commit gets a `git push origin main` immediately after the local commit lands; doc-only commits included; no batching; force-push to `main` is forbidden without explicit user authorization. Paired with a note that CI (`.github/workflows/test-harness.yml`) runs on every push to `main` — skipping pushes lets a broken main accumulate silently.
+**Description (cont):** Why pair with the container rebuild step. Both happen after the commit. The rebuild is local (verifies harness against the new code); the push is remote (verifies CI + makes the commit visible). Either alone leaves a gap — pushed but not rebuilt means the dev container is stale on this laptop; rebuilt but not pushed means GitHub + CI + collaborators don't see the work. Both should happen after every commit.
+**Description (cont 2):** Why doc-only commits push too. The "every commit ships a bump" rule (top of CLAUDE.md) already classifies doc edits as PATCH bumps. The push rule mirrors that — every bump, every commit, every push. There's no "doc commits don't need pushing" carve-out because the version badge in README + the `APP_VERSION` constant + the CHANGELOG entry all need to reach GitHub for `/version` poll consumers (the demo CDN, contributors checking the README, anyone reading the changelog) to see the new value.
+**Description (cont 3):** Verification. (a) `curl /version` reports `2.60.1` after `docker compose up -d --build app`. (b) The 7 stacked commits (v2.57.0 through v2.60.0) PLUS this commit pushed cleanly to `origin/main` in one `git push` — the next commit will fall into the new "push immediately" discipline. (c) No code change in this commit besides the CLAUDE.md rule + version bump artifacts (`app/version.py`, `README.md` badge, CHANGELOG header).
+
+### Added
+- `CLAUDE.md` rule: "Push every commit to `origin/main` immediately after the local commit lands." Paired with the container-rebuild rule and the per-commit version-bump rule. Force-push to `main` is forbidden without explicit user authorization.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.60.1`.
+- `README.md` version badge → `2.60.1`.
+
+### Notes
+- **Backlog flush.** The 7 unpushed commits (v2.57.0 → v2.60.0) ride along with this push. Going forward each commit pushes on its own.
+- **Why a PATCH not MINOR.** No new feature, no API change — just a process rule + the implied behavior shift on the next commit. PATCH is the right slot per the SemVer rubric at the top of CLAUDE.md.
+
+---
+
 ## [2.60.0] - 2026-05-25 — "Divine Strike"
 
 **Schema version:** 57
