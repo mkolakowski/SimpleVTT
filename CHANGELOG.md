@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.68.2] - 2026-05-26 — "Breathing Room"
+
+**Schema version:** 60
+**Commit summary:** **Initiative tracker card gap bumped 8 → 14 px.** Companion to the v2.68.1 roll log card gap bump — same rationale (the v2.4.31-era 8 px gap was tight when cards were monolithic, but with action-economy chips + buff rows + reaction prompt buttons + HP/AC mini-cells the cards now carry more visual weight per row). The `.char-detail` selector drives every init-tracker card (PCs + NPCs); its bottom margin controls the gap between consecutive cards in the Battle drawer's list.
+**Description:** One CSS edit in `app/templates/tabletop.html` — `.char-detail { margin: 0 2px 8px }` → `margin: 0 2px 14px`. No JS changes; no behavior changes; no test changes. The bump is purely visual.
+**Description (cont):** Verification. (a) `curl /version` reports `2.68.2`. (b) Existing harness suite continues to pass — pure CSS edit, no functional surface touched.
+
+### Changed
+- `.char-detail` bottom margin `8px → 14px` (init-tracker card gap).
+- `app/version.py` `APP_VERSION` → `2.68.2`.
+- `README.md` version badge → `2.68.2`.
+
+### Notes
+- **Pairs with the v2.68.1 roll log gap bump.** Same delta size, same rationale.
+
+---
+
 ## [2.68.1] - 2026-05-26 — "Popups Everywhere"
 
 **Schema version:** 60

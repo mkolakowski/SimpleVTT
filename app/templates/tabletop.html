@@ -741,7 +741,10 @@
        border so Characters cards visually match init rows + GM-Tools
        panels. */
     .char-detail {
-        display: block; margin: 0 2px 8px;
+        /* v2.68.2: bottom margin bumped 8 → 14 px so init-tracker
+           cards have more visual breathing room (matches the v2.68.1
+           roll log gap bump). */
+        display: block; margin: 0 2px 14px;
         border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
         border-radius: 8px; overflow: hidden;
         box-shadow: 0 3px 14px rgba(0,0,0,.22);
