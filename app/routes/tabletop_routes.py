@@ -1414,6 +1414,106 @@ def _distance_ft_between_chars(
     )
 
 
+# v2.66.0 — F1 follow-up: Opportunity Attack trigger detection.
+# RAW (PHB p.195): "You can make an opportunity attack when a hostile
+# creature that you can see moves out of your reach. To make the
+# opportunity attack, you use your reaction to make one melee attack
+# against the provoking creature."
+#
+# When a token moves, walk every OTHER combatant in the active battle
+# and check whether the mover transitioned from within-reach to
+# out-of-reach. Each provoked watcher returns one entry; the caller
+# broadcasts an advisory feature_used so the player UI can prompt the
+# watcher's controller to spend their reaction on an OA.
+#
+# v1 simplifications:
+#   - 5 ft reach for every combatant. Polearm Master / Reach weapons /
+#     monster reach (e.g. giants, larger monsters) are filed for a
+#     follow-up that reads a "melee_reach_ft" field off the combatant.
+#   - "Hostile" not enforced — every other combatant is a potential
+#     watcher. Mixed-loyalty (charmed PC, friendly NPC) is filed.
+#   - "Can see" not enforced (no visibility/cover model yet).
+#   - Pure advisory broadcast — does NOT consume the reaction or fire
+#     the attack. Player UI decides whether to spend.
+#   - Watchers whose reaction is already used in this round are
+#     skipped (no spam broadcasts).
+def _check_opportunity_attack_triggers(
+    db: Session, campaign_id: int,
+    mover_token_id: int,
+    from_x: float, from_y: float,
+    to_x: float, to_y: float,
+) -> list[dict]:
+    """Returns a list of provoked-OA dicts, one per watcher that:
+      - is in the active battle's init tracker,
+      - has a token on the active map (other than the mover),
+      - was within 5 ft of from_pos AND beyond 5 ft of to_pos,
+      - has their reaction available (economy.reaction is False).
+
+    Each entry: {watcher_combatant_id, watcher_name, watcher_char_id,
+    watcher_color, watcher_token_id}. Returns empty list when there's
+    no active battle, no active map, or no qualifying watchers.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return []
+    combatants = state.get("combatants") or []
+    if not combatants:
+        return []
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not campaign.active_map_id:
+        return []
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        return []
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+    grid_size_px = int(map_row.grid_size_px)
+    triggers: list[dict] = []
+    REACH_FT = 5.0
+    for c in combatants:
+        # Reaction already spent? Skip — OA needs reaction.
+        economy = c.get("economy") or {}
+        if bool(economy.get("reaction")):
+            continue
+        # Find the watcher's token on the active map.
+        watcher_token = None
+        src_token_id = c.get("source_token_id")
+        if src_token_id:
+            watcher_token = db.query(Token).filter(
+                Token.id == int(src_token_id),
+                Token.map_id == map_row.id,
+            ).first()
+        if watcher_token is None and c.get("char_id"):
+            watcher_token = db.query(Token).filter(
+                Token.character_id == int(c["char_id"]),
+                Token.map_id == map_row.id,
+            ).first()
+        if watcher_token is None:
+            continue
+        if int(watcher_token.id) == int(mover_token_id):
+            continue
+        wx = float(watcher_token.x or 0)
+        wy = float(watcher_token.y or 0)
+        dist_from = _distance_ft_between_points(
+            grid_size_px, grid_type, wx, wy, from_x, from_y,
+        )
+        dist_to = _distance_ft_between_points(
+            grid_size_px, grid_type, wx, wy, to_x, to_y,
+        )
+        if dist_from <= REACH_FT and dist_to > REACH_FT:
+            triggers.append({
+                "watcher_combatant_id": c.get("id"),
+                "watcher_name": c.get("name") or "Combatant",
+                "watcher_char_id": c.get("char_id"),
+                "watcher_color": c.get("color"),
+                "watcher_token_id": int(watcher_token.id),
+                "dist_from_ft": dist_from,
+                "dist_to_ft": dist_to,
+            })
+    return triggers
+
+
 # v2.49.75 — Phase 2C range-enforcement helper. Given a caster + a
 # spell / weapon range string + a target descriptor, returns either
 # None (in range / unchecked / overridden) or an error dict suitable
@@ -6171,6 +6271,41 @@ async def move_token(
         }},
     )
 
+    # v2.66.0 — F1 follow-up: Opportunity Attack trigger advisory.
+    # When the mover leaves a watcher's 5 ft reach mid-move, broadcast
+    # a feature_used advisory so the watcher's controller can decide
+    # whether to spend their reaction on an OA. Pure advisory — does
+    # NOT auto-fire the attack or consume the reaction.
+    oa_triggers: list[dict] = []
+    if distance_ft > 0:
+        try:
+            oa_triggers = _check_opportunity_attack_triggers(
+                db, campaign_id, int(token.id),
+                from_x, from_y, x, y,
+            )
+        except Exception:
+            oa_triggers = []
+    mover_name = token.label or "Token"
+    for trig in oa_triggers:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": trig.get("watcher_char_id"),
+                "character_name": trig.get("watcher_name"),
+                "user_color": trig.get("watcher_color"),
+                "feature_name": "⚔ Opportunity Attack triggered",
+                "feature_desc": (
+                    f"{mover_name} moved out of {trig.get('watcher_name')}'s "
+                    f"5 ft reach. Use your reaction to make a melee attack?"
+                ),
+                "source": "opportunity-attack-trigger",
+                "watcher_combatant_id": trig.get("watcher_combatant_id"),
+                "watcher_token_id": trig.get("watcher_token_id"),
+                "mover_token_id": int(token.id),
+                "mover_name": mover_name,
+            },
+        })
+
     # v2.8.0: strict-mode movement audit. When the campaign has
     # strict_action_economy on AND this drag pushes the combatant past
     # their walking speed for the FIRST time this turn (transition from
@@ -6227,7 +6362,22 @@ async def move_token(
                     },
                 })
 
-    return {"ok": True, "distance_ft": distance_ft}
+    return {
+        "ok": True,
+        "distance_ft": distance_ft,
+        # v2.66.0 — F1 OA: surface trigger advisories on the move
+        # response too so harness tests + future client UI can assert
+        # on them without watching the WS broadcast.
+        "opportunity_attack_triggers": [
+            {
+                "watcher_combatant_id": t.get("watcher_combatant_id"),
+                "watcher_name": t.get("watcher_name"),
+                "watcher_char_id": t.get("watcher_char_id"),
+                "watcher_token_id": t.get("watcher_token_id"),
+            }
+            for t in oa_triggers
+        ],
+    }
 
 
 @router.get("/api/campaign/{campaign_id}/tokens")
@@ -12364,6 +12514,37 @@ def _paladin_level_from_sheet(sheet: dict) -> int:
     return 0
 
 
+def _paladin_is_conscious(char: "Character | None") -> bool:
+    """v2.66.0 — F1 follow-up. Paladin auras (AoP, AoD) require the
+    paladin to be CONSCIOUS per RAW ("You must be conscious to grant
+    this bonus"). Returns True when the paladin has hp > 0 AND
+    death_saves.status indicates a conscious state.
+
+    Conscious means hp > 0 and death_saves.status in
+    {"alive", "stable"}. An unconscious paladin (hp == 0, status in
+    {"dying", "dead"}) cannot emit the aura — RAW it suspends until
+    they're back up.
+
+    Used by ``_aura_of_protection_bonus`` and
+    ``_ally_has_aura_of_devotion``. Sheet-driven so the check is
+    free of init-tracker state — works whether the paladin is in
+    battle or not.
+    """
+    if not char:
+        return False
+    sheet = char.sheet or {}
+    hp = sheet.get("hp") or {}
+    try:
+        hp_current = int(hp.get("current") or 0)
+    except (TypeError, ValueError):
+        hp_current = 0
+    if hp_current <= 0:
+        return False
+    ds = sheet.get("death_saves") or {}
+    status = (ds.get("status") or "alive").strip().lower()
+    return status in {"alive", "stable"}
+
+
 def _aura_of_protection_bonus(
     db: Session, campaign_id: int, saving_char_id: int | None,
 ) -> "tuple[int, Character | None]":
@@ -12421,6 +12602,11 @@ def _aura_of_protection_bonus(
         sheet = char.sheet or {}
         paladin_lv = _paladin_level_from_sheet(sheet)
         if paladin_lv < 6:
+            continue
+        # v2.66.0 — F1 follow-up. RAW: aura suspends when the paladin
+        # is unconscious. Skip downed paladins so a dying Caelan
+        # doesn't keep granting +CHA to saves.
+        if not _paladin_is_conscious(char):
             continue
         # v2.61.0 — F1 range gate. Aura radius is 10 ft at Lv 6-17,
         # 30 ft at Lv 18+ per RAW. ``_distance_ft_between_chars``
@@ -12607,6 +12793,9 @@ def _ally_has_aura_of_devotion(
         sheet = char.sheet or {}
         paladin_lv = _paladin_level_from_sheet(sheet)
         if paladin_lv < 7:
+            continue
+        # v2.66.0 — F1 follow-up. Same conscious gate as AoP.
+        if not _paladin_is_conscious(char):
             continue
         # Subclass check — normalize "Oath of Devotion" → "devotion"
         # so the gate matches the `_FEATURE_ECONOMY` subclass-tag

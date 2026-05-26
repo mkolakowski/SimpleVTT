@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 505 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.65.0, 2026-05-26).
+**Total tests:** 509 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.66.0, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -757,6 +757,16 @@ v2.61.0 — F1 framework lands. New helper `_distance_ft_between_chars(db, campa
 |------|-----------------|
 | `test_aura_of_devotion_blocks_when_paladin_within_10_ft` | Caelan + Krieger 5 ft apart (1 cell on demo 70 px / 5 ft grid) → AoD range gate passes → Suggestion save-fail does NOT install Charmed, broadcast fires. |
 | `test_aura_of_devotion_skips_when_paladin_outside_10_ft` | Caelan + Krieger 25 ft apart (5 cells) → AoD range gate skips → Charmed install proceeds, no broadcast. |
+
+### `test_opportunity_attack.py`
+v2.66.0 — F1 follow-ups: Aura conscious-check + Opportunity Attack trigger. `_paladin_is_conscious(char)` gates both `_aura_of_protection_bonus` and `_ally_has_aura_of_devotion` on `hp > 0 AND death_saves.status ∈ {alive, stable}`. `_check_opportunity_attack_triggers(...)` walks combatants on token move, detects from ≤ 5 ft → to > 5 ft transitions, and emits `feature_used(source="opportunity-attack-trigger")` for each provoked watcher whose reaction is available.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_aura_of_protection_skips_when_paladin_unconscious` | Override Caelan to `dying` via `/death-save/override` → Thalindra Fireball at Pip → `base_expression="1d20"` (no +CHA from Caelan), no aura broadcast. |
+| `test_oa_fires_when_mover_leaves_watcher_reach` | Krieger token 5 ft from Tavik (350,350 vs 420,350 on 70 px / 5 ft grid) moves to 25 ft (700,350) → move response carries `opportunity_attack_triggers` naming Tavik; `feature_used(source=opportunity-attack-trigger)` broadcast fires. |
+| `test_oa_skips_when_watcher_reaction_used` | Tavik combatant seeded with `economy.reaction=True` → Krieger leaves reach → no OA trigger (RAW: needs reaction). |
+| `test_oa_skips_when_move_starts_out_of_reach` | Krieger starts 25 ft from Tavik → moves further away → no OA trigger (no in-reach → out-of-reach transition). |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

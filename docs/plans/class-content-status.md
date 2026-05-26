@@ -1178,9 +1178,9 @@ Format per framework: **what it is**, **what features it blocks**,
 RAW-correct system — the v1 simplification that ships the dependent
 features cheaply).
 
-### F1. Token positional adjacency / 5-ft-range checking — ✅ SHIPPED (v2.61.0)
+### F1. Token positional adjacency / 5-ft-range checking — ✅ SHIPPED (v2.61.0, v2.66.0 follow-ups)
 
-**Status:** Primitive `_distance_ft_between_chars(db, campaign_id, char_a_id, char_b_id) → float | None` shipped v2.61.0. Wired into AoP / AoD / Countercharm. Follow-up consumers (Sneak Attack ally-adjacency, Bardic recipient range, Mass Cure target range, Opportunity Attack trigger) still filed — each is now a one-call addition reusing the helper.
+**Status:** Primitive `_distance_ft_between_chars(db, campaign_id, char_a_id, char_b_id) → float | None` shipped v2.61.0. Wired into AoP / AoD / Countercharm. v2.62.1 added Sneak Attack ally-adjacency advisory. v2.66.0 ("The Watch") closed two more v1 simplifications: (a) Paladin auras now require the paladin to be conscious — new `_paladin_is_conscious(char)` helper gates both AoP + AoD; (b) Opportunity Attack trigger detection — new `_check_opportunity_attack_triggers(...)` walks combatants and broadcasts a `feature_used(source="opportunity-attack-trigger")` advisory when a token moves out of a watcher's 5 ft reach (advisory only — does NOT auto-fire). Remaining filings: Bardic recipient range, reach-weapon / monster reach for OA, OA hostility / visibility gates.
 
 **What it is:** A `_distance_ft_between_chars(db, campaign_id, char_a_id, char_b_id) → float | None`
 helper that resolves both characters' tokens on the active map (via

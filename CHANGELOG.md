@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.66.0] - 2026-05-26 — "The Watch"
+
+**Schema version:** 59
+**Commit summary:** **F1 follow-ups — Opportunity Attack trigger + Aura conscious-check.** Closes two v1 simplifications from v2.61.0's positional-adjacency framework. (1) Paladin auras (AoP, AoD) now require the paladin to be conscious per RAW — `_paladin_is_conscious(char)` reads `sheet.hp.current > 0` AND `death_saves.status ∈ {alive, stable}`, and both `_aura_of_protection_bonus` + `_ally_has_aura_of_devotion` gate on it. (2) New `_check_opportunity_attack_triggers(db, campaign_id, mover_token_id, from_x, from_y, to_x, to_y)` helper walks every combatant; for each watcher with a token on the active map, computes distance to from_pos vs. to_pos. When `from ≤ 5 ft AND to > 5 ft AND watcher.economy.reaction is False`, emits a `feature_used(source="opportunity-attack-trigger")` advisory broadcast and includes the trigger in the move endpoint's response under `opportunity_attack_triggers`. Pure advisory — does NOT consume the reaction or fire the attack (player decides).
+**Description:** Three blocks of edits in `app/routes/tabletop_routes.py`. **(1) Aura conscious-check:** new `_paladin_is_conscious(char) -> bool` helper next to `_paladin_level_from_sheet`. Two new gates — one inserted into `_aura_of_protection_bonus` between the Lv 6 check and the F1 range check; one into `_ally_has_aura_of_devotion` between the Lv 7 check and the subclass check. Unconscious paladins skip the loop the same way out-of-range or low-level paladins do. **(2) OA helper:** new `_check_opportunity_attack_triggers(...)` after `_distance_ft_between_chars` (~L 1415). Iterates `state.combatants`, finds each watcher's token by `source_token_id` then `char_id`, computes `_distance_ft_between_points(grid_size_px, grid_type, wx, wy, ...)` to from_pos and to_pos, and returns a list of provoked-OA dicts (`watcher_combatant_id`, `watcher_name`, `watcher_char_id`, `watcher_color`, `watcher_token_id`, `dist_from_ft`, `dist_to_ft`). Watchers whose reaction is already used (`economy.reaction is True`) are skipped — RAW: OA needs a reaction. **(3) Move-endpoint integration:** after the token mutation + initial `token_move` broadcast in `move_token` (~L 6160), call the OA helper and for each trigger emit `feature_used(source="opportunity-attack-trigger")` naming the watcher + the provoking mover. The move response gains an `opportunity_attack_triggers` array so harness tests + future client UI can assert on triggers without scraping the WS stream.
+**Description (cont):** v1 simplifications still apply to OA — filed for follow-ups:
+- **5 ft reach for every watcher**. Reach weapons (glaive, halberd, polearm) and monster reach (e.g. larger creatures) would push the threshold to 10 ft or higher. Adding a `melee_reach_ft` field to the combatant dict (default 5) would let `_check_opportunity_attack_triggers` honor longer reach without changing the call sites.
+- **"Hostile" not enforced**. Every other combatant is a potential watcher. Mixed-loyalty (charmed PC, friendly NPC) edge cases would suppress the broadcast for non-hostile watchers. Filed.
+- **"Can see" not enforced**. No visibility / cover / blinded-condition model — every watcher provokes. Disengage action also bypasses OA per RAW but the v1 trigger fires regardless; the player UI can decide whether to spend on a Disengaged mover.
+- **Advisory only**. The broadcast does NOT auto-consume the reaction or fire `/attack`. Player UI sees the chip and decides whether to spend their reaction. Filed: a one-click "Take the OA" button on the chat card that calls `/use_reaction` + `/attack` together.
+**Description (cont 2):** Aura conscious-check is a sheet-driven check, not init-tracker. `_paladin_is_conscious` reads the Character row's `sheet.hp.current` + `sheet.death_saves.status`; both stay in sync with the hub combatant via the existing `_apply_hp_change` + `_set_death_save_state` plumbing. Result: when Caelan goes dying mid-fight (HP → 0, status → "dying" via damage or `/death-save/override`), the next save roll constructed (in `/cast_spell` PC save / AoE save / `/place_aoe` PC branch / `/roll_request/{id}/respond` condition gate) returns `(0, None)` from `_aura_of_protection_bonus` and `False` from `_ally_has_aura_of_devotion`. Caelan stops granting +CHA. The paladin's own saves still benefit when conscious; a dying Caelan can't even self-aura.
+**Description (cont 3):** Verification. (a) `curl /version` reports `2.66.0` after `docker compose up -d --build app`. (b) New harness `tests/harness/test_opportunity_attack.py` (4 tests): aura skips when paladin override → dying; OA fires when Krieger moves 25 ft from Tavik (5 ft → 25 ft via 350 → 700 px on a 70 px/cell grid); OA skipped when Tavik's reaction is already used; OA skipped when start position is already out of reach. (c) Full suite 505 + 4 = 509 passing.
+
+### Added
+- `_paladin_is_conscious(char)` helper — RAW conscious gate for Paladin auras.
+- `_check_opportunity_attack_triggers(...)` helper — walks combatants, returns list of provoked-OA dicts.
+- `opportunity_attack_triggers` array on `/api/campaign/{cid}/token/{tid}/move` response.
+- `feature_used(source="opportunity-attack-trigger")` WS broadcast advisory.
+- Harness `tests/harness/test_opportunity_attack.py` — 4 tests (1 aura conscious + 3 OA paths).
+
+### Changed
+- `_aura_of_protection_bonus` skips unconscious paladins (RAW).
+- `_ally_has_aura_of_devotion` skips unconscious paladins (RAW).
+- `move_token` endpoint emits OA advisory broadcasts on qualifying moves.
+- `app/version.py` `APP_VERSION` → `2.66.0`.
+- `README.md` version badge → `2.66.0`.
+- `docs/plans/class-content-status.md` — F1 row in "Missing system frameworks" notes the v2.66.0 follow-ups landed.
+- `docs/test-harness-coverage.md` — total test count 505 → 509.
+
+### Notes
+- **Advisory broadcast — no auto-fire.** OA detection does NOT spend the reaction or call `/attack`. Player UI sees the chip and decides. Filed: chat-card one-click "Take the OA" that pairs `/use_reaction` with `/attack`.
+- **5 ft reach assumed for every watcher.** Reach weapons + monster reach filed — drop-in via a `melee_reach_ft` combatant field.
+- **Hostility + visibility not gated.** Mixed-loyalty / blinded / cover edge cases filed; v1 broadcasts to every watcher in reach transition.
+
+---
+
 ## [2.65.0] - 2026-05-26 — "The Rewind"
 
 **Schema version:** 59
