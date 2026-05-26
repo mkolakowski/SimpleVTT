@@ -1894,6 +1894,170 @@ def _check_opportunity_attack_triggers(
     return triggers
 
 
+# ── v2.67.0 — Reactions automation foundation (Phase 1) ──
+#
+# docs/plans/reactions-automation.md spec, server-side foundation:
+#
+#   - ``_active_reaction_prompts`` — in-memory dict of ``prompt_id``
+#     → ``{...}`` entries with TTL. Replay-attack guard: only
+#     prompts in this dict can be resolved by ``/use_reaction``;
+#     each prompt is single-use.
+#   - ``_eligible_reactions(db, campaign_id, watcher_char_id,
+#     trigger_event, context)`` — returns a list of option dicts
+#     for the prompt's catalog. Phase 1 ships only the
+#     ``creature_exits_reach`` event with a single ``take-the-oa``
+#     option; subsequent phases add more events + reactions.
+#   - ``_emit_reaction_prompt(campaign_id, watcher_combatant,
+#     trigger_event, summary, options, target_user_ids)`` async —
+#     registers the prompt in ``_active_reaction_prompts`` and
+#     broadcasts a ``reaction_prompt`` WS event.
+#   - ``/use_reaction`` endpoint — single dispatch entry point.
+#     Validates the prompt_id against the in-memory store, marks
+#     the reaction slot, dispatches to the reaction's handler (Phase
+#     1 only handles ``take-the-oa`` — just consumes the slot +
+#     broadcasts ``reaction_prompt_resolved`` for the client to
+#     dismiss the popup; the player still clicks Attack manually).
+#
+# Phase 1 deliberately does NOT include the client popup UI or the
+# settings UI toggle — those land in Phase 1b. The DB column +
+# server-side broadcast shape is the foundation everything else
+# builds on.
+import time as _time_mod
+import uuid as _uuid_mod
+
+# In-memory prompt registry. Format: ``{prompt_id: entry_dict}``
+# where entry_dict has campaign_id / created_at / expires_at /
+# watcher_char_id / trigger_event / options / resolved (bool). TTL
+# enforced lazily on lookup; expired entries are dropped at the next
+# read. Mirrors the v2.65.0 ``_attack_damage_log`` shape.
+_active_reaction_prompts: dict[str, dict] = {}
+_REACTION_PROMPT_TTL_S = 600  # 10 minutes
+
+
+def _purge_active_reaction_prompts() -> None:
+    """Drop expired prompts. Called inside every read/write path so
+    the in-memory dict can't grow unboundedly. TTL is 10 minutes —
+    well past any realistic player decision window but short enough
+    to avoid memory leaks on long-running campaigns."""
+    now = _time_mod.time()
+    expired = [
+        pid for pid, entry in _active_reaction_prompts.items()
+        if float(entry.get("expires_at", 0)) <= now
+    ]
+    for pid in expired:
+        _active_reaction_prompts.pop(pid, None)
+
+
+def _eligible_reactions(
+    db: Session, campaign_id: int, watcher_char_id: int | None,
+    trigger_event: str, context: dict,
+) -> list[dict]:
+    """Phase 1 stub. Returns the list of reaction option dicts a
+    watcher has available for the given trigger event. Each option
+    has shape ``{key, label, kind, resource_cost, params, available,
+    unavailable_reason}``.
+
+    Phase 1 only handles ``creature_exits_reach`` — returns a single
+    ``take-the-oa`` option (no resource cost beyond the reaction
+    slot itself). Subsequent phases extend with class-feature,
+    spell, feat, and item reactions per the plan doc's catalog.
+    """
+    if trigger_event == "creature_exits_reach":
+        return [{
+            "key": "take-the-oa",
+            "label": "⚔ Take the Opportunity Attack",
+            "kind": "implicit",
+            "resource_cost": "Reaction",
+            "params": {},
+            "available": True,
+            "unavailable_reason": None,
+        }]
+    # Phase 1 doesn't catalog any other trigger events yet.
+    return []
+
+
+def _resolve_watcher_user_ids(
+    db: Session, campaign: "Campaign", watcher_combatant: dict,
+) -> list[int]:
+    """Return the list of user_ids whose clients should render the
+    reaction popup. For a PC watcher, that's the character's
+    ``owner_user_id``. For an NPC watcher (no char_id), the GM
+    receives the popup. The list also always includes the GM so they
+    see every prompt in the roll-log audit even when a PC owns it.
+    """
+    out: list[int] = []
+    char_id = watcher_combatant.get("char_id")
+    if char_id:
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(char_id),
+            ).first()
+        except Exception:
+            char = None
+        if char and char.owner_user_id:
+            out.append(int(char.owner_user_id))
+    # GM always gets the prompt for audit visibility.
+    if campaign and campaign.gm_user_id and int(campaign.gm_user_id) not in out:
+        out.append(int(campaign.gm_user_id))
+    return out
+
+
+async def _emit_reaction_prompt(
+    db: Session, campaign: "Campaign",
+    watcher_combatant: dict, trigger_event: str, summary: str,
+    *, context: dict | None = None,
+) -> str | None:
+    """Build + broadcast a ``reaction_prompt`` WS event. Registers
+    the prompt in ``_active_reaction_prompts`` so ``/use_reaction``
+    can validate it later. Returns the ``prompt_id`` (or None when
+    no options are eligible — caller may want to suppress the
+    broadcast in that case, but Phase 1 always emits as long as the
+    trigger is recognized).
+    """
+    _purge_active_reaction_prompts()
+    context = dict(context or {})
+    watcher_char_id = watcher_combatant.get("char_id")
+    options = _eligible_reactions(
+        db, campaign.id, watcher_char_id, trigger_event, context,
+    )
+    if not options:
+        return None
+    prompt_id = f"rxn_{_uuid_mod.uuid4().hex}"
+    now = _time_mod.time()
+    target_user_ids = _resolve_watcher_user_ids(
+        db, campaign, watcher_combatant,
+    )
+    entry = {
+        "prompt_id": prompt_id,
+        "campaign_id": int(campaign.id),
+        "created_at": now,
+        "expires_at": now + _REACTION_PROMPT_TTL_S,
+        "watcher_combatant_id": watcher_combatant.get("id"),
+        "watcher_char_id": watcher_char_id,
+        "trigger_event": trigger_event,
+        "context": context,
+        "options": options,
+        "resolved": False,
+    }
+    _active_reaction_prompts[prompt_id] = entry
+    await hub.broadcast(int(campaign.id), {
+        "type": "reaction_prompt",
+        "data": {
+            "prompt_id": prompt_id,
+            "campaign_id": int(campaign.id),
+            "watcher_combatant_id": watcher_combatant.get("id"),
+            "watcher_char_id": watcher_char_id,
+            "watcher_name": watcher_combatant.get("name"),
+            "watcher_color": watcher_combatant.get("color"),
+            "trigger_event": trigger_event,
+            "trigger_summary": summary,
+            "target_user_ids": target_user_ids,
+            "options": options,
+        },
+    })
+    return prompt_id
+
+
 # v2.49.75 — Phase 2C range-enforcement helper. Given a caster + a
 # spell / weapon range string + a target descriptor, returns either
 # None (in range / unchecked / overridden) or an error dict suitable
@@ -6710,6 +6874,33 @@ async def move_token(
                 "mover_name": mover_name,
             },
         })
+        # v2.67.0 Phase 1 — also emit a reaction_prompt for the
+        # OA exit-reach trigger. Keeps the legacy feature_used
+        # advisory for backward compat (existing harness tests +
+        # chat-card render path); the new broadcast adds the
+        # popup + roll-log "Take the OA" button path.
+        if trigger_type == "exit":
+            watcher_combatant = None
+            for c in (hub.get_battle(campaign_id) or {}).get(
+                "combatants", []
+            ) or []:
+                if c.get("id") == trig.get("watcher_combatant_id"):
+                    watcher_combatant = c
+                    break
+            if watcher_combatant is not None:
+                try:
+                    await _emit_reaction_prompt(
+                        db, campaign, watcher_combatant,
+                        trigger_event="creature_exits_reach",
+                        summary=feature_desc,
+                        context={
+                            "mover_token_id": int(token.id),
+                            "mover_name": mover_name,
+                            "watcher_reach_ft": reach_ft,
+                        },
+                    )
+                except Exception:
+                    pass
 
     # v2.8.0: strict-mode movement audit. When the campaign has
     # strict_action_economy on AND this drag pushes the combatant past
@@ -11925,6 +12116,123 @@ async def use_bardic_inspiration(
 
 
 # ----------- API: Cutting Words (Lore Bard Lv 3) -----------
+
+# v2.67.0 Phase 1 — Reactions automation foundation.
+@router.post("/api/campaign/{campaign_id}/use_reaction")
+async def use_reaction(
+    campaign_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.67.0 Phase 1 — single dispatch entry point for reactions
+    triggered by a prompt from ``_emit_reaction_prompt``.
+
+    Body:
+      ``prompt_id``       — UUID returned in the original prompt;
+                            single-use, replay-guarded.
+      ``reaction_key``    — must match an ``option.key`` from the
+                            prompt's option list (server-side
+                            validation).
+      ``watcher_char_id`` — owning character of the watcher
+                            combatant (for the action-economy mark).
+      ``params``          — per-reaction extras (Phase 1 unused).
+
+    Phase 1 only handles ``take-the-oa`` (OA exit-reach trigger).
+    Validates the prompt, marks the reaction slot, broadcasts
+    ``reaction_prompt_resolved``. The player still clicks Attack
+    manually — Phase 1 doesn't auto-fire a follow-up attack.
+
+    Subsequent phases extend the dispatch table with class-feature,
+    spell, feat, and item reaction handlers.
+    """
+    _purge_active_reaction_prompts()
+    body = await request.json()
+    prompt_id = str(body.get("prompt_id") or "").strip()
+    reaction_key = str(body.get("reaction_key") or "").strip()
+    watcher_char_id_raw = body.get("watcher_char_id")
+    if not prompt_id:
+        raise HTTPException(400, "prompt_id is required")
+    if not reaction_key:
+        raise HTTPException(400, "reaction_key is required")
+
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_can_view_campaign(db, user, campaign):
+        raise HTTPException(403, "Not a member")
+
+    entry = _active_reaction_prompts.get(prompt_id)
+    if entry is None:
+        return JSONResponse(status_code=409, content={
+            "error": "prompt_expired_or_unknown",
+            "prompt_id": prompt_id,
+        })
+    if int(entry.get("campaign_id") or 0) != campaign_id:
+        # Belt + suspenders — prompts are campaign-scoped.
+        raise HTTPException(404, "prompt_id not for this campaign")
+    if bool(entry.get("resolved")):
+        return JSONResponse(status_code=409, content={
+            "error": "prompt_already_resolved",
+            "prompt_id": prompt_id,
+        })
+
+    option_keys = [
+        (o.get("key") or "") for o in (entry.get("options") or [])
+    ]
+    if reaction_key not in option_keys:
+        return JSONResponse(status_code=400, content={
+            "error": "unknown_reaction_key",
+            "reaction_key": reaction_key,
+            "available_keys": option_keys,
+        })
+
+    # Authorization: PC watcher → only the owning user OR GM may
+    # resolve. NPC watcher → GM only.
+    watcher_char_id = entry.get("watcher_char_id")
+    is_gm = _user_is_gm(user, campaign, db)
+    if watcher_char_id and not is_gm:
+        char = db.query(Character).filter(
+            Character.id == int(watcher_char_id),
+        ).first()
+        if not char or char.owner_user_id != user.id:
+            raise HTTPException(403, "Not your character")
+    elif not watcher_char_id and not is_gm:
+        raise HTTPException(403, "NPC reactions are GM-only")
+
+    # Mark the prompt resolved BEFORE the reaction's side effects so
+    # the replay guard fires even if the handler raises mid-way.
+    entry["resolved"] = True
+    entry["resolved_by_user_id"] = int(user.id)
+    entry["resolved_reaction_key"] = reaction_key
+
+    # Dispatch. Phase 1 only routes ``take-the-oa``; future phases
+    # extend this table.
+    if reaction_key == "take-the-oa" and watcher_char_id:
+        # Mark the watcher's reaction slot used. The player will
+        # click Attack manually to actually swing — Phase 1 doesn't
+        # auto-fire the follow-up attack.
+        await _mark_battle_economy(
+            campaign_id, int(watcher_char_id), "reaction",
+        )
+
+    await hub.broadcast(campaign_id, {
+        "type": "reaction_prompt_resolved",
+        "data": {
+            "prompt_id": prompt_id,
+            "campaign_id": campaign_id,
+            "reaction_key": reaction_key,
+            "watcher_char_id": watcher_char_id,
+            "watcher_combatant_id": entry.get("watcher_combatant_id"),
+            "resolved_by_user_id": int(user.id),
+        },
+    })
+
+    return {
+        "ok": True,
+        "prompt_id": prompt_id,
+        "reaction_key": reaction_key,
+        "trigger_event": entry.get("trigger_event"),
+    }
+
 
 @router.post("/api/campaign/{campaign_id}/use_cutting_words")
 async def use_cutting_words(

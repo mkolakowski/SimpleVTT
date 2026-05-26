@@ -97,6 +97,15 @@ class User(Base):
     # CSS reads it via `var(--glass-alpha, 42%)`.
     glass_alpha: Mapped[int] = mapped_column(Integer, default=42, server_default="42")
 
+    # v2.67.0 — per-user reaction-prompt UX. Controls whether the
+    # client surfaces a popup toast + roll-log entry when a reaction
+    # event fires for a character this user owns, or only the roll-
+    # log entry, or nothing at all (legacy chip-click).
+    # Values: "popup" | "roll_log_only" | "off".
+    reaction_prompt_mode: Mapped[str] = mapped_column(
+        String(16), default="popup", server_default="popup",
+    )
+
     characters: Mapped[list["Character"]] = relationship(
         back_populates="owner", foreign_keys="Character.owner_user_id"
     )

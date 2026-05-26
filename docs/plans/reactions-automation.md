@@ -1,6 +1,6 @@
 # Reactions Automation — Design Plan
 
-**Status:** ⚪ Proposed (no phases implemented yet — see [Existing surfaces](#existing-surfaces) for the pre-plan reaction work that this builds on).
+**Status:** 🟠 Phase 1a shipped in **v2.67.0** (server-side foundation: `reaction_prompt` broadcast + `/use_reaction` endpoint + `_eligible_reactions` + `_emit_reaction_prompt` + schema v60 `users.reaction_prompt_mode` + OA exit-reach retrofit). Phase 1b (client popup UI + settings toggle) + Phases 2-7 still ⚪.
 **Companion to:** [`docs/plans/class-content-status.md`](class-content-status.md) (the content catalog) and the v2.66.0+ OA/Sentinel trigger work.
 
 ---

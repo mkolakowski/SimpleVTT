@@ -10,6 +10,60 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.67.0] - 2026-05-26 — "Permission Granted"
+
+**Schema version:** 60
+**Commit summary:** **Phase 1 of the reactions-automation plan — server-side foundation.** New `reaction_prompt` WS broadcast type, new `/api/campaign/{cid}/use_reaction` consolidated endpoint with prompt_id replay guard, new in-memory `_active_reaction_prompts` registry with 10-minute TTL, new `_eligible_reactions(...)` + `_emit_reaction_prompt(...)` helpers, schema v60 migration adding `users.reaction_prompt_mode` ("popup" | "roll_log_only" | "off"; default "popup"). One trigger wired end-to-end as the Phase 1 proof: `creature_exits_reach` (OA exit-reach) now emits both the legacy v2.66.0 `feature_used` advisory AND the new `reaction_prompt`, with the "Take the Opportunity Attack" option. Players can resolve via the endpoint; the response flips `economy.reaction` and broadcasts `reaction_prompt_resolved` so the popup dismisses. Client popup UI + settings toggle deferred to Phase 1b.
+**Description:** Five files. **(1)** `app/models.py` — new `User.reaction_prompt_mode: Mapped[str]` defaulting to "popup". **(2)** `app/database.py` — schema v60 migration block: `ALTER TABLE users ADD COLUMN reaction_prompt_mode VARCHAR(16) NOT NULL DEFAULT 'popup'` (Postgres + SQLite identical since the type is a plain VARCHAR with a string default). **(3)** `app/version.py` — `APP_VERSION = "2.67.0"`, `SCHEMA_VERSION = 60`. **(4)** `app/routes/tabletop_routes.py` — three blocks of additions: the in-memory prompt registry + TTL purge helper, the `_eligible_reactions` + `_resolve_watcher_user_ids` + `_emit_reaction_prompt` helpers (~150 lines), the new `/use_reaction` endpoint (~100 lines), and a retrofit in the `/move` endpoint's OA-broadcast loop that calls `_emit_reaction_prompt` for `trigger_type == "exit"` triggers. **(5)** `tests/harness/test_reaction_prompt.py` — 5 tests covering the happy path + replay guard + 2 error paths.
+**Description (cont):** Architectural decisions:
+- **In-memory prompt registry, not DB.** Reactions are ephemeral — a prompt's lifecycle is seconds to minutes. Storing them in PostgreSQL would add a write-heavy table for short-lived state that doesn't need to survive a restart (if the app restarts mid-combat, the GM rebuilds the encounter anyway). The dict lives at module level next to the existing `_attack_damage_log`.
+- **10-minute TTL.** Matches `_attack_damage_log`'s purge-on-access pattern. Long enough that a slow player has time to decide; short enough that a forgotten prompt eventually clears.
+- **Single dispatch endpoint, not per-reaction endpoints.** `/use_reaction` matches the v2.65.0 `_attack_damage_log` consolidation pattern and the v2.66.5 Sentinel `_check_sentinel_attack_triggers` helper shape. Future phases add cases to the dispatch table (Phase 2 = class features, Phase 3 = spells, etc.) without proliferating endpoints.
+- **Backward compat: legacy `feature_used` advisory kept.** v2.66.0's broadcast still fires alongside the new `reaction_prompt`. The chat-card render path in `tabletop.html` already consumes the legacy event; the new event adds the popup + roll-log button path on top. Phase 1b's popup UI listener can read the new event; existing clients keep working unchanged.
+- **`target_user_ids` per-user routing.** The broadcast payload carries the list of user_ids whose clients should render the popup. The watcher's `owner_user_id` (for PCs) + the GM (always, for audit). Client decides whether to render based on `ME.id`; non-watchers see only the roll-log entry with disabled buttons (Phase 1b).
+- **Replay guard.** Every prompt is single-use. Once `entry["resolved"] = True`, a second POST returns 409 `prompt_already_resolved`. Mark resolved BEFORE handler side effects so the guard fires even if the dispatch raises mid-way.
+**Description (cont 2):** Phase 1 scope (Phase 1a — server-side foundation):
+- ✅ Schema v60 + `User.reaction_prompt_mode`.
+- ✅ `reaction_prompt` WS broadcast type.
+- ✅ `/use_reaction` endpoint with replay guard + auth.
+- ✅ `_eligible_reactions` (stub — only `creature_exits_reach`).
+- ✅ `_emit_reaction_prompt` + `_active_reaction_prompts` registry.
+- ✅ OA exit-reach retrofit emitting the new broadcast.
+- ✅ Harness coverage.
+
+Phase 1b (next commit) — client popup UI in `economy_messaging.js` + per-user settings toggle in `/settings` page + the chat-card "Take the OA" button in the roll log.
+
+Phase 2 onwards — class features, spells, feats, items, monsters per the plan doc catalog.
+**Description (cont 3):** Verification. (a) `curl /version` reports `{"app_version":"2.67.0","schema_version":60}` after `docker compose up -d --build app`. (b) Harness suite passes 519 + 5 = 524 tests. (c) The retrofit doesn't break the v2.66.x existing OA tests (legacy `feature_used` still fires for backward compat).
+
+### Added
+- `User.reaction_prompt_mode: Mapped[str]` — schema v60.
+- `_active_reaction_prompts: dict[str, dict]` in-memory registry with `_REACTION_PROMPT_TTL_S = 600` + `_purge_active_reaction_prompts()`.
+- `_eligible_reactions(db, campaign_id, watcher_char_id, trigger_event, context)` helper (Phase 1 stub).
+- `_resolve_watcher_user_ids(db, campaign, watcher_combatant)` helper.
+- `_emit_reaction_prompt(db, campaign, watcher_combatant, trigger_event, summary, *, context)` async helper.
+- `reaction_prompt` WS broadcast type.
+- `reaction_prompt_resolved` WS broadcast type.
+- `/api/campaign/{cid}/use_reaction` endpoint with prompt_id replay guard + auth.
+- Harness `tests/harness/test_reaction_prompt.py` — 5 tests.
+
+### Changed
+- `/api/campaign/{cid}/token/{tid}/move` OA broadcast loop now emits `reaction_prompt` for `trigger_type == "exit"` triggers, in addition to the legacy `feature_used` advisory.
+- `app/version.py` `APP_VERSION` → `2.67.0`, `SCHEMA_VERSION` → `60`.
+- `README.md` version badge → `2.67.0` / schema `v60`.
+- `docs/plans/reactions-automation.md` — Phase 1a marked ✅ shipped; Phase 1b (client UI) still ⚪.
+- `docs/test-harness-coverage.md` — total test count 519 → 524.
+
+### Schema
+- **v60:** `users.reaction_prompt_mode VARCHAR(16) NOT NULL DEFAULT 'popup'`. Migration is idempotent (skipped if column exists) and back-compat for existing rows (default fills automatically).
+
+### Notes
+- **Phase 1a only.** Server-side foundation. Client popup UI + settings page toggle land in Phase 1b.
+- **Backward compat preserved.** The v2.66.x `feature_used(source="opportunity-attack-trigger")` advisory still fires; existing harness tests + chat-card render paths unchanged.
+- **One trigger wired for v1 proof.** Only `creature_exits_reach` emits a prompt today. Phase 2+ extends the trigger taxonomy per the plan.
+
+---
+
 ## [2.66.7] - 2026-05-26 — "Permission to React"
 
 **Schema version:** 59

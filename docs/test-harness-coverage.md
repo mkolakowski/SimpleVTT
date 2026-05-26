@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 519 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.66.7, 2026-05-26).
+**Total tests:** 524 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.67.0, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -776,6 +776,17 @@ v2.66.0 — F1 follow-ups: Aura conscious-check + Opportunity Attack trigger. `_
 | `test_sentinel_skips_when_watcher_is_the_target` | Control — Krieger attacks Tavik (the sentinel) directly → no trigger (RAW: watcher must not be the target). |
 | `test_sentinel_skips_without_feat_flag` | Control — same geometry without the `sentinel` flag → no trigger. |
 | `test_sentinel_fires_on_npc_attack` | v2.66.6 — Bandit NPC (SRD slug) spawned via TokenTemplate + `/npc_attack` against Pip, Tavik (sentinel) 5 ft from the bandit → response carries `sentinel_triggers` + broadcast desc names the bandit. |
+
+### `test_reaction_prompt.py`
+v2.67.0 — Phase 1a of the reactions-automation plan (see [`docs/plans/reactions-automation.md`](plans/reactions-automation.md)). New `reaction_prompt` WS broadcast + `/api/campaign/{cid}/use_reaction` endpoint + in-memory `_active_reaction_prompts` registry with `prompt_id` replay guard. OA exit-reach (v2.66.0) retrofits to emit both the legacy `feature_used` advisory AND the new `reaction_prompt`. Schema v60 adds `users.reaction_prompt_mode`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_oa_exit_reach_emits_reaction_prompt` | Krieger leaves Tavik's 5 ft reach → `reaction_prompt` broadcast with `take-the-oa` option + the legacy `feature_used(source=opportunity-attack-trigger)` still fires (backward compat). |
+| `test_use_reaction_marks_economy_and_resolves_prompt` | POST `/use_reaction` with the prompt_id + `reaction_key=take-the-oa` → 200, `reaction_prompt_resolved` broadcast fires, Tavik's `economy.reaction` flips to True. |
+| `test_use_reaction_replay_guard` | Second POST with the same prompt_id → 409 `prompt_already_resolved`. |
+| `test_use_reaction_unknown_prompt_id` | POST with a fake prompt_id → 409 `prompt_expired_or_unknown`. |
+| `test_use_reaction_missing_prompt_id` | POST with no prompt_id → 400. |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

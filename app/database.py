@@ -581,6 +581,22 @@ def _apply_inline_migrations() -> None:
                     "JSON NOT NULL DEFAULT '[]'"
                 ))
 
+    # ---- Schema v60 (2.67.0): users.reaction_prompt_mode ----
+    # Per-user setting controlling whether reaction prompts surface as
+    # a popup toast, a roll-log entry only, or are suppressed entirely.
+    # Default "popup" matches the v2.67.0 Phase 1 UX. Values:
+    #   "popup"          — popup + roll-log (default)
+    #   "roll_log_only"  — roll-log entry only (no popup)
+    #   "off"            — no reaction prompts (legacy chip-click only)
+    # See docs/plans/reactions-automation.md.
+    user_cols_v60 = _column_names("users")
+    with engine.begin() as conn:
+        if user_cols_v60 and "reaction_prompt_mode" not in user_cols_v60:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN reaction_prompt_mode "
+                "VARCHAR(16) NOT NULL DEFAULT 'popup'"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""
