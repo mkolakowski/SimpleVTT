@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 511 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.66.1, 2026-05-26).
+**Total tests:** 512 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.66.2, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -769,6 +769,7 @@ v2.66.0 — F1 follow-ups: Aura conscious-check + Opportunity Attack trigger. `_
 | `test_oa_skips_when_move_starts_out_of_reach` | Krieger starts 25 ft from Tavik → moves further away → no OA trigger (no in-reach → out-of-reach transition). |
 | `test_oa_honors_explicit_melee_reach_ft_override` | v2.66.1 — Tavik seeded with `melee_reach_ft=10` (glaive/halberd) → Krieger at 10 ft moves to 15 ft → OA fires past the 10 ft threshold; trigger carries `watcher_reach_ft=10.0`; broadcast `feature_desc` references "10 ft". |
 | `test_oa_5ft_reach_still_skips_at_10ft_start` | Control for the reach override — same geometry without `melee_reach_ft` set → default 5 ft → no OA at 10 ft start. |
+| `test_oa_npc_reach_parses_from_monster_action_desc` | v2.66.2 — Hill Giant TokenTemplate via SRD slug `hill-giant` (Greatclub desc contains "reach 10 ft.") → spawn token + seed battle with the giant 10 ft from Krieger → Krieger moves to 15 ft → OA fires with `watcher_reach_ft=10.0` parsed from action desc (no explicit override). |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

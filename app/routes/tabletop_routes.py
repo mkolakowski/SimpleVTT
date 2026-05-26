@@ -1444,10 +1444,21 @@ def _distance_ft_between_chars(
 #     the attack. Player UI decides whether to spend.
 #   - Watchers whose reaction is already used in this round are
 #     skipped (no spam broadcasts).
+# v2.66.2 — Regex for NPC monster action desc strings. The SRD
+# convention is "reach N ft." (e.g. "Melee Weapon Attack: +8 to hit,
+# reach 10 ft., one target."). Pulls the first integer after "reach"
+# so a Hill Giant's Greatclub action contributes 10 ft to the
+# combatant's melee reach.
+_NPC_REACH_RE = _re.compile(
+    r"\breach\s+(\d+)\s*(?:ft|foot|feet)\.?", _re.IGNORECASE,
+)
+
+
 def _combatant_melee_reach_ft(
     db: Session, combatant: dict,
 ) -> float:
-    """v2.66.1 — Reach in feet for a combatant's melee threat zone.
+    """v2.66.1 / v2.66.2 — Reach in feet for a combatant's melee
+    threat zone.
 
     Resolution order:
       1. ``combatant["melee_reach_ft"]`` — explicit override on the
@@ -1458,9 +1469,22 @@ def _combatant_melee_reach_ft(
          counts as melee when its ``range`` string parses (via
          ``parse_range_ft``) to a plain integer (not a thrown tuple
          or None). Thrown / ranged weapons (e.g. "30/120 ft" → tuple)
-         are excluded.
-      3. Default: 5.0 ft (RAW unarmed strike / standard weapon reach).
+         are excluded. Save-DC attacks (spell saves) are excluded.
+      3. For NPCs (combatant has ``source_token_id``): look up the
+         Token → TokenTemplate, project via ``_monster_template_to_sheet``,
+         walk the resulting attacks, and regex ``reach N ft.`` from
+         each action's desc/description field. Max across all matches.
+      4. Default: 5.0 ft (RAW unarmed strike / standard weapon reach).
+
+    Caps at 15 ft (largest practical 5e reach weapon / monster reach;
+    defensive against ranged spell attacks miscategorized as melee).
     """
+    # Largest 5e melee reach weapon is the lance at 10 ft; some
+    # monsters reach 15 ft (Treant, Storm Giant, etc.). Defensive
+    # cap so a Fire Bolt's "120 ft" range can't inflate the threat
+    # zone to absurd distances even if it slips past other filters.
+    MELEE_REACH_CAP_FT = 15.0
+
     explicit = combatant.get("melee_reach_ft")
     if explicit is not None:
         try:
@@ -1469,6 +1493,7 @@ def _combatant_melee_reach_ft(
                 return v
         except (TypeError, ValueError):
             pass
+
     char_id = combatant.get("char_id")
     if char_id:
         try:
@@ -1479,14 +1504,6 @@ def _combatant_melee_reach_ft(
             char = None
         if char and char.sheet:
             from ..content.range_parser import parse_range_ft
-            # Cap melee reach at 15 ft. Largest 5e reach weapon is
-            # the lance at 10 ft (or 15 ft Heavy Polearm homebrew /
-            # mounted lance — sane upper bound). Filters out
-            # ranged-spell-attack "range" fields like Fire Bolt's
-            # "120 ft" (no save_dc, plain attack_bonus, single-band
-            # integer parse) that would otherwise inflate the OA
-            # threat zone to absurd distances.
-            MELEE_REACH_CAP_FT = 15.0
             best = 0.0
             for atk in (char.sheet.get("attacks") or []):
                 if not isinstance(atk, dict):
@@ -1513,6 +1530,73 @@ def _combatant_melee_reach_ft(
                         best = float(parsed)
             if best > 0:
                 return best
+
+    # NPC path — v2.66.2.
+    src_token_id = combatant.get("source_token_id")
+    if src_token_id:
+        try:
+            t = db.query(Token).filter(Token.id == int(src_token_id)).first()
+        except Exception:
+            t = None
+        tmpl = None
+        if t and t.token_template_id:
+            try:
+                tmpl = db.query(TokenTemplate).filter(
+                    TokenTemplate.id == int(t.token_template_id),
+                ).first()
+            except Exception:
+                tmpl = None
+        if tmpl is not None:
+            try:
+                proj = _monster_template_to_sheet(tmpl, 0)
+            except Exception:
+                proj = None
+            if isinstance(proj, dict):
+                best = 0.0
+                # SRD monsters fold action descs into "attacks"
+                # (projection writes the desc into either "description"
+                # or "desc"). The original actions list also lives at
+                # sheet["actions"]. Scan both so we catch every reach
+                # mention.
+                desc_sources: list[str] = []
+                for atk in (proj.get("attacks") or []):
+                    if not isinstance(atk, dict):
+                        continue
+                    # Skip save-based attacks — those are spell-save
+                    # actions (Frightful Presence, Breath weapons),
+                    # not melee weapons. The reach numerically printed
+                    # in the desc would be wrong to credit as melee.
+                    try:
+                        if int(atk.get("save_dc") or 0) > 0:
+                            continue
+                    except (TypeError, ValueError):
+                        pass
+                    for k in ("description", "desc"):
+                        v = atk.get(k)
+                        if isinstance(v, str) and v:
+                            desc_sources.append(v)
+                for action in (proj.get("actions") or []):
+                    if not isinstance(action, dict):
+                        continue
+                    try:
+                        if int(action.get("save_dc") or 0) > 0:
+                            continue
+                    except (TypeError, ValueError):
+                        pass
+                    v = action.get("desc")
+                    if isinstance(v, str) and v:
+                        desc_sources.append(v)
+                for text in desc_sources:
+                    for m in _NPC_REACH_RE.finditer(text):
+                        try:
+                            n = int(m.group(1))
+                        except (TypeError, ValueError):
+                            continue
+                        if 0 < n <= MELEE_REACH_CAP_FT and float(n) > best:
+                            best = float(n)
+                if best > 0:
+                    return best
+
     return 5.0
 def _check_opportunity_attack_triggers(
     db: Session, campaign_id: int,

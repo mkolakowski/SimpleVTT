@@ -441,3 +441,97 @@ async def test_oa_5ft_reach_still_skips_at_10ft_start(
         f"default 5 ft reach should NOT trigger at 10 ft start; "
         f"got {matching}"
     )
+
+
+async def test_oa_npc_reach_parses_from_monster_action_desc(
+    gm_client, gm_ws, roster,
+):
+    """v2.66.2 — NPC reach parsed from monster action ``desc`` text.
+
+    Creates a Hill Giant TokenTemplate (SRD slug ``hill-giant`` has
+    "reach 10 ft." in its Greatclub action), spawns a token, and
+    seeds the battle with the Hill Giant watching Krieger. Krieger
+    starts 10 ft (2 cells) from the giant, moves to 15 ft (3 cells).
+    OA should fire because the helper extracted reach=10 from the
+    giant's action desc — no explicit ``melee_reach_ft`` set.
+    """
+    krieger = roster["Krieger Stonefist"]
+
+    # Create a Hill Giant template (pointer to SRD slug).
+    tmpl_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/templates",
+        json={
+            "name": "Hill Giant (OA test)",
+            "template": "dnd5e",
+            "tags": ["npc", "harness"],
+            "sheet": {"monster_slug": "hill-giant"},
+        },
+    )
+    assert tmpl_resp.status_code == 200, tmpl_resp.text
+    tmpl = tmpl_resp.json()
+
+    # Spawn a token from that template at (350, 350).
+    tok_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/tokens",
+        json={
+            "token_template_id": tmpl["id"],
+            "label": "Hill Giant",
+            "x": 350.0,
+            "y": 350.0,
+            "color": "#9c884a",
+            "size": 2,
+        },
+    )
+    assert tok_resp.status_code == 200, tok_resp.text
+    giant_tok = tok_resp.json()
+
+    # Place Krieger 10 ft (2 cells = 140 px) away — within the giant's
+    # parsed 10 ft reach.
+    await _place_token(gm_client, krieger["id"], 490.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok, "Krieger token must exist"
+
+    # Seed a battle with both combatants. The Hill Giant is an NPC
+    # combatant referencing the token via source_token_id (no char_id).
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        {
+            "id": "tok_oa_giant",
+            "char_id": None,
+            "source_token_id": giant_tok["id"],
+            "token_template_id": tmpl["id"],
+            "name": "Hill Giant",
+            "initiative": 8,
+            "hp_current": 105, "hp_max": 105,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Move Krieger 1 cell further → 15 ft from the giant. Past the
+    # 10 ft threshold → OA should fire because the helper parsed
+    # "reach 10 ft." from the giant's Greatclub action desc.
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 560.0, "y": 350.0},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    matching = [
+        t for t in (data.get("opportunity_attack_triggers") or [])
+        if t.get("watcher_combatant_id") == "tok_oa_giant"
+    ]
+    assert matching, (
+        f"expected OA trigger from Hill Giant (10 ft reach parsed "
+        f"from action desc); got triggers="
+        f"{data.get('opportunity_attack_triggers')}"
+    )
+    assert matching[0].get("watcher_reach_ft") == 10.0, (
+        f"trigger should carry watcher_reach_ft=10.0; got "
+        f"{matching[0].get('watcher_reach_ft')!r}"
+    )

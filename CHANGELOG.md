@@ -10,6 +10,36 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.66.2] - 2026-05-26 — "Greatclub Geometry"
+
+**Schema version:** 59
+**Commit summary:** **NPC reach parsed from monster action descriptions.** Extends `_combatant_melee_reach_ft` with a third resolution tier: when the combatant has a `source_token_id` but no PC `char_id`, look up the Token → TokenTemplate, project via `_monster_template_to_sheet`, and regex `reach (\d+) ?ft` from the projected attacks' `description` / `desc` text. Skips save-DC actions (Breath Weapon / Frightful Presence "20 ft. cone" etc. would otherwise read as 20 ft reach). Same 15 ft defensive cap. Result: a Hill Giant in init now contributes 10 ft reach automatically without the GM setting `melee_reach_ft` on the combatant.
+**Description:** Two edits in `app/routes/tabletop_routes.py`. **(1)** New module-level regex `_NPC_REACH_RE = re.compile(r"\breach\s+(\d+)\s*(?:ft|foot|feet)\.?", re.IGNORECASE)` matches the SRD convention from monster action descs ("Melee Weapon Attack: +8 to hit, reach 10 ft., one target."). **(2)** `_combatant_melee_reach_ft` gains an NPC branch after the PC sheet-derivation branch: look up `Token.id == combatant.source_token_id`, then `TokenTemplate.id == token.token_template_id`, project via `_monster_template_to_sheet(tmpl, 0)`. The projection's `attacks` list carries the folded-in monster actions with the original SRD `desc` text in the `description` field; the helper iterates both `attacks` and `actions`, skips save-DC entries (spell saves like Breath Weapon mention "reach 5 ft." in their templated header but the actual damage is save-based AoE, not melee), regexes `reach N ft.` from the remaining desc strings, and tracks the max ≤ 15 ft.
+**Description (cont):** v1 simplifications still apply (filed):
+- **Multiattack reach not parsed.** Some monsters describe reach only in their Multiattack action's prose (e.g. "makes two attacks with its claw, reach 10 ft."), not in the individual claw action. The regex catches it because it scans every desc string with "reach N ft." in it, but if reach is described purely structurally (no inline text) the helper misses. Filed.
+- **Special-attack reach not modeled.** Treant's "Animate Trees" action lets nearby trees become Treants with their own reach; v1 doesn't model spawned-creature reach inheritance.
+- **Polearm Master enter-reach OA still filed.**
+- **Hostility / visibility gates still filed.**
+**Description (cont 2):** Why scan both `attacks` and `actions`. The projection produces `attacks` (folded-in flat list) but the original `actions` list still lives at `sheet.actions`. Some shipped monster JSON files put structured action data in `actions` only (the projection filters them out when they lack damage/attack_roll/save_ability — see `_monster_template_to_sheet` ~L 24336). Scanning both catches every desc string regardless of which list survives the projection.
+**Description (cont 3):** Verification. (a) `curl /version` reports `2.66.2` after `docker compose up -d --build app`. (b) New test `test_oa_npc_reach_parses_from_monster_action_desc` creates a Hill Giant TokenTemplate (pointer to SRD `hill-giant`), spawns a token, seeds a battle with the giant + Krieger 10 ft apart, moves Krieger to 15 ft, asserts OA fires with `watcher_reach_ft=10.0`. (c) Suite count 511 + 1 = 512.
+
+### Added
+- `_NPC_REACH_RE` regex helper for parsing "reach N ft." from monster action desc strings.
+- NPC branch in `_combatant_melee_reach_ft` — Token → TokenTemplate → projected sheet → regex over action descs.
+- Harness `test_oa_npc_reach_parses_from_monster_action_desc` — Hill Giant via SRD slug pointer, OA fires at 10 ft reach with no explicit override.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.66.2`.
+- `README.md` version badge → `2.66.2`.
+- `docs/plans/class-content-status.md` — F1 row reflects NPC desc parsing landed.
+- `docs/test-harness-coverage.md` — total test count 511 → 512.
+
+### Notes
+- **Hostility check still absent.** A 10 ft reach Hill Giant now correctly threatens at 10 ft, but every other combatant (PC or hostile) is still treated as a potential OA target. Filed.
+- **Multiattack-only reach text filed** — some monsters describe reach only in Multiattack's prose; today the helper catches inline "reach N ft." in any desc but skips structured-only descriptions.
+
+---
+
 ## [2.66.1] - 2026-05-26 — "The Long Arm"
 
 **Schema version:** 59
