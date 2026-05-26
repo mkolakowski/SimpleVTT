@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.68.7] - 2026-05-26 — "Stand and Shield"
+
+**Schema version:** 60
+**Commit summary:** **Phase 2c — Protection + Interception fighting styles in the GM Reactions catalog.** `_combatant_reactions_catalog` extended with two more ally-defense reactions tied to PHB / TCoE fighting styles. Detection reads `sheet.fighting_style` (single string per PC under the current schema — matches the v2.17 seed convention). Style itself gates access (only Fighter / Paladin / Ranger class progressions grant these), so no separate class-level check needed. Both reactions surface as one-click spend buttons in the v2.68.0 GM Reactions Panel and through the v2.67.x reaction-prompt popup pipeline. Same "state tracker, not rules engine" stance — clicking flips the reaction chip + posts a chat card; GM applies the +disadvantage / damage reduction manually.
+**Description:** One block of edits in `app/routes/tabletop_routes.py` — `_combatant_reactions_catalog`'s PC path gains a fighting-style branch after the Deflect Missiles check. Reads `sheet.fighting_style` (trimmed + lowercased), branches on the two reaction-bearing values: "protection" → append `fighting-style-protection` with shield-required hint; "interception" → append `fighting-style-interception` with the 1d10 + prof damage-reduction descriptor. Other styles ("defense", "archery", "great-weapon-fighting", "dueling", etc.) are passive and don't add catalog entries.
+**Description (cont):** No demo PC has fighting_style "protection" or "interception" today (Caelan = defense, Rowan = archery, Garrik = great-weapon-fighting). The new code paths are gated and won't spuriously fire on the existing demo catalog. Live end-to-end coverage waits for either (a) a demo PC bump that swaps a Paladin / Fighter / Ranger to one of these styles or (b) a sheet-edit endpoint the harness can use to mutate the field at runtime. Filed.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.68.7`. (b) Existing 538 tests pass unchanged — the new branches are additive + gated on a sheet field no demo PC sets. No new tests this commit; live coverage filed alongside the Battle Master demo fixture filing from v2.68.6.
+
+### Added
+- Protection + Interception entries in `_combatant_reactions_catalog` gated on `sheet.fighting_style`.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.68.7`.
+- `README.md` version badge → `2.68.7`.
+- `docs/plans/reactions-automation.md` — Phase 2c status flipped to ✅ shipped (catalog).
+
+### Notes
+- **Live end-to-end coverage filed.** No demo PC has these styles today; needs a demo bump (swap Caelan defense → protection or seed a new Fighter/Paladin with interception) for full harness coverage.
+- **Multi-style classes filed.** Some classes (Champion Lv 10's Additional Fighting Style, Ranger archetypes, etc.) grant multiple styles. Current schema is a single string — a future commit could broaden to a list / set field if needed.
+- **State tracker, not rules engine.** Same as v2.68.6 — GM rolls the disadvantage / reduction manually.
+
+---
+
 ## [2.68.6] - 2026-05-26 — "Stance and Sting"
 
 **Schema version:** 60

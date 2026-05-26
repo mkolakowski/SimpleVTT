@@ -12576,6 +12576,42 @@ def _combatant_reactions_catalog(
                     "by 1d10 + DEX + Monk Lv. Catch if reduced to 0."
                 ),
             })
+        # v2.68.7 Phase 2c — Fighting style reactions. Two of the
+        # PHB / TCoE fighting styles include a reaction:
+        #   Protection (PHB) — shield + ally hit within 5 ft → impose
+        #     disadvantage on the attack.
+        #   Interception (TCoE) — ally takes damage within 5 ft →
+        #     reduce damage by 1d10 + prof.
+        # Sheet field is ``sheet.fighting_style`` (single string —
+        # one style per PC under current schema; multi-style classes
+        # like Champion's Additional Fighting Style would need a
+        # list field, filed). Style itself gates access since only
+        # the right class progression grants it.
+        fs = (sheet.get("fighting_style") or "").strip().lower()
+        if fs == "protection":
+            out.append({
+                "key": "fighting-style-protection",
+                "label": "🛡 Protection (fighting style)",
+                "source": "Protection fighting style",
+                "kind": "class_feature",
+                "desc": (
+                    "When an attacker targets an ally within 5 ft, "
+                    "impose disadvantage on the attack roll. Requires "
+                    "a shield."
+                ),
+            })
+        if fs == "interception":
+            out.append({
+                "key": "fighting-style-interception",
+                "label": "🛡 Interception (fighting style)",
+                "source": "Interception fighting style",
+                "kind": "class_feature",
+                "desc": (
+                    "When an ally within 5 ft takes damage, reduce "
+                    "it by 1d10 + proficiency bonus. Requires a "
+                    "shield, melee weapon, or simple weapon."
+                ),
+            })
         # Feats (PC sheet.feats list)
         for f in (sheet.get("feats") or []):
             if not isinstance(f, dict):
