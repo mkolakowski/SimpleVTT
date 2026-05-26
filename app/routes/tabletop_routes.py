@@ -8445,11 +8445,51 @@ async def cast_spell(
         and heal_rolled > 0
     ):
         _bh_already_fired = bool(payload.get("blessed_healer_uplift"))
+        # v2.61.1 — F1 range gate. Mass Healing Word / Mass Cure
+        # Wounds heal "up to N creatures of your choice that you can
+        # see within range." Parse the spell's range once at the top
+        # of the loop; per extra target, look up its distance from
+        # the caster via _distance_ft_between_chars and skip + warn
+        # when out of range. None distance (no token, no grid, off-
+        # map) falls back to "in range" so the v2.59.0 behavior is
+        # preserved for off-grid narrative scenes.
+        from ..content.range_parser import max_range_ft, parse_range_ft
+        _heal_max_ft = max_range_ft(parse_range_ft(payload.get("spell_range") or ""))
         for extra_id in target_combatant_ids_in[1:]:
             extra_combatant = _lookup_combatant(campaign_id, extra_id)
             if not extra_combatant:
                 continue
             extra_char_id = extra_combatant.get("char_id")
+            # v2.61.1 — out-of-range targets are silently dropped
+            # from the heal loop, with a broadcast warning so the
+            # player + GM see who was skipped. Only fires when the
+            # spell has a parseable range and the caster + extra
+            # both have tokens on the active map.
+            if _heal_max_ft is not None and _heal_max_ft > 0 and extra_char_id:
+                _extra_dist_ft = _distance_ft_between_chars(
+                    db, campaign_id, int(char.id), int(extra_char_id),
+                )
+                if _extra_dist_ft is not None and _extra_dist_ft > _heal_max_ft:
+                    await hub.broadcast(campaign_id, {
+                        "type": "feature_used",
+                        "data": {
+                            "character_id": char.id,
+                            "character_name": char.name,
+                            "user_color": char.color,
+                            "feature_name": (
+                                f"⚠️ {extra_combatant.get('name', 'target')} "
+                                f"out of range ({_extra_dist_ft:.0f} ft > "
+                                f"{int(_heal_max_ft)} ft)"
+                            ),
+                            "feature_desc": (
+                                f"{payload.get('spell_name') or 'Heal'} skipped "
+                                f"{extra_combatant.get('name', 'this target')} — "
+                                f"out of range. Other targets still healed."
+                            ),
+                            "source": "heal-out-of-range",
+                        },
+                    })
+                    continue
             extra_is_self = bool(
                 extra_char_id and int(extra_char_id) == char.id
             )

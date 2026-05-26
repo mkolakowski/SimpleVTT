@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.61.1] - 2026-05-25 — "Cure Carrying"
+
+**Schema version:** 57
+**Commit summary:** **First F1 consumer commit — Mass Healing Word / Mass Cure Wounds extras loop now drops out-of-range targets + broadcasts a warning.** v2.59.0 shipped the multi-target heal loop without a per-target range check; v2.61.1 adds the gate using v2.61.0's `_distance_ft_between_chars` primitive. Closes the v2.59.0 "Mass Healing Word / Mass Cure Wounds target range (RAW 60 ft) — today the AoE picker doesn't check range" file. ~20 LOC.
+**Description:** Single-file edit in `app/routes/tabletop_routes.py` inside the v2.59.0 multi-target heal loop (~L 8442). Before the per-extra `_apply_heal_to_combatant` call: parse the spell's range via `max_range_ft(parse_range_ft(payload["spell_range"]))`, look up `_distance_ft_between_chars(db, campaign_id, char.id, extra_char_id)`, and `continue` past the target with an `⚠️ feature_used(source="heal-out-of-range")` broadcast naming the dropped target + the over-range distance. Falls back to "in range" when the helper returns None (no token / no grid / off-map) per v2.61.0 semantics.
+**Description (cont):** Why broadcast-and-skip rather than 409-the-whole-cast. The v2.59.0 AoE picker doesn't currently render a range ring around the caster, so the player can pick targets without knowing they're over 60 ft away. A 409 would discard the entire heal including in-range targets — bad UX. Skip + warn is the soft-fail variant: in-range targets still heal, out-of-range targets get a visible "⚠️ X out of range" chat card so the player knows to reposition next turn. The single-target primary path's range check (already shipped via `_check_cast_range`) is unchanged.
+**Description (cont 2):** Why `source="heal-out-of-range"` not a structured warning field. The broadcast piggybacks on the existing `feature_used` event type so the chat card renders without client-side changes. Tagging with a distinct `source` slug lets future UI work surface the warning more prominently (e.g. yellow chat-card border) without breaking backward compat. The Disciple of Life / Blessed Healer broadcasts that follow already use the same shape.
+**Description (cont 3):** What about the primary target. `target_combatant_ids_in[0]` is processed by the single-target heal block earlier in `/cast_spell`, which DOES route through `_check_cast_range` (v2.49.75). So if the primary target is out of range, the whole cast 409s; only the extras (slots 2-6 of a Mass Healing Word) get the per-target soft-fail. RAW: same gate would apply to the primary but the existing range-check infrastructure already handles it.
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.61.1` after `docker compose up -d --build app`. (b) New harness `tests/harness/test_mass_heal_range_gate.py` — 2 tests: (i) Tavik + Krieger placed 5 ft apart, Pip at 80 ft → Pip skipped + warning + only Krieger's Disciple of Life broadcast fires; (ii) no tokens placed → fall-back path keeps v2.59.0 behavior (both targets heal). (c) Full suite 487 + 2 = 489 passing.
+
+### Added
+- Per-target range gate at the top of the v2.59.0 multi-target heal extras loop in `/cast_spell` (~L 8442). Uses `_distance_ft_between_chars` (v2.61.0) + `max_range_ft(parse_range_ft(spell_range))`.
+- `feature_used(source="heal-out-of-range")` broadcast on each skipped extra target so the player + GM see who was dropped.
+- Harness `tests/harness/test_mass_heal_range_gate.py` — 2 tests covering in-range/out-of-range split + the no-token fallback path.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.61.1`.
+- `README.md` version badge → `2.61.1`.
+- `docs/test-harness-coverage.md` — total test count 487 → 489; new `test_mass_heal_range_gate.py` section added.
+
+### Notes
+- **First F1 consumer.** Demonstrates v2.61.0's leverage: ~20 LOC of new code (1 helper call + 1 broadcast) closes a v2.59.0 filing. Remaining F1 consumers (Sneak Attack ally-adjacency, Opportunity Attack trigger, Mass Cure Wounds — same code path) are each similarly small follow-up commits.
+- **Bardic Inspiration range already shipped (v2.49.148).** The plan doc's "Bardic Inspiration recipient range" listing in F1 was inaccurate — the range check landed via `_check_cast_range` at v2.49.148. Plan doc updated in this commit to reflect.
+- **Soft-fail UX choice.** Skip + warn beats 409-everything for the AoE case. Future work: render a 60 ft range ring on the AoE picker so the player avoids picking out-of-range targets in the first place. Filed for the AoE picker work.
+
+---
+
 ## [2.61.0] - 2026-05-25 — "Within Reach"
 
 **Schema version:** 57
