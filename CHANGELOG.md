@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.66.1] - 2026-05-26 — "The Long Arm"
+
+**Schema version:** 59
+**Commit summary:** **Reach-weapon support for Opportunity Attack trigger.** Replaces v2.66.0's hardcoded 5 ft reach with a new `_combatant_melee_reach_ft(db, combatant) -> float` helper that resolves reach in three tiers: (1) explicit `melee_reach_ft` field on the combatant dict (GM override via `/battle` PUT), (2) for PCs, scan `sheet.attacks` for the largest melee range parseable as a plain integer (excludes thrown/ranged `N/M ft` tuples), (3) default 5 ft. The OA helper now passes the per-watcher reach into the in-reach / out-of-reach transition check, surfaces it on the move response as `watcher_reach_ft`, and renders it in the `feature_used` broadcast desc ("moved out of Tavik's 10 ft reach" instead of "5 ft").
+**Description:** Three blocks of edits in `app/routes/tabletop_routes.py`. **(1)** New `_combatant_melee_reach_ft` helper. The explicit-override tier reads `combatant["melee_reach_ft"]` first so a GM seeding the battle JSON with `{"melee_reach_ft": 10}` on a glaive-wielding fighter or hill-giant NPC gets honored immediately. The PC sheet-derivation tier walks `sheet.attacks`, calls `parse_range_ft(atk["range"])` from `app.content.range_parser`, and keeps only single-band integer results — thrown/ranged weapons (parser returns `(N, M)` tuple) are excluded so a Caelan with a longsword + javelin doesn't accidentally pick up a 30 ft "reach" from the javelin's normal-range band. **(2)** `_check_opportunity_attack_triggers` calls the helper per-watcher and tests `dist_from ≤ reach_ft AND dist_to > reach_ft` against the resolved value rather than the prior hardcoded 5.0. Each returned trigger dict carries a new `watcher_reach_ft` field. **(3)** Move endpoint's broadcast renders the resolved reach in the `feature_desc` string ("moved out of NAME's N ft reach") so the chat-card text matches the per-watcher mechanic; the move response array also surfaces `watcher_reach_ft` for client consumers.
+**Description (cont):** v1 simplifications for reach derivation (filed):
+- **NPC action-desc parsing not yet wired.** Monsters with reach (Hill Giant, Treant, Wyvern, Mariliths) carry "reach 10 ft." in their action `desc` strings, but `_combatant_melee_reach_ft` doesn't parse the freeform text. GMs working around this should set `melee_reach_ft` explicitly on the NPC combatant in the `/battle` PUT. Filed: regex `reach (\d+) ?ft` walk of the source npc's actions list, max across all melee actions.
+- **Polearm Master feat not modeled.** PHB feat grants OA on enter-reach, not just exit. The current OA helper only fires on the exit transition. Filed.
+- **Hostility check still absent.** Same as v2.66.0; reach widens the threat zone but doesn't filter friendly watchers. Filed.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.66.1` after `docker compose up -d --build app`. (b) Two new tests in `tests/harness/test_opportunity_attack.py`: `test_oa_honors_explicit_melee_reach_ft_override` seeds Tavik with `melee_reach_ft=10` + places Krieger 2 cells away → moving 1 more cell fires OA past the 10 ft threshold + broadcast `feature_desc` references "10 ft"; `test_oa_5ft_reach_still_skips_at_10ft_start` is the control — same geometry but no override → standard 5 ft reach → no OA. (c) Suite count 509 + 2 = 511.
+
+### Added
+- `_combatant_melee_reach_ft(db, combatant) -> float` helper — three-tier reach resolution (explicit field / PC sheet derivation / 5 ft default).
+- `watcher_reach_ft` field on move response's `opportunity_attack_triggers` entries.
+- `watcher_reach_ft` field on `feature_used(source="opportunity-attack-trigger")` broadcasts.
+- Harness `tests/harness/test_opportunity_attack.py` — 2 new tests (`test_oa_honors_explicit_melee_reach_ft_override`, `test_oa_5ft_reach_still_skips_at_10ft_start`).
+
+### Changed
+- `_check_opportunity_attack_triggers` now consults `_combatant_melee_reach_ft(db, combatant)` per watcher instead of a hardcoded 5.0.
+- OA `feature_desc` renders the per-watcher reach ("moved out of NAME's N ft reach"); v2.66.0 always said "5 ft" regardless.
+- `app/version.py` `APP_VERSION` → `2.66.1`.
+- `README.md` version badge → `2.66.1`.
+- `docs/plans/class-content-status.md` — F1 row notes the reach-weapon follow-up landed.
+- `docs/test-harness-coverage.md` — total test count 509 → 511.
+
+### Notes
+- **NPC action-desc parsing filed.** Monster reach is in the freeform `desc` text ("reach 10 ft."); v2.66.1 doesn't parse it. GMs can set `melee_reach_ft` explicitly on NPC combatants in the `/battle` PUT until that lands.
+- **Polearm Master enter-reach OA filed.** The feat grants OA on enter-reach too; only the exit transition fires today.
+
+---
+
 ## [2.66.0] - 2026-05-26 — "The Watch"
 
 **Schema version:** 59

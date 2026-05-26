@@ -1426,10 +1426,17 @@ def _distance_ft_between_chars(
 # broadcasts an advisory feature_used so the player UI can prompt the
 # watcher's controller to spend their reaction on an OA.
 #
-# v1 simplifications:
-#   - 5 ft reach for every combatant. Polearm Master / Reach weapons /
-#     monster reach (e.g. giants, larger monsters) are filed for a
-#     follow-up that reads a "melee_reach_ft" field off the combatant.
+# v2.66.1 — reach-weapon support. Reach is no longer hardcoded 5 ft;
+# `_combatant_melee_reach_ft(db, combatant)` returns the watcher's
+# largest melee reach in feet. Honors an explicit `melee_reach_ft`
+# field on the combatant (GM override), then for PCs falls back to
+# scanning `sheet.attacks` for melee ranges (range strings parseable
+# by `parse_range_ft` as a plain int, not a thrown N/M tuple). NPC
+# action-desc parsing ("reach 10 ft.") filed for a follow-up — today
+# the GM can set `melee_reach_ft` explicitly on NPC combatants in the
+# `/battle` PUT to match monster reach.
+#
+# v1 simplifications still apply:
 #   - "Hostile" not enforced — every other combatant is a potential
 #     watcher. Mixed-loyalty (charmed PC, friendly NPC) is filed.
 #   - "Can see" not enforced (no visibility/cover model yet).
@@ -1437,6 +1444,76 @@ def _distance_ft_between_chars(
 #     the attack. Player UI decides whether to spend.
 #   - Watchers whose reaction is already used in this round are
 #     skipped (no spam broadcasts).
+def _combatant_melee_reach_ft(
+    db: Session, combatant: dict,
+) -> float:
+    """v2.66.1 — Reach in feet for a combatant's melee threat zone.
+
+    Resolution order:
+      1. ``combatant["melee_reach_ft"]`` — explicit override on the
+         combatant dict (GM sets per-combatant via /battle PUT, e.g.
+         for a glaive-wielding NPC or a Hill Giant).
+      2. For PCs (combatant has ``char_id``): walk the character's
+         ``sheet.attacks`` and find the maximum melee range. An attack
+         counts as melee when its ``range`` string parses (via
+         ``parse_range_ft``) to a plain integer (not a thrown tuple
+         or None). Thrown / ranged weapons (e.g. "30/120 ft" → tuple)
+         are excluded.
+      3. Default: 5.0 ft (RAW unarmed strike / standard weapon reach).
+    """
+    explicit = combatant.get("melee_reach_ft")
+    if explicit is not None:
+        try:
+            v = float(explicit)
+            if v > 0:
+                return v
+        except (TypeError, ValueError):
+            pass
+    char_id = combatant.get("char_id")
+    if char_id:
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(char_id),
+            ).first()
+        except Exception:
+            char = None
+        if char and char.sheet:
+            from ..content.range_parser import parse_range_ft
+            # Cap melee reach at 15 ft. Largest 5e reach weapon is
+            # the lance at 10 ft (or 15 ft Heavy Polearm homebrew /
+            # mounted lance — sane upper bound). Filters out
+            # ranged-spell-attack "range" fields like Fire Bolt's
+            # "120 ft" (no save_dc, plain attack_bonus, single-band
+            # integer parse) that would otherwise inflate the OA
+            # threat zone to absurd distances.
+            MELEE_REACH_CAP_FT = 15.0
+            best = 0.0
+            for atk in (char.sheet.get("attacks") or []):
+                if not isinstance(atk, dict):
+                    continue
+                # Skip save-based attacks (spell saves like Sacred
+                # Flame have a `save_dc > 0` field; they're never
+                # melee weapons).
+                try:
+                    if int(atk.get("save_dc") or 0) > 0:
+                        continue
+                except (TypeError, ValueError):
+                    pass
+                range_str = (atk.get("range") or "").strip()
+                if not range_str:
+                    continue
+                parsed = parse_range_ft(range_str)
+                # Only single-band integer reach counts as melee
+                # (thrown/ranged "N/M ft" parses to a tuple; "Self"
+                # / "Touch" / "Unlimited" become 0/5/None). Cap at
+                # MELEE_REACH_CAP_FT to defend against ranged
+                # spell attacks miscategorized as melee.
+                if isinstance(parsed, int) and 0 < parsed <= MELEE_REACH_CAP_FT:
+                    if float(parsed) > best:
+                        best = float(parsed)
+            if best > 0:
+                return best
+    return 5.0
 def _check_opportunity_attack_triggers(
     db: Session, campaign_id: int,
     mover_token_id: int,
@@ -1470,7 +1547,6 @@ def _check_opportunity_attack_triggers(
     ).lower()
     grid_size_px = int(map_row.grid_size_px)
     triggers: list[dict] = []
-    REACH_FT = 5.0
     for c in combatants:
         # Reaction already spent? Skip — OA needs reaction.
         economy = c.get("economy") or {}
@@ -1501,13 +1577,15 @@ def _check_opportunity_attack_triggers(
         dist_to = _distance_ft_between_points(
             grid_size_px, grid_type, wx, wy, to_x, to_y,
         )
-        if dist_from <= REACH_FT and dist_to > REACH_FT:
+        reach_ft = _combatant_melee_reach_ft(db, c)
+        if dist_from <= reach_ft and dist_to > reach_ft:
             triggers.append({
                 "watcher_combatant_id": c.get("id"),
                 "watcher_name": c.get("name") or "Combatant",
                 "watcher_char_id": c.get("char_id"),
                 "watcher_color": c.get("color"),
                 "watcher_token_id": int(watcher_token.id),
+                "watcher_reach_ft": reach_ft,
                 "dist_from_ft": dist_from,
                 "dist_to_ft": dist_to,
             })
@@ -6287,6 +6365,13 @@ async def move_token(
             oa_triggers = []
     mover_name = token.label or "Token"
     for trig in oa_triggers:
+        reach_ft = trig.get("watcher_reach_ft") or 5.0
+        # Render the reach in whole feet when it's an integer value
+        # (most common: 5, 10, 15) and strip trailing ".0" so the chat
+        # card reads "5 ft" not "5.0 ft".
+        reach_display = (
+            int(reach_ft) if float(reach_ft).is_integer() else reach_ft
+        )
         await hub.broadcast(campaign_id, {
             "type": "feature_used",
             "data": {
@@ -6296,11 +6381,13 @@ async def move_token(
                 "feature_name": "⚔ Opportunity Attack triggered",
                 "feature_desc": (
                     f"{mover_name} moved out of {trig.get('watcher_name')}'s "
-                    f"5 ft reach. Use your reaction to make a melee attack?"
+                    f"{reach_display} ft reach. Use your reaction to make a "
+                    f"melee attack?"
                 ),
                 "source": "opportunity-attack-trigger",
                 "watcher_combatant_id": trig.get("watcher_combatant_id"),
                 "watcher_token_id": trig.get("watcher_token_id"),
+                "watcher_reach_ft": reach_ft,
                 "mover_token_id": int(token.id),
                 "mover_name": mover_name,
             },
@@ -6374,6 +6461,7 @@ async def move_token(
                 "watcher_name": t.get("watcher_name"),
                 "watcher_char_id": t.get("watcher_char_id"),
                 "watcher_token_id": t.get("watcher_token_id"),
+                "watcher_reach_ft": t.get("watcher_reach_ft"),
             }
             for t in oa_triggers
         ],

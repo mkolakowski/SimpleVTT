@@ -1178,9 +1178,9 @@ Format per framework: **what it is**, **what features it blocks**,
 RAW-correct system — the v1 simplification that ships the dependent
 features cheaply).
 
-### F1. Token positional adjacency / 5-ft-range checking — ✅ SHIPPED (v2.61.0, v2.66.0 follow-ups)
+### F1. Token positional adjacency / 5-ft-range checking — ✅ SHIPPED (v2.61.0, v2.66.0+ follow-ups)
 
-**Status:** Primitive `_distance_ft_between_chars(db, campaign_id, char_a_id, char_b_id) → float | None` shipped v2.61.0. Wired into AoP / AoD / Countercharm. v2.62.1 added Sneak Attack ally-adjacency advisory. v2.66.0 ("The Watch") closed two more v1 simplifications: (a) Paladin auras now require the paladin to be conscious — new `_paladin_is_conscious(char)` helper gates both AoP + AoD; (b) Opportunity Attack trigger detection — new `_check_opportunity_attack_triggers(...)` walks combatants and broadcasts a `feature_used(source="opportunity-attack-trigger")` advisory when a token moves out of a watcher's 5 ft reach (advisory only — does NOT auto-fire). Remaining filings: Bardic recipient range, reach-weapon / monster reach for OA, OA hostility / visibility gates.
+**Status:** Primitive `_distance_ft_between_chars(db, campaign_id, char_a_id, char_b_id) → float | None` shipped v2.61.0. Wired into AoP / AoD / Countercharm. v2.62.1 added Sneak Attack ally-adjacency advisory. v2.66.0 ("The Watch") added Paladin conscious-check + Opportunity Attack trigger detection. v2.66.1 ("The Long Arm") added reach-weapon support for OA — new `_combatant_melee_reach_ft(db, combatant)` reads explicit `melee_reach_ft` override, then falls back to PC sheet derivation (max melee `range` across `sheet.attacks`), then 5 ft default. Remaining filings: NPC action-desc reach parsing ("reach 10 ft." regex over monster action descs), Bardic recipient range, OA hostility / visibility gates, Polearm Master enter-reach OA.
 
 **What it is:** A `_distance_ft_between_chars(db, campaign_id, char_a_id, char_b_id) → float | None`
 helper that resolves both characters' tokens on the active map (via

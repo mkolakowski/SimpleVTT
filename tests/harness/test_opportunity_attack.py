@@ -334,3 +334,110 @@ async def test_oa_skips_when_move_starts_out_of_reach(
         f"OA trigger should NOT fire when start position is already "
         f"out of reach; got {triggers}"
     )
+
+
+async def test_oa_honors_explicit_melee_reach_ft_override(
+    gm_client, gm_ws, roster,
+):
+    """v2.66.1 — reach-weapon support. Tavik combatant seeded with
+    ``melee_reach_ft=10`` (glaive / halberd / hill-giant-style reach).
+    Krieger starts 10 ft (2 cells = 140 px) away — IN range; moves to
+    15 ft (3 cells = 210 px) — OUT of range. OA should fire on this
+    transition past the 10 ft threshold, even though the previous v1
+    hardcoded 5 ft would have skipped it (5 ft → already out by 10 ft
+    start).
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+
+    tavik_combatant = _make_combatant(tavik["name"], tavik["id"], init=8)
+    # GM marks Tavik as wielding a reach weapon (10 ft threat zone).
+    tavik_combatant["melee_reach_ft"] = 10.0
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        tavik_combatant,
+    ])
+
+    # Place Tavik at (350, 350). Krieger at (490, 350) — 140 px away
+    # = 2 cells = 10 ft → within Tavik's reach.
+    await _place_token(gm_client, tavik["id"], 350.0, 350.0)
+    await _place_token(gm_client, krieger["id"], 490.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok, "Krieger token must exist after place"
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Move Krieger 1 cell further → (560, 350), distance = 3 cells
+    # = 15 ft from Tavik. Past the 10 ft threshold → OA.
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 560.0, "y": 350.0},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    matching = [
+        t for t in (data.get("opportunity_attack_triggers") or [])
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert matching, (
+        f"expected OA trigger with 10 ft reach override; "
+        f"got triggers={data.get('opportunity_attack_triggers')}"
+    )
+    assert matching[0].get("watcher_reach_ft") == 10.0, (
+        f"trigger should carry watcher_reach_ft=10.0; got "
+        f"{matching[0].get('watcher_reach_ft')!r}"
+    )
+
+    # WS broadcast should mention the 10 ft reach in feature_desc.
+    await asyncio.sleep(0.15)
+    oa_msgs = _oa_broadcasts(gm_ws)
+    tv_msgs = [
+        m for m in oa_msgs
+        if (m.get("data") or {}).get("character_id") == tavik["id"]
+    ]
+    assert tv_msgs, "expected OA broadcast for Tavik"
+    desc = (tv_msgs[0].get("data") or {}).get("feature_desc") or ""
+    assert "10 ft" in desc, (
+        f"broadcast desc should reference 10 ft reach; got {desc!r}"
+    )
+
+
+async def test_oa_5ft_reach_still_skips_at_10ft_start(
+    gm_client, gm_ws, roster,
+):
+    """Control: a standard-reach (5 ft) watcher does NOT fire OA when
+    the mover starts 10 ft away (already out of reach). Confirms the
+    reach helper still defaults to 5 ft when no override is set —
+    only an explicit override or a sheet-derived reach weapon pushes
+    the threshold up.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+
+    # 10 ft (2 cells) apart — outside default 5 ft reach.
+    await _place_token(gm_client, tavik["id"], 350.0, 350.0)
+    await _place_token(gm_client, krieger["id"], 490.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok, "Krieger token must exist"
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 560.0, "y": 350.0},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    matching = [
+        t for t in (data.get("opportunity_attack_triggers") or [])
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert not matching, (
+        f"default 5 ft reach should NOT trigger at 10 ft start; "
+        f"got {matching}"
+    )
