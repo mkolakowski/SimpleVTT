@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 546 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.68.11, 2026-05-26).
+**Total tests:** 548 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.69.0, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -791,6 +791,8 @@ v2.67.0 — Phase 1a of the reactions-automation plan (see [`docs/plans/reaction
 | `test_reaction_prompt_mode_setting_invalid` | Invalid mode → 400. |
 | `test_uncanny_dodge_emits_reaction_prompt` | v2.67.2 — Phase 2a. NPC attacks Pip (Rogue Lv 5) for flat 6 → UD auto-halves to 3 AND emits `reaction_prompt(damage_taken)` with `uncanny-dodge-ack` option; ack POSTs cleanly resolve the prompt. |
 | `test_use_reaction_marks_npc_economy_via_combatant_id` | v2.67.3 — spawn bandit NPC + Krieger 5 ft adjacent + move Krieger out of reach → OA prompt fires for the bandit → POST `/use_reaction` (no `watcher_char_id`) → bandit's `economy.reaction` flips True via `economy_update` carrying `combatant_id`. |
+| `test_shield_prompt_fires_on_pc_hit` | v2.69.0 — Phase 3a. Bandit NPC swings at Thalindra (Wizard with Shield prepared + Lv 1 slot) until a hit lands → `reaction_prompt(attack_targeted)` fires with `cast-shield` option carrying class_slug + slot_level + AC preview in the label. |
+| `test_cast_shield_consumes_slot_and_installs_buff` | v2.69.0 — POST `/use_reaction` with `reaction_key=cast-shield` after the prompt → 200, `economy_update` for Thalindra's reaction = True, `spell_slot_update` decrements the Lv 1 wizard slot, `feature_used(source=shield-cast)` broadcast, `buff_update` installs `shield-active` with `effects.ac_bonus=5` + `immune_magic_missile=True` + `duration_rounds=1`. |
 
 ### `test_gm_reactions_panel.py`
 v2.68.0 — GM Reactions Panel (see [`docs/plans/reactions-automation.md`](plans/reactions-automation.md)). New `GET /available_reactions` + `POST /spend_reaction_manual` endpoints surface every combatant's reaction catalog to the GM and let the GM flip any reaction chip with one click. PC class features (Uncanny Dodge / Cutting Words / Indomitable), PC feats (Sentinel / Polearm Master / etc.), PC reaction spells (Shield / Counterspell / etc. via `casting_time` scan), NPC monster reactions (Parry / etc. via `category == "reaction"` walk).

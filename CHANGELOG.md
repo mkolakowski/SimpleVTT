@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.69.0] - 2026-05-26 — "The Arcane Aegis"
+
+**Schema version:** 60
+**Commit summary:** **Phase 3a — Shield spell, the first reaction spell wired to a runtime trigger event.** New `attack_targeted` trigger event fires from `/attack` after a PC target is hit; new `_pc_has_shield_available(char)` helper detects Shield in `sheet.spells` + a 1st-level (or higher) slot available; the prompt's `cast-shield` option resolves to a `/use_reaction` dispatch that consumes the slot, marks the reaction, and installs a `shield-active` buff (`effects.ac_bonus=5`, `immune_magic_missile=true`, 1-round duration). The +5 AC retroactive negation of the triggering attack is filed for v3.0.0 — v1 leaves that adjudication to the player/GM since the popup tells them whether the new AC would make the hit miss.
+**Description:** Four blocks of edits in `app/routes/tabletop_routes.py`. **(1)** `_pc_has_shield_available(char) -> (bool, class_slug, slot_level)` helper: walks `sheet.spells` for an entry whose slug/name is "shield" AND whose `casting_time` contains "reaction"; if found, scans `sheet.spell_slots[*][lv]` for the lowest level with `used < total`; returns the eligibility triple. **(2)** `_eligible_reactions[attack_targeted]`: if the watcher is a PC and `_pc_has_shield_available` returns True, returns a `cast-shield` option with the slot_level + class_slug in `params`, plus a label that previews whether the +5 AC would retroactively miss based on the context's `attack_total` vs the watcher's `ac + 5`. **(3)** `/attack` calls `_emit_reaction_prompt(attack_targeted)` for the target PC after the hit/miss resolves and damage applies. Context carries `attack_id`, `attack_total`, `target_ac`, `attacker_char_id`, `attacker_name`, `attack_name`. Gated on `hit == True` AND `target_combatant.economy.reaction == False`. **(4)** `/use_reaction` dispatch case `cast-shield`: reads `slot_level` + `class_slug` from the prompt's stored options, validates the slot has remaining uses (409 `no_slot` otherwise), decrements via the same in-place `sheet.spell_slots` mutation used by `/cast_spell` (~L 20997), commits, marks reaction, installs the `shield-active` buff via `_install_buff` + mirrors via `_mirror_buffs_to_sheet`, broadcasts `spell_slot_update` + `feature_used(source="shield-cast")`.
+**Description (cont):** v1 simplifications (filed for Phase 3a.1):
+- **No auto-undo of the triggering attack's damage.** The shield buff installs but the recently-applied damage stays. The popup's label tells the player whether the +5 AC would have retroactively negated the hit ("Shield's +5 AC (15 → 20) would make d20 17 MISS." vs "still leaves d20 24 as a HIT.") — they/the GM decide whether to manually undo via the v2.65.0 chat-card Undo button.
+- **No auto-recompute of in-flight attack vs new AC.** v1 doesn't replay the attack roll against `ac+5`; it just installs the buff for any SUBSEQUENT attacks this turn.
+- **Attack-pipeline doesn't read `ac_bonus` from buffs yet.** The +5 is captured on the buff for visibility, but the next attack against Thalindra doesn't auto-consume it. Filed: extend the AC-resolution path to walk `_get_buffs(target)` for `effects.ac_bonus` entries and sum.
+- **Magic Missile immunity not yet wired** — the buff captures `immune_magic_missile: True` but no current /cast_spell path checks it before applying Magic Missile damage. Filed.
+- **Prompt fires only on /attack** — `/npc_attack` doesn't yet emit the `attack_targeted` prompt. Trivial extension; filed.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.69.0`. (b) Two new tests:
+- `test_shield_prompt_fires_on_pc_hit` — Krieger swings on Thalindra (Wizard 5 w/ Shield) until a hit lands; asserts `reaction_prompt(attack_targeted)` fires with `cast-shield` option in Thalindra's prompt.
+- `test_cast_shield_consumes_slot_and_installs_buff` — same setup + POST `/use_reaction` with `cast-shield`; asserts `economy_update` for Thalindra's reaction, `spell_slot_update` for the 1st+ slot decrement, `feature_used(source="shield-cast")`, and `buff_update` carrying the `shield-active` buff.
+
+Full suite 546 → 548, all clean.
+
+### Added
+- `_pc_has_shield_available(char) -> (bool, class_slug, slot_level)` helper.
+- `attack_targeted` trigger event branch in `_eligible_reactions`.
+- `/attack` calls `_emit_reaction_prompt(attack_targeted)` for hit PC targets.
+- `cast-shield` dispatch case in `/use_reaction` — consumes slot, marks reaction, installs `shield-active` buff with `effects.ac_bonus=5` + `immune_magic_missile=True`.
+- Harness `test_shield_prompt_fires_on_pc_hit` + `test_cast_shield_consumes_slot_and_installs_buff` — 2 new tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.69.0`.
+- `README.md` version badge → `2.69.0`.
+- `docs/plans/reactions-automation.md` — Phase 3a marked 🟠 partial (catalog + slot consumption + buff install shipped; auto-undo + AC pipeline integration filed for Phase 3a.1).
+- `docs/test-harness-coverage.md` — total test count 546 → 548.
+
+### Notes
+- **First reaction spell + first runtime-event-driven trigger.** Sets the pattern for Counterspell (Phase 3b) and the other reaction spells: dedicated trigger event, eligibility helper, dispatch handler with state mutation.
+- **AC pipeline integration filed.** v1 captures the +5 AC on the buff but doesn't apply it to subsequent attack roll AC checks. The buff system already supports `effects.ac_bonus` semantically; the consumer side needs wiring.
+
+---
+
 ## [2.68.11] - 2026-05-26 — "The Shapeshifter's Drawer"
 
 **Schema version:** 60

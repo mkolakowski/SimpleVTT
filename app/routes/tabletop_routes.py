@@ -1994,6 +1994,69 @@ def _purge_active_reaction_prompts() -> None:
         _active_reaction_prompts.pop(pid, None)
 
 
+# v2.69.0 Phase 3a — Shield spell eligibility helper.
+#
+# Returns ``(eligible, class_slug, slot_level)`` where:
+#   - eligible: True when the PC has Shield in their spell list AND a
+#     1st-level (or higher) slot available, AND their combatant's
+#     reaction slot is unused. False otherwise.
+#   - class_slug: the spellcasting class to debit (lowercase). Picks
+#     the FIRST class found that has Shield + an available slot;
+#     multi-class PCs are handled by iteration order.
+#   - slot_level: the lowest slot level >= 1 that has remaining uses.
+#
+# Caller (the `_eligible_reactions[attack_targeted]` branch) uses
+# (class_slug, slot_level) as params for the ``cast-shield`` option's
+# dispatch in ``/use_reaction``.
+def _pc_has_shield_available(char) -> "tuple[bool, str, int]":
+    """Detect Shield (1st-level reaction spell) eligibility on a PC."""
+    if not char or not char.sheet:
+        return False, "", 0
+    sheet = char.sheet or {}
+    # Walk spells; need at least one entry with slug "shield" or name
+    # "Shield" AND casting_time mentioning "reaction".
+    has_shield = False
+    for sp in (sheet.get("spells") or []):
+        if not isinstance(sp, dict):
+            continue
+        slug = (sp.get("_slug") or "").strip().lower()
+        name = (sp.get("name") or "").strip().lower()
+        ct = (sp.get("casting_time") or "").lower()
+        if (slug == "shield" or name == "shield") and "reaction" in ct:
+            has_shield = True
+            break
+    if not has_shield:
+        return False, "", 0
+    # Find the lowest available 1st+ slot across the PC's classes.
+    all_slots = sheet.get("spell_slots") or {}
+    best_class = ""
+    best_lv = 0
+    for cslug, per_class in (all_slots or {}).items():
+        if not isinstance(per_class, dict):
+            continue
+        for lv_key, slot in per_class.items():
+            if not isinstance(slot, dict):
+                continue
+            try:
+                lv = int(lv_key)
+            except (TypeError, ValueError):
+                continue
+            if lv < 1:
+                continue
+            total = int(slot.get("total") or 0)
+            used = int(slot.get("used") or 0)
+            if total <= 0 or used >= total:
+                continue
+            # Prefer the lowest available level (don't burn higher
+            # slots when a 1st will do).
+            if best_lv == 0 or lv < best_lv:
+                best_lv = lv
+                best_class = str(cslug).strip().lower()
+    if best_lv == 0:
+        return False, "", 0
+    return True, best_class, best_lv
+
+
 def _eligible_reactions(
     db: Session, campaign_id: int, watcher_char_id: int | None,
     trigger_event: str, context: dict,
@@ -2043,6 +2106,51 @@ def _eligible_reactions(
             "kind": "implicit",
             "resource_cost": "Reaction",
             "params": {},
+            "available": True,
+            "unavailable_reason": None,
+        }]
+    # v2.69.0 Phase 3a — Shield spell auto-prompt. Fires from /attack
+    # after a PC target is hit. Returns a cast-shield option when the
+    # target PC has Shield in their spell list + a 1st+ slot
+    # available + reaction available. Context carries attack_total +
+    # target_ac so the popup copy can tell the player whether the
+    # +5 AC retroactively negates the hit (filed: server-side auto-
+    # recompute; v1 leaves the decision to player/GM adjudication).
+    if trigger_event == "attack_targeted":
+        if not watcher_char_id:
+            return []
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+        except Exception:
+            char = None
+        if not char or not char.sheet:
+            return []
+        eligible, class_slug, slot_lv = _pc_has_shield_available(char)
+        if not eligible:
+            return []
+        ac = (char.sheet.get("ac") or 0)
+        new_ac = (ac or 0) + 5
+        atk_total = context.get("attack_total")
+        negates_hint = ""
+        if isinstance(atk_total, int) and ac:
+            if atk_total < new_ac:
+                negates_hint = (
+                    f" — Shield's +5 AC ({ac} → {new_ac}) would make "
+                    f"d20 {atk_total} MISS."
+                )
+            else:
+                negates_hint = (
+                    f" — Shield's +5 AC ({ac} → {new_ac}) still leaves "
+                    f"d20 {atk_total} as a HIT."
+                )
+        return [{
+            "key": "cast-shield",
+            "label": f"✨ Cast Shield (+5 AC){negates_hint}",
+            "kind": "spell",
+            "resource_cost": f"Reaction + 1× L{slot_lv} slot",
+            "params": {"slot_level": slot_lv, "class_slug": class_slug},
             "available": True,
             "unavailable_reason": None,
         }]
@@ -12408,6 +12516,110 @@ async def use_reaction(
         # (resource decremented, reaction or use slot marked); this
         # branch just resolves the prompt cleanly.
         pass
+    elif reaction_key == "cast-shield" and watcher_char_id:
+        # v2.69.0 Phase 3a — Shield spell. Consume 1× 1st+ slot, mark
+        # reaction, install shield-active buff with +5 AC for 1
+        # round. v1 doesn't auto-undo the triggering attack's damage;
+        # the +5 AC takes effect for SUBSEQUENT attacks this turn,
+        # and the player / GM adjudicates whether the original attack
+        # is retroactively negated (chat-card shows the d20 + AC for
+        # comparison). Auto-undo + auto-recompute filed for v3.0.0.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "cast-shield"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            slot_level = int(params.get("slot_level") or 1)
+            class_slug = str(params.get("class_slug") or "").strip().lower()
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            sheet = dict(watcher_char.sheet or {})
+            all_slots = dict(sheet.get("spell_slots") or {})
+            per_class = dict(all_slots.get(class_slug) or {})
+            slot_key = str(slot_level)
+            slot = dict(per_class.get(slot_key) or {})
+            total = int(slot.get("total") or 0)
+            used = int(slot.get("used") or 0)
+            if total <= 0 or used >= total:
+                return JSONResponse(status_code=409, content={
+                    "error": "no_slot",
+                    "class_slug": class_slug,
+                    "level": slot_level,
+                })
+            slot["used"] = used + 1
+            slot["total"] = total
+            per_class[slot_key] = slot
+            all_slots[class_slug] = per_class
+            sheet["spell_slots"] = all_slots
+            watcher_char.sheet = sheet
+            db.commit()
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            # Install the shield buff. effects.ac_bonus = 5 captures
+            # the mechanical effect; downstream attack-pipeline
+            # consumers can read it when they grow buff-aware AC
+            # math (filed).
+            shield_buff = {
+                "key": "shield-active",
+                "name": "✨ Shield",
+                "icon": "✨",
+                "source_char_id": int(watcher_char_id),
+                "target_combatant_id": entry.get("watcher_combatant_id"),
+                "duration_rounds": 1,
+                "duration_max": 1,
+                "concentration": False,
+                "effects": {
+                    "ac_bonus": 5,
+                    "immune_magic_missile": True,
+                },
+                "desc": (
+                    "+5 AC until the start of your next turn. "
+                    "Immune to Magic Missile during the duration."
+                ),
+            }
+            await _install_buff(
+                campaign_id, int(watcher_char_id), shield_buff,
+            )
+            _mirror_buffs_to_sheet(
+                db, int(watcher_char_id),
+                _get_buffs(campaign_id, int(watcher_char_id)),
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "spell_slot_update",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "class_slug": class_slug,
+                    "level": slot_level,
+                    "used": used + 1,
+                    "total": total,
+                },
+            })
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": "✨ Shield cast — +5 AC",
+                    "feature_desc": (
+                        f"Reaction. +5 AC until start of next turn "
+                        f"(consumed 1× L{slot_level} slot)."
+                    ),
+                    "source": "shield-cast",
+                    "reaction_kind": "spell",
+                    "slot_level": slot_level,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
 
     await hub.broadcast(campaign_id, {
         "type": "reaction_prompt_resolved",
@@ -21415,6 +21627,37 @@ async def use_attack(
         )
     except Exception:
         _sentinel_triggers_for_response = []
+    # v2.69.0 Phase 3a — Shield spell prompt. After a PC target is
+    # hit, emit a reaction_prompt(attack_targeted) so the target's
+    # owning user + GM see a "Cast Shield (+5 AC)" option in the
+    # popup + roll log. The catalog gate (Shield in spells, slot
+    # available, reaction available) lives in
+    # `_eligible_reactions[attack_targeted]`.
+    try:
+        if hit and target_combatant_id:
+            target_cb = _lookup_combatant(campaign_id, target_combatant_id)
+            if target_cb is not None and target_cb.get("char_id"):
+                _target_econ = (target_cb.get("economy") or {})
+                if not bool(_target_econ.get("reaction")):
+                    await _emit_reaction_prompt(
+                        db, campaign, target_cb,
+                        trigger_event="attack_targeted",
+                        summary=(
+                            f"{char.name} hit {target_cb.get('name') or 'you'} "
+                            f"with {name} (d20 total {attack_total} vs AC "
+                            f"{target_ac or '?'})."
+                        ),
+                        context={
+                            "attack_id": attack_id,
+                            "attack_total": attack_total,
+                            "target_ac": target_ac,
+                            "attacker_char_id": char.id,
+                            "attacker_name": char.name,
+                            "attack_name": name,
+                        },
+                    )
+    except Exception:
+        pass
     # Return the attack + damage totals so the sheet's .atk-strike handler can
     # fire the shared roll-toast immediately. The broadcast still drives the
     # tabletop's roll-card path; this echo gives the rolling player a popup

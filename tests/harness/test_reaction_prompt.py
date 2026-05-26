@@ -525,6 +525,198 @@ async def test_cutting_words_emits_reaction_prompt(
     assert ack.status_code == 200, ack.text
 
 
+# ── v2.69.0 — Phase 3a: Shield spell prompt + cast ──
+
+
+async def test_shield_prompt_fires_on_pc_hit(
+    gm_client, gm_ws, roster,
+):
+    """v2.69.0 — when a PC who has Shield in their spell list +
+    a 1st+ slot + a free reaction is HIT by an attack, the v2.67.x
+    prompt pipeline emits a `reaction_prompt(attack_targeted)` with
+    a `cast-shield` option. Krieger swings on Thalindra (Wizard 5
+    with Shield as a reaction spell).
+    """
+    krieger = roster["Krieger Stonefist"]
+    thalindra = roster["Thalindra Moonwhisper"]
+    # Long rest so Thalindra's slots are full.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+        json={"type": "long"},
+    )
+
+    thal_cid = f"tok_shield_{thalindra['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": thal_cid,
+            "char_id": thalindra["id"],
+            "name": thalindra["name"],
+            "initiative": 10,
+            "hp_current": 32, "hp_max": 32,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Probe until Krieger lands a hit on Thalindra.
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": thal_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(attack_targeted) for Thalindra; "
+        f"buffered prompts: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+    assert "cast-shield" in keys, (
+        f"expected cast-shield option; got {keys}"
+    )
+
+
+async def test_cast_shield_consumes_slot_and_installs_buff(
+    gm_client, gm_ws, roster,
+):
+    """End-to-end: hit Thalindra → prompt fires → POST /use_reaction
+    with cast-shield → 1st-level slot used count increments + shield-
+    active buff installed + reaction slot flips.
+    """
+    krieger = roster["Krieger Stonefist"]
+    thalindra = roster["Thalindra Moonwhisper"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+        json={"type": "long"},
+    )
+
+    thal_cid = f"tok_shield_cast_{thalindra['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": thal_cid,
+            "char_id": thalindra["id"],
+            "name": thalindra["name"],
+            "initiative": 10,
+            "hp_current": 32, "hp_max": 32,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Probe until a hit lands.
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": thal_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, "expected attack_targeted prompt"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "cast-shield",
+            "watcher_char_id": thalindra["id"],
+        },
+    )
+    assert cast.status_code == 200, cast.text
+
+    await asyncio.sleep(0.2)
+    # economy_update fires Thalindra's reaction = used.
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == thalindra["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update for Thalindra's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    # spell_slot_update broadcasts the consumed slot.
+    slot_msgs = [
+        m for m in gm_ws.buffered("spell_slot_update")
+        if (m.get("data") or {}).get("character_id") == thalindra["id"]
+        and int((m.get("data") or {}).get("level") or 0) >= 1
+    ]
+    assert slot_msgs, (
+        f"expected spell_slot_update for Thalindra's 1st+ slot; "
+        f"buffered: {[m.get('data') for m in gm_ws.buffered('spell_slot_update')]}"
+    )
+
+    # feature_used card with source=shield-cast.
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "shield-cast"
+        and (m.get("data") or {}).get("character_id") == thalindra["id"]
+    ]
+    assert fu, "expected feature_used(source=shield-cast) broadcast"
+
+    # buff_update broadcasts the shield-active install.
+    buffs = [
+        m for m in gm_ws.buffered("buff_update")
+        if (m.get("data") or {}).get("character_id") == thalindra["id"]
+    ]
+    saw_shield = any(
+        any(
+            isinstance(b, dict) and b.get("key") == "shield-active"
+            for b in (m.get("data") or {}).get("buffs", []) or []
+        )
+        for m in buffs
+    )
+    assert saw_shield, (
+        f"expected shield-active buff installed for Thalindra; "
+        f"buff_update payloads: {[m.get('data') for m in buffs]}"
+    )
+
+
 async def test_indomitable_emits_reaction_prompt(
     gm_client, gm_ws, roster,
 ):
