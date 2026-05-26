@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.68.10] - 2026-05-26 — "The Defender's Pivot"
+
+**Schema version:** 60
+**Commit summary:** **Demo fixture consolidation v1 — Caelan's fighting style bumped Defense → Protection.** Closes the v2.68.7 Phase 2c protection live-coverage gap. AC drops 19 → 18 (Defense's +1 AC is lost). Sir Caelan Lightbringer's defender flavor fits Protection (RAW Paladin can pick either Defense or Protection). The other v2.68.6–v2.68.9 fixture gaps (Battle Master, Interception, Light/Tempest/Archfey, Valor/Crown) stay filed — the demo PCs they'd map to (Garrik, Magnus, Tavik, Lyra) all have non-trivial wiring tied to their current subclasses (Champion crit threshold, Fiend temp HP, Life Domain spell uplift, Lore cutting words) that subclass swaps would break. New harness test asserts Caelan's catalog includes `fighting-style-protection`.
+**Description:** Two edits in `app/demo_seed.py` — flip `fighting_style: "defense"` → `"protection"` with an explanatory comment, and drop AC 19 → 18 with a matching comment. One new test in `tests/harness/test_gm_reactions_panel.py` — `test_available_reactions_lists_caelan_protection` mirrors the v2.68.6 Kael Deflect Missiles test pattern: seed a battle with just Caelan, GET `/available_reactions`, assert Caelan's reactions list contains the `fighting-style-protection` key.
+**Description (cont):** Why this is consolidation v1, not v2. The cleanest path to closing all six remaining catalog gaps would be either (a) adding new fixture PCs to the demo (heavy seed work; affects every existing test fixture assumption about the demo roster), or (b) building a `/sheet-fields` PATCH extension that lets the harness mutate `subclass` + `fighting_style` at runtime (which would solve the testing problem but bleed scope into the sheet-edit machinery). Doing the safest single-PC swap now ships a load-bearing piece of coverage; the remaining gaps stay filed with a tractable "demo fixture consolidation v2" follow-up.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.68.10`. (b) New `test_available_reactions_lists_caelan_protection` passes. (c) Existing 538 tests pass — no existing test asserts on Caelan's specific AC. Total 538 → 539.
+
+### Added
+- Harness `test_available_reactions_lists_caelan_protection`.
+
+### Changed
+- Demo Caelan `fighting_style: "defense"` → `"protection"`.
+- Demo Caelan AC `19 → 18` (Defense +1 dropped).
+- `app/version.py` `APP_VERSION` → `2.68.10`.
+- `README.md` version badge → `2.68.10`.
+- `docs/test-harness-coverage.md` — total test count 538 → 539.
+
+### Notes
+- **Single demo swap.** The remaining gaps (Battle Master, Interception, Light/Tempest/Archfey, Valor/Crown) stay filed; their PCs have non-trivial subclass wiring that would break under a subclass swap.
+- **Sheet-edit PATCH extension filed.** A future consolidation could extend `/sheet-fields` to allow `subclass` + `fighting_style` keys so the harness can mutate them per-test without seed bumps.
+
+---
+
 ## [2.68.9] - 2026-05-26 — "Crown and Chorus"
 
 **Schema version:** 60

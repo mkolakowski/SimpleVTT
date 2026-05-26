@@ -736,7 +736,12 @@ def _paladin_sheet(name: str) -> dict:
         "alignment": "Lawful Good",
         "background": "Soldier",
         "abilities": {"STR": 16, "DEX": 10, "CON": 14, "INT": 10, "WIS": 12, "CHA": 16},
-        "ac": 19,  # chain mail 16 + shield 2 + Fighting Style: Defense +1
+        # v2.68.10: fighting style swapped Defense → Protection so the
+        # v2.68.7 GM Reactions catalog has live Phase 2c coverage. AC
+        # drops 19 → 18 (lose Defense's +1 AC); gains the Protection
+        # reaction. Sir Caelan Lightbringer is a defender-flavored
+        # paladin so the swap fits his archetype.
+        "ac": 18,  # chain mail 16 + shield 2 (no Defense +1 anymore)
         "speed": 30,
         "hp": {"current": 60, "max": 60, "temp": 0},  # 10 + 6×(6+CON) Lv 7 paladin
         "initiative_bonus": 0,
@@ -751,7 +756,11 @@ def _paladin_sheet(name: str) -> dict:
             "Insight":     {"ability": "WIS", "proficient": True, "expertise": False},
             "Athletics":   {"ability": "STR", "proficient": True, "expertise": False},
         },
-        "fighting_style": "defense",  # +1 AC while wearing armor
+        # v2.68.10: Protection style (PHB) — reaction: when an
+        # attacker targets an ally within 5 ft (you must have a
+        # shield), impose disadvantage on the attack roll. Powers
+        # the v2.68.7 fighting-style-protection catalog entry.
+        "fighting_style": "protection",
         "attacks": [
             {"name": "Longsword", "attack_bonus": "+6", "damage": "1d8+3",
              "damage_type": "slashing", "range": "5 ft", "desc": "Versatile (1d10). Sir Caelan's family blade."},

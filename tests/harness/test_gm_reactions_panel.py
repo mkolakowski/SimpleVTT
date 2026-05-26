@@ -281,3 +281,34 @@ async def test_available_reactions_lists_monk_deflect_missiles(
     assert "deflect-missiles" in keys, (
         f"expected deflect-missiles in Kael's catalog; got {keys}"
     )
+
+
+async def test_available_reactions_lists_caelan_protection(
+    gm_client, roster,
+):
+    """v2.68.10 — Caelan's fighting style bumped from "defense" to
+    "protection" so the v2.68.7 Phase 2c catalog has live coverage.
+    The catalog now surfaces `fighting-style-protection` on Caelan.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    await _seed_battle(gm_client, [
+        _make_combatant(caelan["name"], caelan["id"], init=10),
+    ])
+    resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/available_reactions",
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    caelan_entry = next(
+        (c for c in data["combatants"] if c["char_id"] == caelan["id"]),
+        None,
+    )
+    assert caelan_entry, (
+        f"expected Caelan in catalog; got "
+        f"{[c['name'] for c in data['combatants']]}"
+    )
+    keys = [r["key"] for r in caelan_entry["reactions"]]
+    assert "fighting-style-protection" in keys, (
+        f"expected fighting-style-protection in Caelan's catalog; "
+        f"got {keys}"
+    )
