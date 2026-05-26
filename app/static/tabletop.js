@@ -341,12 +341,31 @@
     const _gifOverlay = document.getElementById('gif-token-overlay');
     const _gifImgMap  = {};   // token.id → <img>
 
+    // v2.64.0 — F2 fog-of-war: returns true when the current user
+    // should NOT see this token. GMs always see everything; non-GM
+    // users are hidden from when:
+    //   - the legacy `is_hidden` boolean is set (hidden from all
+    //     non-GM users), OR
+    //   - their user_id appears in `hidden_from_user_ids` (the
+    //     per-user list added in v2.64.0).
+    // Used in render loops + hit-testing + GIF overlay to skip
+    // tokens that the viewer shouldn't perceive.
+    function _isTokenHiddenFromMe(t) {
+        if (!t || (ME && ME.isGm)) return false;
+        if (t.is_hidden) return true;
+        const hf = t.hidden_from_user_ids;
+        if (Array.isArray(hf) && ME && typeof ME.id === 'number' && hf.includes(ME.id)) {
+            return true;
+        }
+        return false;
+    }
+
     function _updateGifOverlay() {
         if (!_gifOverlay) return;
         const keep = new Set();
         tokens.forEach(t => {
             if (!ME.animateGifs || !t.image_url || !t.image_url.toLowerCase().includes('.gif')) return;
-            if (t.is_hidden && !ME.isGm) return;
+            if (_isTokenHiddenFromMe(t)) return;
             keep.add(t.id);
             const cx = t.x + gridSize / 2;
             const cy = t.y + gridSize / 2;
@@ -633,7 +652,7 @@
                 return null;
             };
             for (const t of tokens) {
-                if (t.is_hidden && !ME.isGm) continue;
+                if (_isTokenHiddenFromMe(t)) continue;
                 // Self-anchored shapes never target the caster
                 // themselves — Spirit Guardians, Antimagic Field,
                 // Thunderwave etc. affect creatures "originating from"
@@ -891,7 +910,7 @@
             // Find the topmost token under the cursor.
             for (let i = tokens.length - 1; i >= 0; i--) {
                 const t = tokens[i];
-                if (t.is_hidden && !ME.isGm) continue;
+                if (_isTokenHiddenFromMe(t)) continue;
                 if (!pointInToken(canvasX, canvasY, t)) continue;
                 const cur = this.picks.get(t.id) || 0;
                 if (this._totalPicked() >= this.required) return false;
@@ -1636,12 +1655,19 @@
     }
 
     function drawToken(t) {
-        if (t.is_hidden && !ME.isGm) return;
+        if (_isTokenHiddenFromMe(t)) return;
         const cx = t.x + gridSize / 2;
         const cy = t.y + gridSize / 2;
         const r = (gridSize * t.size) / 2 - 4;
         ctx.save();
-        if (t.is_hidden) ctx.globalAlpha = 0.4;
+        // v2.64.0: GM dim-render for tokens hidden from anyone —
+        // legacy `is_hidden` OR the new per-user `hidden_from_user_ids`
+        // list. 40% alpha indicates "GM sees this; some players
+        // don't." Other clients have already skipped this token via
+        // _isTokenHiddenFromMe.
+        if (t.is_hidden || (Array.isArray(t.hidden_from_user_ids) && t.hidden_from_user_ids.length > 0)) {
+            ctx.globalAlpha = 0.4;
+        }
         const isGif = ME.animateGifs && t.image_url && t.image_url.toLowerCase().includes('.gif');
         const _char = charById[t.character_id] || {};
         const _ringColor = _char.color || t.color || '#000';
@@ -1788,7 +1814,7 @@
         // narrative reasons).
         const battleC = (window.battle && window.battle.combatants) || [];
         tokens.forEach(t => {
-            if (t.is_hidden && !ME.isGm) return;
+            if (_isTokenHiddenFromMe(t)) return;
             let combatant = null;
             for (const c of battleC) {
                 if (c.source_token_id != null && c.source_token_id === t.id) { combatant = c; break; }
@@ -1833,7 +1859,7 @@
         // so the glow doesn't leak hidden NPC positions.
         if (_initHoverTokenId !== null) {
             const t = tokens.find(tk => tk.id === _initHoverTokenId);
-            if (t && !(t.is_hidden && !ME.isGm)) {
+            if (t && !(_isTokenHiddenFromMe(t))) {
                 const cx = t.x + gridSize / 2;
                 const cy = t.y + gridSize / 2;
                 const r = (gridSize * t.size) / 2;
@@ -1853,7 +1879,7 @@
         // jpg fills the token face. Skip hidden tokens for non-GM.
         tokens.forEach(t => {
             if (!_targeting.isTargeted(t.id)) return;
-            if (t.is_hidden && !ME.isGm) return;
+            if (_isTokenHiddenFromMe(t)) return;
             const cx = t.x + gridSize / 2;
             const cy = t.y + gridSize / 2;
             const r = (gridSize * t.size) / 2 - 4;
@@ -1887,7 +1913,7 @@
         if (_targetPicker.active && _targetPicker.cursorRaw) {
             for (let i = tokens.length - 1; i >= 0; i--) {
                 const t = tokens[i];
-                if (t.is_hidden && !ME.isGm) continue;
+                if (_isTokenHiddenFromMe(t)) continue;
                 if (pointInToken(_targetPicker.cursorRaw.x, _targetPicker.cursorRaw.y, t)) {
                     _hoveredPickableId = t.id;
                     break;
@@ -1900,7 +1926,7 @@
             ctx.lineCap = 'round';
             ctx.setLineDash([]);
             for (const t of tokens) {
-                if (t.is_hidden && !ME.isGm) continue;
+                if (_isTokenHiddenFromMe(t)) continue;
                 // Skip the caster's own token — single-target spells
                 // can't target self, and showing the caster as a
                 // valid target clutters the visual. v2.49.169: NPC
@@ -2017,7 +2043,7 @@
             for (const [tokenId, count] of _targetPicker.picks) {
                 const t = tokens.find(tk => tk.id === tokenId);
                 if (!t) continue;
-                if (t.is_hidden && !ME.isGm) continue;
+                if (_isTokenHiddenFromMe(t)) continue;
                 const cx = t.x + gridSize / 2;
                 const cy = t.y + gridSize / 2;
                 const r = (gridSize * t.size) / 2;
@@ -2439,7 +2465,7 @@
             // Highlight tokens inside the shape using the same hit-test
             // logic as commit().
             tokens.forEach(t => {
-                if (t.is_hidden && !ME.isGm) return;
+                if (_isTokenHiddenFromMe(t)) return;
                 if (!_aoePicker._tokenInShape(t, cx, cy)) return;
                 const tcx = t.x + gridSize / 2;
                 const tcy = t.y + gridSize / 2;
@@ -3472,7 +3498,7 @@
         for (let i = tokens.length - 1; i >= 0; i--) {
             const t = tokens[i];
             if (!pointInToken(x, y, t)) continue;
-            if (t.is_hidden && !ME.isGm) continue;
+            if (_isTokenHiddenFromMe(t)) continue;
             if (ev.shiftKey) _targeting.addTarget(t.id);
             else _targeting.setTarget(t.id);
             _maybeShowTargetingHint();

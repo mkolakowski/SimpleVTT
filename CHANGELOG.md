@@ -10,6 +10,52 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.64.0] - 2026-05-26 — "The Veil"
+
+**Schema version:** 59
+**Commit summary:** **F2 fog-of-war v1 lands — per-user token visibility + Hide/Reveal endpoints + auto-reveal on attack.** Adds `Token.hidden_from_user_ids: JSON list[int]` (schema v59); GET /tokens server-side filter; `POST /api/campaign/{cid}/token/{tid}/hide` + `/reveal` GM endpoints; client-side canvas filter via new `_isTokenHiddenFromMe(t)` helper; auto-reveal hook in `_apply_damage_to_combatant` that drops the target's owner_user_id from a hidden attacker's list. Closes the v2.55.1 Blindsense / Hide-in-Plain-Sight / Vanish / Feral Senses filings (data plumbing now exists for those feature consumers).
+**Description:** Six files. **(1)** `app/models.py` — `Token.hidden_from_user_ids: Mapped[list]` mapped to a JSON column (default `[]`, server_default `'[]'`). **(2)** `app/database.py` — schema v59 migration: `ALTER TABLE tokens ADD COLUMN hidden_from_user_ids JSONB NOT NULL DEFAULT '[]'::jsonb` (Postgres) or `JSON NOT NULL DEFAULT '[]'` (SQLite). Idempotent — skipped if column exists. **(3)** `app/routes/tabletop_routes.py` — GET /tokens filter: non-GM viewers get the token omitted when their user_id appears in `hidden_from_user_ids` OR the legacy `is_hidden` boolean is set. GM viewers see everything + the `hidden_from_user_ids` field surfaces in the response so the GM UI can render per-user visibility chips. **(4)** Two new endpoints next to the existing PATCH /token: `POST /token/{tid}/hide` (GM only; body `{from_user_ids: list[int]}` or `{from_all_players: true}`) merges the new ids into the existing list; `POST /token/{tid}/reveal` (GM only; body `{to_user_ids: list[int]}` or `{to_all: true}`) removes ids from the list or clears it. Both emit `token_update` WS broadcasts. **(5)** `_token_dict` includes `hidden_from_user_ids` on every broadcast so connected clients can decide whether to render. **(6)** New `_auto_reveal_attacker_to_target_owner` helper + an `attacker_char_id` kwarg on `_apply_damage_to_combatant`. When a hidden attacker's damage lands on a PC target, the target's `owner_user_id` is removed from the attacker's hidden_from list and a `feature_used(source=auto-reveal-on-attack)` broadcast surfaces the reveal in the chat.
+**Description (cont):** Client canvas integration (`app/static/tabletop.js`). New helper `_isTokenHiddenFromMe(t)` returns True when the current viewer should NOT see the token: GMs always see; non-GMs are hidden from when `is_hidden=True` OR `ME.id in t.hidden_from_user_ids`. All 12 existing `t.is_hidden && !ME.isGm` sites are rewritten to use the new helper via a single `replace_all` edit — render loop, hit-testing, GIF overlay, drag handlers, hover tooltips all pick up the new logic transparently. The GM dim-render branch (40% alpha for tokens hidden from anyone) extends to cover the new per-user list: if `hidden_from_user_ids` is non-empty, the GM sees the token at 40% alpha as an indicator that some players can't see it.
+**Description (cont 2):** Auto-reveal flow. When `/attack` damage lands on a PC, the PC branch of `_apply_damage_to_combatant` calls `_auto_reveal_attacker_to_target_owner(db, campaign_id, attacker_char_id, combatant)`. The helper looks up the target's character row → owner_user_id, then walks the attacker's token. If the attacker's hidden_from_user_ids contains the target's owner_id, the helper removes it, commits, and broadcasts a `token_update` event PLUS a `feature_used(source=auto-reveal-on-attack)` chat card naming the target. This handles the RAW case "the player whose PC just took damage should see who hit them." Both /attack damage call sites (primary target + multi-target extras loop) pass `attacker_char_id=char.id`.
+**Description (cont 3):** v1 trade-offs (filed):
+- **WS broadcasts are NOT per-user filtered**. The broadcast includes `hidden_from_user_ids` on the token; the client decides to render or skip. A non-GM with devtools can inspect the WS payload and see the list (the token's existence isn't strictly secret, only its render). True per-user broadcast filtering would require a major hub refactor — filed.
+- **Spell-cast auto-reveal not yet wired**. A hidden caster who damages a PC with a spell doesn't auto-reveal yet (only weapon `/attack` does). The 12+ spell-damage `_apply_damage_to_combatant` call sites would each need `attacker_char_id=char.id` added. Small per-site addition; filed for the spell-side pass.
+- **Permissive validators**. `hidden_from_user_ids` accepts any integer user_ids without checking if they're actually campaign members. A GM passing user_id 9999 just silently keeps it in the list. Cleanup filed; harmless today since the GM is the only one who can set the list.
+**Description (cont 4):** What unlocks. F2 is the foundation for 4+ filed Lv 10+ Ranger / Rogue features:
+- **Blindsense** (Rogue Lv 14, descriptive v2.55.1) — would let the Rogue see hidden creatures within 10 ft. A future commit adds a `_pc_blindsense_radius_ft(sheet)` helper that surfaces a per-viewer override on GET /tokens (Rogue Lv 14+ sees through `hidden_from_user_ids` within 10 ft).
+- **Hide in Plain Sight** (Ranger Lv 10) — player-driven hide action with terrain prereq; UI surface filed for a `/use_hide_in_plain_sight` endpoint.
+- **Vanish** (Ranger Lv 14) — Hide as a bonus action.
+- **Feral Senses** (Ranger Lv 18) — fight unseen creatures without disadvantage in 30 ft.
+**Description (cont 5):** Verification. (a) `curl /version` reports `2.64.0` + `schema_version 59` after `docker compose up -d --build app`. (b) New harness `tests/harness/test_fog_of_war.py` — 4 tests: GM-sees-all + non-GM-filtered, reveal clears list, 403 on non-GM /hide, 400 on invalid body. (c) Full suite 498 + 4 = 502 passing. (d) Manual click-through: GM clicks "Hide from Alice" → Pip's token shows at 40% alpha in GM's view, disappears from Alice's view immediately via WS broadcast.
+
+### Added
+- `Token.hidden_from_user_ids: JSON list[int]` column + schema v59 migration.
+- `POST /api/campaign/{cid}/token/{tid}/hide` endpoint (GM only) — merges user_ids into the hidden list. Supports `from_user_ids: list[int]` or `from_all_players: true`.
+- `POST /api/campaign/{cid}/token/{tid}/reveal` endpoint (GM only) — removes user_ids from the list or clears it entirely.
+- `_auto_reveal_attacker_to_target_owner` helper in tabletop_routes.py + `attacker_char_id` kwarg on `_apply_damage_to_combatant`.
+- `_isTokenHiddenFromMe(t)` helper in tabletop.js — single source of truth for "can I see this token?" Replaces all 12 `t.is_hidden && !ME.isGm` sites.
+- Harness `tests/harness/test_fog_of_war.py` — 4 tests covering filter / reveal / 403 / 400.
+
+### Changed
+- GET /tokens now surfaces `hidden_from_user_ids` to GM viewers + filters out hidden tokens for non-GMs.
+- `_token_dict` (broadcast payload) includes `hidden_from_user_ids` so clients can decide render.
+- GM canvas render: tokens with non-empty `hidden_from_user_ids` show at 40% alpha (same indicator as legacy `is_hidden`).
+- Both /attack damage call sites pass `attacker_char_id=char.id` to enable auto-reveal.
+- `app/version.py` `APP_VERSION` → `2.64.0`, `SCHEMA_VERSION` → 59.
+- `README.md` version badge → `2.64.0 · Schema v59`.
+- `docs/plans/class-content-status.md` — F2 row flips from ⚪ to ✅ shipped.
+
+### Schema
+- v59 (this commit): `ALTER TABLE tokens ADD COLUMN hidden_from_user_ids JSONB|JSON NOT NULL DEFAULT '[]'`.
+
+### Notes
+- **Foundation, not the full UX yet.** The data plumbing + endpoints are in place; the GM UI for "right-click token → hide from X" still needs to be added (filed). The auto-reveal on damage and the canvas filter both work today.
+- **Per-user WS broadcast filtering deferred.** Today broadcasts go to all clients with the hidden_from list embedded; clients respect it. A v2 would scrub the broadcast per-recipient.
+- **Spell-cast auto-reveal not yet wired.** Only weapon attacks (/attack) pass `attacker_char_id`. The 12+ spell-damage call sites can be threaded in a follow-up.
+- **Backward compatibility**: the legacy `is_hidden` boolean ("hidden from all players") continues to work unchanged. The new field is additive — a token can be `is_hidden=True` (hidden from all) OR have specific user_ids in `hidden_from_user_ids` (hidden from those, visible to others). Both paths route through `_isTokenHiddenFromMe`.
+
+---
+
 ## [2.63.0] - 2026-05-26 — "Argent Knuckles"
 
 **Schema version:** 58

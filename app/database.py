@@ -557,6 +557,30 @@ def _apply_inline_migrations() -> None:
                 "INTEGER NOT NULL DEFAULT 42"
             ))
 
+    # ---- Schema v59 (2.64.0): tokens.hidden_from_user_ids ----
+    # Per-user fog-of-war list on each token. JSON array of user_ids
+    # who can't see this token. Empty default — token visible to all
+    # players. GM viewport always sees every token regardless.
+    # Distinct from the legacy `is_hidden` boolean (which hides from
+    # ALL non-GM users); the new field is additive — specific users
+    # may be hidden from while others can still see.
+    token_cols_v59 = _column_names("tokens")
+    with engine.begin() as conn:
+        if token_cols_v59 and "hidden_from_user_ids" not in token_cols_v59:
+            dialect = engine.dialect.name
+            if dialect == "postgresql":
+                conn.execute(text(
+                    "ALTER TABLE tokens ADD COLUMN hidden_from_user_ids "
+                    "JSONB NOT NULL DEFAULT '[]'::jsonb"
+                ))
+            else:
+                # SQLite stores JSON as TEXT internally; column type
+                # JSON is accepted but check-constraints differ.
+                conn.execute(text(
+                    "ALTER TABLE tokens ADD COLUMN hidden_from_user_ids "
+                    "JSON NOT NULL DEFAULT '[]'"
+                ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

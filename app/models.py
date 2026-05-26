@@ -322,6 +322,16 @@ class Token(Base):
     y: Mapped[float] = mapped_column(Float, default=0)
     size: Mapped[int] = mapped_column(Integer, default=1)
     is_hidden: Mapped[bool] = mapped_column(Boolean, default=False)
+    # v2.64.0 — F2 fog-of-war: per-user-id hidden list. When a user's
+    # id appears in this list, GET /tokens (non-GM) omits the token
+    # AND the canvas render filter skips it on broadcasts. GMs always
+    # see every token regardless. Distinct from `is_hidden` (legacy
+    # "hidden from everyone but GM" boolean) — the new field is
+    # additive: specific user_ids can be hidden from while others
+    # can still see.
+    hidden_from_user_ids: Mapped[list] = mapped_column(
+        JSON, default=list, server_default="[]",
+    )
     token_template_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("token_templates.id", use_alter=True, name="fk_token_template", ondelete="SET NULL"),
         nullable=True,

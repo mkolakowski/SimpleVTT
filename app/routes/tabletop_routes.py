@@ -2158,6 +2158,7 @@ async def _apply_damage_to_combatant(
     is_attack: bool = False,
     attack_id: str | None = None,
     is_magical: bool = False,
+    attacker_char_id: int | None = None,
 ) -> dict:
     """Apply ``damage_amount`` damage to the target combatant. Two
     paths:
@@ -2254,6 +2255,14 @@ async def _apply_damage_to_combatant(
         })
         # v2.49.61: RAW Sleep — taking damage wakes the sleeper.
         await _wake_sleeping_on_damage(campaign_id, char.id, None, applied, db=db)
+        # v2.64.0 — F2 auto-reveal: hidden attacker damages a PC →
+        # the target's owner sees the attacker. Fires only when an
+        # `attacker_char_id` is supplied (weapon-attack path; spell-
+        # cast paths can plumb it through later).
+        if applied > 0 and attacker_char_id:
+            await _auto_reveal_attacker_to_target_owner(
+                db, campaign_id, attacker_char_id, combatant,
+            )
         if attack_id:
             _attack_damage_log[attack_id] = {
                 "ts": _time.time(),
@@ -6133,8 +6142,15 @@ def list_tokens(
     tokens = db.query(Token).filter(Token.map_id == map_row.id).all()
     out = []
     for t in tokens:
-        if t.is_hidden and not is_gm:
-            continue
+        # v2.64.0 — F2 fog-of-war filter. GM sees everything; non-GM
+        # users get tokens omitted when (a) the legacy is_hidden flag
+        # is set, OR (b) their user_id appears in hidden_from_user_ids.
+        if not is_gm:
+            if t.is_hidden:
+                continue
+            hidden_from = t.hidden_from_user_ids or []
+            if isinstance(hidden_from, list) and user.id in hidden_from:
+                continue
         out.append({
             "id": t.id,
             "label": t.label,
@@ -6147,6 +6163,11 @@ def list_tokens(
             "token_template_id": t.token_template_id,
             "controller_user_id": t.controller_user_id,
             "is_hidden": bool(t.is_hidden),
+            # v2.64.0 — F2: surface the hidden-from list to the GM so
+            # the GM UI can render a per-user visibility chip
+            # ("hidden from Alice / Bob"). Non-GM viewers never see
+            # this field since the entire token is filtered above.
+            "hidden_from_user_ids": list(t.hidden_from_user_ids or []) if is_gm else [],
         })
     return {"tokens": out, "map_id": map_row.id,
             "grid_size_px": map_row.grid_size_px,
@@ -7278,7 +7299,198 @@ def _token_dict(t: Token) -> dict:
         "image_url": t.image_url,
         "is_hidden": t.is_hidden,
         "token_template_id": t.token_template_id,
+        # v2.64.0 — F2 fog-of-war: broadcast the per-user hidden list
+        # alongside the token state. The client-side canvas render
+        # checks `myUserId in token.hidden_from_user_ids` and skips
+        # the draw call. GMs ignore the field (always render). v1
+        # trade-off: a non-GM viewer with devtools can inspect the
+        # WS payload and see the list (the token itself isn't
+        # rendered, but its existence isn't strictly secret). Per-
+        # user broadcast filtering filed for a follow-up.
+        "hidden_from_user_ids": list(t.hidden_from_user_ids or []),
     }
+
+
+@router.post("/api/campaign/{campaign_id}/token/{token_id}/hide")
+async def hide_token_from_users(
+    campaign_id: int,
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.64.0 — F2 hide a token from specific players (or all
+    players). GM-only.
+
+    Body: ``{from_user_ids: list[int]}`` to hide from specific users
+    OR ``{from_all_players: true}`` to hide from every non-GM user
+    in the campaign (queries CampaignMembership for the user_id list).
+
+    Idempotent — adding a user_id that's already in the list is a
+    no-op. The merged set is written to ``Token.hidden_from_user_ids``
+    and broadcast as a ``token_update`` event so connected clients
+    can update their canvas state.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token or token.map.campaign_id != campaign_id:
+        raise HTTPException(404, "Token not found")
+
+    body = await request.json()
+    from_all = bool(body.get("from_all_players"))
+    from_ids = body.get("from_user_ids") or []
+    if not isinstance(from_ids, list):
+        raise HTTPException(400, "from_user_ids must be a list of integers")
+
+    if from_all:
+        # Resolve the campaign's non-GM members. The GM owns the
+        # campaign and is always excluded; co-GMs (is_gm=True on
+        # membership) are also excluded so they can still see hidden
+        # tokens.
+        memberships = (
+            db.query(CampaignMembership)
+            .filter(
+                CampaignMembership.campaign_id == campaign_id,
+                CampaignMembership.is_gm == False,  # noqa: E712
+            )
+            .all()
+        )
+        member_ids = [m.user_id for m in memberships]
+    else:
+        try:
+            member_ids = [int(x) for x in from_ids]
+        except (TypeError, ValueError):
+            raise HTTPException(400, "from_user_ids must contain integers")
+
+    existing = list(token.hidden_from_user_ids or [])
+    merged = sorted(set(existing) | set(member_ids))
+    token.hidden_from_user_ids = merged
+    # SQLAlchemy doesn't detect in-place list mutation on JSON cols;
+    # flag_modified forces the dirty bit so the UPDATE actually fires.
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(token, "hidden_from_user_ids")
+    db.commit()
+    await hub.broadcast(campaign_id, {"type": "token_update", "data": _token_dict(token)})
+    return _token_dict(token)
+
+
+@router.post("/api/campaign/{campaign_id}/token/{token_id}/reveal")
+async def reveal_token_to_users(
+    campaign_id: int,
+    token_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.64.0 — F2 reveal a hidden token to specific players (or
+    everyone). GM-only.
+
+    Body: ``{to_user_ids: list[int]}`` to remove those user_ids from
+    the hidden_from list OR ``{to_all: true}`` to clear the list
+    entirely (everyone sees it again).
+
+    Broadcasts ``token_update`` with the new state.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    token = db.query(Token).filter(Token.id == token_id).first()
+    if not token or token.map.campaign_id != campaign_id:
+        raise HTTPException(404, "Token not found")
+
+    body = await request.json()
+    to_all = bool(body.get("to_all"))
+    to_ids = body.get("to_user_ids") or []
+    if not isinstance(to_ids, list):
+        raise HTTPException(400, "to_user_ids must be a list of integers")
+
+    if to_all:
+        new_list: list[int] = []
+    else:
+        try:
+            remove_set = {int(x) for x in to_ids}
+        except (TypeError, ValueError):
+            raise HTTPException(400, "to_user_ids must contain integers")
+        existing = list(token.hidden_from_user_ids or [])
+        new_list = [u for u in existing if u not in remove_set]
+
+    token.hidden_from_user_ids = new_list
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(token, "hidden_from_user_ids")
+    db.commit()
+    await hub.broadcast(campaign_id, {"type": "token_update", "data": _token_dict(token)})
+    return _token_dict(token)
+
+
+async def _auto_reveal_attacker_to_target_owner(
+    db: Session, campaign_id: int,
+    attacker_char_id: int | None,
+    target_combatant: dict | None,
+) -> None:
+    """v2.64.0 — F2 auto-reveal hook. When a hidden attacker damages
+    a PC, the target's owner_user_id is removed from the attacker's
+    `hidden_from_user_ids` list (the player whose PC just took
+    damage should now SEE who attacked them).
+
+    Fires from `_apply_damage_to_combatant`'s PC branch when an
+    `attacker_char_id` is supplied. No-op when the attacker has no
+    token, no hidden list, or the target isn't a PC.
+
+    Broadcasts ``token_update`` if the attacker's token was modified.
+    """
+    if not attacker_char_id or not target_combatant:
+        return
+    target_char_id = target_combatant.get("char_id")
+    if not target_char_id:
+        return
+    target_char = db.query(Character).filter(
+        Character.id == int(target_char_id),
+    ).first()
+    if not target_char or not target_char.owner_user_id:
+        return
+    target_owner_id = int(target_char.owner_user_id)
+    # Find the attacker's token on the campaign's active map.
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not campaign.active_map_id:
+        return
+    attacker_token = (
+        db.query(Token)
+        .filter(
+            Token.character_id == int(attacker_char_id),
+            Token.map_id == campaign.active_map_id,
+        )
+        .first()
+    )
+    if not attacker_token:
+        return
+    existing = list(attacker_token.hidden_from_user_ids or [])
+    if target_owner_id not in existing:
+        return
+    new_list = [u for u in existing if u != target_owner_id]
+    attacker_token.hidden_from_user_ids = new_list
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(attacker_token, "hidden_from_user_ids")
+    db.commit()
+    await hub.broadcast(campaign_id, {
+        "type": "token_update", "data": _token_dict(attacker_token),
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": attacker_char_id,
+            "character_name": attacker_token.label or "Attacker",
+            "feature_name": (
+                f"👁️ Revealed to {target_char.name}'s player"
+            ),
+            "feature_desc": (
+                "An attack on a player's PC reveals the attacker to "
+                "that player's viewport."
+            ),
+            "source": "auto-reveal-on-attack",
+        },
+    })
 
 
 # ----------- API: dice -----------
@@ -19073,6 +19285,7 @@ async def use_attack(
                 total_damage, damage_type,
                 is_crit=is_crit, is_attack=True, attack_id=attack_id,
                 is_magical=attack_is_magical,
+                attacker_char_id=char.id,
             )
             damage_applied = apply_result["applied"]
             target_hp_before = apply_result["hp_before"]
@@ -19194,6 +19407,7 @@ async def use_attack(
                     is_crit=extra_is_crit, is_attack=True,
                     attack_id=attack_id,
                     is_magical=_attack_is_magical(sheet, name),
+                    attacker_char_id=char.id,
                 )
                 extra_applied = _ar["applied"]
                 extra_hp_before = _ar["hp_before"]

@@ -1217,7 +1217,9 @@ behavior) so the helpers degrade gracefully.
 **Effort estimate:** 1 commit, ~80 LOC + 1 harness test. Big payoff
 since 6+ features unblock immediately.
 
-### F2. Fog-of-war / hidden-token state
+### F2. Fog-of-war / hidden-token state — ✅ SHIPPED (v2.64.0)
+
+**Status:** Data model + Hide/Reveal endpoints + auto-reveal on attack + client canvas filter all shipped v2.64.0. Per-user WS broadcast filtering deferred to a follow-up. Consumer features (Blindsense, Hide in Plain Sight, Vanish, Feral Senses) are now data-plumbing-ready — each is a small per-class commit reusing the v2.64.0 primitives.
 
 **What it is:** A `token.hidden_from_user_ids: list[int]` field on
 tokens, plus the canvas-render logic to omit hidden tokens from
