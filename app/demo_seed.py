@@ -538,23 +538,28 @@ def _cleric_sheet(name: str) -> dict:
     on outgoing healing). Prof bonus stays +3 (Lv 5-8 band) so attack
     bonus + save DCs don't drift. L3 spell slot count 2 → 3 per
     Lv 6 cleric table (4/3/3 base).
+
+    v2.60.0: bumped Lv 6 → 8 to unlock Divine Strike (Life Domain
+    Lv 8+ — +1d8 radiant on weapon hits once per turn, wired into
+    the /attack auto-uplifts list). Prof bonus still +3 (Lv 5-8
+    band). Gains L4 slots (4/3/3/2 at Lv 8 per cleric table).
     """
     return {
         "class": "Cleric",
         "subclass": "Life Domain",
-        "level": 6,
+        "level": 8,
         "race": "Hill Dwarf",
         "alignment": "Lawful Good",
         "background": "Folk Hero",
         "abilities": {"STR": 14, "DEX": 10, "CON": 14, "INT": 10, "WIS": 16, "CHA": 12},
         "ac": 18,
         "speed": 25,
-        # 8 (Lv 1 d8) + 5× avg d8 (5) + CON +2 × 6 + Dwarven Toughness +1 × 6
-        # = 8 + 25 + 12 + 6 = 51. (v2.57.1: was 43 at Lv 5 — added 5 + 2 + 1 = 8 for Lv 6.)
-        "hp": {"current": 51, "max": 51, "temp": 0},
+        # 8 (Lv 1 d8) + 7× avg d8 (5) + CON +2 × 8 + Dwarven Toughness +1 × 8
+        # = 8 + 35 + 16 + 8 = 67. (v2.60.0: was 51 at Lv 6 — added 8 per level for Lv 7/8.)
+        "hp": {"current": 67, "max": 67, "temp": 0},
         "initiative_bonus": 0,
         "proficiency_bonus": 3,  # +3 through Lv 5-8.
-        "hit_dice": {"current": 6, "max": 6},
+        "hit_dice": {"current": 8, "max": 8},
         "class_hit_die": "d8",
         "class_spellcasting": "WIS",
         "saving_throws": {"WIS": True, "CHA": True},
@@ -605,12 +610,13 @@ def _cleric_sheet(name: str) -> dict:
             {"name": "Spirit Guardians",  "level": 3, "prepared": True, "_slug": "spirit-guardians", "casting_time": "1 action"},
             {"name": "Mass Healing Word", "level": 3, "prepared": True, "_slug": "mass-healing-word", "casting_time": "1 bonus action"},
         ],
-        # Lv 6 cleric slot progression — 4/3/3 (v2.57.1: L3 2 → 3 per Lv 6 table).
+        # Lv 8 cleric slot progression — 4/3/3/2 (v2.60.0: L4 added).
         "spell_slots": {
             "cleric": {
                 "1": {"total": 4, "used": 0},
                 "2": {"total": 3, "used": 0},
                 "3": {"total": 3, "used": 0},
+                "4": {"total": 2, "used": 0},
             },
         },
         # v2.4.13: rich inventory items (was bare strings). Chain mail
@@ -686,6 +692,17 @@ def _cleric_sheet(name: str) -> dict:
                 "key": "blessed-healer",
                 "name": "Blessed Healer",
                 "desc": "Passive (Life Domain Lv 6+) — when you cast a Lv 1+ heal spell on a creature other than yourself, you ALSO regain 2 + spell level HP. Fires automatically via /cast_spell hook (v2.58.0).",
+            },
+            # v2.60.0: Divine Strike (Life Domain Lv 8+). Once per turn
+            # when you hit with a weapon attack, add +1d8 radiant
+            # damage to the hit. Wired into /attack via the auto-
+            # uplifts list — uses the same once-per-turn flag pattern
+            # as Colossus Slayer (combatant.economy.divine_strike_used,
+            # reset by the GM-side nextTurn handler).
+            {
+                "key": "divine-strike",
+                "name": "Divine Strike",
+                "desc": "Passive (Life Domain Lv 8+) — once per turn, hits with a weapon attack deal an extra 1d8 radiant damage. Fires automatically via /attack hook (v2.60.0).",
             },
         ],
     }

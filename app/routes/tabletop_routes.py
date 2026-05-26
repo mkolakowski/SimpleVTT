@@ -11352,7 +11352,65 @@ def _compute_attack_auto_uplifts(
             except dice_mod.DiceParseError:
                 pass
 
+    # 4. v2.60.0 — Divine Strike (Cleric Life Domain Lv 8+). Once
+    #    per turn: +1d8 radiant on weapon hits (Lv 8-13) / +2d8 radiant
+    #    (Lv 14+). Tracked via ``combatant.economy.divine_strike_used``
+    #    flag — reset at turn start by the GM-side nextTurn handler
+    #    alongside action chips + the Colossus Slayer flag. Subclass-
+    #    gated: only Life Domain (other domains have different Lv 8
+    #    features — War Domain's War God's Blessing, Light's
+    #    Improved Flare, etc.). Future Death Domain Reaper Lv 8
+    #    feature would slot in here with a separate `source` tag.
+    cleric_lv = _cleric_level_from_sheet(attacker_sheet)
+    if cleric_lv >= 8 and target_combatant is not None:
+        subclass_raw = (attacker_sheet.get("subclass") or "").strip().lower()
+        subclass_slug = subclass_raw.replace(" domain", "").strip()
+        if subclass_slug == "life":
+            already_used = bool(
+                (attacker_combatant or {}).get("economy", {}).get("divine_strike_used")
+            )
+            if not already_used:
+                ds_dice = "2d8" if cleric_lv >= 14 else "1d8"
+                try:
+                    r = dice_mod.roll(ds_dice)
+                    uplifts.append({
+                        "label": "Divine Strike",
+                        "expression": ds_dice,
+                        "total": r.total,
+                        "breakdown": r.breakdown,
+                        "damage_type": "radiant",
+                        "source": "divine-strike",
+                    })
+                except dice_mod.DiceParseError:
+                    pass
+
     return uplifts
+
+
+async def _mark_divine_strike_used(
+    campaign_id: int, attacker_char_id: int,
+) -> None:
+    """v2.60.0 — set ``combatant.economy.divine_strike_used = True``
+    on the attacker so subsequent attacks this turn don't re-roll
+    Divine Strike. Reset is handled client-side by the GM's
+    nextTurn handler alongside the Colossus Slayer flag.
+    """
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return
+    target = None
+    for c in state.get("combatants") or []:
+        if c.get("char_id") == attacker_char_id:
+            target = c
+            break
+    if target is None:
+        return
+    economy = target.get("economy") or {}
+    if not isinstance(economy, dict):
+        economy = {}
+        target["economy"] = economy
+    economy["divine_strike_used"] = True
+    hub.set_battle(campaign_id, state)
 
 
 async def _mark_colossus_slayer_used(
@@ -18542,10 +18600,11 @@ async def use_attack(
         target_combatant_id=target_combatant_id,
         attack_damage_type=damage_type,
     )
-    # Mark Colossus Slayer "used this turn" if it was actually
-    # rolled — the helper itself reads but doesn't mutate.
-    if any(u.get("source") == "colossus-slayer" for u in auto_uplifts):
-        await _mark_colossus_slayer_used(campaign_id, char.id)
+    # v2.60.0 — defer the mark-as-used calls for on-hit-only uplifts
+    # (Colossus Slayer + Divine Strike) until after hit determination
+    # at L ~18731. Pre-v2.60.0 the Colossus Slayer mark fired on every
+    # /attack call including misses, burning the once-per-turn use on
+    # a swing that never connected. Moved to the post-hit block below.
 
     # Aggregate auto-uplift damage into the base damage_total so the
     # existing "Total damage" line in chat cards remains accurate
@@ -18668,6 +18727,22 @@ async def use_attack(
     if target_combatant and not is_save and attack_total is not None:
         target_ac = _read_target_ac(db, campaign_id, target_combatant)
         hit = is_crit or (attack_total >= target_ac)
+        # v2.60.0 — on-hit-only uplift bookkeeping. Strip Colossus
+        # Slayer + Divine Strike from auto_uplifts on a miss (those
+        # are "on hit" features per RAW; rolling their bonus dice on
+        # a missed swing would inflate the chat card and confuse the
+        # player). Mark "used this turn" only on a hit, so a missed
+        # swing doesn't burn the once-per-turn charge.
+        if not hit:
+            auto_uplifts = [
+                u for u in auto_uplifts
+                if u.get("source") not in ("colossus-slayer", "divine-strike")
+            ]
+        else:
+            if any(u.get("source") == "colossus-slayer" for u in auto_uplifts):
+                await _mark_colossus_slayer_used(campaign_id, char.id)
+            if any(u.get("source") == "divine-strike" for u in auto_uplifts):
+                await _mark_divine_strike_used(campaign_id, char.id)
         if (
             hit
             and bool(campaign.auto_apply_damage)

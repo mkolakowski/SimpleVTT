@@ -217,30 +217,40 @@ async def test_hunters_mark_does_not_fire_on_other_target(gm_client, rowan_full,
 
 
 async def test_colossus_slayer_fires_vs_below_max_hp(gm_client, rowan_full, roster):
-    """Pip starts below max HP. Rowan's Longbow vs Pip triggers Colossus Slayer."""
+    """Pip starts below max HP. Rowan's Longbow vs Pip triggers Colossus Slayer.
+
+    v2.60.0: CS only fires on HIT (RAW). Re-seed + retry until a hit
+    lands so the test isn't flaky on missed swings.
+    """
     rowan = rowan_full
     pip = roster["Pip Quickfingers"]
     rowan_cid = f"tok_{rowan['id']}"
     pip_cid = f"tok_{pip['id']}"
-    # Pip starts at 20/30 (below max).
-    await _seed_battle(gm_client, [
-        _mkc(rowan_cid, rowan['id'], name="Rowan"),
-        _mkc(pip_cid, pip['id'], hp_cur=20, hp_max=30, name="Pip"),
-    ])
 
-    resp = await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/attack",
-        json={
-            "character_id": rowan["id"],
-            "attack_index": 0,
-            "target_combatant_id": pip_cid,
-            "override": True,
-        },
+    cs_entry = None
+    for _ in range(10):
+        await _seed_battle(gm_client, [
+            _mkc(rowan_cid, rowan['id'], name="Rowan"),
+            _mkc(pip_cid, pip['id'], hp_cur=20, hp_max=30, name="Pip"),
+        ])
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": rowan["id"],
+                "attack_index": 0,
+                "target_combatant_id": pip_cid,
+                "override": True,
+            },
+        )
+        data = resp.json()
+        cs_list = [u for u in data["auto_uplifts"] if u["source"] == "colossus-slayer"]
+        if cs_list:
+            cs_entry = cs_list[0]
+            break
+    assert cs_entry is not None, (
+        "Colossus Slayer did not fire on a Rowan hit vs below-max Pip in 10 tries"
     )
-    data = resp.json()
-    cs = [u for u in data["auto_uplifts"] if u["source"] == "colossus-slayer"]
-    assert len(cs) == 1
-    assert cs[0]["expression"] == "1d6"
+    assert cs_entry["expression"] == "1d6"
 
 
 async def test_colossus_slayer_skips_full_hp_target(gm_client, rowan_full, roster):
@@ -269,26 +279,40 @@ async def test_colossus_slayer_skips_full_hp_target(gm_client, rowan_full, roste
 
 
 async def test_colossus_slayer_once_per_turn(gm_client, rowan_full, roster):
-    """First attack triggers Colossus Slayer; second attack same turn doesn't."""
+    """First attack triggers Colossus Slayer; second attack same turn doesn't.
+
+    v2.60.0: Colossus Slayer now only marks "used" on a HIT (RAW —
+    feature triggers when "you hit a creature"). Loop the first
+    attack until it lands a hit before checking the second.
+    """
     rowan = rowan_full
     pip = roster["Pip Quickfingers"]
     rowan_cid = f"tok_{rowan['id']}"
     pip_cid = f"tok_{pip['id']}"
-    await _seed_battle(gm_client, [
-        _mkc(rowan_cid, rowan['id'], name="Rowan"),
-        _mkc(pip_cid, pip['id'], hp_cur=20, hp_max=30, name="Pip"),
-    ])
 
-    r1 = await gm_client.post(
-        f"/api/campaign/{CAMPAIGN_ID}/attack",
-        json={
-            "character_id": rowan["id"],
-            "attack_index": 0,
-            "target_combatant_id": pip_cid,
-            "override": True,
-        },
+    # Loop until the first attack hits AND fires CS. Re-seed each
+    # iteration so the flag resets and the target stays below max HP.
+    cs_fired_on_first = False
+    for _ in range(10):
+        await _seed_battle(gm_client, [
+            _mkc(rowan_cid, rowan['id'], name="Rowan"),
+            _mkc(pip_cid, pip['id'], hp_cur=20, hp_max=30, name="Pip"),
+        ])
+        r1 = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": rowan["id"],
+                "attack_index": 0,
+                "target_combatant_id": pip_cid,
+                "override": True,
+            },
+        )
+        if any(u["source"] == "colossus-slayer" for u in r1.json()["auto_uplifts"]):
+            cs_fired_on_first = True
+            break
+    assert cs_fired_on_first, (
+        "Colossus Slayer did not fire on a first-hit Rowan attack in 10 tries"
     )
-    assert any(u["source"] == "colossus-slayer" for u in r1.json()["auto_uplifts"])
 
     r2 = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/attack",

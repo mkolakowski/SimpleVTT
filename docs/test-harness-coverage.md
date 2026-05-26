@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 482 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.59.2, 2026-05-25).
+**Total tests:** 485 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.60.0, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -740,6 +740,15 @@ v2.59.2 — Legacy `/apply_healing` (chat-card "🩹 Apply Healing" button) path
 |------|-----------------|
 | `test_apply_healing_runs_life_domain_uplift` | Tavik casts Cure Wounds with no target → /apply_healing routes to Tavik himself (calling user's first PC fallback) → Disciple of Life broadcast fires; Blessed Healer does NOT (RAW: only when target ≠ caster). |
 | `test_apply_healing_routes_to_stored_target_and_fires_blessed_healer` | Sanity check on the target-bound path still works after the heal-claim edits: Tavik casts Cure Wounds at Krieger via target_combatant_id → Disciple + Blessed Healer both fire (v2.58.0 path unchanged). |
+
+### `test_divine_strike.py`
+v2.60.0 — Divine Strike (Life Domain Cleric Lv 8+). +1d8 radiant on first weapon hit per turn, wired into `_compute_attack_auto_uplifts`. Once-per-turn lock via `combatant.economy.divine_strike_used` (mirror of v2.20.0 Colossus Slayer flag). Companion helper `_mark_divine_strike_used` flips the flag. Client-side turn-advance handlers in tabletop.html reset the flag alongside `colossus_slayer_used`.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_divine_strike_fires_on_first_weapon_hit` | Tavik (Lv 8 Life Domain) attacks Krieger with Warhammer → /attack `auto_uplifts` carries a divine-strike entry with `1d8` expression + `radiant` damage_type. |
+| `test_divine_strike_locks_after_first_hit` | Same turn, second attack → divine-strike NOT in auto_uplifts (once-per-turn lock). |
+| `test_divine_strike_skips_non_cleric` | Pip (Rogue) attacks Krieger → no divine-strike uplift fires (subclass gate). |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

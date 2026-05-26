@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.60.0] - 2026-05-25 — "Divine Strike"
+
+**Schema version:** 57
+**Commit summary:** **Tavik Lv 6 → 8 unlocks Divine Strike (Life Domain Lv 8+): +1d8 radiant on the first weapon hit per turn, auto-applied via the `/attack` auto-uplifts hook.** Once-per-turn lock uses `combatant.economy.divine_strike_used` — exact mirror of the v2.20.0 Colossus Slayer flag pattern. Subclass-gated (Life Domain only); other Cleric domains have different Lv 8 features (War's War God's Blessing, Light's Improved Flare, etc.) which can slot into the same uplifts pipeline with their own `source` tags. Prof bonus stays +3 (Lv 5-8 band) — no attack-bonus drift in any harness test.
+**Description:** Three-file change. **(1)** `app/demo_seed.py` `_cleric_sheet` — Tavik bumped Lv 6 → Lv 8. HP 51 → 67 (+8 per level via avg d8 5 + CON +2 + Dwarven Toughness +1), hit_dice 6 → 8, L4 spell slots gained at 2 total (Lv 8 cleric base 4/3/3/2). Added `divine-strike` class_features row. **(2)** `app/routes/tabletop_routes.py` — `_compute_attack_auto_uplifts` gains a 4th branch after Colossus Slayer for Divine Strike: cleric_lv ≥ 8 + subclass "life" + target_combatant present + `economy.divine_strike_used` not set → roll 1d8 (or 2d8 at Lv 14+) radiant, append to uplifts with `source: "divine-strike"`. Companion helper `_mark_divine_strike_used` flips the flag, called from `use_attack` after the uplift fires (mirror of `_mark_colossus_slayer_used`). **(3)** `app/templates/tabletop.html` — added `economy.divine_strike_used = false` to both the `battle-next-btn` next-turn handler (~L 6479) and the `battle-start-btn` round-start sweep (~L 6517), alongside the existing Colossus Slayer reset.
+**Description (cont):** Why mirror Colossus Slayer's flag pattern. Both features are "once per turn, on weapon-hit, against any target". The flag lives on the attacker's combatant `economy` dict so it's part of the battle state that broadcasts to all clients and resets cleanly via the existing turn-advance handler. No buff system extension needed; no per-turn dict-of-attackers tracking; no datetime stamps. The Colossus Slayer pattern has been stable since v2.20.0 — copying it keeps the new feature's surface tiny.
+**Description (cont 2):** Subclass-gating intentionally tight. Each Cleric domain's Lv 8 feature is distinct: Life → Divine Strike (radiant), War → War God's Blessing (reaction +10 to ally attack), Light → Improved Flare (reaction blind), Death → Divine Strike (necrotic), Tempest → Divine Strike (thunder/lightning), Trickery → Divine Strike (poison), Nature → Divine Strike (cold/fire/lightning), Forge → Saint of Forge and Fire (resistance to fire). Note that **Divine Strike** appears across multiple domains with different damage types — RAW each domain picks a type. v2.60.0 ships Life Domain only (Tavik is the demo fixture); other domains can plug in by extending the gate to read the domain's preferred type from a curated table. Filed for follow-up if a Death / Tempest / etc. demo cleric gets added.
+**Description (cont 3):** Once-per-turn lock semantics. Flag flips True on the first SUCCESSFUL Divine Strike roll (the auto_uplifts list includes it). Subsequent attacks on the same turn read the flag and skip the uplift. The flag resets when the GM advances the turn (next/start buttons in tabletop.html). Implication: a Cleric who attacks 0 times on their turn (e.g. casts Cure Wounds + dodges) doesn't accumulate stored Divine Strikes — the feature is per-turn, not per-attack-attempt. RAW correct.
+**Description (cont 4):** Harness test churn from the Lv 8 bump. Tavik's attack bonus stays +5 (Warhammer +3 prof + STR +2 = +5). No test in the 482-test suite asserts on Tavik's exact HP / hit_dice / L4 slot count (verified via grep). Spell slot tests don't hardcode the L4 count. Heal tests use `auto_heal_applied > 0` or `>= 7` style assertions which are robust to the level bump.
+**Description (cont 5):** Verification. (a) `curl /version` reports `2.60.0` after `docker compose up -d --build app`. (b) Harness `tests/harness/test_divine_strike.py` (3 tests) — first-hit fires (+1d8 radiant), once-per-turn lock (second attack on same turn doesn't re-fire), non-Cleric skip (Pip Rogue). (c) Full suite 482 + 3 = 485 passing. (d) Manual click-through: Tavik attacks Krieger with Warhammer from the sheet → chat card shows `Divine Strike +N radiant` alongside the weapon damage line; a second Warhammer click on the same turn shows the weapon damage only.
+
+### Added
+- 4th uplift branch in `_compute_attack_auto_uplifts` — Divine Strike (Cleric Lv 8+ Life Domain, once per turn, +1d8 radiant / +2d8 at Lv 14+).
+- `_mark_divine_strike_used(campaign_id, attacker_char_id)` companion helper — flips the once-per-turn lock flag on the attacker's combatant.
+- Client-side turn-advance + round-start handlers in `tabletop.html` now reset `economy.divine_strike_used` alongside `colossus_slayer_used`.
+- Tavik `class_features` array gains a `divine-strike` row.
+- Harness `tests/harness/test_divine_strike.py` — 3 tests covering fire / lock / non-Cleric skip.
+
+### Changed
+- Brother Tavik Stonebrow (Cleric, Life Domain) bumped Lv 6 → Lv 8. HP 51 → 67; hit_dice 6 → 8; L4 spell slot added (2 total); prof bonus stays +3 (Lv 5-8 band).
+- `app/version.py` `APP_VERSION` → `2.60.0`.
+- `README.md` version badge → `2.60.0`.
+- `docs/plans/class-content-status.md` — Life Domain subclass row's "Divine Strike (Lv 8) still descriptive" note flips to ✅ shipped.
+- `docs/test-harness-coverage.md` — total test count 482 → 485; new `test_divine_strike.py` section added.
+
+### Notes
+- **Subclass-specific damage type filed.** RAW Divine Strike's damage type varies by domain (Life→radiant, Death→necrotic, Tempest→thunder/lightning, Trickery→poison, Nature→cold/fire/lightning). v2.60.0 ships Life Domain hard-coded to radiant. A future domain-specific demo cleric (Death / Tempest / etc.) would extend the gate with a small `_divine_strike_damage_type(subclass_slug)` lookup table.
+- **Cleric class status after this commit**: every row ✅ except Divine Intervention (Lv 10). Tavik 8 → 10 would bump prof bonus +3 → +4 (cascade), gain L5 slots, gain Lv 9 spell-list options. Filed for a future cycle.
+- **Life Domain mechanical completeness**: Disciple of Life ✅ + Channel Divinity (Preserve Life + Turn Undead) ✅ + Blessed Healer ✅ + Divine Strike ✅. Only Supreme Healing (Lv 17) remains descriptive — a Lv 17 cleric demo is well outside the v1 scope, filed.
+
+---
+
 ## [2.59.2] - 2026-05-25 — "Claim of Faith"
 
 **Schema version:** 57
