@@ -495,6 +495,58 @@
 </section>
 
 <section>
+    <h2>🪟 Glass effect transparency</h2>
+    <p class="muted">Controls how see-through the frosted-glass cards on the tabletop are (Roll Log, sheets, drawers, GM Tools, Characters, Battle cards). <strong>Lower = more see-through</strong> (more of the map shows through); <strong>higher = more opaque</strong> (closer to a solid background). Default is 42% — the v2.50.3 baseline. Live preview updates as you drag.</p>
+    <div style="display:flex;align-items:center;gap:14px;margin-top:12px;flex-wrap:wrap;">
+        <label for="glass-alpha-slider" style="font-size:13px;min-width:7em;">Transparency</label>
+        <input type="range" id="glass-alpha-slider" min="5" max="100" step="1"
+               value="{{ user.glass_alpha or 42 }}"
+               style="flex:1;min-width:200px;max-width:340px;height:32px;cursor:pointer;"
+               aria-label="Glass effect transparency percentage">
+        <span id="glass-alpha-value" style="font-family:monospace;font-size:14px;min-width:3.5em;text-align:right;">{{ user.glass_alpha or 42 }}%</span>
+        <span id="glass-alpha-status" style="font-size:11px;color:#6cb;min-width:5em;"></span>
+    </div>
+    <div style="margin-top:14px;padding:12px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);-webkit-backdrop-filter:blur(16px) saturate(160%);backdrop-filter:blur(16px) saturate(160%);">
+        <strong>Live preview</strong> — this card uses the same frosted-glass recipe as the tabletop. Drag the slider to see the alpha change in real time.
+    </div>
+    <script>
+    (function () {
+        const slider = document.getElementById('glass-alpha-slider');
+        const valOut = document.getElementById('glass-alpha-value');
+        const status = document.getElementById('glass-alpha-status');
+        if (!slider) return;
+        let saveTimer = null;
+        slider.addEventListener('input', () => {
+            const v = slider.value;
+            valOut.textContent = v + '%';
+            // Live preview: update the body's --glass-alpha so the
+            // preview card AND the Roll Log toggle's chrome reflect
+            // the new value immediately.
+            document.body.style.setProperty('--glass-alpha', v + '%');
+            // Debounce the POST so we don't fire one per slider tick.
+            status.textContent = 'saving…';
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(async () => {
+                try {
+                    const resp = await fetch('/api/settings/glass_alpha', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ alpha: parseInt(v, 10) }),
+                    });
+                    if (!resp.ok) throw new Error(await resp.text());
+                    status.textContent = '✓ Saved';
+                    setTimeout(() => { status.textContent = ''; }, 2500);
+                } catch (e) {
+                    status.textContent = '✗ Failed';
+                    console.error(e);
+                }
+            }, 300);
+        });
+    })();
+    </script>
+</section>
+
+<section>
     <h2>📜 Roll log position</h2>
     <p class="muted">Where the Roll Log drawer opens on the tabletop. <strong>Right</strong> (default) stacks it with the other tabs in the shared right sidebar. <strong>Left</strong> pulls Roll Log into its own independent drawer on the left edge so it can stay open while you have Battle or Settings open on the right.</p>
     <p class="muted" style="font-size:11px;font-style:italic;">Ignored on phones (≤ 640 px viewport) — the left drawer is 480 px wide and would cover most of the screen. The preference is preserved server-side; rotating to landscape or resizing to a larger window picks it back up on the next page load.</p>

@@ -278,7 +278,7 @@
            glass, not muddy gray. Cards stay legible because text
            tokens are still on a fully opaque token-color (--fg).
            v2.49.139 history: original 78% + 10px tuning. */
-        background: color-mix(in srgb, var(--bg) 42%, transparent);
+        background: color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);
         -webkit-backdrop-filter: blur(16px) saturate(160%);
         backdrop-filter: blur(16px) saturate(160%);
         overflow: hidden;
@@ -473,7 +473,7 @@
         border-radius: 8px;
         border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
         border-left: 3px solid #c8962a;
-        background: color-mix(in srgb, var(--bg) 42%, transparent);
+        background: color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);
         -webkit-backdrop-filter: blur(16px) saturate(160%);
         backdrop-filter: blur(16px) saturate(160%);
         overflow: hidden;
@@ -513,7 +513,7 @@
         border-radius: 8px;
         border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
         border-left: 3px solid var(--accent);
-        background: color-mix(in srgb, var(--bg) 42%, transparent);
+        background: color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);
         -webkit-backdrop-filter: blur(16px) saturate(160%);
         backdrop-filter: blur(16px) saturate(160%);
         overflow: hidden;
@@ -741,7 +741,7 @@
         border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
         border-radius: 8px; overflow: hidden;
         box-shadow: 0 3px 14px rgba(0,0,0,.22);
-        background: color-mix(in srgb, var(--bg) 42%, transparent);
+        background: color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);
         -webkit-backdrop-filter: blur(16px) saturate(160%);
         backdrop-filter: blur(16px) saturate(160%);
     }
@@ -1230,7 +1230,7 @@
         border-radius: 8px;
         margin-bottom: 7px;
         box-shadow: 0 3px 14px rgba(0,0,0,.22);
-        background: color-mix(in srgb, var(--bg) 42%, transparent);
+        background: color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);
         -webkit-backdrop-filter: blur(16px) saturate(160%);
         backdrop-filter: blur(16px) saturate(160%);
     }
@@ -1287,7 +1287,7 @@
         border-radius: 8px;
         overflow: hidden;
         box-shadow: 0 3px 14px rgba(0,0,0,.22);
-        background: color-mix(in srgb, var(--bg) 42%, transparent);
+        background: color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);
         -webkit-backdrop-filter: blur(16px) saturate(160%);
         backdrop-filter: blur(16px) saturate(160%);
     }
@@ -1425,7 +1425,7 @@
         border-radius: 8px;
         overflow: hidden;
         box-shadow: 0 3px 14px rgba(0,0,0,.22);
-        background: color-mix(in srgb, var(--bg) 42%, transparent);
+        background: color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);
         -webkit-backdrop-filter: blur(16px) saturate(160%);
         backdrop-filter: blur(16px) saturate(160%);
     }
@@ -1955,7 +1955,7 @@
            by an opaque rect, so the visual continuity with the rest
            of the sidebar is preserved. #}
         {% if is_gm %}
-        <div style="position:sticky;top:0;z-index:10;margin:0 0 8px;border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.14);background:color-mix(in srgb, var(--bg) 42%, transparent);-webkit-backdrop-filter:blur(16px) saturate(160%);backdrop-filter:blur(16px) saturate(160%);">
+        <div style="position:sticky;top:0;z-index:10;margin:0 0 8px;border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.14);background:color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);-webkit-backdrop-filter:blur(16px) saturate(160%);backdrop-filter:blur(16px) saturate(160%);">
             <div style="background:linear-gradient(135deg,color-mix(in srgb, var(--accent) 13%, transparent),color-mix(in srgb, var(--accent) 8%, transparent));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚙ GM Controls</div>
             <div style="padding:8px;">
                 <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">
@@ -3061,7 +3061,7 @@
            family. The session controls block had a transparent body
            (no bg set) before — now picks up the same bg-mix 42% + blur
            treatment so it visually pairs with .gm-panel below it. #}
-        <div style="margin-bottom:10px;border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);border-radius:8px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.12);background:color-mix(in srgb, var(--bg) 42%, transparent);-webkit-backdrop-filter:blur(16px) saturate(160%);backdrop-filter:blur(16px) saturate(160%);">
+        <div style="margin-bottom:10px;border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);border-radius:8px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.12);background:color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);-webkit-backdrop-filter:blur(16px) saturate(160%);backdrop-filter:blur(16px) saturate(160%);">
             <div style="background:linear-gradient(135deg,color-mix(in srgb, var(--accent) 13%, transparent),color-mix(in srgb, var(--accent) 8%, transparent));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">⚡ Session</div>
             <div style="padding:8px 10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                 {% if campaign.session_active %}

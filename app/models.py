@@ -89,6 +89,14 @@ class User(Base):
     # the per-user pattern for theme / font_preference / tab_color.
     roll_log_position: Mapped[str] = mapped_column(String(10), default="right", server_default="right")
 
+    # v2.62.0 — per-user glass / frosted-card transparency. Range 1-100;
+    # default 42 matches the v2.50.3 baseline alpha (every glass card
+    # uses `color-mix(in srgb, var(--bg) <glass_alpha>%, transparent)`).
+    # Higher = more opaque (closer to solid bg); lower = more see-
+    # through. Body element renders `--glass-alpha: <value>%` so the
+    # CSS reads it via `var(--glass-alpha, 42%)`.
+    glass_alpha: Mapped[int] = mapped_column(Integer, default=42, server_default="42")
+
     characters: Mapped[list["Character"]] = relationship(
         back_populates="owner", foreign_keys="Character.owner_user_id"
     )

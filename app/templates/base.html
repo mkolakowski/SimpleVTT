@@ -23,7 +23,7 @@
     <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
     {% block head %}{% endblock %}
 </head>
-<body>
+<body{% if user and user.glass_alpha %} style="--glass-alpha: {{ user.glass_alpha }}%;"{% endif %}>
     <script>
     /* v2.3.28: global fetch wrapper that catches expired-session 401
        responses (``{"detail":"Login required"}``) and bounces the user

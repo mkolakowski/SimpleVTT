@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.62.0] - 2026-05-26 — "Glass Dimmer"
+
+**Schema version:** 58
+**Commit summary:** **Per-user glass / transparency slider lands in /settings.** All 9 frosted-glass card sites on the tabletop (Roll Log, sheets, drawers, GM Tools, Characters, Battle cards) now read their alpha from a `--glass-alpha` CSS variable set on the body from the user's saved value. Default is 42% (matches the v2.50.3 baseline — no visual change for existing users). New `glass_alpha` integer column on `users` + `/api/settings/glass_alpha` POST endpoint + live-preview slider in `/settings`.
+**Description:** Five-file change. **(1)** `app/models.py` — User row gains `glass_alpha: int (default 42, server_default "42")`. **(2)** `app/database.py` — Schema v58 migration: `ALTER TABLE users ADD COLUMN glass_alpha INTEGER NOT NULL DEFAULT 42`. **(3)** `app/routes/user_routes.py` — new `POST /api/settings/glass_alpha` endpoint with a Pydantic `_GlassAlphaBody {alpha: int}` body. Validates `1 ≤ alpha ≤ 100`. **(4)** `app/templates/base.html` — body tag inline `style="--glass-alpha: {{ user.glass_alpha }}%"` when user is logged in. **(5)** `app/templates/tabletop.html` — all 9 `color-mix(in srgb, var(--bg) 42%, transparent)` instances rewritten to `color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent)` via a single `replace_all` edit. **(6)** `app/templates/user_settings.html` — new section above Roll log position with a 5-100% range slider, live-preview card using the same recipe, and a debounced (300 ms) POST handler.
+**Description (cont):** Why a CSS variable instead of inline styles per card. The body element renders the value ONCE; every glass-style declaration in `tabletop.html` reads it via `var(--glass-alpha, 42%)` with a 42% fallback for any context where the body hasn't yet set the variable (e.g. anonymous SSR, error pages, the rare paths where `user` isn't in the template context). Single source of truth; no per-card mutation needed; the JS slider can hot-update the variable for live preview without a page reload.
+**Description (cont 2):** Why 42% as the default. Matches the v2.50.3 alpha that's been the production baseline since v2.50.3 ("bump transparency 55%→42% across all glass cards"). Every existing user gets `42` from the column default; no migration changes their visual experience. Sliding to higher numbers (50-80%) restores something closer to v2.49.246's tuning; lower (15-30%) goes even more see-through for players who want the map dominant.
+**Description (cont 3):** Live preview shape. The slider's `input` event handler does two things: (a) updates a preview-card span showing the percent value, AND (b) writes `document.body.style.setProperty('--glass-alpha', v + '%')` so every glass card on the page (including the live-preview card in the settings section itself) re-renders immediately. A 300 ms debounced POST to `/api/settings/glass_alpha` persists the new value — so dragging fast doesn't fire 100 POSTs, but a single release saves quickly.
+**Description (cont 4):** Range chosen as `[5, 100]` not `[1, 100]`. The slider's `min="5"` keeps the user from rendering glass cards effectively invisible (alpha 1% is so transparent text becomes unreadable against busy map tiles). The server's validation is `[1, 100]` for API-direct callers who want extremes; the UI deliberately caps the bottom at 5%.
+**Description (cont 5):** Verification. (a) `curl /version` reports `2.62.0` + `schema_version 58` after `docker compose up -d --build app`. (b) Migration applied cleanly on the running postgres (no demo reseed needed; the `ADD COLUMN ... DEFAULT 42` populates existing user rows). (c) New harness `tests/harness/test_settings_glass_alpha.py` (4 tests): round-trip happy path, out-of-range above (101), out-of-range below (0), negative. All pass. (d) Manual click-through: open /settings, drag slider — live preview updates immediately; status text reads "✓ Saved" within 300 ms; reload /campaign/1 — Roll Log card uses the new alpha. (e) Full suite 489 + 4 = 493 passing.
+
+### Added
+- `User.glass_alpha: int` column (range 1-100, default 42). Schema v58 migration in `_apply_inline_migrations`.
+- `POST /api/settings/glass_alpha` endpoint with integer 1-100 validation.
+- Live-preview slider in `/settings` with debounced (300 ms) save + body CSS-variable hot-update.
+- Body element renders `style="--glass-alpha: {{ user.glass_alpha }}%"` when logged in.
+- Harness `tests/harness/test_settings_glass_alpha.py` — 4 tests (round-trip + 3 invalid-input cases).
+
+### Changed
+- All 9 `color-mix(in srgb, var(--bg) 42%, transparent)` sites in `app/templates/tabletop.html` rewritten to read `var(--glass-alpha, 42%)`. Single `replace_all` edit; no behavioral change at the default.
+- `app/version.py` `APP_VERSION` → `2.62.0`, `SCHEMA_VERSION` → 58.
+- `README.md` version badge → `2.62.0 · Schema v58`.
+- `docs/test-harness-coverage.md` — total test count 489 → 493; new `test_settings_glass_alpha.py` section.
+
+### Schema
+- v58 (this commit): `ALTER TABLE users ADD COLUMN glass_alpha INTEGER NOT NULL DEFAULT 42`. Idempotent (skipped if column exists).
+
+### Notes
+- **Default preserves the v2.50.3 baseline.** No existing user sees a visual change on first load after the migration; the 42% default matches the hardcoded value they had before.
+- **Live preview without page reload.** The slider hot-updates `--glass-alpha` on the body so the preview card AND any other glass card visible on the settings page (e.g. the Roll Log icon's drawer-tab background if visible) re-render immediately. The persistent value lives on the server; subsequent page loads (or the tabletop in another tab) pick it up via the `base.html` inline style.
+- **Min slider value 5%, not 1%.** Below 5% the cards become unreadable against busy map tiles. API-direct callers can still POST `alpha: 1` if they want the extreme; the UI caps to keep the typical user out of unusable territory.
+- **What's not affected.** The drawer-tab chip background (`rgba(20, 22, 30, 0.55)`), modal overlays (`rgba(0, 0, 0, 0.55)`), and the v2.49.246 / v2.50.4 chrome decorations stay hardcoded — they're not "glass cards" in the v2.50.3 sense and live on different surfaces. Filed if anyone wants those wired into the slider too.
+
+---
+
 ## [2.61.1] - 2026-05-25 — "Cure Carrying"
 
 **Schema version:** 57

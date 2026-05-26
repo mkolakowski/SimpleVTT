@@ -542,6 +542,21 @@ def _apply_inline_migrations() -> None:
                 "VARCHAR(10) NOT NULL DEFAULT 'right'"
             ))
 
+    # ---- Schema v58 (2.62.0): users.glass_alpha ----
+    # Per-user transparency / glass-effect strength for the tabletop's
+    # frosted-card surfaces. Integer percent 1-100; default 42 to
+    # match the v2.50.3 baseline. Body element renders
+    # ``--glass-alpha: Npx`` so all 9 sites in tabletop.html using
+    # ``color-mix(in srgb, var(--bg) 42%, transparent)`` now read
+    # ``var(--bg) var(--glass-alpha, 42%)``.
+    user_cols_v58 = _column_names("users")
+    with engine.begin() as conn:
+        if user_cols_v58 and "glass_alpha" not in user_cols_v58:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN glass_alpha "
+                "INTEGER NOT NULL DEFAULT 42"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

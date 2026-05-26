@@ -453,3 +453,31 @@ def update_roll_log_position(
     user.roll_log_position = body.position
     db.commit()
     return {"ok": True, "roll_log_position": body.position}
+
+
+class _GlassAlphaBody(BaseModel):
+    alpha: int
+
+
+@router.post("/api/settings/glass_alpha")
+def update_glass_alpha(
+    body: _GlassAlphaBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.62.0 — persist the user's frosted-glass card transparency.
+    Integer percent 1-100. Higher = more opaque (closer to solid
+    background); lower = more see-through. Default 42 matches the
+    v2.50.3 baseline alpha; the tabletop body element renders the
+    value as `--glass-alpha: N%` so the 9 glass-card sites in
+    tabletop.html pick it up via `var(--glass-alpha, 42%)`.
+    """
+    if not isinstance(body.alpha, int):
+        raise HTTPException(400, "alpha must be an integer")
+    if body.alpha < 1 or body.alpha > 100:
+        raise HTTPException(
+            400, f"alpha must be in [1, 100]; got {body.alpha}",
+        )
+    user.glass_alpha = body.alpha
+    db.commit()
+    return {"ok": True, "glass_alpha": body.alpha}
