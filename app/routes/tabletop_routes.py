@@ -1972,7 +1972,39 @@ def _eligible_reactions(
             "available": True,
             "unavailable_reason": None,
         }]
-    # Phase 1 doesn't catalog any other trigger events yet.
+    # v2.67.2 Phase 2a — Uncanny Dodge auto-fire announcement.
+    # The trigger fires AFTER the v2.49.243 auto-halve has already
+    # happened (server applies the half + marks the reaction). The
+    # prompt is informational + auditable — the option is a no-op
+    # ack ("OK") rather than a spend, because the reaction has
+    # already been used by the auto-fire branch.
+    if trigger_event == "damage_taken":
+        if not watcher_char_id:
+            return []
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+        except Exception:
+            char = None
+        if not char or not char.sheet:
+            return []
+        if _rogue_level_from_sheet(char.sheet) >= 5:
+            # The "already-fired" UD context is signaled by
+            # ``context.uncanny_dodge_used == True`` on the prompt
+            # entry; the option is ack-only.
+            if context.get("uncanny_dodge_used"):
+                return [{
+                    "key": "uncanny-dodge-ack",
+                    "label": "🛡️ Uncanny Dodge auto-fired (acknowledge)",
+                    "kind": "ack",
+                    "resource_cost": "Reaction (already spent)",
+                    "params": {},
+                    "available": True,
+                    "unavailable_reason": None,
+                }]
+    # Phase 2+ extends this stub with class features, spells, feats,
+    # and items per the plan doc catalog.
     return []
 
 
@@ -2993,6 +3025,34 @@ async def _apply_damage_to_combatant(
                         "source": "uncanny-dodge",
                     },
                 })
+                # v2.67.2 Phase 2a — also surface the auto-fire
+                # through the reaction-prompt pipeline so the popup
+                # + roll-log UX from v2.67.0/v2.67.1 reflects it.
+                # The "uncanny-dodge-ack" option is informational —
+                # auto-fire already spent the reaction; the prompt
+                # is a record, not a decision point.
+                try:
+                    campaign_row = db.query(Campaign).filter(
+                        Campaign.id == campaign_id,
+                    ).first()
+                    if campaign_row:
+                        await _emit_reaction_prompt(
+                            db, campaign_row, combatant,
+                            trigger_event="damage_taken",
+                            summary=(
+                                f"🛡️ Uncanny Dodge auto-halved damage "
+                                f"on {_ud_char.name}: {uncanny_pre_halve} "
+                                f"→ {damage_amount}."
+                            ),
+                            context={
+                                "uncanny_dodge_used": True,
+                                "pre_halve": uncanny_pre_halve,
+                                "post_halve": damage_amount,
+                                "attack_id": attack_id,
+                            },
+                        )
+                except Exception:
+                    pass
         # Apply resistance (Phase B) BEFORE _apply_hp_change so the
         # massive-damage threshold uses the post-resistance number.
         applied, resistance_applied = _resistance_halve(
@@ -12213,6 +12273,12 @@ async def use_reaction(
         await _mark_battle_economy(
             campaign_id, int(watcher_char_id), "reaction",
         )
+    elif reaction_key == "uncanny-dodge-ack":
+        # v2.67.2 Phase 2a — informational ack. Uncanny Dodge already
+        # auto-fired in ``_apply_damage_to_combatant``; this resolves
+        # the prompt without touching state. Reaction is already
+        # marked, damage is already halved.
+        pass
 
     await hub.broadcast(campaign_id, {
         "type": "reaction_prompt_resolved",

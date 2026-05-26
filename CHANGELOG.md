@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.67.2] - 2026-05-26 — "Dodged It"
+
+**Schema version:** 60
+**Commit summary:** **Phase 2a — Uncanny Dodge surfaces through the reaction prompt pipeline.** The v2.49.243 auto-fire behavior is preserved (back-compat: damage still halves automatically + reaction marked), but the new prompt pipeline now ALSO emits a `reaction_prompt(trigger_event="damage_taken")` ack alongside so the v2.67.1 popup + roll-log UX captures it. The `uncanny-dodge-ack` option is informational — clicking it just resolves the prompt; no state mutation, since the reaction was already spent by the auto-fire branch. Full prompt-first flip (auto-fire becomes opt-in) deferred to Phase 2a.1 once more reactions land + the player-side flow is exercised more broadly.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. **(1)** `_eligible_reactions` gains a `damage_taken` case: when `context.uncanny_dodge_used` is True (set by the auto-fire path) and the watcher is a Rogue Lv 5+, returns a single `uncanny-dodge-ack` option (`kind: "ack"`, `resource_cost: "Reaction (already spent)"`). **(2)** `_apply_damage_to_combatant`'s UD branch now also calls `_emit_reaction_prompt` immediately after the auto-fire broadcast, passing `context={"uncanny_dodge_used": True, "pre_halve": pre, "post_halve": damage_amount, "attack_id": attack_id}`. **(3)** `/use_reaction` dispatch gains an `elif reaction_key == "uncanny-dodge-ack"` branch that does nothing — the auto-fire already mutated state; the ack just marks the prompt resolved.
+**Description (cont):** Why ack-only and not prompt-first. RAW Uncanny Dodge auto-applies "when an attacker that you can see hits you with an attack" — the player declares it as the hit lands, not after. The cleanest prompt-first flow needs:
+- Server pauses damage application
+- Prompt fires
+- Player clicks → server applies halved; or timeout → applies full
+This requires net-new pending-damage state machinery. The intermediate "apply full, then offer rollback to halved" UX is awkward (player sees damage land, then has to claim it back). The ack-only approach in this commit gives Phase 2a's intended UX outcome — **the player sees a popup + audit entry every time UD fires** — without the pending-damage complexity. Phase 2a.1 will add the pending-damage flow + a per-user `auto_spend_uncanny_dodge` toggle that gates between the current auto-fire and the new prompt-first paths.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.67.2`. (b) New `test_uncanny_dodge_emits_reaction_prompt` test: NPC attacks Pip (Rogue Lv 5) with flat 6 damage, asserts `damage_applied == 3` (legacy UD half), asserts `reaction_prompt` broadcast fires with `uncanny-dodge-ack` option, then POSTs `/use_reaction` with the ack key → 200 + `reaction_prompt_resolved` broadcast. (c) The existing 2 v2.49.243 UD tests pass unchanged (no behavior change to the auto-fire path).
+
+### Added
+- `damage_taken` trigger event in `_eligible_reactions` (ack-only Uncanny Dodge option when `context.uncanny_dodge_used == True`).
+- `_emit_reaction_prompt` call in `_apply_damage_to_combatant`'s UD auto-fire branch.
+- `uncanny-dodge-ack` dispatch case in `/use_reaction`.
+- Harness `test_uncanny_dodge_emits_reaction_prompt` covering the auto-fire + prompt + ack cycle.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.67.2`.
+- `README.md` version badge → `2.67.2`.
+- `docs/plans/reactions-automation.md` — Phase 2a marked 🟠 partial (ack-only); Phase 2a.1 prompt-first filed.
+- `docs/test-harness-coverage.md` — total test count 526 → 527.
+
+### Notes
+- **Legacy auto-fire preserved.** Existing v2.49.243 UD tests pass unchanged. The new prompt is additive — it doesn't change WHAT happens, only adds a player-facing record.
+- **Phase 2a.1 filed.** Prompt-first flow + `auto_spend_uncanny_dodge` opt-in stays on the roadmap; needs pending-damage state model.
+- **The Rogue's owning user sees the popup automatically.** `_resolve_watcher_user_ids` returns `[owner_user_id, gm_user_id]` so both Pip's owner (alice) and the GM see the prompt. Non-owners don't (client-side `target_user_ids` filter).
+
+---
+
 ## [2.67.1] - 2026-05-26 — "The Floating Card"
 
 **Schema version:** 60

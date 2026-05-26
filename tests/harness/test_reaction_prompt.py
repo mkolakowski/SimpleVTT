@@ -319,3 +319,149 @@ async def test_reaction_prompt_mode_setting_invalid(gm_client):
         json={"mode": "spam-the-popup"},
     )
     assert resp.status_code == 400, resp.text
+
+
+# ── v2.67.2 — Phase 2a: Uncanny Dodge prompt announcement ──
+
+
+async def test_uncanny_dodge_emits_reaction_prompt(
+    gm_client, gm_ws, roster,
+):
+    """v2.67.2 — after v2.49.243 auto-fires Uncanny Dodge on Pip (Rogue
+    Lv 5+), the new prompt pipeline emits a `reaction_prompt(
+    trigger_event="damage_taken")` ack so the popup + roll-log UX
+    captures it. The option key is `uncanny-dodge-ack`.
+
+    Legacy auto-fire behavior is unchanged (damage halved, reaction
+    marked, feature_used broadcast still fires) — this test only
+    asserts the new prompt is emitted alongside.
+    """
+    pip = roster["Pip Quickfingers"]
+
+    # Force auto_apply_damage on so _apply_damage_to_combatant runs.
+    form = {
+        "name": "Demo Campaign",
+        "description": "demo",
+        "game_system": "dnd5e",
+        "gm_tab_color": "",
+        "font_override": "",
+        "default_encounter_id": "",
+        "hp_threshold_1": "",
+        "hp_threshold_2": "",
+        "hp_threshold_3": "",
+        "hp_threshold_4": "",
+        "auto_play_playlist_id": "",
+        "auto_play_mode": "order",
+        "auto_play_initial_volume": "0.7",
+        "auto_apply_damage": "on",
+    }
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings",
+        data=form, follow_redirects=False,
+    )
+    try:
+        pip_cid = f"tok_ud_{pip['id']}"
+        bandit_cid = "npc_bandit_ud_prompt"
+        await _seed_battle(gm_client, [
+            {
+                "id": bandit_cid,
+                "char_id": None,
+                "token_template_id": 1,
+                "name": "Bandit",
+                "initiative": 12,
+                "hp_current": 11, "hp_max": 11,
+                "buffs": [],
+                "economy": {
+                    "action": False, "bonus": False,
+                    "reaction": False, "movement": 0,
+                },
+            },
+            {
+                "id": pip_cid,
+                "char_id": pip["id"],
+                "name": pip["name"],
+                "initiative": 10,
+                "hp_current": 33, "hp_max": 33,
+                "buffs": [],
+                "economy": {
+                    "action": False, "bonus": False,
+                    "reaction": False, "movement": 0,
+                },
+            },
+        ])
+        await asyncio.sleep(0.15)
+        gm_ws.mark()
+
+        # Probe until a hit lands. Flat +10 attack + flat 6 damage
+        # always hits Pip's AC and applies 3 (UD halves 6 → 3).
+        landed = None
+        for _ in range(20):
+            r = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/npc_attack",
+                json={
+                    "combatant_id": bandit_cid,
+                    "action_name": "Greatclub",
+                    "attack_bonus": "+10",
+                    "damage": "6",
+                    "damage_type": "bludgeoning",
+                    "target_combatant_id": pip_cid,
+                },
+            )
+            assert r.status_code == 200, r.text
+            data = r.json()
+            if data.get("hit") and data.get("damage_applied", 0) > 0:
+                landed = data
+                break
+        assert landed, "expected at least one hit in 20 swings"
+        # UD halved 6 → 3.
+        assert landed["damage_applied"] == 3
+
+        # New prompt fired alongside the legacy feature_used advisory.
+        await asyncio.sleep(0.2)
+        prompts = _prompt_broadcasts(gm_ws)
+        matching = [
+            m for m in prompts
+            if (m.get("data") or {}).get("watcher_char_id") == pip["id"]
+            and (m.get("data") or {}).get("trigger_event")
+            == "damage_taken"
+        ]
+        assert matching, (
+            f"expected reaction_prompt(damage_taken) for Pip; "
+            f"buffered prompts: "
+            f"{[(m.get('data') or {}).get('trigger_event') for m in prompts]}"
+        )
+        keys = [
+            o.get("key")
+            for o in matching[0]["data"].get("options", [])
+        ]
+        assert "uncanny-dodge-ack" in keys, (
+            f"expected uncanny-dodge-ack option; got {keys}"
+        )
+
+        # Ack the prompt — should resolve cleanly without changing
+        # state (legacy auto-fire already did the work).
+        prompt_id = matching[0]["data"]["prompt_id"]
+        gm_ws.mark()
+        ack = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+            json={
+                "prompt_id": prompt_id,
+                "reaction_key": "uncanny-dodge-ack",
+                "watcher_char_id": pip["id"],
+            },
+        )
+        assert ack.status_code == 200, ack.text
+        await asyncio.sleep(0.15)
+        resolved = _resolved_broadcasts(gm_ws)
+        assert any(
+            (m.get("data") or {}).get("prompt_id") == prompt_id
+            for m in resolved
+        ), "expected reaction_prompt_resolved broadcast"
+    finally:
+        # Restore auto_apply_damage = off.
+        form["auto_apply_damage"] = ""
+        del form["auto_apply_damage"]
+        await gm_client.post(
+            f"/campaign/{CAMPAIGN_ID}/settings",
+            data=form, follow_redirects=False,
+        )
