@@ -52,6 +52,8 @@ async def test_wiki_home_renders():
     assert "/wiki/doc/plan-unified-mini-sheet" in resp.text
     # v2.49.186: unified mini-sheet visual mockups companion.
     assert "/wiki/unified-mini-sheet-mockups" in resp.text
+    # v2.66.7: reactions-automation plan listed in the design-plans table.
+    assert "/wiki/doc/plan-reactions-automation" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -200,6 +202,20 @@ async def test_wiki_doc_serves_ruler_plan():
     # The plan's H1 is "Ruler & Range Enforcement — Design Plan".
     assert "ruler" in resp.text.lower()
     assert "range" in resp.text.lower()
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_doc_serves_reactions_automation_plan():
+    """v2.66.7: GET /wiki/doc/plan-reactions-automation — 200 + body
+    contains the plan's H1 + the nav menu. Resolves through
+    _DOC_ALLOWLIST to ``docs/plans/reactions-automation.md``.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/doc/plan-reactions-automation")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # The plan's H1 is "Reactions Automation — Design Plan".
+    assert "reactions automation" in resp.text.lower()
     assert 'class="wiki-nav"' in resp.text
 
 

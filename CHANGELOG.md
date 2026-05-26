@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.66.7] - 2026-05-26 — "Permission to React"
+
+**Schema version:** 59
+**Commit summary:** **Reactions-automation design plan lands.** New `docs/plans/reactions-automation.md` captures the full design for a per-user prompt UX that fires whenever a player has a reaction available + a trigger event matches a reaction in their catalog. Unifies the bespoke v2.66.0+ OA / Sentinel advisories under a single `reaction_prompt` WS broadcast + new `/use_reaction` endpoint + per-user `reaction_prompt_mode` setting. Catalogs every RAW reaction (class features, feats, spells, items, monsters) with current status, trigger, cost, effect. 7-phase implementation roadmap. Surfaces the plan through the wiki per the CLAUDE.md rule.
+**Description:** Five files. **(1)** `docs/plans/reactions-automation.md` — new ~12 KB design doc. Covers: goal, the existing reaction surfaces it builds on, a `reaction_prompt` broadcast shape with per-user `target_user_ids` routing, a `/use_reaction` consolidated endpoint with `prompt_id` replay guard, the trigger-event taxonomy (10 events: damage_taken, attack_targeted, spell_cast_near, save_failed, ally_attacked_near, creature_exits_reach, creature_enters_reach, falling, crit_against_you, ally_drops_to_zero), an exhaustive reaction catalog in 5 categories (A: class features, B: feats, C: reaction spells, D: items, E: monster reactions), UX details (roll-log + popup + cross-client coordination), 7 implementation phases, out-of-scope list, and 6 open questions. **(2)** `app/routes/wiki_routes.py` — new `_DOC_ALLOWLIST` entry `"plan-reactions-automation"`. **(3)** `app/templates/wiki.html` — new row in the Design plans table. **(4)** `docs/wiki/README.md` — same. **(5)** `tests/harness/test_wiki.py` — new `test_wiki_doc_serves_reactions_automation_plan` smoke test + asserting the new slug appears on the landing page.
+**Description (cont):** Why the plan flips auto-fire to always-prompt by default. Today's Uncanny Dodge (v2.49.243) auto-consumes the reaction the instant a Rogue takes damage. Players have complained that they wanted to save it for the second hit. The plan's framework still allows auto-fire as a per-user opt-in setting, but the default is "show the prompt, let the player click." Roll-log entry captures both the offered options + the player's choice (or decline) for auditability.
+**Description (cont 2):** Why the trigger-event taxonomy is fixed-size. Reactions are a small set of game events — RAW doesn't add new trigger types every release. A fixed enum makes the dispatch table easy to maintain. Each event names exactly what fires it (which endpoint, which condition) so future reactions just register against the existing event keys.
+**Description (cont 3):** Verification. (a) `curl /version` reports `2.66.7` after `docker compose up -d --build app`. (b) `curl /wiki/doc/plan-reactions-automation` returns 200 + the plan's H1. (c) Suite count 518 + 1 = 519.
+
+### Added
+- `docs/plans/reactions-automation.md` — 7-phase design plan unifying reaction prompts.
+- `_DOC_ALLOWLIST["plan-reactions-automation"]` in `app/routes/wiki_routes.py`.
+- Landing-page row in `app/templates/wiki.html` + `docs/wiki/README.md`.
+- Harness `test_wiki_doc_serves_reactions_automation_plan` + landing-page assertion in `test_wiki_home_renders`.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.66.7`.
+- `README.md` version badge → `2.66.7`.
+- `docs/test-harness-coverage.md` — total test count 518 → 519.
+
+### Notes
+- **Doc-only.** No runtime code changes. Implementation lands incrementally across Phases 1-7 in subsequent commits.
+- **Catalog is exhaustive of PHB + XGE + TCoE common reactions.** Homebrew + edge cases (eldritch invocations like Dreadful Word) are filed as needed when their content lands.
+
+---
+
 ## [2.66.6] - 2026-05-26 — "The Sentinel's Watch (NPC Edition)"
 
 **Schema version:** 59
