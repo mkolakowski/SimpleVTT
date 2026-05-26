@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 514 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.66.4, 2026-05-26).
+**Total tests:** 517 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.66.5, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -772,6 +772,9 @@ v2.66.0 — F1 follow-ups: Aura conscious-check + Opportunity Attack trigger. `_
 | `test_oa_npc_reach_parses_from_monster_action_desc` | v2.66.2 — Hill Giant TokenTemplate via SRD slug `hill-giant` (Greatclub desc contains "reach 10 ft.") → spawn token + seed battle with the giant 10 ft from Krieger → Krieger moves to 15 ft → OA fires with `watcher_reach_ft=10.0` parsed from action desc (no explicit override). |
 | `test_oa_polearm_master_fires_on_enter_reach` | v2.66.4 — Tavik seeded with `polearm_master=True` + `melee_reach_ft=10` → Krieger moves from 15 ft to 10 ft → enter-reach OA fires with `trigger_type="enter"` + broadcast desc references "Polearm Master". |
 | `test_oa_enter_reach_skips_without_polearm_master` | Control — same geometry, but Tavik has reach 10 ft without the Polearm Master flag → no enter-reach OA (only exit-reach fires for standard combatants). |
+| `test_sentinel_fires_when_ally_attacks_target_near_watcher` | v2.66.5 — Tavik flagged with `sentinel=True`; placed 5 ft from Krieger. Krieger attacks Pip → `sentinel_triggers` lists Tavik + broadcast `feature_used(source=sentinel-attack-trigger)` desc references "Sentinel". |
+| `test_sentinel_skips_when_watcher_is_the_target` | Control — Krieger attacks Tavik (the sentinel) directly → no trigger (RAW: watcher must not be the target). |
+| `test_sentinel_skips_without_feat_flag` | Control — same geometry without the `sentinel` flag → no trigger. |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

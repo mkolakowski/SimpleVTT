@@ -10,6 +10,38 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.66.5] - 2026-05-26 — "The Sentinel's Watch"
+
+**Schema version:** 59
+**Commit summary:** **Sentinel feat — effect 3 (ally-attacked-near-you advisory) wired into `/attack`.** RAW Sentinel effect 3: "When a creature within 5 ft of you makes an attack against a target other than you (and that target doesn't have this feat), you can use your reaction to make a melee weapon attack against the attacking creature." New `_combatant_has_sentinel(db, combatant)` helper (mirrors v2.66.4 Polearm Master shape — explicit `sentinel: True` field OR PC `sheet.feats` slug match). New `_check_sentinel_attack_triggers(...)` walks combatants for any Sentinel watcher within 5 ft of the attacker, excluding the attacker + the target, and skipping the trigger entirely when the target has Sentinel too (RAW exception honored). `/attack` calls `_broadcast_sentinel_attack_triggers` just before the response: fires one `feature_used(source="sentinel-attack-trigger")` per qualifier and surfaces the list as `sentinel_triggers` on the response.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. **(1)** `_combatant_has_sentinel` helper — same pattern as `_combatant_has_polearm_master`: explicit flag tier first, then PC sheet derivation via `sheet.feats` slug match. **(2)** `_check_sentinel_attack_triggers(db, campaign_id, attacker_combatant_id, attacker_char_id, target_combatant_id)` helper. Loads the active battle, finds the attacker's combatant by combatant id OR char id, resolves their token position (PC via `char_id`; NPC via `source_token_id`), and walks every other combatant skipping the target. For each remaining combatant: skip if their reaction is used, skip if they don't have Sentinel, skip if they have no token on the active map, skip if they're > 5 ft from the attacker. Returns the survivors with `watcher_combatant_id` / `watcher_name` / `watcher_char_id` / `watcher_color` / `watcher_token_id` / `dist_ft` fields. **(3)** New `_broadcast_sentinel_attack_triggers` async helper invoked from `/attack` just before the response dict — broadcasts one `feature_used(source="sentinel-attack-trigger")` per trigger and returns the trigger list (minus broadcast-specific fields) for the response echo.
+**Description (cont):** v1 simplifications still filed:
+- **Effect 1 (OA hit → speed 0) not modeled.** RAW: when an OA hits, the target's speed becomes 0 for the rest of the turn. Today the OA helper is pure advisory (no auto-fire) and we don't have a "speed-zeroed-this-turn" buff key yet. Filed for follow-up that pairs auto-fire + speed-buff plumbing.
+- **Effect 2 (Disengage bypass denial) not modeled.** RAW: Sentinel ignores the target's Disengage action. SimpleVTT doesn't model the Disengage action today (no "current turn dodged/disengaged" state); filed alongside Sentinel effect 2 + Polearm Master interaction with Disengage.
+- **Effect 3 only fires on `/attack`** — not yet wired into `/npc_attack` or `/cast_spell` (RAW Sentinel triggers on any attack including spell-attack rolls, not just weapon attacks). The same helper trivially extends to those endpoints; filed.
+- **Target-has-Sentinel exception** IS honored — the helper short-circuits when the target also has the feat, matching the RAW "and that target doesn't have this feat".
+**Description (cont 2):** Why pre-await the broadcast helper instead of inlining. The /attack response is a single `return {...}` dict literal that includes `sentinel_triggers` as a field. Computing the list AND broadcasting requires `await hub.broadcast(...)`, which can't live inside a dict comprehension. Awaiting `_broadcast_sentinel_attack_triggers` into a local variable above the return is the clean pattern — same shape v2.62.1 used for the Sneak Attack ally-adjacency advisory.
+**Description (cont 3):** Verification. (a) `curl /version` reports `2.66.5` after `docker compose up -d --build app`. (b) Three new tests in `tests/harness/test_opportunity_attack.py`: `test_sentinel_fires_when_ally_attacks_target_near_watcher` (Krieger attacks Pip, Tavik is the sentinel 5 ft from Krieger — trigger fires + broadcast desc mentions "Sentinel"); `test_sentinel_skips_when_watcher_is_the_target` (Krieger attacks Tavik who has sentinel — no trigger because the watcher IS the target); `test_sentinel_skips_without_feat_flag` (control — same geometry without the flag → no trigger). (c) Suite count 514 + 3 = 517.
+
+### Added
+- `_combatant_has_sentinel(db, combatant) -> bool` helper — explicit override + PC `sheet.feats` slug detection.
+- `_check_sentinel_attack_triggers(...)` helper — walks combatants for Sentinel watchers within 5 ft of the attacker.
+- `_broadcast_sentinel_attack_triggers` async wrapper — fires `feature_used(source="sentinel-attack-trigger")` per qualifier.
+- `sentinel_triggers` array on `/attack` response.
+- Harness `test_opportunity_attack.py` — 3 new tests (firing, watcher-is-target control, no-feat control).
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.66.5`.
+- `README.md` version badge → `2.66.5`.
+- `docs/plans/class-content-status.md` — Sentinel filing flipped from ⚪ to ✅ shipped (effect 3).
+- `docs/test-harness-coverage.md` — total test count 514 → 517.
+
+### Notes
+- **Effect 1 + 2 filed.** OA-hit speed-zero and Disengage-bypass denial both need infrastructure that doesn't exist today; deferred.
+- **`/attack` only.** Spell attacks + NPC attacks not yet wired. The helper is reusable.
+
+---
+
 ## [2.66.4] - 2026-05-26 — "The Quarterstaff"
 
 **Schema version:** 59

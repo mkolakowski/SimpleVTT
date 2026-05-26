@@ -1444,6 +1444,169 @@ def _distance_ft_between_chars(
 #     the attack. Player UI decides whether to spend.
 #   - Watchers whose reaction is already used in this round are
 #     skipped (no spam broadcasts).
+# v2.66.5 — Sentinel feat detection. Same shape as Polearm Master:
+# explicit ``sentinel: True`` on the combatant dict (GM flag for
+# NPCs) or PC ``sheet.feats`` entry with slug "sentinel".
+def _combatant_has_sentinel(
+    db: Session, combatant: dict,
+) -> bool:
+    explicit = combatant.get("sentinel")
+    if explicit is not None:
+        return bool(explicit)
+    char_id = combatant.get("char_id")
+    if char_id:
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(char_id),
+            ).first()
+        except Exception:
+            char = None
+        if char and char.sheet:
+            for f in (char.sheet.get("feats") or []):
+                if not isinstance(f, dict):
+                    continue
+                slug = (f.get("slug") or "").strip().lower()
+                if slug == "sentinel":
+                    return True
+                name = (f.get("name") or "").strip().lower().replace(" ", "-")
+                if name == "sentinel":
+                    return True
+    return False
+
+
+# v2.66.5 — Sentinel "ally attacked near you" trigger. RAW (PHB
+# Sentinel effect 3): "When a creature within 5 feet of you makes
+# an attack against a target other than you (and that target doesn't
+# have this feat), you can use your reaction to make a melee weapon
+# attack against the attacking creature."
+#
+# Fires on every weapon attack. Walks combatants for any Sentinel
+# watcher (not the attacker, not the target) within 5 ft of the
+# attacker whose reaction is still available. Pure advisory — does
+# NOT auto-fire the reaction.
+#
+# v1 simplifications:
+#   - Always 5 ft (RAW). No per-watcher tweak.
+#   - Target-has-Sentinel exception (the RAW "and that target doesn't
+#     have this feat") IS honored — Sentinel watchers can't trigger
+#     when the attack target ALSO has Sentinel.
+#   - Hostility / visibility not gated (mirror of OA simplifications).
+def _check_sentinel_attack_triggers(
+    db: Session, campaign_id: int,
+    attacker_combatant_id: str | None,
+    attacker_char_id: int | None,
+    target_combatant_id: str | None,
+) -> list[dict]:
+    """Return list of provoked Sentinel triggers. Each entry shape
+    mirrors the OA trigger dict: ``{watcher_combatant_id,
+    watcher_name, watcher_char_id, watcher_color, watcher_token_id,
+    dist_ft}``. Empty list when no active battle, no active map, or
+    no qualifying watcher.
+    """
+    if not attacker_combatant_id and not attacker_char_id:
+        return []
+    state = hub.get_battle(campaign_id)
+    if not state:
+        return []
+    combatants = state.get("combatants") or []
+    if not combatants:
+        return []
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not campaign.active_map_id:
+        return []
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        return []
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+    grid_size_px = int(map_row.grid_size_px)
+
+    # Locate the attacker's combatant + token position.
+    attacker_combatant = None
+    for c in combatants:
+        if attacker_combatant_id and c.get("id") == attacker_combatant_id:
+            attacker_combatant = c
+            break
+        if (
+            attacker_char_id and c.get("char_id") == int(attacker_char_id)
+        ):
+            attacker_combatant = c
+            break
+    if attacker_combatant is None:
+        return []
+    attacker_token = None
+    src_id = attacker_combatant.get("source_token_id")
+    if src_id:
+        attacker_token = db.query(Token).filter(
+            Token.id == int(src_id), Token.map_id == map_row.id,
+        ).first()
+    if attacker_token is None and attacker_combatant.get("char_id"):
+        attacker_token = db.query(Token).filter(
+            Token.character_id == int(attacker_combatant["char_id"]),
+            Token.map_id == map_row.id,
+        ).first()
+    if attacker_token is None:
+        return []
+    ax = float(attacker_token.x or 0)
+    ay = float(attacker_token.y or 0)
+
+    # RAW exception: skip Sentinel triggers when the target ALSO has
+    # the Sentinel feat. Sentinel doesn't fire watcher-to-watcher.
+    if target_combatant_id:
+        target_combatant = None
+        for c in combatants:
+            if c.get("id") == target_combatant_id:
+                target_combatant = c
+                break
+        if target_combatant is not None:
+            if _combatant_has_sentinel(db, target_combatant):
+                return []
+
+    SENTINEL_REACH_FT = 5.0
+    triggers: list[dict] = []
+    for c in combatants:
+        if c.get("id") == (attacker_combatant_id or attacker_combatant.get("id")):
+            continue
+        if target_combatant_id and c.get("id") == target_combatant_id:
+            continue
+        economy = c.get("economy") or {}
+        if bool(economy.get("reaction")):
+            continue
+        if not _combatant_has_sentinel(db, c):
+            continue
+        # Locate watcher's token.
+        watcher_token = None
+        wsrc = c.get("source_token_id")
+        if wsrc:
+            watcher_token = db.query(Token).filter(
+                Token.id == int(wsrc), Token.map_id == map_row.id,
+            ).first()
+        if watcher_token is None and c.get("char_id"):
+            watcher_token = db.query(Token).filter(
+                Token.character_id == int(c["char_id"]),
+                Token.map_id == map_row.id,
+            ).first()
+        if watcher_token is None:
+            continue
+        wx = float(watcher_token.x or 0)
+        wy = float(watcher_token.y or 0)
+        dist = _distance_ft_between_points(
+            grid_size_px, grid_type, wx, wy, ax, ay,
+        )
+        if dist > SENTINEL_REACH_FT:
+            continue
+        triggers.append({
+            "watcher_combatant_id": c.get("id"),
+            "watcher_name": c.get("name") or "Combatant",
+            "watcher_char_id": c.get("char_id"),
+            "watcher_color": c.get("color"),
+            "watcher_token_id": int(watcher_token.id),
+            "dist_ft": dist,
+        })
+    return triggers
+
+
 # v2.66.4 — Polearm Master feat detection. RAW (PHB feat):
 # "While you are wielding a glaive, halberd, pike, quarterstaff, or
 # spear, other creatures provoke an opportunity attack from you when
@@ -20165,6 +20328,18 @@ async def use_attack(
         _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
     else:
         await _mark_battle_economy(campaign_id, char.id, "action")
+    # v2.66.5 — Sentinel feat advisory. Walk for any Sentinel watcher
+    # within 5 ft of the attacker who isn't the target. Emits one
+    # `feature_used(source="sentinel-attack-trigger")` per qualifier
+    # and returns the list for the response echo below.
+    try:
+        _sentinel_triggers_for_response = (
+            await _broadcast_sentinel_attack_triggers(
+                db, campaign_id, char.id, target_combatant_id, name,
+            )
+        )
+    except Exception:
+        _sentinel_triggers_for_response = []
     # Return the attack + damage totals so the sheet's .atk-strike handler can
     # fire the shared roll-toast immediately. The broadcast still drives the
     # tabletop's roll-card path; this echo gives the rolling player a popup
@@ -20220,7 +20395,79 @@ async def use_attack(
         # v2.49.85 — echo the per-target outcomes so the rolling player's
         # local toast can render the multi-target summary without WS lag.
         "auto_attack_targets": auto_attack_targets,
+        # v2.66.5 — Sentinel feat advisory. RAW effect 3: a Sentinel
+        # within 5 ft of the attacker can use their reaction to make a
+        # melee attack against the attacker (when the attack target
+        # isn't themselves + doesn't have Sentinel). Broadcast +
+        # response list populated by ``_broadcast_sentinel_attack_triggers``
+        # called above.
+        "sentinel_triggers": _sentinel_triggers_for_response,
     }
+
+
+async def _broadcast_sentinel_attack_triggers(
+    db: Session, campaign_id: int, attacker_char_id: int,
+    target_combatant_id: str | None, attack_name: str,
+) -> list[dict]:
+    """v2.66.5 — broadcast Sentinel advisories + return the trigger
+    list for the response. Fires one `feature_used(source=
+    "sentinel-attack-trigger")` per qualifying watcher. The returned
+    list (without WS broadcast metadata) gets surfaced on the /attack
+    response so the rolling player's local toast can render the
+    advisory without WS lag.
+    """
+    triggers = _check_sentinel_attack_triggers(
+        db, campaign_id, None, attacker_char_id, target_combatant_id,
+    )
+    if not triggers:
+        return []
+    attacker_name = ""
+    try:
+        attacker_char = db.query(Character).filter(
+            Character.id == int(attacker_char_id),
+        ).first()
+        if attacker_char:
+            attacker_name = attacker_char.name or ""
+    except Exception:
+        pass
+    target_name = (
+        _lookup_combatant_name(campaign_id, target_combatant_id)
+        if target_combatant_id else ""
+    )
+    for trig in triggers:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": trig.get("watcher_char_id"),
+                "character_name": trig.get("watcher_name"),
+                "user_color": trig.get("watcher_color"),
+                "feature_name": "⚔ Sentinel reaction available",
+                "feature_desc": (
+                    f"{attacker_name or 'Attacker'} attacked "
+                    f"{target_name or 'another target'} within 5 ft of you. "
+                    f"Sentinel lets you use your reaction to make a melee "
+                    f"attack against them."
+                ),
+                "source": "sentinel-attack-trigger",
+                "watcher_combatant_id": trig.get("watcher_combatant_id"),
+                "watcher_token_id": trig.get("watcher_token_id"),
+                "attacker_char_id": attacker_char_id,
+                "attacker_name": attacker_name,
+                "attack_name": attack_name,
+                "target_combatant_id": target_combatant_id,
+                "target_name": target_name,
+            },
+        })
+    return [
+        {
+            "watcher_combatant_id": t.get("watcher_combatant_id"),
+            "watcher_name": t.get("watcher_name"),
+            "watcher_char_id": t.get("watcher_char_id"),
+            "watcher_token_id": t.get("watcher_token_id"),
+            "dist_ft": t.get("dist_ft"),
+        }
+        for t in triggers
+    ]
 
 
 # ----------- API: NPC attack (v2.49.164) -----------

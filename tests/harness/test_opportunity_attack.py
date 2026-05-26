@@ -651,3 +651,180 @@ async def test_oa_enter_reach_skips_without_polearm_master(
         f"enter-reach OA should NOT fire without Polearm Master; "
         f"got {matching}"
     )
+
+
+# ── v2.66.5 — Sentinel feat (effect 3: ally attacked near you) ──
+
+
+def _sentinel_broadcasts(gm_ws) -> list:
+    return [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "sentinel-attack-trigger"
+    ]
+
+
+async def test_sentinel_fires_when_ally_attacks_target_near_watcher(
+    gm_client, gm_ws, roster,
+):
+    """v2.66.5 — RAW Sentinel effect 3: "When a creature within 5 ft
+    of you makes an attack against a target other than you (and that
+    target doesn't have this feat), you can use your reaction to make
+    a melee weapon attack against the attacking creature."
+
+    Setup: Krieger (attacker) at (350, 350). Tavik (sentinel) at
+    (420, 350) — 5 ft east of Krieger. Pip (target) at (350, 420) —
+    5 ft south of Krieger, within Greataxe range. Krieger attacks Pip
+    → Tavik is within 5 ft of the attacker (Krieger), not the target
+    (Pip). Sentinel trigger fires.
+    """
+    krieger = roster["Krieger Stonefist"]
+    pip = roster["Pip Quickfingers"]
+    tavik = roster["Brother Tavik Stonebrow"]
+
+    tavik_combatant = _make_combatant(tavik["name"], tavik["id"], init=8)
+    tavik_combatant["sentinel"] = True
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12),
+        _make_combatant(pip["name"], pip["id"], init=10),
+        tavik_combatant,
+    ])
+
+    # Place tokens. Krieger center; Tavik 5 ft east (sentinel watcher);
+    # Pip 5 ft south (target — within Greataxe range).
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    await _place_token(gm_client, pip["id"], 350.0, 420.0)
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Find Pip's combatant id from the seeded battle.
+    pip_combatant_id = f"tok_oa_{pip['id']}"
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": krieger["id"],
+            "attack_index": 0,  # Greataxe
+            "target_combatant_id": pip_combatant_id,
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    triggers = [
+        t for t in (data.get("sentinel_triggers") or [])
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert triggers, (
+        f"expected Sentinel trigger naming Tavik; got "
+        f"sentinel_triggers={data.get('sentinel_triggers')}"
+    )
+
+    # Broadcast assertion.
+    await asyncio.sleep(0.2)
+    sentinel_msgs = _sentinel_broadcasts(gm_ws)
+    tv_msgs = [
+        m for m in sentinel_msgs
+        if (m.get("data") or {}).get("character_id") == tavik["id"]
+    ]
+    assert tv_msgs, (
+        f"expected sentinel-attack-trigger broadcast for Tavik; "
+        f"got: {[(m.get('data') or {}).get('character_name') for m in sentinel_msgs]}"
+    )
+    desc = (tv_msgs[0].get("data") or {}).get("feature_desc") or ""
+    assert "Sentinel" in desc, (
+        f"broadcast desc should reference Sentinel; got {desc!r}"
+    )
+
+
+async def test_sentinel_skips_when_watcher_is_the_target(
+    gm_client, gm_ws, roster,
+):
+    """Control: RAW Sentinel doesn't fire when the watcher IS the
+    target — the watcher would just take the attack normally.
+    Tavik (sentinel) is the target this time; even though he's near
+    himself, no trigger fires.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+
+    tavik_combatant = _make_combatant(tavik["name"], tavik["id"], init=8)
+    tavik_combatant["sentinel"] = True
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12),
+        tavik_combatant,
+    ])
+
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    tavik_combatant_id = f"tok_oa_{tavik['id']}"
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": krieger["id"],
+            "attack_index": 0,
+            "target_combatant_id": tavik_combatant_id,
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    triggers = [
+        t for t in (data.get("sentinel_triggers") or [])
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert not triggers, (
+        f"Sentinel should NOT fire when watcher IS the target; "
+        f"got {triggers}"
+    )
+
+
+async def test_sentinel_skips_without_feat_flag(
+    gm_client, gm_ws, roster,
+):
+    """Control: same geometry as the firing test but no sentinel
+    flag → no broadcast.
+    """
+    krieger = roster["Krieger Stonefist"]
+    pip = roster["Pip Quickfingers"]
+    tavik = roster["Brother Tavik Stonebrow"]
+
+    # No `sentinel: True` on Tavik.
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12),
+        _make_combatant(pip["name"], pip["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    await _place_token(gm_client, pip["id"], 350.0, 420.0)
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    pip_combatant_id = f"tok_oa_{pip['id']}"
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": krieger["id"],
+            "attack_index": 0,
+            "target_combatant_id": pip_combatant_id,
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    triggers = [
+        t for t in (data.get("sentinel_triggers") or [])
+        if t.get("watcher_char_id") == tavik["id"]
+    ]
+    assert not triggers, (
+        f"Sentinel should NOT fire without the feat flag; got {triggers}"
+    )
