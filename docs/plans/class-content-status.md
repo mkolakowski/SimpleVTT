@@ -96,10 +96,70 @@ its plan section here.
 > as "the existing 🟢 / 🟡 spell-related rows now work better"
 > rather than triggering row-by-row status flips.
 
-**Audit conclusion.** The doc as of v2.49.111 accurately reflects
-shipped class-feature work. New row flips will happen when concrete
-class features ship — e.g. the next Monk picker (Patient Defense /
-Step of the Wind), Sorcerer Metamagic, Warlock Pact Boon, etc.
+**Audit conclusion (v2.49.111, 2026-05-22).** The doc as of v2.49.111
+accurately reflects shipped class-feature work. New row flips will
+happen when concrete class features ship — e.g. the next Monk picker
+(Patient Defense / Step of the Wind), Sorcerer Metamagic, Warlock
+Pact Boon, etc.
+
+> **Re-audit (v2.60.1, 2026-05-25):** walked v2.49.112 → v2.60.1 (the
+> 100+ commits since the prior audit). **27 status flips** landed in
+> this window — full report in commit messages + the per-row notes
+> below. Highlights of what flipped from ⚪/🟡 → ✅/🟢:
+>
+> - **Barbarian** — Reckless Attack ✅ (v2.49.238), Danger Sense ✅
+>   (v2.52.0), Feral Instinct ✅ descriptive (v2.57.0). Path of the
+>   Berserker → 🟢 with **Mindless Rage ✅** condition-install
+>   immunity gate (v2.57.0).
+> - **Fighter** — Improved Critical ✅ (v2.49.231), Remarkable
+>   Athlete ✅ (v2.49.237), Indomitable ✅ arm-then-consume buff
+>   (v2.56.0).
+> - **Monk** — Ki options (Patient Defense + Step of the Wind +
+>   Flurry of Blows) ✅ (v2.49.112-114), Wholeness of Body ✅
+>   (v2.49.227), Stillness of Mind ✅ (v2.49.229), Evasion ✅
+>   (v2.51.5).
+> - **Paladin** — Aura of Protection ✅ (v2.53.0) first ally-conferred
+>   save-bonus mechanic, Aura of Devotion ✅ (v2.55.0) first
+>   condition-install immunity gate.
+> - **Cleric** — all 12 canon Channel Divinity domains curated
+>   (v2.56.1-v2.56.2); Destroy Undead ✅ (v2.56.2) folded into Turn
+>   Undead desc; **Life Domain** full mechanical pipeline:
+>   Disciple of Life ✅ + Blessed Healer ✅ (v2.58.0) heal-uplift
+>   hook, AoE loop (v2.59.0), spellcasting-modifier baking
+>   (v2.59.1), legacy heal-claim parity (v2.59.2), Divine Strike ✅
+>   (v2.60.0).
+> - **Rogue** — Uncanny Dodge ✅ (v2.49.243), Evasion ✅ (v2.51.6).
+> - **Bard** — Countercharm ✅ (v2.54.0) first condition-gated save
+>   aura.
+> - **Ranger** — Favored Enemy / Natural Explorer / Land's Stride /
+>   Blindsense all ✅ descriptive (v2.55.1).
+>
+> **Cross-cutting infrastructure status flips** (huge update — see the
+> revised "## Cross-cutting infrastructure plans" section below):
+> Resource option-picker ✅ shipped (Phase 1-3 v2.9.0/14.3/56.1-.2).
+> Action-economy tracker ✅ shipped (Phase 1-4 + strict mode v2.8.0).
+> Combat condition / buff slot ✅ shipped (v2.19.x + v2.38.x condition
+> slots + v2.49.x effects intercepts). Roll-time intercepts 🟢 partial
+> (save-roll construction-time hooks all shipped via v2.52.0-v2.57.0,
+> but attack-roll pre-d20 intercepts for Lucky / Portent still ⚪).
+> Passive trait engine ⚪ unchanged — race traits remain descriptive.
+>
+> **Harness growth**: 351 tests (v2.49.109) → **485 tests** (v2.60.1).
+> +16 new test files for the new feature surfaces.
+
+**Re-audit conclusion (v2.60.1).** The doc has been substantially
+updated. The "Cross-cutting infrastructure plans" section is rewritten
+below to reflect SHIPPED state (sections A, C, E flipped from "filed"
+to "✅ shipped"; B flipped to "🟢 partial" with concrete progress notes;
+D still ⚪). A new "## Missing system frameworks" section enumerates
+the 8 system-level blockers (positional adjacency, fog-of-war,
+difficult-terrain, fall-damage, disease, magical-source-resistance
+gating, component-tracking, condition-undo) and the features each
+blocks. Per-feature implementation plans for the remaining ⚪ items
+are at "## Per-feature implementation plans (⚪ → 🟠)" further down —
+every ⚪ row in the status tables has a corresponding plan entry,
+even when the plan is just "blocked on framework X; defer until
+X ships."
 
 ## Status legend
 
@@ -389,64 +449,248 @@ trait as a row with description.
 These are NOT class/race/feat-specific but block any deeper mechanical
 work above. Filed here so the order-of-operations is clear.
 
-### A. Resource option-picker UI
+**Status legend at the section level** — each subsection (A–E) carries
+its own status badge at the top. The body of each subsection mixes the
+original design plan (preserved) with the shipped-state addendum.
+
+### A. Resource option-picker UI — ✅ SHIPPED (v2.9.0 → v2.56.2)
+
+**Status:** Phase 1–3 shipped. Phase 4 (Lv 6+ CD options, picker
+level-gate, Sorcery Points + Superiority Dice spend pickers) filed.
 
 **Affects:** Channel Divinity (Cleric, Paladin), Ki (Monk), Sorcery
 Points (Sorcerer), Bardic Inspiration (Bard), Superiority Dice (Battle
 Master), Lay on Hands (Paladin), Cleansing Touch, Stroke of Luck.
 
-Today the class-resources panel renders `Name X/Y` and a single "Use"
-button that decrements `current` by 1. The next level of richness is an
-overlay that opens on click and lets the player pick **which option** the
-resource is being spent on (Turn Undead vs Preserve Life, Flurry of
-Blows vs Patient Defense vs Step of the Wind, etc.).
+**What shipped:**
+- v2.9.0 — `showResourceOptionPicker` overlay opens on counter-chip
+  click; reads `_FEATURE_ECONOMY[resource_key].options` for the per-
+  feature option table.
+- v2.14.0 — Life Domain Channel Divinity (Turn Undead, Preserve Life)
+  end-to-end via the picker; Tavik demo fixture.
+- v2.14.3 — Paladin Oath of Devotion Channel Divinity (Sacred Weapon,
+  Turn the Unholy) — same picker, `class+subclass` tag filtering.
+- v2.49.112-114 — Monk Ki spend options (Flurry of Blows, Patient
+  Defense, Step of the Wind) wired via the same shape.
+- v2.56.1 — 8 remaining Cleric domain CD options (Knowledge / Tempest /
+  Trickery / Forge / Grave / Order / Nature / Twilight).
+- v2.56.2 — final 3 Cleric domains (Death / Arcana / Peace); all 12
+  canon domains now covered.
 
-**Plan:** see the Channel Divinity 3-phase plan in conversation /
-2.4.15 commit message. The plan generalizes — the picker is keyed on
-`resource.key` and reads from a per-feature curated table
-(`dnd5e_channel_divinity.js`, `dnd5e_ki_options.js`, etc.) that lists the
-options unlocked at the character's level.
+**What's left (filed):**
+- Lv 6+ CD options (Knowledge: Read Thoughts, Trickery: Cloak of
+  Shadows) + picker level-gate so Lv 2-5 clerics don't see them.
+- Sorcery Points spend picker (Font of Magic: convert SP ↔ slots,
+  Metamagic application) — counter exists, picker doesn't.
+- Superiority Dice spend picker (Battle Master maneuvers) — counter
+  exists, picker doesn't.
+- Bardic Inspiration recipient-side picker (currently the bard's
+  picker is wired but the recipient's "spend a die" timing isn't).
 
-### B. Roll-time intercepts
+### B. Roll-time intercepts — 🟢 PARTIAL (save-roll hooks ✅; attack-roll pre-d20 modals ⚪)
 
-**Affects:** Lucky (Halfling + feat), Reliable Talent (Rogue), Indomitable
-(Fighter), Stroke of Luck (Rogue), Portent (Divination), Bardic
-Inspiration (recipient side), Sneak Attack (uplift), Divine Smite
-(uplift), Improved Critical (Champion).
+**Status:** Save-roll construction-time hooks shipped (v2.52.0 onward).
+Attack-roll pre-d20 intercepts (Lucky reroll, Portent swap, Bardic
+Inspiration recipient die) still filed.
 
-These all want to fire **at the moment a d20 is rolled** — either to
-modify the result (reroll, replace, add) or to trigger a follow-on
-roll (smite damage). Today `/api/.../roll` is a fire-and-forget endpoint;
-adding intercepts means a confirmation-style modal that pauses between
-roll-result-known and result-applied, with affordances for each
-applicable feature.
+**Affects:** Lucky (Halfling + feat), Reliable Talent (Rogue),
+Indomitable (Fighter ✅), Stroke of Luck (Rogue), Portent (Divination),
+Bardic Inspiration (recipient side), Sneak Attack (uplift), Divine
+Smite (uplift), Improved Critical (Champion ✅).
 
-**No plan yet.** Big architectural change — would touch every roll path.
+**What shipped — save-roll path:**
+- v2.52.0 — **Danger Sense** (Barbarian Lv 2+ Dex save adv) via
+  `_pc_has_danger_sense_on_dex_save`. Construction-time hook on
+  `base_expression` swaps `1d20 → 2d20kh1`.
+- v2.53.0 — **Aura of Protection** (Paladin Lv 6+ ally save bonus)
+  via `_aura_of_protection_bonus`. Appended to `base_expression` at
+  roll_request creation (`1d20 → 1d20+N`).
+- v2.54.0 — **Countercharm** (Bard Lv 6+ condition-gated save aura)
+  via `_ally_has_countercharm_active`. Construction-time advantage
+  only when the incoming spell installs Charmed or Frightened (gate
+  via `_spell_installs_countercharmed_condition`).
+- v2.55.0 — **Aura of Devotion** (Paladin Oath of Devotion Lv 7+)
+  condition-install short-circuit at `/roll_request/{id}/respond`
+  via `_ally_has_aura_of_devotion`. Distinct shape: fires AFTER the
+  save resolves to block the consequence-buff install.
+- v2.56.0 — **Indomitable** (Fighter Lv 9+) arm-then-consume via
+  `_saver_has_indomitable_armed`. `/use_indomitable` installs a
+  buff; next save-roll consumes it (swaps `1d20 → 2d20kh1`, removes
+  buff). Buff-based variant of the v2.52.0 pattern.
+- v2.57.0 — **Mindless Rage** (Path of the Berserker Lv 6+)
+  self-targeted condition-install immunity via
+  `_pc_has_rage_active_buff`. Charm/fright install short-circuit
+  keyed off the saver's own rage buff (not an ally aura).
 
-### C. Combat condition / buff slot
+**What's left (attack-roll pre-d20 intercepts):**
+- **Lucky** (Halfling + feat). Reroll a d20 (attack/save/check) before
+  the result is announced. Needs a pre-result modal that pauses the
+  roll between dice land + result applied. Today's roll endpoint
+  (`/roll`) is fire-and-forget; the modal would need to (a) defer the
+  result-application broadcast, (b) present the player with "Use a
+  Luck point?", (c) re-roll if accepted, (d) apply the new result.
+  Big architectural change — touches every roll path.
+- **Portent** (Divination Wizard Lv 2). Roll 2d20 at start of day
+  (LR / SR per-feature), bank the values; later spend one to swap
+  in for ANY d20 anyone rolls (attack / save / check by self or
+  another creature). Needs (a) a banked-values panel on Thalindra's
+  sheet, (b) a roll-time modal offering "swap with portent N?" at
+  every d20 trigger across the campaign — easily 5+ surfaces (PC
+  saves, NPC attacks, ally death saves, etc.).
+- **Reliable Talent** (Rogue Lv 11). Floor-of-10 on proficient skill
+  checks. Needs the skill-check engine to compose `max(rolled, 10)`
+  via the same construction-time hook the save-rolls use. Smaller
+  scope than Lucky — purely additive on top of the roll math.
+- **Stroke of Luck** (Rogue Lv 20). Convert a miss → hit OR a failed
+  check → 20. Per-short-rest counter exists; the conversion needs the
+  pre-result modal. Same shape as Lucky but with a binary "convert"
+  vs "reroll" choice.
+- **Bardic Inspiration (recipient)**. The bard's grant-side is wired;
+  the recipient's "spend a die" timing isn't. Needs a roll-time
+  modal on the recipient's d20 ("Add bardic inspiration die?").
 
-**Affects:** Rage (resistance + adv on STR), Reckless Attack (adv +
-disadvantage incoming), Guided Strike (next attack +10), Bless (+1d4
-on attack/save), Bardic Inspiration (recipient), almost every concentration
-spell.
+**Why the save-roll path was easier than attack-roll**: save rolls go
+through `/roll_request` which has a `base_expression` field assembled
+on the server BEFORE the d20 is rolled. The construction-time hook
+modifies that string before the client receives it. Attack rolls go
+through `/roll` which posts the resolved d20 total back from the
+client — there's no server-side intermediate state for the intercept
+to live in. The attack-roll intercept would require either (a) moving
+attack-roll dice to the server (like save rolls), or (b) extending
+`/roll` with a two-phase commit (post dice → server prompts → client
+confirms/rerolls).
 
-Today the only "buff" surface is the manual conditions list. A
-character would benefit from a structured buff slot: name, duration,
-mod, expiration trigger. Big design surface.
+### C. Combat condition / buff slot — ✅ SHIPPED (v2.19.x → v2.49.x → v2.58.0+)
 
-**No plan yet.**
+**Status:** Buff infrastructure shipped end-to-end. Concentration
+cascade + buff cleanup + condition-install immunity gates all
+operational.
 
-### D. Passive trait engine
+**Affects:** Rage (resistance + adv on STR ✅), Reckless Attack
+(adv + disadv incoming ✅), Bless (+1d4 on attack/save 🟡 still
+descriptive), Bardic Inspiration (recipient 🟡 still descriptive),
+almost every concentration spell (✅ concentration cleanup wired).
 
-**Affects:** every race's Darkvision / damage resistance / saving-throw
-advantage, Sneak Attack reqs, Dwarven Toughness, Fey Ancestry.
+**What shipped:**
+- v2.19.x — combatant `buffs` list as part of battle state;
+  `_install_buff` + `_remove_buff` + `_install_buff_on_combatant_id`
+  helpers; buff dict shape: `key`, `name`, `icon`,
+  `source_caster_id`, `target_combatant_id`, `duration_rounds`,
+  `duration_max`, `concentration`, `effects` (dict or list).
+- v2.38.x — concentration tracking + auto-drop on damage / KO /
+  incapacitation; caster-side concentration buffs cascade-drop
+  associated condition buffs on PCs (`_drop_caster_concentration`).
+- v2.49.x — mechanical effect intercepts: `_attacker_has_str_attack_advantage`
+  (reads `effects.advantage_on=['str_attack']`),
+  `_target_grants_advantage_to_attackers` (reads
+  `effects.incoming_attacks_have_advantage`),
+  `_target_uses_uncanny_dodge`, `_target_uses_evasion`,
+  `_target_has_dodging` (Patient Defense / Dodge action).
+- v2.58.0+ — `_life_domain_heal_uplift` reads caster sheet,
+  `_compute_attack_auto_uplifts` reads attacker buffs + sheet for
+  Divine Strike / Rage / Hex / Hunter's Mark / Colossus Slayer.
+- v2.60.0 — once-per-turn-flag pattern on `combatant.economy` for
+  Colossus Slayer + Divine Strike + on-hit-only resets.
 
-Most racial traits are passive — they apply automatically when a
-specific roll happens (e.g. "Dwarves have advantage on saves against
-poison"). Today they're descriptive only; players manually flip
-advantage / disadvantage at roll time.
+**What's left (filed):**
+- **Bless** (+1d4 on attack rolls + saves). The cleric's Bless cast
+  installs a buff; the wired attack/save paths would read
+  `effects.attack_roll_bonus_dice` + `effects.save_bonus_dice`.
+  Today Bless is data-only (the spell casts but the bonus dice
+  aren't auto-applied to recipients' rolls).
+- **Bardic Inspiration recipient side**. The bard's `/use_bardic_inspiration`
+  installs a buff on the recipient with `effects.inspiration_die`;
+  the d20 paths would consume the die on next roll. Pre-d20 modal
+  needed (cross-references Phase B above).
+- **Suspended condition state** for Mindless Rage's RAW second
+  sentence ("if you ARE charmed when you enter rage, the effect is
+  suspended"). Today Mindless Rage only blocks NEW installs.
+- **Buff-reversal undo** for condition-install. `/undo_attack_damage`
+  reverts HP changes but doesn't un-install conditions; same gap on
+  AoE heals (only first target reverts).
 
-**No plan yet.** Tied to (B) — same intercept point.
+### D. Passive trait engine — ⚪ STILL UNIMPLEMENTED
+
+**Status:** No code. Every racial / class passive trait is purely
+descriptive — the player applies it manually at roll time.
+
+**Affects:** Every race's Darkvision / damage resistance /
+saving-throw advantage; Sneak Attack reqs; Dwarven Toughness (HP);
+Fey Ancestry (charm immunity); Half-Orc Relentless Endurance;
+Tiefling Hellish Resistance.
+
+**Plan (NEW — fills the prior "No plan yet"):**
+
+The engine needs **three distinct primitive types** since racial
+traits don't fit one shape:
+
+1. **Static stat modifiers** (Dwarven Toughness +1 HP/level, ASI +1/+2,
+   Wood Elf base speed 35) — already wired via the sheet schema. No
+   new engine needed; demo seeds bake these into the sheet at PC
+   creation time.
+
+2. **Conditional advantage / disadvantage on d20** (Dwarven
+   Resilience advantage on poison saves, Gnome Cunning advantage
+   vs INT/WIS/CHA magic saves, High Elf Trance advantage on charm
+   saves, Fey Ancestry advantage on charm saves + immunity to
+   sleep). These need a **roll-time gate** that reads:
+   - Roll context (save ability, spell school, damage type if a save
+     reduces damage, condition being applied)
+   - Saver's race slug
+   - Optional level/subclass conditions
+   
+   **Helper sketch:**
+   ```python
+   def _race_grants_save_advantage(
+       saving_char_sheet: dict,
+       save_ability: str,
+       spell_slug: str | None = None,
+       damage_type: str | None = None,
+       condition_key: str | None = None,
+   ) -> tuple[bool, str]:
+       """Returns (applies, race_trait_name) for racial save adv.
+       Reads `sheet["race"]` slug; consults a curated table
+       `_RACE_SAVE_ADVANTAGES` keyed on race slug → list of
+       (save_ability, spell_school?, damage_type?, condition_key?) →
+       trait_name."""
+   ```
+   Same construction-time hook the v2.52.0+ saves use; just an
+   additional source of `2d20kh1` in `base_expression`.
+
+3. **Condition-install immunity gates** (Fey Ancestry charm immunity,
+   Half-Orc Relentless Endurance "drop to 1 HP instead of 0").
+   These need install-site short-circuits like the v2.55.0 Aura of
+   Devotion gate but keyed off the SAVER's race slug instead of an
+   ally aura. Already exists as a pattern; just need a new helper:
+   ```python
+   def _saver_has_race_condition_immunity(
+       saving_char_sheet: dict, condition_key: str,
+   ) -> bool: ...
+   ```
+   Half-Orc Relentless Endurance is shaped differently — it needs a
+   per-long-rest counter + a damage-application intercept that
+   triggers at HP ≤ 0.
+
+**Why filed for follow-up**: tied to (B) advantage-on-d20 work + a
+new race-trait curated table. Each PC class has ~5 racial traits;
+12 classes × 5 ≈ 60 trait entries. Big content investment.
+
+**Suggested phase plan:**
+- **Phase 1** — Static stat mods: confirm every demo PC's racial
+  bonuses are baked into the sheet (already true; doc-only).
+- **Phase 2** — Race-keyed save advantage table + roll-time gate:
+  `_RACE_SAVE_ADVANTAGES` table + `_race_grants_save_advantage` helper
+  + integration at the 5 save-roll construction sites. Ships
+  Dwarven Resilience, Gnome Cunning, High Elf Trance, Fey Ancestry
+  charm-save advantage in one commit.
+- **Phase 3** — Condition-install immunity gate: Fey Ancestry charm
+  immunity via `_saver_has_race_condition_immunity` keyed on race
+  slug. Reuses v2.55.0 AoD install-site short-circuit pattern.
+- **Phase 4** — Half-Orc Relentless Endurance: per-long-rest
+  counter + HP-pinned-to-1 hook in `_apply_damage_to_combatant`.
+- **Phase 5** — Tiefling Infernal Legacy (Hellish Rebuke 1/day,
+  Darkness 1/day): per-day counter + spell-list grant. Ships as a
+  Tiefling demo PC.
 
 ### E. Action-economy tracker
 
@@ -922,25 +1166,311 @@ end-to-end:**
 
 ---
 
+## Missing system frameworks
+
+Beyond the 5 cross-cutting infrastructure sections (A-E) above, there
+are **8 system-level frameworks** that don't yet exist and each blocks
+multiple class/race/feat features. Listed here so the cost/benefit of
+each is visible alongside the unimplemented features that need it.
+
+Format per framework: **what it is**, **what features it blocks**,
+**minimal viable shape** to unblock the gated features (not the full
+RAW-correct system — the v1 simplification that ships the dependent
+features cheaply).
+
+### F1. Token positional adjacency / 5-ft-range checking
+
+**What it is:** A `_distance_ft_between_points(token_a, token_b) → ft`
+helper that reads the canvas token-position state and returns the
+in-game distance in feet between two combatants. Today
+`hub.get_battle(campaign_id)` carries combatants but no canonical
+position field — token positions live in the canvas overlay state,
+not in the battle state shared with feature helpers.
+
+**Blocks:**
+- **Sneak Attack ally-adjacency validation** (Rogue Lv 1) — filed
+  v2.16.0; today the player asserts eligibility (trust-based).
+- **Opportunity Attack** trigger detection — currently no auto-fire on
+  token-drag exit from a hostile creature's space.
+- **Aura of Protection / Aura of Devotion 10 ft radius gate** —
+  v2.53.0 + v2.55.0 fire on ANY paladin in init (oversize aura).
+  Same shape for v2.59.0+ Countercharm 30 ft.
+- **Bardic Inspiration recipient range** — RAW 60 ft; today no check.
+- **Mass Healing Word / Mass Cure Wounds target range** — RAW 60 ft
+  with up to 6 creatures; today the AoE picker doesn't check range.
+- **Sneak Attack "within 5 ft" detection** (alternative to advantage).
+
+**Minimal viable shape:** Canvas state already exposes `token.x_px`
++ `token.y_px` per token; add a `_canvas_token_position(campaign_id,
+char_id) → (x_ft, y_ft) | None` helper that reads the canvas hub
+state (already broadcast via `canvas_update` event) and converts pixel
+coords to feet using the map's `grid_size_px` + `grid_size_ft` fields.
+Then `_distance_ft_between_points` does Pythagorean / Chebyshev
+distance. Reuse in every aura / targeting gate as a soft check — if
+position data is missing, fall back to "no range check" (current
+behavior) so the helpers degrade gracefully.
+
+**Effort estimate:** 1 commit, ~80 LOC + 1 harness test. Big payoff
+since 6+ features unblock immediately.
+
+### F2. Fog-of-war / hidden-token state
+
+**What it is:** A `token.hidden_from_user_ids: list[int]` field on
+tokens, plus the canvas-render logic to omit hidden tokens from
+non-GM viewports. Auto-reveal on damage. A separate concept from
+the existing "invisible" condition (which is mostly RAW-mechanical:
+advantage on attacks, disadvantage against; not strictly hidden from
+sight).
+
+**Blocks:**
+- **Blindsense** (Rogue Lv 14, descriptive v2.55.1) — would let the
+  Rogue see hidden creatures within 10 ft on their viewport.
+- **Hide in Plain Sight** (Ranger Lv 10, no plan) — RAW: 1-min camo
+  with terrain; needs hidden state to be hidable.
+- **Vanish** (Ranger Lv 14, no plan) — Hide as a bonus action without
+  giving away position; same fog-of-war primitive.
+- **Feral Senses** (Ranger Lv 18, no plan) — fight unseen creatures
+  without disadvantage in 30 ft.
+- **Improved Invisibility / Greater Invisibility** spells.
+- **Pass Without Trace** (Druid spell) — tracking-roll modifier on
+  hidden tokens.
+- **Sneak Attack stealth detection** (RAW alternative to
+  advantage / ally adjacent).
+
+**Minimal viable shape:** Add a `hidden_from_user_ids` array on each
+token; canvas-render walks each viewer's user_id and skips matching
+tokens (rendering an empty space). GM viewport always sees everything.
+Auto-reveal on first damage tick: damage-application path appends
+the attacker's user_id to the source-attacker's `revealed_to` list
+and clears `hidden_from_user_ids` for that user. Hide action sets
+`hidden_from_user_ids = [all other player user_ids]`. Filed alongside
+ruler/range (Phase 5+); shares the "per-viewer rendering" concept.
+
+**Effort estimate:** 3-5 commits, several hundred LOC (canvas render,
+hidden-set management, action endpoints). Significant — defer until
+multiple Lv 10+ Ranger features stack up to make the work worthwhile.
+
+### F3. Difficult terrain modeling
+
+**What it is:** A `cell.terrain_difficulty: float` field on each map
+cell (or terrain-tagged polygons) + a movement-cost multiplier when
+a token crosses such cells. The canvas already renders map cells but
+doesn't tag any as difficult.
+
+**Blocks:**
+- **Land's Stride** (Ranger Lv 8, descriptive v2.55.1) — ignore
+  difficult terrain.
+- **Spell-shaped terrain** (Spike Growth, Spirit Guardians, Plant
+  Growth) — RAW: half-speed through.
+- **Druid Wild Shape land-speed bonuses** for terrain-traversing
+  forms (Mountain Goat = ignore difficult terrain RAW).
+- **Monk Slow Fall** (Lv 4, descriptive v2.54.1) — would chain into
+  fall-damage on movement-into-pit cases.
+- **Wizard Misty Step** + **Cleric Word of Recall** — bypass terrain
+  on cast; needs to know what's bypassed.
+
+**Minimal viable shape:** Add `terrain_difficulty` (default 1.0,
+2.0 for hard, 0 for impassable) to the map JSON cell schema. Canvas
+overlay renders hard-terrain cells with a translucent tile. Movement
+breadcrumb (already shipped in v2.8.x) computes the multiplied
+distance. Land's Stride simply ignores the multiplier when the moving
+token's char_id is a Ranger Lv 8+.
+
+**Effort estimate:** 2-3 commits. Small but touches a content-format
+change (existing campaigns' maps don't have terrain tags — need a
+migration or default-to-easy).
+
+### F4. Fall damage helper
+
+**What it is:** A `_apply_fall_damage(combatant, height_ft)` helper
+that applies 1d6 per 10 ft fallen (cap 20d6) as bludgeoning damage.
+Needs height awareness on map cells (3D-ish — pit cells with depth,
+cliff edges).
+
+**Blocks:**
+- **Slow Fall** (Monk Lv 4, descriptive v2.54.1) — reaction to reduce
+  fall damage by 5 × monk level.
+- **Feather Fall** (Wizard / Sorcerer / Bard L1 spell) — full
+  prevention up to 60 ft.
+- **Levitate** / **Fly** + **Earthbind** — flying creatures losing
+  flight take fall damage.
+
+**Minimal viable shape:** Add `cell.height_ft` (default 0) on the map
+cell schema (same migration as F3). When a token drags onto a cell
+with a height_ft delta > 5 from its previous cell, trigger
+`_apply_fall_damage` for the delta. Slow Fall reads the falling PC's
+sheet for `class: "Monk"` + `level >= 4` and reduces.
+
+**Effort estimate:** Same migration as F3 + 1 commit. Pair with F3
+since both touch map cell schema.
+
+### F5. Disease engine
+
+**What it is:** A `diseased` condition + a list of disease types
+(Sewer Plague, Cackle Fever, etc.) + a per-disease save cadence +
+end-conditions. Today no condition slot called "diseased"; no monster
+template grants disease on hit.
+
+**Blocks:**
+- **Divine Health** (Paladin Lv 3, descriptive v2.3.25) — immunity.
+- **Purity of Body** (Monk Lv 10, descriptive v2.49.229) — same.
+- **Lay on Hands disease-cure option** (Paladin Lv 1) — RAW: spend
+  5 HP from the LoH pool to end one disease. v2.10.0 LoH endpoint
+  doesn't surface this option.
+- **Lesser / Greater Restoration** spells — cure disease branches.
+- **Aura of Purity** (Paladin Devotion Lv 7+) — allies in 10 ft
+  resist disease. Sibling to AoD shape.
+
+**Minimal viable shape:** Add `diseased: True` to the condition slot
+(already established system); add a `disease_type: "sewer-plague"`
+field on the buff (info-only — GM applies the per-disease save
+cadence manually); reuse existing condition-install gate path.
+Lay on Hands gets a "Cure Disease" option in its picker (costs 5 HP).
+Lesser Restoration gets a target picker for "end disease" same shape
+as "end poisoned". Divine Health adds a condition-install immunity
+gate keyed on `cond.key == "diseased"`.
+
+**Effort estimate:** 2-3 commits (condition + LoH option +
+Restoration update). Low priority — niche RAW; mostly a content
+hook.
+
+### F6. Magical-vs-mundane-source resistance gating
+
+**What it is:** A `magical: True` flag on attacks + spells (already
+present on spells implicitly — they're magical); plus a resistance-
+lookup that distinguishes "resistance to bludgeoning damage" from
+"resistance to nonmagical bludgeoning damage". Many monsters in the
+SRD have the latter (e.g. Werewolves: resistance to nonmagical B/P/S
+unless silvered).
+
+**Blocks:**
+- **Ki-Empowered Strikes** (Monk Lv 6, descriptive v2.54.1) — unarmed
+  strikes count as magical for resistance.
+- **Improved Divine Smite** (Paladin Lv 11, no plan) — passive +1d8
+  radiant on every weapon hit; the radiant damage is magical.
+- **Magic Weapons** (mundane weapons + the Magic Weapon spell):
+  upgrades a weapon to magical for the duration.
+- **Pact of the Blade** (Warlock Pact Boon, no plan) — pact weapons
+  count as magical.
+- **Brutal Critical** (Barbarian Lv 9, no plan) — extra crit damage;
+  RAW interaction with magical weapons.
+
+**Minimal viable shape:** Extend the resistance check in
+`_apply_damage_to_combatant`. Today `_resistance_halve` checks
+damage type only; extend to read `attack.is_magical` (True for
+spells, weapon attacks if the weapon `properties.magical == True`
+or the attacker has a class feature that makes it so — Ki-Empowered
+Strikes, Magic Weapon spell, Pact of the Blade). When the target has
+`resistances: ["nonmagical-bludgeoning"]` and the attack is magical,
+the resistance doesn't apply. Add `is_magical` field on the attack
+payload that the resistance check reads.
+
+**Effort estimate:** 1-2 commits. Mostly a damage-pipeline schema
+change + monster template updates. Low UI surface.
+
+### F7. Component-tracking system
+
+**What it is:** A list of components per spell (V/S/M) + a
+per-character "ignore components on cast" flag. Today no
+component-cost validation on cast.
+
+**Blocks:**
+- **Archdruid** (Druid Lv 20, descriptive v2.55.1) — ignore V/S/M on
+  druid spells.
+- **Subtle Spell** (Sorcerer Metamagic, filed) — cast without V or S.
+- **Material-component cost validation** for spells with expensive
+  consumables (e.g. Revivify's 300gp diamond, Wish's 25,000gp).
+- **Silence spell interaction** — V-only spells fail in a Silenced
+  area.
+
+**Minimal viable shape:** SRD spells already carry `components: "V, S, M"`
+or similar; parse this at spell-cast time. Add a per-PC
+`ignore_spell_components: list[str]` field (set to `["V", "S", "M"]`
+for Archdruid Lv 20+ Druid spells). Cast-time validation: skip the
+component check if the caster's ignore list matches the spell's
+school/class. Skip silence-zone validation for v1 (too positional).
+
+**Effort estimate:** 1 commit. Mostly schema + a single gate.
+
+### F8. Condition-buff undo / reversal
+
+**What it is:** A reverse-install pipeline for buffs that hold state.
+Today `/undo_attack_damage` reverts HP changes but doesn't un-install
+conditions. Same gap on multi-target heals (only first target reverts).
+
+**Blocks:**
+- **Multi-target heal undo** (v2.59.0 filed). Mass Cure Wounds heals
+  6 targets; undo reverts only target 0.
+- **Condition undo on save-fail-then-save-again** (v2.49.243 file).
+  Charmed installs on save fail; if a follow-on save succeeds and
+  ends the condition, the original install should be undoable.
+- **Indomitable RAW** (Fighter Lv 9). v2.56.0 ships advantage-on-next-
+  save instead of RAW reroll-on-failure because reroll-on-failure
+  needs to undo the install of any condition (Charmed, Paralyzed)
+  that the failed save just landed.
+- **Death Save undo** (filed multiple times) — current overrides flip
+  status but don't reverse cascaded concentration drops.
+
+**Minimal viable shape:** Each `_apply_*` helper writes a per-cast
+reversal entry to a new `_undo_log: dict[cast_id, list[reversal_op]]`.
+Each entry encodes (a) target_combatant_id, (b) old_state (HP, buff
+list snapshot), (c) reversal function. Undo walks the list and
+applies the reversal in reverse order. Snapshot-based design rather
+than per-op replay — robust against state drift.
+
+**Effort estimate:** 3-5 commits. Moderate-to-large refactor (every
+`_apply_*` site needs to write its snapshot). High-value once shipped
+— closes 4+ filed v1 simplifications.
+
+### Framework prioritization
+
+If the question is "what should we build next to unlock the MOST
+unimplemented features?", the ranking is:
+
+1. **F1 Token adjacency** — unblocks 6+ features (Sneak Attack
+   validation, AoP/AoD radius, Bardic recipient range, Mass Cure
+   range, Opportunity Attack). Smallest LOC investment. **Build
+   first.**
+2. **F8 Condition undo** — closes 4+ filed simplifications + enables
+   RAW Indomitable. **Build second** since it removes simplifications
+   already shipped.
+3. **F6 Magical-source resistance** — unblocks Ki-Empowered Strikes +
+   3 class-feature dependencies. **Build third** — small + targeted.
+4. **F2 Fog-of-war** — unblocks 4+ Lv 10+ Ranger / Rogue features.
+   Skip if no demo PC is at those levels.
+5. **F3-F4 Terrain + fall** — pair. Low ROI until a Druid /
+   tactical-combat campaign needs them.
+6. **F5 Disease** — niche; defer until a disease-themed campaign
+   surfaces.
+7. **F7 Components** — Archdruid + Subtle Spell only; defer.
+
+---
+
 ## Order of priority (rough)
 
-Updated for v2.9.3. ~~Strikethrough~~ items are shipped.
+Updated for v2.60.1. ~~Strikethrough~~ items are shipped.
 
 1. ~~**(E) Action-economy tracker — Phase 1+2** — manual chip strip + auto-advance from existing strike / cast buttons.~~ ✅ shipped v2.4.31 (Phase 1) + v2.5.3 (Phase 2) + v2.5.5 (Phase 2b full-sheet sync).
-2. ~~**Channel Divinity option-picker.**~~ ✅ shipped v2.9.0 with the reusable `showResourceOptionPicker` helper. Life Domain end-to-end; other domains need their `_FEATURE_ECONOMY` option entries (see per-class plans below — short follow-up per domain).
-3. **Lay on Hands target-picker.** Needs a numeric amount picker (HP to spend, max = pool) layered on top of `showResourceOptionPicker`. Plus a target-picker overlay (click a token / pick from init roster). Now mostly a UX assembly job since the resource picker exists. See per-class plan.
+2. ~~**Channel Divinity option-picker.**~~ ✅ shipped v2.9.0 with the reusable `showResourceOptionPicker` helper. Life Domain end-to-end v2.14.0; all 12 canon Cleric domains + Paladin Oath of Devotion options curated by v2.56.2.
+3. ~~**Lay on Hands target-picker.**~~ ✅ shipped v2.10.0 (`/use_lay_on_hands` endpoint + amount + target picker chain; Caelan demo fixture).
 4. **Wild Shape transformation UI.** `_doMiniTransform` is half-wired (beast picker exists for Druids). Finishing the form-picker dropdown closes Druid Lv 2 functionality. See per-class plan.
-5. **Bardic Inspiration target-picker.** Same target-picker primitive as #3 (just no amount picker — pick target → "Bardic Inspiration to X" log entry + give X a d6/d8/d10/d12 die). Completes Bard core loop. See per-class plan.
+5. **Bardic Inspiration target-picker.** ✅ shipped v2.11.0 (target-picker excludes self per RAW; `/use_bardic_inspiration` endpoint scales die by level; recipient-side d20 consumption pending Phase B roll-time intercept).
 6. ~~**(E) Action-economy — Phase 3+4** — class-feature table + gating with GM override.~~ ✅ shipped v2.6.0 (Phase 3 curated table) + v2.6.1 (Phase 4 gating) + v2.7.2 (Phase 4a dimming) + v2.8.0 (strict mode).
-7. **Cross-cutting (A) generalized.** Refactor LoH / Wild Shape / Bardic Inspiration / Ki / Sorcery Points onto a single `resource → option → target → effect` framework. Now post-shipping #3-5 since the abstraction emerges from the concrete cases.
-8. **Sneak Attack / Divine Smite per-attack uplift toggle.** Pair of adjacent damage-uplift features; each is a per-attack toggle that fires extra damage dice on the resulting damage roll. Depends on (B) for the post-attack damage-up intercept. See per-class plans (Rogue Sneak Attack, Paladin Divine Smite).
-9. **(B) Roll-time intercepts.** Big architectural work; unblocks Lucky / Indomitable / Reliable Talent / Portent / Champion Improved Critical. The roll-toast popup (`/static/roll_toast.js`) is the most natural insertion point: pause the toast animation, surface intercept buttons under the dice, fire follow-up rolls / replace value before the toast lands. Filed as a separate plan doc when work begins.
-10. **(C) Buff slot.** Even bigger; unblocks every concentration spell + Bless / Reckless Attack / Guided Strike / etc. Buff entries should carry name + duration + mods + expiration trigger + source. The existing concentration-tracker UI from v2.1.x is the closest precedent. Filed as a separate plan doc when work begins.
-11. **(D) Passive trait engine.** Likely subsumed by (B) once the intercept exists. Each race trait registers a callback on a specific roll type (e.g. "STR save against poison" → advantage) that the intercept evaluates.
+7. **Cross-cutting (A) generalized.** Refactor LoH / Wild Shape / Bardic Inspiration / Ki / Sorcery Points onto a single `resource → option → target → effect` framework. Now post-shipping #3-5 since the abstraction emerges from the concrete cases. Ki picker and Channel Divinity picker now share the v2.9.0 primitive; Sorcery Points + Superiority Dice + Lay on Hands disease-cure option still need their pickers wired.
+8. ~~**Sneak Attack / Divine Smite per-attack uplift toggle.**~~ ✅ shipped v2.16.0 (per-attack uplift modal on Strike click; both work as confirmation-after-d20-result not RAW-correct pre-roll declaration; filed for the eventual Phase B mid-roll intercept).
+9. **(B) Roll-time intercepts — save-roll path** ✅ shipped (Danger Sense v2.52.0, Aura of Protection v2.53.0, Countercharm v2.54.0, Aura of Devotion v2.55.0, Indomitable v2.56.0, Mindless Rage v2.57.0). **Attack-roll path** still ⚪ — unblocks Lucky (Halfling + feat), Portent (Divination), Reliable Talent (Rogue), Stroke of Luck (Rogue), Bardic Inspiration recipient-side die. Largest remaining intercept gap.
+10. ~~**(C) Buff slot.**~~ ✅ shipped (v2.19.x → v2.49.x → v2.58.0+). Buff dict shape stable; install/remove helpers operational; mechanical-effect intercepts at attack-roll / save-roll / heal-resolution; concentration cleanup via `_drop_caster_concentration`. Remaining: Bless attack/save bonus (filed); Bardic Inspiration recipient die (cross-ref Phase B); suspended-buff state for Mindless Rage RAW second sentence (filed).
+11. **(D) Passive trait engine** ⚪ — see the rewritten section above. Phased plan (Phase 1 stat-mod confirmation, Phase 2 race-keyed save-advantage table, Phase 3 race condition-install immunity, Phase 4 Half-Orc Relentless Endurance, Phase 5 Tiefling Infernal Legacy). Phase 2 is the most leveraged — would unblock Dwarven Resilience + Gnome Cunning + High Elf Trance + Fey Ancestry in one commit by reusing the v2.52.0+ save-roll construction hook.
 12. ~~**(E) Action-economy — Phase 5** — movement tracker.~~ ✅ shipped v2.6.2 (chip) + v2.8.1-2 (breadcrumb) + v2.8.3 (Dash modal).
+13. **F1 Token positional adjacency** (NEW priority — see "Missing system frameworks" section above) — small commit unblocks 6+ filed simplifications (Sneak Attack ally-adjacency, AoP/AoD/Countercharm 10/30 ft radius, Bardic 60 ft range, Mass Cure target range, Opportunity Attack trigger). **Highest-ROI next infrastructure piece.**
+14. **F8 Condition undo / reversal** (NEW priority) — closes 4 filed v1 simplifications including RAW Indomitable. Per-cast snapshot pipeline ~3-5 commits.
+15. **F6 Magical-source resistance gating** (NEW priority) — unblocks Ki-Empowered Strikes + Improved Divine Smite + Magic Weapon + Pact of the Blade + Brutal Critical. Small + targeted ~1-2 commits.
 
-Items 3-5 are the next-up user-visible wins. 7-11 are infrastructure
-that pays for itself across many features once shipped.
+Items 4 + 11 are the next-up user-visible wins for the remaining
+class features. Items 13-15 are the highest-leverage infrastructure
+investments — each unlocks multiple Lv 10+ features in one commit
+window. Items 9 (attack-roll intercept) + (D) Phase 2 (race-keyed
+save-advantage table) are the largest remaining ⚪ areas.
 
 ---
 
@@ -1682,6 +2212,25 @@ already shipped.
   side effect (Riposte: reaction-attack after enemy misses; Trip
   Attack: prone on hit; Disarm: save vs disarm; etc.). Largest single
   subclass effort. Deps: (B), (C).
+- **Eldritch Knight (Weapon Bond / War Magic / Eldritch Strike /
+  Arcane Charge / Improved War Magic)** — L. Fighter subclass that
+  mixes martial + wizard. **Weapon Bond (Lv 3)**: 1-hour ritual binds
+  up to 2 weapons; can summon them to hand as a bonus action. UI:
+  bond-target picker on the inventory panel + a "Summon bonded
+  weapon" bonus action. **War Magic (Lv 7)**: cantrip + weapon attack
+  as one action — extend the spell-cast handler to flag "uses War
+  Magic" + allow a free attack-action follow-up. **Eldritch Strike
+  (Lv 10)**: attacker's next spell-DC save against the hit target
+  has disadvantage; same install-side-effect-buff pattern as
+  Vow of Enmity. **Arcane Charge (Lv 15)**: teleport 30 ft on Action
+  Surge; small teleport hook. **Improved War Magic (Lv 18)**:
+  Lv 1+ spell instead of cantrip in War Magic — extends the Lv 7
+  check. Plus Eldritch Knight has its own spell list (Lv 1-4 Wizard
+  spells, mostly Abjuration / Evocation). Sheet schema would need to
+  accommodate the third-caster spell slots (1/3 caster). Deps: full
+  wizard spell list integration + a third-caster slot table on the
+  sheet (similar to Arcane Trickster Rogue). Defer until an EK demo
+  PC is added.
 - **Way of the Open Hand (Open Hand Technique / Wholeness of Body /
   Tranquility / Quivering Palm)** — Open Hand Technique ✅ **shipped
   v2.49.57** with three picker modes (prone / disengage / lose

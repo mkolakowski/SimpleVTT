@@ -10,6 +10,35 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.60.2] - 2026-05-25 — "The Atlas"
+
+**Schema version:** 57
+**Commit summary:** **Class-content-status.md gets a comprehensive v2.49.112 → v2.60.1 re-audit + a new "Missing system frameworks" section enumerating 8 system-level blockers + a rewritten "Cross-cutting infrastructure plans" section showing actual shipped state.** Doc-only commit. The prior audit ran at v2.49.111 (~3 hours of work ago in real time, ~110 commits ago); 27 status flips landed since then but the plan doc's cross-cutting infrastructure section + per-feature tables hadn't been updated to match. This refresh closes that gap.
+**Description:** Three blocks of edits to `docs/plans/class-content-status.md`. **(1)** New "Re-audit (v2.60.1)" callout block under the v2.49.111 audit header (~L 99-160). Lists 27 status flips by class (Barbarian Reckless Attack + Danger Sense + Feral Instinct, Fighter Improved Critical + Remarkable Athlete + Indomitable, Monk Ki options + Wholeness + Stillness + Evasion, Paladin Aura of Protection + Aura of Devotion, Cleric Life Domain heal-uplift pipeline, Rogue Uncanny Dodge + Evasion, Bard Countercharm, Ranger descriptive set). Notes infrastructure status flips. **(2)** Rewritten "Cross-cutting infrastructure plans" section (~L 387-700). Each subsection A-E now carries a status badge: **A** Resource option-picker ✅ shipped (Phase 1-3); **B** Roll-time intercepts 🟢 partial (save-roll path complete, attack-roll path still ⚪); **C** Combat condition / buff slot ✅ shipped; **D** Passive trait engine ⚪ still unimplemented with a NEW 5-phase plan; **E** Action-economy tracker ✅ shipped through Phase 4+strict mode. **(3)** New "## Missing system frameworks" section (~L 850-1167) enumerating 8 system-level blockers (F1 token adjacency, F2 fog-of-war, F3 difficult terrain, F4 fall damage, F5 disease engine, F6 magical-source resistance, F7 component tracking, F8 condition undo) with what each unblocks + a minimal viable shape + an effort estimate. Closes with a "Framework prioritization" subsection ranking F1 → F8 by ROI.
+**Description (cont):** Additional touch-ups: **(4)** Refreshed "## Order of priority (rough)" list (~L 1449) to reflect what's shipped through v2.60.1 and add 3 new framework-priority entries (F1, F8, F6). Strikethroughs for items 1-3, 5, 6, 8, 12 (all shipped); annotation of partial-status items (9 save-roll path ✅, attack-roll ⚪). **(5)** Added a per-feature plan stub for **Eldritch Knight** (Fighter subclass — the one ⚪ class/subclass entry without a plan paragraph). Covers Weapon Bond, War Magic, Eldritch Strike, Arcane Charge, Improved War Magic, third-caster spell list integration. Effort estimate L (large; needs an EK demo PC + third-caster slot table). Filed.
+**Description (cont 2):** Every remaining ⚪ row in the status tables now has a corresponding implementation plan paragraph. The audit verified this by grepping the doc for each ⚪ feature name + cross-referencing to the per-feature plans section + the subclass-feature plans section. Result: zero "NO PLAN" entries remain.
+**Description (cont 3):** Why doc-only PATCH. No code changed. The next implementer (human or AI) can read the doc and pick a feature → plan → ship without needing to start from scratch. The new "Missing system frameworks" section is the highest-value addition since it surfaces the cost/benefit ranking that wasn't visible before.
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.60.2` after `docker compose up -d --build app`. (b) `wc -l docs/plans/class-content-status.md` grew from 1841 to ~2200 lines (+ ~360 lines of new content). (c) Doc remains surfaced via `/wiki/plan-class-content-status` per the CLAUDE.md wiki-surfacing rule; no allowlist or landing-page table updates needed since the slug already exists.
+
+### Added
+- `docs/plans/class-content-status.md` — new "Missing system frameworks" section (F1-F8) with minimal viable shapes + effort estimates + framework prioritization.
+- `docs/plans/class-content-status.md` — Eldritch Knight (Fighter subclass) implementation plan paragraph.
+- `docs/plans/class-content-status.md` — Phase 1-5 plan for the (D) Passive trait engine cross-cutting infrastructure section (was "No plan yet" pre-v2.60.2).
+- `docs/plans/class-content-status.md` — v2.60.1 re-audit callout listing 27 status flips since v2.49.111.
+
+### Changed
+- `docs/plans/class-content-status.md` — rewritten Cross-cutting infrastructure section: sections A, C, E now carry ✅ shipped badges with version refs; section B is 🟢 partial with concrete progress; section D is ⚪ with a new phased plan.
+- `docs/plans/class-content-status.md` — refreshed Order of priority list with v2.60.1 strikethroughs + 3 new framework-priority entries.
+- `app/version.py` `APP_VERSION` → `2.60.2`.
+- `README.md` version badge → `2.60.2`.
+
+### Notes
+- **Doc-only commit.** No code changes. The plan doc is the surface; future implementation work picks features from it.
+- **Highest-value addition is the missing-frameworks section.** It surfaces the order-of-operations question ("what unblocks the most features per LOC?") that wasn't visible before. F1 (token positional adjacency) lands as the recommended next infrastructure investment — unblocks 6+ filed simplifications in ~80 LOC.
+- **Doc has grown substantially.** From 1841 to ~2200 lines. Still navigable via the section headings + the per-class tables at the top.
+
+---
+
 ## [2.60.1] - 2026-05-25 — "Push It"
 
 **Schema version:** 57
