@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.68.3] - 2026-05-26 — "The Hidden Rail"
+
+**Schema version:** 60
+**Commit summary:** **Left-side roll log polish — scrollbar moves to right edge + auto-hides + roll cards align with dice roller.** Three CSS/JS edits in `app/templates/tabletop.html`. (1) Revert v2.49.245's `direction: rtl` trick — scrollbar moves from the LEFT (screen-edge) to the natural LTR RIGHT position (toward the canvas), easier to reach. (2) Scrollbar styled to auto-hide via a transparent default `scrollbar-color` that fades in on `:hover` of the panel; JS adds a `.scrolling` class for ~1.2 s after each scroll event so the bar also reveals while actively scrolling (covers touch / mouse-wheel users who aren't hovering). (3) `#roll-log-drawer .drawer-body` horizontal padding 14 → 10 px to match the dice roller wrapper, so the roll cards' left/right edges line up flush with the dice roller card below them.
+**Description:** All edits scoped to `#roll-log-drawer` (other drawers — Battle / Characters / Settings / GM Tools — keep their always-on 14 px padded scrollbars unchanged). **(1)** Removed `.drawer-sidebar--left .drawer-body { direction: rtl }` + the LTR override on direct children. The scrollbar now sits on the right edge of the panel (toward the map) instead of pinned to the screen edge. **(2)** New CSS rule block: default `.drawer-sidebar--left #roll-log-drawer .drawer-body` gets `scrollbar-color: transparent transparent` + transparent `::-webkit-scrollbar-thumb`. On `#roll-log-drawer:hover` the accent-tinted thumb fades back in (200 ms transition). A new `.scrolling` class (added by JS in `_wireScrollReveal`) also reveals the bar — `body.addEventListener('scroll', …)` adds the class and a 1.2-second timeout removes it. Result: idle = invisible scrollbar; scroll OR hover = visible. **(3)** New rule `#roll-log-drawer .drawer-body { padding-left: 10px; padding-right: 10px }` to match the dice roller card wrapper's 10 px horizontal padding. The roll cards and the dice roller card both have 1 px borders, so the visible card edges now align.
+**Description (cont):** Why scoped to the left-side specifically. Right-side roll log (the default) lives in a multi-tab drawer (Battle / Characters / Settings / GM Tools / Roll Log) where consistent always-on scrollbars across tabs feels right. The left-side roll log is a dedicated drawer with the dice roller card pinned to the bottom — a static layout where an always-on scrollbar competes visually with the cards. Auto-hide + alignment make the static layout cleaner.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.68.3`. (b) Pure CSS + JS edit, no harness assertions to add. Manual check in the dev container: open `/settings` → roll log position = "Left" → reload → roll log now has its scrollbar on the right edge of the panel, hidden by default, fades in on hover or while scrolling, and the cards/dice-roller card share a left/right edge.
+
+### Changed
+- Left-side roll log scrollbar moved from left edge → right edge of panel (revert of v2.49.245's `direction: rtl` flip).
+- Left-side roll log scrollbar auto-hides — transparent by default, fades in on `#roll-log-drawer:hover` or while actively scrolling (JS `.scrolling` class with 1.2 s idle timeout).
+- `#roll-log-drawer .drawer-body` horizontal padding 14 → 10 px so the roll cards align with the dice roller card.
+- `app/version.py` `APP_VERSION` → `2.68.3`.
+- `README.md` version badge → `2.68.3`.
+
+### Notes
+- **Right-side roll log unchanged.** The hover / auto-hide rules + the padding override are all scoped to `#roll-log-drawer` (and the auto-hide also gated on the left-sidebar selector). Right-side default behavior preserved.
+- **Touch / mouse-wheel scrolling reveals the bar.** The JS `.scrolling` class covers users who scroll without hovering (typical on touch).
+- **Cards aligned to dice roller's 10 px wrapper.** Both surfaces have 1 px borders, so visible card edges line up flush.
+
+---
+
 ## [2.68.2] - 2026-05-26 — "Breathing Room"
 
 **Schema version:** 60

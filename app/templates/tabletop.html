@@ -123,15 +123,59 @@
     .drawer-sidebar--left:not(:has(.drawer-panel.open)) {
         pointer-events: none;
     }
-    /* v2.49.245: when the roll log is on the LEFT, push its scrollbar
-       to the left edge (closest to the screen edge, away from the map)
-       so it doesn't sit between the cards and the map content. The
-       standard CSS trick: ``direction: rtl`` on the scroll container
-       flips the scrollbar to the start side; ``direction: ltr`` on
-       direct children restores normal text/list flow so the roll
-       cards aren't mirrored. */
-    .drawer-sidebar--left .drawer-body { direction: rtl; }
-    .drawer-sidebar--left .drawer-body > * { direction: ltr; }
+    /* v2.68.3: when the roll log is on the LEFT, the scrollbar now
+       lives on the RIGHT edge of the panel (toward the map) — the
+       natural LTR position. Reverts the v2.49.245 ``direction: rtl``
+       trick because users found the screen-edge scrollbar position
+       awkward to reach. The scrollbar is also styled to auto-hide
+       (transparent thumb until panel hover) so it doesn't compete
+       with the cards visually. */
+    /* v2.68.3 — left-side roll log: align the roll-list horizontal
+       padding to the dice-roller card wrapper's 10 px so the roll
+       cards and the dice-roller card share a left/right edge. The
+       generic `.drawer-body` 14 px padding still applies to other
+       drawers (Battle / Characters / Settings / GM Tools). */
+    #roll-log-drawer .drawer-body {
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+    /* Auto-hide scrollbar for the left-side roll log: invisible by
+       default, fades in on panel hover. Same accent colors as the
+       generic v2.49.246 treatment, just gated on hover. */
+    .drawer-sidebar--left #roll-log-drawer .drawer-body {
+        scrollbar-color: transparent transparent;
+        transition: scrollbar-color 0.2s;
+    }
+    .drawer-sidebar--left #roll-log-drawer:hover .drawer-body {
+        scrollbar-color:
+            color-mix(in srgb, var(--accent) 55%, transparent)
+            transparent;
+    }
+    .drawer-sidebar--left #roll-log-drawer .drawer-body::-webkit-scrollbar-thumb {
+        background: transparent;
+        transition: background 0.2s;
+    }
+    .drawer-sidebar--left #roll-log-drawer:hover .drawer-body::-webkit-scrollbar-thumb {
+        background: color-mix(in srgb, var(--accent) 45%, transparent);
+        background-clip: padding-box;
+    }
+    .drawer-sidebar--left #roll-log-drawer:hover .drawer-body::-webkit-scrollbar-thumb:hover {
+        background: color-mix(in srgb, var(--accent) 75%, transparent);
+        background-clip: padding-box;
+    }
+    /* JS adds .scrolling for ~1.2 s after a scroll event so the
+       scrollbar also reveals while the user is actively scrolling
+       (not just on hover). Lets touch / mouse-wheel users see where
+       they are without having to mouse-into the panel. */
+    .drawer-sidebar--left #roll-log-drawer .drawer-body.scrolling {
+        scrollbar-color:
+            color-mix(in srgb, var(--accent) 55%, transparent)
+            transparent;
+    }
+    .drawer-sidebar--left #roll-log-drawer .drawer-body.scrolling::-webkit-scrollbar-thumb {
+        background: color-mix(in srgb, var(--accent) 45%, transparent);
+        background-clip: padding-box;
+    }
     /* v2.4.22: drawer tabs now live inline with the campaign title in the
        ``.tt-topbar`` (was a dedicated bar above the sidebar panels). No
        more bottom border or min-width — those existed to make it look
@@ -3703,6 +3747,25 @@ let CONC_DATA = {{ conc_by_char | tojson }};
             if (body) requestAnimationFrame(() => { body.scrollTop = body.scrollHeight; });
         }
     }
+
+    /* v2.68.3 — scroll-reveal for the left-side roll log scrollbar.
+       Adds .scrolling for ~1.2 s after a scroll event so the bar
+       fades in while the user is actively scrolling, then fades out
+       again on idle. CSS handles the visual; this just toggles the
+       class. Skips when the roll log is on the right side (the
+       drawer there has the always-on bar already). */
+    (function _wireScrollReveal() {
+        const rollLog = document.getElementById('roll-log-drawer');
+        if (!rollLog || !rollLog.closest('.drawer-sidebar--left')) return;
+        const body = rollLog.querySelector('.drawer-body');
+        if (!body) return;
+        let timer = null;
+        body.addEventListener('scroll', () => {
+            body.classList.add('scrolling');
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => body.classList.remove('scrolling'), 1200);
+        }, { passive: true });
+    })();
 
     tabs.forEach(tab => tab.addEventListener('click', () => openPanel(tab.dataset.target)));
 
