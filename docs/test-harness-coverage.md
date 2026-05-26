@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 480 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.59.1, 2026-05-25).
+**Total tests:** 482 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.59.2, 2026-05-25).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -732,6 +732,14 @@ v2.59.1 — Heal expressions bake the caster's spellcasting modifier. Pre-v2.59.
 | Test | What it asserts |
 |------|-----------------|
 | `test_cure_wounds_adds_wis_modifier_to_heal` | Tavik (WIS 16 = +3) casts Cure Wounds (L1) at Krieger 5 times. Every `auto_heal_rolled` is in [4, 11] (= 1d8 + 3). Pre-fix min was 1. |
+
+### `test_heal_claim_uplift.py`
+v2.59.2 — Legacy `/apply_healing` (chat-card "🩹 Apply Healing" button) path honors caster spellcasting modifier + Life Domain uplift. Pre-v2.59.2 the claim flow rolled bare dice — bypassed the v2.58.0 + v2.59.1 corrections. Fix: `_heal_claims[cast_id]` captures `caster_char_id` + `slot_level` at registration; /apply_healing reads them, runs the same uplift composition + broadcasts as the target-bound path.
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_apply_healing_runs_life_domain_uplift` | Tavik casts Cure Wounds with no target → /apply_healing routes to Tavik himself (calling user's first PC fallback) → Disciple of Life broadcast fires; Blessed Healer does NOT (RAW: only when target ≠ caster). |
+| `test_apply_healing_routes_to_stored_target_and_fires_blessed_healer` | Sanity check on the target-bound path still works after the heal-claim edits: Tavik casts Cure Wounds at Krieger via target_combatant_id → Disciple + Blessed Healer both fire (v2.58.0 path unchanged). |
 
 ### `test_use_countercharm.py`
 v2.54.0 — Bard Lv 6+ Countercharm. First condition-gated save aura (only fires on spells installing charmed/frightened, not all saves). `/use_countercharm` installs a 1-round self-buff; `_ally_has_countercharm_active` reads it on save-roll construction; gate on `_SPELL_CONDITION_MAP[slug].key ∈ {charmed, frightened}` via `_spell_installs_countercharmed_condition`. Same commit adds `suggestion → Charmed` to the map.

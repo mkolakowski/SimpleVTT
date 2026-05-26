@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.59.2] - 2026-05-25 — "Claim of Faith"
+
+**Schema version:** 57
+**Commit summary:** **Legacy heal-claim flow (`/apply_healing`) now honors spellcasting modifier + Life Domain uplift.** The chat-card "🩹 Apply Healing" button path bypassed the v2.58.0 + v2.59.1 corrections — pre-fix, casts without a target rolled bare dice when claimed. Fixed: `_heal_claims[cast_id]` now captures `caster_char_id` + `slot_level` at /cast_spell registration time; /apply_healing reads them, looks up the caster sheet, runs `_caster_spellcasting_mod` + `_life_domain_heal_uplift`, fires the same Disciple of Life / Blessed Healer broadcasts as the target-bound path. Closes the last "filed for follow-up" caveat from v2.58.0 + v2.59.0.
+**Description:** Two edits in `app/routes/tabletop_routes.py`. **(1)** The `_heal_claims[cast_id]` dict gains two new fields: `caster_char_id: char.id` + `slot_level: int(slot_level)`. **(2)** The `/apply_healing` handler (~L 17178+) gains a ~70-LOC block between the dice roll and the `_apply_hp_change` call that mirrors the cast_spell single-target Blessed Healer branch: fetch caster_char by id, compute `_spc_mod` + `_life_target_uplift` + `_life_self_uplift`, add `rolled += _spc_mod + _life_target_uplift`, fire the Disciple of Life broadcast if uplift > 0, fire Blessed Healer (with a second `_apply_heal_to_combatant` call against the caster's combatant) if `_life_self_uplift > 0`.
+**Description (cont):** Why bring it into parity at all. v2.58.0 + v2.59.0 + v2.59.1 corrected the target-bound auto-heal path (when /cast_spell includes a `target_combatant_id`). The legacy claim flow predates the target-binding work (~v2.27.1) and was left rolling bare dice. After v2.59.1 shipped, a Tavik Cure Wounds cast at Krieger (with target binding) heals 7-14, but the same cast WITHOUT target binding ("apply to me" chat-card path) healed only 1-8 — a confusing inconsistency for the player. This commit closes the gap so both paths produce identical math.
+**Description (cont 2):** Edge case — self-heal via claim. The /apply_healing handler routes the heal to the calling user's first owned PC when the claim has no stored target. If the caster is also the calling user (e.g. GM casting Cure Wounds on themselves), the target IS the caster — Disciple of Life still fires (uplifts the heal) but Blessed Healer does NOT (RAW: "creature other than you"). The `_target_is_caster` boolean threaded into `_life_domain_heal_uplift(...)` handles this correctly without special-casing.
+**Description (cont 3):** Broadcast routing nuance. The Disciple of Life + Blessed Healer broadcasts in /apply_healing are anchored on `caster_char` (the cleric who cast the spell), NOT on the calling user (the player who clicked the button). This matches the chat-card credit semantics — "Tavik's Disciple of Life uplifted +3 HP" not "GM's Disciple of Life" — because the GM is just clicking the claim button, not exercising a class feature.
+**Description (cont 4):** Verification. (a) `curl /version` reports `2.59.2` after `docker compose up -d --build app`. (b) Harness `tests/harness/test_heal_claim_uplift.py` — 2 tests: self-heal claim (Disciple of Life fires, Blessed Healer doesn't), target-bound parity check (the v2.58.0 path still routes Disciple + Blessed Healer correctly for non-self targets). (c) Full suite 480 + 2 = 482 passing. (d) Manual click-through: Tavik casts Cure Wounds with no target → chat card shows "🩹 Apply Healing"; GM clicks → Tavik's HP increases AND chat shows Disciple of Life card (no Blessed Healer since heal self).
+
+### Added
+- `_heal_claims[cast_id]` now captures `caster_char_id` + `slot_level` at /cast_spell registration time.
+- `/apply_healing` handler extended with ~70 LOC mirroring the cast_spell single-target Disciple of Life + Blessed Healer branches. Composes `_spc_mod + _life_target_uplift` into `rolled` before `_apply_hp_change`; fires both `feature_used` broadcasts (`source=disciple-of-life`, `source=blessed-healer`) if applicable.
+- Harness `tests/harness/test_heal_claim_uplift.py` — 2 tests: self-heal claim sanity (Disciple yes, Blessed Healer no) + target-bound parity sanity.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.59.2`.
+- `README.md` version badge → `2.59.2`.
+- `docs/test-harness-coverage.md` — total test count 480 → 482; new `test_heal_claim_uplift.py` section added.
+
+### Notes
+- **Last "filed for follow-up" closed.** v2.58.0 + v2.59.0 both noted "legacy heal-claim flow doesn't carry slot_level / caster sheet through" — closed now.
+- **Per-target undo still unsupported.** Same v1 simplification as v2.59.0: /undo_attack_damage reverts only the heal's `_attack_damage_log[cast_id]` entry, which the claim path doesn't write to (claim heals are not tracked in the undo log today). Filed; the claim flow is a chat-card UX path, not a primary action — undo is rare.
+
+---
+
 ## [2.59.1] - 2026-05-25 — "Empowered Heal"
 
 **Schema version:** 57

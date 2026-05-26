@@ -8181,6 +8181,13 @@ async def cast_spell(
             "target_combatant_id": target_combatant_id or "",
             "target_character_id": target_character_id_in,
             "target_name": target_name_resolved or target_name_in or "",
+            # v2.59.2: capture caster + slot_level so /apply_healing
+            # can run the spellcasting-mod bake + Life Domain uplift
+            # at claim time. Pre-v2.59.2 the claim flow rolled bare
+            # dice (no WIS mod, no Disciple of Life uplift) — only
+            # the target-bound auto-heal path got the corrections.
+            "caster_char_id": char.id,
+            "slot_level": int(slot_level),
         }
 
     # v2.26.0 Phase T.4: auto-apply healing to the targeted combatant.
@@ -17184,6 +17191,38 @@ async def apply_healing(
         rolled = 0
         breakdown = ""
 
+    # v2.59.2 — bring the heal-claim flow into parity with the
+    # target-bound auto-heal path (v2.58.0 + v2.59.1). Two
+    # corrections: (a) add the caster's spellcasting modifier per
+    # RAW (Cure Wounds heals `dice + spellcasting modifier`);
+    # (b) add Disciple of Life uplift if the caster is a Life
+    # Domain Cleric Lv 1+. Pre-v2.59.2 the claim flow rolled bare
+    # dice — under-healing on every cast that went through the
+    # legacy "🩹 Apply Healing" button path.
+    caster_char = None
+    caster_sheet = {}
+    if claim.get("caster_char_id"):
+        caster_char = db.query(Character).filter(
+            Character.id == int(claim["caster_char_id"]),
+            Character.campaign_id == campaign_id,
+        ).first()
+        if caster_char:
+            caster_sheet = caster_char.sheet or {}
+    _spc_mod = _caster_spellcasting_mod(caster_sheet)
+    _claim_slot_level = int(claim.get("slot_level") or 0)
+    _target_is_caster = bool(caster_char and caster_char.id == char.id)
+    _life_target_uplift, _life_self_uplift = _life_domain_heal_uplift(
+        caster_sheet, _claim_slot_level, _target_is_caster,
+    )
+    if rolled > 0 and _spc_mod > 0:
+        rolled += _spc_mod
+        breakdown = (
+            f"{breakdown} + {_spc_mod} (spellcasting mod)"
+            if breakdown else f"+{_spc_mod}"
+        )
+    if rolled > 0 and _life_target_uplift > 0:
+        rolled += _life_target_uplift
+
     # Apply HP through the death-save state machine (heals wake the
     # character from dying/stable per v2.1.0 design).
     hp_before = char.sheet.get("hp") or {}
@@ -17192,6 +17231,66 @@ async def apply_healing(
     new_cur = min(hp_max, hp_cur + rolled) if hp_max > 0 else (hp_cur + rolled)
     result = _apply_hp_change(char, new_cur)
     db.commit()
+
+    # v2.59.2 — Disciple of Life + Blessed Healer broadcasts +
+    # Blessed Healer self-heal. Mirror of the cast_spell single-
+    # target Blessed Healer branch (~L 8260) but anchored on the
+    # claim's caster_char + claimed target_char.
+    if _life_target_uplift > 0 and caster_char:
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": caster_char.id,
+                "character_name": caster_char.name,
+                "user_color": caster_char.color,
+                "feature_name": (
+                    f"💗 Disciple of Life → +{_life_target_uplift} "
+                    f"HP on {char.name}"
+                ),
+                "feature_desc": (
+                    f"Life Domain Lv 1+ — outgoing heals add "
+                    f"2 + spell level ({_life_target_uplift}) HP."
+                ),
+                "source": "disciple-of-life",
+            },
+        })
+    if _life_self_uplift > 0 and caster_char:
+        _bh_caster_combatant = _lookup_combatant(
+            campaign_id, f"tok_{caster_char.id}",
+        )
+        if not _bh_caster_combatant:
+            _state = hub.get_battle(campaign_id) or {}
+            for _c in (_state.get("combatants") or []):
+                if _c.get("char_id") == caster_char.id:
+                    _bh_caster_combatant = _c
+                    break
+        if not _bh_caster_combatant:
+            _bh_caster_combatant = {
+                "char_id": caster_char.id,
+                "id": "",
+                "name": caster_char.name,
+            }
+        _bh_result = await _apply_heal_to_combatant(
+            db, campaign_id, _bh_caster_combatant, _life_self_uplift,
+            cast_id=None,
+        )
+        await hub.broadcast(campaign_id, {
+            "type": "feature_used",
+            "data": {
+                "character_id": caster_char.id,
+                "character_name": caster_char.name,
+                "user_color": caster_char.color,
+                "feature_name": (
+                    f"💗 Blessed Healer → +{_bh_result['applied']} "
+                    f"HP to {caster_char.name}"
+                ),
+                "feature_desc": (
+                    f"Life Domain Lv 6+ — healing others heals "
+                    f"you for 2 + spell level ({_life_self_uplift}) HP."
+                ),
+                "source": "blessed-healer",
+            },
+        })
 
     # Track claim
     claimed.add(user.id)
