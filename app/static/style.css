@@ -275,8 +275,18 @@ body { display: flex; flex-direction: column; }
    so the fixed layer beneath shows through. `html` keeps the theme
    color, so transparent areas of UI (between glass panels, etc.)
    still tint correctly when the encounter bg has alpha or is
-   otherwise translucent. */
+   otherwise translucent.
+
+   v2.87.2 — also drop `.map-pane`'s opaque `background: var(--bg)`
+   in the same condition. Without this, the pane's bg covers the
+   encounter-bg across the central viewport (where the battle map
+   lives), so the encounter bg was only visible in the thin gaps
+   above the topbar and around the drawers. With the override, the
+   encounter bg shows through everywhere except where the actual map
+   image / canvas paints — which is exactly the "window onto a larger
+   world" feel the feature aims for. */
 body.has-encounter-bg { background: transparent; }
+body.has-encounter-bg .map-pane { background: transparent; }
 
 /* ── Display scale (per-user) ─────────────────────────────────────────────
    `--ui-scale` and `--font-scale` are stamped on <html> by base.html.

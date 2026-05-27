@@ -645,6 +645,93 @@
     </details>
 </section>
 
+<!-- ── Encounter background (campaign default) ── -->
+{# v2.87.1 — campaign-level UI for the default background introduced in
+   v2.87.0. The POST /api/campaign/{cid}/background endpoint writes
+   ``default_background_url`` AND copies the value to
+   ``active_background_url`` + broadcasts ``background_change`` so the
+   live tabletop swaps in place. Per-encounter overrides still live in
+   the encounter editor on the tabletop. #}
+<section class="settings-section" id="background" data-tab="world">
+    <h2>🖼 Background (campaign default)</h2>
+    <p class="muted" style="margin:0 0 8px;">A fullscreen image or video rendered <strong>behind</strong> the battle map. Extends past the visible viewport, stays still while the map pans/zooms over it, and is the default for every encounter that doesn't bind its own background. Animated formats supported — GIF / animated WebP / mp4 / webm. 80 MB ceiling.</p>
+    <div id="campaign-bg-row" style="display:flex;flex-direction:column;gap:8px;max-width:520px;">
+        <div id="campaign-bg-status" class="muted" style="font-size:12px;">
+            {% if campaign.default_background_url %}
+                Current default: <code style="font-size:11px;">{{ campaign.default_background_url }}</code>
+            {% else %}
+                No default set — encounters without their own background render against the theme color.
+            {% endif %}
+        </div>
+        {% if campaign.default_background_url %}
+            {% set _camp_bg_ext = campaign.default_background_url.rsplit('.', 1)[-1].lower() %}
+            {% if _camp_bg_ext in ('mp4', 'webm') %}
+                <video src="{{ campaign.default_background_url }}" autoplay loop muted playsinline
+                       style="max-width:240px;max-height:135px;border-radius:6px;border:1px solid var(--border);"></video>
+            {% else %}
+                <img src="{{ campaign.default_background_url }}" alt="campaign default background preview"
+                     style="max-width:240px;max-height:135px;border-radius:6px;border:1px solid var(--border);object-fit:cover;">
+            {% endif %}
+        {% endif %}
+        <input type="file" id="campaign-bg-file"
+               accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm"
+               style="font-size:12px;">
+        <div style="display:flex;gap:8px;">
+            <button type="button" id="campaign-bg-upload-btn">Upload &amp; set as default</button>
+            <button type="button" id="campaign-bg-clear-btn"
+                    {% if not campaign.default_background_url %}disabled title="No default to clear"{% endif %}>Clear default</button>
+        </div>
+        <div id="campaign-bg-feedback" class="muted" style="font-size:11px;color:var(--accent);min-height:14px;"></div>
+    </div>
+    <script>
+    (function () {
+        const fileInput = document.getElementById('campaign-bg-file');
+        const uploadBtn = document.getElementById('campaign-bg-upload-btn');
+        const clearBtn  = document.getElementById('campaign-bg-clear-btn');
+        const feedback  = document.getElementById('campaign-bg-feedback');
+        const endpoint  = '/api/campaign/{{ campaign.id }}/background';
+
+        async function send(formData, busyMsg, doneMsg) {
+            uploadBtn.disabled = true; clearBtn.disabled = true;
+            feedback.textContent = busyMsg;
+            try {
+                const resp = await fetch(endpoint, {method: 'POST', body: formData});
+                if (!resp.ok) {
+                    feedback.textContent = 'Failed: ' + await resp.text();
+                    return;
+                }
+                feedback.textContent = doneMsg + ' Reloading to show the new state…';
+                // The new value is live for connected tabletop clients
+                // via the background_change WS broadcast that the endpoint
+                // fires, but the settings page itself doesn't subscribe
+                // to that hub — reload here so the preview thumbnail +
+                // status line reflect the new value.
+                setTimeout(() => location.reload(), 600);
+            } finally {
+                uploadBtn.disabled = false; clearBtn.disabled = false;
+            }
+        }
+
+        uploadBtn.addEventListener('click', () => {
+            if (!fileInput.files || !fileInput.files[0]) {
+                feedback.textContent = 'Pick a file first.';
+                return;
+            }
+            const fd = new FormData();
+            fd.append('image', fileInput.files[0]);
+            send(fd, 'Uploading…', 'Set as campaign default.');
+        });
+
+        clearBtn.addEventListener('click', () => {
+            if (!confirm('Clear the campaign default background? Encounters with their own background still use it; others will render against the theme color.')) return;
+            const fd = new FormData();
+            fd.append('clear', 'true');
+            send(fd, 'Clearing…', 'Default cleared.');
+        });
+    })();
+    </script>
+</section>
+
 <!-- ── Audio ── -->
 <section class="settings-section" id="audio" data-tab="world">
     <div style="display:flex;align-items:center;gap:10px;justify-content:space-between;margin-bottom:6px;">

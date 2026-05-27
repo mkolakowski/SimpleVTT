@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.87.2] - 2026-05-27 — "Through the Window"
+
+**Schema version:** 64
+**Commit summary:** **Two changes that make the v2.86 / v2.87 background feature actually look right.** First — GM-reported visual bug: even with v2.86.1's body-transparent fix, the encounter background was only showing in the thin strip above the topbar. The `.map-pane` element (the central canvas container) has its own `background: var(--bg)` opaque fill that was covering everything underneath in the main viewport. Second — adds the campaign-settings UI for the v2.87.0 default background that was previously only settable via the API.
+**Description:** Two edits. **(1)** `app/static/style.css`: new rule `body.has-encounter-bg .map-pane { background: transparent; }` immediately after the existing `body.has-encounter-bg` rule from v2.86.1. With both in place, the encounter bg now shows through the entire central viewport — surrounding the actual map image when you pan/zoom so the map feels like a window onto a larger world. **(2)** `app/templates/campaign_settings.html`: new "🖼 Background (campaign default)" section under the World tab between Maps and Audio. File picker (`accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm"`) + Upload/Clear buttons + inline preview thumbnail (img or video depending on extension). JS posts to the existing `POST /api/campaign/{cid}/background` endpoint via `FormData`, then reloads the settings page to refresh the preview + status line. Per-encounter overrides are still managed from the encounter editor on the tabletop — they take precedence over the default per the v2.87.0 fallback logic.
+
+### Added
+- Campaign-settings "🖼 Background (campaign default)" section under the World tab — preview + file picker + Upload/Clear buttons + status line.
+
+### Changed
+- `style.css` — `body.has-encounter-bg .map-pane { background: transparent }` so the encounter bg fills the central viewport, not just the topbar gap.
+
+### Notes
+- **PATCH bump** — visual fix + UI surfacing. No data-model, contract, or schema change.
+- Why the campaign-settings page reloads on save instead of swapping in place: the page doesn't subscribe to the campaign hub (it's not a real-time view), so the preview thumbnail + "current default" line would otherwise go stale. A 600 ms feedback flash + `location.reload()` is simpler than wiring a WS connection just for the preview.
+
+---
+
 ## [2.87.0] - 2026-05-27 — "The House Style"
 
 **Schema version:** 64
