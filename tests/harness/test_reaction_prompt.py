@@ -1178,6 +1178,167 @@ async def test_cast_hellish_rebuke_consumes_slot(
         )
 
 
+# ── v2.74.0 — Phase 4a: Defensive Duelist feat ──
+
+
+async def test_defensive_duelist_prompt_fires_on_pc_hit(
+    gm_client, gm_ws, roster,
+):
+    """v2.74.0 — when a PC with Defensive Duelist + an equipped
+    finesse weapon is hit by a melee attack, the v2.69.0
+    `attack_targeted` prompt now also surfaces `use-defensive-duelist`
+    alongside any Shield option. Lyra got the feat in the v2.74.0
+    demo seed (Rapier is finesse). Picked Lyra over Pip because
+    Pip's Uncanny Dodge auto-fires on damage and burns the reaction
+    before the prompt can offer DD.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    krieger = roster["Krieger Stonefist"]
+
+    lyra_cid = f"tok_dd_{lyra['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": lyra_cid,
+            "char_id": lyra["id"],
+            "name": lyra["name"],
+            "initiative": 10,
+            "hp_current": 40, "hp_max": 40,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Probe until Krieger hits Lyra.
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": lyra_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == lyra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(attack_targeted) for Lyra; "
+        f"buffered: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+    assert "use-defensive-duelist" in keys, (
+        f"expected use-defensive-duelist option; got {keys}"
+    )
+    dd_option = next(
+        (o for o in prompts[0]["data"]["options"]
+         if o.get("key") == "use-defensive-duelist"), {}
+    )
+    # Lyra is Bard 6 → PB +3.
+    assert int((dd_option.get("params") or {}).get("pb") or 0) == 3
+
+
+async def test_use_defensive_duelist_marks_reaction(
+    gm_client, gm_ws, roster,
+):
+    """End-to-end: Krieger hits Lyra → prompt fires → POST
+    /use_reaction with use-defensive-duelist → Lyra's reaction flips
+    + feature_used(source=defensive-duelist, pb_bonus=3) broadcast.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    krieger = roster["Krieger Stonefist"]
+
+    lyra_cid = f"tok_dd2_{lyra['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": lyra_cid,
+            "char_id": lyra["id"],
+            "name": lyra["name"],
+            "initiative": 10,
+            "hp_current": 40, "hp_max": 40,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": lyra_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == lyra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, "expected attack_targeted prompt for Lyra"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    use = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "use-defensive-duelist",
+            "watcher_char_id": lyra["id"],
+        },
+    )
+    assert use.status_code == 200, use.text
+
+    await asyncio.sleep(0.2)
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == lyra["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update for Lyra's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "defensive-duelist"
+        and (m.get("data") or {}).get("character_id") == lyra["id"]
+    ]
+    assert fu, "expected feature_used(source=defensive-duelist)"
+    assert fu[-1]["data"].get("pb_bonus") == 3
+
+
 # ── v2.73.0 — Phase 6: NPC monster reactions ──
 
 

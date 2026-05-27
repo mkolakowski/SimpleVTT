@@ -1012,7 +1012,19 @@ def _bard_sheet(name: str) -> dict:
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
         ],
-        "feats": [],
+        # v2.74.0 Phase 4a — Defensive Duelist feat for Lyra. RAW
+        # (PHB p.166): reaction-based +PB AC against one melee hit
+        # when wielding a finesse weapon (Lyra has Rapier equipped,
+        # which is finesse). Picked Lyra over Pip because Pip's
+        # Uncanny Dodge (Rogue Lv 5+) auto-fires on damage and burns
+        # the reaction before the attack_targeted prompt can offer
+        # DD as an alternative — Lyra (Bard) has no UD so the
+        # reaction is free for DD. Wired through the v2.69.0
+        # attack_targeted trigger event alongside Shield.
+        "feats": [
+            {"slug": "defensive-duelist", "name": "Defensive Duelist",
+             "desc": "When wielding a finesse weapon and another creature hits you with a melee attack, you can use your reaction to add your proficiency bonus to your AC for that attack."},
+        ],
         # v2.14.1: Bardic Inspiration uses = CHA mod (3 at CHA 17),
         # refreshes on short rest from Lv 5 onward via Font of
         # Inspiration. Song of Rest exists as a passive (no counter

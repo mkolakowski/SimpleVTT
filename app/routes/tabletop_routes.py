@@ -2057,6 +2057,53 @@ def _pc_has_shield_available(char) -> "tuple[bool, str, int]":
     return True, best_class, best_lv
 
 
+# v2.74.0 Phase 4a — Defensive Duelist. RAW (PHB p.166): "When you
+# are wielding a finesse weapon with which you are proficient and
+# another creature hits you with a melee attack, you can use your
+# reaction to add your proficiency bonus to your AC for that attack,
+# potentially causing the attack to miss you." Returns (eligible,
+# proficiency_bonus). The PC must:
+#   - have the "defensive-duelist" feat in sheet.feats
+#   - have at least one equipped weapon whose ``properties`` string
+#     contains "finesse" (case-insensitive substring match — covers
+#     "finesse, light", "finesse", "finesse, light, thrown", etc.)
+# Reaction-slot availability is checked by the caller via the
+# combatant's economy dict before _eligible_reactions runs.
+def _pc_has_defensive_duelist_available(char) -> "tuple[bool, int]":
+    """Detect Defensive Duelist feat eligibility on a PC."""
+    if not char or not char.sheet:
+        return False, 0
+    sheet = char.sheet or {}
+    has_feat = False
+    for f in (sheet.get("feats") or []):
+        if not isinstance(f, dict):
+            continue
+        slug = (f.get("slug") or "").strip().lower()
+        name = (f.get("name") or "").strip().lower().replace(" ", "-")
+        if slug == "defensive-duelist" or name == "defensive-duelist":
+            has_feat = True
+            break
+    if not has_feat:
+        return False, 0
+    # Walk inventory for an equipped finesse weapon.
+    has_finesse = False
+    for it in (sheet.get("inventory") or []):
+        if not isinstance(it, dict):
+            continue
+        if not it.get("equipped"):
+            continue
+        if (it.get("type") or "").strip().lower() != "weapon":
+            continue
+        props = (it.get("properties") or "").lower()
+        if "finesse" in props:
+            has_finesse = True
+            break
+    if not has_finesse:
+        return False, 0
+    pb = int(sheet.get("proficiency_bonus") or 2)
+    return True, pb
+
+
 # v2.72.0 Phase 3d — Silvery Barbs. RAW (SAI / Strixhaven p.144):
 # "1 reaction, which you take when a creature you can see within 60
 # feet of yourself succeeds on an attack roll, an ability check, or
@@ -2381,6 +2428,37 @@ def _eligible_reactions(
                         "kind": "spell",
                         "resource_cost": f"Reaction + 1× L{slot_lv} slot",
                         "params": {"slot_level": slot_lv, "class_slug": class_slug},
+                        "available": True,
+                        "unavailable_reason": None,
+                    })
+                # v2.74.0 Phase 4a — Defensive Duelist feat. Same
+                # trigger event as Shield (attack_targeted) but a
+                # feat-based AC bump (+PB) instead of a spell-slot-
+                # based +5. Both can coexist for a Wizard/Rogue
+                # multiclass; the player picks one.
+                dd_elig, dd_pb = _pc_has_defensive_duelist_available(char)
+                if dd_elig:
+                    dd_ac = (char.sheet.get("ac") or 0)
+                    dd_new = (dd_ac or 0) + dd_pb
+                    dd_atk_total = context.get("attack_total")
+                    dd_hint = ""
+                    if isinstance(dd_atk_total, int) and dd_ac:
+                        if dd_atk_total < dd_new:
+                            dd_hint = (
+                                f" — +{dd_pb} AC ({dd_ac} → {dd_new}) would "
+                                f"make d20 {dd_atk_total} MISS."
+                            )
+                        else:
+                            dd_hint = (
+                                f" — +{dd_pb} AC ({dd_ac} → {dd_new}) still "
+                                f"leaves d20 {dd_atk_total} as a HIT."
+                            )
+                    opts.append({
+                        "key": "use-defensive-duelist",
+                        "label": f"🗡 Defensive Duelist (+{dd_pb} AC){dd_hint}",
+                        "kind": "feat",
+                        "resource_cost": "Reaction",
+                        "params": {"pb": dd_pb},
                         "available": True,
                         "unavailable_reason": None,
                     })
@@ -13631,6 +13709,49 @@ async def use_reaction(
                     "reaction_kind": "spell",
                     "slot_level": slot_level,
                     "damage_type": damage_type,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key == "use-defensive-duelist" and watcher_char_id:
+        # v2.74.0 Phase 4a — Defensive Duelist feat. Pure reaction
+        # spend (no slot cost). Marks reaction + broadcasts
+        # feature_used naming the AC bonus formula. Retroactive AC
+        # negation of the triggering attack is filed for v3 alongside
+        # the v2.69.0 Shield work — chat-card surfaces whether the
+        # new AC would have made the d20 miss.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "use-defensive-duelist"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            pb = int(params.get("pb") or 2)
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": f"🗡 Defensive Duelist (+{pb} AC)",
+                    "feature_desc": (
+                        f"Reaction. +{pb} AC against the triggering melee "
+                        f"attack. (RAW: requires equipped finesse weapon.)"
+                    ),
+                    "source": "defensive-duelist",
+                    "reaction_kind": "feat",
+                    "pb_bonus": pb,
                 },
             })
         except HTTPException:

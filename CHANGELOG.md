@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.74.0] - 2026-05-26 — "The Finesse Parry"
+
+**Schema version:** 60
+**Commit summary:** **Phase 4a — Defensive Duelist feat, the first PC feat wired to a runtime reaction trigger.** Reuses the v2.69.0 `attack_targeted` trigger event (no new event needed). New `_pc_has_defensive_duelist_available(char)` helper gates on `sheet.feats` containing "defensive-duelist" AND at least one equipped weapon whose `properties` string contains "finesse" (substring match). The PC branch of `_eligible_reactions[attack_targeted]` now appends a `use-defensive-duelist` option (with the PC's proficiency bonus + AC math preview) alongside any Shield option a Wizard/Sorcerer might have. `/use_reaction use-defensive-duelist` dispatch marks the reaction and broadcasts `feature_used(source=defensive-duelist, pb_bonus=N)`. Pip got the feat first but the test-failure surfaced an Uncanny-Dodge-vs-DD interaction (UD auto-fires first and consumes the reaction); demo seed moved to Lyra (Bard, Rapier-equipped, no UD) where DD has clear airspace.
+**Description:** Three blocks of edits in `app/routes/tabletop_routes.py` + one demo-seed change. **(1)** New `_pc_has_defensive_duelist_available(char) -> (bool, pb_bonus)` helper. Walks `sheet.feats` for slug/name normalized to "defensive-duelist"; if found, walks `sheet.inventory` for any equipped weapon (`equipped: True`, `type: "weapon"`) whose `properties` (lowercased) substring-matches "finesse". Returns `(True, sheet.proficiency_bonus or 2)` if both conditions hold. **(2)** `_eligible_reactions[attack_targeted]` PC branch: after the existing Shield option append (v2.69.0 / v2.73.0 NPC-branch refactor preserved), additionally calls `_pc_has_defensive_duelist_available` and appends a `use-defensive-duelist` option carrying `pb` in `params`. Label previews AC bonus + retroactive-negation hint via the same context.attack_total comparison Shield uses. **(3)** `/use_reaction use-defensive-duelist` dispatch: reads `pb` from the stored option's params, marks reaction via `_mark_battle_economy`, broadcasts `feature_used(source="defensive-duelist", pb_bonus=N)`. **(4)** `app/demo_seed.py`: Lyra gets the feat (was empty list); chose Lyra over Pip because Pip's Uncanny Dodge (Rogue Lv 5+) auto-fires on damage and burns the reaction before the `attack_targeted` prompt can offer DD. The Pip + DD interaction is filed as a follow-up: extend the UD path to NOT auto-spend when DD-eligible, or surface a pre-resolution prompt with both options.
+**Description (cont):** v1 simplifications (filed for v3 pending-damage state machine):
+- **No auto-AC negation of the triggering attack.** Same filing as the v2.69.0 Shield work — chat-card surfaces whether the new AC (current + PB) would have made the d20 miss; player/GM adjudicates whether to manually undo via v2.65.0 Undo button.
+- **No "is this a melee attack" gate.** RAW: DD only works against melee attacks. v1 fires the prompt for any `attack_targeted` event (which only fires from `/attack`, but the framework doesn't yet check the attacker's range — could fire for a ranged crossbow hit). Filed: extend `attack_targeted` context with `is_melee: bool`.
+- **UD-vs-DD interaction:** if a Rogue 5+ with DD takes damage, UD auto-fires first and consumes the reaction → DD prompt never offers because the gate `not bool(econ.reaction)` evaluates False. Lyra has no UD so this isn't a live issue in the demo; filed as a feature interaction.
+- **No PB recompute on level-up.** The helper reads `sheet.proficiency_bonus` once at prompt-emit time; if the PC level-ups mid-fight (rare) the cached PB on the prompt option doesn't update. Standard prompt-lifecycle behavior.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.74.0`. (b) Two new tests:
+- `test_defensive_duelist_prompt_fires_on_pc_hit` — Krieger swings on Lyra (Bard 6 w/ DD feat + Rapier equipped) until a hit lands; asserts `reaction_prompt(attack_targeted)` fires for Lyra with `use-defensive-duelist` option whose `params.pb == 3` (Lyra's PB at Lv 6).
+- `test_use_defensive_duelist_marks_reaction` — same setup + POST `/use_reaction` with `use-defensive-duelist`; asserts `economy_update` for Lyra's reaction = True, `feature_used(source=defensive-duelist, pb_bonus=3)`.
+
+Full reaction_prompt suite passes 23/23 locally.
+
+### Added
+- `_pc_has_defensive_duelist_available(char) -> (bool, pb_bonus)` helper.
+- Defensive Duelist option in `_eligible_reactions[attack_targeted]` PC branch (alongside Shield).
+- `use-defensive-duelist` dispatch case in `/use_reaction` — marks reaction, broadcasts `feature_used(source="defensive-duelist", pb_bonus=N)`.
+- Defensive Duelist feat added to Lyra's `sheet.feats` in `demo_seed.py`.
+- Harness `test_defensive_duelist_prompt_fires_on_pc_hit` + `test_use_defensive_duelist_marks_reaction` — 2 new tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.74.0`.
+- `README.md` version badge → `2.74.0`.
+- `docs/plans/reactions-automation.md` — Phase 4a marked 🟠 partial (DD shipped; Lucky / War Caster / Mage Slayer still ⚪).
+- `docs/test-harness-coverage.md` — total test count 556 → 558.
+
+### Notes
+- **First feat-driven reaction.** Prior reactions were class-feature (UD / Cutting Words / Indomitable / Sentinel) or spell (Shield / Counterspell / HR / AE / SB). DD opens the feat-detection pipeline for Phase 4b (Lucky, multi-trigger) + 4c (War Caster) + 4d (Mage Slayer).
+- **Demo-seed picks reveal trigger interactions.** The Pip + DD attempt surfaced that UD auto-fires first; moving DD to Lyra worked because Bard has no auto-fire reaction. Future feat picks should consider which other reactions the PC has access to.
+
+---
+
 ## [2.73.0] - 2026-05-26 — "The Parried Blade"
 
 **Schema version:** 60
