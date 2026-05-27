@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.87.3] - 2026-05-27 — "No Frame"
+
+**Schema version:** 64
+**Commit summary:** **Drops the dark "gutter" rectangles that v2.51.x drew along the inside edges of every battle map.** GM reported the dark strips visually read as a "border living inside the map," obscuring the outermost cells of the background image. v2.51.x rendered four 22-px-wide strips at the canvas edges (top, left, right, bottom) with a `rgba(0,0,0,0.35)` fill plus a 1-px accent-color frame line — a heavy treatment that ate ~3% of map area on every map. Removed in this bump; coordinate labels stay but render directly over the map content with a translucent text-shadow for legibility on light maps.
+**Description:** One edit — `app/static/tabletop.js::drawGridCoords()`. Removed the four `ctx.fillRect()` calls that painted the gutter strips and the four `ctx.stroke()` border-line calls that drew the inside-edge accent frame. Replaced with a `ctx.shadowColor` / `ctx.shadowBlur` setup so the existing label `fillText()` calls render with a soft dark shadow halo around each glyph — legible against both light and dark map backgrounds without any opaque backing. Label positions, text color (theme accent), and grid spacing are unchanged from v2.51.x.
+
+### Changed
+- `tabletop.js` — `drawGridCoords()` no longer paints gutter rectangles or frame lines. Labels keep their theme-accent color and gain a `rgba(0, 0, 0, 0.85)` text-shadow with 3-px blur for contrast.
+
+### Notes
+- **PATCH bump** — pure visual change. No coordinate-system change, no data-model change. Hit-testing, token drag, AOE picker, ruler, fog-of-war reveal — all of those use `clientToCanvas()` which is untouched.
+- This is the lightweight fix. If the user still wants the labels themselves moved OUT of the map area (currently they overlay the outermost cell row/column with text-shadow), a follow-up commit can wrap the bg-layer / canvas / gif-overlay in a single transformed `#map-transform` div and expand the canvas dimensions to give the labels a true gutter outside the map image. That's a larger restructure (touches pan/zoom transforms, clientToCanvas coordinate space, and pan clamping); shipping the cheap version first lets the GM evaluate whether the heavier restructure is still wanted.
+
+---
+
 ## [2.87.2] - 2026-05-27 — "Through the Window"
 
 **Schema version:** 64

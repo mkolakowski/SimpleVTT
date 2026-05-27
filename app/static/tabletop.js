@@ -209,51 +209,19 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // v2.51.2 — unified backing recipe for all four strips: dark
-        // (0.35 alpha) + accent text.
-        // v2.51.3 — paint the four strips as NON-OVERLAPPING
-        // rectangles so the corners aren't double-darkened. The
-        // previous code drew 4 full-length strips that overlapped in
-        // the 4 corner blocks; two 0.35-alpha fills stacked there
-        // produced a combined alpha of 1 - (1 - 0.35)² ≈ 0.58, which
-        // read as visibly darker corners and (per user feedback) made
-        // the A and 1 labels look misaligned against an asymmetrically
-        // shaped gutter. New geometry: left + right strips paint the
-        // full canvas height (covering the corners once); top + bottom
-        // strips paint only the MIDDLE x-range between them. Result:
-        // uniform 0.35 alpha across the whole gutter frame.
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
-        // Left + right: full height (covers all four corners).
-        ctx.fillRect(0, 0, stripH, MAP_H);
-        ctx.fillRect(MAP_W - stripH, 0, stripH, MAP_H);
-        // Top + bottom: middle only (skip corner regions already painted).
-        const midW = MAP_W - 2 * stripH;
-        if (midW > 0) {
-            ctx.fillRect(stripH, 0, midW, stripH);
-            ctx.fillRect(stripH, MAP_H - stripH, midW, stripH);
-        }
-
-        // Theme-accent border lines separating each gutter from the
-        // map body. Four strokes — one along the inside edge of each
-        // strip — so the player sees a complete frame.
-        ctx.strokeStyle = accent;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(0, stripH + 0.5);
-        ctx.lineTo(MAP_W, stripH + 0.5);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(stripH + 0.5, 0);
-        ctx.lineTo(stripH + 0.5, MAP_H);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(0, MAP_H - stripH - 0.5);
-        ctx.lineTo(MAP_W, MAP_H - stripH - 0.5);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(MAP_W - stripH - 0.5, 0);
-        ctx.lineTo(MAP_W - stripH - 0.5, MAP_H);
-        ctx.stroke();
+        // v2.87.3 — dropped the dark gutter-strip rectangles + inner
+        // border lines that v2.51.x drew at the four edges of the map.
+        // The strips lived INSIDE the map area (canvas coords 0..stripH
+        // etc.) and visually read as a "border living inside the map"
+        // (per user report), obscuring the outermost cells of the
+        // background image. Labels are now rendered with a translucent
+        // dark text-shadow only — they sit over the map content without
+        // a heavy frame, so the map image is fully visible to its
+        // edges.
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+        ctx.shadowBlur = 3;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
 
         // v2.50.5 — labels centered between the gridlines, NOT
         // offset by the perpendicular strip width. The gridlines that
