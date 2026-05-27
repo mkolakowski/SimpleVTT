@@ -2348,43 +2348,103 @@ def _eligible_reactions(
     # +5 AC retroactively negates the hit (filed: server-side auto-
     # recompute; v1 leaves the decision to player/GM adjudication).
     if trigger_event == "attack_targeted":
-        if not watcher_char_id:
-            return []
-        try:
-            char = db.query(Character).filter(
-                Character.id == int(watcher_char_id),
-            ).first()
-        except Exception:
-            char = None
-        if not char or not char.sheet:
-            return []
-        eligible, class_slug, slot_lv = _pc_has_shield_available(char)
-        if not eligible:
-            return []
-        ac = (char.sheet.get("ac") or 0)
-        new_ac = (ac or 0) + 5
-        atk_total = context.get("attack_total")
-        negates_hint = ""
-        if isinstance(atk_total, int) and ac:
-            if atk_total < new_ac:
-                negates_hint = (
-                    f" — Shield's +5 AC ({ac} → {new_ac}) would make "
-                    f"d20 {atk_total} MISS."
-                )
-            else:
-                negates_hint = (
-                    f" — Shield's +5 AC ({ac} → {new_ac}) still leaves "
-                    f"d20 {atk_total} as a HIT."
-                )
-        return [{
-            "key": "cast-shield",
-            "label": f"✨ Cast Shield (+5 AC){negates_hint}",
-            "kind": "spell",
-            "resource_cost": f"Reaction + 1× L{slot_lv} slot",
-            "params": {"slot_level": slot_lv, "class_slug": class_slug},
-            "available": True,
-            "unavailable_reason": None,
-        }]
+        opts: list[dict] = []
+        # PC watcher path — Shield spell.
+        if watcher_char_id:
+            try:
+                char = db.query(Character).filter(
+                    Character.id == int(watcher_char_id),
+                ).first()
+            except Exception:
+                char = None
+            if char and char.sheet:
+                eligible, class_slug, slot_lv = _pc_has_shield_available(char)
+                if eligible:
+                    ac = (char.sheet.get("ac") or 0)
+                    new_ac = (ac or 0) + 5
+                    atk_total = context.get("attack_total")
+                    negates_hint = ""
+                    if isinstance(atk_total, int) and ac:
+                        if atk_total < new_ac:
+                            negates_hint = (
+                                f" — Shield's +5 AC ({ac} → {new_ac}) would make "
+                                f"d20 {atk_total} MISS."
+                            )
+                        else:
+                            negates_hint = (
+                                f" — Shield's +5 AC ({ac} → {new_ac}) still leaves "
+                                f"d20 {atk_total} as a HIT."
+                            )
+                    opts.append({
+                        "key": "cast-shield",
+                        "label": f"✨ Cast Shield (+5 AC){negates_hint}",
+                        "kind": "spell",
+                        "resource_cost": f"Reaction + 1× L{slot_lv} slot",
+                        "params": {"slot_level": slot_lv, "class_slug": class_slug},
+                        "available": True,
+                        "unavailable_reason": None,
+                    })
+        # v2.73.0 Phase 6 — NPC watcher path. Walk the projected
+        # template sheet for actions with `category == "reaction"`
+        # (Parry, etc.). The caller passes the watcher's combatant
+        # dict (which carries `source_token_id`) via context.
+        else:
+            watcher_combatant_id = context.get("watcher_combatant_id")
+            campaign_id = context.get("campaign_id")
+            if watcher_combatant_id and campaign_id:
+                state = hub.get_battle(int(campaign_id))
+                watcher_cb = None
+                if state:
+                    for c in (state.get("combatants") or []):
+                        if c.get("id") == watcher_combatant_id:
+                            watcher_cb = c
+                            break
+                tmpl = None
+                if watcher_cb is not None:
+                    src_id = watcher_cb.get("source_token_id")
+                    if src_id:
+                        try:
+                            t = db.query(Token).filter(
+                                Token.id == int(src_id),
+                            ).first()
+                            if t and t.token_template_id:
+                                tmpl = db.query(TokenTemplate).filter(
+                                    TokenTemplate.id == int(t.token_template_id),
+                                ).first()
+                        except Exception:
+                            tmpl = None
+                if tmpl is not None:
+                    try:
+                        proj = _monster_template_to_sheet(tmpl, 0)
+                    except Exception:
+                        proj = None
+                    if isinstance(proj, dict):
+                        for a in (proj.get("actions") or []):
+                            if not isinstance(a, dict):
+                                continue
+                            cat = (a.get("category") or "").strip().lower()
+                            if cat != "reaction":
+                                continue
+                            action_name = (a.get("name") or "Reaction").strip()
+                            action_id = (
+                                a.get("id")
+                                or action_name.lower().replace(" ", "-")
+                            )
+                            opts.append({
+                                "key": f"monster-{action_id}",
+                                "label": f"⚡ {action_name}",
+                                "kind": "monster_reaction",
+                                "resource_cost": "Reaction",
+                                "params": {
+                                    "action_id": action_id,
+                                    "action_name": action_name,
+                                    "monster_name": tmpl.name or "Monster",
+                                    "desc": (a.get("desc") or "").strip()[:200],
+                                },
+                                "available": True,
+                                "unavailable_reason": None,
+                            })
+        return opts
     # v2.70.0 Phase 3b — Counterspell auto-prompt. Fires from
     # /cast_spell + /npc_cast_spell when a spell is cast within 60 ft
     # of a watcher who has Counterspell prepared + a 3rd+ slot
@@ -2657,6 +2717,13 @@ async def _emit_reaction_prompt(
     _purge_active_reaction_prompts()
     context = dict(context or {})
     watcher_char_id = watcher_combatant.get("char_id")
+    # v2.73.0 Phase 6 — plumb the watcher's combatant id + campaign
+    # id into context so the NPC-watcher branch of
+    # `_eligible_reactions[attack_targeted]` can look up the template
+    # via hub state + Token → TokenTemplate without needing a new
+    # function-signature parameter. PC paths ignore these fields.
+    context.setdefault("watcher_combatant_id", watcher_combatant.get("id"))
+    context.setdefault("campaign_id", int(campaign.id))
     options = _eligible_reactions(
         db, campaign.id, watcher_char_id, trigger_event, context,
     )
@@ -13570,6 +13637,54 @@ async def use_reaction(
             raise
         except Exception:
             pass
+    elif reaction_key.startswith("monster-"):
+        # v2.73.0 Phase 6 — NPC reaction (Parry, etc.). The NPC
+        # combatant has no char_id; mark the reaction slot via
+        # combatant_id and broadcast a feature_used naming the
+        # action + monster + the description from the projected
+        # stat-block. The narrative effect (Parry's +2 AC against
+        # one melee attack) is GM-adjudicated — v1 captures the
+        # spend + the desc text; auto-recompute of AC against the
+        # triggering attack is filed for v3 alongside the pending-
+        # damage state machine.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == reaction_key),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            action_name = str(params.get("action_name") or "Reaction")
+            monster_name = str(params.get("monster_name") or "Monster")
+            desc = str(params.get("desc") or "")
+            watcher_combatant_id = entry.get("watcher_combatant_id")
+            if not watcher_combatant_id:
+                raise HTTPException(400, "watcher_combatant_id missing")
+            await _mark_battle_economy_by_combatant_id(
+                campaign_id, str(watcher_combatant_id), "reaction",
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": None,
+                    "character_name": monster_name,
+                    "user_color": None,
+                    "feature_name": f"⚡ {action_name}",
+                    "feature_desc": desc or (
+                        f"{monster_name} used its reaction: {action_name}."
+                    ),
+                    "source": "monster-reaction",
+                    "reaction_kind": "monster_reaction",
+                    "monster_name": monster_name,
+                    "action_id": params.get("action_id"),
+                    "action_name": action_name,
+                    "watcher_combatant_id": watcher_combatant_id,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
     elif reaction_key == "cast-silvery-barbs" and watcher_char_id:
         # v2.72.0 Phase 3d — Silvery Barbs. Consume the 1st+ slot,
         # mark reaction, broadcast feature_used naming the target +
@@ -22674,10 +22789,19 @@ async def use_attack(
     # popup + roll log. The catalog gate (Shield in spells, slot
     # available, reaction available) lives in
     # `_eligible_reactions[attack_targeted]`.
+    #
+    # v2.73.0 Phase 6 — extend to NPC targets too. Bandit Captain
+    # (Parry), Knight (Parry), Gladiator (Parry), Erinyes (Parry),
+    # Marilith (Parry), Noble (Parry), and any monster stat-block
+    # with a `category: "reaction"` action entry can now surface in
+    # the popup when hit by a PC swing. The eligibility branch in
+    # `_eligible_reactions[attack_targeted]` reads `combatant.
+    # source_token_id` → Token → TokenTemplate → projected sheet
+    # actions.
     try:
         if hit and target_combatant_id:
             target_cb = _lookup_combatant(campaign_id, target_combatant_id)
-            if target_cb is not None and target_cb.get("char_id"):
+            if target_cb is not None:
                 _target_econ = (target_cb.get("economy") or {})
                 if not bool(_target_econ.get("reaction")):
                     await _emit_reaction_prompt(

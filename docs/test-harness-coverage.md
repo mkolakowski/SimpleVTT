@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 554 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.72.0, 2026-05-26).
+**Total tests:** 556 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.73.0, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -799,6 +799,8 @@ v2.67.0 — Phase 1a of the reactions-automation plan (see [`docs/plans/reaction
 | `test_cast_hellish_rebuke_consumes_slot` | v2.71.0 — POST `/use_reaction` with `reaction_key=cast-hellish-rebuke` after the prompt → 200, `economy_update` for Magnus's reaction = True, `spell_slot_update` decrements his L3 Pact slot, `feature_used(source=hellish-rebuke-cast, damage_type=fire, damage_expr=4d10, slot_level=3)`. |
 | `test_silvery_barbs_prompt_fires_on_save_pass` | v2.72.0 — Phase 3d. Krieger (Barbarian +7 STR save) rolls a DC 5 STR save via `/roll_request/{id}/respond` and trivially passes; Thalindra (Wizard 5 w/ Silvery Barbs from v2.72.0 demo seed + L1 slot) in the battle → `reaction_prompt(save_resolved)` fires for Thalindra with `cast-silvery-barbs` option whose `params.slot_level=1`, `params.target_name="Krieger Stonefist"`. The rolling character is excluded from being their own watcher. |
 | `test_cast_silvery_barbs_consumes_slot` | v2.72.0 — POST `/use_reaction` with `reaction_key=cast-silvery-barbs` after the prompt → 200, `economy_update` for Thalindra's reaction = True, `spell_slot_update` decrements her L1 wizard slot, `feature_used(source=silvery-barbs-cast, slot_level=1, rerolled_target_name="Krieger Stonefist")`. |
+| `test_npc_parry_prompt_fires_on_hit` | v2.73.0 — Phase 6. Krieger swings on a spawned Bandit Captain (forces `auto_apply_damage=on`) until a hit lands → `reaction_prompt(attack_targeted)` fires for the captain's combatant_id with `monster-parry` option built from `_monster_template_to_sheet(tmpl).actions[].category=="reaction"`. |
+| `test_use_npc_parry_marks_reaction` | v2.73.0 — POST `/use_reaction` with `reaction_key=monster-parry` (no `watcher_char_id` for NPC) → 200, `economy_update` for the captain's reaction = True (via `combatant_id` key, not `character_id`), `feature_used(source=monster-reaction, action_name="Parry", monster_name~="Bandit Captain*")`. |
 
 ### `test_gm_reactions_panel.py`
 v2.68.0 — GM Reactions Panel (see [`docs/plans/reactions-automation.md`](plans/reactions-automation.md)). New `GET /available_reactions` + `POST /spend_reaction_manual` endpoints surface every combatant's reaction catalog to the GM and let the GM flip any reaction chip with one click. PC class features (Uncanny Dodge / Cutting Words / Indomitable), PC feats (Sentinel / Polearm Master / etc.), PC reaction spells (Shield / Counterspell / etc. via `casting_time` scan), NPC monster reactions (Parry / etc. via `category == "reaction"` walk).

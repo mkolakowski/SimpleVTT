@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.73.0] - 2026-05-26 — "The Parried Blade"
+
+**Schema version:** 60
+**Commit summary:** **Phase 6 — Monster reactions. NPC stat-block reactions (Parry, etc.) now surface through the `attack_targeted` trigger pipeline.** Extends the v2.69.0 Shield prompt hook to fire for NPC targets in addition to PCs. The `_eligible_reactions[attack_targeted]` branch now has two paths: PC watcher → Shield via `_pc_has_shield_available`, NPC watcher → walk `_monster_template_to_sheet(tmpl).actions` for `category == "reaction"` entries (Parry, etc.) and build `monster-{action_id}` options. New `/use_reaction` dispatch for `monster-*` keys marks the NPC's reaction slot via `_mark_battle_economy_by_combatant_id` and broadcasts a `feature_used(source="monster-reaction")` naming the action + monster + desc. Narrative effects (Parry's +2 AC against one melee attack, etc.) are GM-adjudicated for v1.
+**Description:** Four blocks of edits in `app/routes/tabletop_routes.py`. **(1)** `/attack` emit gate: previously `if target_cb.get("char_id")` (PC-only); now fires for any combatant whose reaction slot is unused. The PC vs NPC branch happens downstream in `_eligible_reactions`. **(2)** `_emit_reaction_prompt` now injects `watcher_combatant_id` + `campaign_id` into the context dict via `setdefault` so the NPC-watcher branch of `_eligible_reactions` can look up the template (combatant_id → source_token_id → Token → TokenTemplate → projected sheet) without needing a new function-signature parameter. PC paths ignore these fields. **(3)** `_eligible_reactions[attack_targeted]` restructured from "single option list" into a "build opts list, branch on `watcher_char_id`" shape: PC path appends `cast-shield` when eligible (same as v2.69.0); NPC path resolves the template, walks `proj.actions`, filters `category == "reaction"`, appends `monster-{action_id}` options. **(4)** `/use_reaction` dispatch case for any reaction_key matching `monster-*`: reads the option's `params` (action_id, action_name, monster_name, desc) from the stored entry; marks reaction via `_mark_battle_economy_by_combatant_id`; broadcasts `feature_used(source="monster-reaction")` carrying `monster_name`, `action_id`, `action_name`, `watcher_combatant_id`.
+**Description (cont):** v1 simplifications (filed for v3 pending-damage state machine):
+- **No auto-AC bump for Parry.** Parry's RAW effect is "+2 AC against one melee attack that would hit"; v1 doesn't recompute the triggering hit vs the new AC. The chat-card surfaces the desc text + the action name; GM adjudicates whether the +2 saves the NPC. Same filing as the v2.69.0 Shield retroactive-negation work.
+- **No effect resolution for non-defensive reactions.** Other monster reactions in the SRD catalog (Aboleth Tentacle Slap, Yuan-Ti Snake Form, etc.) have varied effects (damage, transformation, repositioning) that the v1 catalog surface doesn't simulate. Filed: per-reaction dispatch handlers as Phase 6.1+.
+- **NPC reactions only on `attack_targeted` for now.** NPC monsters with reactions tied to other triggers (damage_taken, spell_cast_near, ally_attacked_near) aren't yet surfaced. Filed: extend each existing trigger event's branch with a parallel NPC walker.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.73.0`. (b) Two new tests:
+- `test_npc_parry_prompt_fires_on_hit` — Krieger swings on a spawned Bandit Captain until a hit lands (forces `auto_apply_damage=on` like the v2.71.0 HR tests); asserts `reaction_prompt(attack_targeted)` fires for the captain's combatant_id with a `monster-parry` option.
+- `test_use_npc_parry_marks_reaction` — same setup + POST `/use_reaction` with `monster-parry` (no `watcher_char_id` — NPCs don't have one); asserts `economy_update` for the captain's reaction = True (via `combatant_id` key, not `character_id`), and `feature_used(source="monster-reaction", action_name="Parry", monster_name~="Bandit Captain*")`.
+
+Full reaction_prompt suite passes 21/21 locally.
+
+### Added
+- `_eligible_reactions[attack_targeted]` NPC-watcher branch — walks `_monster_template_to_sheet(tmpl).actions[].category == "reaction"`.
+- `_emit_reaction_prompt` injects `watcher_combatant_id` + `campaign_id` into context so the NPC branch can look up the template.
+- `monster-*` dispatch case in `/use_reaction` — marks NPC reaction via `_mark_battle_economy_by_combatant_id` + broadcasts `feature_used(source="monster-reaction")`.
+- `/attack` now emits `attack_targeted` for NPC targets too (was: PC-only).
+- Harness `test_npc_parry_prompt_fires_on_hit` + `test_use_npc_parry_marks_reaction` — 2 new tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.73.0`.
+- `README.md` version badge → `2.73.0`.
+- `docs/plans/reactions-automation.md` — Phase 6 marked 🟠 partial (Parry-style catalog surfaced via attack_targeted; per-reaction dispatch handlers + non-attack_targeted triggers filed).
+- `docs/test-harness-coverage.md` — total test count 554 → 556.
+
+### Notes
+- **First NPC-side reaction trigger.** Closes the gap between the v2.68.0 GM Reactions Panel (manual NPC-reaction spend) and the v2.69.0+ trigger-driven PC reactions. Now a GM swing on Krieger and a Krieger swing on the Bandit Captain both surface popups via the same `attack_targeted` pipeline — symmetric coverage.
+- **Walker scales to other monsters automatically.** The catalog read walks `category == "reaction"` so every monster JSON with a reaction (Knight, Gladiator, Erinyes, Marilith, Noble, ...) gets the same prompt surface without per-monster code.
+
+---
+
 ## [2.72.0] - 2026-05-26 — "Argent Words"
 
 **Schema version:** 60
