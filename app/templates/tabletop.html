@@ -3,6 +3,12 @@
 {# Suppress the version footer on the tabletop page — the screen is meant
    to be full-bleed and the footer would push the canvas into a scrollbar. #}
 {% block footer %}{% endblock %}
+{# v2.90.0 — same treatment for the topnav. All the links it carries
+   (Wiki, My Characters, Settings, Admin, Logout) plus the version
+   number are surfaced in the Tools drawer's Quick Links panel
+   below, so the topnav is redundant on the tabletop and removing it
+   reclaims ~40 px of vertical space. #}
+{% block topnav %}{% endblock %}
 {% block head %}
 <style>
     body { overflow: hidden; }
@@ -1834,13 +1840,16 @@
         {# v2.49.106 — Settings tab houses player-side preferences
            (sound controls today, future per-player options later).
            Player-only; GMs have the music + GM-tools controls in
-           their own GM Tools drawer. #}
+           their own Tools drawer.
+           v2.90.0 — the GM-Tools drawer is renamed "Tools" and is now
+           visible to players too (with GM-only sections gated inside).
+           The player Settings tab stays as the sound-mute surface; the
+           Tools drawer Quick Links panel surfaces /settings as a
+           hyperlink to the full settings page. #}
         {% if not is_gm %}
         <button class="drawer-tab-btn" data-target="settings-drawer">⚙ Settings</button>
         {% endif %}
-        {% if is_gm %}
-        <button class="drawer-tab-btn gm-tools-tab" data-target="gm-tools-drawer">⚙ GM Tools</button>
-        {% endif %}
+        <button class="drawer-tab-btn gm-tools-tab" data-target="gm-tools-drawer">⚙ Tools</button>
     </div>
 </div>
 
@@ -3459,10 +3468,36 @@
         </script>
 {% endif %}
 
-{% if is_gm %}
-<!-- ── GM Tools drawer ── -->
+<!-- ── Tools drawer ── -->
+{# v2.90.0 — the drawer (renamed GM Tools → Tools) is now visible to
+   players too. The four GM-only sections (Session, Encounters, Token
+   Management, Music) are individually gated with {% if is_gm %} so
+   players see the Quick Links panel + nothing else here. #}
 <div id="gm-tools-drawer" class="drawer-panel">
     <div class="drawer-body">
+        {# v2.90.0 — Quick Links panel. Surfaces the links + version
+           that used to live in the topnav header (now hidden on the
+           tabletop). Visible to everyone; the Admin link only renders
+           for admins, matching the topnav's existing gate. The version
+           string is read from APP_VERSION so it stays in sync with
+           every release. #}
+        <div style="margin-bottom:10px;border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);border-radius:8px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.12);background:color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);-webkit-backdrop-filter:blur(16px) saturate(160%);backdrop-filter:blur(16px) saturate(160%);">
+            <div style="background:linear-gradient(135deg,color-mix(in srgb, var(--accent) 13%, transparent),color-mix(in srgb, var(--accent) 8%, transparent));border-bottom:2px solid var(--accent);padding:5px 10px;font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;display:flex;align-items:center;gap:8px;">
+                <span style="flex:1;">🔗 Quick Links</span>
+                <span class="muted" style="font-size:9px;font-weight:500;letter-spacing:0;text-transform:none;" title="App version v{{ APP_VERSION }} · schema v{{ SCHEMA_VERSION }}">v{{ APP_VERSION }}</span>
+            </div>
+            <div style="padding:8px 10px;display:flex;flex-direction:column;gap:4px;font-size:12px;">
+                <a href="/wiki" target="_blank" rel="noopener noreferrer" class="btn-link" title="Open the wiki in a new tab" style="min-height:32px;display:flex;align-items:center;gap:6px;">📖 Wiki</a>
+                <a href="/characters" class="btn-link" style="min-height:32px;display:flex;align-items:center;gap:6px;">🧝 My Characters</a>
+                <a href="/settings" class="btn-link" style="min-height:32px;display:flex;align-items:center;gap:6px;">⚙ User Settings</a>
+                {% if user.is_admin %}
+                <a href="/admin" class="btn-link" style="min-height:32px;display:flex;align-items:center;gap:6px;">🛡 Admin</a>
+                {% endif %}
+                <a href="/logout" class="btn-link" style="min-height:32px;display:flex;align-items:center;gap:6px;color:var(--fg-mute);">↪ Logout</a>
+            </div>
+        </div>
+
+        {% if is_gm %}
         <!-- ── Session controls ── -->
         {# v2.51.4: glass-card recipe matching the rest of the drawer
            family. The session controls block had a transparent body
@@ -3675,9 +3710,9 @@
         {% endif %}
             </div><!-- /gm-panel-body (music) -->
         </details><!-- /#music-panel -->
+        {% endif %}{# /is_gm — closes the Sessions/Encounters/Tokens/Music gate from v2.90.0 #}
     </div>
 </div>
-{% endif %}
 
         </div><!-- /.drawer-panels-wrapper -->
     </div><!-- /.drawer-sidebar -->

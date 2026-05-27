@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.90.0] - 2026-05-27 — "The Player's Toolbelt"
+
+**Schema version:** 64
+**Commit summary:** **Renames "GM Tools" → "Tools" and opens the drawer to players (with a Quick Links panel + the four GM-only sections gated inside), then hides the topnav header on the tabletop because the Quick Links panel now carries everything the topnav used to.** GM-only sections (Session, Encounters, Token Management, Music) remain GM-gated and only render when `is_gm` is true. Players see only the Quick Links panel (Wiki, My Characters, User Settings, Admin if admin, Logout, plus the app version).
+**Description:** Three edits. **(1)** `app/templates/base.html`: wraps `<header class="topnav">…</header>` in a new `{% block topnav %}…{% endblock %}` so subclasses can suppress it. The default block keeps emitting the header exactly as before — no behavior change anywhere except the tabletop. **(2)** `app/templates/tabletop.html`: overrides `{% block topnav %}{% endblock %}` (empty) so the topnav doesn't render on the tabletop. Renames the drawer tab button from `⚙ GM Tools` → `⚙ Tools` and removes the `{% if is_gm %}` guard so players see the tab. Wraps the **inside** of the drawer's four legacy sections in a single `{% if is_gm %}` block from "Session" through "Music" so players see only the new Quick Links panel. Adds the Quick Links panel as the first child of `#gm-tools-drawer .drawer-body` — same glass-card recipe as the Session card, headed `🔗 Quick Links` with an `v{APP_VERSION}` chip in the corner, body holds 5 link rows: Wiki, My Characters, User Settings, Admin (admin-only), Logout. Each link row meets the 44 px touch-target rule via `min-height:32px` (dense-panel exception matching the rest of the drawer cards). **(3)** `app/version.py`: `APP_VERSION` → `2.90.0`. `README.md` version badge → `2.90.0`.
+
+### Added
+- `Quick Links` panel inside the Tools drawer — Wiki, My Characters, User Settings, Admin (admin-only), Logout, plus an `vX.Y.Z` chip in the header.
+- `{% block topnav %}` Jinja block in `base.html` so pages can suppress the top navigation header.
+
+### Changed
+- Drawer tab `⚙ GM Tools` renamed to `⚙ Tools`; it's now visible to players (previously GM-only).
+- The four GM-only sections (Session, Encounters, Token Management, Music) are individually gated with `{% if is_gm %}` instead of the whole drawer being GM-only. Same surface; just gated one layer deeper.
+- The tabletop page suppresses the topnav header via `{% block topnav %}{% endblock %}`, reclaiming the vertical space for the canvas. All the links the topnav used to carry now live in the Tools drawer's Quick Links panel.
+
+### Notes
+- **MINOR bump** — net-new surface (Quick Links panel + topnav suppression block) + a contract shift (GM Tools drawer is now visible to players). No data-model, schema, or API changes.
+- The existing player Settings tab (sound mute / volume) stays as a separate drawer; the Quick Links panel's "User Settings" link points at the full `/settings` page in the same window, matching the original topnav behavior.
+
+---
+
 ## [2.89.0] - 2026-05-27 — "Reactions in Reach"
 
 **Schema version:** 64

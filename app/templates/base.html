@@ -60,6 +60,12 @@
     })();
     </script>
     {% include "_demo_banner.html" %}
+    {# v2.90.0 — topnav is now a Jinja block so pages can suppress it.
+       The tabletop page overrides this block (and the version footer)
+       so the playspace is full-bleed; the Tools drawer surfaces the
+       Wiki / My Characters / Settings / Admin / Logout links + version
+       number that used to live up here. #}
+    {% block topnav %}
     <header class="topnav">
         <a href="/" class="brand">SimpleVTT<span class="brand-version" title="App version v{{ APP_VERSION }} · schema v{{ SCHEMA_VERSION }}">· v{{ APP_VERSION }}</span></a>
         <nav>
@@ -79,6 +85,7 @@
             {% endif %}
         </nav>
     </header>
+    {% endblock %}
     <main class="container">
         {% block content %}{% endblock %}
     </main>
