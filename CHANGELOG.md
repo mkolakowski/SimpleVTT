@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.84.1] - 2026-05-26 — "Cross the Boundary"
+
+**Schema version:** 61
+**Commit summary:** **Fixes the v2.84.0 sepia wood-grain background selector.** The CSS selector was `[data-theme="sepia"].sepia-texture-on` — a compound selector requiring BOTH the attribute and the class on the SAME element. But `data-theme` is set on `<html>` and the `sepia-texture-on` class is on `<body>` — different elements. The compound never matched, so the texture never rendered.
+**Description:** One edit in `app/static/style-fantasy-themes.css`. Selector changed from `[data-theme="sepia"].sepia-texture-on` (compound, never matches) to `[data-theme="sepia"] body.sepia-texture-on` (descendant combinator: html with the attribute → body with the class). Specificity goes from (0,2,0) to (0,2,1), still beats the base.css `html, body { background: var(--bg); }` rule (0,0,1) — so the textured background-image wins.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.84.1`.
+- `README.md` version badge → `2.84.1`.
+- `style-fantasy-themes.css` — sepia-texture selector uses descendant combinator now.
+
+### Notes
+- **PATCH bump** — pure selector fix. The toggle endpoint, the data model column, and the template wiring from v2.84.0 are all correct; only the CSS selector was wrong.
+- The bug was undetected by the v2.84.0 harness test because `test_settings_sepia_texture.py` only asserts the endpoint round-trip — it doesn't render the page and check the actual visual. A `tests/harness_ui/` Playwright test would catch this in the future; filed.
+
+---
+
 ## [2.84.0] - 2026-05-26 — "The Grain in the Page"
 
 **Schema version:** 61
