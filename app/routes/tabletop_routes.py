@@ -2104,6 +2104,60 @@ def _pc_has_defensive_duelist_available(char) -> "tuple[bool, int]":
     return True, pb
 
 
+# v2.78.0 Phase 5 — Item reactions. Generic catalog mechanism that
+# lets equipped inventory items declare reaction options. Items in
+# sheet.inventory[*] with `equipped: True` AND a `_reactions: [...]`
+# array contribute one option per entry to `_eligible_reactions`.
+# Each entry shape: {"key": str, "trigger": str, "label": str,
+# "desc": str, "kind": str, "cost": str}.
+#
+# v1 ships with a single demo item (Cloak of Displacement on Lyra)
+# whose entry binds to `trigger=attack_targeted`. The framework
+# scales: any SRD/homebrew item with reaction text can add a
+# `_reactions` array without further code changes — the catalog walk
+# + dispatch is generic.
+#
+# Per-item state (charges, daily uses, etc.) is left to the item's
+# `_reactions[*].cost` field for v1 (informational only). Charge
+# tracking parallel to Lucky (v2.77.0) is filed for individual items
+# that need it (Pearl of Power, Wand of Lightning Bolts, etc.).
+def _pc_item_reactions_for_trigger(char, trigger: str) -> list[dict]:
+    """Return the list of item-derived reaction option dicts a PC has
+    for the given ``trigger`` event. Walks equipped inventory items
+    only — unequipped reaction items don't fire.
+    """
+    if not char or not char.sheet:
+        return []
+    out: list[dict] = []
+    for it in (char.sheet.get("inventory") or []):
+        if not isinstance(it, dict):
+            continue
+        if not it.get("equipped"):
+            continue
+        for rx in (it.get("_reactions") or []):
+            if not isinstance(rx, dict):
+                continue
+            if (rx.get("trigger") or "").strip().lower() != trigger.lower():
+                continue
+            key = (rx.get("key") or "").strip()
+            if not key:
+                continue
+            out.append({
+                "key": key,
+                "label": rx.get("label") or f"Item reaction: {it.get('name') or 'Item'}",
+                "kind": rx.get("kind") or "item",
+                "resource_cost": rx.get("cost") or "Reaction",
+                "params": {
+                    "item_name": it.get("name") or "",
+                    "item_slug": (it.get("_slug") or "").strip(),
+                    "desc": (rx.get("desc") or "")[:200],
+                },
+                "available": True,
+                "unavailable_reason": None,
+            })
+    return out
+
+
 # v2.77.0 Phase 4b — Lucky feat. RAW (PHB p.167): "You have 3 luck
 # points. Whenever you make an attack roll, an ability check, or a
 # saving throw, you can spend one luck point to roll an additional
@@ -2694,6 +2748,10 @@ def _eligible_reactions(
                         "available": True,
                         "unavailable_reason": None,
                     })
+                # v2.78.0 Phase 5 — Item reactions. Walks equipped
+                # inventory items for `_reactions[]` entries binding
+                # to the attack_targeted trigger.
+                opts.extend(_pc_item_reactions_for_trigger(char, "attack_targeted"))
         # v2.73.0 Phase 6 — NPC watcher path. Walk the projected
         # template sheet for actions with `category == "reaction"`
         # (Parry, etc.). The caller passes the watcher's combatant
@@ -14073,6 +14131,52 @@ async def use_reaction(
                     "caster_combatant_id": params.get("caster_combatant_id"),
                     "caster_char_id": params.get("caster_char_id"),
                     "spell_name": spell_name,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key.startswith("item-") and watcher_char_id:
+        # v2.78.0 Phase 5 — Item reactions. Generic dispatch reads
+        # the option's params (item_name, item_slug, desc) from the
+        # stored entry, marks reaction, broadcasts feature_used with
+        # source=item-reaction + the item identity. Per-item state
+        # mutation (charge decrement, etc.) is filed for individual
+        # items that need it.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == reaction_key),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            item_name = str(params.get("item_name") or "Item")
+            item_slug = str(params.get("item_slug") or "")
+            desc = str(params.get("desc") or "")
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": f"💍 {item_name}",
+                    "feature_desc": desc or (
+                        f"Item reaction. Effect adjudicated by GM."
+                    ),
+                    "source": "item-reaction",
+                    "reaction_kind": "item",
+                    "item_name": item_name,
+                    "item_slug": item_slug,
+                    "reaction_key": reaction_key,
                 },
             })
         except HTTPException:

@@ -1012,6 +1012,34 @@ def _bard_sheet(name: str) -> dict:
              "equippable": True, "equipped": True,
              "armor_type": "light", "ac_value": 12,
              "_slug": "studded-leather"},
+            # v2.78.0 Phase 5 — Cloak of Displacement demo item.
+            # RAW (DMG p.158, rare wondrous item, attunement):
+            # "While you wear this cloak, it projects an illusion that
+            # makes you appear to be standing in a place near your
+            # actual location, causing any creature to have disadvantage
+            # on attack rolls against you. If you take damage, the
+            # property ceases to function until the start of your next
+            # turn. This property is suppressed while you are
+            # incapacitated, restrained, or otherwise unable to move."
+            # v1 surfaces the v2.78.0 generic item-reaction option on
+            # the attack_targeted trigger so the GM can apply
+            # disadvantage retroactively when the cloak hasn't been
+            # suppressed yet. Auto-resolution + the "suppressed for 1
+            # round on damage" tracking are filed for v3.
+            {"name": "Cloak of Displacement", "type": "wondrous", "qty": 1,
+             "equippable": True, "equipped": True, "attunement": True,
+             "_slug": "cloak-of-displacement",
+             "_reactions": [
+                 {
+                     "key": "item-cloak-displacement-advantage",
+                     "trigger": "attack_targeted",
+                     "label": "🌫 Cloak of Displacement — declare attacker had disadvantage",
+                     "desc": "While the cloak is active (suppressed for 1 round after you take damage), attacks against you have disadvantage. GM adjudicates whether the trigger qualifies.",
+                     "kind": "item",
+                     "cost": "Reaction (informational — passive disadvantage)",
+                 },
+             ],
+             "desc": "Wondrous item, rare (requires attunement). Attackers have disadvantage against you. Property suppressed for 1 round after you take damage."},
             {"name": "Lute", "type": "gear", "qty": 1,
              "desc": "Lyra's instrument — a polished six-string serving as her bardic focus. Lets her cast spells with material components without a separate component pouch."},
             {"name": "Entertainer's pack", "type": "gear", "qty": 1,

@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.78.0] - 2026-05-26 — "The Displaced Bard"
+
+**Schema version:** 60
+**Commit summary:** **Phase 5 — Item reactions, shipped as a generic catalog mechanism rather than per-item code.** New `_pc_item_reactions_for_trigger(char, trigger)` helper walks `sheet.inventory[*]` for equipped items carrying a `_reactions: [...]` array; each entry binds to a trigger event and contributes one option to the prompt. SRD/homebrew items can add reaction behavior by editing the inventory entry — no new helper or dispatch code needed. `/use_reaction` `item-*` keys dispatch generically: mark reaction + broadcast `feature_used(source="item-reaction", item_slug, item_name)`. Demo ships with **Cloak of Displacement** equipped on Lyra; its `_reactions[]` entry binds to `attack_targeted` and surfaces the "declare attacker had disadvantage" option alongside her v2.74.0 Defensive Duelist.
+**Description:** Four blocks of edits + one demo-seed change. **(1)** New `_pc_item_reactions_for_trigger(char, trigger)` helper. Walks `sheet.inventory[*]`; for each item with `equipped: True`, walks its `_reactions: [...]` array; each entry's `trigger` field is compared case-insensitively to the supplied trigger; matches produce option dicts with the entry's `key`, `label`, `kind`, `cost`, and `desc` plus the item identity (`item_name`, `item_slug`) in params. Unequipped reaction items don't fire (matches the RAW "while worn/wielded" convention for nearly all SRD reaction items). **(2)** `_eligible_reactions[attack_targeted]` PC branch now calls `_pc_item_reactions_for_trigger(char, "attack_targeted")` after the Shield + DD + Lucky options and `extend`s the result onto the opts list. The helper is trigger-keyed so future extension to `damage_taken` / `save_resolved` / `spell_cast_near` / etc. is a one-liner. **(3)** `/use_reaction` dispatch case `reaction_key.startswith("item-")`: reads `params.item_name`, `item_slug`, `desc` from the stored option; marks reaction via `_mark_battle_economy`; broadcasts `feature_used(source="item-reaction")` carrying the item identity + the player-facing desc. **(4)** `app/demo_seed.py`: Lyra's inventory gains a Cloak of Displacement entry with `_reactions: [{key: "item-cloak-displacement-advantage", trigger: "attack_targeted", label, desc, kind: "item", cost}]`. The entry's `key` follows the `item-{slug}-{descriptor}` convention so the dispatch's `startswith("item-")` matches.
+**Description (cont):** v1 simplifications (filed for v3):
+- **No per-item charge tracking.** v1's `cost` field is informational text only. Pearl of Power (1 charge/long rest), Wand of Lightning Bolts (7 charges/long rest at varied DCs), Ring of the Ram (3 charges/day) etc. need the Lucky v2.77.0–style `sheet.resources` integration. Filed: extend the dispatch to also decrement a charge resource keyed by the item slug.
+- **No effect resolution.** RAW Cloak of Displacement says "attackers have disadvantage" — v1 broadcasts the trigger advisory; the GM applies disadvantage manually. Same pattern as v2.66.0 OA advisory and the v2.71.0 HR + v2.75.0 Mage Slayer dispatches.
+- **No "suppressed after damage" tracking for Cloak.** RAW: the displacement property is suppressed for 1 round after the wearer takes damage. v1 surfaces the option regardless; GM adjudicates. Filed: a per-item buff state tracker that the damage path could read.
+- **No GM Reactions Panel integration.** v2.68.0 panel walks PC class features, feats, prepared spells, and NPC monster reactions; v1 doesn't extend the panel to walk item `_reactions` entries. Filed: a parallel walk in `list_available_reactions`.
+- **Other Phase 5 items filed.** Ring of Spell Turning (extends Counterspell pipeline with reflect logic), Spell-Storing Ring (stored spells with caster-statblock copy), Periapt of Wound Closure (passive death-save advantage) — none implemented in v1.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.78.0`. (b) Two new tests:
+- `test_item_reaction_prompt_includes_cloak_of_displacement` — Krieger swings on Lyra (Cloak of Displacement + DD feat both equipped) until a hit lands; asserts the `attack_targeted` prompt now includes both `use-defensive-duelist` AND `item-cloak-displacement-advantage` keys.
+- `test_use_item_reaction_marks_reaction` — POST `/use_reaction` with `item-cloak-displacement-advantage`; asserts `economy_update` for Lyra's reaction = True, `feature_used(source="item-reaction", item_slug="cloak-of-displacement", item_name="Cloak of Displacement")`.
+
+Full reaction_prompt suite passes 31/31 locally.
+
+### Added
+- `_pc_item_reactions_for_trigger(char, trigger) -> list[dict]` helper.
+- Item-reaction extension in `_eligible_reactions[attack_targeted]` PC branch.
+- Generic `item-*` dispatch case in `/use_reaction` — broadcasts `feature_used(source="item-reaction")` with item identity.
+- Cloak of Displacement equipped on Lyra in `demo_seed.py` with a `_reactions[]` entry binding to `attack_targeted`.
+- Harness `test_item_reaction_prompt_includes_cloak_of_displacement` + `test_use_item_reaction_marks_reaction` — 2 new tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.78.0`.
+- `README.md` version badge → `2.78.0`.
+- `docs/plans/reactions-automation.md` — Phase 5 marked 🟠 partial (generic item-reaction framework shipped; specific items like Ring of Spell Turning / Spell-Storing Ring still ⚪).
+- `docs/test-harness-coverage.md` — total test count 564 → 566.
+
+### Notes
+- **Generic catalog mechanism, single demo item.** The pattern lets any item — SRD or homebrew — declare reaction options by editing its inventory entry. A future GM who hand-crafts a "Boots of Reactive Counterstrike" homebrew item can give it a `_reactions[]` array and the framework picks it up automatically.
+- **Item key convention.** `item-{slug}-{descriptor}` — slug matches the item's `_slug`, descriptor names the specific reaction. Multiple reactions per item allowed (e.g. `item-ring-of-the-ram-1charge`, `item-ring-of-the-ram-3charges`).
+
+---
+
 ## [2.77.0] - 2026-05-26 — "Three Luck Points"
 
 **Schema version:** 60
