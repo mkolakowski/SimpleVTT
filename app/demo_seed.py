@@ -662,7 +662,16 @@ def _cleric_sheet(name: str) -> dict:
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action. Campaign setting can flip to bonus action."},
         ],
-        "feats": [],
+        # v2.76.0 Phase 4c — War Caster feat for Tavik. RAW (PHB
+        # p.170): the reaction part lets Tavik cast a 1-action
+        # single-target spell instead of an OA when a creature
+        # provokes one (Sacred Flame, Guiding Bolt, Inflict Wounds,
+        # etc.). Wired through the v2.66.0 creature_exits_reach
+        # trigger event alongside the standard OA option.
+        "feats": [
+            {"slug": "war-caster", "name": "War Caster",
+             "desc": "Advantage on Constitution saves to maintain concentration when you take damage. Somatic-while-holding-weapons. When a creature's movement provokes an OA from you, you can use your reaction to cast a 1-action spell at it instead of attacking."},
+        ],
         # v2.4.15: seed the Channel Divinity resource so Tavik's class-resources
         # panel shows the counter from first sheet open instead of requiring
         # the player to click "Auto-fill Resources". Shape mirrors the recipe

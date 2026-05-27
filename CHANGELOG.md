@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.76.0] - 2026-05-26 — "Spell in Hand"
+
+**Schema version:** 60
+**Commit summary:** **Phase 4c — War Caster feat. Third PC feat reaction wired to a runtime trigger.** Extends the v2.66.0 OA trigger event (`creature_exits_reach` + the Polearm Master `creature_enters_reach`) with a second option per OA prompt — `take-war-caster-cast`, a 1-action spell cast at the provoker instead of the standard weapon OA. Helper gates on the feat AND at least one prepared/known spell with `casting_time` containing "1 action" (avoids surfacing the option on a non-caster who somehow acquired the feat). Both OA branches in `_eligible_reactions` (exit-reach + enter-reach) refactored from "single take-the-oa option" to "build opts list and append War Caster when eligible." `/use_reaction take-war-caster-cast` dispatch marks reaction + broadcasts `feature_used(source="war-caster")` with provoker identity + a click-Cast-Spell instruction. Tavik (Cleric, melee weapon + Cleric spell list) got the feat.
+**Description:** Five blocks of edits + one demo-seed change. **(1)** New `_pc_has_war_caster_available(char) -> bool` helper. Walks `sheet.feats` for slug/name normalized to "war-caster"; if found, walks `sheet.spells` for ANY spell whose `casting_time` (lowercased) contains "1 action". Returns True iff both conditions hold. (Doesn't enforce the RAW "single-creature target" rule — v1 surfaces the option and the GM/player picks a single-target spell at cast time.) **(2)** `_eligible_reactions[creature_exits_reach]` restructured from "return single take-the-oa option" to "build opts list, optionally append War Caster": looks up the watcher Character (already keyed by `watcher_char_id`), calls helper, appends `take-war-caster-cast` carrying `provoker_combatant_id`, `provoker_char_id`, `provoker_name` in params. The provoker_name accepts either `provoker_name` or `mover_name` from context (the v2.66.0 OA emit uses `mover_name`; this branch falls back to it without requiring the OA-emit context to change). **(3)** Same refactor for `_eligible_reactions[creature_enters_reach]` (Polearm Master). Both events now surface War Caster identically. **(4)** `/use_reaction take-war-caster-cast` dispatch: pure reaction spend (the spell slot is consumed when the player actually casts via `/cast_spell` later). Marks reaction, broadcasts `feature_used(source="war-caster")` with `provoker_name`, `provoker_combatant_id`, `provoker_char_id`, plus a desc telling the player to click their Cast Spell button to resolve. **(5)** `app/demo_seed.py`: Tavik gets the War Caster feat (was empty list). His Cleric spell list satisfies the at-least-one-1-action-spell gate (Sacred Flame cantrip is "1 action", plus Guiding Bolt / Inflict Wounds / etc.).
+**Description (cont):** v1 simplifications (filed for v3):
+- **No auto-cast resolution.** Same pattern as the v2.66.0 OA advisory + the v2.75.0 Mage Slayer dispatch: chat-card surfaces the trigger, player clicks Cast Spell to resolve. Auto-cast routing through `/cast_spell` against the provoker_combatant_id is filed.
+- **No spell-list filtering in the UI.** RAW: 1-action spells only. v1 doesn't filter the player's Cast Spell button to show only valid choices — the player picks any spell + GM adjudicates (a Time-Stop choice obviously isn't a War Caster cast).
+- **Two other War Caster benefits not surfaced.** RAW: (a) advantage on Constitution saves to maintain concentration when you take damage (a passive save buff — filed for `_maybe_concentration_save`), (b) somatic-while-holding-weapons (filed for `_cast_spell`'s component check, which v1 doesn't enforce anyway).
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.76.0`. (b) Two new tests:
+- `test_war_caster_prompt_offers_cast_alongside_oa` — Krieger leaves Tavik's reach (5 ft → 50 ft); asserts the v2.66.0 `creature_exits_reach` prompt now includes BOTH `take-the-oa` AND `take-war-caster-cast` keys.
+- `test_use_war_caster_cast_marks_reaction` — same setup + POST `/use_reaction` with `take-war-caster-cast`; asserts `economy_update` for Tavik's reaction = True, `feature_used(source="war-caster", provoker_name="Krieger Stonefist")`.
+
+Full reaction_prompt suite passes 27/27 locally.
+
+### Added
+- `_pc_has_war_caster_available(char) -> bool` helper.
+- War Caster option in `_eligible_reactions[creature_exits_reach]` AND `creature_enters_reach` (alongside `take-the-oa`).
+- `take-war-caster-cast` dispatch case in `/use_reaction` — marks reaction, broadcasts `feature_used(source="war-caster")` naming the provoker + a click-Cast-Spell instruction.
+- War Caster feat added to Tavik's `sheet.feats` in `demo_seed.py`.
+- Harness `test_war_caster_prompt_offers_cast_alongside_oa` + `test_use_war_caster_cast_marks_reaction` — 2 new tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.76.0`.
+- `README.md` version badge → `2.76.0`.
+- Both OA event branches in `_eligible_reactions` refactored to return an opts list instead of a single option.
+- `docs/plans/reactions-automation.md` — Phase 4c marked 🟠 partial (reaction-trigger shipped; passive concentration advantage + somatic-while-holding-weapons filed).
+- `docs/test-harness-coverage.md` — total test count 560 → 562.
+
+### Notes
+- **Phase 4 is now 3-of-4 shipped.** Defensive Duelist (v2.74.0) + Mage Slayer (v2.75.0) + War Caster (v2.76.0). Lucky (multi-trigger, charge tracking) is the remaining Phase 4 feat — biggest scope of the four.
+- **First reaction that adds a second option to an existing prompt.** Prior reactions either created their own trigger event (Shield / Counterspell / etc.) or replaced the v2.69.0 PC-branch entirely. War Caster's pattern — "watcher_char_id-keyed helper appended to a list" — is the template for future feat additions to existing triggers (e.g. Sentinel + War Caster, OA + Polearm Master + War Caster).
+
+---
+
 ## [2.75.0] - 2026-05-26 — "Mage Slayer"
 
 **Schema version:** 60

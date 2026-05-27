@@ -2104,6 +2104,46 @@ def _pc_has_defensive_duelist_available(char) -> "tuple[bool, int]":
     return True, pb
 
 
+# v2.76.0 Phase 4c — War Caster feat. RAW (PHB p.170) third
+# benefit: "When a hostile creature's movement provokes an
+# opportunity attack from you, you can use your reaction to cast a
+# spell at the creature, rather than making an opportunity attack.
+# The spell must have a casting time of 1 action and must target
+# only that creature." The other two benefits (advantage on concen-
+# tration saves when taking damage; somatic-while-holding-weapons)
+# are filed.
+#
+# v1 simplification: surface the prompt when the watcher has the
+# feat AND at least one prepared/known spell whose casting_time
+# contains "1 action" (we don't enforce the "single creature" gate
+# in v1 — caster picks the spell + GM adjudicates). Auto-cast
+# resolution is filed alongside the v2.66.0 OA advisory pattern
+# (player clicks Cast Spell instead of clicking Attack).
+def _pc_has_war_caster_available(char) -> bool:
+    """Detect War Caster feat + at-least-one-1-action-spell on a PC."""
+    if not char or not char.sheet:
+        return False
+    sheet = char.sheet or {}
+    has_feat = False
+    for f in (sheet.get("feats") or []):
+        if not isinstance(f, dict):
+            continue
+        slug = (f.get("slug") or "").strip().lower()
+        name = (f.get("name") or "").strip().lower().replace(" ", "-")
+        if slug == "war-caster" or name == "war-caster":
+            has_feat = True
+            break
+    if not has_feat:
+        return False
+    for sp in (sheet.get("spells") or []):
+        if not isinstance(sp, dict):
+            continue
+        ct = (sp.get("casting_time") or "").lower()
+        if "1 action" in ct:
+            return True
+    return False
+
+
 # v2.75.0 Phase 4d — Mage Slayer feat. RAW (PHB p.168): "When a
 # creature within 5 feet of you casts a spell, you can use your
 # reaction to make a melee weapon attack against that creature."
@@ -2389,7 +2429,7 @@ def _eligible_reactions(
     spell, feat, and item reactions per the plan doc's catalog.
     """
     if trigger_event == "creature_exits_reach":
-        return [{
+        opts: list[dict] = [{
             "key": "take-the-oa",
             "label": "⚔ Take the Opportunity Attack",
             "kind": "implicit",
@@ -2398,12 +2438,49 @@ def _eligible_reactions(
             "available": True,
             "unavailable_reason": None,
         }]
+        # v2.76.0 Phase 4c — War Caster cast-instead-of-OA option.
+        # RAW: PC may cast a 1-action single-target spell at the
+        # creature provoking the OA instead of making the weapon
+        # swing. Helper gates on feat + at-least-one-1-action-spell;
+        # the GM/player picks which spell at cast time.
+        if watcher_char_id:
+            try:
+                wchar = db.query(Character).filter(
+                    Character.id == int(watcher_char_id),
+                ).first()
+            except Exception:
+                wchar = None
+            if wchar and _pc_has_war_caster_available(wchar):
+                opts.append({
+                    "key": "take-war-caster-cast",
+                    "label": (
+                        "✨ War Caster — cast a 1-action spell instead "
+                        "of the OA"
+                    ),
+                    "kind": "feat",
+                    "resource_cost": "Reaction + spell slot (when cast)",
+                    "params": {
+                        "provoker_combatant_id": context.get("provoker_combatant_id"),
+                        "provoker_char_id": context.get("provoker_char_id"),
+                        # v2.66.0 OA emit uses ``mover_name`` /
+                        # ``mover_token_id`` as the provoker identity;
+                        # accept either spelling so this branch works
+                        # without changing the OA emit context.
+                        "provoker_name": (
+                            context.get("provoker_name")
+                            or context.get("mover_name")
+                        ),
+                    },
+                    "available": True,
+                    "unavailable_reason": None,
+                })
+        return opts
     # v2.68.1 — Polearm Master enter-reach. Same option key as the
     # exit-reach trigger (same mechanic, same dispatch handler) but
     # different copy + trigger event so the prompt summary can
     # explain the Polearm-Master-specific provoke.
     if trigger_event == "creature_enters_reach":
-        return [{
+        opts: list[dict] = [{
             "key": "take-the-oa",
             "label": "⚔ Take the Opportunity Attack (Polearm Master)",
             "kind": "implicit",
@@ -2412,6 +2489,42 @@ def _eligible_reactions(
             "available": True,
             "unavailable_reason": None,
         }]
+        # v2.76.0 Phase 4c — War Caster also applies for enter-reach
+        # OA (Polearm Master + War Caster combo: when an enemy enters
+        # the polearm wielder's reach, they OA — War Caster lets that
+        # OA be a spell instead).
+        if watcher_char_id:
+            try:
+                wchar = db.query(Character).filter(
+                    Character.id == int(watcher_char_id),
+                ).first()
+            except Exception:
+                wchar = None
+            if wchar and _pc_has_war_caster_available(wchar):
+                opts.append({
+                    "key": "take-war-caster-cast",
+                    "label": (
+                        "✨ War Caster — cast a 1-action spell instead "
+                        "of the Polearm-Master OA"
+                    ),
+                    "kind": "feat",
+                    "resource_cost": "Reaction + spell slot (when cast)",
+                    "params": {
+                        "provoker_combatant_id": context.get("provoker_combatant_id"),
+                        "provoker_char_id": context.get("provoker_char_id"),
+                        # v2.66.0 OA emit uses ``mover_name`` /
+                        # ``mover_token_id`` as the provoker identity;
+                        # accept either spelling so this branch works
+                        # without changing the OA emit context.
+                        "provoker_name": (
+                            context.get("provoker_name")
+                            or context.get("mover_name")
+                        ),
+                    },
+                    "available": True,
+                    "unavailable_reason": None,
+                })
+        return opts
     # v2.68.1 — Sentinel ally-attacked-near-you. Different option key
     # (`take-sentinel-strike`) so the dispatch can distinguish it
     # from an OA if needed in future phases; today both flow through
@@ -13785,6 +13898,52 @@ async def use_reaction(
                     "reaction_kind": "spell",
                     "slot_level": slot_level,
                     "damage_type": damage_type,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key == "take-war-caster-cast" and watcher_char_id:
+        # v2.76.0 Phase 4c — War Caster cast-instead-of-OA. Pure
+        # reaction spend; the spell slot is consumed when the player
+        # actually casts via /cast_spell. v1 broadcasts an advisory
+        # naming the provoking creature + tells the player to click
+        # Cast Spell to resolve (1-action spells only, single-target).
+        # Auto-cast resolution + spell-list filtering filed.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "take-war-caster-cast"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            provoker_name = str(params.get("provoker_name") or "the creature")
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": "✨ War Caster reaction",
+                    "feature_desc": (
+                        f"Reaction. Cast a 1-action single-target spell "
+                        f"at {provoker_name} (who provoked the OA). Click "
+                        f"your Cast Spell button to resolve."
+                    ),
+                    "source": "war-caster",
+                    "reaction_kind": "feat",
+                    "provoker_name": provoker_name,
+                    "provoker_combatant_id": params.get("provoker_combatant_id"),
+                    "provoker_char_id": params.get("provoker_char_id"),
                 },
             })
         except HTTPException:

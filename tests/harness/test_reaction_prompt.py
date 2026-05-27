@@ -1178,6 +1178,121 @@ async def test_cast_hellish_rebuke_consumes_slot(
         )
 
 
+# ── v2.76.0 — Phase 4c: War Caster feat ──
+
+
+async def test_war_caster_prompt_offers_cast_alongside_oa(
+    gm_client, gm_ws, roster,
+):
+    """v2.76.0 — when a creature exits the reach of a PC with the
+    War Caster feat, the existing OA prompt (creature_exits_reach)
+    now also surfaces a `take-war-caster-cast` option alongside the
+    standard `take-the-oa`. Tavik got the feat in the v2.76.0 demo
+    seed; his cleric spell list satisfies the at-least-one-1-action-
+    spell gate.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    assert kr_tok, "Krieger token must exist"
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 700.0, "y": 350.0},
+    )
+    assert resp.status_code == 200, resp.text
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == tavik["id"]
+        and (m.get("data") or {}).get("trigger_event")
+        == "creature_exits_reach"
+    ]
+    assert prompts, "expected creature_exits_reach prompt for Tavik"
+    keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+    assert "take-the-oa" in keys
+    assert "take-war-caster-cast" in keys, (
+        f"expected take-war-caster-cast option alongside take-the-oa; "
+        f"got {keys}"
+    )
+
+
+async def test_use_war_caster_cast_marks_reaction(
+    gm_client, gm_ws, roster,
+):
+    """End-to-end: Krieger leaves Tavik's reach → prompt fires →
+    POST /use_reaction with take-war-caster-cast → Tavik's reaction
+    flips + feature_used(source=war-caster) broadcast names the
+    provoker (Krieger) + a click-Cast-Spell instruction.
+    """
+    krieger = roster["Krieger Stonefist"]
+    tavik = roster["Brother Tavik Stonebrow"]
+
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=10),
+        _make_combatant(tavik["name"], tavik["id"], init=8),
+    ])
+    await _place_token(gm_client, krieger["id"], 350.0, 350.0)
+    await _place_token(gm_client, tavik["id"], 420.0, 350.0)
+    kr_tok = await _get_token_for_char(gm_client, krieger["id"])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/token/{kr_tok['id']}/move",
+        json={"x": 700.0, "y": 350.0},
+    )
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == tavik["id"]
+        and (m.get("data") or {}).get("trigger_event")
+        == "creature_exits_reach"
+    ]
+    assert prompts, "expected creature_exits_reach prompt for Tavik"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    use = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "take-war-caster-cast",
+            "watcher_char_id": tavik["id"],
+        },
+    )
+    assert use.status_code == 200, use.text
+
+    await asyncio.sleep(0.2)
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == tavik["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update for Tavik's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "war-caster"
+        and (m.get("data") or {}).get("character_id") == tavik["id"]
+    ]
+    assert fu, "expected feature_used(source=war-caster)"
+    last = fu[-1]["data"]
+    assert (last.get("provoker_name") or "").lower() == krieger["name"].lower()
+
+
 # ── v2.75.0 — Phase 4d: Mage Slayer feat ──
 
 

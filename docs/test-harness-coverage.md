@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 560 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.75.0, 2026-05-26).
+**Total tests:** 562 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.76.0, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -805,6 +805,8 @@ v2.67.0 — Phase 1a of the reactions-automation plan (see [`docs/plans/reaction
 | `test_use_defensive_duelist_marks_reaction` | v2.74.0 — POST `/use_reaction` with `reaction_key=use-defensive-duelist` after the prompt → 200, `economy_update` for Lyra's reaction = True, `feature_used(source=defensive-duelist, pb_bonus=3)`. |
 | `test_mage_slayer_prompt_fires_on_spell_within_5ft` | v2.75.0 — Phase 4d. Magnus and Krieger placed 5 ft apart on the active map; Magnus casts Burning Hands at L3 → `reaction_prompt(spell_cast_near)` fires for Krieger (Mage Slayer feat from v2.75.0 demo seed + Greataxe equipped) with `take-mage-slayer-strike` option. |
 | `test_use_mage_slayer_strike_marks_reaction` | v2.75.0 — POST `/use_reaction` with `reaction_key=take-mage-slayer-strike` after the prompt → 200, `economy_update` for Krieger's reaction = True, `feature_used(source=mage-slayer, caster_name="Magnus Hexbinder", spell_name="Burning Hands")`. |
+| `test_war_caster_prompt_offers_cast_alongside_oa` | v2.76.0 — Phase 4c. Krieger leaves Tavik's reach (Tavik has War Caster feat from v2.76.0 demo seed + Cleric spells with `casting_time="1 action"`) → existing v2.66.0 `creature_exits_reach` prompt now includes BOTH `take-the-oa` AND `take-war-caster-cast` keys. |
+| `test_use_war_caster_cast_marks_reaction` | v2.76.0 — POST `/use_reaction` with `reaction_key=take-war-caster-cast` after the prompt → 200, `economy_update` for Tavik's reaction = True, `feature_used(source=war-caster, provoker_name="Krieger Stonefist")`. |
 
 ### `test_gm_reactions_panel.py`
 v2.68.0 — GM Reactions Panel (see [`docs/plans/reactions-automation.md`](plans/reactions-automation.md)). New `GET /available_reactions` + `POST /spend_reaction_manual` endpoints surface every combatant's reaction catalog to the GM and let the GM flip any reaction chip with one click. PC class features (Uncanny Dodge / Cutting Words / Indomitable), PC feats (Sentinel / Polearm Master / etc.), PC reaction spells (Shield / Counterspell / etc. via `casting_time` scan), NPC monster reactions (Parry / etc. via `category == "reaction"` walk).
