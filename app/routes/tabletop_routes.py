@@ -863,11 +863,12 @@ async def _maybe_concentration_save(
     con_mod = (con_score - 10) // 2
     # CON save proficiency? RAW: Barbarian + Fighter + Sorcerer have
     # CON save proficiency; nothing else on the demo's PC roster. War
-    # Caster / Resilient (CON) feats also grant it, but neither is in
-    # the demo today — defer feat-driven proficiency to a future commit.
+    # Caster (v2.83.0) and Resilient (CON) feats also grant it — War
+    # Caster is now detected; Resilient is still filed.
     saves = dict(sheet.get("saving_throws") or {})
     pb = int(sheet.get("proficiency_bonus") or 0)
-    prof_bonus = pb if saves.get("CON") else 0
+    war_caster_active = _pc_has_war_caster_feat(char)
+    prof_bonus = pb if (saves.get("CON") or war_caster_active) else 0
     bonus = con_mod + prof_bonus
 
     # v2.49.48 — RAW: a creature loses concentration AUTOMATICALLY
@@ -883,8 +884,12 @@ async def _maybe_concentration_save(
     hp_current_after = int((sheet.get("hp") or {}).get("current") or 0)
     forced_drop_on_zero_hp = hp_current_after <= 0
 
+    # v2.83.0 — War Caster grants advantage on concentration saves
+    # from damage. Expression becomes 2d20kh1 (keep-highest) when WC
+    # is active.
+    d20_expr = "2d20kh1" if war_caster_active else "1d20"
     try:
-        result = dice_mod.roll(f"1d20+{bonus}" if bonus >= 0 else f"1d20{bonus}")
+        result = dice_mod.roll(f"{d20_expr}+{bonus}" if bonus >= 0 else f"{d20_expr}{bonus}")
         total = result.total
         raw = total - bonus  # the d20 face value
     except dice_mod.DiceParseError:
@@ -945,8 +950,41 @@ async def _maybe_concentration_save(
             # only when the drop was forced regardless of roll outcome.
             "forced_drop_on_zero_hp": forced_drop_on_zero_hp,
             "dropped_key": dropped_key,
+            # v2.83.0 — surface War Caster's contribution so the
+            # client can render "🛡 War Caster: advantage" on the
+            # roll-log card. The d20 expression was 2d20kh1 when
+            # set, the CON-save proficiency may have come from the
+            # feat rather than the class. Both are useful audit
+            # signals for the GM.
+            "war_caster_advantage": war_caster_active,
         },
     })
+    # v2.83.0 — broadcast a feature_used trail when War Caster's
+    # advantage actually fired (the d20 expression was 2d20kh1). Same
+    # pattern as v2.53.0 Aura of Protection and v2.52.0 Danger Sense.
+    if war_caster_active:
+        try:
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": char.id,
+                    "character_name": char.name,
+                    "user_color": char.color,
+                    "feature_name": "🛡 War Caster (advantage)",
+                    "feature_desc": (
+                        f"Advantage on concentration save (2d20kh1) "
+                        f"after taking {damage_amount} damage."
+                    ),
+                    "source": "war-caster-concentration",
+                    "reaction_kind": "passive",
+                    "dc": dc,
+                    "rolled": raw,
+                    "total": total,
+                    "passed": passed,
+                },
+            })
+        except Exception:
+            pass
 
     # v2.39.0: GM-only narrative roll-log entry summarising the
     # concentration loss + the paired effects that dropped. Players
@@ -2254,6 +2292,34 @@ def _pc_has_lucky_available(char) -> "tuple[bool, int]":
 # in v1 — caster picks the spell + GM adjudicates). Auto-cast
 # resolution is filed alongside the v2.66.0 OA advisory pattern
 # (player clicks Cast Spell instead of clicking Attack).
+# v2.83.0 — War Caster passive feat detection (no spell-list gate).
+# The reaction-trigger eligibility (`_pc_has_war_caster_available`,
+# v2.76.0) gates on the PC having at least one 1-action spell ready,
+# because the reaction's RAW effect is "cast a spell instead of the
+# OA." The PASSIVE benefits (advantage + proficiency on concentration
+# saves) trigger regardless of spell availability — they're feat-only.
+# Hence this lighter detector.
+def _pc_has_war_caster_feat(char) -> bool:
+    """Detect just the War Caster feat — no spell-list check.
+
+    Used by `_maybe_concentration_save` to apply the RAW passive
+    benefits: advantage on Constitution saves to maintain concentration
+    when you take damage, AND War Caster grants Constitution save
+    proficiency for that specific roll even when the PC lacks it as a
+    class feature.
+    """
+    if not char or not char.sheet:
+        return False
+    for f in (char.sheet.get("feats") or []):
+        if not isinstance(f, dict):
+            continue
+        slug = (f.get("slug") or "").strip().lower()
+        name = (f.get("name") or "").strip().lower().replace(" ", "-")
+        if slug == "war-caster" or name == "war-caster":
+            return True
+    return False
+
+
 def _pc_has_war_caster_available(char) -> bool:
     """Detect War Caster feat + at-least-one-1-action-spell on a PC."""
     if not char or not char.sheet:

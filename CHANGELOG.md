@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.83.0] - 2026-05-26 — "Iron Concentration"
+
+**Schema version:** 60
+**Commit summary:** **Wires War Caster's RAW passive concentration-save benefits.** When a PC with the War Caster feat takes damage while concentrating, the CON save now gets (a) advantage (rolls `2d20kh1` instead of `1d20`) and (b) Constitution save proficiency for that roll even if the PC's class doesn't grant it. The `concentration_save` broadcast surfaces a new `war_caster_advantage: bool` field and a `feature_used(source="war-caster-concentration")` audit trail fires alongside it. Closes a v2.76.0-filed limitation.
+**Description:** Three edits in `app/routes/tabletop_routes.py`. **(1)** New `_pc_has_war_caster_feat(char) -> bool` helper — lighter than the v2.76.0 `_pc_has_war_caster_available` (which requires the PC to also have a 1-action spell prepared for the reaction trigger). The passive benefits only need feat presence. **(2)** `_maybe_concentration_save`'s proficiency-bonus check now ORs `saves.get("CON")` with `war_caster_active = _pc_has_war_caster_feat(char)` — War Caster grants the CON-save proficiency for THIS specific roll even if the PC class doesn't have it (a Bard with WC would otherwise have no CON-save prof). **(3)** The same function's d20-roll-expression changes from `1d20` to `2d20kh1` when `war_caster_active`. The `concentration_save` broadcast carries a new `war_caster_advantage` boolean, and a `feature_used(source="war-caster-concentration")` broadcast fires after the save with the DC, rolled, total, passed for the chat-card audit trail.
+**Description (cont):** v1 scope:
+- **War Caster reaction trigger (1-action spell instead of OA) stays unchanged** — v2.76.0 wired that path; this commit only adds the two passive benefits.
+- **Mage Slayer passive save advantage filed but not shipped here.** RAW: advantage on saves against spells from creatures within 5 ft of you. Requires plumbing the spell caster's combatant identity into the save-roll context AND measuring 5-ft distance — more invasive than the concentration path. Filed for v2.83.1.
+- **Mage Slayer concentration-disadvantage on damage dealt filed.** RAW: creatures within 5 ft of you have disadvantage on concentration checks for damage you deal. Same plumbing required as above; filed.
+- **War Caster's somatic-while-armed benefit still filed.** v1 doesn't enforce somatic components at all, so wiring this is no-op until the component-check pipeline ships.
+
+### Added
+- `_pc_has_war_caster_feat(char) -> bool` helper — lightweight feat-only detector.
+- `concentration_save` broadcast field `war_caster_advantage: bool`.
+- `feature_used(source="war-caster-concentration")` broadcast emitted when WC advantage applies.
+- Harness `test_war_caster_concentration_save_advantage` in `test_concentration_buffs.py` — PATCHes WC feat onto Rowan, casts Hunter's Mark, damages via PATCH, asserts the new broadcast fields. Restores feats in finally.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.83.0`.
+- `README.md` version badge → `2.83.0`.
+- `_maybe_concentration_save` proficiency check now ORs `saves.get("CON")` with `war_caster_active` (War Caster grants CON-save prof for this roll specifically).
+- `_maybe_concentration_save` d20 expression switches to `2d20kh1` when War Caster is active.
+- `docs/test-harness-coverage.md` — total test count 569 → 570.
+
+### Notes
+- **MINOR bump** — adds new broadcast fields + new behavior path. PATCH would understate.
+- **First passive feat effect wired**. The reactions push (v2.69 → v2.78) all surfaced via the prompt pipeline; this is the first feat effect that's purely passive (no popup, no user click — just a different d20 expression).
+- Closes one of the three filings noted at the bottom of `docs/plans/reactions-automation.md` v3 backlog. Mage Slayer's passive effects are still in the backlog (filed for v2.83.1+).
+
+---
+
 ## [2.82.0] - 2026-05-26 — "The Reactions Guide"
 
 **Schema version:** 60

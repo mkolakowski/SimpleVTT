@@ -279,3 +279,72 @@ async def test_concentration_save_on_damage(gm_client, gm_ws, rowan_full, roster
         # On fail, buff should be removed via a subsequent buff_update.
         bu = await gm_ws.wait_for("buff_update")
         assert bu["data"]["removed_key"] == "hunters-mark"
+
+
+async def test_war_caster_concentration_save_advantage(
+    gm_client, gm_ws, rowan_full, roster,
+):
+    """v2.83.0 — War Caster's RAW passive: advantage on Constitution
+    saving throws to maintain concentration when you take damage. The
+    `_maybe_concentration_save` helper detects the feat and rolls
+    `2d20kh1` instead of `1d20`. Also broadcasts `feature_used(source=
+    war-caster-concentration)` so the chat-card has an audit trail.
+
+    Pattern: PATCH War Caster onto Rowan's feats, install Hunter's
+    Mark (concentration), damage Rowan via sheet PATCH, assert the
+    concentration_save broadcast carries `war_caster_advantage: True`
+    AND the feature_used trail fires. Restore feats in finally.
+    """
+    rowan = rowan_full
+    pip = roster["Pip Quickfingers"]
+    patch = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/sheet-fields",
+        json={"feats": [
+            {"slug": "war-caster", "name": "War Caster"},
+        ]},
+    )
+    assert patch.status_code == 200, patch.text
+    try:
+        await _seed_battle_with(gm_client, [rowan["id"], pip["id"]])
+        # Install Hunter's Mark.
+        r1 = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_hunters_mark",
+            json={
+                "character_id": rowan["id"],
+                "target_character_id": pip["id"],
+                "override": True,
+            },
+        )
+        assert r1.status_code == 200, r1.text
+        gm_ws.mark()
+
+        # Damage Rowan — 10 damage triggers a concentration save at DC 10.
+        resp = await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/sheet-fields",
+            json={
+                "hp": {"current": 34},
+                "hp_change_reason": "damage",
+                "damage_amount": 10,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+        cs = await gm_ws.wait_for("concentration_save")
+        assert cs["data"]["character_id"] == rowan["id"]
+        assert cs["data"]["buff_key"] == "hunters-mark"
+        # The v2.83.0 marker.
+        assert cs["data"].get("war_caster_advantage") is True, (
+            f"expected war_caster_advantage=True; got {cs['data']}"
+        )
+
+        # feature_used(source=war-caster-concentration) audit trail.
+        fu = await gm_ws.wait_for("feature_used")
+        assert fu["data"].get("source") == "war-caster-concentration"
+        assert fu["data"].get("character_id") == rowan["id"]
+        assert fu["data"].get("dc") == 10
+        assert fu["data"].get("passed") == cs["data"]["passed"]
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{rowan['id']}/sheet-fields",
+            json={"feats": []},
+        )
