@@ -599,9 +599,10 @@ def _apply_inline_migrations() -> None:
 
     # ---- Schema v61 (2.84.0): users.sepia_texture ----
     # Per-user toggle for the sepia theme's wood-grain background
-    # pattern. Default TRUE so existing sepia users get the texture
-    # immediately on first page reload. Body element renders the
-    # `sepia-texture-on` CSS class when the user's `sepia_texture`
+    # pattern. v2.85.0 flipped the default from TRUE → FALSE so the
+    # sepia theme renders the flat solid sepia color out of the box;
+    # the textured look is opt-in via /settings. Body element renders
+    # the `sepia-texture-on` CSS class when the user's `sepia_texture`
     # is true AND the active theme is "sepia"; the matching CSS
     # selector layers an inline-SVG wood-grain on top of the existing
     # --bg color.
@@ -610,8 +611,46 @@ def _apply_inline_migrations() -> None:
         if user_cols_v61 and "sepia_texture" not in user_cols_v61:
             conn.execute(text(
                 "ALTER TABLE users ADD COLUMN sepia_texture "
-                "BOOLEAN NOT NULL DEFAULT TRUE"
+                "BOOLEAN NOT NULL DEFAULT FALSE"
             ))
+
+    # ---- Schema v62 (2.85.0): flip sepia_texture default off ----
+    # v2.84.0 shipped with DEFAULT TRUE so every user landed on the
+    # textured look without opting in. v2.85.0 reverses that: the
+    # textured background is opt-in. Two parts here:
+    #   1. ALTER the column DEFAULT to FALSE so fresh INSERTs that
+    #      omit the field land on the new default.
+    #   2. UPDATE every existing row currently sitting at TRUE back
+    #      to FALSE — anyone who landed on TRUE via v2.84.0's
+    #      default never made an active choice, so resetting to the
+    #      new default is the user-respecting move. Users who
+    #      actually want the texture can re-enable via /settings.
+    # Gated on the `schema_version` tracking table so the one-shot
+    # UPDATE runs exactly once: on subsequent boots v62 is already
+    # stamped, so we skip both the ALTER and the UPDATE. This means
+    # users who toggle the texture back ON via /settings won't have
+    # it flipped off again on the next container restart.
+    user_cols_v62 = _column_names("users")
+    if user_cols_v62 and "sepia_texture" in user_cols_v62:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS schema_version (
+                    version INTEGER PRIMARY KEY,
+                    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            already = conn.execute(
+                text("SELECT 1 FROM schema_version WHERE version = 62")
+            ).first()
+            if not already:
+                conn.execute(text(
+                    "ALTER TABLE users ALTER COLUMN sepia_texture "
+                    "SET DEFAULT FALSE"
+                ))
+                conn.execute(text(
+                    "UPDATE users SET sepia_texture = FALSE "
+                    "WHERE sepia_texture = TRUE"
+                ))
 
 
 def _make_character_campaign_nullable(inspector) -> None:

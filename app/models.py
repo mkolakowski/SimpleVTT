@@ -107,14 +107,13 @@ class User(Base):
     )
 
     # v2.84.0 — per-user toggle for the sepia theme's wood-grain
-    # background pattern. Default True (on) — when the user is on
-    # the sepia theme, body gets a class that applies a subtle
-    # SVG wood-grain background-image overlaying the existing
-    # sepia base color. Other themes ignore the toggle; the column
-    # is theme-agnostic just in case future themes also want an
-    # optional texture variant.
+    # background pattern. v2.85.0 flipped the default from True →
+    # False so the sepia theme renders the flat solid sepia color
+    # out of the box; opt-in to the textured look via the /settings
+    # toggle. Other themes ignore the column; it's theme-agnostic
+    # so future themes can adopt the same opt-in pattern.
     sepia_texture: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default="true",
+        Boolean, default=False, server_default="false",
     )
 
     characters: Mapped[list["Character"]] = relationship(

@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.85.0] - 2026-05-26 — "The Flat Page"
+
+**Schema version:** 62
+**Commit summary:** **Flips the sepia wood-grain texture default from ON to OFF.** v2.84.0 shipped with the procedural wood-grain background as the default for sepia-theme users; the request here is to make the flat solid sepia color the out-of-the-box look and let users opt **in** to the textured version. The texture itself, the `/settings` toggle, and the CSS selector all stay — only the default polarity changes.
+**Description:** Five edits + a schema bump. **(1)** `app/models.py`: `User.sepia_texture` column default flipped from `True` / `server_default="true"` to `False` / `server_default="false"`. **(2)** `app/database.py`: v61 migration block updated to `DEFAULT FALSE` for fresh installs; new v62 migration block runs `ALTER TABLE users ALTER COLUMN sepia_texture SET DEFAULT FALSE` and a one-shot `UPDATE users SET sepia_texture = FALSE WHERE sepia_texture = TRUE`, gated on the `schema_version` tracking table so the UPDATE runs exactly once per database — users who later opt back into the texture via `/settings` won't have it flipped off on the next container restart. **(3)** `app/templates/base.html`: the `sepia-texture-on` body-class gate changed from `(user is none or user.sepia_texture)` to `user is not none and user.sepia_texture` — unauthenticated visitors now see the flat default instead of the texture (matches the new opt-in semantics; the texture requires a logged-in user who has explicitly toggled it on). **(4)** `app/templates/user_settings.html`: "(default)" label moved from the "Wood grain" button to the "Flat color" button, and the helper paragraph updated to lead with "When OFF (default), the background is the flat solid sepia color." **(5)** `app/version.py`: `APP_VERSION` → `2.85.0`, `SCHEMA_VERSION` → `62`. **(6)** `README.md` version badge → `2.85.0` / `v62`.
+
+### Changed
+- Sepia theme renders the flat solid `#2c1f0e` color out of the box. Wood-grain texture is now opt-in via `/settings`.
+- Existing v2.84.x users who landed on `sepia_texture = TRUE` via the prior default are reset to `FALSE` by the one-shot v62 UPDATE; they can re-enable the texture in `/settings` if they prefer it.
+- Unauthenticated visitors on the sepia theme see the flat background (the old code path that emitted the class for anonymous users was tied to the now-stale "default ON" assumption).
+
+### Schema
+- **v62** — `ALTER TABLE users ALTER COLUMN sepia_texture SET DEFAULT FALSE` + one-shot `UPDATE users SET sepia_texture = FALSE WHERE sepia_texture = TRUE`, gated on `schema_version` row so it only runs once.
+
+### Notes
+- **MINOR bump** — UX default flip is a behavior change visible to every existing sepia user, not a pure bug fix. The toggle endpoint contract (`/api/settings/sepia_texture`), the CSS selector, and the harness tests from v2.84.0 / v2.84.1 are unchanged, so no harness updates needed.
+- The "flip everyone to FALSE" migration runs **once** per database thanks to the `schema_version` gate; future `docker compose up -d --build app` cycles see v62 already stamped and skip the UPDATE. Critical because otherwise users who opt back in would be reset on every container restart.
+
+---
+
 ## [2.84.1] - 2026-05-26 — "Cross the Boundary"
 
 **Schema version:** 61

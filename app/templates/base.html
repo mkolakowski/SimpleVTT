@@ -23,7 +23,7 @@
     <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
     {% block head %}{% endblock %}
 </head>
-<body{% if user and user.glass_alpha %} style="--glass-alpha: {{ user.glass_alpha }}%;"{% endif %}{# v2.84.0: sepia wood-grain texture opt-in class. Only emitted when the active theme is "sepia" AND user.sepia_texture is True (default). CSS selector [data-theme="sepia"].sepia-texture-on layers the wood SVG. #}{% set _active_theme = (user.theme if user and user.theme else APP_DEFAULT_THEME) %}{% if _active_theme == 'sepia' and (user is none or user.sepia_texture) %} class="sepia-texture-on"{% endif %}>
+<body{% if user and user.glass_alpha %} style="--glass-alpha: {{ user.glass_alpha }}%;"{% endif %}{# v2.84.0: sepia wood-grain texture opt-in class. v2.85.0 flipped the default from on → off, so the class is only emitted when the user has actively opted in via /settings (and the active theme is sepia). Unauthenticated visitors get the flat sepia color too — the texture requires a logged-in user with sepia_texture=True. #}{% set _active_theme = (user.theme if user and user.theme else APP_DEFAULT_THEME) %}{% if _active_theme == 'sepia' and user is not none and user.sepia_texture %} class="sepia-texture-on"{% endif %}>
     <script>
     /* v2.3.28: global fetch wrapper that catches expired-session 401
        responses (``{"detail":"Login required"}``) and bounces the user

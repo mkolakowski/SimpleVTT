@@ -590,11 +590,11 @@
 
 <section>
     <h2>🪵 Sepia wood-grain texture</h2>
-    <p class="muted">Only affects the <strong>Sepia</strong> theme. When ON (default), the sepia background gets a subtle procedural wood-grain pattern overlay. When OFF, the background is the flat solid sepia color. The toggle is per-user; other themes ignore it.</p>
+    <p class="muted">Only affects the <strong>Sepia</strong> theme. When OFF (default), the background is the flat solid sepia color. When ON, the sepia background gets a subtle procedural wood-grain pattern overlay. The toggle is per-user; other themes ignore it.</p>
     <div style="display:flex;align-items:center;gap:14px;margin-top:12px;">
         <div role="radiogroup" aria-label="Sepia wood-grain texture" style="display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
-            <button type="button" class="sepia-tex-btn" data-enabled="true"  aria-pressed="{{ 'true' if user.sepia_texture else 'false' }}" style="padding:8px 16px;background:none;border:none;cursor:pointer;color:var(--fg);font-size:13px;min-height:44px;">Wood grain (default)</button>
-            <button type="button" class="sepia-tex-btn" data-enabled="false" aria-pressed="{{ 'true' if not user.sepia_texture else 'false' }}" style="padding:8px 16px;background:none;border:none;cursor:pointer;color:var(--fg);font-size:13px;min-height:44px;border-left:1px solid var(--border);">Flat color</button>
+            <button type="button" class="sepia-tex-btn" data-enabled="true"  aria-pressed="{{ 'true' if user.sepia_texture else 'false' }}" style="padding:8px 16px;background:none;border:none;cursor:pointer;color:var(--fg);font-size:13px;min-height:44px;">Wood grain</button>
+            <button type="button" class="sepia-tex-btn" data-enabled="false" aria-pressed="{{ 'true' if not user.sepia_texture else 'false' }}" style="padding:8px 16px;background:none;border:none;cursor:pointer;color:var(--fg);font-size:13px;min-height:44px;border-left:1px solid var(--border);">Flat color (default)</button>
         </div>
         <span id="sepia-texture-status" style="font-size:11px;color:#6cb;min-width:9em;"></span>
     </div>
