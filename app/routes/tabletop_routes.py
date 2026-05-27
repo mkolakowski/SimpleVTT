@@ -9303,20 +9303,19 @@ async def _perform_encounter_load(
     campaign.current_encounter_id = enc.id
     db.flush()
 
-    # v2.86.0 — copy the encounter's background URL to the campaign's
-    # currently-displayed handle. Null on the encounter means "this
-    # encounter doesn't override the background" — we leave the
-    # campaign's value alone rather than clearing it, so an older
-    # encounter (saved before this feature shipped) doesn't unexpectedly
-    # wipe a background the GM set via the campaign-level endpoint.
-    # GMs who want a "no background" encounter clear it explicitly via
-    # the encounter-editor's clear button (which sets background_url
-    # to a sentinel) — for v2.86.0 the sentinel is just an empty
-    # string, and the PATCH endpoint normalises empty → None already,
-    # so for now "null = inherit" is the only behaviour.
+    # v2.86.0 / v2.87.0 — resolve the encounter's background URL.
+    # Precedence: ``enc.background_url`` (the encounter's own bind)
+    # wins; falling back to ``campaign.default_background_url`` (the
+    # GM's house default set via /api/campaign/{cid}/background) when
+    # the encounter doesn't override. Both null = no background. We
+    # always set ``active_background_url`` to the resolved value (or
+    # null) so leaving an encounter with no bg correctly reverts to
+    # the campaign default rather than keeping a stale previous
+    # encounter's bg displayed.
+    resolved_bg = enc.background_url or campaign.default_background_url
     bg_changed_in_place = False
-    if enc.background_url and enc.background_url != campaign.active_background_url:
-        campaign.active_background_url = enc.background_url
+    if resolved_bg != campaign.active_background_url:
+        campaign.active_background_url = resolved_bg
         bg_changed_in_place = True
         db.flush()
 
@@ -28976,14 +28975,21 @@ async def set_campaign_background(
     db: Session = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """Set or clear the campaign's currently-displayed background. GM-only.
+    """Set or clear the campaign's **default** background. GM-only.
 
-    Mirrors the encounter endpoint's payload but writes directly to
-    ``campaign.active_background_url`` and immediately broadcasts a
-    ``background_change`` WS message so every connected client swaps
-    the layer in-place (no page reload). Useful for prep/preview
-    flows and for clearing a stale background without first having to
-    load a different encounter.
+    v2.87.0 semantics: this endpoint writes to
+    ``campaign.default_background_url`` (the "house" backdrop that
+    applies whenever an encounter doesn't bind its own). It also
+    immediately copies the new value into
+    ``campaign.active_background_url`` so the swap is visible without
+    waiting for the next encounter load, and broadcasts a
+    ``background_change`` so every connected client updates in place.
+
+    Pre-v2.87.0 this endpoint wrote only to ``active_background_url``;
+    callers who relied on "set a one-off without making it the
+    default" should instead use the per-encounter endpoint, or set
+    + clear the campaign default around the one-off (the broadcast
+    fires both times so the UX is identical).
     """
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign or not _user_is_gm(user, campaign, db):
@@ -28994,13 +29000,18 @@ async def set_campaign_background(
         new_url = await _save_background_upload(image)
     else:
         raise HTTPException(400, "Provide an image upload or clear=true")
+    campaign.default_background_url = new_url
     campaign.active_background_url = new_url
     db.commit()
     await hub.broadcast(
         campaign_id,
         {"type": "background_change", "data": {"url": new_url}},
     )
-    return {"ok": True, "active_background_url": new_url}
+    return {
+        "ok": True,
+        "default_background_url": new_url,
+        "active_background_url": new_url,
+    }
 
 
 # ----------- Settings: members + danger zone (admin) -----------

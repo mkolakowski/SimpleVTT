@@ -614,6 +614,21 @@ def _apply_inline_migrations() -> None:
                 "BOOLEAN NOT NULL DEFAULT FALSE"
             ))
 
+    # ---- Schema v64 (2.87.0): campaign default background ----
+    # GMs can set a campaign-wide default background that's used
+    # when an encounter loads without its own background_url. See
+    # models.Campaign.default_background_url for the contract. Null
+    # default keeps existing campaigns at "no default" semantics —
+    # encounters without a bg fall back to NULL (no background), same
+    # behaviour as before v2.87.0.
+    camp_cols_v64 = _column_names("campaigns")
+    with engine.begin() as conn:
+        if camp_cols_v64 and "default_background_url" not in camp_cols_v64:
+            conn.execute(text(
+                "ALTER TABLE campaigns ADD COLUMN default_background_url "
+                "VARCHAR(500)"
+            ))
+
     # ---- Schema v63 (2.86.0): encounter backgrounds ----
     # Two new columns enable the encounter-background feature: a
     # fullscreen fixed-position image/video layer BEHIND the battle

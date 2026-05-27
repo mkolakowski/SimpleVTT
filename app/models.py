@@ -140,11 +140,20 @@ class Campaign(Base):
     # Encounters carry their own ``background_url`` and the load flow
     # copies it here — this column is the "currently displayed" handle
     # that the tabletop SSR + ``background_change`` WS broadcast read
-    # from. GMs can also set it directly via the campaign endpoint
-    # without going through an encounter (e.g. for prep / preview).
-    # Animated formats: GIF + animated WebP via <img>, mp4 + webm via
-    # <video>. Detection lives in the template (file-extension based).
+    # from. Animated formats: GIF + animated WebP via <img>, mp4 +
+    # webm via <video>. Detection lives in the template (extension).
     active_background_url: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True
+    )
+    # v2.87.0: campaign-level default background. When an encounter
+    # loads without its own ``background_url`` set, the load flow
+    # falls back to this value so the campaign's "house" backdrop
+    # stays in effect for any unbound encounter. Settable via the
+    # /api/campaign/{cid}/background endpoint, which also bumps
+    # ``active_background_url`` so the change is immediately visible
+    # without requiring an encounter load. Null = no default; the
+    # tabletop falls back to the theme's body color.
+    default_background_url: Mapped[Optional[str]] = mapped_column(
         String(500), nullable=True
     )
     # Audio: track currently playing (null = nothing); started_at is the

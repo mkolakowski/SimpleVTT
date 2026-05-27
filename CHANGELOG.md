@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.87.0] - 2026-05-27 — "The House Style"
+
+**Schema version:** 64
+**Commit summary:** **Campaign-level default background — a "house" backdrop that's used whenever an encounter is loaded without its own background_url.** GMs can now set one campaign-wide default that quietly fills in across every encounter, and individual encounters can still override it for set-piece scenes. Closes the obvious gap from v2.86.0 where the only way to get a background was to bind one per-encounter.
+**Description:** Five edits + a schema bump + a new harness test. **(1)** `app/models.py`: new `Campaign.default_background_url: Optional[str]` (the GM's house default). **(2)** `app/database.py`: schema v64 migration adds the column (nullable VARCHAR(500), default NULL — pre-v2.87.0 campaigns keep "no default" semantics). **(3)** `app/routes/tabletop_routes.py`:
+  - `POST /api/campaign/{cid}/background` repurposed to write the **default** instead of the live value. It also copies the new value into `active_background_url` immediately so the swap is visible without an encounter load, and the existing `background_change` broadcast still fires.
+  - `_perform_encounter_load` resolves with precedence: `enc.background_url or campaign.default_background_url`. Both null = no background. The function now always sets `active_background_url` to the resolved value (instead of leaving stale), so a no-bg encounter correctly reverts to the campaign default rather than keeping the previous encounter's bg pinned.
+**(4)** `app/version.py`: `APP_VERSION` → `2.87.0`, `SCHEMA_VERSION` → `64`. `README.md` version badge → `2.87.0` / `v64`.
+**(5)** `tests/harness/test_encounter_background.py`: new `test_campaign_default_falls_back_for_encounter_without_bg` asserts the campaign endpoint writes both `default_background_url` and `active_background_url`, plus a no-bg encounter creates correctly with `background_url=null`. Existing tests stay green — they read `active_background_url` from the response which is still present (and now mirrors `default_background_url`).
+
+### Added
+- `Campaign.default_background_url` — the GM's "house" backdrop.
+- Response body of `POST /api/campaign/{cid}/background` now includes `default_background_url` alongside `active_background_url`.
+- `tests/harness/test_encounter_background.py::test_campaign_default_falls_back_for_encounter_without_bg`.
+
+### Changed
+- `POST /api/campaign/{cid}/background` writes to `default_background_url` (was: `active_background_url` only).
+- `_perform_encounter_load` resolves background via `enc.background_url or campaign.default_background_url` and always sets `active_background_url` to the resolved value — so a no-bg encounter correctly reverts to the campaign default rather than keeping the previous encounter's bg.
+
+### Schema
+- **v64** — `ALTER TABLE campaigns ADD COLUMN default_background_url VARCHAR(500)`. Nullable, default NULL.
+
+### Notes
+- **MINOR bump** — net-new behavior (campaign-level default + fallback) plus a small contract shift on the existing endpoint (response now carries an extra field; nothing removed). Pre-v2.87.0 callers that only read `active_background_url` keep working.
+- Net effect for a GM: set a default once via `/api/campaign/{cid}/background`, and every encounter without its own background inherits it. Per-encounter uploads still override the default for that scene.
+
+---
+
 ## [2.86.1] - 2026-05-27 — "Lifting the Curtain"
 
 **Schema version:** 63

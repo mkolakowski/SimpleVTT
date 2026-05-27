@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 575 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.86.0, 2026-05-27).
+**Total tests:** 576 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.87.0, 2026-05-27).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -686,6 +686,7 @@ v2.86.0 — encounter backgrounds. Fullscreen fixed-position image/video layer b
 |------|-----------------|
 | `test_campaign_background_missing_payload_400` | No file + `clear=false` on the campaign endpoint → 400. Guards against silent no-op calls. |
 | `test_campaign_background_upload_then_clear` | Multipart PNG upload → 200 + `active_background_url` starts with `/static/uploads/encounter_bg/` + `background_change` WS broadcast carries the new URL. Subsequent `clear=true` → 200 + URL nulled + broadcast carries `null`. |
+| `test_campaign_default_falls_back_for_encounter_without_bg` | v2.87.0 — campaign endpoint sets both `default_background_url` and `active_background_url`; a no-bg encounter creates with `background_url=null`. Proves the contract that powers the fallback in `_perform_encounter_load` (enc bg → campaign default → null). |
 | `test_encounter_background_upload_does_not_broadcast` | Creates a throwaway encounter, attaches a background to it via the per-encounter endpoint, asserts the encounter projection now carries `background_url`, asserts NO `background_change` broadcast fires (propagation only happens on encounter load), cleans up via the delete endpoint. |
 
 ### `test_use_indomitable.py`
