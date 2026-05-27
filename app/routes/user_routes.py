@@ -455,6 +455,31 @@ def update_roll_log_position(
     return {"ok": True, "roll_log_position": body.position}
 
 
+class _SepiaTextureBody(BaseModel):
+    enabled: bool
+
+
+@router.post("/api/settings/sepia_texture")
+def update_sepia_texture(
+    body: _SepiaTextureBody,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """v2.84.0 — persist the user's preference for the sepia theme's
+    wood-grain background pattern. Default True (on); users who prefer
+    the flat solid-color sepia look set False.
+
+    The toggle only takes effect on the sepia theme — the body's
+    ``sepia-texture-on`` class is emitted by base.html only when both
+    ``user.sepia_texture == True`` AND the active theme is "sepia".
+    The CSS selector ``[data-theme="sepia"].sepia-texture-on``
+    layers the inline-SVG wood-grain over the existing --bg color.
+    """
+    user.sepia_texture = bool(body.enabled)
+    db.commit()
+    return {"ok": True, "sepia_texture": bool(body.enabled)}
+
+
 class _GlassAlphaBody(BaseModel):
     alpha: int
 

@@ -589,6 +589,47 @@
 </section>
 
 <section>
+    <h2>🪵 Sepia wood-grain texture</h2>
+    <p class="muted">Only affects the <strong>Sepia</strong> theme. When ON (default), the sepia background gets a subtle procedural wood-grain pattern overlay. When OFF, the background is the flat solid sepia color. The toggle is per-user; other themes ignore it.</p>
+    <div style="display:flex;align-items:center;gap:14px;margin-top:12px;">
+        <div role="radiogroup" aria-label="Sepia wood-grain texture" style="display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden;">
+            <button type="button" class="sepia-tex-btn" data-enabled="true"  aria-pressed="{{ 'true' if user.sepia_texture else 'false' }}" style="padding:8px 16px;background:none;border:none;cursor:pointer;color:var(--fg);font-size:13px;min-height:44px;">Wood grain (default)</button>
+            <button type="button" class="sepia-tex-btn" data-enabled="false" aria-pressed="{{ 'true' if not user.sepia_texture else 'false' }}" style="padding:8px 16px;background:none;border:none;cursor:pointer;color:var(--fg);font-size:13px;min-height:44px;border-left:1px solid var(--border);">Flat color</button>
+        </div>
+        <span id="sepia-texture-status" style="font-size:11px;color:#6cb;min-width:9em;"></span>
+    </div>
+    <style>
+        .sepia-tex-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg, #fff); }
+        .sepia-tex-btn:hover:not([aria-pressed="true"]) { background: var(--bg-2); }
+    </style>
+    <script>
+    (function () {
+        const btns   = document.querySelectorAll('.sepia-tex-btn');
+        const status = document.getElementById('sepia-texture-status');
+        btns.forEach(btn => btn.addEventListener('click', async () => {
+            const enabled = btn.dataset.enabled === 'true';
+            if (btn.getAttribute('aria-pressed') === 'true') return;
+            status.textContent = 'saving…';
+            try {
+                const resp = await fetch('/api/settings/sepia_texture', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled }),
+                });
+                if (!resp.ok) throw new Error(await resp.text());
+                btns.forEach(b => b.setAttribute('aria-pressed', b === btn ? 'true' : 'false'));
+                status.textContent = '✓ Saved — reload to see the change.';
+                setTimeout(() => { status.textContent = ''; }, 4000);
+            } catch (e) {
+                status.textContent = '✗ Failed';
+                console.error(e);
+            }
+        }));
+    })();
+    </script>
+</section>
+
+<section>
     <h2>⚡ Reaction prompts</h2>
     <p class="muted">When a trigger event fires for which one of your characters has a reaction available (an opportunity attack, an incoming attack, a save, etc.), how should we surface the options? <strong>Popup</strong> (default) shows a glass-card toast in the corner with one-click spend buttons. <strong>Roll log only</strong> writes the entry to the roll log without the popup — useful if you watch the log closely and find popups distracting. <strong>Off</strong> suppresses both; the action-economy chip click is still the manual fallback.</p>
     <div style="display:flex;align-items:center;gap:14px;margin-top:12px;">

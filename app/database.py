@@ -597,6 +597,22 @@ def _apply_inline_migrations() -> None:
                 "VARCHAR(16) NOT NULL DEFAULT 'popup'"
             ))
 
+    # ---- Schema v61 (2.84.0): users.sepia_texture ----
+    # Per-user toggle for the sepia theme's wood-grain background
+    # pattern. Default TRUE so existing sepia users get the texture
+    # immediately on first page reload. Body element renders the
+    # `sepia-texture-on` CSS class when the user's `sepia_texture`
+    # is true AND the active theme is "sepia"; the matching CSS
+    # selector layers an inline-SVG wood-grain on top of the existing
+    # --bg color.
+    user_cols_v61 = _column_names("users")
+    with engine.begin() as conn:
+        if user_cols_v61 and "sepia_texture" not in user_cols_v61:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN sepia_texture "
+                "BOOLEAN NOT NULL DEFAULT TRUE"
+            ))
+
 
 def _make_character_campaign_nullable(inspector) -> None:
     """Make characters.campaign_id nullable so characters can exist without a campaign."""

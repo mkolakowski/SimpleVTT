@@ -164,3 +164,21 @@
     --theme-grain-opacity: 0.06;
 }
 
+/* v2.84.0 — Sepia wood-grain background.
+   Toggle is per-user via /settings (`user.sepia_texture`, default ON).
+   The base.html template emits `class="sepia-texture-on"` on <body>
+   when both conditions are true: active theme is "sepia" AND
+   `user.sepia_texture == True`. The selector below layers a
+   procedurally-generated wood-grain SVG (feTurbulence with
+   horizontal-stretched noise) over the existing --bg #2c1f0e color,
+   producing a light wood pattern that respects the sepia palette.
+   Background-color stays as --bg so the SVG's alpha channel blends
+   into the solid tint instead of replacing it. */
+[data-theme="sepia"].sepia-texture-on {
+    background-color: var(--bg);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400' viewBox='0 0 400 400'><defs><filter id='w' x='0' y='0' width='100%25' height='100%25'><feTurbulence type='turbulence' baseFrequency='0.02 0.6' numOctaves='3' seed='7'/><feColorMatrix values='0 0 0 0 0.36  0 0 0 0 0.26  0 0 0 0 0.12  0 0 0 0.55 0'/></filter></defs><rect width='100%25' height='100%25' filter='url(%23w)'/></svg>");
+    background-repeat: repeat;
+    background-size: 400px 400px;
+    background-attachment: fixed;
+}
+

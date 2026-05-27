@@ -10,6 +10,40 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.84.0] - 2026-05-26 — "The Grain in the Page"
+
+**Schema version:** 61
+**Commit summary:** **Sepia theme's background is now a subtle wood-grain pattern instead of a flat color, with a per-user opt-out toggle in `/settings`.** The wood texture is a procedurally-generated inline SVG (feTurbulence noise stretched horizontally to imitate grain) layered over the existing sepia base color `#2c1f0e`. Default ON so existing sepia users get the texture immediately; a `/settings` toggle flips it off for the flat-color look. Only affects the sepia theme — other themes ignore the setting.
+**Description:** Five edits + a new harness test. **(1)** `app/models.py`: new `sepia_texture: bool` column on the User model, default True. **(2)** `app/database.py`: schema v61 inline migration (`ALTER TABLE users ADD COLUMN sepia_texture BOOLEAN NOT NULL DEFAULT TRUE`). **(3)** `app/routes/user_routes.py`: new `POST /api/settings/sepia_texture` endpoint accepting `{"enabled": bool}`. Same shape as `/api/settings/roll_log_position` + the v2.62.0 glass_alpha endpoint. **(4)** `app/templates/base.html`: body tag now emits `class="sepia-texture-on"` only when the active theme resolves to "sepia" AND `user.sepia_texture` is True (or the user is unauthenticated; default-on visitors see the texture). **(5)** `app/static/style-fantasy-themes.css`: new `[data-theme="sepia"].sepia-texture-on` selector layering a `data:image/svg+xml` background-image — a 400x400 tile with an feTurbulence filter (`baseFrequency='0.02 0.6'` = horizontally stretched noise = wood-grain look) color-matrixed into a sepia-brown tone (`0.36, 0.26, 0.12, 0.55 alpha`) over the existing `--bg` color. Tiled via `background-repeat: repeat` + `background-attachment: fixed` so the grain stays put during scroll. **(6)** `app/templates/user_settings.html`: new "🪵 Sepia wood-grain texture" section with a two-button radiogroup ("Wood grain (default)" / "Flat color"), JS POSTs the toggle to the new endpoint, status pill confirms save. Pattern mirrors the existing `roll_log_position` UI. **(7)** New harness test `tests/harness/test_settings_sepia_texture.py` — 2 tests (round-trip + per-user isolation), mirrors `test_settings_roll_log_position.py`.
+**Description (cont):** Why a procedural SVG instead of a static PNG / JPG asset:
+- Zero new file dependencies (the SVG lives inline in CSS as a data URI).
+- The grain frequency is parameterizable in CSS if a future theme variant wants a tighter / looser grain.
+- Image-asset cache headers don't apply — the data URI is part of the CSS file's response, served with the same cache-busting query string as every other static asset.
+- The feTurbulence color is sepia-tinted via feColorMatrix, so the grain blends with the underlying sepia base color (`--bg: #2c1f0e`) instead of fighting it.
+
+### Added
+- `users.sepia_texture` BOOLEAN column (schema v61 migration, default TRUE).
+- `POST /api/settings/sepia_texture` endpoint.
+- "🪵 Sepia wood-grain texture" section on `/settings`.
+- `[data-theme="sepia"].sepia-texture-on` CSS selector in `style-fantasy-themes.css` with inline-SVG wood-grain background.
+- `tests/harness/test_settings_sepia_texture.py` — 2 new tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.84.0`, `SCHEMA_VERSION` → `61`.
+- `README.md` version + schema badges → `2.84.0` / `v61`.
+- `app/templates/base.html` body tag conditionally emits `class="sepia-texture-on"`.
+- `docs/test-harness-coverage.md` — total test count 570 → 572.
+
+### Schema
+- Add `users.sepia_texture` BOOLEAN NOT NULL DEFAULT TRUE.
+
+### Notes
+- **MINOR bump** — adds a new public endpoint, new schema column, new user-visible visual surface.
+- The texture is intentionally subtle (feTurbulence alpha is ~0.55, the color matrix mutes the grain into a sepia-tone). Text contrast over the textured background tests cleanly with the existing `--fg: #e8d8b8`.
+- **Future themes can adopt the same toggle.** The CSS selector is theme-keyed (`[data-theme="sepia"].sepia-texture-on`), so a future "parchment" or "leather" theme can drop in its own texture-on variant without changing the data model.
+
+---
+
 ## [2.83.0] - 2026-05-26 — "Iron Concentration"
 
 **Schema version:** 60
