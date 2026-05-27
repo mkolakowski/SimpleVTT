@@ -10,6 +10,44 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.71.0] - 2026-05-26 — "The Devil's Bargain"
+
+**Schema version:** 60
+**Commit summary:** **Phase 3c — Hellish Rebuke + Absorb Elements, two reaction spells wired to the `damage_taken` trigger event.** Extends the existing v2.67.2 Uncanny Dodge `damage_taken` plumbing to also fire for non-UD targets. New helpers `_pc_has_hellish_rebuke_available(char)` + `_pc_has_absorb_elements_available(char, damage_type)` gate eligibility on prepared spell + available slot (HR: 1st+, AE: 1st+ with damage_type ∈ {acid, cold, fire, lightning, thunder}). `/use_reaction` dispatches `cast-hellish-rebuke` (consume slot, mark reaction, broadcast `feature_used(source=hellish-rebuke-cast)` with `damage_expr=<1+lv>d10` + attacker name) and `cast-absorb-elements` (consume slot, install `absorb-elements-active` buff with resistance to damage type + +slot_level d6 elemental damage on next melee). The original attacker's HP and the elemental-damage resistance pipeline are **not auto-applied** in v1 — broadcast carries the formula and the GM/player adjudicates. Auto-undo of damage + buff-aware resistance pipeline filed for v3.
+**Description:** Four blocks of edits in `app/routes/tabletop_routes.py`. **(1)** Two new helper functions mirror the v2.69.0 Shield / v2.70.0 Counterspell pattern. HR walks `sheet.spells` for "hellish-rebuke" with `casting_time` containing "reaction"; if found, scans `sheet.spell_slots[*][lv]` for the lowest 1st+ slot with `used < total`. AE adds a damage-type gate (`_ABSORB_ELEMENTS_TYPES = {"acid", "cold", "fire", "lightning", "thunder"}`) before the spell scan — for any other damage type the helper returns False even if the spell + slot are present. **(2)** `_eligible_reactions[damage_taken]` now builds a list of options instead of a single ack: the existing Uncanny Dodge ack appears when `context.uncanny_dodge_used=True`, plus Hellish Rebuke when `hr_elig`, plus Absorb Elements when `ae_elig`. All three can coexist for a Rogue 5+ multiclassed Warlock or Wizard. **(3)** A second `_emit_reaction_prompt(damage_taken)` site in `_apply_damage_to_combatant`'s PC branch after the `_log_damage_entry`. Gated on `applied > 0 AND not uncanny_dodge_used AND not bool(combatant.economy.reaction)` — the UD branch already emits its own ack-only prompt for the auto-fire case, and a reaction already used can't be spent on HR/AE. Context carries `damage_amount`, `damage_type`, `attacker_char_id`, `attacker_name`, `attack_id` so the eligibility check + label can name the attacker + the elemental gate fires. **(4)** Two new `/use_reaction` dispatch cases. `cast-hellish-rebuke`: consume the lowest available 1st+ slot via the same in-place `sheet.spell_slots` mutation pattern as Shield/Counterspell, mark reaction, broadcast `spell_slot_update` + `feature_used(source=hellish-rebuke-cast)` carrying `damage_expr` (=`<1+slot_level>d10`), `damage_type=fire`, `rebuke_target_name`, `rebuke_target_char_id`, `rebuke_target_combatant_id`, `slot_level`. `cast-absorb-elements`: consume slot, mark reaction, install `absorb-elements-active` buff with `effects.resistance_damage_type=<type>`, `effects.next_melee_bonus_dice=<slot_level>`, `effects.next_melee_bonus_type=<type>`, `duration_rounds=1`; broadcast `spell_slot_update` + `feature_used(source=absorb-elements-cast)`.
+**Description (cont):** v1 simplifications (filed for v3 pending-damage state machine):
+- **No auto-damage to the rebuked attacker.** The broadcast surfaces the `damage_expr` (4d10 fire for Magnus's L3 slot, etc.) + the attacker name; player/GM rolls the dice + the attacker's DEX save + applies the result. Auto-roll + auto-apply against the attacker filed.
+- **AE resistance pipeline not yet consumed.** The buff captures `effects.resistance_damage_type` for visibility but `_resistance_halve` doesn't yet read buff-derived resistances (only `sheet.damage_resistances`). Filed: extend the resistance gate to also walk `_get_buffs(target)` for `effects.resistance_damage_type` entries.
+- **AE next-melee bonus damage not yet wired.** The buff captures `effects.next_melee_bonus_dice` + `effects.next_melee_bonus_type` for visibility but the next /attack from this PC doesn't auto-append the bonus. Filed.
+- **No Absorb Elements demo fixture.** None of the demo PCs have AE on their spell list (Wizard/Sorcerer/Druid/Ranger/Artificer have it RAW). Live AE test was attempted via `_SHEET_PATCH_KEYS["spells"]` PATCH-and-restore but the harness has no JSON-character-fetch endpoint for snapshotting the original spells. Filed: bake AE into a demo PC or add a JSON sheet endpoint for the harness to use.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.71.0`. (b) Two new tests:
+- `test_hellish_rebuke_prompt_fires_on_pc_damage` — Krieger swings on Magnus (Warlock 5 w/ HR + L3 Pact slot) until a hit lands; forces `auto_apply_damage=on` via the campaign settings form-post (a v2.67.2 UD test's cleanup leaves it off, breaking later damage-driven tests in the same suite); asserts `reaction_prompt(damage_taken)` with `cast-hellish-rebuke` option in Magnus's prompt. Restored in finally.
+- `test_cast_hellish_rebuke_consumes_slot` — same setup + POST `/use_reaction` with `cast-hellish-rebuke`; asserts `economy_update` for Magnus's reaction, `spell_slot_update` for the L3 slot decrement, `feature_used(source=hellish-rebuke-cast, damage_type=fire, damage_expr=4d10)`.
+
+Both tests are wrapped in try/finally so the auto_apply_damage flip doesn't leak to subsequent tests. Full reaction_prompt suite passes 17/17 locally.
+
+### Added
+- `_pc_has_hellish_rebuke_available(char) -> (bool, class_slug, slot_level)` helper.
+- `_pc_has_absorb_elements_available(char, damage_type) -> (bool, class_slug, slot_level)` helper (gated on elemental damage type).
+- `_eligible_reactions[damage_taken]` now returns a list of options: UD ack (preserved) + Hellish Rebuke + Absorb Elements.
+- Second `_emit_reaction_prompt(damage_taken)` site in `_apply_damage_to_combatant`'s PC branch for non-UD damage.
+- `cast-hellish-rebuke` dispatch case in `/use_reaction` — consumes slot, marks reaction, broadcasts `feature_used(source=hellish-rebuke-cast)`.
+- `cast-absorb-elements` dispatch case in `/use_reaction` — consumes slot, marks reaction, installs `absorb-elements-active` buff.
+- Harness `test_hellish_rebuke_prompt_fires_on_pc_damage` + `test_cast_hellish_rebuke_consumes_slot` — 2 new tests.
+- Test helper `_campaign_settings_form(auto_apply_damage)` in `test_reaction_prompt.py` — builds the campaign-settings form-post body so the HR tests can force-on auto_apply_damage and restore on cleanup.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.71.0`.
+- `README.md` version badge → `2.71.0`.
+- `docs/plans/reactions-automation.md` — Phase 3c marked 🟠 partial (HR live; AE catalog wired but no demo fixture).
+- `docs/test-harness-coverage.md` — total test count 550 → 552.
+
+### Notes
+- **First case where multiple reactions stack on the same trigger.** A Rogue 5+ multiclassed Warlock would see THREE options in the popup on the same `damage_taken` event: UD ack (auto-fired), HR (cast), AE (cast for elemental damage). The framework already supports this — eligible_reactions just appends to the list.
+- **`damage_taken` is now the most fully-loaded trigger.** Future Phase 4 feats (Defensive Duelist with sword/finesse weapon, Mage Slayer reaction on spell cast) will extend other triggers; `damage_taken` is the busiest.
+
+---
+
 ## [2.70.0] - 2026-05-26 — "The Silence"
 
 **Schema version:** 60

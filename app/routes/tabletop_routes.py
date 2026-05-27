@@ -2057,6 +2057,120 @@ def _pc_has_shield_available(char) -> "tuple[bool, str, int]":
     return True, best_class, best_lv
 
 
+# v2.71.0 Phase 3c — Hellish Rebuke. RAW (PHB p.250): "1 reaction,
+# which you take in response to being damaged by a creature within
+# 60 feet of you that you can see." 1st-level spell, cast at higher
+# levels deals +1d10 fire per slot. The helper finds the LOWEST
+# available 1st+ slot — players can dispatch to higher slots later
+# via params extension. Multi-class casters: walks every class's
+# slot pool; Warlock Pact Magic (single-level pool) just works.
+def _pc_has_hellish_rebuke_available(char) -> "tuple[bool, str, int]":
+    """Detect Hellish Rebuke (1st-level reaction spell) eligibility on a PC."""
+    if not char or not char.sheet:
+        return False, "", 0
+    sheet = char.sheet or {}
+    has_hr = False
+    for sp in (sheet.get("spells") or []):
+        if not isinstance(sp, dict):
+            continue
+        slug = (sp.get("_slug") or "").strip().lower()
+        name = (sp.get("name") or "").strip().lower()
+        ct = (sp.get("casting_time") or "").lower()
+        if (slug == "hellish-rebuke" or name == "hellish rebuke") and "reaction" in ct:
+            has_hr = True
+            break
+    if not has_hr:
+        return False, "", 0
+    all_slots = sheet.get("spell_slots") or {}
+    best_class = ""
+    best_lv = 0
+    for cslug, per_class in (all_slots or {}).items():
+        if not isinstance(per_class, dict):
+            continue
+        for lv_key, slot in per_class.items():
+            if not isinstance(slot, dict):
+                continue
+            try:
+                lv = int(lv_key)
+            except (TypeError, ValueError):
+                continue
+            if lv < 1:
+                continue
+            total = int(slot.get("total") or 0)
+            used = int(slot.get("used") or 0)
+            if total <= 0 or used >= total:
+                continue
+            if best_lv == 0 or lv < best_lv:
+                best_lv = lv
+                best_class = str(cslug).strip().lower()
+    if best_lv == 0:
+        return False, "", 0
+    return True, best_class, best_lv
+
+
+# v2.71.0 Phase 3c — Absorb Elements. RAW (XGtE p.150): "1 reaction,
+# which you take when you take acid, cold, fire, lightning, or thunder
+# damage." 1st-level spell, +1d6 to the next melee hit per slot above
+# 1st. Gated on the incoming damage_type ∈ {acid, cold, fire, lightning,
+# thunder}. None of the demo PCs have it yet — the helper is wired so
+# any sheet patched with an absorb-elements entry surfaces the option.
+_ABSORB_ELEMENTS_TYPES = {"acid", "cold", "fire", "lightning", "thunder"}
+
+
+def _pc_has_absorb_elements_available(
+    char, damage_type: str,
+) -> "tuple[bool, str, int]":
+    """Detect Absorb Elements (1st-level reaction spell) eligibility on a PC.
+
+    Gated on ``damage_type`` belonging to the elemental set — for any
+    other type the helper returns False even if the spell + slot are
+    present. (Bludgeoning/piercing/slashing/psychic etc. don't trigger.)
+    """
+    dt = (damage_type or "").strip().lower()
+    if dt not in _ABSORB_ELEMENTS_TYPES:
+        return False, "", 0
+    if not char or not char.sheet:
+        return False, "", 0
+    sheet = char.sheet or {}
+    has_ae = False
+    for sp in (sheet.get("spells") or []):
+        if not isinstance(sp, dict):
+            continue
+        slug = (sp.get("_slug") or "").strip().lower()
+        name = (sp.get("name") or "").strip().lower()
+        ct = (sp.get("casting_time") or "").lower()
+        if (slug == "absorb-elements" or name == "absorb elements") and "reaction" in ct:
+            has_ae = True
+            break
+    if not has_ae:
+        return False, "", 0
+    all_slots = sheet.get("spell_slots") or {}
+    best_class = ""
+    best_lv = 0
+    for cslug, per_class in (all_slots or {}).items():
+        if not isinstance(per_class, dict):
+            continue
+        for lv_key, slot in per_class.items():
+            if not isinstance(slot, dict):
+                continue
+            try:
+                lv = int(lv_key)
+            except (TypeError, ValueError):
+                continue
+            if lv < 1:
+                continue
+            total = int(slot.get("total") or 0)
+            used = int(slot.get("used") or 0)
+            if total <= 0 or used >= total:
+                continue
+            if best_lv == 0 or lv < best_lv:
+                best_lv = lv
+                best_class = str(cslug).strip().lower()
+    if best_lv == 0:
+        return False, "", 0
+    return True, best_class, best_lv
+
+
 # v2.70.0 Phase 3b — Counterspell. RAW (PHB p.228): "1 reaction, which
 # you take when you see a creature within 60 feet of you casting a
 # spell." 3rd-level spell. Cast at 3rd → auto-counters spells 3rd or
@@ -2316,12 +2430,11 @@ def _eligible_reactions(
             char = None
         if not char or not char.sheet:
             return []
+        opts: list[dict] = []
+        # Uncanny Dodge ack — only when context flags the auto-fire.
         if _rogue_level_from_sheet(char.sheet) >= 5:
-            # The "already-fired" UD context is signaled by
-            # ``context.uncanny_dodge_used == True`` on the prompt
-            # entry; the option is ack-only.
             if context.get("uncanny_dodge_used"):
-                return [{
+                opts.append({
                     "key": "uncanny-dodge-ack",
                     "label": "🛡️ Uncanny Dodge auto-fired (acknowledge)",
                     "kind": "ack",
@@ -2329,7 +2442,63 @@ def _eligible_reactions(
                     "params": {},
                     "available": True,
                     "unavailable_reason": None,
-                }]
+                })
+        # v2.71.0 Phase 3c — Hellish Rebuke. Eligible when the watcher
+        # has it prepared with a 1st+ slot AND the damage came from an
+        # identifiable attacker (PC or NPC combatant id in context).
+        # RAW range: 60 ft of attacker; we file the positional range
+        # gate for now since the existing damage path doesn't yet
+        # carry caster→target tokens. State-tracker stance: surface
+        # the option and let the GM adjudicate range. Auto-undo of
+        # the attacker's HP is filed for v3.
+        hr_elig, hr_class, hr_lv = _pc_has_hellish_rebuke_available(char)
+        if hr_elig:
+            attacker_name = context.get("attacker_name") or "the attacker"
+            opts.append({
+                "key": "cast-hellish-rebuke",
+                "label": (
+                    f"🔥 Cast Hellish Rebuke on {attacker_name} "
+                    f"(L{hr_lv}: {1 + hr_lv}d10 fire, DEX save half)"
+                ),
+                "kind": "spell",
+                "resource_cost": f"Reaction + 1× L{hr_lv} slot",
+                "params": {
+                    "slot_level": hr_lv,
+                    "class_slug": hr_class,
+                    "attacker_name": attacker_name,
+                    "attacker_char_id": context.get("attacker_char_id"),
+                    "attacker_combatant_id": context.get("attacker_combatant_id"),
+                    "damage_amount": context.get("damage_amount"),
+                },
+                "available": True,
+                "unavailable_reason": None,
+            })
+        # v2.71.0 Phase 3c — Absorb Elements. Gated on damage_type ∈
+        # {acid, cold, fire, lightning, thunder}. Self-buff: resistance
+        # to the triggering damage type until the start of the next
+        # turn + +1d6 elemental damage on the next melee hit.
+        dmg_type = (context.get("damage_type") or "").lower()
+        ae_elig, ae_class, ae_lv = _pc_has_absorb_elements_available(
+            char, dmg_type,
+        )
+        if ae_elig:
+            opts.append({
+                "key": "cast-absorb-elements",
+                "label": (
+                    f"🌊 Cast Absorb Elements ({dmg_type} resistance + "
+                    f"+{ae_lv}d6 next melee hit, L{ae_lv})"
+                ),
+                "kind": "spell",
+                "resource_cost": f"Reaction + 1× L{ae_lv} slot",
+                "params": {
+                    "slot_level": ae_lv,
+                    "class_slug": ae_class,
+                    "damage_type": dmg_type,
+                },
+                "available": True,
+                "unavailable_reason": None,
+            })
+        return opts
     # Phase 2+ extends this stub with class features, spells, feats,
     # and items per the plan doc catalog.
     return []
@@ -3556,6 +3725,50 @@ async def _apply_damage_to_combatant(
                 "applied": applied,
                 "was_resistance": resistance_applied,
             })
+        # v2.71.0 Phase 3c — Hellish Rebuke + Absorb Elements prompt.
+        # Emit damage_taken when the PC takes nonzero damage AND
+        # didn't already get a UD-ack prompt above. The
+        # _eligible_reactions branch filters watchers without HR/AE
+        # available so the broadcast only fires when at least one
+        # reaction option is actually present. Skip if reaction
+        # already used (the helpers gate inside _eligible_reactions
+        # via slot/spell walks, but the up-front check saves the
+        # broadcast in the common case).
+        try:
+            econ = (combatant.get("economy") or {})
+            if applied > 0 and not uncanny_dodge_used and not bool(econ.get("reaction")):
+                attacker_name = ""
+                if attacker_char_id:
+                    try:
+                        atk_char = db.query(Character).filter(
+                            Character.id == int(attacker_char_id),
+                        ).first()
+                        if atk_char:
+                            attacker_name = atk_char.name or ""
+                    except Exception:
+                        pass
+                campaign_row2 = db.query(Campaign).filter(
+                    Campaign.id == campaign_id,
+                ).first()
+                if campaign_row2:
+                    await _emit_reaction_prompt(
+                        db, campaign_row2, combatant,
+                        trigger_event="damage_taken",
+                        summary=(
+                            f"{combatant.get('name') or char.name} took "
+                            f"{applied} {damage_type or ''} damage"
+                            + (f" from {attacker_name}." if attacker_name else ".")
+                        ),
+                        context={
+                            "damage_amount": applied,
+                            "damage_type": damage_type or "",
+                            "attacker_char_id": attacker_char_id,
+                            "attacker_name": attacker_name,
+                            "attack_id": attack_id,
+                        },
+                    )
+        except Exception:
+            pass
         return {
             "applied": applied,
             "hp_before": hp_cur,
@@ -12990,6 +13203,193 @@ async def use_reaction(
                     ),
                     "outcome_hint": outcome_hint,
                     "arcana_check_dc": check_dc,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key == "cast-hellish-rebuke" and watcher_char_id:
+        # v2.71.0 Phase 3c — Hellish Rebuke. Consume the 1st+ slot,
+        # mark reaction, broadcast feature_used naming the attacker
+        # + the damage formula at the slot level. v1 doesn't roll the
+        # damage / attacker's DEX save — the chat-card surfaces the
+        # 1+slot_level d10 fire formula and the GM rolls / adjudicates.
+        # Auto-roll + auto-damage-to-attacker filed for v3.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "cast-hellish-rebuke"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            slot_level = int(params.get("slot_level") or 1)
+            class_slug = str(params.get("class_slug") or "").strip().lower()
+            attacker_name = str(params.get("attacker_name") or "the attacker")
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            sheet = dict(watcher_char.sheet or {})
+            all_slots = dict(sheet.get("spell_slots") or {})
+            per_class = dict(all_slots.get(class_slug) or {})
+            slot_key = str(slot_level)
+            slot = dict(per_class.get(slot_key) or {})
+            total = int(slot.get("total") or 0)
+            used = int(slot.get("used") or 0)
+            if total <= 0 or used >= total:
+                return JSONResponse(status_code=409, content={
+                    "error": "no_slot",
+                    "class_slug": class_slug,
+                    "level": slot_level,
+                })
+            slot["used"] = used + 1
+            slot["total"] = total
+            per_class[slot_key] = slot
+            all_slots[class_slug] = per_class
+            sheet["spell_slots"] = all_slots
+            watcher_char.sheet = sheet
+            db.commit()
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            damage_dice = 1 + slot_level
+            await hub.broadcast(campaign_id, {
+                "type": "spell_slot_update",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "class_slug": class_slug,
+                    "level": slot_level,
+                    "used": used + 1,
+                    "total": total,
+                },
+            })
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": "🔥 Hellish Rebuke cast",
+                    "feature_desc": (
+                        f"Reaction. {attacker_name} takes {damage_dice}d10 "
+                        f"fire damage (DEX save DC = caster's spell save DC "
+                        f"for half). Consumed 1× L{slot_level} slot."
+                    ),
+                    "source": "hellish-rebuke-cast",
+                    "reaction_kind": "spell",
+                    "slot_level": slot_level,
+                    "damage_expr": f"{damage_dice}d10",
+                    "damage_type": "fire",
+                    "rebuke_target_name": attacker_name,
+                    "rebuke_target_char_id": params.get("attacker_char_id"),
+                    "rebuke_target_combatant_id": params.get("attacker_combatant_id"),
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key == "cast-absorb-elements" and watcher_char_id:
+        # v2.71.0 Phase 3c — Absorb Elements. Consume the 1st+ slot,
+        # mark reaction, install absorb-elements-active buff with
+        # resistance to the triggering damage type + +slot_level d6
+        # bonus damage on the next melee hit. Like Shield's +5 AC,
+        # downstream consumers (resistance pipeline, melee bonus
+        # damage) aren't yet wired — the buff captures the effects
+        # for visibility + GM adjudication. v3 will wire them.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "cast-absorb-elements"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            slot_level = int(params.get("slot_level") or 1)
+            class_slug = str(params.get("class_slug") or "").strip().lower()
+            damage_type = str(params.get("damage_type") or "").lower()
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            sheet = dict(watcher_char.sheet or {})
+            all_slots = dict(sheet.get("spell_slots") or {})
+            per_class = dict(all_slots.get(class_slug) or {})
+            slot_key = str(slot_level)
+            slot = dict(per_class.get(slot_key) or {})
+            total = int(slot.get("total") or 0)
+            used = int(slot.get("used") or 0)
+            if total <= 0 or used >= total:
+                return JSONResponse(status_code=409, content={
+                    "error": "no_slot",
+                    "class_slug": class_slug,
+                    "level": slot_level,
+                })
+            slot["used"] = used + 1
+            slot["total"] = total
+            per_class[slot_key] = slot
+            all_slots[class_slug] = per_class
+            sheet["spell_slots"] = all_slots
+            watcher_char.sheet = sheet
+            db.commit()
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            ae_buff = {
+                "key": "absorb-elements-active",
+                "name": f"🌊 Absorb Elements ({damage_type})",
+                "icon": "🌊",
+                "source_char_id": int(watcher_char_id),
+                "target_combatant_id": entry.get("watcher_combatant_id"),
+                "duration_rounds": 1,
+                "duration_max": 1,
+                "concentration": False,
+                "effects": {
+                    "resistance_damage_type": damage_type,
+                    "next_melee_bonus_dice": slot_level,
+                    "next_melee_bonus_type": damage_type,
+                },
+                "desc": (
+                    f"Resistance to {damage_type} damage from the "
+                    f"triggering source. Next melee hit deals "
+                    f"+{slot_level}d6 {damage_type} damage."
+                ),
+            }
+            await _install_buff(
+                campaign_id, int(watcher_char_id), ae_buff,
+            )
+            _mirror_buffs_to_sheet(
+                db, int(watcher_char_id),
+                _get_buffs(campaign_id, int(watcher_char_id)),
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "spell_slot_update",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "class_slug": class_slug,
+                    "level": slot_level,
+                    "used": used + 1,
+                    "total": total,
+                },
+            })
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": "🌊 Absorb Elements cast",
+                    "feature_desc": (
+                        f"Reaction. Resistance to {damage_type} from the "
+                        f"triggering source + +{slot_level}d6 {damage_type} "
+                        f"on next melee hit. Consumed 1× L{slot_level} slot."
+                    ),
+                    "source": "absorb-elements-cast",
+                    "reaction_kind": "spell",
+                    "slot_level": slot_level,
+                    "damage_type": damage_type,
                 },
             })
         except HTTPException:

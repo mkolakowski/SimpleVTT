@@ -950,6 +950,234 @@ async def test_cast_counterspell_consumes_slot(
     assert (last.get("countered_spell_name") or "").lower() == "suggestion"
 
 
+# ── v2.71.0 — Phase 3c: Hellish Rebuke + Absorb Elements ──
+
+
+def _campaign_settings_form(auto_apply_damage: bool) -> dict:
+    """Build the /campaign/{id}/settings form-post body. v2.71.0 — used
+    by the Hellish Rebuke tests to force auto_apply_damage on (it gets
+    toggled off by the v2.67.2 Uncanny Dodge test's cleanup, leaving
+    the demo in the wrong state for later damage-driven tests).
+    """
+    form = {
+        "name": "Demo Campaign",
+        "description": "demo",
+        "game_system": "dnd5e",
+        "gm_tab_color": "",
+        "font_override": "",
+        "default_encounter_id": "",
+        "hp_threshold_1": "",
+        "hp_threshold_2": "",
+        "hp_threshold_3": "",
+        "hp_threshold_4": "",
+        "auto_play_playlist_id": "",
+        "auto_play_mode": "order",
+        "auto_play_initial_volume": "0.7",
+    }
+    if auto_apply_damage:
+        form["auto_apply_damage"] = "on"
+    return form
+
+
+async def test_hellish_rebuke_prompt_fires_on_pc_damage(
+    gm_client, gm_ws, roster,
+):
+    """v2.71.0 — when a Warlock with Hellish Rebuke prepared + a slot
+    available + reaction unused takes damage, `damage_taken` fires
+    with a `cast-hellish-rebuke` option. Magnus (Warlock 5, Pact
+    Magic L3 x2) is the demo Warlock — Krieger swings on him until
+    a hit lands.
+    """
+    magnus = roster["Magnus Hexbinder"]
+    krieger = roster["Krieger Stonefist"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+        json={"type": "long"},
+    )
+    # Force auto_apply_damage on so _apply_damage_to_combatant runs
+    # for /attack. Restored in the finally block to preserve the
+    # demo's default state for subsequent tests.
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings",
+        data=_campaign_settings_form(True), follow_redirects=False,
+    )
+
+    try:
+        magnus_cid = f"tok_hr_{magnus['id']}"
+        await _seed_battle(gm_client, [
+            _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+            {
+                "id": magnus_cid,
+                "char_id": magnus["id"],
+                "name": magnus["name"],
+                "initiative": 10,
+                "hp_current": 50, "hp_max": 50,
+                "buffs": [],
+                "economy": {
+                    "action": False, "bonus": False,
+                    "reaction": False, "movement": 0,
+                },
+            },
+        ])
+        await asyncio.sleep(0.15)
+        gm_ws.mark()
+
+        # Krieger swings until a hit lands.
+        for _ in range(20):
+            resp = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/attack",
+                json={
+                    "character_id": krieger["id"],
+                    "attack_index": 0,
+                    "target_combatant_id": magnus_cid,
+                    "override": True,
+                    "override_range": True,
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            if resp.json().get("hit"):
+                break
+        else:
+            raise AssertionError("no hit landed in 20 swings")
+
+        await asyncio.sleep(0.2)
+        prompts = [
+            m for m in _prompt_broadcasts(gm_ws)
+            if (m.get("data") or {}).get("watcher_char_id") == magnus["id"]
+            and (m.get("data") or {}).get("trigger_event") == "damage_taken"
+        ]
+        assert prompts, (
+            f"expected reaction_prompt(damage_taken) for Magnus; "
+            f"buffered: "
+            f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+        )
+        keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+        assert "cast-hellish-rebuke" in keys, (
+            f"expected cast-hellish-rebuke option; got {keys}"
+        )
+    finally:
+        await gm_client.post(
+            f"/campaign/{CAMPAIGN_ID}/settings",
+            data=_campaign_settings_form(False), follow_redirects=False,
+        )
+
+
+async def test_cast_hellish_rebuke_consumes_slot(
+    gm_client, gm_ws, roster,
+):
+    """End-to-end: Krieger hits Magnus → prompt fires → POST
+    /use_reaction with cast-hellish-rebuke → Magnus's Pact slot used
+    count increments + reaction flips + feature_used(source=
+    hellish-rebuke-cast) fires.
+    """
+    magnus = roster["Magnus Hexbinder"]
+    krieger = roster["Krieger Stonefist"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+        json={"type": "long"},
+    )
+    await gm_client.post(
+        f"/campaign/{CAMPAIGN_ID}/settings",
+        data=_campaign_settings_form(True), follow_redirects=False,
+    )
+
+    try:
+        magnus_cid = f"tok_hr2_{magnus['id']}"
+        await _seed_battle(gm_client, [
+            _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+            {
+                "id": magnus_cid,
+                "char_id": magnus["id"],
+                "name": magnus["name"],
+                "initiative": 10,
+                "hp_current": 50, "hp_max": 50,
+                "buffs": [],
+                "economy": {
+                    "action": False, "bonus": False,
+                    "reaction": False, "movement": 0,
+                },
+            },
+        ])
+        await asyncio.sleep(0.15)
+        gm_ws.mark()
+
+        for _ in range(20):
+            resp = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/attack",
+                json={
+                    "character_id": krieger["id"],
+                    "attack_index": 0,
+                    "target_combatant_id": magnus_cid,
+                    "override": True,
+                    "override_range": True,
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            if resp.json().get("hit"):
+                break
+        else:
+            raise AssertionError("no hit landed in 20 swings")
+        await asyncio.sleep(0.2)
+
+        prompts = [
+            m for m in _prompt_broadcasts(gm_ws)
+            if (m.get("data") or {}).get("watcher_char_id") == magnus["id"]
+            and (m.get("data") or {}).get("trigger_event") == "damage_taken"
+        ]
+        assert prompts, "expected damage_taken prompt for Magnus"
+        prompt_id = prompts[0]["data"]["prompt_id"]
+
+        gm_ws.mark()
+        cast = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+            json={
+                "prompt_id": prompt_id,
+                "reaction_key": "cast-hellish-rebuke",
+                "watcher_char_id": magnus["id"],
+            },
+        )
+        assert cast.status_code == 200, cast.text
+
+        await asyncio.sleep(0.2)
+        # economy_update: reaction flipped.
+        econ = [
+            m for m in gm_ws.buffered("economy_update")
+            if (m.get("data") or {}).get("character_id") == magnus["id"]
+            and (m.get("data") or {}).get("slot") == "reaction"
+        ]
+        assert econ, "expected economy_update for Magnus's reaction"
+        assert econ[-1]["data"]["used"] is True
+
+        # spell_slot_update: Pact slot decremented (Magnus only has L3
+        # slots).
+        slot_msgs = [
+            m for m in gm_ws.buffered("spell_slot_update")
+            if (m.get("data") or {}).get("character_id") == magnus["id"]
+            and int((m.get("data") or {}).get("level") or 0) >= 1
+        ]
+        assert slot_msgs, (
+            f"expected spell_slot_update for Magnus's slot; buffered: "
+            f"{[m.get('data') for m in gm_ws.buffered('spell_slot_update')]}"
+        )
+
+        # feature_used(source=hellish-rebuke-cast) fires.
+        fu = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source") == "hellish-rebuke-cast"
+            and (m.get("data") or {}).get("character_id") == magnus["id"]
+        ]
+        assert fu, "expected feature_used(source=hellish-rebuke-cast)"
+        last = fu[-1]["data"]
+        assert last.get("damage_type") == "fire"
+        # Magnus's slot is L3 → damage_dice = 1 + 3 = 4 → "4d10".
+        assert last.get("damage_expr") == "4d10"
+    finally:
+        await gm_client.post(
+            f"/campaign/{CAMPAIGN_ID}/settings",
+            data=_campaign_settings_form(False), follow_redirects=False,
+        )
+
+
 async def test_indomitable_emits_reaction_prompt(
     gm_client, gm_ws, roster,
 ):
