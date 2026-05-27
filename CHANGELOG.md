@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.86.1] - 2026-05-27 — "Lifting the Curtain"
+
+**Schema version:** 63
+**Commit summary:** **Fixes the v2.86.0 encounter background being invisible.** The `#encounter-bg-layer` element renders behind the rest of the tabletop via `position:fixed; z-index:-1`. But `style.css` has `html, body { background: var(--bg) }`, and a child element with `z-index:-1` paints **behind** its parent body's opaque background — so even though the layer was in the DOM with the right `src`, the body's theme bg was painting on top of it, hiding the upload completely. Reported by the GM after uploading + reloading + hard-refreshing yielded no visible change.
+**Description:** Three edits. **(1)** `app/templates/base.html`: the `<body>` tag now collects classes via a small Jinja list (`_body_classes`) so the existing `sepia-texture-on` class can coexist with the new `has-encounter-bg` class. The new class is emitted when `campaign` is defined in the template scope AND `campaign.active_background_url` is non-null. **(2)** `app/static/style.css`: new rule `body.has-encounter-bg { background: transparent; }` immediately after the `html, body { background: var(--bg) }` line, so it overrides cleanly by source order + same specificity. `html` keeps the theme color — transparent areas of the UI (between glass panels, etc.) still tint correctly. **(3)** `app/static/tabletop.js`: WS handler now adds/removes the `has-encounter-bg` class on `background_change` so live swaps don't require a page reload.
+
+### Changed
+- `style.css` — `body.has-encounter-bg` rule drops body's opaque background when an encounter bg is active.
+- `base.html` — body tag uses a class-collector pattern so the sepia + encounter-bg classes can both be present.
+- `tabletop.js` — `background_change` WS handler toggles the body class alongside swapping the inner media src.
+
+### Notes
+- **PATCH bump** — pure visual bug fix. No data-model or endpoint change; the v2.86.0 wiring was correct top-to-bottom (encounter upload → encounter load → campaign update → SSR render → asset serving), it just was painted-over.
+- The harness test couldn't have caught this — `test_encounter_background.py` asserts on the endpoint contract + WS broadcast shape, not the visual paint order. A Playwright UI test that loads the tabletop with a bg and visually asserts on the background pixel would catch it; filed for the `tests/harness_ui/` suite.
+- Other elements that overlay translucent panels (glass cards, drawer sidebars) keep their existing `--bg`-tinted backdrop because they don't rely on body's background-color — they set their own translucent layers via `--glass-alpha`.
+
+---
+
 ## [2.86.0] - 2026-05-27 — "Endless Horizon"
 
 **Schema version:** 63

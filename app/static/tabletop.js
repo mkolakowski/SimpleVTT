@@ -3786,6 +3786,16 @@
                 const layer = document.getElementById('encounter-bg-layer');
                 if (!layer) return;
                 const newUrl = msg.data && msg.data.url ? String(msg.data.url) : '';
+                // v2.86.1 — toggle the body class that drops body's
+                // opaque theme background so the z-index:-1 layer is
+                // actually visible. Without this the layer is in the
+                // DOM with the right src but painted-over by the
+                // body's `background: var(--bg)` rule.
+                if (newUrl) {
+                    document.body.classList.add('has-encounter-bg');
+                } else {
+                    document.body.classList.remove('has-encounter-bg');
+                }
                 if (!newUrl) {
                     layer.innerHTML = '';
                     return;

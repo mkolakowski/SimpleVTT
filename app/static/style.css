@@ -264,6 +264,20 @@
 html, body { background: var(--bg); color: var(--fg); margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; height: 100%; }
 body { display: flex; flex-direction: column; }
 
+/* v2.86.1 — encounter-background reveal. The `#encounter-bg-layer`
+   element uses position:fixed; z-index:-1 to sit behind the rest of
+   the tabletop. By default the rule above paints an opaque body
+   background that covers anything at z-index:-1, making the uploaded
+   image/video invisible. When `body.has-encounter-bg` is set —
+   emitted by base.html when `campaign.active_background_url` is
+   non-null, and toggled live by the WS handler in tabletop.js on
+   `background_change` — the body's background drops to transparent
+   so the fixed layer beneath shows through. `html` keeps the theme
+   color, so transparent areas of UI (between glass panels, etc.)
+   still tint correctly when the encounter bg has alpha or is
+   otherwise translucent. */
+body.has-encounter-bg { background: transparent; }
+
 /* ── Display scale (per-user) ─────────────────────────────────────────────
    `--ui-scale` and `--font-scale` are stamped on <html> by base.html.
    ui-scale uses CSS `zoom` (supported in all modern browsers, Firefox 126+)
