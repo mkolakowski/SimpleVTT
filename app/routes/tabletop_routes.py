@@ -2104,6 +2104,38 @@ def _pc_has_defensive_duelist_available(char) -> "tuple[bool, int]":
     return True, pb
 
 
+# v2.80.0 — Detect "other attack_targeted reactions eligible for this
+# PC" so the v2.49.243 Uncanny Dodge auto-fire path can SUPPRESS
+# itself when the player has alternatives (Defensive Duelist, Shield,
+# Lucky, item reactions). Without this, UD's auto-consume eats the
+# reaction slot before the v2.69.0 attack_targeted prompt can offer
+# the alternatives — closes the Pip-vs-DD interaction footgun filed
+# in v2.74.0.
+#
+# Auto-fire still kicks in when the PC has UD as their ONLY
+# attack_targeted reaction (the common case — vanilla Rogue 5+ with
+# no feats). Existing tests in test_use_attack_uncanny_dodge.py
+# continue to pass for Pip's default sheet (no DD/Shield/Lucky/item
+# reactions on him).
+def _pc_has_other_attack_targeted_reactions(char) -> bool:
+    """Returns True when the PC has at least one attack_targeted
+    reaction eligible OTHER than Uncanny Dodge. Used to gate UD's
+    auto-fire suppression so the player can pick from the prompt
+    instead of having UD silently consume the reaction.
+    """
+    if not char or not char.sheet:
+        return False
+    if _pc_has_shield_available(char)[0]:
+        return True
+    if _pc_has_defensive_duelist_available(char)[0]:
+        return True
+    if _pc_has_lucky_available(char)[0]:
+        return True
+    if _pc_item_reactions_for_trigger(char, "attack_targeted"):
+        return True
+    return False
+
+
 # v2.78.0 Phase 5 — Item reactions. Generic catalog mechanism that
 # lets equipped inventory items declare reaction options. Items in
 # sheet.inventory[*] with `equipped: True` AND a `_reactions: [...]`
@@ -2745,6 +2777,40 @@ def _eligible_reactions(
                         "kind": "feat",
                         "resource_cost": "Reaction",
                         "params": {"pb": dd_pb},
+                        "available": True,
+                        "unavailable_reason": None,
+                    })
+                # v2.80.0 — Uncanny Dodge as an explicit option on
+                # attack_targeted. Surfaces only when the watcher is
+                # a Rogue Lv 5+ AND UD's auto-fire path was suppressed
+                # (i.e. _pc_has_other_attack_targeted_reactions
+                # returned True for this PC, leaving the reaction
+                # slot unused). When UD is the watcher's only
+                # attack_targeted option, the legacy v2.49.243
+                # auto-fire path runs instead and this branch is
+                # skipped (UD ack appears via the damage_taken
+                # path's existing v2.67.2 surface).
+                if (
+                    _rogue_level_from_sheet(char.sheet) >= 5
+                    and _pc_has_other_attack_targeted_reactions(char)
+                ):
+                    ud_dmg_applied = context.get("damage_applied") or 0
+                    ud_heal_back = (
+                        int(ud_dmg_applied) - int(ud_dmg_applied) // 2
+                    )
+                    opts.append({
+                        "key": "cast-uncanny-dodge",
+                        "label": (
+                            f"🛡️ Uncanny Dodge — halve the {ud_dmg_applied} "
+                            f"damage (heal back {ud_heal_back} HP)"
+                        ),
+                        "kind": "class_feature",
+                        "resource_cost": "Reaction",
+                        "params": {
+                            "damage_applied": int(ud_dmg_applied),
+                            "heal_back": ud_heal_back,
+                            "attack_id": context.get("attack_id"),
+                        },
                         "available": True,
                         "unavailable_reason": None,
                     })
@@ -4217,6 +4283,20 @@ async def _apply_damage_to_combatant(
             _ud_applies, _ud_char = _target_uses_uncanny_dodge(
                 db, campaign_id, combatant.get("id"),
             )
+            # v2.80.0 — suppress UD auto-fire when the PC has other
+            # attack_targeted reactions eligible (DD / Shield /
+            # Lucky / item reactions). The v2.69.0 attack_targeted
+            # prompt that fires from /attack will then surface
+            # cast-uncanny-dodge as one option alongside the others,
+            # so the player picks instead of UD silently consuming
+            # the reaction. Closes the Pip-vs-DD interaction footgun
+            # filed in v2.74.0. Auto-fire still kicks in when UD is
+            # the only attack_targeted reaction available.
+            if (
+                _ud_applies and _ud_char is not None
+                and _pc_has_other_attack_targeted_reactions(_ud_char)
+            ):
+                _ud_applies = False
             if _ud_applies and _ud_char is not None:
                 damage_amount = damage_amount // 2
                 uncanny_dodge_used = True
@@ -14183,6 +14263,71 @@ async def use_reaction(
             raise
         except Exception:
             pass
+    elif reaction_key == "cast-uncanny-dodge" and watcher_char_id:
+        # v2.80.0 — Uncanny Dodge cast via prompt (suppressed auto-fire
+        # case). Heals back ceil(damage_applied / 2) HP, marks
+        # reaction, broadcasts feature_used naming the halve. Damage
+        # was applied at FULL because the auto-fire was suppressed —
+        # this dispatch retroactively halves it via a HP restore.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "cast-uncanny-dodge"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            damage_applied = int(params.get("damage_applied") or 0)
+            heal_back = int(params.get("heal_back") or 0)
+            attack_id = params.get("attack_id")
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            sheet = dict(watcher_char.sheet or {})
+            hp = dict(sheet.get("hp") or {})
+            hp_cur = int(hp.get("current") or 0)
+            hp_max = int(hp.get("max") or 0)
+            new_hp = min(hp_max, hp_cur + heal_back) if hp_max else hp_cur + heal_back
+            hp_result = _apply_hp_change(watcher_char, new_hp)
+            db.commit()
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "character_hp_update",
+                "data": {
+                    "character_id": watcher_char.id,
+                    "hp": hp_result["hp"],
+                    "delta": heal_back,
+                    "source": "uncanny-dodge",
+                },
+            })
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": (
+                        f"🛡️ Uncanny Dodge → {damage_applied} → "
+                        f"{damage_applied // 2} damage"
+                    ),
+                    "feature_desc": (
+                        f"Reaction. Halved the {damage_applied} damage "
+                        f"to {damage_applied // 2}; restored {heal_back} HP."
+                    ),
+                    "source": "uncanny-dodge",
+                    "reaction_kind": "class_feature",
+                    "damage_applied": damage_applied,
+                    "heal_back": heal_back,
+                    "attack_id": attack_id,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
     elif reaction_key == "use-lucky" and watcher_char_id:
         # v2.77.0 Phase 4b — Lucky feat. Decrement the lucky charge
         # in sheet.resources, mark reaction, broadcast feature_used
@@ -23479,6 +23624,10 @@ async def use_attack(
                             "attacker_char_id": char.id,
                             "attacker_name": char.name,
                             "attack_name": name,
+                            # v2.80.0 — plumb the applied damage so
+                            # the cast-uncanny-dodge dispatch can
+                            # heal back ceil(applied/2) HP.
+                            "damage_applied": damage_applied,
                         },
                     )
     except Exception:

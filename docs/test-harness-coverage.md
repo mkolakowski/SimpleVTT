@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 566 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.78.0, 2026-05-26).
+**Total tests:** 568 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.80.0, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -811,6 +811,8 @@ v2.67.0 — Phase 1a of the reactions-automation plan (see [`docs/plans/reaction
 | `test_use_lucky_decrements_charge` | v2.77.0 — POST `/use_reaction` with `reaction_key=use-lucky` after the prompt → 200, `economy_update` for Garrik's reaction = True, `feature_used(source=lucky, charges_after=2)` (resource decremented from 3 → 2 via in-place mutation of `sheet.resources[*].current`). |
 | `test_item_reaction_prompt_includes_cloak_of_displacement` | v2.78.0 — Phase 5. Krieger swings on Lyra (Cloak of Displacement equipped from v2.78.0 demo seed + DD feat from v2.74.0) until a hit lands → `attack_targeted` prompt now includes BOTH `use-defensive-duelist` AND `item-cloak-displacement-advantage` keys. Generic `_pc_item_reactions_for_trigger` walker reads `sheet.inventory[*]._reactions[]`. |
 | `test_use_item_reaction_marks_reaction` | v2.78.0 — POST `/use_reaction` with `reaction_key=item-cloak-displacement-advantage` after the prompt → 200, `economy_update` for Lyra's reaction = True, `feature_used(source=item-reaction, item_slug="cloak-of-displacement", item_name="Cloak of Displacement")`. Generic `item-*` dispatch — no per-item code required. |
+| `test_uncanny_dodge_suppressed_when_dd_eligible` | v2.80.0 — PATCH Defensive Duelist onto Pip's feats; Krieger swings until a hit lands → assert NO `feature_used(source=uncanny-dodge)` auto-fire broadcast AND the `attack_targeted` prompt surfaces BOTH `cast-uncanny-dodge` AND `use-defensive-duelist`. Restores Pip's empty feats in finally. Closes the v2.74.0 filing for the Pip-vs-UD interaction. |
+| `test_cast_uncanny_dodge_via_prompt_heals_back_half` | v2.80.0 — same PATCH-and-restore; POST `/use_reaction` with `cast-uncanny-dodge` → 200, `economy_update` for Pip's reaction = True, `character_hp_update(source=uncanny-dodge, delta=heal_back)` restores HP by `ceil(damage_applied / 2)`, `feature_used(source=uncanny-dodge, damage_applied, heal_back)`. |
 
 ### `test_gm_reactions_panel.py`
 v2.68.0 — GM Reactions Panel (see [`docs/plans/reactions-automation.md`](plans/reactions-automation.md)). New `GET /available_reactions` + `POST /spend_reaction_manual` endpoints surface every combatant's reaction catalog to the GM and let the GM flip any reaction chip with one click. PC class features (Uncanny Dodge / Cutting Words / Indomitable), PC feats (Sentinel / Polearm Master / etc.), PC reaction spells (Shield / Counterspell / etc. via `casting_time` scan), NPC monster reactions (Parry / etc. via `category == "reaction"` walk).

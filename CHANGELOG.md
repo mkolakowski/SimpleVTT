@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.80.0] - 2026-05-26 — "Fork in the Road"
+
+**Schema version:** 60
+**Commit summary:** **Fixes the v2.49.243 Uncanny Dodge vs other-reactions interaction filed in v2.74.0.** UD's auto-fire path now suppresses itself when the watcher PC has other `attack_targeted` reactions eligible (Defensive Duelist, Shield, Lucky, item reactions). In that case the v2.69.0 `attack_targeted` prompt surfaces all options (including a new explicit `cast-uncanny-dodge`) so the player picks instead of UD silently consuming the reaction. Legacy auto-fire still kicks in when UD is the watcher's only attack_targeted reaction (preserves existing v2.49.243 behavior + the 4 tests in `test_use_attack_uncanny_dodge.py`).
+**Description:** Four blocks of edits in `app/routes/tabletop_routes.py`. **(1)** New `_pc_has_other_attack_targeted_reactions(char) -> bool` helper. Returns True when at least one of Shield, Defensive Duelist, Lucky, or any equipped item with `_reactions[]` binding to `attack_targeted` is eligible. **(2)** `_apply_damage_to_combatant`'s PC branch UD auto-fire path now gates the existing `damage_amount // 2` halve on `not _pc_has_other_attack_targeted_reactions(_ud_char)`. When the helper returns True, `_ud_applies` is forced False — auto-fire suppressed; damage applies at full; reaction slot remains unused. **(3)** `/attack`'s `attack_targeted` emit context now plumbs `damage_applied` so the new dispatch can compute the heal-back delta. **(4)** New `cast-uncanny-dodge` option in `_eligible_reactions[attack_targeted]` PC branch, gated on (a) `_rogue_level_from_sheet(char.sheet) >= 5` AND (b) `_pc_has_other_attack_targeted_reactions(char) == True` (i.e. UD's auto-fire was suppressed). Option carries `damage_applied`, `heal_back = damage - damage // 2`, `attack_id` in params. **(5)** New `cast-uncanny-dodge` dispatch in `/use_reaction`: reads `heal_back` from params, applies a HP heal via `_apply_hp_change(char, min(hp_max, hp_cur + heal_back))`, broadcasts `character_hp_update(source="uncanny-dodge")` + `feature_used(source="uncanny-dodge", damage_applied, heal_back, attack_id)`, marks reaction.
+**Description (cont):** v1 simplifications (filed for v3):
+- **No undo of the original attack_id from the v2.65.0 damage log.** The heal-back is a fresh HP transaction — it doesn't tag itself as "undoing X HP of attack Y." A v3 pending-damage state machine could properly tag the undo so the chat-card Undo button shows a cohesive reversion. v1's behavior is functionally correct (Pip ends up with the right HP) but the damage log accumulates two entries (one full application, one heal-back) instead of one half-application.
+- **No interaction between the suppressed UD and OTHER damage_taken reactions (HR / AE).** A Rogue 5+ Warlock multiclass with both UD and HR would see UD in the attack_targeted prompt and HR in the damage_taken prompt — currently both prompts fire for the same hit (HR because reaction is unused after auto-fire is suppressed). Player picks one; the other's prompt times out. Filed: unify the two prompts into a single "post-damage" prompt that surfaces all relevant reactions.
+- **No mention of UD on `damage_taken` ack path.** The v2.67.2 ack option (`uncanny-dodge-ack`) still fires only when UD auto-fired (i.e. when the watcher has UD as their ONLY attack_targeted reaction). The two paths don't conflict because they fire under mutually exclusive conditions.
+**Description (cont 2):** Verification.
+- (a) `curl /version` reports `2.80.0`. (b) Two new tests use PATCH-DD-onto-Pip pattern:
+  - `test_uncanny_dodge_suppressed_when_dd_eligible` — PATCH Defensive Duelist onto Pip's feats; swing on Pip until hit; assert NO `feature_used(source=uncanny-dodge)` auto-fire broadcast AND the `attack_targeted` prompt contains BOTH `cast-uncanny-dodge` AND `use-defensive-duelist` keys. Restores Pip's empty feats in finally.
+  - `test_cast_uncanny_dodge_via_prompt_heals_back_half` — same PATCH-and-restore; POST `/use_reaction` with `cast-uncanny-dodge` → asserts `economy_update` for Pip's reaction = True, `character_hp_update(source=uncanny-dodge, delta=heal_back)`, `feature_used(source=uncanny-dodge, damage_applied, heal_back)`.
+- (c) Existing UD tests stay green: `test_use_attack_uncanny_dodge.py` (4 tests) all pass because Pip's default sheet has no DD/Shield/Lucky/item reactions, so the auto-fire path runs unchanged. `test_uncanny_dodge_emits_reaction_prompt` (v2.67.2) also passes for the same reason.
+- (d) `test_attack_auto_damage::test_attack_auto_apply_on_hit` is a known pre-existing flake (passes in isolation + when its file runs alone, fails when run after other tests in the full suite). Tracked since v2.51.6; not a regression from v2.80.0. Filed as a separate test-isolation cleanup.
+
+Full reaction_prompt suite: 33/33 pass. UD test file: 4/4 pass. Full harness suite: 567/568 pass (the 1 fail is the pre-existing flake).
+
+### Added
+- `_pc_has_other_attack_targeted_reactions(char) -> bool` helper.
+- `cast-uncanny-dodge` option in `_eligible_reactions[attack_targeted]` PC branch (gated on Rogue 5+ AND other reactions eligible).
+- `cast-uncanny-dodge` dispatch case in `/use_reaction` — applies HP heal-back + marks reaction + broadcasts `feature_used(source="uncanny-dodge")`.
+- `attack_targeted` emit context now plumbs `damage_applied` for the dispatch's heal-back math.
+- Harness `test_uncanny_dodge_suppressed_when_dd_eligible` + `test_cast_uncanny_dodge_via_prompt_heals_back_half` — 2 new tests using PATCH-DD-onto-Pip + restore pattern.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.80.0`.
+- `README.md` version badge → `2.80.0`.
+- `_apply_damage_to_combatant`'s PC branch UD auto-fire gated on `not _pc_has_other_attack_targeted_reactions(_ud_char)` — auto-fire suppressed when other reactions exist.
+
+### Notes
+- **First reaction with a "suppress auto, surface in prompt" interaction model.** The pattern can extend to other auto-fire features (Evasion auto-half on Dex saves, Mindless Rage condition immunity, etc.) when their interactions with other reactions become relevant.
+- **MINOR bump justification.** Adds a new public option key (`cast-uncanny-dodge`) + new broadcast field (`damage_applied` in `attack_targeted` context). Existing UD behavior preserved for vanilla Pip; the new interaction only triggers when the PC has additional reactions configured.
+
+---
+
 ## [2.79.0] - 2026-05-26 — "Demo Default Honored"
 
 **Schema version:** 60

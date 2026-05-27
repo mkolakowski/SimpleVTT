@@ -1138,6 +1138,225 @@ async def test_cast_hellish_rebuke_consumes_slot(
     assert last.get("damage_expr") == "4d10"
 
 
+# ── v2.80.0 — Uncanny Dodge vs Defensive Duelist interaction ──
+
+
+async def test_uncanny_dodge_suppressed_when_dd_eligible(
+    gm_client, gm_ws, roster,
+):
+    """v2.80.0 — UD's v2.49.243 auto-fire path now suppresses itself
+    when the watcher PC has other attack_targeted reactions eligible
+    (DD / Shield / Lucky / item-reactions). Closes the Pip-vs-DD
+    interaction footgun filed in v2.74.0: previously, UD silently
+    consumed the reaction before the player could pick DD.
+
+    Test pattern: PATCH Defensive Duelist onto Pip's feats list,
+    swing on Pip until a hit lands, assert NO auto-halve (damage
+    applies at full) AND the attack_targeted prompt surfaces BOTH
+    cast-uncanny-dodge AND use-defensive-duelist. Restore Pip's
+    feats in finally.
+    """
+    pip = roster["Pip Quickfingers"]
+    krieger = roster["Krieger Stonefist"]
+
+    # PATCH Pip with the Defensive Duelist feat. _SHEET_PATCH_KEYS
+    # allowlist (v2.68.11) lets the harness mutate sheet.feats.
+    patch = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+        json={"feats": [
+            {"slug": "defensive-duelist", "name": "Defensive Duelist"},
+        ]},
+    )
+    assert patch.status_code == 200, patch.text
+    try:
+        pip_cid = f"tok_ud_dd_{pip['id']}"
+        await _seed_battle(gm_client, [
+            _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+            {
+                "id": pip_cid,
+                "char_id": pip["id"],
+                "name": pip["name"],
+                "initiative": 10,
+                "hp_current": 45, "hp_max": 45,
+                "buffs": [],
+                "economy": {
+                    "action": False, "bonus": False,
+                    "reaction": False, "movement": 0,
+                },
+            },
+        ])
+        await asyncio.sleep(0.15)
+        gm_ws.mark()
+
+        for _ in range(20):
+            resp = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/attack",
+                json={
+                    "character_id": krieger["id"],
+                    "attack_index": 0,
+                    "target_combatant_id": pip_cid,
+                    "override": True,
+                    "override_range": True,
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            if resp.json().get("hit"):
+                break
+        else:
+            raise AssertionError("no hit landed in 20 swings")
+
+        await asyncio.sleep(0.2)
+        # No feature_used(source=uncanny-dodge) auto-fire broadcast
+        # — UD suppressed itself because DD is eligible.
+        ud_autofires = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source") == "uncanny-dodge"
+        ]
+        assert not ud_autofires, (
+            f"expected NO uncanny-dodge auto-fire when DD eligible; "
+            f"got {ud_autofires}"
+        )
+        # attack_targeted prompt surfaces both options.
+        prompts = [
+            m for m in _prompt_broadcasts(gm_ws)
+            if (m.get("data") or {}).get("watcher_char_id") == pip["id"]
+            and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+        ]
+        assert prompts, "expected attack_targeted prompt for Pip"
+        keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+        assert "cast-uncanny-dodge" in keys, (
+            f"expected cast-uncanny-dodge option; got {keys}"
+        )
+        assert "use-defensive-duelist" in keys, (
+            f"expected use-defensive-duelist option; got {keys}"
+        )
+    finally:
+        # Restore Pip's empty feats list.
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+            json={"feats": []},
+        )
+
+
+async def test_cast_uncanny_dodge_via_prompt_heals_back_half(
+    gm_client, gm_ws, roster,
+):
+    """End-to-end: PATCH DD onto Pip, NPC hits Pip → prompt fires →
+    POST /use_reaction with cast-uncanny-dodge → Pip's reaction flips
+    + HP heals back ceil(damage/2) + feature_used(source=
+    uncanny-dodge) names the halve.
+    """
+    pip = roster["Pip Quickfingers"]
+    krieger = roster["Krieger Stonefist"]
+
+    patch = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+        json={"feats": [
+            {"slug": "defensive-duelist", "name": "Defensive Duelist"},
+        ]},
+    )
+    assert patch.status_code == 200, patch.text
+    try:
+        pip_cid = f"tok_ud_dd2_{pip['id']}"
+        await _seed_battle(gm_client, [
+            _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+            {
+                "id": pip_cid,
+                "char_id": pip["id"],
+                "name": pip["name"],
+                "initiative": 10,
+                "hp_current": 45, "hp_max": 45,
+                "buffs": [],
+                "economy": {
+                    "action": False, "bonus": False,
+                    "reaction": False, "movement": 0,
+                },
+            },
+        ])
+        await asyncio.sleep(0.15)
+        gm_ws.mark()
+
+        landed = None
+        for _ in range(20):
+            resp = await gm_client.post(
+                f"/api/campaign/{CAMPAIGN_ID}/attack",
+                json={
+                    "character_id": krieger["id"],
+                    "attack_index": 0,
+                    "target_combatant_id": pip_cid,
+                    "override": True,
+                    "override_range": True,
+                },
+            )
+            assert resp.status_code == 200, resp.text
+            if resp.json().get("hit"):
+                landed = resp.json()
+                break
+        else:
+            raise AssertionError("no hit landed in 20 swings")
+        await asyncio.sleep(0.2)
+
+        prompts = [
+            m for m in _prompt_broadcasts(gm_ws)
+            if (m.get("data") or {}).get("watcher_char_id") == pip["id"]
+            and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+        ]
+        assert prompts, "expected attack_targeted prompt"
+        prompt_id = prompts[0]["data"]["prompt_id"]
+        ud_opt = next(
+            (o for o in prompts[0]["data"]["options"]
+             if o.get("key") == "cast-uncanny-dodge"), {}
+        )
+        expected_damage = int((ud_opt.get("params") or {}).get("damage_applied") or 0)
+        expected_heal_back = int((ud_opt.get("params") or {}).get("heal_back") or 0)
+        assert expected_damage > 0
+        assert expected_heal_back > 0
+
+        gm_ws.mark()
+        use = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+            json={
+                "prompt_id": prompt_id,
+                "reaction_key": "cast-uncanny-dodge",
+                "watcher_char_id": pip["id"],
+            },
+        )
+        assert use.status_code == 200, use.text
+
+        await asyncio.sleep(0.2)
+        econ = [
+            m for m in gm_ws.buffered("economy_update")
+            if (m.get("data") or {}).get("character_id") == pip["id"]
+            and (m.get("data") or {}).get("slot") == "reaction"
+        ]
+        assert econ, "expected economy_update for Pip's reaction"
+        assert econ[-1]["data"]["used"] is True
+
+        # character_hp_update broadcast carries the heal-back delta.
+        hp_updates = [
+            m for m in gm_ws.buffered("character_hp_update")
+            if (m.get("data") or {}).get("character_id") == pip["id"]
+            and (m.get("data") or {}).get("source") == "uncanny-dodge"
+        ]
+        assert hp_updates, "expected character_hp_update from UD cast"
+        assert hp_updates[-1]["data"].get("delta") == expected_heal_back
+
+        # feature_used named the halve.
+        fu = [
+            m for m in gm_ws.buffered("feature_used")
+            if (m.get("data") or {}).get("source") == "uncanny-dodge"
+            and (m.get("data") or {}).get("character_id") == pip["id"]
+        ]
+        assert fu, "expected feature_used(source=uncanny-dodge)"
+        assert fu[-1]["data"].get("damage_applied") == expected_damage
+        assert fu[-1]["data"].get("heal_back") == expected_heal_back
+    finally:
+        await gm_client.patch(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/sheet-fields",
+            json={"feats": []},
+        )
+
+
 # ── v2.78.0 — Phase 5: Item reactions ──
 
 
