@@ -30,14 +30,32 @@
     // so all draw calls keep using logical (CSS) coordinates. ``MAP_W``
     // / ``MAP_H`` replace every former ``canvas.width`` / ``canvas.height``
     // reference below — those would now return the backing-store size.
-    const MAP_W = canvas.width;
-    const MAP_H = canvas.height;
+    //
+    // v2.88.0 — canvas is now sized to (MAP_W + 2*stripH) × (MAP_H +
+    // 2*stripH) so the grid coordinate gutter can render OUTSIDE the
+    // map image. ``stripH`` is the gutter width in CSS pixels, set
+    // server-side via the data-strip-h attribute and matched to the
+    // same formula tabletop.js used internally pre-v2.88.0
+    // (max(16, min(28, round(gridSize*0.32)))). The canvas is also
+    // positioned at top:-stripH;left:-stripH inside the
+    // #map-transform wrapper so that after ctx.translate(stripH,
+    // stripH) the canvas's logical (0, 0) coincides with the
+    // bg-layer image's (0, 0) — map-coord drawing keeps the same
+    // coordinate space as before this version.
+    const stripH = parseInt(canvas.dataset.stripH || '0', 10);
+    const MAP_W = canvas.width - 2 * stripH;
+    const MAP_H = canvas.height - 2 * stripH;
     const DPR = Math.max(1, window.devicePixelRatio || 1);
-    canvas.width = MAP_W * DPR;
-    canvas.height = MAP_H * DPR;
-    canvas.style.width = MAP_W + 'px';
-    canvas.style.height = MAP_H + 'px';
+    canvas.width = (MAP_W + 2 * stripH) * DPR;
+    canvas.height = (MAP_H + 2 * stripH) * DPR;
+    canvas.style.width = (MAP_W + 2 * stripH) + 'px';
+    canvas.style.height = (MAP_H + 2 * stripH) + 'px';
     ctx.scale(DPR, DPR);
+    // Shift the drawing origin so logical (0, 0) is at canvas-physical
+    // (stripH, stripH). Everything downstream draws in map coords; the
+    // gutter strips paint at logical (-stripH..0) which lands in the
+    // outer halo.
+    ctx.translate(stripH, stripH);
     // ``high`` resampling matters for the demo-token portraits which
     // are sourced ~1000 px wide and rendered at ~70 px on canvas; the
     // browser default (``low``) makes that 14× downscale look mushy.
@@ -209,84 +227,77 @@
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // v2.87.3 — dropped the dark gutter-strip rectangles + inner
-        // border lines that v2.51.x drew at the four edges of the map.
-        // The strips lived INSIDE the map area (canvas coords 0..stripH
-        // etc.) and visually read as a "border living inside the map"
-        // (per user report), obscuring the outermost cells of the
-        // background image. Labels are now rendered with a translucent
-        // dark text-shadow only — they sit over the map content without
-        // a heavy frame, so the map image is fully visible to its
-        // edges.
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
-        ctx.shadowBlur = 3;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
+        // v2.88.0 — gutter strips + frame are back, but now drawn in
+        // the OUTER halo (canvas-logical coords -stripH..0 and
+        // MAP_W..MAP_W+stripH) instead of the inner edge of the map
+        // (canvas coords 0..stripH). The canvas was expanded by 2*stripH
+        // server-side and ctx.translate(stripH, stripH) shifts logical
+        // (0, 0) to canvas-physical (stripH, stripH); drawing at
+        // negative logical coords lands in the outer halo around the
+        // bg image — so the labels and frame sit entirely OUTSIDE the
+        // map bounds (per GM request, v2.87.3 → v2.88.0).
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+        // Top + bottom gutters (full width, stripH tall) at y = -stripH
+        // and y = MAP_H. Both extend left/right by stripH so the four
+        // corners are filled exactly once.
+        ctx.fillRect(-stripH, -stripH, MAP_W + 2 * stripH, stripH);
+        ctx.fillRect(-stripH, MAP_H, MAP_W + 2 * stripH, stripH);
+        // Left + right gutters (MAP_H tall, stripH wide), between the
+        // top and bottom strips so corners don't double-fill.
+        ctx.fillRect(-stripH, 0, stripH, MAP_H);
+        ctx.fillRect(MAP_W, 0, stripH, MAP_H);
 
-        // v2.50.5 — labels centered between the gridlines, NOT
-        // offset by the perpendicular strip width. The gridlines that
-        // drawSquareGrid() paints sit at x = 0, gridSize, 2*gridSize,
-        // … (and the same in y). Each cell is the span between two
-        // consecutive gridlines; the visual center of cell ``c`` is at
-        // x = c*gridSize + gridSize/2. Anchoring labels there makes
-        // each letter / number line up directly with its column /
-        // row's gridlines on the map. The previous implementation
-        // (+ stripH offset) shifted labels right/down by the gutter
-        // width, leaving them between gridlines but off-by-one from
-        // the cells they were supposed to label.
+        // Theme-accent border lines at the INNER edge of the gutter,
+        // i.e., along the boundary between the gutter and the map
+        // image. Frames the map cleanly without painting any pixels
+        // inside the map itself.
+        ctx.strokeStyle = accent;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, -0.5);
+        ctx.lineTo(MAP_W, -0.5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-0.5, 0);
+        ctx.lineTo(-0.5, MAP_H);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(0, MAP_H + 0.5);
+        ctx.lineTo(MAP_W, MAP_H + 0.5);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(MAP_W + 0.5, 0);
+        ctx.lineTo(MAP_W + 0.5, MAP_H);
+        ctx.stroke();
+
+        // v2.88.0 — labels render IN THE GUTTER (outside the map
+        // bounds). Top labels at y = -stripH/2 (in the negative-y
+        // gutter), left labels at x = -stripH/2 (in the negative-x
+        // gutter), right labels at x = MAP_W + stripH/2, bottom
+        // labels at y = MAP_H + stripH/2. Column-x and row-y still
+        // align with the map's gridlines (c*gridSize + gridSize/2) so
+        // each letter / number lines up with its cell column/row.
         //
-        // v2.51.0 — alignment tweak: round each label's anchor point
-        // to integer pixel coordinates BEFORE fillText so sub-pixel
-        // canvas rendering doesn't leave A and 1 a fraction of a
-        // pixel out of alignment with each other. With textBaseline
-        // 'middle' the canvas uses font metrics to position the
-        // glyph; the integer rounding stabilizes that across glyphs
-        // with different visual heights (the cap-height of "A" vs.
-        // the digit-height of "1").
-        //
-        // Edge case: when ``gridSize / 2 < stripH`` (very small grids),
-        // the first column / row label would fall inside the
-        // perpendicular gutter strip and be hidden behind its dark
-        // backing. Skip drawing in that case so the user doesn't see
-        // a half-clipped glyph in the corner.
-        const stripHalf = Math.round(stripH / 2);
-        // Top labels (accent color) — column letters.
+        // The previous (v2.51.x) bounds-clipping skipped labels that
+        // would land inside the PERPENDICULAR gutter — that doesn't
+        // apply now (gutters live outside the map area), so all
+        // labels render unconditionally.
+        const topY = -Math.round(stripH / 2);
+        const leftX = -Math.round(stripH / 2);
+        const rightX = MAP_W + Math.round(stripH / 2);
+        const bottomY = MAP_H + Math.round(stripH / 2);
         ctx.fillStyle = accent;
+        // Top + bottom labels — column letters.
         for (let c = 0; c < cols; c++) {
             const x = Math.round(c * gridSize + gridSize / 2);
-            if (x > MAP_W - stripH) break;            // clips into right gutter
-            if (x < stripH) continue;                 // clips into left gutter
-            ctx.fillText(_colLabel(c), x, stripHalf);
-        }
-        // Left labels (accent color) — row numbers.
-        for (let r = 0; r < rows; r++) {
-            const y = Math.round(r * gridSize + gridSize / 2);
-            if (y > MAP_H - stripH) break;            // clips into bottom gutter
-            if (y < stripH) continue;                 // clips into top gutter
-            ctx.fillText(String(r + 1), stripHalf, y);
-        }
-
-        // v2.51.2 — right + bottom border lettering uses the SAME
-        // accent color as the top + left labels (was dark text in
-        // v2.51.0; unified per user request to keep the visual
-        // treatment consistent across all four sides). `ctx.fillStyle`
-        // is still set to `accent` from the top-label pass above, so
-        // no re-set needed — the loop just reuses it.
-        const rightX = MAP_W - stripHalf;
-        const bottomY = MAP_H - stripHalf;
-        // Right labels — row numbers, mirroring the left strip.
-        for (let r = 0; r < rows; r++) {
-            const y = Math.round(r * gridSize + gridSize / 2);
-            if (y > MAP_H - stripH) break;
-            if (y < stripH) continue;
-            ctx.fillText(String(r + 1), rightX, y);
-        }
-        // Bottom labels — column letters, mirroring the top strip.
-        for (let c = 0; c < cols; c++) {
-            const x = Math.round(c * gridSize + gridSize / 2);
-            if (x > MAP_W - stripH) break;
-            if (x < stripH) continue;
+            ctx.fillText(_colLabel(c), x, topY);
             ctx.fillText(_colLabel(c), x, bottomY);
+        }
+        // Left + right labels — row numbers.
+        for (let r = 0; r < rows; r++) {
+            const y = Math.round(r * gridSize + gridSize / 2);
+            ctx.fillText(String(r + 1), leftX, y);
+            ctx.fillText(String(r + 1), rightX, y);
         }
         ctx.restore();
     }
@@ -2800,12 +2811,34 @@
         panY = Math.max(margin - MAP_H * scale, Math.min(paneRect.height - margin, panY));
     }
 
+    // v2.88.0 — pan/zoom transform now targets the single
+    // #map-transform wrapper instead of bg-layer / canvas /
+    // gif-overlay individually. The wrapper's children (with their
+    // various top/left positions, including canvas at -stripH/-stripH)
+    // scale uniformly because the wrapper provides one shared
+    // transform context. Before this, each child had the same
+    // transform applied separately but CSS scale with
+    // transform-origin: 0 0 doesn't account for the child's box
+    // top/left, so different top/left values diverged at scale ≠ 1.
+    const mapTransform = document.getElementById('map-transform');
     function applyTransform() {
         clampPan();
         const t = `translate(${panX}px, ${panY}px) scale(${scale})`;
-        canvas.style.transform = t;
-        if (bgLayer) { bgLayer.style.transform = t; }
-        if (_gifOverlay) { _gifOverlay.style.transform = t; _gifOverlay.style.transformOrigin = '0 0'; }
+        if (mapTransform) {
+            mapTransform.style.transform = t;
+        } else {
+            // Fallback path for legacy pages / tests that may not have
+            // the wrapper element — preserves the pre-v2.88.0 behaviour
+            // of applying the transform per-child. Harmless on pages
+            // that DO have the wrapper because mapTransform is checked
+            // first.
+            canvas.style.transform = t;
+            if (bgLayer) { bgLayer.style.transform = t; }
+            if (_gifOverlay) {
+                _gifOverlay.style.transform = t;
+                _gifOverlay.style.transformOrigin = '0 0';
+            }
+        }
         scheduleSaveView();
     }
 
@@ -3069,10 +3102,17 @@
     }
 
     function clientToCanvas(ev) {
+        // v2.88.0 — canvas is now expanded by stripH on every side and
+        // positioned at top:-stripH;left:-stripH inside the wrapper, so
+        // ``rect`` corresponds to the OUTER (expanded) canvas. Logical
+        // (0, 0) in map coords is at canvas-local (stripH, stripH) due
+        // to ctx.translate(stripH, stripH). Subtract stripH after the
+        // scale divide to get map coords. Pre-v2.88.0 stripH was 0,
+        // so this is a no-op for legacy paths.
         const rect = canvas.getBoundingClientRect();
         return [
-            (ev.clientX - rect.left) / scale,
-            (ev.clientY - rect.top) / scale,
+            (ev.clientX - rect.left) / scale - stripH,
+            (ev.clientY - rect.top) / scale - stripH,
         ];
     }
 
@@ -3085,9 +3125,10 @@
         const canvasRect = canvas.getBoundingClientRect();
         const screenCx = paneRect.left + paneRect.width / 2;
         const screenCy = paneRect.top + paneRect.height / 2;
+        // v2.88.0 — same stripH subtraction as clientToCanvas.
         return {
-            x: (screenCx - canvasRect.left) / scale,
-            y: (screenCy - canvasRect.top) / scale,
+            x: (screenCx - canvasRect.left) / scale - stripH,
+            y: (screenCy - canvasRect.top) / scale - stripH,
         };
     }
     window.vttViewportCenterWorld = viewportCenterWorld;

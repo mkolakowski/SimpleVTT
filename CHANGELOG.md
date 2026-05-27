@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.88.0] - 2026-05-27 — "Outside the Map"
+
+**Schema version:** 64
+**Commit summary:** **Moves the grid coordinate gutter (labels + frame) fully OUTSIDE the map's bounds.** GM still wanted the labels but didn't want them sitting on top of the map image — the v2.51.x "inside-the-map" gutter had been the source of "the border lives inside the map" complaints. This commit restructures the canvas / bg-layer / GIF-overlay layout so the gutter renders in an OUTER halo outside the map image; map content is unobscured to its true edges.
+**Description:** Two architectural shifts. **(1)** Layout: wrap the three transformed children (`#map-bg-layer`, `#vtt-canvas`, `#gif-token-overlay`) in a single `#map-transform` div in `tabletop.html`. Pan/zoom transform now applies to the wrapper only, not to each child. This fixes a long-standing latent issue where the three children's box positions had to match exactly to scale together — CSS `transform: scale()` with `transform-origin: 0 0` doesn't account for a child's box top/left, so different top/left values diverged at scale ≠ 1. The wrapper provides one shared transform context. **(2)** Canvas sizing: the canvas is now `(MAP_W + 2*stripH) × (MAP_H + 2*stripH)` pixels, positioned at `top:-stripH; left:-stripH` inside the wrapper. `ctx.translate(stripH, stripH)` shifts the canvas's logical (0, 0) to canvas-physical (stripH, stripH), so it coincides with the bg-layer image's (0, 0). Map-coord drawing (tokens, grid, AOEs, ruler, fog-of-war) stays in the same coordinate space as before; the gutter strips and labels now draw at negative logical coords (`-stripH..0`) which paint into the outer halo around the bg image.
+
+**Description (cont):** `clientToCanvas` and `viewportCenterWorld` subtract `stripH` from their outputs so map-coord conversions account for the canvas's extra padding. Pre-v2.88.0 `stripH` was 0 (no gutter), so the subtraction is a no-op on legacy paths. The `gutter strips` use `rgba(0,0,0,0.55)` fill (slightly opaque so labels read on any background) and the accent-color frame lines sit at the map's true edges (`logical 0..MAP_W` and `0..MAP_H`), forming a clean rectangle that hugs the map without painting any pixels inside it. Labels render at `y = -stripH/2` (top), `x = -stripH/2` (left), `x = MAP_W + stripH/2` (right), `y = MAP_H + stripH/2` (bottom).
+
+### Changed
+- `app/templates/tabletop.html`: bg-layer, canvas, and gif-overlay now wrapped in `#map-transform`. Canvas dims expanded by `2 * stripH` server-side via a new `_strip_h` Jinja calc (clamped 16..28 px). Canvas positioned at `top:-stripH; left:-stripH`. `data-strip-h` attribute added so JS can read the value.
+- `app/static/tabletop.js`: derives `MAP_W = canvas.width - 2 * stripH`; adds `ctx.translate(stripH, stripH)` after the DPR scale; `applyTransform()` targets `#map-transform` (with a legacy fallback path that applies transforms per-child if the wrapper is absent); `clientToCanvas` + `viewportCenterWorld` subtract stripH; `drawGridCoords` paints strips + frame + labels in the outer halo (negative coords).
+
+### Notes
+- **MINOR bump** — architectural restructure that introduces a new coordinate-shift contract (`ctx.translate(stripH, stripH)`) and a new wrapper element. Visually it's a polish change, but the underlying coordinate-system mechanics are net-new.
+- All map-coord-consuming code (tokens, grid, AOEs, ruler, fog-of-war, GIF overlay, drag-and-drop) is unchanged — the translate is invisible to them because their input coords were already in map space. Only the boundary functions (`clientToCanvas`, `viewportCenterWorld`, `drawGridCoords`) needed adjustment.
+- Pan clamping (`clampPan`) still uses `MAP_W` (logical map size, no gutter) so the user can't pan the map fully off-screen, but the gutter halo may partially clip at extreme pan positions. Minor visual quirk; not a regression vs. pre-v2.88.0 behaviour.
+- If the demo container needs a hard refresh after the bump, the new SSR layout + JS coord-shift land together — no migration needed.
+
+---
+
 ## [2.87.3] - 2026-05-27 — "No Frame"
 
 **Schema version:** 64

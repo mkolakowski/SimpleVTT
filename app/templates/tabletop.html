@@ -1879,6 +1879,26 @@
             </span>
         </div>
         {% if active_map %}
+            {# v2.88.0 — compute the gutter strip width server-side so the
+               canvas can be sized BIGGER than the map image, leaving room
+               for the grid coordinate labels + frame to render OUTSIDE
+               the map bounds. Same formula tabletop.js uses (clamp 16..28
+               px, scales with grid). #}
+            {% set _strip_h_raw = (active_map.grid_size_px * 32) // 100 %}
+            {% set _strip_h = 16 if _strip_h_raw < 16 else (28 if _strip_h_raw > 28 else _strip_h_raw) %}
+            {# v2.88.0 — single transformed wrapper. The pan/zoom matrix
+               (translate(panX,panY) scale(scale)) is applied to this div
+               only, so the three children scale together regardless of
+               their individual top/left positions. Previously each child
+               had its own transform applied identically, but CSS scale
+               with transform-origin: 0 0 doesn't account for the child's
+               box top/left — so different top/left values diverged at
+               scale ≠ 1. The wrapper fixes that: scaling the wrapper
+               proportionally moves every child inside it.
+               width:0;height:0 keeps the wrapper from claiming layout
+               space; absolutely-positioned children render outside its
+               content box (overflow visible is default). #}
+            <div id="map-transform" style="position:absolute;top:0;left:0;transform-origin:0 0;width:0;height:0;">
             {# Animated map background — rendered as a native HTML element so GIFs animate
                and videos loop. Sits behind the canvas (z-index:0) which draws only the
                grid and tokens on top (transparent background). #}
@@ -1886,23 +1906,35 @@
                 {% set _bg_ext = active_map.image_url.rsplit('.', 1)[-1].lower() %}
                 {% if _bg_ext in ('mp4', 'webm') %}
                     <video id="map-bg-layer" src="{{ active_map.image_url }}" autoplay loop muted playsinline
-                           style="position:absolute;top:0;left:0;z-index:0;pointer-events:none;transform-origin:0 0;width:{{ active_map.width_px }}px;height:{{ active_map.height_px }}px;object-fit:fill;display:block;"></video>
+                           style="position:absolute;top:0;left:0;z-index:0;pointer-events:none;width:{{ active_map.width_px }}px;height:{{ active_map.height_px }}px;object-fit:fill;display:block;"></video>
                 {% else %}
                     <img id="map-bg-layer" src="{{ active_map.image_url }}" alt=""
-                         style="position:absolute;top:0;left:0;z-index:0;pointer-events:none;transform-origin:0 0;width:{{ active_map.width_px }}px;height:{{ active_map.height_px }}px;display:block;">
+                         style="position:absolute;top:0;left:0;z-index:0;pointer-events:none;width:{{ active_map.width_px }}px;height:{{ active_map.height_px }}px;display:block;">
                 {% endif %}
             {% endif %}
+            {# Canvas is BIGGER than the map by stripH on every side, and
+               positioned at top:-stripH;left:-stripH inside the wrapper
+               so that after ctx.translate(stripH, stripH) the canvas's
+               logical (0,0) coincides with the bg-layer's (0,0).
+               That keeps map-coord drawing (tokens, grid, AOEs) at the
+               same coordinates as before; the gutter strips paint at
+               logical (-stripH..0) which is canvas-physical (0..stripH)
+               — the outer halo around the bg image. #}
             <canvas id="vtt-canvas"
-                    width="{{ active_map.width_px }}"
-                    height="{{ active_map.height_px }}"
+                    width="{{ active_map.width_px + 2 * _strip_h }}"
+                    height="{{ active_map.height_px + 2 * _strip_h }}"
                     data-grid-type="{{ active_map.grid_type.value }}"
                     data-grid-size="{{ active_map.grid_size_px }}"
                     data-show-grid="{{ '1' if active_map.show_grid else '0' }}"
-                    style="position:relative;z-index:1;"
+                    data-strip-h="{{ _strip_h }}"
+                    style="position:absolute;top:-{{ _strip_h }}px;left:-{{ _strip_h }}px;z-index:1;"
                     {% if active_map.image_url %}data-bg="{{ active_map.image_url }}"{% endif %}></canvas>
-            {# GIF token overlay — sits over the canvas and receives the same pan/zoom transform.
-               Real <img> elements here animate natively; canvas only draws the colour ring. #}
-            <div id="gif-token-overlay" style="position:absolute;top:0;left:0;z-index:2;pointer-events:none;transform-origin:0 0;"></div>
+            {# GIF token overlay — same parent as canvas + bg-layer; the
+               wrapper's transform applies to all three uniformly. Token
+               positions inside this overlay are in map coords (matching
+               bg-layer's (0,0)), so this stays at top:0;left:0. #}
+            <div id="gif-token-overlay" style="position:absolute;top:0;left:0;z-index:2;pointer-events:none;"></div>
+            </div>
         {% else %}
             <p class="muted" style="padding: 20px;">No active map. {% if is_gm %}Upload one in <a href="/admin/campaign/{{ campaign.id }}">campaign settings</a>.{% endif %}</p>
         {% endif %}
