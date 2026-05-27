@@ -1178,6 +1178,169 @@ async def test_cast_hellish_rebuke_consumes_slot(
         )
 
 
+# ── v2.77.0 — Phase 4b: Lucky feat ──
+
+
+async def test_lucky_prompt_fires_on_pc_hit(
+    gm_client, gm_ws, roster,
+):
+    """v2.77.0 — when a PC with the Lucky feat (+ remaining charges)
+    is hit by an attack, the v2.69.0 attack_targeted prompt now also
+    surfaces `use-lucky`. Garrik got the feat in the v2.77.0 demo
+    seed; his luck-point resource starts at 3/3.
+    """
+    garrik = roster["Garrik Ironside"]
+    krieger = roster["Krieger Stonefist"]
+    # Long-rest Garrik to ensure luck points are at 3/3 even if a
+    # prior test decremented them.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/rest",
+        json={"type": "long"},
+    )
+
+    garrik_cid = f"tok_lk_{garrik['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": garrik_cid,
+            "char_id": garrik["id"],
+            "name": garrik["name"],
+            "initiative": 10,
+            "hp_current": 85, "hp_max": 85,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": garrik_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, "expected attack_targeted prompt for Garrik"
+    keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+    assert "use-lucky" in keys, (
+        f"expected use-lucky option; got {keys}"
+    )
+    lucky_opt = next(
+        (o for o in prompts[0]["data"]["options"]
+         if o.get("key") == "use-lucky"), {}
+    )
+    # Garrik long-rested → 3 charges before spending.
+    assert int((lucky_opt.get("params") or {}).get("charges_before") or 0) == 3
+
+
+async def test_use_lucky_decrements_charge(
+    gm_client, gm_ws, roster,
+):
+    """End-to-end: Krieger hits Garrik → prompt fires → POST
+    /use_reaction with use-lucky → Garrik's reaction flips +
+    charges_after = 2 + feature_used(source=lucky).
+    """
+    garrik = roster["Garrik Ironside"]
+    krieger = roster["Krieger Stonefist"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/rest",
+        json={"type": "long"},
+    )
+
+    garrik_cid = f"tok_lk2_{garrik['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": garrik_cid,
+            "char_id": garrik["id"],
+            "name": garrik["name"],
+            "initiative": 10,
+            "hp_current": 85, "hp_max": 85,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": garrik_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == garrik["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, "expected attack_targeted prompt for Garrik"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    use = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "use-lucky",
+            "watcher_char_id": garrik["id"],
+        },
+    )
+    assert use.status_code == 200, use.text
+
+    await asyncio.sleep(0.2)
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == garrik["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update for Garrik's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "lucky"
+        and (m.get("data") or {}).get("character_id") == garrik["id"]
+    ]
+    assert fu, "expected feature_used(source=lucky)"
+    assert fu[-1]["data"].get("charges_after") == 2
+
+
 # ── v2.76.0 — Phase 4c: War Caster feat ──
 
 

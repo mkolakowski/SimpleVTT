@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.77.0] - 2026-05-26 — "Three Luck Points"
+
+**Schema version:** 60
+**Commit summary:** **Phase 4b — Lucky feat. Fourth PC feat reaction wired to a runtime trigger. Closes Phase 4.** First reaction with a CHARGE-TRACKED resource (3 charges / long rest, not a once-per-turn or per-trigger reset). Helper `_pc_has_lucky_available(char) -> (bool, charges_remaining)` reads `sheet.resources` for the "lucky" entry's `current` count alongside the feat detection. The `_eligible_reactions[attack_targeted]` PC branch now appends a `use-lucky` option carrying the current charge count + the original attack_total in `params`. `/use_reaction use-lucky` dispatch decrements the resource via in-place mutation of `sheet.resources[*].current`, marks reaction, broadcasts `feature_used(source="lucky", charges_after=N)`. Garrik got the feat + 3-charge resource — picked because his reaction slot was otherwise quiet (no UD like Pip, no DD like Lyra, no WC like Tavik, no MS-style trigger competing).
+**Description:** Five blocks of edits + one demo-seed change. **(1)** `_pc_has_lucky_available(char) -> (bool, int)` helper. Walks `sheet.feats` for slug/name normalized to "lucky"; if found, walks `sheet.resources` for an entry with `key == "lucky"` and reads `current`. Returns `(True, current)` only when `current > 0`; otherwise `(False, 0)` (both no-feat and zero-charges paths). **(2)** `_eligible_reactions[attack_targeted]` PC branch: after the Shield + DD options (preserved), additionally calls the Lucky helper and appends a `use-lucky` option carrying `charges_before` + the triggering `attack_total` in `params`. Label previews the charge math: `🍀 Lucky (3/3 → 2/3) — original d20 total 18; roll a new d20 and pick the lower for the attacker.` **(3)** `/use_reaction use-lucky` dispatch: reads `params.attack_total` + the watcher Character; walks `sheet.resources` looking for the "lucky" key; if found AND `current > 0`, decrements `current` by 1, marks the resource as found, and rebuilds `sheet.resources` immutably (preserves other resources). Returns `409 no_charges` if the charge slot is empty (defensive — eligibility already gated, but a stale prompt + duplicate dispatch could hit this). Marks reaction via `_mark_battle_economy`, broadcasts `feature_used(source="lucky", charges_after=N, attack_total=N)`. **(4)** `app/demo_seed.py`: Garrik (Fighter) gets the Lucky feat in `sheet.feats` and a `{"key": "lucky", "name": "Luck Points", "current": 3, "max": 3, "reset": "long"}` entry prepended to `sheet.resources`. The existing Second Wind / Action Surge / Indomitable entries follow.
+**Description (cont):** v1 simplifications (filed for v3 pending-damage state machine + new trigger events):
+- **`attack_targeted` only.** RAW Lucky also fires on the PC's OWN attack/check/save rolls (4 separate trigger surfaces); v1 only surfaces the "attack roll made against you" trigger because it reuses the v2.69.0 event already in place. The other three need new events (`attack_resolved` + `check_resolved`) + the v2.72.0 Silvery Barbs–style "roll-and-pick" pending-state pattern.
+- **No auto-reroll of the d20.** Chat-card surfaces the original `attack_total`; player rolls a new d20 and applies the lower for the attacker manually. Same pattern as Silvery Barbs.
+- **No "luck points cancel" mechanic.** RAW: if two creatures spend luck on the same roll, neither rolls extra. v1 doesn't model this (no Lucky-vs-Lucky conflict surface yet).
+- **Long rest restores via existing rest endpoint** — no special Lucky-restore code. The resource's `reset: "long"` field already routes through `/rest?type=long` which resets `current` to `max`. Verified in the test by long-resting Garrik at the start.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.77.0`. (b) Two new tests:
+- `test_lucky_prompt_fires_on_pc_hit` — Krieger swings on Garrik until a hit lands; asserts `reaction_prompt(attack_targeted)` for Garrik with `use-lucky` option whose `params.charges_before == 3` (long-rested at start).
+- `test_use_lucky_decrements_charge` — same setup + POST `/use_reaction` with `use-lucky`; asserts `economy_update` for Garrik's reaction = True, `feature_used(source="lucky", charges_after=2)`.
+
+Full reaction_prompt suite passes 29/29 locally. **Phase 4 is now complete** (DD v2.74.0 + MS v2.75.0 + WC v2.76.0 + Lucky v2.77.0).
+
+### Added
+- `_pc_has_lucky_available(char) -> (bool, charges_remaining)` helper.
+- Lucky option in `_eligible_reactions[attack_targeted]` PC branch.
+- `use-lucky` dispatch case in `/use_reaction` — decrements the lucky resource, marks reaction, broadcasts `feature_used(source="lucky", charges_after=N)`.
+- Lucky feat + 3-charge `Luck Points` resource added to Garrik's sheet in `demo_seed.py`.
+- Harness `test_lucky_prompt_fires_on_pc_hit` + `test_use_lucky_decrements_charge` — 2 new tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.77.0`.
+- `README.md` version badge → `2.77.0`.
+- `docs/plans/reactions-automation.md` — Phase 4 marked complete: Phase 4b Lucky shipped; DD + MS + WC also done.
+- `docs/test-harness-coverage.md` — total test count 562 → 564.
+
+### Notes
+- **First reaction with a multi-use charge resource.** Prior reactions either spent a reaction slot only (Sentinel / Polearm Master / OA / DD / MS / WC), consumed a spell slot (Shield / Counterspell / HR / AE / SB), or fired off a class-feature counter that's already widely modeled (Cutting Words / Indomitable / Channel Divinity). Lucky's "3 charges / long rest" is the first reaction that uses the resources table directly + tracks charges across prompts.
+- **Pattern is ready for War Caster's somatic-while-armed + Mage Slayer's passive saves.** Both filed effects need a charge-or-passive mechanic; Lucky's resources-table read is the same shape.
+
+---
+
 ## [2.76.0] - 2026-05-26 — "Spell in Hand"
 
 **Schema version:** 60

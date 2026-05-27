@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 562 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.76.0, 2026-05-26).
+**Total tests:** 564 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.77.0, 2026-05-26).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -807,6 +807,8 @@ v2.67.0 — Phase 1a of the reactions-automation plan (see [`docs/plans/reaction
 | `test_use_mage_slayer_strike_marks_reaction` | v2.75.0 — POST `/use_reaction` with `reaction_key=take-mage-slayer-strike` after the prompt → 200, `economy_update` for Krieger's reaction = True, `feature_used(source=mage-slayer, caster_name="Magnus Hexbinder", spell_name="Burning Hands")`. |
 | `test_war_caster_prompt_offers_cast_alongside_oa` | v2.76.0 — Phase 4c. Krieger leaves Tavik's reach (Tavik has War Caster feat from v2.76.0 demo seed + Cleric spells with `casting_time="1 action"`) → existing v2.66.0 `creature_exits_reach` prompt now includes BOTH `take-the-oa` AND `take-war-caster-cast` keys. |
 | `test_use_war_caster_cast_marks_reaction` | v2.76.0 — POST `/use_reaction` with `reaction_key=take-war-caster-cast` after the prompt → 200, `economy_update` for Tavik's reaction = True, `feature_used(source=war-caster, provoker_name="Krieger Stonefist")`. |
+| `test_lucky_prompt_fires_on_pc_hit` | v2.77.0 — Phase 4b. Krieger swings on Garrik (Fighter w/ Lucky feat + 3/3 Luck Points resource from v2.77.0 demo seed; long-rested in setup to ensure 3/3) until a hit lands → `reaction_prompt(attack_targeted)` fires for Garrik with `use-lucky` option whose `params.charges_before == 3`. |
+| `test_use_lucky_decrements_charge` | v2.77.0 — POST `/use_reaction` with `reaction_key=use-lucky` after the prompt → 200, `economy_update` for Garrik's reaction = True, `feature_used(source=lucky, charges_after=2)` (resource decremented from 3 → 2 via in-place mutation of `sheet.resources[*].current`). |
 
 ### `test_gm_reactions_panel.py`
 v2.68.0 — GM Reactions Panel (see [`docs/plans/reactions-automation.md`](plans/reactions-automation.md)). New `GET /available_reactions` + `POST /spend_reaction_manual` endpoints surface every combatant's reaction catalog to the GM and let the GM flip any reaction chip with one click. PC class features (Uncanny Dodge / Cutting Words / Indomitable), PC feats (Sentinel / Polearm Master / etc.), PC reaction spells (Shield / Counterspell / etc. via `casting_time` scan), NPC monster reactions (Parry / etc. via `category == "reaction"` walk).

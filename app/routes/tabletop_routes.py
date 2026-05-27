@@ -2104,6 +2104,55 @@ def _pc_has_defensive_duelist_available(char) -> "tuple[bool, int]":
     return True, pb
 
 
+# v2.77.0 Phase 4b — Lucky feat. RAW (PHB p.167): "You have 3 luck
+# points. Whenever you make an attack roll, an ability check, or a
+# saving throw, you can spend one luck point to roll an additional
+# d20... You can also spend one luck point when an attack roll is
+# made against you. Roll a d20 and then choose whether the attack
+# uses the attacker's roll or yours."
+#
+# v1 scope: ship the "attack roll made against you" trigger only.
+# The own-roll surfaces (your attack/check/save) need new trigger
+# events (attack_resolved + check_resolved) and a "roll modifier
+# pending" state that v2.72.0 Silvery Barbs already partly models
+# but hasn't generalized. Filed: extend to all four surfaces.
+#
+# Returns (eligible, charges_remaining). The watcher must:
+#   - have the "lucky" feat in sheet.feats
+#   - have at least 1 charge remaining in sheet.resources entry
+#     keyed "lucky" (current > 0)
+def _pc_has_lucky_available(char) -> "tuple[bool, int]":
+    """Detect Lucky feat eligibility + remaining charges on a PC."""
+    if not char or not char.sheet:
+        return False, 0
+    sheet = char.sheet or {}
+    has_feat = False
+    for f in (sheet.get("feats") or []):
+        if not isinstance(f, dict):
+            continue
+        slug = (f.get("slug") or "").strip().lower()
+        name = (f.get("name") or "").strip().lower()
+        if slug == "lucky" or name == "lucky":
+            has_feat = True
+            break
+    if not has_feat:
+        return False, 0
+    for r in (sheet.get("resources") or []):
+        if not isinstance(r, dict):
+            continue
+        key = (r.get("key") or "").strip().lower()
+        if key != "lucky":
+            continue
+        try:
+            cur = int(r.get("current") or 0)
+        except (TypeError, ValueError):
+            cur = 0
+        if cur > 0:
+            return True, cur
+        return False, 0
+    return False, 0
+
+
 # v2.76.0 Phase 4c — War Caster feat. RAW (PHB p.170) third
 # benefit: "When a hostile creature's movement provokes an
 # opportunity attack from you, you can use your reaction to cast a
@@ -2580,6 +2629,37 @@ def _eligible_reactions(
                         "kind": "spell",
                         "resource_cost": f"Reaction + 1× L{slot_lv} slot",
                         "params": {"slot_level": slot_lv, "class_slug": class_slug},
+                        "available": True,
+                        "unavailable_reason": None,
+                    })
+                # v2.77.0 Phase 4b — Lucky feat. Reaction-style "roll
+                # a d20 and pick the higher" against an attacker's
+                # attack roll. The chat-card surfaces the original
+                # attack_total + a "1d20 — pick higher" instruction;
+                # GM/player adjudicates the result. Auto-reroll is
+                # filed alongside the v2.72.0 Silvery Barbs work.
+                lk_elig, lk_charges = _pc_has_lucky_available(char)
+                if lk_elig:
+                    lk_atk_total = context.get("attack_total")
+                    lk_hint = ""
+                    if isinstance(lk_atk_total, int):
+                        lk_hint = (
+                            f" — original d20 total {lk_atk_total}; "
+                            f"roll a new d20 and pick the lower for the "
+                            f"attacker."
+                        )
+                    opts.append({
+                        "key": "use-lucky",
+                        "label": (
+                            f"🍀 Lucky ({lk_charges}/{lk_charges} → "
+                            f"{max(0, lk_charges - 1)}/{lk_charges}){lk_hint}"
+                        ),
+                        "kind": "feat",
+                        "resource_cost": "Reaction + 1 luck point",
+                        "params": {
+                            "charges_before": lk_charges,
+                            "attack_total": lk_atk_total,
+                        },
                         "available": True,
                         "unavailable_reason": None,
                     })
@@ -13993,6 +14073,77 @@ async def use_reaction(
                     "caster_combatant_id": params.get("caster_combatant_id"),
                     "caster_char_id": params.get("caster_char_id"),
                     "spell_name": spell_name,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key == "use-lucky" and watcher_char_id:
+        # v2.77.0 Phase 4b — Lucky feat. Decrement the lucky charge
+        # in sheet.resources, mark reaction, broadcast feature_used
+        # naming the new d20-pick instruction. v1 doesn't auto-roll
+        # the new d20 — chat-card surfaces the original attack_total
+        # and tells the player to roll a new d20 and pick the lower
+        # for the attacker (= they take the worse roll).
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "use-lucky"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            attack_total = params.get("attack_total")
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            sheet = dict(watcher_char.sheet or {})
+            resources = list(sheet.get("resources") or [])
+            updated_resources = []
+            charges_after = 0
+            found = False
+            for r in resources:
+                if not isinstance(r, dict):
+                    updated_resources.append(r)
+                    continue
+                if (r.get("key") or "").strip().lower() == "lucky":
+                    cur = int(r.get("current") or 0)
+                    if cur <= 0:
+                        return JSONResponse(status_code=409, content={
+                            "error": "no_charges",
+                            "resource": "lucky",
+                        })
+                    r = dict(r)
+                    r["current"] = cur - 1
+                    charges_after = cur - 1
+                    found = True
+                updated_resources.append(r)
+            if not found:
+                raise HTTPException(404, "lucky resource not found")
+            sheet["resources"] = updated_resources
+            watcher_char.sheet = sheet
+            db.commit()
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": f"🍀 Lucky ({charges_after} charges left)",
+                    "feature_desc": (
+                        f"Reaction. Roll a new d20 against the attack "
+                        f"(original total: {attack_total}) and have the "
+                        f"attacker take the LOWER of the two."
+                    ),
+                    "source": "lucky",
+                    "reaction_kind": "feat",
+                    "charges_after": charges_after,
+                    "attack_total": attack_total,
                 },
             })
         except HTTPException:

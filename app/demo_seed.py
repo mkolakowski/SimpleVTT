@@ -2232,14 +2232,33 @@ def _fighter_sheet(name: str) -> dict:
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action."},
         ],
-        "feats": [],
+        # v2.77.0 Phase 4b — Lucky feat for Garrik. RAW (PHB p.167):
+        # 3 luck points / long rest; reaction-style "roll a new d20
+        # and pick the higher" against attack rolls against you OR
+        # your own attack/check/save rolls. v1 only surfaces the
+        # against-you trigger via the v2.69.0 attack_targeted event.
+        # Picked Garrik (Fighter) over other PCs because his reaction
+        # slot is otherwise quiet — no Uncanny Dodge (Pip), no
+        # Defensive Duelist (Lyra), no War Caster (Tavik).
+        "feats": [
+            {"slug": "lucky", "name": "Lucky",
+             "desc": "3 luck points per long rest. Spend 1 to roll an extra d20 on your attack, check, or save (pick which to use). Also spend 1 when an attack roll is made against you: roll a d20, choose whether the attack uses the attacker's roll or yours."},
+        ],
         # v2.17.0: Fighter Lv 5 resources. Both refresh on short rest.
         # v2.56.0: Indomitable counter added (Lv 9 unlock): 1/long rest;
         # 2 uses at Lv 13, 3 uses at Lv 17. Reset is "long" per RAW.
         # Champion's Improved Critical (Lv 3: crit on 19-20) is passive;
         # it doesn't need a counter (handled at server-side via
         # `_attacker_crit_threshold` since v2.49.231).
+        # v2.77.0: Lucky luck points (3/long rest).
         "resources": [
+            {
+                "key": "lucky",
+                "name": "Luck Points",
+                "current": 3, "max": 3, "reset": "long",
+                "source": "feat: Lucky",
+                "desc": "Spend 1 to roll a new d20 (own attack/check/save → pick higher; vs attack against you → pick lower for the attacker). 3/long rest.",
+            },
             {
                 "key": "second-wind",
                 "name": "Second Wind",
