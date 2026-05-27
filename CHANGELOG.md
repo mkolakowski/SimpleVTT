@@ -10,6 +10,37 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.79.0] - 2026-05-26 — "Demo Default Honored"
+
+**Schema version:** 60
+**Commit summary:** **Test-pollution fix. The v2.67.2 Uncanny Dodge test was restoring `campaign.auto_apply_damage` to OFF in its `finally` block instead of to the demo's seeded default (ON), which polluted the state for every subsequent test in the file and forced v2.71.0 / v2.73.0 to ship workaround toggle dances.** Fixes the source, then removes the workaround toggle dance from all four affected tests (HR x2 + NPC Parry x2) and deletes the unused `_campaign_settings_form` helper.
+**Description:** Five blocks of edits, all in `tests/harness/test_reaction_prompt.py`. **(1)** v2.67.2 UD test (`test_uncanny_dodge_emits_reaction_prompt`): `finally` block changed from "delete the `auto_apply_damage` form key" (which sent the form WITHOUT the key, interpreted server-side as OFF) to setting `form["auto_apply_damage"] = "on"` (preserves the demo's seeded default per `app/demo_seed.py:auto_apply_damage=True`). The original test was correct in forcing ON for its own run; the bug was the restoration. **(2)–(3)** v2.71.0 HR tests (`test_hellish_rebuke_prompt_fires_on_pc_damage`, `test_cast_hellish_rebuke_consumes_slot`): removed the `_campaign_settings_form(True)` start + `try:`/`finally: _campaign_settings_form(False)` wrapping. Now the tests can rely on the demo default. **(4)–(5)** v2.73.0 NPC Parry tests (`test_npc_parry_prompt_fires_on_hit`, `test_use_npc_parry_marks_reaction`): same removal of toggle dance. **(6)** `_campaign_settings_form(auto_apply_damage: bool)` helper deleted — no remaining callers. Each test that needed it could now just inline the form dict if a future test wants to toggle, but no current test does.
+**Description (cont):** Why this is a real bug + cleanup, not just refactoring:
+- **Test-isolation guarantee restored.** Before this fix, anyone running `pytest tests/harness/test_reaction_prompt.py::test_some_later_test` in isolation got a different result than running the same test after the UD test ran in the suite, because the suite-run had polluted `auto_apply_damage`. The HR/Parry workarounds re-toggled-on-then-off, layering more pollution. The fix at the source means every test in the suite now sees the same demo-default state at start.
+- **Removes 4 test-level `try:`/`finally:` wrappers** that existed only to undo the pollution. Code reads cleaner without them.
+- **`_campaign_settings_form` helper deletion** is dead-code removal — the helper was only added in v2.71.0 specifically to wrap the workaround, and the workaround is gone.
+- **Pattern-template for future cleanup.** Any other test that sets a campaign-wide setting in its `try` block should restore to the demo default in `finally`, not to "the absence of the setting." The v2.67.2 fix is the canonical example.
+
+Full 566-test harness suite passes (verified locally after the fix).
+
+### Added
+- (none — pure cleanup)
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.79.0`.
+- `README.md` version badge → `2.79.0`.
+- `tests/harness/test_reaction_prompt.py` — v2.67.2 UD test's `finally` block restores `auto_apply_damage=on` (was: removed the key, leaving it OFF).
+- `tests/harness/test_reaction_prompt.py` — v2.71.0 HR + v2.73.0 NPC Parry tests no longer wrap their bodies in a settings-toggle `try:`/`finally:`.
+
+### Removed
+- `_campaign_settings_form(auto_apply_damage: bool)` helper in `tests/harness/test_reaction_prompt.py` — unused after the toggle-dance removal.
+
+### Notes
+- **MINOR bump** (not PATCH) because the test-isolation guarantee is a meaningful behavior change for anyone running the harness suite or developing against it. PATCH bumps are for fixes that don't materially change behavior; this fixes an actual pollution bug that affected test ordering.
+- **No production code touched.** All changes are in `tests/harness/test_reaction_prompt.py` + the `app/version.py` / `README.md` bump. The container rebuild + 566-test run was still done per the CLAUDE.md rule (`docker compose up -d --build app` keeps the `/version` endpoint truthful).
+
+---
+
 ## [2.78.1] - 2026-05-26 — "The Reactions Atlas"
 
 **Schema version:** 60

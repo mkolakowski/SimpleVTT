@@ -458,9 +458,15 @@ async def test_uncanny_dodge_emits_reaction_prompt(
             for m in resolved
         ), "expected reaction_prompt_resolved broadcast"
     finally:
-        # Restore auto_apply_damage = off.
-        form["auto_apply_damage"] = ""
-        del form["auto_apply_damage"]
+        # v2.79.0 — restore auto_apply_damage to the demo's default
+        # (ON, per app/demo_seed.py). Earlier versions of this test
+        # restored to OFF (deleted the form key), which polluted the
+        # demo campaign state for every subsequent test in the suite
+        # and forced v2.71.0+ damage-dependent tests (HR / NPC Parry)
+        # to do their own auto-apply toggle dance. The fix is to
+        # restore the demo's seeded default value, not the absence
+        # of the key.
+        form["auto_apply_damage"] = "on"
         await gm_client.post(
             f"/campaign/{CAMPAIGN_ID}/settings",
             data=form, follow_redirects=False,
@@ -953,32 +959,6 @@ async def test_cast_counterspell_consumes_slot(
 # ── v2.71.0 — Phase 3c: Hellish Rebuke + Absorb Elements ──
 
 
-def _campaign_settings_form(auto_apply_damage: bool) -> dict:
-    """Build the /campaign/{id}/settings form-post body. v2.71.0 — used
-    by the Hellish Rebuke tests to force auto_apply_damage on (it gets
-    toggled off by the v2.67.2 Uncanny Dodge test's cleanup, leaving
-    the demo in the wrong state for later damage-driven tests).
-    """
-    form = {
-        "name": "Demo Campaign",
-        "description": "demo",
-        "game_system": "dnd5e",
-        "gm_tab_color": "",
-        "font_override": "",
-        "default_encounter_id": "",
-        "hp_threshold_1": "",
-        "hp_threshold_2": "",
-        "hp_threshold_3": "",
-        "hp_threshold_4": "",
-        "auto_play_playlist_id": "",
-        "auto_play_mode": "order",
-        "auto_play_initial_volume": "0.7",
-    }
-    if auto_apply_damage:
-        form["auto_apply_damage"] = "on"
-    return form
-
-
 async def test_hellish_rebuke_prompt_fires_on_pc_damage(
     gm_client, gm_ws, roster,
 ):
@@ -994,72 +974,62 @@ async def test_hellish_rebuke_prompt_fires_on_pc_damage(
         f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
         json={"type": "long"},
     )
-    # Force auto_apply_damage on so _apply_damage_to_combatant runs
-    # for /attack. Restored in the finally block to preserve the
-    # demo's default state for subsequent tests.
-    await gm_client.post(
-        f"/campaign/{CAMPAIGN_ID}/settings",
-        data=_campaign_settings_form(True), follow_redirects=False,
-    )
+    # v2.79.0 — demo default for auto_apply_damage is True (seeded in
+    # app/demo_seed.py); the v2.67.2 UD test restoration was fixed to
+    # preserve that default. No toggle dance needed here anymore.
 
-    try:
-        magnus_cid = f"tok_hr_{magnus['id']}"
-        await _seed_battle(gm_client, [
-            _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
-            {
-                "id": magnus_cid,
-                "char_id": magnus["id"],
-                "name": magnus["name"],
-                "initiative": 10,
-                "hp_current": 50, "hp_max": 50,
-                "buffs": [],
-                "economy": {
-                    "action": False, "bonus": False,
-                    "reaction": False, "movement": 0,
-                },
+    magnus_cid = f"tok_hr_{magnus['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": magnus_cid,
+            "char_id": magnus["id"],
+            "name": magnus["name"],
+            "initiative": 10,
+            "hp_current": 50, "hp_max": 50,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
             },
-        ])
-        await asyncio.sleep(0.15)
-        gm_ws.mark()
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
 
-        # Krieger swings until a hit lands.
-        for _ in range(20):
-            resp = await gm_client.post(
-                f"/api/campaign/{CAMPAIGN_ID}/attack",
-                json={
-                    "character_id": krieger["id"],
-                    "attack_index": 0,
-                    "target_combatant_id": magnus_cid,
-                    "override": True,
-                    "override_range": True,
-                },
-            )
-            assert resp.status_code == 200, resp.text
-            if resp.json().get("hit"):
-                break
-        else:
-            raise AssertionError("no hit landed in 20 swings")
+    # Krieger swings until a hit lands.
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": magnus_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
 
-        await asyncio.sleep(0.2)
-        prompts = [
-            m for m in _prompt_broadcasts(gm_ws)
-            if (m.get("data") or {}).get("watcher_char_id") == magnus["id"]
-            and (m.get("data") or {}).get("trigger_event") == "damage_taken"
-        ]
-        assert prompts, (
-            f"expected reaction_prompt(damage_taken) for Magnus; "
-            f"buffered: "
-            f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
-        )
-        keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
-        assert "cast-hellish-rebuke" in keys, (
-            f"expected cast-hellish-rebuke option; got {keys}"
-        )
-    finally:
-        await gm_client.post(
-            f"/campaign/{CAMPAIGN_ID}/settings",
-            data=_campaign_settings_form(False), follow_redirects=False,
-        )
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == magnus["id"]
+        and (m.get("data") or {}).get("trigger_event") == "damage_taken"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(damage_taken) for Magnus; "
+        f"buffered: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+    assert "cast-hellish-rebuke" in keys, (
+        f"expected cast-hellish-rebuke option; got {keys}"
+    )
 
 
 async def test_cast_hellish_rebuke_consumes_slot(
@@ -1076,106 +1046,96 @@ async def test_cast_hellish_rebuke_consumes_slot(
         f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
         json={"type": "long"},
     )
-    await gm_client.post(
-        f"/campaign/{CAMPAIGN_ID}/settings",
-        data=_campaign_settings_form(True), follow_redirects=False,
+
+    magnus_cid = f"tok_hr2_{magnus['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": magnus_cid,
+            "char_id": magnus["id"],
+            "name": magnus["name"],
+            "initiative": 10,
+            "hp_current": 50, "hp_max": 50,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": magnus_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == magnus["id"]
+        and (m.get("data") or {}).get("trigger_event") == "damage_taken"
+    ]
+    assert prompts, "expected damage_taken prompt for Magnus"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "cast-hellish-rebuke",
+            "watcher_char_id": magnus["id"],
+        },
+    )
+    assert cast.status_code == 200, cast.text
+
+    await asyncio.sleep(0.2)
+    # economy_update: reaction flipped.
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == magnus["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update for Magnus's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    # spell_slot_update: Pact slot decremented (Magnus only has L3
+    # slots).
+    slot_msgs = [
+        m for m in gm_ws.buffered("spell_slot_update")
+        if (m.get("data") or {}).get("character_id") == magnus["id"]
+        and int((m.get("data") or {}).get("level") or 0) >= 1
+    ]
+    assert slot_msgs, (
+        f"expected spell_slot_update for Magnus's slot; buffered: "
+        f"{[m.get('data') for m in gm_ws.buffered('spell_slot_update')]}"
     )
 
-    try:
-        magnus_cid = f"tok_hr2_{magnus['id']}"
-        await _seed_battle(gm_client, [
-            _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
-            {
-                "id": magnus_cid,
-                "char_id": magnus["id"],
-                "name": magnus["name"],
-                "initiative": 10,
-                "hp_current": 50, "hp_max": 50,
-                "buffs": [],
-                "economy": {
-                    "action": False, "bonus": False,
-                    "reaction": False, "movement": 0,
-                },
-            },
-        ])
-        await asyncio.sleep(0.15)
-        gm_ws.mark()
-
-        for _ in range(20):
-            resp = await gm_client.post(
-                f"/api/campaign/{CAMPAIGN_ID}/attack",
-                json={
-                    "character_id": krieger["id"],
-                    "attack_index": 0,
-                    "target_combatant_id": magnus_cid,
-                    "override": True,
-                    "override_range": True,
-                },
-            )
-            assert resp.status_code == 200, resp.text
-            if resp.json().get("hit"):
-                break
-        else:
-            raise AssertionError("no hit landed in 20 swings")
-        await asyncio.sleep(0.2)
-
-        prompts = [
-            m for m in _prompt_broadcasts(gm_ws)
-            if (m.get("data") or {}).get("watcher_char_id") == magnus["id"]
-            and (m.get("data") or {}).get("trigger_event") == "damage_taken"
-        ]
-        assert prompts, "expected damage_taken prompt for Magnus"
-        prompt_id = prompts[0]["data"]["prompt_id"]
-
-        gm_ws.mark()
-        cast = await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
-            json={
-                "prompt_id": prompt_id,
-                "reaction_key": "cast-hellish-rebuke",
-                "watcher_char_id": magnus["id"],
-            },
-        )
-        assert cast.status_code == 200, cast.text
-
-        await asyncio.sleep(0.2)
-        # economy_update: reaction flipped.
-        econ = [
-            m for m in gm_ws.buffered("economy_update")
-            if (m.get("data") or {}).get("character_id") == magnus["id"]
-            and (m.get("data") or {}).get("slot") == "reaction"
-        ]
-        assert econ, "expected economy_update for Magnus's reaction"
-        assert econ[-1]["data"]["used"] is True
-
-        # spell_slot_update: Pact slot decremented (Magnus only has L3
-        # slots).
-        slot_msgs = [
-            m for m in gm_ws.buffered("spell_slot_update")
-            if (m.get("data") or {}).get("character_id") == magnus["id"]
-            and int((m.get("data") or {}).get("level") or 0) >= 1
-        ]
-        assert slot_msgs, (
-            f"expected spell_slot_update for Magnus's slot; buffered: "
-            f"{[m.get('data') for m in gm_ws.buffered('spell_slot_update')]}"
-        )
-
-        # feature_used(source=hellish-rebuke-cast) fires.
-        fu = [
-            m for m in gm_ws.buffered("feature_used")
-            if (m.get("data") or {}).get("source") == "hellish-rebuke-cast"
-            and (m.get("data") or {}).get("character_id") == magnus["id"]
-        ]
-        assert fu, "expected feature_used(source=hellish-rebuke-cast)"
-        last = fu[-1]["data"]
-        assert last.get("damage_type") == "fire"
-        # Magnus's slot is L3 → damage_dice = 1 + 3 = 4 → "4d10".
-        assert last.get("damage_expr") == "4d10"
-    finally:
-        await gm_client.post(
-            f"/campaign/{CAMPAIGN_ID}/settings",
-            data=_campaign_settings_form(False), follow_redirects=False,
-        )
+    # feature_used(source=hellish-rebuke-cast) fires.
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "hellish-rebuke-cast"
+        and (m.get("data") or {}).get("character_id") == magnus["id"]
+    ]
+    assert fu, "expected feature_used(source=hellish-rebuke-cast)"
+    last = fu[-1]["data"]
+    assert last.get("damage_type") == "fire"
+    # Magnus's slot is L3 → damage_dice = 1 + 3 = 4 → "4d10".
+    assert last.get("damage_expr") == "4d10"
 
 
 # ── v2.78.0 — Phase 5: Item reactions ──
@@ -1973,95 +1933,86 @@ async def test_npc_parry_prompt_fires_on_hit(
     `_monster_template_to_sheet(tmpl).actions[].category == "reaction"`.
     """
     krieger = roster["Krieger Stonefist"]
-    # Force auto_apply_damage on so /attack runs the full damage
-    # path (matches v2.71.0 HR test pattern).
-    await gm_client.post(
-        f"/campaign/{CAMPAIGN_ID}/settings",
-        data=_campaign_settings_form(True), follow_redirects=False,
+    # v2.79.0 — auto_apply_damage default is True via demo seed;
+    # toggle dance removed after the v2.67.2 UD test fix.
+
+    tmpl_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/templates",
+        json={
+            "name": "Bandit Captain (Parry trigger test)",
+            "template": "dnd5e",
+            "tags": ["npc", "harness"],
+            "sheet": {"monster_slug": "bandit-captain"},
+        },
     )
-    try:
-        tmpl_resp = await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/templates",
+    assert tmpl_resp.status_code == 200, tmpl_resp.text
+    tmpl = tmpl_resp.json()
+    tok_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/tokens",
+        json={
+            "token_template_id": tmpl["id"],
+            "label": "Bandit Captain",
+            "x": 350.0, "y": 350.0,
+            "color": "#822222", "size": 1,
+        },
+    )
+    assert tok_resp.status_code == 200, tok_resp.text
+    bc_tok = tok_resp.json()
+
+    bc_cid = f"tok_npc_parry_{tmpl['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": bc_cid,
+            "char_id": None,
+            "source_token_id": bc_tok["id"],
+            "token_template_id": tmpl["id"],
+            "name": "Bandit Captain",
+            "initiative": 9,
+            "hp_current": 65, "hp_max": 65,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Probe until Krieger hits the captain.
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
             json={
-                "name": "Bandit Captain (Parry trigger test)",
-                "template": "dnd5e",
-                "tags": ["npc", "harness"],
-                "sheet": {"monster_slug": "bandit-captain"},
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": bc_cid,
+                "override": True,
+                "override_range": True,
             },
         )
-        assert tmpl_resp.status_code == 200, tmpl_resp.text
-        tmpl = tmpl_resp.json()
-        tok_resp = await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/tokens",
-            json={
-                "token_template_id": tmpl["id"],
-                "label": "Bandit Captain",
-                "x": 350.0, "y": 350.0,
-                "color": "#822222", "size": 1,
-            },
-        )
-        assert tok_resp.status_code == 200, tok_resp.text
-        bc_tok = tok_resp.json()
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
 
-        bc_cid = f"tok_npc_parry_{tmpl['id']}"
-        await _seed_battle(gm_client, [
-            _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
-            {
-                "id": bc_cid,
-                "char_id": None,
-                "source_token_id": bc_tok["id"],
-                "token_template_id": tmpl["id"],
-                "name": "Bandit Captain",
-                "initiative": 9,
-                "hp_current": 65, "hp_max": 65,
-                "buffs": [],
-                "economy": {
-                    "action": False, "bonus": False,
-                    "reaction": False, "movement": 0,
-                },
-            },
-        ])
-        await asyncio.sleep(0.15)
-        gm_ws.mark()
-
-        # Probe until Krieger hits the captain.
-        for _ in range(20):
-            resp = await gm_client.post(
-                f"/api/campaign/{CAMPAIGN_ID}/attack",
-                json={
-                    "character_id": krieger["id"],
-                    "attack_index": 0,
-                    "target_combatant_id": bc_cid,
-                    "override": True,
-                    "override_range": True,
-                },
-            )
-            assert resp.status_code == 200, resp.text
-            if resp.json().get("hit"):
-                break
-        else:
-            raise AssertionError("no hit landed in 20 swings")
-
-        await asyncio.sleep(0.2)
-        prompts = [
-            m for m in _prompt_broadcasts(gm_ws)
-            if (m.get("data") or {}).get("watcher_combatant_id") == bc_cid
-            and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
-        ]
-        assert prompts, (
-            f"expected reaction_prompt(attack_targeted) for Bandit Captain; "
-            f"buffered: "
-            f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
-        )
-        keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
-        assert "monster-parry" in keys, (
-            f"expected monster-parry option; got {keys}"
-        )
-    finally:
-        await gm_client.post(
-            f"/campaign/{CAMPAIGN_ID}/settings",
-            data=_campaign_settings_form(False), follow_redirects=False,
-        )
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_combatant_id") == bc_cid
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(attack_targeted) for Bandit Captain; "
+        f"buffered: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+    assert "monster-parry" in keys, (
+        f"expected monster-parry option; got {keys}"
+    )
 
 
 async def test_use_npc_parry_marks_reaction(
@@ -2073,118 +2024,110 @@ async def test_use_npc_parry_marks_reaction(
     fires naming the action + monster.
     """
     krieger = roster["Krieger Stonefist"]
-    await gm_client.post(
-        f"/campaign/{CAMPAIGN_ID}/settings",
-        data=_campaign_settings_form(True), follow_redirects=False,
+    # v2.79.0 — auto_apply_damage default is True via demo seed.
+
+    tmpl_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/templates",
+        json={
+            "name": "Bandit Captain (Parry use test)",
+            "template": "dnd5e",
+            "tags": ["npc", "harness"],
+            "sheet": {"monster_slug": "bandit-captain"},
+        },
     )
-    try:
-        tmpl_resp = await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/templates",
+    tmpl = tmpl_resp.json()
+    tok_resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/tokens",
+        json={
+            "token_template_id": tmpl["id"],
+            "label": "Bandit Captain",
+            "x": 350.0, "y": 350.0,
+            "color": "#822222", "size": 1,
+        },
+    )
+    bc_tok = tok_resp.json()
+
+    bc_cid = f"tok_npc_parry2_{tmpl['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": bc_cid,
+            "char_id": None,
+            "source_token_id": bc_tok["id"],
+            "token_template_id": tmpl["id"],
+            "name": "Bandit Captain",
+            "initiative": 9,
+            "hp_current": 65, "hp_max": 65,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
             json={
-                "name": "Bandit Captain (Parry use test)",
-                "template": "dnd5e",
-                "tags": ["npc", "harness"],
-                "sheet": {"monster_slug": "bandit-captain"},
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": bc_cid,
+                "override": True,
+                "override_range": True,
             },
         )
-        tmpl = tmpl_resp.json()
-        tok_resp = await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/tokens",
-            json={
-                "token_template_id": tmpl["id"],
-                "label": "Bandit Captain",
-                "x": 350.0, "y": 350.0,
-                "color": "#822222", "size": 1,
-            },
-        )
-        bc_tok = tok_resp.json()
+        assert resp.status_code == 200, resp.text
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed in 20 swings")
+    await asyncio.sleep(0.2)
 
-        bc_cid = f"tok_npc_parry2_{tmpl['id']}"
-        await _seed_battle(gm_client, [
-            _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
-            {
-                "id": bc_cid,
-                "char_id": None,
-                "source_token_id": bc_tok["id"],
-                "token_template_id": tmpl["id"],
-                "name": "Bandit Captain",
-                "initiative": 9,
-                "hp_current": 65, "hp_max": 65,
-                "buffs": [],
-                "economy": {
-                    "action": False, "bonus": False,
-                    "reaction": False, "movement": 0,
-                },
-            },
-        ])
-        await asyncio.sleep(0.15)
-        gm_ws.mark()
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_combatant_id") == bc_cid
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts, "expected attack_targeted prompt for Bandit Captain"
+    prompt_id = prompts[0]["data"]["prompt_id"]
 
-        for _ in range(20):
-            resp = await gm_client.post(
-                f"/api/campaign/{CAMPAIGN_ID}/attack",
-                json={
-                    "character_id": krieger["id"],
-                    "attack_index": 0,
-                    "target_combatant_id": bc_cid,
-                    "override": True,
-                    "override_range": True,
-                },
-            )
-            assert resp.status_code == 200, resp.text
-            if resp.json().get("hit"):
-                break
-        else:
-            raise AssertionError("no hit landed in 20 swings")
-        await asyncio.sleep(0.2)
+    gm_ws.mark()
+    # NPC reactions don't carry a watcher_char_id.
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "monster-parry",
+        },
+    )
+    assert cast.status_code == 200, cast.text
 
-        prompts = [
-            m for m in _prompt_broadcasts(gm_ws)
-            if (m.get("data") or {}).get("watcher_combatant_id") == bc_cid
-            and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
-        ]
-        assert prompts, "expected attack_targeted prompt for Bandit Captain"
-        prompt_id = prompts[0]["data"]["prompt_id"]
+    await asyncio.sleep(0.2)
+    # economy_update for the NPC combatant (carries combatant_id,
+    # not character_id since this is an NPC).
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("combatant_id") == bc_cid
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, (
+        f"expected economy_update for Bandit Captain's reaction; "
+        f"buffered: {[m.get('data') for m in gm_ws.buffered('economy_update')]}"
+    )
+    assert econ[-1]["data"]["used"] is True
 
-        gm_ws.mark()
-        # NPC reactions don't carry a watcher_char_id.
-        cast = await gm_client.post(
-            f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
-            json={
-                "prompt_id": prompt_id,
-                "reaction_key": "monster-parry",
-            },
-        )
-        assert cast.status_code == 200, cast.text
-
-        await asyncio.sleep(0.2)
-        # economy_update for the NPC combatant (carries combatant_id,
-        # not character_id since this is an NPC).
-        econ = [
-            m for m in gm_ws.buffered("economy_update")
-            if (m.get("data") or {}).get("combatant_id") == bc_cid
-            and (m.get("data") or {}).get("slot") == "reaction"
-        ]
-        assert econ, (
-            f"expected economy_update for Bandit Captain's reaction; "
-            f"buffered: {[m.get('data') for m in gm_ws.buffered('economy_update')]}"
-        )
-        assert econ[-1]["data"]["used"] is True
-
-        # feature_used(source=monster-reaction) names Parry + Bandit Captain.
-        fu = [
-            m for m in gm_ws.buffered("feature_used")
-            if (m.get("data") or {}).get("source") == "monster-reaction"
-        ]
-        assert fu, "expected feature_used(source=monster-reaction)"
-        last = fu[-1]["data"]
-        assert last.get("action_name") == "Parry"
-        assert (last.get("monster_name") or "").lower().startswith("bandit captain")
-    finally:
-        await gm_client.post(
-            f"/campaign/{CAMPAIGN_ID}/settings",
-            data=_campaign_settings_form(False), follow_redirects=False,
-        )
+    # feature_used(source=monster-reaction) names Parry + Bandit Captain.
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "monster-reaction"
+    ]
+    assert fu, "expected feature_used(source=monster-reaction)"
+    last = fu[-1]["data"]
+    assert last.get("action_name") == "Parry"
+    assert (last.get("monster_name") or "").lower().startswith("bandit captain")
 
 
 # ── v2.72.0 — Phase 3d: Silvery Barbs ──
