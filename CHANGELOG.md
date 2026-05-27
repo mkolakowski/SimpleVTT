@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.90.1] - 2026-05-27 — "Pills"
+
+**Schema version:** 64
+**Commit summary:** **Pillifies the v2.90.0 Quick Links panel and lays them out in a 2-column grid.** The vertical list of full-width text links was visually heavy for a small drawer card; pills + a 2-column grid pack the same 4–5 destinations into roughly half the vertical real estate while staying scannable and meeting the dense-panel 32-px touch-target rule.
+**Description:** One edit — the Quick Links body in `app/templates/tabletop.html`. New `.ql-pill` style block scoped to the panel: rounded pill (`border-radius:999px`), translucent accent backing (`color-mix(in srgb, var(--accent) 8%, transparent)`), accent-tinted border, centered icon + label, ellipsis on overflow. Hover bumps the backing to 18 % + tightens the border to full accent. `.ql-pill.is-muted` keeps Logout deemphasized (transparent backing, muted text) to separate the destructive action from the navigation pills. Container switched from `display:flex; flex-direction:column` to `display:grid; grid-template-columns:1fr 1fr; gap:6px` so the pills land in a 2-column grid. Labels trimmed to fit: "My Characters" → "Characters", "User Settings" → "Settings".
+
+### Changed
+- Quick Links rows are now compact rounded pills in a 2-column grid (was: full-width text rows in a vertical stack).
+- Labels shortened to "Characters" and "Settings" to fit the pill width without ellipsing.
+
+### Notes
+- **PATCH bump** — pure visual restyle of the same 4–5 destination set. No data, no contract, no schema changes.
+- Touch targets remain at the 32-px dense-panel exception height; both axes are above the threshold thanks to the grid cell width.
+
+---
+
 ## [2.90.0] - 2026-05-27 — "The Player's Toolbelt"
 
 **Schema version:** 64

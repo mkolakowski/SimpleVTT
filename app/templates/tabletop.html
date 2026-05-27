@@ -3486,14 +3486,49 @@
                 <span style="flex:1;">🔗 Quick Links</span>
                 <span class="muted" style="font-size:9px;font-weight:500;letter-spacing:0;text-transform:none;" title="App version v{{ APP_VERSION }} · schema v{{ SCHEMA_VERSION }}">v{{ APP_VERSION }}</span>
             </div>
-            <div style="padding:8px 10px;display:flex;flex-direction:column;gap:4px;font-size:12px;">
-                <a href="/wiki" target="_blank" rel="noopener noreferrer" class="btn-link" title="Open the wiki in a new tab" style="min-height:32px;display:flex;align-items:center;gap:6px;">📖 Wiki</a>
-                <a href="/characters" class="btn-link" style="min-height:32px;display:flex;align-items:center;gap:6px;">🧝 My Characters</a>
-                <a href="/settings" class="btn-link" style="min-height:32px;display:flex;align-items:center;gap:6px;">⚙ User Settings</a>
+            {# v2.90.1 — pillified 2-column grid. Each link is a small
+               rounded pill (border + translucent accent backing) so the
+               panel reads as a compact action cluster rather than a
+               vertical list. 32-px min-height keeps the dense-panel
+               touch-target rule (per CLAUDE.md, dense rows like this
+               sidebar are allowed below 44 px). The Logout pill keeps
+               its muted treatment to deemphasize the destructive action
+               next to the navigation pills. #}
+            <style>
+                .ql-pill {
+                    min-height:32px;
+                    padding:4px 10px;
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    gap:5px;
+                    font-size:11px;
+                    border:1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+                    border-radius:999px;
+                    background:color-mix(in srgb, var(--accent) 8%, transparent);
+                    color:var(--fg);
+                    text-decoration:none;
+                    text-align:center;
+                    white-space:nowrap;
+                    overflow:hidden;
+                    text-overflow:ellipsis;
+                    transition:background .12s, border-color .12s;
+                }
+                .ql-pill:hover {
+                    background:color-mix(in srgb, var(--accent) 18%, transparent);
+                    border-color:var(--accent);
+                }
+                .ql-pill.is-muted { color:var(--fg-mute); border-color:var(--border); background:transparent; }
+                .ql-pill.is-muted:hover { color:var(--fg); border-color:color-mix(in srgb, var(--fg-mute) 50%, var(--border)); }
+            </style>
+            <div style="padding:8px 10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                <a href="/wiki" target="_blank" rel="noopener noreferrer" class="ql-pill" title="Open the wiki in a new tab">📖 Wiki</a>
+                <a href="/characters" class="ql-pill">🧝 Characters</a>
+                <a href="/settings" class="ql-pill">⚙ Settings</a>
                 {% if user.is_admin %}
-                <a href="/admin" class="btn-link" style="min-height:32px;display:flex;align-items:center;gap:6px;">🛡 Admin</a>
+                <a href="/admin" class="ql-pill">🛡 Admin</a>
                 {% endif %}
-                <a href="/logout" class="btn-link" style="min-height:32px;display:flex;align-items:center;gap:6px;color:var(--fg-mute);">↪ Logout</a>
+                <a href="/logout" class="ql-pill is-muted">↪ Logout</a>
             </div>
         </div>
 
