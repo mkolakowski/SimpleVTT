@@ -2104,6 +2104,45 @@ def _pc_has_defensive_duelist_available(char) -> "tuple[bool, int]":
     return True, pb
 
 
+# v2.75.0 Phase 4d — Mage Slayer feat. RAW (PHB p.168): "When a
+# creature within 5 feet of you casts a spell, you can use your
+# reaction to make a melee weapon attack against that creature."
+# Returns True when the PC has the feat AND at least one equipped
+# melee weapon (any weapon without a "range" entry, OR with a range
+# string mentioning "5 ft" for the melee component of a thrown
+# weapon). v1 doesn't auto-resolve the attack — the chat-card
+# surfaces the trigger + the player rolls the attack manually.
+def _pc_has_mage_slayer_available(char) -> bool:
+    """Detect Mage Slayer feat eligibility on a PC."""
+    if not char or not char.sheet:
+        return False
+    sheet = char.sheet or {}
+    has_feat = False
+    for f in (sheet.get("feats") or []):
+        if not isinstance(f, dict):
+            continue
+        slug = (f.get("slug") or "").strip().lower()
+        name = (f.get("name") or "").strip().lower().replace(" ", "-")
+        if slug == "mage-slayer" or name == "mage-slayer":
+            has_feat = True
+            break
+    if not has_feat:
+        return False
+    # Walk inventory for an equipped melee weapon.
+    for it in (sheet.get("inventory") or []):
+        if not isinstance(it, dict):
+            continue
+        if not it.get("equipped"):
+            continue
+        if (it.get("type") or "").strip().lower() != "weapon":
+            continue
+        rng = (it.get("range") or "").strip().lower()
+        # Pure melee weapons have no range or range == "5 ft".
+        if not rng or "5 ft" in rng:
+            return True
+    return False
+
+
 # v2.72.0 Phase 3d — Silvery Barbs. RAW (SAI / Strixhaven p.144):
 # "1 reaction, which you take when a creature you can see within 60
 # feet of yourself succeeds on an attack roll, an ability check, or
@@ -2545,42 +2584,74 @@ def _eligible_reactions(
             char = None
         if not char or not char.sheet:
             return []
-        eligible, class_slug, slot_lv = _pc_has_counterspell_available(char)
-        if not eligible:
-            return []
-        incoming_lv = context.get("spell_level")
-        spell_name = context.get("spell_name") or "a spell"
-        caster_name = context.get("caster_name") or "Someone"
-        gate_hint = ""
-        if isinstance(incoming_lv, int) and incoming_lv > 0:
-            if slot_lv >= incoming_lv:
-                gate_hint = (
-                    f" — L{slot_lv} slot AUTO-COUNTERS the L{incoming_lv} cast."
-                )
-            else:
-                check_dc = 10 + incoming_lv
-                gate_hint = (
-                    f" — L{slot_lv} slot needs an arcana check (DC {check_dc}) "
-                    f"to counter the L{incoming_lv} cast."
-                )
-        return [{
-            "key": "cast-counterspell",
-            "label": (
-                f"🚫 Cast Counterspell on {caster_name}'s {spell_name}"
-                f"{gate_hint}"
-            ),
-            "kind": "spell",
-            "resource_cost": f"Reaction + 1× L{slot_lv} slot",
-            "params": {
-                "slot_level": slot_lv,
-                "class_slug": class_slug,
-                "spell_name": spell_name,
-                "caster_name": caster_name,
-                "incoming_spell_level": incoming_lv,
-            },
-            "available": True,
-            "unavailable_reason": None,
-        }]
+        opts: list[dict] = []
+        # Counterspell (60 ft).
+        cs_elig, class_slug, slot_lv = _pc_has_counterspell_available(char)
+        if cs_elig:
+            incoming_lv = context.get("spell_level")
+            spell_name = context.get("spell_name") or "a spell"
+            caster_name = context.get("caster_name") or "Someone"
+            gate_hint = ""
+            if isinstance(incoming_lv, int) and incoming_lv > 0:
+                if slot_lv >= incoming_lv:
+                    gate_hint = (
+                        f" — L{slot_lv} slot AUTO-COUNTERS the L{incoming_lv} cast."
+                    )
+                else:
+                    check_dc = 10 + incoming_lv
+                    gate_hint = (
+                        f" — L{slot_lv} slot needs an arcana check (DC {check_dc}) "
+                        f"to counter the L{incoming_lv} cast."
+                    )
+            opts.append({
+                "key": "cast-counterspell",
+                "label": (
+                    f"🚫 Cast Counterspell on {context.get('caster_name') or 'Someone'}'s "
+                    f"{context.get('spell_name') or 'a spell'}{gate_hint}"
+                ),
+                "kind": "spell",
+                "resource_cost": f"Reaction + 1× L{slot_lv} slot",
+                "params": {
+                    "slot_level": slot_lv,
+                    "class_slug": class_slug,
+                    "spell_name": spell_name,
+                    "caster_name": caster_name,
+                    "incoming_spell_level": incoming_lv,
+                },
+                "available": True,
+                "unavailable_reason": None,
+            })
+        # v2.75.0 Phase 4d — Mage Slayer feat. RAW range: within 5 ft
+        # of the caster. The walker's context carries distance_ft so
+        # this branch can gate cleanly. Surfaces a melee-attack-
+        # against-caster option; v1 doesn't auto-roll the attack —
+        # chat-card surfaces the trigger + the player rolls manually.
+        dist_ft = context.get("distance_ft")
+        if (
+            _pc_has_mage_slayer_available(char)
+            and isinstance(dist_ft, (int, float))
+            and float(dist_ft) <= 5.0
+        ):
+            caster_name = context.get("caster_name") or "the caster"
+            spell_name = context.get("spell_name") or "a spell"
+            opts.append({
+                "key": "take-mage-slayer-strike",
+                "label": (
+                    f"⚔ Mage Slayer reaction — melee attack on "
+                    f"{caster_name} (cast {spell_name})"
+                ),
+                "kind": "feat",
+                "resource_cost": "Reaction",
+                "params": {
+                    "caster_name": caster_name,
+                    "caster_combatant_id": context.get("caster_combatant_id"),
+                    "caster_char_id": context.get("caster_char_id"),
+                    "spell_name": spell_name,
+                },
+                "available": True,
+                "unavailable_reason": None,
+            })
+        return opts
     # v2.68.5 Phase 2b — informational ack for class-feature reactions
     # that already have dedicated endpoints (Cutting Words v2.54.0,
     # Indomitable v2.56.0). The endpoint mutates state; the prompt
@@ -2929,8 +3000,13 @@ async def _emit_counterspell_prompts(
             watcher = None
         if not watcher or not watcher.sheet:
             continue
-        eligible, _cls, _slot = _pc_has_counterspell_available(watcher)
-        if not eligible:
+        cs_eligible, _cls, _slot = _pc_has_counterspell_available(watcher)
+        # v2.75.0 Phase 4d — Mage Slayer (5 ft) qualifies the
+        # watcher even without Counterspell. The distance gate is
+        # applied per-watcher below, so we still need to know
+        # whether either feat could apply BEFORE measuring distance.
+        ms_eligible = _pc_has_mage_slayer_available(watcher)
+        if not cs_eligible and not ms_eligible:
             continue
         # Locate watcher's token + measure distance.
         watcher_token = None
@@ -13709,6 +13785,55 @@ async def use_reaction(
                     "reaction_kind": "spell",
                     "slot_level": slot_level,
                     "damage_type": damage_type,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key == "take-mage-slayer-strike" and watcher_char_id:
+        # v2.75.0 Phase 4d — Mage Slayer feat. Pure reaction spend
+        # (no slot cost). Marks reaction + broadcasts feature_used
+        # naming the caster being attacked. v1 doesn't auto-roll the
+        # melee attack against the caster — chat-card surfaces the
+        # trigger and the player rolls the attack manually (mirrors
+        # the v2.66.0 OA pattern where the legacy `feature_used`
+        # advisory tells the player to click their Attack button).
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "take-mage-slayer-strike"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            caster_name = str(params.get("caster_name") or "the caster")
+            spell_name = str(params.get("spell_name") or "a spell")
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": "⚔ Mage Slayer reaction",
+                    "feature_desc": (
+                        f"Reaction. Make a melee weapon attack against "
+                        f"{caster_name} (who cast {spell_name}). Click "
+                        f"your Attack button to resolve."
+                    ),
+                    "source": "mage-slayer",
+                    "reaction_kind": "feat",
+                    "caster_name": caster_name,
+                    "caster_combatant_id": params.get("caster_combatant_id"),
+                    "caster_char_id": params.get("caster_char_id"),
+                    "spell_name": spell_name,
                 },
             })
         except HTTPException:

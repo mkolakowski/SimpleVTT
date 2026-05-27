@@ -1178,6 +1178,195 @@ async def test_cast_hellish_rebuke_consumes_slot(
         )
 
 
+# ── v2.75.0 — Phase 4d: Mage Slayer feat ──
+
+
+async def test_mage_slayer_prompt_fires_on_spell_within_5ft(
+    gm_client, gm_ws, roster,
+):
+    """v2.75.0 — when a creature within 5 ft of a PC with Mage Slayer
+    casts a spell, the v2.70.0 `spell_cast_near` walker now also
+    emits for that watcher (was: Counterspell-only). Krieger got the
+    feat in the v2.75.0 demo seed; place Magnus 5 ft away and have
+    him cast Burning Hands.
+    """
+    magnus = roster["Magnus Hexbinder"]
+    krieger = roster["Krieger Stonefist"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+        json={"type": "long"},
+    )
+    # Place tokens 5 ft apart (one cell at 70 px/cell).
+    await _place_token(gm_client, magnus["id"], 300.0, 300.0)
+    await _place_token(gm_client, krieger["id"], 370.0, 300.0)
+
+    krieg_cid = f"tok_ms_kr_{krieger['id']}"
+    magnus_cid = f"tok_ms_mg_{magnus['id']}"
+    await _seed_battle(gm_client, [
+        {
+            "id": magnus_cid,
+            "char_id": magnus["id"],
+            "name": magnus["name"],
+            "initiative": 14,
+            "hp_current": 50, "hp_max": 50,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+        {
+            "id": krieg_cid,
+            "char_id": krieger["id"],
+            "name": krieger["name"],
+            "initiative": 10,
+            "hp_current": 75, "hp_max": 75,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Magnus casts Burning Hands (index 5) at L3 (his only slot) —
+    # action-time, doesn't trigger Counterspell from Magnus himself.
+    # target_combatant_ids targets Krieger so the cast resolves.
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": magnus["id"],
+            "spell_index": 5,
+            "slot_level": 3,
+            "class_slug": "warlock",
+            "target_combatant_ids": [krieg_cid],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == krieger["id"]
+        and (m.get("data") or {}).get("trigger_event") == "spell_cast_near"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(spell_cast_near) for Krieger; "
+        f"buffered: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    keys = [o.get("key") for o in prompts[0]["data"].get("options", [])]
+    assert "take-mage-slayer-strike" in keys, (
+        f"expected take-mage-slayer-strike option; got {keys}"
+    )
+
+
+async def test_use_mage_slayer_strike_marks_reaction(
+    gm_client, gm_ws, roster,
+):
+    """End-to-end: Magnus casts within 5 ft → Krieger's prompt fires
+    → POST /use_reaction with take-mage-slayer-strike → Krieger's
+    reaction flips + feature_used(source=mage-slayer) fires naming
+    the caster + spell.
+    """
+    magnus = roster["Magnus Hexbinder"]
+    krieger = roster["Krieger Stonefist"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{magnus['id']}/rest",
+        json={"type": "long"},
+    )
+    await _place_token(gm_client, magnus["id"], 300.0, 300.0)
+    await _place_token(gm_client, krieger["id"], 370.0, 300.0)
+
+    krieg_cid = f"tok_ms2_kr_{krieger['id']}"
+    magnus_cid = f"tok_ms2_mg_{magnus['id']}"
+    await _seed_battle(gm_client, [
+        {
+            "id": magnus_cid,
+            "char_id": magnus["id"],
+            "name": magnus["name"],
+            "initiative": 14,
+            "hp_current": 50, "hp_max": 50,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+        {
+            "id": krieg_cid,
+            "char_id": krieger["id"],
+            "name": krieger["name"],
+            "initiative": 10,
+            "hp_current": 75, "hp_max": 75,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": magnus["id"],
+            "spell_index": 5,
+            "slot_level": 3,
+            "class_slug": "warlock",
+            "target_combatant_ids": [krieg_cid],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == krieger["id"]
+        and (m.get("data") or {}).get("trigger_event") == "spell_cast_near"
+    ]
+    assert prompts, "expected spell_cast_near prompt for Krieger"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    use = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "take-mage-slayer-strike",
+            "watcher_char_id": krieger["id"],
+        },
+    )
+    assert use.status_code == 200, use.text
+
+    await asyncio.sleep(0.2)
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == krieger["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update for Krieger's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "mage-slayer"
+        and (m.get("data") or {}).get("character_id") == krieger["id"]
+    ]
+    assert fu, "expected feature_used(source=mage-slayer)"
+    last = fu[-1]["data"]
+    assert (last.get("caster_name") or "").lower() == magnus["name"].lower()
+    assert (last.get("spell_name") or "").lower() == "burning hands"
+
+
 # ── v2.74.0 — Phase 4a: Defensive Duelist feat ──
 
 

@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.75.0] - 2026-05-26 — "Mage Slayer"
+
+**Schema version:** 60
+**Commit summary:** **Phase 4d — Mage Slayer feat. Second PC feat reaction wired to a runtime trigger.** Reuses the v2.70.0 `spell_cast_near` trigger event and its 60-ft walker; new helper `_pc_has_mage_slayer_available` gates on `sheet.feats` containing "mage-slayer" AND at least one equipped melee weapon (no `range` field, or `range` containing "5 ft"). Walker now emits `spell_cast_near` for any watcher with Counterspell OR Mage Slayer (was: Counterspell-only); the `_eligible_reactions[spell_cast_near]` branch additionally gates Mage Slayer on `context.distance_ft <= 5.0` so the 5-ft RAW range applies even though the walker iterates the full 60-ft radius. `/use_reaction take-mage-slayer-strike` dispatch marks reaction + broadcasts `feature_used(source="mage-slayer")` naming the caster + spell + a "click your Attack button to resolve" prompt. Krieger got the feat (Greataxe-wielding Barbarian, melee-only).
+**Description:** Four blocks of edits + one demo-seed change. **(1)** New `_pc_has_mage_slayer_available(char) -> bool` helper. Walks `sheet.feats` for slug/name normalized to "mage-slayer"; if found, walks `sheet.inventory` for an equipped weapon whose `range` field is empty or contains "5 ft" (catches melee-only weapons + the melee component of thrown weapons whose range is recorded as "5 ft" or absent). Returns True iff both conditions hold. **(2)** `_eligible_reactions[spell_cast_near]` restructured from "single Counterspell option" into a "build opts list" shape: Counterspell branch unchanged (slot-level + arcana-check-DC params); new Mage Slayer branch gated on `context.distance_ft <= 5.0` appends `take-mage-slayer-strike` option with `caster_name`, `caster_combatant_id`, `caster_char_id`, `spell_name` in params. **(3)** Walker (`_emit_counterspell_prompts`) eligibility check broadened: was `if not _pc_has_counterspell_available(watcher): continue`, now `if not (cs_eligible or ms_eligible): continue`. Distance is still measured per-watcher and passed through context; eligible_reactions does the 5 ft check itself. **(4)** `/use_reaction take-mage-slayer-strike` dispatch: pure reaction spend (no slot cost). Marks reaction via `_mark_battle_economy`, broadcasts `feature_used(source="mage-slayer")` with `caster_name`, `caster_combatant_id`, `caster_char_id`, `spell_name`, plus a desc telling the player to click their Attack button to resolve the strike. **(5)** `app/demo_seed.py`: Krieger gets the Mage Slayer feat (was empty list). Greataxe is the qualifying melee weapon — Javelin's `range: "30/120 ft"` doesn't match "5 ft" so it doesn't satisfy the melee gate on its own, but Greataxe (no `range` field on the inventory entry, melee-only) does.
+**Description (cont):** v1 simplifications (filed for v3):
+- **No auto-roll of the melee attack against the caster.** The chat-card surfaces the trigger + names the caster + spell; the player clicks their Attack button to resolve. Same pattern as the v2.66.0 OA advisory.
+- **The other two Mage Slayer effects aren't surfaced.** RAW: (a) advantage on saves against spells cast by creatures within 5 ft of you (a passive save buff), and (b) creatures within 5 ft have disadvantage on concentration checks for damage you deal. v1 only wires the reaction-trigger effect. Filed: passive save advantage in `_eligible_reactions[save_resolved]` (or a save-roll construction site like Danger Sense / Aura of Protection); concentration-disadvantage in `_maybe_concentration_save`.
+- **Range gate uses distance to the caster's token; assumes square-grid Chebyshev distance.** The walker reuses the v2.70.0 Counterspell distance measurement (5 ft per cell). Off-grid maps return no prompts (the walker bails when no active map).
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.75.0`. (b) Two new tests:
+- `test_mage_slayer_prompt_fires_on_spell_within_5ft` — place Magnus + Krieger 5 ft apart on the active map; Magnus casts Burning Hands at L3; asserts `reaction_prompt(spell_cast_near)` fires for Krieger with `take-mage-slayer-strike` option.
+- `test_use_mage_slayer_strike_marks_reaction` — same setup + POST `/use_reaction` with `take-mage-slayer-strike`; asserts `economy_update` for Krieger's reaction = True, `feature_used(source="mage-slayer", caster_name="Magnus Hexbinder", spell_name="Burning Hands")`.
+
+Full reaction_prompt suite passes 25/25 locally.
+
+### Added
+- `_pc_has_mage_slayer_available(char) -> bool` helper.
+- Mage Slayer option in `_eligible_reactions[spell_cast_near]` (alongside Counterspell, gated on context.distance_ft ≤ 5.0).
+- Walker eligibility check broadened from CS-only to (CS or MS).
+- `take-mage-slayer-strike` dispatch case in `/use_reaction` — marks reaction, broadcasts `feature_used(source="mage-slayer")` naming the caster + spell.
+- Mage Slayer feat added to Krieger's `sheet.feats` in `demo_seed.py`.
+- Harness `test_mage_slayer_prompt_fires_on_spell_within_5ft` + `test_use_mage_slayer_strike_marks_reaction` — 2 new tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.75.0`.
+- `README.md` version badge → `2.75.0`.
+- `docs/plans/reactions-automation.md` — Phase 4d marked 🟠 partial (reaction-trigger shipped; passive save advantage + concentration disadvantage filed).
+- `docs/test-harness-coverage.md` — total test count 558 → 560.
+
+### Notes
+- **First reaction that's eligible per-watcher based on distance.** Prior trigger events fired indiscriminately to the watcher who matched the event itself (Shield → the attack target, HR → the damage target). Mage Slayer's 5-ft gate is the first per-trigger-context positional filter inside `_eligible_reactions`. The walker stays at 60 ft (matching Counterspell), and `_eligible_reactions` filters by `distance_ft <= 5.0`.
+- **Lays the foundation for War Caster.** Phase 4c's War Caster also fires off `spell_cast_near` but additionally gates on the casting being an OA-provoking move. The walker is ready; War Caster just needs its own `take-war-caster-cast` option in the branch.
+
+---
+
 ## [2.74.0] - 2026-05-26 — "The Finesse Parry"
 
 **Schema version:** 60

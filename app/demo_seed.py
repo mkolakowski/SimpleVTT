@@ -1641,7 +1641,16 @@ def _barbarian_sheet(name: str) -> dict:
              "_slug": "potion-of-healing",
              "desc": "Drink to regain 2d4+2 HP. RAW: action."},
         ],
-        "feats": [],
+        # v2.75.0 Phase 4d — Mage Slayer feat for Krieger. RAW (PHB
+        # p.168): reaction-based melee attack against a creature
+        # within 5 ft of you that casts a spell. Krieger's Greataxe
+        # qualifies as the melee weapon. Wired through the v2.70.0
+        # spell_cast_near trigger with a 5 ft gate via
+        # context.distance_ft.
+        "feats": [
+            {"slug": "mage-slayer", "name": "Mage Slayer",
+             "desc": "When a creature within 5 ft of you casts a spell, you can use your reaction to make a melee weapon attack against that creature. Plus advantage on saves against spells cast by creatures within 5 ft, and they have disadvantage on concentration checks for damage you deal."},
+        ],
         # v2.18.2: Barbarian Lv 5 resources. Rage counter (3/long-rest
         # at Lv 3-5; scales to 4/long at Lv 6, 5/long at Lv 12, etc.).
         # The rage's mechanical effects (damage bonus / advantage on
