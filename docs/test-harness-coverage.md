@@ -1209,6 +1209,29 @@ The following endpoint surfaces are exercised indirectly by other tests but lack
 
 ---
 
+## Known flakes (test-isolation pollution)
+
+The following tests pass in isolation (running the file alone or the test alone) but fail when run as part of the full `pytest tests/harness/` suite due to state pollution from earlier-running tests. Tracked here because the bisection cost per flake is non-trivial (each requires running subsets of the 568-test suite to find the polluter) and the failures are not regressions from any specific commit — they accumulated across the reactions push (v2.69 → v2.80) as more tests share the demo campaign without resetting state between them.
+
+Bisection-find pattern (when you decide to chase one):
+1. Confirm the test passes in isolation: `python3 -m pytest tests/harness/<test_file>::<test_name> -v`
+2. Run the failing test after each alphabetical group: `python3 -m pytest tests/harness/test_a*.py tests/harness/<file>::<name> -q`, then `test_b*.py`, etc.
+3. The group that fails contains the polluter. Bisect down to a single test.
+4. Read that test's `finally` block. The pattern is almost always "removes a campaign-setting form key" (interpreted server-side as resetting to OFF) instead of "restores to the demo seed default." v2.79.0 fixed one instance (auto_apply_damage in the v2.67.2 UD test); the same playbook applies here.
+
+| Flake | Failure | First-noticed |
+|-------|---------|---------------|
+| `test_attack_auto_damage.py::test_attack_auto_apply_on_hit` | Asserts `target_hp_after < pip_hp_before` after a hit. Fails when run after some other test in the suite (depends on `auto_apply_damage` campaign setting + Pip's sheet HP state). The fixture-level `auto_apply_on` cleanup at line 73-76 removes the form key (= OFF) on teardown, matching the v2.79.0-fixed pattern. Likely the source. | v2.51.6 (filed in v2.80.0) |
+| `test_aura_of_devotion.py::test_aura_of_devotion_blocks_charmed_install` | Fails when test_aura_of_devotion runs after some other test that polluted Caelan's sheet (lost his aura-of-devotion class feature, or his action economy is in the wrong state). | reactions push era |
+| `test_heal_claim_uplift.py::test_apply_healing_runs_life_domain_uplift` | Asserts a `disciple-of-life` broadcast on heal-claim resolution but the buffered broadcasts show only `spell_cast` + `spell_slot_update`. Tavik's action economy or Life Domain feature state is polluted. | reactions push era |
+| `test_aura_of_protection.py` (various) | Caelan's level / aura-of-protection state polluted by tests that touched his sheet. | reactions push era |
+| `test_danger_sense.py` (various) | Krieger's class_features / level / sheet state polluted. | reactions push era |
+| `test_spell_catalog_damage.py` (various) | Demo spell-list state assertions affected by tests that touched sheet.spells (e.g. v2.72.0 Silvery Barbs test patches Thalindra). | reactions push era |
+
+When a flake is fixed at the source, remove its row.
+
+---
+
 ## Updating this doc
 
 When you change tests, update the corresponding section in the same commit. Conventions:
