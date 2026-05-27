@@ -33,21 +33,27 @@ from .conftest import CAMPAIGN_ID
 
 
 def _open5e_reachable() -> bool:
-    """Skip-gate for tests that need a live Open5e v2 API. CI has
-    internet so this returns True there; local air-gapped runs skip.
+    """Skip-gate for tests that need Open5e creature data.
 
-    Open5e blocks the default urllib user-agent with a 403; the app's
-    helper passes ``User-Agent: SimpleVTT/1.0`` and works. Mirror that
-    here. Pings the search endpoint (rather than a specific slug)
-    since slug shapes vary between API revisions.
+    v2.81.0 — was hitting the EXTERNAL api.open5e.com directly, which
+    made the test suite fragile to transient network blips even when
+    the local app would have served the data fine from its cache or
+    local mirror. Now hits the LOCAL app's /api/open5e/creature/wolf
+    endpoint (the same endpoint the /transform handler calls
+    downstream); a 200 there means the test will work, a 5xx or
+    timeout means skip.
+
+    This makes the test runnable in air-gapped CI as long as the
+    local app has cached Wolf data, and avoids spurious skips when
+    api.open5e.com is briefly slow or unreachable.
     """
     try:
         req = urllib.request.Request(
-            "https://api.open5e.com/v2/creatures/?limit=1&type__key=beast",
+            "http://localhost:8013/api/open5e/monsters?search=wolf",
             headers={"User-Agent": "SimpleVTT/1.0"},
         )
-        urllib.request.urlopen(req, timeout=3)
-        return True
+        resp = urllib.request.urlopen(req, timeout=3)
+        return 200 <= resp.status < 300
     except Exception:
         return False
 

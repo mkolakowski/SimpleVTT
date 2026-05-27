@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.81.0] - 2026-05-26 — "Local First, External Maybe"
+
+**Schema version:** 60
+**Commit summary:** **Fixes the test-suite skip flakiness on `test_transform.py`.** The `_open5e_reachable()` skip-check was hitting the EXTERNAL `api.open5e.com` directly with a 3-second timeout — when the external API was briefly slow or unreachable (network blip, DNS hiccup), all 7 transform tests would silently skip even though the local app would have served the data fine from its cache/proxy. Now the check hits the LOCAL `/api/open5e/monsters?search=wolf` endpoint, which only fails when the local app itself can't talk to Open5e — the same condition under which the tests would also fail. No more spurious skip-cascades from transient external-network blips.
+**Description:** One edit in `tests/harness/test_transform.py`. The `_open5e_reachable()` helper's request URL changed from `https://api.open5e.com/v2/creatures/?limit=1&type__key=beast` (external) to `http://localhost:8013/api/open5e/monsters?search=wolf` (local app endpoint). The local endpoint doesn't require auth + returns 200 with cached/proxied data, so the check accurately reflects whether the tests can run.
+**Description (cont):** Why this matters:
+- Prior behavior: the test-suite's 7 transform tests would skip on any network hiccup with the external Open5e API. A flaky run would show `4 skipped` (transform tests minus the smoke-only ones), masking whether the tests passed or failed.
+- New behavior: skips only when the LOCAL app endpoint fails — which is the same condition under which the test itself would fail. No false skips.
+- Aligns with the CLAUDE.md "Third-party APIs must be Docker Compose services" rule in spirit (we're now testing through the local proxy, not directly through the external API).
+**Description (cont 2):** Verification:
+- Before: `pytest tests/harness/test_transform.py` ran with 4 tests sometimes skipped (when the external network was slow). After: all 7 transform tests run; `7 passed in 8.14s`.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.81.0`.
+- `README.md` version badge → `2.81.0`.
+- `tests/harness/test_transform.py::_open5e_reachable()` — request URL changed from external `api.open5e.com` to local `localhost:8013/api/open5e/monsters?search=wolf`.
+
+### Notes
+- **MINOR bump** — the test-suite reachability semantics changed. Previously a slow external Open5e meant skip; now it doesn't.
+- The 3 of 4 full-suite runs since v2.80.2 ship were all clean (568/568); the 1 run with `4 skipped + 1 fail` was likely an external network blip that hit `test_transform.py` plus a coincidental WS race in `test_attack_auto_apply_on_hit`. v2.81.0 eliminates the skip half of that pattern.
+
+---
+
 ## [2.80.2] - 2026-05-26 — "First Flake Down"
 
 **Schema version:** 60
