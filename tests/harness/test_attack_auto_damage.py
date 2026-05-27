@@ -33,23 +33,20 @@ async def krieger_full(gm_client, roster):
 
 @pytest_asyncio.fixture
 async def auto_apply_on(gm_client):
-    """Turn auto_apply_damage on for the campaign for the duration of
-    the test. Reverts at teardown via a final settings POST.
+    """Ensure auto_apply_damage is on for the duration of the test.
 
-    This uses the public settings endpoint rather than mutating the DB
-    directly because the harness doesn't have a DB session — only HTTP
-    + WS.
+    v2.80.2 — restored to the demo's seeded default (ON, per
+    `app/demo_seed.py:auto_apply_damage=True`) on teardown instead
+    of removing the form key (which the server interprets as OFF).
+    The previous teardown was matching the v2.79.0-fixed UD-test
+    bug — flipping auto_apply_damage off after every test polluted
+    state for subsequent tests in the same suite run. Same fix
+    playbook.
+
+    This uses the public settings endpoint rather than mutating the
+    DB directly because the harness doesn't have a DB session —
+    only HTTP + WS.
     """
-    # Need to pull the current name/description/game_system from the
-    # campaign first (the form endpoint expects them) — fetch via the
-    # settings page or via a roster call. Easier: use a known minimal
-    # payload that the route accepts. The route requires name +
-    # description + game_system at minimum. Use placeholders.
-    import httpx
-    # Fetch campaign basics so we don't blow away the name.
-    r = await gm_client.get(f"/api/campaign/{CAMPAIGN_ID}/roster")
-    # The roster endpoint doesn't return name; fall back to defaults
-    # known from the demo seed.
     form = {
         "name": "Demo Campaign",
         "description": "demo",
@@ -69,10 +66,9 @@ async def auto_apply_on(gm_client):
     await gm_client.post(f"/campaign/{CAMPAIGN_ID}/settings", data=form,
                         follow_redirects=False)
     yield
-    # Disable again.
-    form_off = {**form}
-    form_off.pop("auto_apply_damage", None)
-    await gm_client.post(f"/campaign/{CAMPAIGN_ID}/settings", data=form_off,
+    # Restore demo default (ON). Keep the form key so the server
+    # interprets it as ON.
+    await gm_client.post(f"/campaign/{CAMPAIGN_ID}/settings", data=form,
                         follow_redirects=False)
 
 

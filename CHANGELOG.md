@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.80.2] - 2026-05-26 — "First Flake Down"
+
+**Schema version:** 60
+**Commit summary:** **Fixes the `test_attack_auto_damage::test_attack_auto_apply_on_hit` flake catalogued in v2.80.1.** Applies the v2.79.0 fix playbook to the `auto_apply_on` fixture in `tests/harness/test_attack_auto_damage.py`: teardown now restores the demo's seeded default (ON) instead of removing the form key (= OFF). Full 568-test harness suite now passes end-to-end.
+**Description:** One edit in `tests/harness/test_attack_auto_damage.py`. The `auto_apply_on` fixture's teardown block (was lines 73-76) previously did `form_off = {**form}; form_off.pop("auto_apply_damage", None); await POST` — removing the key tells the server-side form parser the setting is OFF. Per `app/demo_seed.py:auto_apply_damage=True`, the demo's seeded default is ON. So the teardown was actively flipping the setting OFF for every subsequent test in the same suite run. Fix: post the SAME form dict (with `auto_apply_damage="on"`) on teardown, preserving the demo default. Mirrors the v2.79.0 fix to the UD test cleanup.
+**Description (cont):** Verification:
+- Before fix (v2.80.1): full suite fails with `FAILED test_attack_auto_damage.py::test_attack_auto_apply_on_hit` (1 fail, 567 pass).
+- After fix (v2.80.2): full suite passes — `568 passed in 263.61s`.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.80.2`.
+- `README.md` version badge → `2.80.2`.
+- `tests/harness/test_attack_auto_damage.py` — `auto_apply_on` fixture teardown restores the demo default (ON) instead of removing the form key.
+- `docs/test-harness-coverage.md` — `test_attack_auto_damage::test_attack_auto_apply_on_hit` flake row struck-through with "Fixed in v2.80.2" annotation.
+
+### Notes
+- **PATCH bump** — test-only fix, no production code touched, restores a previously-broken-on-the-full-suite test to passing without changing what the test asserts.
+- **Five flakes still in the catalogue** (test_aura_of_devotion, test_heal_claim_uplift, test_aura_of_protection, test_danger_sense, test_spell_catalog_damage). Each needs its own bisection-find; the polluting state varies (some are sheet feats, some are class_features, some are action economy). The v2.80.1 catalogue is the work-list.
+
+---
+
 ## [2.80.1] - 2026-05-26 — "Flake Cartography"
 
 **Schema version:** 60
