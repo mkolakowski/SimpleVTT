@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.89.0] - 2026-05-27 — "Reactions in Reach"
+
+**Schema version:** 64
+**Commit summary:** **Moves the GM Reactions panel from the GM Tools drawer to the Battle drawer, directly under GM Controls.** Per GM request — during combat the reactions panel was a tab-switch away in GM Tools, and the GM was already living in the Battle drawer for initiative + token management. Now the reactions list sits right where combat is being driven from.
+**Description:** One edit — `app/templates/tabletop.html`. Cut the entire `<details id="gm-reactions-panel">` block + its inline script (~150 lines, v2.68.0 vintage) out of `<div id="gm-tools-drawer">` and pasted it into `<div id="players-drawer">` immediately after the closing `</div>` of the v2.49.98 GM Controls card, still inside the existing `{% if is_gm %}` guard so non-GM players don't see it. All DOM ids (`gm-reactions-panel`, `gm-reactions-list`, `rxn-count-chip`, `.spend-rxn-btn`, etc.) stay unchanged so the WS `economy_update` refresh listener, the `/spend_reaction_manual` POST, and the `vtt:ws-message` event hook all keep working from the new location. Where the panel used to live in GM Tools is now a single Jinja comment pointer documenting the move.
+
+### Changed
+- `tabletop.html` — `#gm-reactions-panel` now renders under GM Controls in the Battle drawer (`#players-drawer`) instead of in the GM Tools drawer.
+
+### Notes
+- **MINOR bump** — net-effect is a single panel relocation, but it's a meaningful UX shift (Reactions becomes part of the combat-driving sidebar instead of a separate GM Tools tab) and the affected element is `position:sticky` adjacent in the new layout. Not a pure bug fix so PATCH felt wrong.
+- No JS / contract / WS / data-model changes. The panel keeps the same gm-panel CSS treatment so it visually pairs with the Encounters / Fog of War / etc. panels that still live in GM Tools.
+- Existing GM muscle memory: the chevron + summary header + spend buttons all behave identically; only the parent drawer changed.
+
+---
+
 ## [2.88.0] - 2026-05-27 — "Outside the Map"
 
 **Schema version:** 64
