@@ -4,7 +4,7 @@ Living catalog of the click-through harness suite at `tests/harness/`.
 
 > **Update rule.** Whenever a test is added, removed, renamed, or has its assertion shape materially changed, update this file in the same commit. The CLAUDE.md harness-discipline rule already requires harness coverage for every endpoint commit; this file makes the coverage navigable.
 
-**Total tests:** 572 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.84.0, 2026-05-26).
+**Total tests:** 575 in `tests/harness/` + 13 in `tests/harness_ui/` (as of v2.86.0, 2026-05-27).
 **Runner:** `python3 -m pytest tests/harness/ -q` from the repo root. The harness expects the demo app to be reachable at `http://localhost:8013` (Docker Compose).
 **Fixtures:** `gm_client`, `alice_client`, `bob_client` (httpx async clients), `roster` (skinny char list), `gm_ws` / `alice_ws` / `bob_ws` (WebSocket collectors). Per-test character fixtures (e.g. `krieger_full`, `tavik_rested`, `garrik_fresh`) long-rest + reset state so each test starts from a known baseline.
 
@@ -678,6 +678,15 @@ v2.49.244 — per-user UI preference. `POST /api/settings/roll_log_position` fli
 | `test_roll_log_position_left_then_right` | GM POSTs `{"position": "left"}` → 200 + `roll_log_position == "left"`; subsequent POST `{"position": "right"}` flips back, both persist. |
 | `test_roll_log_position_rejects_invalid_value` | `{"position": "middle"}` → 400 with the invalid value surfaced in the response body. |
 | `test_roll_log_position_persists_for_player` | Per-user isolation — Alice sets `left` independently of the GM; cleanup resets her to `right`. |
+
+### `test_encounter_background.py`
+v2.86.0 — encounter backgrounds. Fullscreen fixed-position image/video layer behind the battle map; `POST /api/campaign/{cid}/background` writes `campaign.active_background_url` + broadcasts `background_change`; `POST /api/campaign/{cid}/encounters/{eid}/background` writes `enc.background_url` without broadcasting (the encounter load flow propagates).
+
+| Test | What it asserts |
+|------|-----------------|
+| `test_campaign_background_missing_payload_400` | No file + `clear=false` on the campaign endpoint → 400. Guards against silent no-op calls. |
+| `test_campaign_background_upload_then_clear` | Multipart PNG upload → 200 + `active_background_url` starts with `/static/uploads/encounter_bg/` + `background_change` WS broadcast carries the new URL. Subsequent `clear=true` → 200 + URL nulled + broadcast carries `null`. |
+| `test_encounter_background_upload_does_not_broadcast` | Creates a throwaway encounter, attaches a background to it via the per-encounter endpoint, asserts the encounter projection now carries `background_url`, asserts NO `background_change` broadcast fires (propagation only happens on encounter load), cleans up via the delete endpoint. |
 
 ### `test_use_indomitable.py`
 v2.56.0 — Fighter Lv 9+ Indomitable. Arm-then-consume single-use save-advantage buff (`indomitable-armed`). Save-roll hook reads + consumes the buff per-save. RAW-bent v1 (advantage on next save instead of post-roll reroll-on-failure); see TODO.md.

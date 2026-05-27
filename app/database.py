@@ -614,6 +614,31 @@ def _apply_inline_migrations() -> None:
                 "BOOLEAN NOT NULL DEFAULT FALSE"
             ))
 
+    # ---- Schema v63 (2.86.0): encounter backgrounds ----
+    # Two new columns enable the encounter-background feature: a
+    # fullscreen fixed-position image/video layer BEHIND the battle
+    # map that stays still while the map pans/zooms. See models.py
+    # for the full rendering contract.
+    #   - encounters.background_url — per-encounter source of truth
+    #   - campaigns.active_background_url — currently-displayed handle
+    # Both are nullable VARCHAR(500), defaulting NULL (no background).
+    # The encounter-load flow (_perform_encounter_load) copies
+    # encounter.background_url → campaign.active_background_url and
+    # broadcasts a background_change message.
+    enc_cols_v63 = _column_names("encounters")
+    camp_cols_v63 = _column_names("campaigns")
+    with engine.begin() as conn:
+        if enc_cols_v63 and "background_url" not in enc_cols_v63:
+            conn.execute(text(
+                "ALTER TABLE encounters ADD COLUMN background_url "
+                "VARCHAR(500)"
+            ))
+        if camp_cols_v63 and "active_background_url" not in camp_cols_v63:
+            conn.execute(text(
+                "ALTER TABLE campaigns ADD COLUMN active_background_url "
+                "VARCHAR(500)"
+            ))
+
     # ---- Schema v62 (2.85.0): flip sepia_texture default off ----
     # v2.84.0 shipped with DEFAULT TRUE so every user landed on the
     # textured look without opting in. v2.85.0 reverses that: the

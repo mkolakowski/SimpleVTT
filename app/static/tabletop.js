@@ -3770,6 +3770,54 @@
                 location.reload();
                 return;
             }
+            // v2.86.0 — surgical encounter-background swap. Fired by
+            // the encounter-load flow when the loaded encounter binds
+            // a different background_url to the campaign than what's
+            // currently displayed, AND by the /api/campaign/{id}/background
+            // direct-set endpoint. Skipped during map_change loads
+            // because that branch hard-reloads and the SSR picks the
+            // new bg up.
+            //
+            // Rebuilds the inner media element when the type changes
+            // between img and video (mp4/webm → video; everything else
+            // → img); otherwise just swaps the src in place, which is
+            // smooth for img/img and video/video transitions.
+            if (msg.type === 'background_change') {
+                const layer = document.getElementById('encounter-bg-layer');
+                if (!layer) return;
+                const newUrl = msg.data && msg.data.url ? String(msg.data.url) : '';
+                if (!newUrl) {
+                    layer.innerHTML = '';
+                    return;
+                }
+                const ext = newUrl.split('.').pop().toLowerCase();
+                const wantVideo = (ext === 'mp4' || ext === 'webm');
+                const wantTag = wantVideo ? 'VIDEO' : 'IMG';
+                let media = document.getElementById('encounter-bg-media');
+                if (media && media.tagName !== wantTag) {
+                    media.remove();
+                    media = null;
+                }
+                if (!media) {
+                    media = document.createElement(wantTag.toLowerCase());
+                    media.id = 'encounter-bg-media';
+                    media.style.cssText = 'width:100%;height:100%;object-fit:cover;display:block;';
+                    if (wantVideo) {
+                        media.autoplay = true; media.loop = true;
+                        media.muted = true; media.playsInline = true;
+                    } else {
+                        media.alt = '';
+                    }
+                    layer.appendChild(media);
+                }
+                if (media.getAttribute('src') !== newUrl) {
+                    media.setAttribute('src', newUrl);
+                    if (wantVideo) {
+                        try { media.load(); media.play().catch(() => {}); } catch (e) {}
+                    }
+                }
+                return;
+            }
             if (msg.type === 'token_move') {
                 const t = tokens.find(t => t.id === msg.data.id);
                 if (t) { t.x = msg.data.x; t.y = msg.data.y; render(); }

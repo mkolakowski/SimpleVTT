@@ -8731,6 +8731,7 @@ def _encounter_to_dict(e: Encounter) -> dict:
         "tags": list(e.tags or []),
         "folder": e.folder or "",
         "stop_audio_on_load": bool(e.stop_audio_on_load),
+        "background_url": e.background_url,
         "use_spawn_points": bool(e.use_spawn_points),
         "spawn_points": dict(e.spawn_points or {}),
         "token_count": len(tokens),
@@ -9053,6 +9054,13 @@ async def update_encounter_meta(
         enc.folder = str(body.get("folder") or "").strip()[:120]
     if "stop_audio_on_load" in body:
         enc.stop_audio_on_load = bool(body.get("stop_audio_on_load"))
+    if "background_url" in body:
+        # v2.86.0 — null / empty-string both clear; any string sets.
+        # The upload endpoint above is the file-upload path; this
+        # branch handles direct URL-set callers (e.g. the editor's
+        # "clear" button, or pasting a CDN URL).
+        v = body.get("background_url")
+        enc.background_url = (str(v).strip() or None) if v else None
     if "use_spawn_points" in body:
         enc.use_spawn_points = bool(body.get("use_spawn_points"))
     if "spawn_points" in body:
@@ -9295,6 +9303,23 @@ async def _perform_encounter_load(
     campaign.current_encounter_id = enc.id
     db.flush()
 
+    # v2.86.0 — copy the encounter's background URL to the campaign's
+    # currently-displayed handle. Null on the encounter means "this
+    # encounter doesn't override the background" — we leave the
+    # campaign's value alone rather than clearing it, so an older
+    # encounter (saved before this feature shipped) doesn't unexpectedly
+    # wipe a background the GM set via the campaign-level endpoint.
+    # GMs who want a "no background" encounter clear it explicitly via
+    # the encounter-editor's clear button (which sets background_url
+    # to a sentinel) — for v2.86.0 the sentinel is just an empty
+    # string, and the PATCH endpoint normalises empty → None already,
+    # so for now "null = inherit" is the only behaviour.
+    bg_changed_in_place = False
+    if enc.background_url and enc.background_url != campaign.active_background_url:
+        campaign.active_background_url = enc.background_url
+        bg_changed_in_place = True
+        db.flush()
+
     # ── Pass 2b: create the new tokens from the payload ──
     # When ``use_spawn_points`` is true the encounter's spawn_points
     # dict drives player placement and the snapshot's player entries
@@ -9438,6 +9463,15 @@ async def _perform_encounter_load(
         if battle_state:
             await hub.broadcast(
                 campaign_id, {"type": "battle_update", "data": battle_state}
+            )
+        # v2.86.0 — surgical background swap. Skipped when map_switched
+        # is true because that branch already forces a page reload via
+        # map_change, and the reload's SSR picks up the new bg URL.
+        if bg_changed_in_place:
+            await hub.broadcast(
+                campaign_id,
+                {"type": "background_change",
+                 "data": {"url": campaign.active_background_url}},
             )
 
     # ── Audio behaviour on load ──
@@ -28853,6 +28887,120 @@ def settings_delete_map(
     db.delete(m)
     db.commit()
     return RedirectResponse(f"/campaign/{campaign_id}/settings#maps", status_code=303)
+
+
+# ----------- Encounter backgrounds (v2.86.0) -----------
+#
+# Encounter backgrounds are a fullscreen fixed-position image/video
+# layer rendered BEHIND the battle map. They extend past the map's
+# edges (and past the visible browser viewport) and stay still while
+# the map pans/zooms over them, giving the map a sense of being a
+# window onto a larger world. See models.Campaign.active_background_url
+# for the full rendering contract.
+#
+# Two upload endpoints below share ``_BG_DIR`` and the existing
+# ``_ALLOWED_IMG`` content-type set (which already permits video/mp4
+# + video/webm for animated map backgrounds). Asset payloads are
+# limited to the same 80 MB ceiling as map uploads. Both endpoints
+# accept either a multipart ``image`` file OR a JSON body with
+# ``{"clear": true}`` to null out the field.
+
+_BG_DIR = _SETTINGS_UPLOAD_ROOT / "encounter_bg"
+
+
+async def _save_background_upload(image: UploadFile) -> str:
+    """Persist an uploaded background asset and return its public URL.
+
+    Raises HTTPException on bad content type or oversized payload.
+    """
+    if image.content_type not in _ALLOWED_IMG:
+        raise HTTPException(400, "Unsupported background type")
+    data = await image.read()
+    if len(data) > 80 * 1024 * 1024:
+        raise HTTPException(400, "Background asset too large (>80 MB)")
+    _BG_DIR.mkdir(parents=True, exist_ok=True)
+    ext = Path(image.filename or "").suffix.lower() or ".png"
+    fname = f"{uuid.uuid4().hex}{ext}"
+    (_BG_DIR / fname).write_bytes(data)
+    return f"/static/uploads/encounter_bg/{fname}"
+
+
+@router.post("/api/campaign/{campaign_id}/encounters/{encounter_id}/background")
+async def upload_encounter_background(
+    campaign_id: int,
+    encounter_id: int,
+    image: UploadFile = File(None),
+    clear: bool = Form(False),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Set or clear the background bound to a specific encounter. GM-only.
+
+    Body (multipart): ``image`` file (image or video) OR ``clear=true``
+    to null out the encounter's ``background_url``. When both are
+    omitted, returns 400 — no-op calls would silently look like a
+    success and confuse the editor UI.
+
+    The upload is staged immediately but is NOT applied to the
+    campaign's live background — that happens when the GM loads the
+    encounter via the encounter-load flow. To preview the background
+    without loading the encounter, use the campaign-level endpoint
+    below.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    enc = (
+        db.query(Encounter)
+        .filter(Encounter.id == encounter_id, Encounter.campaign_id == campaign_id)
+        .first()
+    )
+    if not enc:
+        raise HTTPException(404, "Encounter not found")
+    if clear:
+        enc.background_url = None
+    elif image and image.filename:
+        enc.background_url = await _save_background_upload(image)
+    else:
+        raise HTTPException(400, "Provide an image upload or clear=true")
+    db.commit()
+    db.refresh(enc)
+    return {"ok": True, "background_url": enc.background_url}
+
+
+@router.post("/api/campaign/{campaign_id}/background")
+async def set_campaign_background(
+    campaign_id: int,
+    image: UploadFile = File(None),
+    clear: bool = Form(False),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    """Set or clear the campaign's currently-displayed background. GM-only.
+
+    Mirrors the encounter endpoint's payload but writes directly to
+    ``campaign.active_background_url`` and immediately broadcasts a
+    ``background_change`` WS message so every connected client swaps
+    the layer in-place (no page reload). Useful for prep/preview
+    flows and for clearing a stale background without first having to
+    load a different encounter.
+    """
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign or not _user_is_gm(user, campaign, db):
+        raise HTTPException(403, "GM only")
+    if clear:
+        new_url: Optional[str] = None
+    elif image and image.filename:
+        new_url = await _save_background_upload(image)
+    else:
+        raise HTTPException(400, "Provide an image upload or clear=true")
+    campaign.active_background_url = new_url
+    db.commit()
+    await hub.broadcast(
+        campaign_id,
+        {"type": "background_change", "data": {"url": new_url}},
+    )
+    return {"ok": True, "active_background_url": new_url}
 
 
 # ----------- Settings: members + danger zone (admin) -----------

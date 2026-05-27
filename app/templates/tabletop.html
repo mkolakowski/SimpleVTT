@@ -1756,6 +1756,43 @@
 {% endblock %}
 
 {% block content %}
+{# v2.86.0 — encounter background layer.
+
+   A fullscreen fixed-position image/video that sits BEHIND every other
+   tabletop element (z-index:-1), extends past the visible browser
+   viewport via object-fit:cover, and is NOT included in the canvas
+   pan/zoom transform — so it stays put while the battle map pans /
+   zooms over it. Acts like a wallpaper / window behind the play area.
+
+   Source: ``campaign.active_background_url``. The encounter-load flow
+   copies ``encounter.background_url → campaign.active_background_url``
+   and broadcasts a ``background_change`` WS message; the handler in
+   tabletop.js swaps the ``src`` (and rebuilds the element if the media
+   type changes between img and video) without a page reload.
+
+   Format detection: ``.mp4`` / ``.webm`` → <video> (autoplay loop muted
+   playsinline), everything else (jpg/png/webp/gif/animated-webp) →
+   <img>. GIFs animate natively inside <img>.
+
+   Rendered for everyone — GM + players — so all participants see the
+   same background. The container always exists (empty when there's no
+   URL) so the JS handler can populate it without a structural change.
+#}
+<div id="encounter-bg-layer"
+     style="position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;background:transparent;">
+    {% if campaign.active_background_url %}
+        {% set _bg_url = campaign.active_background_url %}
+        {% set _bg_ext = _bg_url.rsplit('.', 1)[-1].lower() %}
+        {% if _bg_ext in ('mp4', 'webm') %}
+            <video id="encounter-bg-media" src="{{ _bg_url }}"
+                   autoplay loop muted playsinline
+                   style="width:100%;height:100%;object-fit:cover;display:block;"></video>
+        {% else %}
+            <img id="encounter-bg-media" src="{{ _bg_url }}" alt=""
+                 style="width:100%;height:100%;object-fit:cover;display:block;">
+        {% endif %}
+    {% endif %}
+</div>
 <div class="tt-topbar">
     {% if campaign.thumbnail_url %}
     <img src="{{ campaign.thumbnail_url }}" alt="" class="tt-topbar-thumb">
@@ -2748,6 +2785,87 @@
                 edit.appendChild(labeledField('Map', editMap));
                 edit.appendChild(labeledField('Playlist / Mode', playlistRow));
                 edit.appendChild(stopAudioLabel);
+
+                // v2.86.0 — Background asset upload row. Image or video
+                // (mp4/webm). Stays still while the map pans, sits behind
+                // everything, extends past the visible viewport. Applied
+                // to the campaign when this encounter loads. Posts to the
+                // dedicated upload endpoint (not the PATCH path) so we
+                // can stream the file; on success we refresh() to pick
+                // up the new background_url on the row.
+                const bgRow = document.createElement('div');
+                bgRow.style.cssText = 'margin:6px 0;display:flex;flex-direction:column;gap:4px;';
+                const bgLabel = document.createElement('div');
+                bgLabel.style.cssText = 'font-size:9px;color:var(--fg-mute);text-transform:uppercase;letter-spacing:.04em;';
+                bgLabel.textContent = '🖼 Background (image or video, behind the map)';
+                bgRow.appendChild(bgLabel);
+                const bgStatus = document.createElement('div');
+                bgStatus.className = 'muted';
+                bgStatus.style.cssText = 'font-size:10px;font-style:italic;';
+                bgStatus.textContent = e.background_url
+                    ? ('Set: ' + e.background_url.split('/').pop())
+                    : 'None — encounter inherits whatever\'s currently displayed.';
+                bgRow.appendChild(bgStatus);
+                const bgFile = document.createElement('input');
+                bgFile.type = 'file';
+                bgFile.accept = 'image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm';
+                bgFile.style.cssText = 'font-size:10px;min-height:32px;';
+                bgRow.appendChild(bgFile);
+                const bgBtnRow = document.createElement('div');
+                bgBtnRow.style.cssText = 'display:flex;gap:4px;';
+                const bgUploadBtn = document.createElement('button');
+                bgUploadBtn.type = 'button';
+                bgUploadBtn.textContent = 'Upload';
+                bgUploadBtn.className = 'enc-modal-btn';
+                bgUploadBtn.addEventListener('click', async () => {
+                    if (!bgFile.files || !bgFile.files[0]) {
+                        bgStatus.textContent = 'Pick a file first.';
+                        return;
+                    }
+                    bgUploadBtn.disabled = true;
+                    bgStatus.textContent = 'Uploading…';
+                    try {
+                        const fd = new FormData();
+                        fd.append('image', bgFile.files[0]);
+                        const resp = await fetch(CAMPAIGN_URL + '/' + e.id + '/background', {
+                            method: 'POST', body: fd,
+                        });
+                        if (!resp.ok) {
+                            bgStatus.textContent = 'Failed: ' + await resp.text();
+                            return;
+                        }
+                        const data = await resp.json();
+                        e.background_url = data.background_url;
+                        bgStatus.textContent = 'Set: ' + (data.background_url || '').split('/').pop();
+                        bgFile.value = '';
+                    } finally { bgUploadBtn.disabled = false; }
+                });
+                const bgClearBtn = document.createElement('button');
+                bgClearBtn.type = 'button';
+                bgClearBtn.textContent = 'Clear';
+                bgClearBtn.className = 'enc-modal-btn';
+                bgClearBtn.addEventListener('click', async () => {
+                    if (!e.background_url) return;
+                    bgClearBtn.disabled = true;
+                    try {
+                        const fd = new FormData();
+                        fd.append('clear', 'true');
+                        const resp = await fetch(CAMPAIGN_URL + '/' + e.id + '/background', {
+                            method: 'POST', body: fd,
+                        });
+                        if (!resp.ok) {
+                            bgStatus.textContent = 'Failed: ' + await resp.text();
+                            return;
+                        }
+                        e.background_url = null;
+                        bgStatus.textContent = 'None — encounter inherits whatever\'s currently displayed.';
+                    } finally { bgClearBtn.disabled = false; }
+                });
+                bgBtnRow.appendChild(bgUploadBtn);
+                bgBtnRow.appendChild(bgClearBtn);
+                bgRow.appendChild(bgBtnRow);
+                edit.appendChild(bgRow);
+
                 edit.appendChild(spawnWrap);
                 edit.appendChild(editBtns);
 

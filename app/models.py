@@ -133,6 +133,20 @@ class Campaign(Base):
     active_map_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("maps.id", use_alter=True, name="fk_campaign_active_map"), nullable=True
     )
+    # v2.86.0: encounter-background layer. The URL of an image or video
+    # rendered as a fullscreen fixed-position layer BEHIND the battle
+    # map. Extends past the map's edges so the world doesn't "end" at
+    # the map boundary; stays still while the map pans/zooms over it.
+    # Encounters carry their own ``background_url`` and the load flow
+    # copies it here — this column is the "currently displayed" handle
+    # that the tabletop SSR + ``background_change`` WS broadcast read
+    # from. GMs can also set it directly via the campaign endpoint
+    # without going through an encounter (e.g. for prep / preview).
+    # Animated formats: GIF + animated WebP via <img>, mp4 + webm via
+    # <video>. Detection lives in the template (file-extension based).
+    active_background_url: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True
+    )
     # Audio: track currently playing (null = nothing); started_at is the
     # server-side timestamp of when playback began, used by clients to
     # compute the seek offset so everyone hears the same position.
@@ -631,6 +645,14 @@ class Encounter(Base):
     description: Mapped[str] = mapped_column(Text, default="")
     map_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("maps.id", ondelete="SET NULL"), nullable=True
+    )
+    # v2.86.0: per-encounter background URL — image or video — that's
+    # copied to ``campaign.active_background_url`` when the encounter
+    # loads. See Campaign.active_background_url for the rendering
+    # contract. Null = the encounter doesn't override the current
+    # background (load leaves whatever's displayed alone).
+    background_url: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True
     )
     auto_play_playlist_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("playlists.id", ondelete="SET NULL"), nullable=True

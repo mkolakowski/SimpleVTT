@@ -10,6 +10,51 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.86.0] - 2026-05-27 — "Endless Horizon"
+
+**Schema version:** 63
+**Commit summary:** **Encounter backgrounds — a fullscreen image/video layer that renders BEHIND the battle map, extends past the visible viewport, and stays still while the map pans/zooms over it.** Each saved encounter can bind its own background; loading the encounter swaps the background in place (no page reload). Animated formats supported: GIF + animated WebP via `<img>`, mp4 + webm via `<video>` (autoplay loop muted playsinline).
+**Description:** Eight edits + a harness test + a schema bump. **(1)** `app/models.py`: new `Encounter.background_url: Optional[str]` (the per-encounter source of truth) + new `Campaign.active_background_url: Optional[str]` (the currently-displayed handle that the tabletop SSR + `background_change` WS broadcast read from). **(2)** `app/database.py`: schema v63 migration block adds both `VARCHAR(500)` columns, defaulting NULL. **(3)** `app/routes/tabletop_routes.py`: two new upload endpoints + extension of `_perform_encounter_load`:
+  - `POST /api/campaign/{cid}/encounters/{eid}/background` — multipart upload (or `clear=true`) that writes the per-encounter `background_url`. Doesn't broadcast — propagation happens when the encounter is loaded.
+  - `POST /api/campaign/{cid}/background` — multipart upload (or `clear=true`) that writes `campaign.active_background_url` directly + broadcasts `background_change` immediately. Useful for GM prep / preview / quick swap without going through an encounter.
+  - `_perform_encounter_load` copies `enc.background_url → campaign.active_background_url` when the encounter's URL is non-null and differs from what's displayed. On the same-map branch this fires a surgical `background_change` broadcast; the map-switched branch already forces a page reload via `map_change`, so the SSR picks it up naturally.
+  - The encounter PATCH endpoint now accepts `background_url` for direct URL set/clear (empty string / null → clear; any other string → set verbatim).
+  - `_encounter_to_dict` projects `background_url` so the encounter library UI can read it.
+**(4)** `app/templates/tabletop.html`: new `<div id="encounter-bg-layer">` at the top of `{% block content %}` with `position:fixed; inset:0; z-index:-1`, rendered SSR from `campaign.active_background_url`. `<video>` for `.mp4` / `.webm`, `<img>` for everything else (PNG/JPEG/WebP/GIF, including animated variants). Element exists empty when no URL is set so the JS handler always has a container to populate.
+**(5)** `app/static/tabletop.js`: WS handler for the `background_change` message. Swaps the inner media `src` in-place when the media type doesn't change; rebuilds the inner element when the type flips between img and video. Idempotent.
+**(6)** `app/templates/tabletop.html` encounter editor: file-upload row inside the per-encounter edit form — picker + Upload button + Clear button + status line. Posts to the encounter-level endpoint via `FormData`.
+**(7)** `app/version.py`: `APP_VERSION` → `2.86.0`, `SCHEMA_VERSION` → `63`. `README.md` version badge → `2.86.0` / `v63`.
+**(8)** `tests/harness/test_encounter_background.py`: three tests — missing-payload 400, campaign-level upload + broadcast assertion + clear round-trip, per-encounter upload persists URL but does NOT broadcast.
+
+**Description (cont):** The static-behind-moving-map trick is structural. The existing tabletop layers — `#map-bg-layer` (z-index 0), `#vtt-canvas` (z-index 1), `#gif-token-overlay` (z-index 2) — all sit inside `#map-pane` and share the same `translate(panX, panY) scale(scale)` transform applied by `applyTransform()` in tabletop.js. The new `#encounter-bg-layer` lives OUTSIDE `#map-pane`, at the very top of `{% block content %}`, with `position:fixed; inset:0; z-index:-1`. Because it's `position:fixed` it anchors to the browser viewport (not its containing block), so it extends past the visible map edges; because it's not included in `applyTransform()`'s targets, the map can pan/zoom freely without disturbing it. `object-fit:cover` on the inner media handles aspect-ratio mismatch — the image/video scales to fill the viewport, cropping outside the visible area as needed.
+
+**Description (cont 2):** Two-tier storage rationale. Encounter backgrounds bind to encounters as a property of "the scene." But the WS broadcast + SSR need a single "currently displayed" handle that updates as encounters load and swap — that's what `Campaign.active_background_url` is for. It's the live mirror; the encounter is the source. GMs can also poke the live value directly via the campaign endpoint (e.g. for prep, or to clear a stale background between encounters without first loading a different one). This mirrors how `Campaign.active_map_id` relates to `Encounter.map_id` — the encounter holds the saved binding, the campaign holds the runtime value.
+
+**Description (cont 3):** Null semantics on encounter load are forgiving: `enc.background_url == null` means "this encounter doesn't override the background" (the load leaves whatever's currently displayed alone). This avoids surprising regressions for older encounters that predate v2.86.0 — they don't suddenly wipe a background a GM set via the campaign endpoint. A GM who wants a "no background" encounter can still clear it explicitly by setting `enc.background_url = null` from the campaign endpoint before loading the encounter.
+
+### Added
+- `Encounter.background_url` — per-encounter image/video URL.
+- `Campaign.active_background_url` — currently-displayed background handle.
+- `POST /api/campaign/{cid}/background` — set or clear the campaign's active background (multipart upload, or `clear=true`); broadcasts `background_change`.
+- `POST /api/campaign/{cid}/encounters/{eid}/background` — set or clear an encounter's background; no broadcast (the load flow handles it).
+- `background_url` accepted on the encounter PATCH body for direct URL set/clear.
+- Encounter-editor UI: file picker + Upload + Clear buttons inside each encounter's edit form.
+- `tests/harness/test_encounter_background.py` — 3 tests covering error path, campaign upload + WS broadcast, and per-encounter upload-no-broadcast.
+
+### Changed
+- `_perform_encounter_load` propagates the loaded encounter's background to the campaign and broadcasts a surgical `background_change` (same-map branch) or relies on the existing `map_change` reload (different-map branch).
+- `_encounter_to_dict` projects `background_url` so the editor UI can render the "Set: …" status line.
+
+### Schema
+- **v63** — `ALTER TABLE encounters ADD COLUMN background_url VARCHAR(500)`; `ALTER TABLE campaigns ADD COLUMN active_background_url VARCHAR(500)`. Both nullable, defaulting NULL.
+
+### Notes
+- **MINOR bump** — net-new feature surface (data-model + endpoints + UI + WS broadcast). The `_ALLOWED_IMG` content-type set is reused (already permits `video/webm` + `video/mp4`); the 80 MB upload ceiling matches the map upload pipeline.
+- Assets land under `app/static/uploads/encounter_bg/` with UUID-stem filenames so two encounters in different campaigns can have the same source-file name without collision.
+- No fog-of-war / visibility interaction — backgrounds always render for everyone (GM + players), the same way maps do.
+
+---
+
 ## [2.85.0] - 2026-05-26 — "The Flat Page"
 
 **Schema version:** 62
