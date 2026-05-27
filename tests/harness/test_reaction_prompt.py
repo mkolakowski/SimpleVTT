@@ -1178,6 +1178,218 @@ async def test_cast_hellish_rebuke_consumes_slot(
         )
 
 
+# ── v2.72.0 — Phase 3d: Silvery Barbs ──
+
+
+async def test_silvery_barbs_prompt_fires_on_save_pass(
+    gm_client, gm_ws, roster,
+):
+    """v2.72.0 — when a creature succeeds on a save (DC met by the
+    rolled d20+mod), a `save_resolved` event fires for every PC
+    watcher who has Silvery Barbs prepared + a 1st+ slot + reaction
+    unused (excluding the rolling character themselves). Thalindra
+    has SB on her sheet via v2.72.0 demo seed addition; Krieger
+    rolls a STR save against a DC 5 (trivially passes) so the trigger
+    fires.
+    """
+    thalindra = roster["Thalindra Moonwhisper"]
+    krieger = roster["Krieger Stonefist"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+        json={"type": "long"},
+    )
+
+    thal_cid = f"tok_sb_{thalindra['id']}"
+    krieg_cid = f"tok_sb_kr_{krieger['id']}"
+    await _seed_battle(gm_client, [
+        {
+            "id": krieg_cid,
+            "char_id": krieger["id"],
+            "name": krieger["name"],
+            "initiative": 12,
+            "hp_current": 75, "hp_max": 75,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+        {
+            "id": thal_cid,
+            "char_id": thalindra["id"],
+            "name": thalindra["name"],
+            "initiative": 10,
+            "hp_current": 32, "hp_max": 32,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Create a STR-save roll request with DC 5 so Krieger trivially
+    # passes (he's a Barbarian — +7 STR save mod).
+    rr = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll_request",
+        json={
+            "label": "STR save",
+            "base_expression": "1d20",
+            "stat_key": "str_save",
+            "dc": 5,
+            "visibility": "public",
+        },
+    )
+    assert rr.status_code == 200, rr.text
+    req_id = rr.json()["id"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll_request/{req_id}/respond",
+        json={"character_id": krieger["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "save_resolved"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(save_resolved) for Thalindra; "
+        f"buffered: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    options = prompts[0]["data"].get("options", []) or []
+    keys = [o.get("key") for o in options]
+    assert "cast-silvery-barbs" in keys, (
+        f"expected cast-silvery-barbs option; got {keys}"
+    )
+    sb_option = next(
+        (o for o in options if o.get("key") == "cast-silvery-barbs"), {}
+    )
+    params = sb_option.get("params") or {}
+    assert int(params.get("slot_level") or 0) == 1
+    assert (params.get("target_name") or "").lower() == krieger["name"].lower()
+
+
+async def test_cast_silvery_barbs_consumes_slot(
+    gm_client, gm_ws, roster,
+):
+    """End-to-end: Krieger passes save → Thalindra's prompt fires →
+    POST /use_reaction with cast-silvery-barbs → Thalindra's L1 slot
+    used count increments + reaction flips + feature_used(source=
+    silvery-barbs-cast) fires.
+    """
+    thalindra = roster["Thalindra Moonwhisper"]
+    krieger = roster["Krieger Stonefist"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+        json={"type": "long"},
+    )
+
+    thal_cid = f"tok_sb2_{thalindra['id']}"
+    krieg_cid = f"tok_sb2_kr_{krieger['id']}"
+    await _seed_battle(gm_client, [
+        {
+            "id": krieg_cid,
+            "char_id": krieger["id"],
+            "name": krieger["name"],
+            "initiative": 12,
+            "hp_current": 75, "hp_max": 75,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+        {
+            "id": thal_cid,
+            "char_id": thalindra["id"],
+            "name": thalindra["name"],
+            "initiative": 10,
+            "hp_current": 32, "hp_max": 32,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    rr = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll_request",
+        json={
+            "label": "STR save",
+            "base_expression": "1d20",
+            "stat_key": "str_save",
+            "dc": 5,
+            "visibility": "public",
+        },
+    )
+    req_id = rr.json()["id"]
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/roll_request/{req_id}/respond",
+        json={"character_id": krieger["id"]},
+    )
+    assert resp.status_code == 200, resp.text
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "save_resolved"
+    ]
+    assert prompts, "expected save_resolved prompt for Thalindra"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "cast-silvery-barbs",
+            "watcher_char_id": thalindra["id"],
+        },
+    )
+    assert cast.status_code == 200, cast.text
+
+    await asyncio.sleep(0.2)
+    # economy_update: reaction flipped.
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == thalindra["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update for Thalindra's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    # spell_slot_update: L1 wizard slot decremented.
+    slot_msgs = [
+        m for m in gm_ws.buffered("spell_slot_update")
+        if (m.get("data") or {}).get("character_id") == thalindra["id"]
+        and int((m.get("data") or {}).get("level") or 0) == 1
+    ]
+    assert slot_msgs, (
+        f"expected spell_slot_update L1 for Thalindra; "
+        f"buffered: {[m.get('data') for m in gm_ws.buffered('spell_slot_update')]}"
+    )
+
+    # feature_used(source=silvery-barbs-cast) fires.
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "silvery-barbs-cast"
+        and (m.get("data") or {}).get("character_id") == thalindra["id"]
+    ]
+    assert fu, "expected feature_used(source=silvery-barbs-cast)"
+    last = fu[-1]["data"]
+    assert last.get("slot_level") == 1
+    assert (last.get("rerolled_target_name") or "").lower() == krieger["name"].lower()
+
+
 async def test_indomitable_emits_reaction_prompt(
     gm_client, gm_ws, roster,
 ):

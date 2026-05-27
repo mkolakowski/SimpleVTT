@@ -2057,6 +2057,65 @@ def _pc_has_shield_available(char) -> "tuple[bool, str, int]":
     return True, best_class, best_lv
 
 
+# v2.72.0 Phase 3d — Silvery Barbs. RAW (SAI / Strixhaven p.144):
+# "1 reaction, which you take when a creature you can see within 60
+# feet of yourself succeeds on an attack roll, an ability check, or
+# a saving throw." 1st-level enchantment (Sorcerer / Wizard / Bard).
+# Force the creature to reroll the d20 and use the lower; choose a
+# different creature within 60 ft to gain advantage on its next
+# attack/check/save within 1 minute.
+#
+# v1 stance: surface the option on save resolution (the most common
+# table use). The dispatch consumes the slot + marks the reaction,
+# but does NOT auto-roll the reroll — the GM/player re-rolls and
+# applies the lower of the two as a manual adjudication. The
+# secondary "ally gets advantage" buff is also filed for v3 pending-
+# damage state machine (needs a buff with single-use trigger semantics
+# the buff system doesn't yet model).
+def _pc_has_silvery_barbs_available(char) -> "tuple[bool, str, int]":
+    """Detect Silvery Barbs (1st-level reaction spell) eligibility on a PC."""
+    if not char or not char.sheet:
+        return False, "", 0
+    sheet = char.sheet or {}
+    has_sb = False
+    for sp in (sheet.get("spells") or []):
+        if not isinstance(sp, dict):
+            continue
+        slug = (sp.get("_slug") or "").strip().lower()
+        name = (sp.get("name") or "").strip().lower()
+        ct = (sp.get("casting_time") or "").lower()
+        if (slug == "silvery-barbs" or name == "silvery barbs") and "reaction" in ct:
+            has_sb = True
+            break
+    if not has_sb:
+        return False, "", 0
+    all_slots = sheet.get("spell_slots") or {}
+    best_class = ""
+    best_lv = 0
+    for cslug, per_class in (all_slots or {}).items():
+        if not isinstance(per_class, dict):
+            continue
+        for lv_key, slot in per_class.items():
+            if not isinstance(slot, dict):
+                continue
+            try:
+                lv = int(lv_key)
+            except (TypeError, ValueError):
+                continue
+            if lv < 1:
+                continue
+            total = int(slot.get("total") or 0)
+            used = int(slot.get("used") or 0)
+            if total <= 0 or used >= total:
+                continue
+            if best_lv == 0 or lv < best_lv:
+                best_lv = lv
+                best_class = str(cslug).strip().lower()
+    if best_lv == 0:
+        return False, "", 0
+    return True, best_class, best_lv
+
+
 # v2.71.0 Phase 3c — Hellish Rebuke. RAW (PHB p.250): "1 reaction,
 # which you take in response to being damaged by a creature within
 # 60 feet of you that you can see." 1st-level spell, cast at higher
@@ -2499,6 +2558,59 @@ def _eligible_reactions(
                 "unavailable_reason": None,
             })
         return opts
+    # v2.72.0 Phase 3d — Silvery Barbs. Trigger fires from the
+    # roll_request save-resolution path when a creature SUCCEEDS on
+    # a save (RAW: only "succeeds" qualifies; on failure the spell
+    # doesn't help). Context carries the rolled total, the DC, the
+    # passed flag, and the roll-er's name. The watcher who casts SB
+    # may be the caster of the original spell or any other PC within
+    # 60 ft — for v1 we surface the option on every PC with SB
+    # available + a 1st+ slot + reaction unused. Range gating
+    # (positional) is filed for v3 alongside the existing
+    # Counterspell 60-ft walker.
+    if trigger_event == "save_resolved":
+        if not watcher_char_id:
+            return []
+        # Gate on context.passed == True per RAW.
+        if not context.get("passed"):
+            return []
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+        except Exception:
+            char = None
+        if not char or not char.sheet:
+            return []
+        sb_elig, sb_class, sb_lv = _pc_has_silvery_barbs_available(char)
+        if not sb_elig:
+            return []
+        target_name = context.get("roller_name") or "the creature"
+        rolled = context.get("rolled")
+        dc = context.get("dc")
+        roll_hint = ""
+        if isinstance(rolled, int) and isinstance(dc, int):
+            roll_hint = f" (d20 total {rolled} vs DC {dc})"
+        return [{
+            "key": "cast-silvery-barbs",
+            "label": (
+                f"🌟 Cast Silvery Barbs on {target_name}{roll_hint} — "
+                f"force reroll, take the lower"
+            ),
+            "kind": "spell",
+            "resource_cost": f"Reaction + 1× L{sb_lv} slot",
+            "params": {
+                "slot_level": sb_lv,
+                "class_slug": sb_class,
+                "target_name": target_name,
+                "target_combatant_id": context.get("roller_combatant_id"),
+                "target_char_id": context.get("roller_char_id"),
+                "rolled": rolled,
+                "dc": dc,
+            },
+            "available": True,
+            "unavailable_reason": None,
+        }]
     # Phase 2+ extends this stub with class features, spells, feats,
     # and items per the plan doc catalog.
     return []
@@ -9657,6 +9769,68 @@ async def respond_roll_request(
         },
     )
 
+    # v2.72.0 Phase 3d — Silvery Barbs prompt. When a save resolves
+    # WITH PASS (creature succeeded), emit a save_resolved event to
+    # every PC who has SB prepared + a 1st+ slot + reaction unused
+    # (excluding the rolling character themselves — RAW: "creature
+    # you can see [other than self]"). The eligible_reactions branch
+    # surfaces the option only when context.passed=True.
+    if roll_req.dc is not None and result.total >= roll_req.dc:
+        try:
+            state = hub.get_battle(campaign_id)
+            if state:
+                roller_char_id = char.id if char else None
+                roller_name = char.name if char else (user.display_name or "")
+                roller_combatant_id = None
+                for c in (state.get("combatants") or []):
+                    if (
+                        roller_char_id
+                        and c.get("char_id") == roller_char_id
+                    ):
+                        roller_combatant_id = c.get("id")
+                        break
+                for c in (state.get("combatants") or []):
+                    watcher_char_id = c.get("char_id")
+                    if not watcher_char_id:
+                        continue
+                    if (
+                        roller_char_id
+                        and int(watcher_char_id) == int(roller_char_id)
+                    ):
+                        continue
+                    economy = c.get("economy") or {}
+                    if bool(economy.get("reaction")):
+                        continue
+                    try:
+                        watcher = db.query(Character).filter(
+                            Character.id == int(watcher_char_id),
+                        ).first()
+                    except Exception:
+                        watcher = None
+                    if not watcher or not watcher.sheet:
+                        continue
+                    sb_elig, _cls, _slv = _pc_has_silvery_barbs_available(watcher)
+                    if not sb_elig:
+                        continue
+                    await _emit_reaction_prompt(
+                        db, campaign, c,
+                        trigger_event="save_resolved",
+                        summary=(
+                            f"{roller_name or 'Someone'} succeeded on save "
+                            f"(d20 total {result.total} vs DC {roll_req.dc})."
+                        ),
+                        context={
+                            "passed": True,
+                            "rolled": int(result.total),
+                            "dc": int(roll_req.dc),
+                            "roller_char_id": roller_char_id,
+                            "roller_name": roller_name,
+                            "roller_combatant_id": roller_combatant_id,
+                        },
+                    )
+        except Exception:
+            pass
+
     # v2.37.0 Phase T.3d: if this roll-request response corresponds to
     # a save-or-suck spell prompted at a PC (Hold Person at Krieger,
     # etc.) and the PC FAILED the save, install the matching condition
@@ -13390,6 +13564,97 @@ async def use_reaction(
                     "reaction_kind": "spell",
                     "slot_level": slot_level,
                     "damage_type": damage_type,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key == "cast-silvery-barbs" and watcher_char_id:
+        # v2.72.0 Phase 3d — Silvery Barbs. Consume the 1st+ slot,
+        # mark reaction, broadcast feature_used naming the target +
+        # the original d20 roll vs DC for the GM/player to reroll
+        # the lower. v1 doesn't auto-reroll — the chat-card surfaces
+        # the formula "1d20 (take lower with rolled={N})" and the
+        # table re-rolls + adjudicates. Secondary advantage-on-
+        # next-roll buff for an ally is filed for v3 alongside the
+        # pending-damage state machine (needs single-use trigger
+        # semantics the buff system doesn't yet model).
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "cast-silvery-barbs"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            slot_level = int(params.get("slot_level") or 1)
+            class_slug = str(params.get("class_slug") or "").strip().lower()
+            target_name = str(params.get("target_name") or "the creature")
+            rolled = params.get("rolled")
+            dc = params.get("dc")
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            sheet = dict(watcher_char.sheet or {})
+            all_slots = dict(sheet.get("spell_slots") or {})
+            per_class = dict(all_slots.get(class_slug) or {})
+            slot_key = str(slot_level)
+            slot = dict(per_class.get(slot_key) or {})
+            total = int(slot.get("total") or 0)
+            used = int(slot.get("used") or 0)
+            if total <= 0 or used >= total:
+                return JSONResponse(status_code=409, content={
+                    "error": "no_slot",
+                    "class_slug": class_slug,
+                    "level": slot_level,
+                })
+            slot["used"] = used + 1
+            slot["total"] = total
+            per_class[slot_key] = slot
+            all_slots[class_slug] = per_class
+            sheet["spell_slots"] = all_slots
+            watcher_char.sheet = sheet
+            db.commit()
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            roll_hint = ""
+            if isinstance(rolled, int) and isinstance(dc, int):
+                roll_hint = (
+                    f" Original roll: d20 total {rolled} vs DC {dc}."
+                )
+            await hub.broadcast(campaign_id, {
+                "type": "spell_slot_update",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "class_slug": class_slug,
+                    "level": slot_level,
+                    "used": used + 1,
+                    "total": total,
+                },
+            })
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": "🌟 Silvery Barbs cast",
+                    "feature_desc": (
+                        f"Reaction. {target_name} must reroll the d20 and "
+                        f"use the lower of the two rolls.{roll_hint} "
+                        f"Consumed 1× L{slot_level} slot."
+                    ),
+                    "source": "silvery-barbs-cast",
+                    "reaction_kind": "spell",
+                    "slot_level": slot_level,
+                    "rerolled_target_name": target_name,
+                    "rerolled_target_char_id": params.get("target_char_id"),
+                    "rerolled_target_combatant_id": params.get("target_combatant_id"),
+                    "original_rolled": rolled,
+                    "original_dc": dc,
                 },
             })
         except HTTPException:

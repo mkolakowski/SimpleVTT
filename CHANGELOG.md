@@ -10,6 +10,42 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.72.0] - 2026-05-26 — "Argent Words"
+
+**Schema version:** 60
+**Commit summary:** **Phase 3d — Silvery Barbs (Strixhaven: SAI), the fourth reaction spell wired to a runtime trigger event.** New `save_resolved` trigger fires from the `/roll_request/{id}/respond` save-resolution path when `roll_req.dc is not None AND result.total >= dc` (RAW: SB triggers on SUCCESS). Walker iterates every PC combatant in the battle (excluding the rolling character themselves), checks `_pc_has_silvery_barbs_available`, emits `reaction_prompt(save_resolved)` per qualifier. `/use_reaction` `cast-silvery-barbs` dispatch consumes the 1st+ slot, marks the reaction, broadcasts `feature_used(source=silvery-barbs-cast)` naming the rerolled target + original d20 vs DC for the GM/player to roll the lower of the two. v1 doesn't auto-reroll the d20 nor install the secondary advantage-on-next-roll buff — both filed for v3.
+**Description:** Five blocks of edits. **(1)** `app/demo_seed.py`: Silvery Barbs appended to Thalindra's spell list at level 1 with `casting_time: "1 reaction"`. Appended at end of list so existing `FIREBALL_INDEX=7` / `COUNTERSPELL=9` assertions stay valid. **(2)** `_pc_has_silvery_barbs_available(char)` helper mirrors v2.69 Shield / v2.70 Counterspell / v2.71 Hellish Rebuke pattern: walks `sheet.spells` for "silvery-barbs" with `casting_time` containing "reaction"; scans `sheet.spell_slots[*][lv]` for the lowest 1st+ slot with `used < total`. **(3)** `_eligible_reactions[save_resolved]` branch: gates on `context.passed == True` (RAW: SB only on success); builds a `cast-silvery-barbs` option with `slot_level`, `class_slug`, `target_name`, `target_char_id`, `target_combatant_id`, `rolled`, `dc` in `params`. Label previews the original roll: "Cast Silvery Barbs on Krieger (d20 total 18 vs DC 5) — force reroll, take the lower". **(4)** New emit site in `respond_roll_request` (~L9772) after the existing `roll` broadcast and before the v2.37 save-or-suck condition-install branch: `if roll_req.dc is not None and result.total >= roll_req.dc`, walk `hub.get_battle(campaign_id).combatants`, skip the rolling character themselves, emit `_emit_reaction_prompt(save_resolved)` to every PC watcher with SB available. Context plumbs `passed=True`, `rolled`, `dc`, `roller_char_id`, `roller_name`, `roller_combatant_id`. **(5)** `/use_reaction` dispatch case `cast-silvery-barbs`: consume the 1st+ slot via the same in-place `sheet.spell_slots` mutation pattern as Shield/Counterspell/HR, mark reaction, broadcast `spell_slot_update` + `feature_used(source=silvery-barbs-cast)` with `rerolled_target_*` fields + `original_rolled`/`original_dc` so the chat-card has everything needed for the GM/player reroll.
+**Description (cont):** v1 simplifications (filed for v3 pending-damage state machine):
+- **No auto-reroll of the d20.** The broadcast surfaces "force reroll, take the lower" + the original roll value; player/GM rolls the new d20 + adjudicates. Auto-roll + auto-apply-lower filed.
+- **No advantage-on-next-roll buff for an ally.** RAW: "choose a different creature within 60 ft to gain advantage on the next attack/check/save within 1 minute." v1 captures the primary effect only; the secondary buff needs single-use trigger semantics the buff system doesn't yet model (filed alongside the v3 pending-damage state machine).
+- **No 60-ft range gate.** The walker iterates every PC combatant in the battle, not just those within 60 ft of the roller. Filed: extend to use the v2.61.0 `_distance_ft_between_chars` primitive like the v2.70.0 Counterspell walker.
+- **Only fires on `respond_roll_request` saves.** Attack rolls, ability checks, NPC auto-save resolutions (via `/cast_spell`'s auto-save branch) don't yet emit `save_resolved`. Filed: extend to the other d20 resolution sites.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.72.0`. (b) Two new tests:
+- `test_silvery_barbs_prompt_fires_on_save_pass` — Thalindra (Wizard 5 w/ SB + L1 slot) + Krieger (Barbarian +7 STR save) in the battle; GM creates a STR-save `/roll_request` with DC 5; Krieger rolls and trivially passes; asserts `reaction_prompt(save_resolved)` fires for Thalindra with `cast-silvery-barbs` option carrying `params.slot_level=1`, `params.target_name="Krieger Stonefist"`.
+- `test_cast_silvery_barbs_consumes_slot` — same setup + POST `/use_reaction` with `cast-silvery-barbs`; asserts `economy_update` for Thalindra's reaction, `spell_slot_update` for the L1 wizard slot decrement, `feature_used(source=silvery-barbs-cast, slot_level=1, rerolled_target_name="Krieger Stonefist")`.
+
+Full reaction_prompt suite passes 19/19 locally.
+
+### Added
+- Silvery Barbs added to Thalindra's spell list in `demo_seed.py` (Wizard L1, "1 reaction" casting time).
+- `_pc_has_silvery_barbs_available(char) -> (bool, class_slug, slot_level)` helper.
+- `save_resolved` trigger event branch in `_eligible_reactions` (gated on `context.passed=True`).
+- Save-pass walker in `respond_roll_request` — emits `save_resolved` prompt to every PC watcher (except the roller) with SB available.
+- `cast-silvery-barbs` dispatch case in `/use_reaction` — consumes slot, marks reaction, broadcasts `feature_used(source=silvery-barbs-cast)` with rerolled target fields + original roll/DC.
+- Harness `test_silvery_barbs_prompt_fires_on_save_pass` + `test_cast_silvery_barbs_consumes_slot` — 2 new tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.72.0`.
+- `README.md` version badge → `2.72.0`.
+- `docs/plans/reactions-automation.md` — Phase 3d marked 🟠 partial (catalog + slot consumption + chat-card advisory shipped; auto-reroll + advantage-on-next-roll buff + 60-ft range gate + attack-roll/check trigger extensions filed for v3).
+- `docs/test-harness-coverage.md` — total test count 552 → 554.
+
+### Notes
+- **First trigger event that fires from a `/roll_request` resolution path.** Future Phase 4 feats (Lucky's multi-trigger surface) and Phase 6 monster reactions that key on save success/failure will reuse `save_resolved` (and the eventual `attack_resolved` / `check_resolved` extensions).
+- **State-tracker stance continues.** The chat-card surfaces every piece of information the table needs (original d20, DC, target, slot level, casting PC) so the GM/player can re-roll the d20 manually and adjudicate the lower without server-side d20 mutation. Auto-roll moves this to "rules engine" territory, which v3 will tackle alongside the pending-damage state machine.
+
+---
+
 ## [2.71.0] - 2026-05-26 — "The Devil's Bargain"
 
 **Schema version:** 60

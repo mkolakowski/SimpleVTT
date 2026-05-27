@@ -474,6 +474,15 @@ def _wizard_sheet(name: str) -> dict:
             # Appended to keep the FIREBALL_INDEX = 7 + Counterspell = 9
             # assumptions in existing harness tests intact.
             {"name": "Sleep", "level": 1, "prepared": True, "_slug": "sleep", "casting_time": "1 action"},
+            # v2.72.0 Phase 3d — Silvery Barbs (Strixhaven: SAI p.144).
+            # Appended at the END of the spell list so existing
+            # spell_index assertions (FIREBALL_INDEX=7, etc.) stay valid.
+            # Wizard spell list (SAI): "1 reaction" trigger when a
+            # creature within 60 ft you can see succeeds on a save /
+            # attack / check; they reroll the d20 and take lower.
+            {"name": "Silvery Barbs", "level": 1, "prepared": True, "_slug": "silvery-barbs",
+             "casting_time": "1 reaction",
+             "desc": "Reaction (when a creature within 60 ft succeeds on a d20 roll): they reroll and take the lower. You may also grant advantage to a different creature within 60 ft on its next attack/check/save within 1 minute."},
         ],
         "spell_slots": {
             "wizard": {
