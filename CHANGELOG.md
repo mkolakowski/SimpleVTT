@@ -10,6 +10,43 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.70.0] - 2026-05-26 — "The Silence"
+
+**Schema version:** 60
+**Commit summary:** **Phase 3b — Counterspell, the second reaction spell wired to a runtime trigger event.** New `spell_cast_near` trigger fires from `/cast_spell` (PC casters) and `/npc_cast_spell` (NPC casters) for every PC watcher within 60 ft of the caster's token who has Counterspell prepared and a 3rd-level (or higher) slot available. The prompt's `cast-counterspell` option resolves to a `/use_reaction` dispatch that consumes the slot, marks the reaction, and broadcasts a `feature_used(source="counterspell-cast")` advisory naming the countered caster, spell, and slot level. RAW level-vs-slot check is surfaced in the option label and the broadcast's `outcome_hint` field (`"auto"` when slot ≥ incoming level; `"check"` with `arcana_check_dc = 10 + incoming_level` otherwise) but v1 doesn't roll the check — the player/GM adjudicates. Auto-undo of the original cast's downstream effects (damage, conditions, slots) is filed for v3 alongside the pending-damage state machine.
+**Description:** Five blocks of edits in `app/routes/tabletop_routes.py`. **(1)** `_pc_has_counterspell_available(char) -> (bool, class_slug, slot_level)` helper mirrors the v2.69.0 Shield helper: walks `sheet.spells` for an entry whose slug/name is "counterspell" AND whose `casting_time` contains "reaction"; if found, scans `sheet.spell_slots[*][lv]` for the lowest level **≥ 3** with `used < total`; returns the eligibility triple. **(2)** `_eligible_reactions[spell_cast_near]`: if the watcher is a PC and the helper returns True, builds a `cast-counterspell` option carrying `slot_level`, `class_slug`, `spell_name`, `caster_name`, `incoming_spell_level` in `params`, plus a label that previews whether the slot level auto-counters ("L3 slot AUTO-COUNTERS the L2 cast") or requires the arcana check ("L3 slot needs an arcana check (DC 14) to counter the L4 cast"). **(3)** `_emit_counterspell_prompts(db, campaign, caster_char_id, caster_combatant_id, spell_name, spell_level, spell_slug)` walker: skips cantrips (level 0) and Counterspell itself (no recursive chains); locates the caster's token on the active map; iterates every other PC combatant in the battle whose token is within 60 ft AND who has Counterspell available AND whose reaction is unused; emits one `_emit_reaction_prompt(spell_cast_near)` per qualifier. **(4)** `/cast_spell` calls the walker after the existing `spell_cast` broadcast + `_mark_battle_economy`; `/npc_cast_spell` calls it after its own `spell_cast` broadcast. Both gated inside a try/except so a positional-lookup failure can't break the cast. **(5)** `/use_reaction` dispatch case `cast-counterspell`: consumes the 3rd+ slot via the same in-place `sheet.spell_slots` mutation pattern as Shield, marks reaction, broadcasts `spell_slot_update` + `feature_used(source="counterspell-cast")` with `countered_spell_name`, `countered_caster_name`, `countered_spell_level`, `outcome_hint`, `arcana_check_dc` for the client roll-card.
+**Description (cont):** v1 simplifications (filed for Phase 3b.1+):
+- **No auto-undo of the countered cast.** Suggestion's charm condition still installs, Fireball's damage still applies, etc. The roll-log advisory tells the table that Counterspell was used (with the level-gate hint); the player/GM uses the v2.65.0 chat-card Undo to walk back the effect. Auto-undo requires the pending-damage state machine filed for v3.
+- **Arcana check not rolled.** When slot < incoming, the option label says "needs DC X check" and the broadcast carries `outcome_hint="check"` + `arcana_check_dc`, but v1 doesn't roll the d20. Player/GM rolls + adjudicates.
+- **NPC counterspells not yet surfaced.** The walker iterates PC watchers only (`if not watcher_char_id: continue`). NPC monsters with Counterspell (e.g. Mage stat block) are filed for Phase 6 monster-reactions.
+- **No range gate when no active map / off-grid maps.** The walker returns 0 prompts in those cases (defensive — the GM's existing manual-spend path via the GM Reactions Panel still works). Filed: an unmapped fallback that emits to every PC with Counterspell, since RAW "within 60 ft" is meaningless without positions.
+**Description (cont 2):** Verification. (a) `curl /version` reports `2.70.0`. (b) Two new tests:
+- `test_counterspell_prompt_fires_on_pc_cast` — Lyra (Bard 6 with Counterspell via Magical Secrets) casts Suggestion (L2) targeted at Krieger while Thalindra (Wizard 5 with Counterspell + L3 slot) is positioned 5 ft from her on the active map; asserts `reaction_prompt(spell_cast_near)` for Thalindra with a `cast-counterspell` option whose `params.slot_level=3`, `params.spell_name="suggestion"`, `params.incoming_spell_level=2`.
+- `test_cast_counterspell_consumes_slot` — same setup + POST `/use_reaction` with `cast-counterspell`; asserts `economy_update` for Thalindra's reaction, `spell_slot_update` for the L3 slot decrement, `feature_used(source="counterspell-cast")` with `outcome_hint="auto"` (since L3 ≥ L2 incoming), `slot_level=3`, `countered_spell_name="suggestion"`.
+
+Full suite 548 → 550, all clean.
+
+### Added
+- `_pc_has_counterspell_available(char) -> (bool, class_slug, slot_level)` helper.
+- `spell_cast_near` trigger event branch in `_eligible_reactions`.
+- `_emit_counterspell_prompts(...)` walker — iterates PC watchers within 60 ft of a caster's token.
+- `/cast_spell` calls the walker after the `spell_cast` broadcast.
+- `/npc_cast_spell` calls the walker after its `spell_cast` broadcast.
+- `cast-counterspell` dispatch case in `/use_reaction` — consumes 3rd+ slot, marks reaction, broadcasts `feature_used(source="counterspell-cast")` with outcome hint + arcana check DC.
+- Harness `test_counterspell_prompt_fires_on_pc_cast` + `test_cast_counterspell_consumes_slot` — 2 new tests.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.70.0`.
+- `README.md` version badge → `2.70.0`.
+- `docs/plans/reactions-automation.md` — Phase 3b marked 🟠 partial (catalog + slot consumption + roll-log advisory shipped; auto-undo + arcana-check-roll + NPC counterspells filed).
+- `docs/test-harness-coverage.md` — total test count 548 → 550.
+
+### Notes
+- **First multi-watcher reaction prompt.** Unlike Shield (which fires for a single hit target), Counterspell can fire for multiple PC watchers in 60 ft of one cast. The popup-routing path already handles N watchers (the `target_user_ids` array in the broadcast).
+- **`spell_cast_near` lays the foundation for Mage Slayer.** Phase 4 feats include Mage Slayer's "you can use your reaction to make a melee attack" trigger which keys on the same event. The walker is reusable.
+
+---
+
 ## [2.69.0] - 2026-05-26 — "The Arcane Aegis"
 
 **Schema version:** 60

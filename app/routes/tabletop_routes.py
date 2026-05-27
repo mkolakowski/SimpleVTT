@@ -2057,6 +2057,64 @@ def _pc_has_shield_available(char) -> "tuple[bool, str, int]":
     return True, best_class, best_lv
 
 
+# v2.70.0 Phase 3b — Counterspell. RAW (PHB p.228): "1 reaction, which
+# you take when you see a creature within 60 feet of you casting a
+# spell." 3rd-level spell. Cast at 3rd → auto-counters spells 3rd or
+# lower; cast at 4th+ → auto-counters spells of that level; otherwise
+# arcana check DC 10 + spell level. v1 doesn't simulate the check —
+# the popup label tells the player whether the slot level guarantees
+# success, and the player/GM adjudicates the higher-level case.
+def _pc_has_counterspell_available(char) -> "tuple[bool, str, int]":
+    """Detect Counterspell (3rd-level reaction spell) eligibility on a PC.
+
+    Returns ``(eligible, class_slug, slot_level)`` mirroring
+    ``_pc_has_shield_available`` — slot_level is the LOWEST available
+    3rd+ slot. Caller may want to consult ``incoming_spell_level``
+    when deciding whether to surface the option vs. flag it as
+    "would require arcana check".
+    """
+    if not char or not char.sheet:
+        return False, "", 0
+    sheet = char.sheet or {}
+    has_counterspell = False
+    for sp in (sheet.get("spells") or []):
+        if not isinstance(sp, dict):
+            continue
+        slug = (sp.get("_slug") or "").strip().lower()
+        name = (sp.get("name") or "").strip().lower()
+        ct = (sp.get("casting_time") or "").lower()
+        if (slug == "counterspell" or name == "counterspell") and "reaction" in ct:
+            has_counterspell = True
+            break
+    if not has_counterspell:
+        return False, "", 0
+    all_slots = sheet.get("spell_slots") or {}
+    best_class = ""
+    best_lv = 0
+    for cslug, per_class in (all_slots or {}).items():
+        if not isinstance(per_class, dict):
+            continue
+        for lv_key, slot in per_class.items():
+            if not isinstance(slot, dict):
+                continue
+            try:
+                lv = int(lv_key)
+            except (TypeError, ValueError):
+                continue
+            if lv < 3:
+                continue
+            total = int(slot.get("total") or 0)
+            used = int(slot.get("used") or 0)
+            if total <= 0 or used >= total:
+                continue
+            if best_lv == 0 or lv < best_lv:
+                best_lv = lv
+                best_class = str(cslug).strip().lower()
+    if best_lv == 0:
+        return False, "", 0
+    return True, best_class, best_lv
+
+
 def _eligible_reactions(
     db: Session, campaign_id: int, watcher_char_id: int | None,
     trigger_event: str, context: dict,
@@ -2151,6 +2209,64 @@ def _eligible_reactions(
             "kind": "spell",
             "resource_cost": f"Reaction + 1× L{slot_lv} slot",
             "params": {"slot_level": slot_lv, "class_slug": class_slug},
+            "available": True,
+            "unavailable_reason": None,
+        }]
+    # v2.70.0 Phase 3b — Counterspell auto-prompt. Fires from
+    # /cast_spell + /npc_cast_spell when a spell is cast within 60 ft
+    # of a watcher who has Counterspell prepared + a 3rd+ slot
+    # available. Context carries the caster's name + spell name +
+    # incoming spell level so the popup label can tell the player
+    # whether their slot level auto-counters or requires the arcana
+    # check (RAW: cast at ≥ incoming level → auto-success; lower →
+    # arcana DC 10 + incoming spell level). v1 doesn't simulate the
+    # check — the popup label calls out which case applies and the
+    # player/GM adjudicates the result. Auto-undo of the original
+    # cast's downstream effects is filed for v3.
+    if trigger_event == "spell_cast_near":
+        if not watcher_char_id:
+            return []
+        try:
+            char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+        except Exception:
+            char = None
+        if not char or not char.sheet:
+            return []
+        eligible, class_slug, slot_lv = _pc_has_counterspell_available(char)
+        if not eligible:
+            return []
+        incoming_lv = context.get("spell_level")
+        spell_name = context.get("spell_name") or "a spell"
+        caster_name = context.get("caster_name") or "Someone"
+        gate_hint = ""
+        if isinstance(incoming_lv, int) and incoming_lv > 0:
+            if slot_lv >= incoming_lv:
+                gate_hint = (
+                    f" — L{slot_lv} slot AUTO-COUNTERS the L{incoming_lv} cast."
+                )
+            else:
+                check_dc = 10 + incoming_lv
+                gate_hint = (
+                    f" — L{slot_lv} slot needs an arcana check (DC {check_dc}) "
+                    f"to counter the L{incoming_lv} cast."
+                )
+        return [{
+            "key": "cast-counterspell",
+            "label": (
+                f"🚫 Cast Counterspell on {caster_name}'s {spell_name}"
+                f"{gate_hint}"
+            ),
+            "kind": "spell",
+            "resource_cost": f"Reaction + 1× L{slot_lv} slot",
+            "params": {
+                "slot_level": slot_lv,
+                "class_slug": class_slug,
+                "spell_name": spell_name,
+                "caster_name": caster_name,
+                "incoming_spell_level": incoming_lv,
+            },
             "available": True,
             "unavailable_reason": None,
         }]
@@ -2299,6 +2415,141 @@ async def _emit_reaction_prompt(
         },
     })
     return prompt_id
+
+
+# v2.70.0 Phase 3b — Counterspell trigger walker. After a spell is
+# cast, walk every other PC combatant in the battle whose token is
+# within 60 ft of the caster's token AND who has Counterspell
+# available, then emit a ``reaction_prompt(spell_cast_near)`` for
+# each. Skips the caster themselves. Cantrips (level 0) and
+# Counterspell itself are excluded — RAW: a reaction CAN'T counter
+# another reaction in the same trigger chain (avoids infinite loops).
+async def _emit_counterspell_prompts(
+    db: Session, campaign: "Campaign",
+    caster_char_id: int | None,
+    caster_combatant_id: str | None,
+    spell_name: str, spell_level: int, spell_slug: str,
+) -> int:
+    """Returns the count of prompts emitted (mostly for tests + logs)."""
+    if spell_level <= 0:
+        return 0
+    slug_norm = (spell_slug or "").strip().lower()
+    name_norm = (spell_name or "").strip().lower()
+    if slug_norm == "counterspell" or name_norm == "counterspell":
+        return 0
+    state = hub.get_battle(int(campaign.id))
+    if not state:
+        return 0
+    combatants = state.get("combatants") or []
+    if not combatants:
+        return 0
+    if not campaign.active_map_id:
+        return 0
+    map_row = db.query(Map).filter(Map.id == campaign.active_map_id).first()
+    if not map_row or not map_row.grid_size_px:
+        return 0
+    grid_type = (
+        map_row.grid_type.value if map_row.grid_type else "square"
+    ).lower()
+    grid_size_px = int(map_row.grid_size_px)
+    # Locate caster's token.
+    caster_combatant = None
+    for c in combatants:
+        if caster_combatant_id and c.get("id") == caster_combatant_id:
+            caster_combatant = c
+            break
+        if (
+            caster_char_id and c.get("char_id") == int(caster_char_id)
+        ):
+            caster_combatant = c
+            break
+    if caster_combatant is None:
+        return 0
+    caster_token = None
+    src_id = caster_combatant.get("source_token_id")
+    if src_id:
+        caster_token = db.query(Token).filter(
+            Token.id == int(src_id), Token.map_id == map_row.id,
+        ).first()
+    if caster_token is None and caster_combatant.get("char_id"):
+        caster_token = db.query(Token).filter(
+            Token.character_id == int(caster_combatant["char_id"]),
+            Token.map_id == map_row.id,
+        ).first()
+    if caster_token is None:
+        return 0
+    cx = float(caster_token.x or 0)
+    cy = float(caster_token.y or 0)
+    COUNTERSPELL_RANGE_FT = 60.0
+    caster_name = caster_combatant.get("name") or ""
+    count = 0
+    for c in combatants:
+        if c.get("id") == caster_combatant.get("id"):
+            continue
+        # PC-only for v1 — NPC counterspells are filed (Phase 6 monster
+        # reactions). A watcher with no char_id can't have Counterspell
+        # on a sheet.
+        watcher_char_id = c.get("char_id")
+        if not watcher_char_id:
+            continue
+        economy = c.get("economy") or {}
+        if bool(economy.get("reaction")):
+            continue
+        try:
+            watcher = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+        except Exception:
+            watcher = None
+        if not watcher or not watcher.sheet:
+            continue
+        eligible, _cls, _slot = _pc_has_counterspell_available(watcher)
+        if not eligible:
+            continue
+        # Locate watcher's token + measure distance.
+        watcher_token = None
+        wsrc = c.get("source_token_id")
+        if wsrc:
+            watcher_token = db.query(Token).filter(
+                Token.id == int(wsrc), Token.map_id == map_row.id,
+            ).first()
+        if watcher_token is None:
+            watcher_token = db.query(Token).filter(
+                Token.character_id == int(watcher_char_id),
+                Token.map_id == map_row.id,
+            ).first()
+        if watcher_token is None:
+            continue
+        wx = float(watcher_token.x or 0)
+        wy = float(watcher_token.y or 0)
+        dist = _distance_ft_between_points(
+            grid_size_px, grid_type, wx, wy, cx, cy,
+        )
+        if dist > COUNTERSPELL_RANGE_FT:
+            continue
+        try:
+            await _emit_reaction_prompt(
+                db, campaign, c,
+                trigger_event="spell_cast_near",
+                summary=(
+                    f"{caster_name or 'Caster'} cast {spell_name} "
+                    f"(L{spell_level}) within 60 ft of "
+                    f"{c.get('name') or 'you'}."
+                ),
+                context={
+                    "caster_combatant_id": caster_combatant.get("id"),
+                    "caster_char_id": caster_combatant.get("char_id"),
+                    "caster_name": caster_name,
+                    "spell_name": spell_name,
+                    "spell_level": int(spell_level),
+                    "spell_slug": slug_norm,
+                    "distance_ft": dist,
+                },
+            )
+            count += 1
+        except Exception:
+            pass
+    return count
 
 
 # v2.49.75 — Phase 2C range-enforcement helper. Given a caster + a
@@ -11067,6 +11318,22 @@ async def cast_spell(
     # _mark_battle_economy keeps an over-budget cast from re-flipping
     # the chip (it's already used — that's why we got here).
     await _mark_battle_economy(campaign_id, char.id, slot_for_economy)
+    # v2.70.0 Phase 3b — Counterspell trigger walker. Emit a
+    # reaction_prompt(spell_cast_near) to every PC watcher within
+    # 60 ft of the caster who has Counterspell prepared + a 3rd+
+    # slot available. Cantrips + the caster themselves + Counterspell
+    # itself are skipped inside the helper.
+    try:
+        await _emit_counterspell_prompts(
+            db, campaign,
+            caster_char_id=int(char.id),
+            caster_combatant_id=None,
+            spell_name=payload.get("spell_name") or (spell.get("name") or ""),
+            spell_level=int(spell_level),
+            spell_slug=str(spell_slug or ""),
+        )
+    except Exception:
+        pass
     return {
         "ok": True,
         "id": cast_id,
@@ -12614,6 +12881,115 @@ async def use_reaction(
                     "source": "shield-cast",
                     "reaction_kind": "spell",
                     "slot_level": slot_level,
+                },
+            })
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    elif reaction_key == "cast-counterspell" and watcher_char_id:
+        # v2.70.0 Phase 3b — Counterspell. Consume the 3rd+ slot,
+        # mark reaction, broadcast a feature_used naming the
+        # countered spell. No buff install (Counterspell is
+        # instantaneous). The original spell's downstream effects
+        # (damage rolls, condition installs, etc.) are NOT auto-undone
+        # in v1 — the player/GM adjudicates the result. Auto-undo of
+        # the cast filed for v3.
+        try:
+            options = entry.get("options") or []
+            matching = next(
+                (o for o in options if o.get("key") == "cast-counterspell"),
+                None,
+            )
+            params = (matching or {}).get("params") or {}
+            slot_level = int(params.get("slot_level") or 3)
+            class_slug = str(params.get("class_slug") or "").strip().lower()
+            spell_name = str(params.get("spell_name") or "the spell")
+            caster_name = str(params.get("caster_name") or "the caster")
+            incoming_lv = params.get("incoming_spell_level")
+            watcher_char = db.query(Character).filter(
+                Character.id == int(watcher_char_id),
+            ).first()
+            if not watcher_char or not watcher_char.sheet:
+                raise HTTPException(404, "watcher character not found")
+            sheet = dict(watcher_char.sheet or {})
+            all_slots = dict(sheet.get("spell_slots") or {})
+            per_class = dict(all_slots.get(class_slug) or {})
+            slot_key = str(slot_level)
+            slot = dict(per_class.get(slot_key) or {})
+            total = int(slot.get("total") or 0)
+            used = int(slot.get("used") or 0)
+            if total <= 0 or used >= total:
+                return JSONResponse(status_code=409, content={
+                    "error": "no_slot",
+                    "class_slug": class_slug,
+                    "level": slot_level,
+                })
+            slot["used"] = used + 1
+            slot["total"] = total
+            per_class[slot_key] = slot
+            all_slots[class_slug] = per_class
+            sheet["spell_slots"] = all_slots
+            watcher_char.sheet = sheet
+            db.commit()
+            await _mark_battle_economy(
+                campaign_id, int(watcher_char_id), "reaction",
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "spell_slot_update",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "class_slug": class_slug,
+                    "level": slot_level,
+                    "used": used + 1,
+                    "total": total,
+                },
+            })
+            # Outcome hint: "auto" when slot_level ≥ incoming_lv,
+            # otherwise "check" (DC 10 + incoming_lv arcana check
+            # required). v1 doesn't roll the check.
+            outcome_hint = "auto"
+            if (
+                isinstance(incoming_lv, int) and incoming_lv > 0
+                and slot_level < incoming_lv
+            ):
+                outcome_hint = "check"
+            check_dc = (
+                10 + int(incoming_lv)
+                if isinstance(incoming_lv, int) and incoming_lv > 0
+                else 0
+            )
+            outcome_desc = (
+                f" — auto-counters at L{slot_level} ≥ L{incoming_lv}."
+                if outcome_hint == "auto"
+                and isinstance(incoming_lv, int) and incoming_lv > 0
+                else (
+                    f" — needs arcana check DC {check_dc} to counter."
+                    if outcome_hint == "check"
+                    else ""
+                )
+            )
+            await hub.broadcast(campaign_id, {
+                "type": "feature_used",
+                "data": {
+                    "character_id": int(watcher_char_id),
+                    "character_name": watcher_char.name,
+                    "user_color": watcher_char.color,
+                    "feature_name": "🚫 Counterspell cast",
+                    "feature_desc": (
+                        f"Reaction. Counters {caster_name}'s {spell_name}"
+                        f"{outcome_desc} (consumed 1× L{slot_level} slot)."
+                    ),
+                    "source": "counterspell-cast",
+                    "reaction_kind": "spell",
+                    "slot_level": slot_level,
+                    "countered_spell_name": spell_name,
+                    "countered_caster_name": caster_name,
+                    "countered_spell_level": (
+                        int(incoming_lv) if isinstance(incoming_lv, int) else 0
+                    ),
+                    "outcome_hint": outcome_hint,
+                    "arcana_check_dc": check_dc,
                 },
             })
         except HTTPException:
@@ -22696,6 +23072,20 @@ async def use_npc_cast_spell(
         "target_hp_after": target_hp_after,
     }
     await hub.broadcast(campaign_id, {"type": "spell_cast", "data": payload})
+    # v2.70.0 Phase 3b — Counterspell prompt for nearby PC watchers.
+    # Mirror of the /cast_spell hook. NPC caster identity is the
+    # combatant_id (no char_id).
+    try:
+        await _emit_counterspell_prompts(
+            db, campaign,
+            caster_char_id=None,
+            caster_combatant_id=combatant_id,
+            spell_name=spell_name,
+            spell_level=int(spell_level),
+            spell_slug="",
+        )
+    except Exception:
+        pass
     return {
         "ok": True,
         "cast_id": cast_id,

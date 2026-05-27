@@ -717,6 +717,239 @@ async def test_cast_shield_consumes_slot_and_installs_buff(
     )
 
 
+# ── v2.70.0 — Phase 3b: Counterspell prompt + cast ──
+
+
+async def test_counterspell_prompt_fires_on_pc_cast(
+    gm_client, gm_ws, roster,
+):
+    """v2.70.0 — when a PC casts a leveled spell within 60 ft of a
+    watcher who has Counterspell prepared + a 3rd+ slot + a free
+    reaction, the new `spell_cast_near` trigger fires. Lyra casts
+    Suggestion (L2) targeted at Krieger; Thalindra (Wizard with
+    Counterspell + L3 slot) is positioned 5 ft away from Lyra so
+    the 60 ft range check passes.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    thalindra = roster["Thalindra Moonwhisper"]
+    krieger = roster["Krieger Stonefist"]
+    # Long-rest both casters so slots are fresh.
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
+        json={"type": "long"},
+    )
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+        json={"type": "long"},
+    )
+    # Place tokens within 60 ft of each other (one cell apart).
+    await _place_token(gm_client, lyra["id"], 300.0, 300.0)
+    await _place_token(gm_client, thalindra["id"], 370.0, 300.0)
+    await _place_token(gm_client, krieger["id"], 440.0, 300.0)
+
+    thal_cid = f"tok_cs_{thalindra['id']}"
+    krieg_cid = f"tok_cs_kr_{krieger['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(lyra["name"], lyra["id"], init=14, hp=40),
+        {
+            "id": thal_cid,
+            "char_id": thalindra["id"],
+            "name": thalindra["name"],
+            "initiative": 10,
+            "hp_current": 32, "hp_max": 32,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+        {
+            "id": krieg_cid,
+            "char_id": krieger["id"],
+            "name": krieger["name"],
+            "initiative": 8,
+            "hp_current": 75, "hp_max": 75,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    # Lyra Suggestion is index 9 in the demo Bard sheet (see
+    # test_use_countercharm SUGGESTION_INDEX = 9).
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": lyra["id"],
+            "spell_index": 9,
+            "slot_level": 2,
+            "class_slug": "bard",
+            "target_combatant_id": krieg_cid,
+            "target_character_id": krieger["id"],
+            "target_name": krieger["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "spell_cast_near"
+    ]
+    assert prompts, (
+        f"expected reaction_prompt(spell_cast_near) for Thalindra; "
+        f"buffered: "
+        f"{[(m.get('data') or {}).get('trigger_event') for m in _prompt_broadcasts(gm_ws)]}"
+    )
+    options = prompts[0]["data"].get("options", []) or []
+    keys = [o.get("key") for o in options]
+    assert "cast-counterspell" in keys, (
+        f"expected cast-counterspell option; got {keys}"
+    )
+    # Params carry the slot level (3, lowest available) + spell name.
+    cs_option = next(
+        (o for o in options if o.get("key") == "cast-counterspell"), {}
+    )
+    params = cs_option.get("params") or {}
+    assert int(params.get("slot_level") or 0) == 3
+    assert (params.get("spell_name") or "").lower() == "suggestion"
+    assert int(params.get("incoming_spell_level") or 0) == 2
+
+
+async def test_cast_counterspell_consumes_slot(
+    gm_client, gm_ws, roster,
+):
+    """End-to-end: Lyra casts Suggestion → Thalindra prompt fires →
+    POST /use_reaction with cast-counterspell → Thalindra's L3 slot
+    used count increments + reaction slot flips + feature_used
+    (source=counterspell-cast) fires.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    thalindra = roster["Thalindra Moonwhisper"]
+    krieger = roster["Krieger Stonefist"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
+        json={"type": "long"},
+    )
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+        json={"type": "long"},
+    )
+    await _place_token(gm_client, lyra["id"], 300.0, 300.0)
+    await _place_token(gm_client, thalindra["id"], 370.0, 300.0)
+    await _place_token(gm_client, krieger["id"], 440.0, 300.0)
+
+    thal_cid = f"tok_cs2_{thalindra['id']}"
+    krieg_cid = f"tok_cs2_kr_{krieger['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(lyra["name"], lyra["id"], init=14, hp=40),
+        {
+            "id": thal_cid,
+            "char_id": thalindra["id"],
+            "name": thalindra["name"],
+            "initiative": 10,
+            "hp_current": 32, "hp_max": 32,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+        {
+            "id": krieg_cid,
+            "char_id": krieger["id"],
+            "name": krieger["name"],
+            "initiative": 8,
+            "hp_current": 75, "hp_max": 75,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    resp = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": lyra["id"],
+            "spell_index": 9,
+            "slot_level": 2,
+            "class_slug": "bard",
+            "target_combatant_id": krieg_cid,
+            "target_character_id": krieger["id"],
+            "target_name": krieger["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+
+    await asyncio.sleep(0.2)
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "spell_cast_near"
+    ]
+    assert prompts, "expected spell_cast_near prompt for Thalindra"
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "cast-counterspell",
+            "watcher_char_id": thalindra["id"],
+        },
+    )
+    assert cast.status_code == 200, cast.text
+
+    await asyncio.sleep(0.2)
+    # economy_update: Thalindra's reaction flips True.
+    econ = [
+        m for m in gm_ws.buffered("economy_update")
+        if (m.get("data") or {}).get("character_id") == thalindra["id"]
+        and (m.get("data") or {}).get("slot") == "reaction"
+    ]
+    assert econ, "expected economy_update for Thalindra's reaction"
+    assert econ[-1]["data"]["used"] is True
+
+    # spell_slot_update: L3 wizard slot decremented.
+    slot_msgs = [
+        m for m in gm_ws.buffered("spell_slot_update")
+        if (m.get("data") or {}).get("character_id") == thalindra["id"]
+        and int((m.get("data") or {}).get("level") or 0) == 3
+    ]
+    assert slot_msgs, (
+        f"expected spell_slot_update L3 for Thalindra; "
+        f"buffered: {[m.get('data') for m in gm_ws.buffered('spell_slot_update')]}"
+    )
+
+    # feature_used card with source=counterspell-cast names Lyra +
+    # Suggestion + L3 slot.
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "counterspell-cast"
+        and (m.get("data") or {}).get("character_id") == thalindra["id"]
+    ]
+    assert fu, "expected feature_used(source=counterspell-cast) broadcast"
+    last = fu[-1]["data"]
+    # Outcome hint = "auto" since L3 slot ≥ L2 incoming.
+    assert last.get("outcome_hint") == "auto"
+    assert last.get("slot_level") == 3
+    assert (last.get("countered_spell_name") or "").lower() == "suggestion"
+
+
 async def test_indomitable_emits_reaction_prompt(
     gm_client, gm_ws, roster,
 ):
