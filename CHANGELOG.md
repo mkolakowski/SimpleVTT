@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.78.1] - 2026-05-26 — "The Reactions Atlas"
+
+**Schema version:** 60
+**Commit summary:** **Doc-only audit. Restructures the reactions-automation plan status from a giant run-on paragraph (had grown across 8 bumps) into a clean per-phase status table + a v3 backlog block.** No code changes; no test changes. Catches the cross-phase v3 work that was filed in individual CHANGELOG entries but never aggregated into a single planning surface.
+**Description:** One edit in `docs/plans/reactions-automation.md`. The opening **Status:** field — previously a 13,000-character paragraph that grew with each bump from v2.67.0 through v2.78.0 — is now a one-sentence summary + a Markdown table with one row per phase (1a, 1b, 2, 3a–e, 4a–d, 5, 6) listing scope + shipped version + status emoji. A new "v3 backlog (cross-phase)" section collects the filed work scattered across the per-bump CHANGELOG entries: pending-damage state machine, auto-resolution of advisory reactions (10+ specific dispatches), new trigger events (attack_resolved / check_resolved / falling), per-item charge tracking, GM Reactions Panel item-walk, passive feat effects (Mage Slayer / War Caster / Cloak suppression), NPC reactions on non-attack_targeted triggers, Lucky-vs-Lucky cancel, range-gate helper standardization, demo Absorb Elements fixture. Full 566-test harness suite passes against v2.78.0 (verified before the doc reorg).
+
+### Added
+- `docs/plans/reactions-automation.md` — "Per-phase status" table + "v3 backlog (cross-phase)" section.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.78.1`.
+- `README.md` version badge → `2.78.1`.
+- `docs/plans/reactions-automation.md` opening status field — was one 13K-char paragraph, now a one-sentence summary + structured table.
+
+### Notes
+- **Reactions framework status at v2.78.1:** Phases 1–6 all at least partial; only Phase 3e Feather Fall is entirely unstarted (depends on a fall-damage model that doesn't exist yet). Phase 2 catalog is 100% shipped. Phases 3a–d (spells), 4a–d (feats), 5 (items), 6 (monster reactions) all have v1 framework + demo fixture + live tests.
+- **v3 surface is large but focused.** The biggest single piece of future work is the pending-damage state machine — once that's in place, every "click X to resolve" advisory dispatch can be replaced with auto-resolution, and the partial 🟠 statuses collapse to full ✅.
+
+---
+
 ## [2.78.0] - 2026-05-26 — "The Displaced Bard"
 
 **Schema version:** 60
