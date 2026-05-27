@@ -54,6 +54,8 @@ async def test_wiki_home_renders():
     assert "/wiki/unified-mini-sheet-mockups" in resp.text
     # v2.66.7: reactions-automation plan listed in the design-plans table.
     assert "/wiki/doc/plan-reactions-automation" in resp.text
+    # v2.82.0: reactions-automation GM how-to listed in the available-guides table.
+    assert "/wiki/reactions" in resp.text
 
 
 async def test_wiki_guide_serves_roll_log():
@@ -90,6 +92,22 @@ async def test_wiki_markdown_guide_renders():
     assert "Realtime broadcasts catalog" in resp.text
     assert "<h1" in resp.text
     assert "<table" in resp.text
+    assert 'class="wiki-nav"' in resp.text
+
+
+async def test_wiki_reactions_guide_renders():
+    """v2.82.0: GET /wiki/reactions — markdown GM how-to under
+    docs/wiki/ rendered + wrapped + nav-injected. Confirms the
+    reactions automation guide is reachable from the wiki.
+    """
+    async with httpx.AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        resp = await client.get("/wiki/reactions")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers.get("content-type", "")
+    # H1 contains "Reactions Automation".
+    assert "reactions" in resp.text.lower()
+    assert "trigger event" in resp.text.lower()
+    assert "<h1" in resp.text
     assert 'class="wiki-nav"' in resp.text
 
 

@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.82.0] - 2026-05-26 — "The Reactions Guide"
+
+**Schema version:** 60
+**Commit summary:** **Pure docs ship — adds the long-pending GM how-to for the v2.67.0–v2.80.2 reactions automation surface as a wiki page.** New `docs/wiki/reactions.md` covers the prompt UI, all 8 trigger events, the full reactions catalog (15+ entries — class features, reaction spells, PC feats, items, monster reactions), the GM Reactions Panel, and v1 limitations. Wired through the wiki landing page + on-disk README + per-slug harness test per the CLAUDE.md doc-surfacing rule.
+**Description:** Five edits. **(1)** New `docs/wiki/reactions.md` (~140 lines) — GM-facing how-to for the reactions framework. Sections: quick start, prompt UI modes, trigger events table (8 events mapped to which reactions surface on each), reactions catalog (class features / reaction spells / feats / items / monster reactions), GM Reactions Panel, v1 limitations, See also. **(2)** `app/templates/wiki.html` "Available guides" table — new row for `/wiki/reactions` between PC-vs-NPC and the visual guides. **(3)** `docs/wiki/README.md` "Available guides" table — matching row. **(4)** `tests/harness/test_wiki.py::test_wiki_home_renders` — asserts `/wiki/reactions` appears in the landing-page body. **(5)** New `tests/harness/test_wiki.py::test_wiki_reactions_guide_renders` — smoke test confirming the slug returns 200, body contains "reactions" + "trigger event" + an `<h1>` + the wiki-nav menu.
+**Description (cont):** Why now (and not earlier):
+- The reactions framework spanned 14 bumps (v2.66.7 plan, v2.67.0 foundation, v2.69.0–v2.80.2 implementation). Documenting after each individual bump would have been premature — the v3 backlog reshapes too many details (auto-resolution, pending-damage state machine).
+- v2.78.1's structured plan-doc rewrite stabilized the architecture description. Now there's a clear story to write a GM-facing guide against.
+- The guide is reader-facing (GMs picking PCs / planning encounters / explaining UX to players), not contributor-facing (the plan doc in `docs/plans/` covers that audience).
+
+### Added
+- `docs/wiki/reactions.md` — Reactions Automation GM Guide (~140 lines).
+- Per-slug harness test `test_wiki_reactions_guide_renders` in `test_wiki.py`.
+- Landing-page assertion `/wiki/reactions` in `test_wiki_home_renders`.
+- "Available guides" table row in both `app/templates/wiki.html` + `docs/wiki/README.md`.
+
+### Changed
+- `app/version.py` `APP_VERSION` → `2.82.0`.
+- `README.md` version badge → `2.82.0`.
+- `docs/test-harness-coverage.md` — total test count 568 → 569.
+
+### Notes
+- **MINOR bump** — new reader-facing doc surface. The wiki gains an entire new guide; PATCH would understate the contribution.
+- **Doc-only commit beyond the test additions** — no production code touched. The wiki rendering pipeline + per-slug routing was already in place from v2.49.66 onwards.
+- **See also section** of the guide links to the design plan + GM-session guide + character sheet guide so readers can navigate the related surfaces.
+
+---
+
 ## [2.81.0] - 2026-05-26 — "Local First, External Maybe"
 
 **Schema version:** 60
