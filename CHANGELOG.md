@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.94.0] - 2026-05-28 — "Let the Bandit Swing"
+
+**Schema version:** 64
+**Commit summary:** **Fixes the GM-reported bug: NPCs couldn't use their action buttons (e.g. Strike on Vex's Dagger).** The `.mini-strike-btn` click handler in `tabletop.html` had two completely different code paths for PCs and NPCs: PCs called `/attack` after picking a target (server resolves hit / auto-applies damage), but NPCs fired three blind `/roll` entries (attack die, damage die, save announcement) with no target picking, no hit-vs-AC math, no auto-damage. v2.94.0 routes attack-roll NPC actions (any action with `attack_bonus` + `damage`, e.g. Vex's Dagger) through `/npc_attack` instead — same target-picker + auto-damage flow as the PC path.
+**Description:** One edit in `app/templates/tabletop.html`'s `.mini-strike-btn` click handler (the `isMonster` branch). New `hasAttackRoll = bonus && damage` gate: when true, the handler now:
+  1. Reads the per-spawn combatant id off the parent `.init-entry[data-char-id]` (same lookup pattern as `_getMonsterActorName`).
+  2. Opens `vttOpenMultiTargetPicker` (with `casterCharId: null` since NPCs have no Character row) to pick the target — same picker the PC path uses.
+  3. POSTs to `/api/campaign/{cid}/npc_attack` with `{combatant_id, action_id, action_name, attack_bonus, damage, damage_type, range, target_combatant_id, override_range}`.
+  4. Surfaces 409 `out_of_range` errors as a "click again to override" toast (matches the PC path's `handleOverBudget` pattern).
+
+Save-only NPC actions (no `attack_bonus` + `damage` pair — e.g. a dragon-breath save spell) still fall through to the legacy three-roll `/roll` chain because their resolution path is `/npc_cast_spell`, which `.mini-strike-btn` doesn't drive yet. Filed for follow-up.
+
+### Changed
+- `.mini-strike-btn` click handler — NPC branch now routes attack-roll actions through `/npc_attack` (with target picker) instead of three blind `/roll` entries.
+
+### Notes
+- **MINOR bump** — behavior change on a stable UI surface (NPC action buttons now actually resolve attacks instead of just rolling dice). No data, schema, or endpoint contract changes — `/npc_attack` was already in place (v2.49.164) and harness-tested, the click handler just wasn't routing through it.
+- Save-only NPC actions filed for follow-up: should call `/npc_cast_spell` instead, which knows how to fire the save chat-card with the DC + ability.
+- The PC path is unchanged.
+
+---
+
 ## [2.93.0] - 2026-05-28 — "Counter the Counter"
 
 **Schema version:** 64

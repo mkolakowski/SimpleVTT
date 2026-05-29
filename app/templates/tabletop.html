@@ -5491,48 +5491,130 @@ let CONC_DATA = {{ conc_by_char | tojson }};
                     const damageType = (btn.dataset.attackDamageType || '').trim();
                     const saveAbility = (btn.dataset.attackSaveAbility || '').trim().toUpperCase();
                     const saveDc = parseInt(btn.dataset.attackSaveDc || '0', 10) || 0;
+                    const actionId = (btn.dataset.attackId || '').trim();
+                    const rangeStr = (btn.dataset.attackRange || '').trim();
                     // v2.49.213: per-spawn combatant nickname ("Soren") via
                     // _getMonsterActorName (falls back to mini-header-name then
                     // 'Monster' if not in the init tracker).
                     const monsterName = _getMonsterActorName(btn);
-                    /* Three POSTs in sequence: attack, damage, and save-
-                     * announcement. Each lands in the campaign roll log as
-                     * its own entry so the GM and players can see the chain.
-                     * Skipped slots (no bonus / no damage / no save) don't
-                     * fire. */
-                    const rolls = [];
-                    if (bonus || (!saveAbility && !damage)) {
-                        const bonusExpr = bonus
-                            ? (bonus.startsWith('+') || bonus.startsWith('-') ? bonus : '+' + bonus)
-                            : '';
-                        rolls.push({
-                            expression: '1d20' + bonusExpr,
-                            note: `${monsterName}: ${atkName} attack`,
-                        });
-                    }
-                    if (damage) {
-                        rolls.push({
-                            expression: damage,
-                            note: `${monsterName}: ${atkName} damage${damageType ? ' (' + damageType + ')' : ''}`,
-                        });
-                    }
-                    if (saveAbility && saveDc) {
-                        rolls.push({
-                            expression: '0',
-                            note: `${monsterName}: ${atkName} — DC ${saveDc} ${saveAbility} save`,
-                        });
-                    }
-                    for (const r of rolls) {
-                        const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            // v2.49.212: pass actor_name so the roll-log entry
-                            // surfaces the monster name instead of the GM user name.
-                            body: JSON.stringify({ ...r, visibility: 'public', skip_roll_state: true, actor_name: monsterName }),
-                        });
+                    // v2.94.0 — route attack-roll NPC actions (any action with
+                    // an attack_bonus + damage, e.g. Vex's Dagger Strike)
+                    // through /npc_attack so the server picks the target,
+                    // resolves hit vs AC, and auto-applies damage — same chain
+                    // the PC .mini-strike-btn calls. Pre-fix, NPC strikes
+                    // POSTed three individual /roll entries (attack, damage,
+                    // save announcement) with no target, no hit math, no
+                    // auto-damage — the bug filed in TODO.md ("NPCs unable to
+                    // use action buttons"). Save-only actions (no
+                    // attack_bonus, e.g. dragon breath) still fall through to
+                    // the legacy /roll logging because their resolution path
+                    // is /npc_cast_spell, which the .mini-strike-btn doesn't
+                    // know how to drive yet (filed for follow-up).
+                    const hasAttackRoll = bonus && damage;
+                    if (hasAttackRoll) {
+                        // The init-entry the .mini-strike-btn sits inside
+                        // has the combatant id on data-char-id — for NPCs
+                        // that's the per-spawn combatant id (e.g. "tok_vex_..."),
+                        // which is exactly what /npc_attack wants.
+                        const entry = btn.closest('.init-entry[data-char-id]');
+                        const combId = entry ? (entry.dataset.charId || '') : '';
+                        if (!combId) {
+                            (window.showToast || alert)(
+                                `Strike failed: NPC combatant id not found`, 'error');
+                            return;
+                        }
+                        // Target picker. Same flow as PC strike — open the
+                        // canvas crosshair picker if no target is preselected.
+                        let _targets = (window._targetingState
+                            && window._targetingState.getTargets()) || [];
+                        let _t0 = _targets[0] || null;
+                        if (!_t0 && typeof window.vttOpenMultiTargetPicker === 'function') {
+                            const _picked = await window.vttOpenMultiTargetPicker({
+                                required: 1,
+                                spellName: atkName,
+                                casterCharId: null,  // NPC; no Character row
+                                rangeStr: rangeStr,
+                            });
+                            if (_picked === null) {
+                                btn.disabled = false;
+                                return;
+                            }
+                            _t0 = { combatant_id: _picked[0] || '', character_id: null, name: '' };
+                        }
+                        const doFetch = (overrideRange) => fetch(
+                            `/api/campaign/${CAMPAIGN_ID}/npc_attack`,
+                            {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    combatant_id: combId,
+                                    action_id: actionId,
+                                    action_name: atkName,
+                                    attack_bonus: bonus,
+                                    damage: damage,
+                                    damage_type: damageType,
+                                    range: rangeStr,
+                                    override_range: !!overrideRange,
+                                    ...(_t0 ? {
+                                        target_combatant_id: _t0.combatant_id || '',
+                                    } : {}),
+                                }),
+                            },
+                        );
+                        let resp = await doFetch(false);
+                        // /npc_attack returns 409 with an out-of-range payload
+                        // when the picker's hint was ignored / stale. Mirror
+                        // PC handleOverBudget pattern: surface the error,
+                        // give the GM the option to retry with override.
+                        if (resp.status === 409) {
+                            let errBody; try { errBody = await resp.json(); } catch { errBody = null; }
+                            const errMsg = errBody && errBody.error === 'out_of_range'
+                                ? `Out of range. Click Strike again to override.`
+                                : `Strike rejected: ${errBody ? JSON.stringify(errBody) : '409'}`;
+                            (window.showToast || alert)(errMsg, 'warning');
+                            return;
+                        }
                         if (!resp.ok) {
-                            (window.showToast || alert)(`Strike failed: ${await resp.text()}`, 'error');
-                            break;
+                            (window.showToast || alert)(
+                                `Strike failed: ${await resp.text()}`, 'error');
+                        }
+                    } else {
+                        // Legacy fall-through for save-only / pure-info actions
+                        // (no attack_bonus + damage pair). Same three-roll
+                        // chain as pre-v2.94.0 — kept until /npc_cast_spell
+                        // gets wired into .mini-strike-btn for save actions.
+                        const rolls = [];
+                        if (bonus || (!saveAbility && !damage)) {
+                            const bonusExpr = bonus
+                                ? (bonus.startsWith('+') || bonus.startsWith('-') ? bonus : '+' + bonus)
+                                : '';
+                            rolls.push({
+                                expression: '1d20' + bonusExpr,
+                                note: `${monsterName}: ${atkName} attack`,
+                            });
+                        }
+                        if (damage) {
+                            rolls.push({
+                                expression: damage,
+                                note: `${monsterName}: ${atkName} damage${damageType ? ' (' + damageType + ')' : ''}`,
+                            });
+                        }
+                        if (saveAbility && saveDc) {
+                            rolls.push({
+                                expression: '0',
+                                note: `${monsterName}: ${atkName} — DC ${saveDc} ${saveAbility} save`,
+                            });
+                        }
+                        for (const r of rolls) {
+                            const resp = await fetch(`/api/campaign/${CAMPAIGN_ID}/roll`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ ...r, visibility: 'public', skip_roll_state: true, actor_name: monsterName }),
+                            });
+                            if (!resp.ok) {
+                                (window.showToast || alert)(`Strike failed: ${await resp.text()}`, 'error');
+                                break;
+                            }
                         }
                     }
                 } else {
