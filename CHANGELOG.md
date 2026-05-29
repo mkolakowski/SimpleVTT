@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.16] - 2026-05-29 — "The Effect Rewind"
+
+**Schema version:** 64
+**Commit summary:** **The v2.97.x audit's filed "effect rewind" follow-up lands.** Undo on the four HP-applying endpoints now reverses the HP delta in addition to the resource leg — drinking a Potion of Healing → undo refunds the potion AND drops HP back to the pre-cast value; Lay on Hands → undo refunds the pool AND the target's HP; Second Wind / Wholeness of Body → undo refunds the counter AND the self-heal HP. The plumbing reuses the existing v2.65.0 damage/heal-undo branch — endpoints just stamp a second `kind: "heal"` log entry alongside the existing `resource_spend` / `inventory_consume` leg, both under the same `cast_id`, and the existing branch walks them in reverse on undo.
+**Description:** Four endpoints get a one-block `_log_damage_entry(cast_id, {"kind": "heal", "target_char_id": <id>, "applied": <post-cap-delta>, "is_heal": True})` call right after their existing resource log:
+**(1)** `/use_lay_on_hands` — heal entry against the TARGET (not the caster), `applied = new_cur - target_cur` (post-cap delta).
+**(2)** `/use_second_wind` — heal entry against the caster (self-heal), `applied = hp_result["hp"]["current"] - hp_cur`.
+**(3)** `/use_wholeness_of_body` — same self-heal pattern.
+**(4)** `/use_item` (`use_kind == "heal"` only) — self-heal under `target_char_id = char.id`, `applied = new_hp_state["current"] - hp_cur`. The non-heal item path is unchanged (no heal entry stamped).
+Each one guards against zero-applied heals (target was already at max HP) by skipping the entry rather than logging a no-op — the existing damage/heal-undo branch's `applied <= 0` guard would correctly skip a logged zero-heal, but skipping the stamp keeps the log lean and the test assertions cleaner.
+
+### Added
+- `kind: "heal"` log entries on the four HP-applying endpoints (LoH / Second Wind / Wholeness of Body / `/use_item` heal). Each rides under the same `cast_id` as the resource leg so a single Undo POST reverses both.
+- `tests/harness/test_undo_refunds_resource.py::_set_hp()` helper — drops a character's current HP below max via the existing `/sheet-fields` PATCH endpoint so the heal has headroom and `actual_healed > 0` (a heal that caps at max would log no entry, defeating the test).
+- Three new round-trip tests: `test_undo_refunds_lay_on_hands_hp` (Caelan heals wounded Pip), `test_undo_refunds_second_wind_hp` (wounded Garrik self-heals), `test_undo_refunds_item_use_hp` (wounded Pip drinks a Potion of Healing). Each asserts the post-undo `character_hp_update` carries `source: "undo_heal"` and the HP returned exactly to the pre-cast value.
+
+### Notes
+- **PATCH bump** — pure completion of the v2.97.0-v2.97.8 audit; no new endpoint surface, no new undo log kind, no contract change beyond the WS broadcast SEQUENCE (a heal-undo now precedes the resource-undo broadcast, since the log is walked in reverse). Existing tests for the resource leg already pass without modification — they assert the resource broadcast which still fires.
+- **Existing tests' undo POST behavior is unchanged.** `test_undo_refunds_lay_on_hands_pool` etc. don't damage the target first, so `actual_healed = 0` and no heal entry is stamped — the test still sees the resource_update first because there's no heal-undo to fire ahead of it.
+- **Out of scope:** healing spells cast via `/cast_spell` (Cure Wounds, Mass Cure, Healing Word). Those route through a more complex multi-target path with save-for-half / claim-based mechanics; an audit pass extending the heal stamp to that surface is filed for a separate commit.
+- Total harness count: 589 (was 586 in v2.97.15) — three new HP refund tests.
+
+---
+
 ## [2.97.15] - 2026-05-29 — "The Variant Page"
 
 **Schema version:** 64

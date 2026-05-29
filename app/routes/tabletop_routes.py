@@ -13287,10 +13287,11 @@ async def use_item(
     db.commit()
 
     # v2.97.8 — stamp inventory_consume so the ↶ Undo pill on the
-    # item-use feature_used card refunds the consumed item. HP changes
-    # from heal items are NOT included; the refund leg restores the
-    # potion/scroll, not the HP gained (matches Lay on Hands' v2.97.0
-    # precedent — downstream effect refund is a separate audit case).
+    # item-use feature_used card refunds the consumed item.
+    # v2.97.16 — also stamp the heal so undo reverses the HP gain via
+    # the existing damage/heal-undo branch. ``new_hp_state["current"]
+    # - hp_cur`` is the post-cap delta; if zero (caster was at max),
+    # we skip the entry rather than logging a no-op heal.
     item_cast_id = uuid.uuid4().hex[:12]
     _log_damage_entry(item_cast_id, {
         "kind": "inventory_consume",
@@ -13301,6 +13302,16 @@ async def use_item(
         "was_removed": was_removed,
         "source_label": item_name,
     })
+    if use_kind == "heal" and new_hp_state is not None:
+        item_actual_healed = int(new_hp_state.get("current") or 0) - int(hp_cur)
+        if item_actual_healed > 0:
+            _log_damage_entry(item_cast_id, {
+                "kind": "heal",
+                "campaign_id": campaign_id,
+                "target_char_id": char.id,
+                "applied": item_actual_healed,
+                "is_heal": True,
+            })
     await hub.broadcast(campaign_id, {
         "type": "inventory_update",
         "data": {
@@ -13557,9 +13568,11 @@ async def use_lay_on_hands(
 
     # v2.97.0 — log the pool spend so /undo_attack_damage can refund
     # the N HP back to the pool via the ``resource_spend`` branch
-    # (clamped to pool_max). HP applied to the target is NOT reverted
-    # by this entry — separate audit case; the bug ask is about the
-    # caster-side resource.
+    # (clamped to pool_max).
+    # v2.97.16 — also stamp a heal entry against the target so the
+    # existing damage/heal-undo branch reverses the HP applied to
+    # them. ``actual_healed`` (capped at target_max) is what the
+    # branch reverses, mirroring the existing /apply_healing pattern.
     loh_cast_id = uuid.uuid4().hex[:12]
     _log_damage_entry(loh_cast_id, {
         "kind": "resource_spend",
@@ -13569,6 +13582,14 @@ async def use_lay_on_hands(
         "amount": int(amount),
         "source_label": "Lay on Hands",
     })
+    if actual_healed > 0:
+        _log_damage_entry(loh_cast_id, {
+            "kind": "heal",
+            "campaign_id": campaign_id,
+            "target_char_id": target.id,
+            "applied": int(actual_healed),
+            "is_heal": True,
+        })
 
     # Mark the caster's action slot in the realtime hub.
     await _mark_battle_economy(campaign_id, char.id, "action")
@@ -18197,6 +18218,9 @@ async def use_second_wind(
     # Same shape as Lay on Hands' refund — only the resource_key +
     # source_label differ. amount = 1 because Second Wind is a
     # discrete use, not a variable spend like LoH's HP pool.
+    # v2.97.16 — also stamp a heal entry against the caster (Second
+    # Wind is self-heal) so the existing damage/heal-undo branch
+    # reverses the HP gained. ``actual_healed`` is post-cap.
     sw_cast_id = uuid.uuid4().hex[:12]
     _log_damage_entry(sw_cast_id, {
         "kind": "resource_spend",
@@ -18206,6 +18230,15 @@ async def use_second_wind(
         "amount": 1,
         "source_label": "Second Wind",
     })
+    sw_actual_healed = hp_result["hp"]["current"] - hp_cur
+    if sw_actual_healed > 0:
+        _log_damage_entry(sw_cast_id, {
+            "kind": "heal",
+            "campaign_id": campaign_id,
+            "target_char_id": char.id,
+            "applied": int(sw_actual_healed),
+            "is_heal": True,
+        })
 
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")
@@ -20374,6 +20407,7 @@ async def use_wholeness_of_body(
     db.commit()
 
     # v2.97.2 — log the use-spend for /undo_attack_damage refund.
+    # v2.97.16 — also stamp the self-heal so undo reverses HP gain.
     wob_cast_id = uuid.uuid4().hex[:12]
     _log_damage_entry(wob_cast_id, {
         "kind": "resource_spend",
@@ -20383,6 +20417,15 @@ async def use_wholeness_of_body(
         "amount": 1,
         "source_label": "Wholeness of Body",
     })
+    wob_actual_healed = hp_result["hp"]["current"] - hp_cur
+    if wob_actual_healed > 0:
+        _log_damage_entry(wob_cast_id, {
+            "kind": "heal",
+            "campaign_id": campaign_id,
+            "target_char_id": char.id,
+            "applied": int(wob_actual_healed),
+            "is_heal": True,
+        })
 
     # Mark the action slot.
     await _mark_battle_economy(campaign_id, char.id, "action")

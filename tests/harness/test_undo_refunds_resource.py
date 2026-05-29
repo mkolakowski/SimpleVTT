@@ -31,6 +31,19 @@ _REFUNDABLE_FEATURE_SOURCES Set.
 from .conftest import CAMPAIGN_ID
 
 
+async def _set_hp(gm_client, char_id: int, current: int) -> None:
+    """Helper: set a character's current HP directly via the sheet
+    fields PATCH endpoint. Used to drop a target's HP below max so a
+    follow-up heal has room to actually apply (a heal that caps at max
+    logs ``applied=0`` and the v2.97.16 heal-undo branch correctly
+    no-ops on it; this helper sets up the non-trivial case)."""
+    resp = await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/sheet-fields",
+        json={"hp": {"current": int(current)}},
+    )
+    assert resp.status_code == 200, resp.text
+
+
 async def _long_rest(gm_client, char_id: int) -> None:
     resp = await gm_client.post(
         f"/api/campaign/{CAMPAIGN_ID}/character/{char_id}/rest",
@@ -439,3 +452,155 @@ async def test_undo_refunds_second_wind_use(gm_client, gm_ws, roster):
         f"{sw_remaining_after_cast}, post-undo current={rd['current']} "
         f"(expected {expected})"
     )
+
+
+# ----------------------------------------------------------------------
+# v2.97.16 — HP refund roundtrips.
+#
+# The v2.97.0-v2.97.8 audit refunded resource counters / spell slots /
+# inventory but left downstream HP changes alone. v2.97.16 stamps a
+# ``heal`` entry alongside the resource leg in the 4 HP-applying
+# endpoints (Lay on Hands / Second Wind / Wholeness of Body / use_item
+# heal); the existing damage/heal-undo branch reverses the HP.
+#
+# Each test damages the target first (so the heal has headroom and
+# ``actual_healed > 0``), casts the heal, captures the cast_id, undoes,
+# and asserts ``character_hp_update`` carries ``source: undo_heal`` +
+# the expected delta.
+# ----------------------------------------------------------------------
+
+
+async def test_undo_refunds_lay_on_hands_hp(gm_client, gm_ws, roster):
+    """Caelan heals a wounded Pip via Lay on Hands. Undo refunds BOTH
+    the pool (existing v2.97.0 plumbing) AND the HP gained (v2.97.16).
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, caelan["id"])
+    await _long_rest(gm_client, pip["id"])
+    # Wound Pip so the heal has headroom. Pre-cast HP is the value we
+    # expect to be restored on undo.
+    target_pre_hp = 20
+    await _set_hp(gm_client, pip["id"], target_pre_hp)
+
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_lay_on_hands",
+        json={
+            "character_id": caelan["id"],
+            "target_character_id": pip["id"],
+            "amount": 8,
+            "override": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+
+    msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    cast_id = msg["data"].get("cast_id")
+    healed = int(msg["data"].get("heal_amount") or 0)
+    assert cast_id and healed > 0, (
+        f"Lay on Hands didn't apply HP: cast_id={cast_id}, healed={healed}, "
+        f"payload={msg['data']}"
+    )
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+
+    # The damage/heal-undo branch walks entries in REVERSE: heal entry
+    # (stamped second) reverses first → character_hp_update with
+    # source=undo_heal + delta=-healed.
+    hp_msg = await gm_ws.wait_for("character_hp_update", timeout=3.0)
+    hd = hp_msg["data"]
+    assert hd["character_id"] == pip["id"]
+    assert hd["source"] == "undo_heal", (
+        f"expected source=undo_heal, got {hd['source']}; payload={hd}"
+    )
+    assert hd["delta"] == -healed
+    assert int(hd["hp"]["current"]) == target_pre_hp, (
+        f"Pip's HP not restored: post-undo={hd['hp']['current']}, "
+        f"expected={target_pre_hp}"
+    )
+
+
+async def test_undo_refunds_second_wind_hp(gm_client, gm_ws, roster):
+    """Garrik uses Second Wind from a wounded state. Undo refunds the
+    counter AND restores Garrik's HP to the pre-cast value."""
+    garrik = roster["Garrik Ironside"]
+    await _long_rest(gm_client, garrik["id"])
+    pre_hp = 15
+    await _set_hp(gm_client, garrik["id"], pre_hp)
+
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_second_wind",
+        json={"character_id": garrik["id"], "override": True},
+    )
+    assert cast.status_code == 200, cast.text
+
+    msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    cast_id = msg["data"].get("cast_id")
+    healed = int(msg["data"].get("heal_amount") or 0)
+    assert cast_id and healed > 0, (
+        f"Second Wind didn't apply HP: cast_id={cast_id}, healed={healed}"
+    )
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+
+    hp_msg = await gm_ws.wait_for("character_hp_update", timeout=3.0)
+    hd = hp_msg["data"]
+    assert hd["character_id"] == garrik["id"]
+    assert hd["source"] == "undo_heal"
+    assert hd["delta"] == -healed
+    assert int(hd["hp"]["current"]) == pre_hp
+
+
+async def test_undo_refunds_item_use_hp(gm_client, gm_ws, roster):
+    """Pip drinks a Potion of Healing from a wounded state. Undo
+    refunds the inventory qty AND restores Pip's HP."""
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, pip["id"])
+    pre_hp = 12
+    await _set_hp(gm_client, pip["id"], pre_hp)
+
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_item",
+        json={
+            "character_id": pip["id"],
+            "inventory_index": 6,  # Pip's Potion of Healing
+            "override": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json().get("cast_id")
+    rolled = int(cast.json().get("rolled") or 0)
+    assert cast_id and rolled > 0
+
+    # Healed could be less than rolled if Pip would cap at max — but
+    # we just dropped her HP, so post-cast HP - pre_hp should equal
+    # min(rolled, max - pre_hp). Read it back via the heal_applied
+    # broadcast: the new_hp.current is what's authoritative.
+    heal_msg = await gm_ws.wait_for("heal_applied", timeout=3.0)
+    post_cast_hp = int(heal_msg["data"]["new_hp"]["current"])
+    healed = post_cast_hp - pre_hp
+    assert healed > 0, f"Potion didn't apply HP: pre={pre_hp}, post={post_cast_hp}"
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+
+    hp_msg = await gm_ws.wait_for("character_hp_update", timeout=3.0)
+    hd = hp_msg["data"]
+    assert hd["character_id"] == pip["id"]
+    assert hd["source"] == "undo_heal"
+    assert hd["delta"] == -healed
+    assert int(hd["hp"]["current"]) == pre_hp
