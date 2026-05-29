@@ -4640,12 +4640,28 @@
         const _firstDamageAction = actions.find(a => a.damage || (a.damage_scaling && a.damage_scaling.length)) || {};
         const damageExpr = _diceExprFromDamage(_firstDamageAction.damage || '');
 
-        const metaBits = [];
-        if (d.spell_school)        metaBits.push(escapeHTML(d.spell_school));
-        if (d.spell_casting_time)  metaBits.push(escapeHTML(d.spell_casting_time));
-        if (d.spell_range)         metaBits.push(escapeHTML(d.spell_range));
-        if (d.spell_concentration) metaBits.push('<span style="color:var(--accent)">Concentration</span>');
-        if (d.spell_ritual)        metaBits.push('<span style="color:var(--accent)">Ritual</span>');
+        // v2.97.12: spell meta info moves from the inline `· tail · tail`
+        // string under the spell name into pill bubbles below the name.
+        // Color family is distinct from .result-pill (which uses semantic
+        // damage / heal / buff colors) — these use the accent purple
+        // family so the eye reads them as "what kind of spell" not
+        // "what happened." The details pill is an expanding <details>
+        // pill: collapsed shape matches the others, opens to reveal the
+        // full spell desc inline (replaces the pre-v2.97.12 ▾ details
+        // disclosure under the name row).
+        const metaPills = [];
+        if (d.spell_school)        metaPills.push(`<span class="spell-meta-pill">${escapeHTML(d.spell_school)}</span>`);
+        if (d.spell_casting_time)  metaPills.push(`<span class="spell-meta-pill">⏱ ${escapeHTML(d.spell_casting_time)}</span>`);
+        if (d.spell_range)         metaPills.push(`<span class="spell-meta-pill">📏 ${escapeHTML(d.spell_range)}</span>`);
+        if (d.spell_concentration) metaPills.push(`<span class="spell-meta-pill is-flag">Concentration</span>`);
+        if (d.spell_ritual)        metaPills.push(`<span class="spell-meta-pill is-flag">Ritual</span>`);
+        if (d.spell_desc) {
+            metaPills.push(
+                `<details class="spell-meta-pill"><summary>details</summary>`
+                + `<div class="spell-meta-pill-body">${escapeHTML(d.spell_desc)}</div>`
+                + `</details>`
+            );
+        }
 
         // v2.43.0: target tag relocated from the body's name row up
         // into the header (next to the slot chip). Inline the spell
@@ -4667,9 +4683,8 @@
                 <div class="spell-cast-body">
                     <div class="spell-cast-name-row">
                         <span class="spell-cast-name">🪄 ${escapeHTML(d.spell_name || 'Spell')}</span>
-                        ${metaBits.length ? `<span class="spell-cast-meta-inline">· ${metaBits.join(' · ')}</span>` : ''}
                     </div>
-                    ${d.spell_desc ? `<details class="roll-card-details"><summary>▾ details</summary><div class="spell-cast-desc">${escapeHTML(d.spell_desc)}</div></details>` : ''}
+                    ${metaPills.length ? `<div class="spell-meta-pills">${metaPills.join('')}</div>` : ''}
                     ${_spellResultPillsHtml(d)}
                     <div class="spell-cast-actions"></div>
                     ${_overBudgetBadge(d)}

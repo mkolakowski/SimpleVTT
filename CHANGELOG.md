@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.12] - 2026-05-29 — "Pill Cabinet"
+
+**Schema version:** 64
+**Commit summary:** **Spell-cast roll-log cards swap the inline-meta tail for a pill row.** The school / casting time / range / Concentration / Ritual / details info that used to render as a tiny ` · school · time · range ` muted tail under the spell name is now a horizontal pill bar — each fact in its own accent-purple pill. The spell description's `▾ details` disclosure becomes one more pill in the same row, expanding inline to reveal the full text. Color family is distinct from the outcome `.result-pill` family (which uses semantic `--c-damage` / `--c-heal` / etc.) so the eye reads spell metadata as "what kind of spell" rather than mixing it with the cast's outcome row below.
+
+### Added
+- `.spell-meta-pills` / `.spell-meta-pill` / `.spell-meta-pill.is-flag` / `details.spell-meta-pill` CSS classes — accent-purple pill family for spell metadata. Compact (22 px min-height, 10.5 px font) so the meta row stays subordinate to the .result-pill outcome row.
+
+### Changed
+- `appendSpellCast` (tabletop.js) — replaces `spell-cast-meta-inline` tail + the standalone `<details class="roll-card-details">` description block with a `.spell-meta-pills` row containing `<span class="spell-meta-pill">` chips for school / casting time / range, `.is-flag` chips for Concentration / Ritual, and a `<details class="spell-meta-pill">` expanding pill for the description.
+
+### Notes
+- **PATCH bump** — pure visual change. No new functionality, no contract change. No new test (no broadcast / endpoint touched).
+- Description pill's expanded body uses a dashed accent-tinted top border + slightly darker accent backing so the open state reads as "this pill is showing more" without disrupting the surrounding card layout. The flexbox column flip on `[open]` lets the body wrap to multiple lines while the closed shape stays a single-line pill.
+- TODO.md entry "Move spell type, range, action type and details to pills" + "details should be an expanding pill" + "pills should be different color than damage pills" — all addressed in this commit.
+
+---
+
 ## [2.97.11] - 2026-05-29 — "Reverse Sweep"
 
 **Schema version:** 64
