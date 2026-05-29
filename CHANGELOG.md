@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.17] - 2026-05-29 — "Claim the Refund"
+
+**Schema version:** 64
+**Commit summary:** **The v2.97.16 effect-rewind audit extends to the `/cast_spell` healing surface.** Pre-v2.97.17, the auto-applied heal path (cast Cure Wounds / Healing Word with a target) already stamped its heal via `_apply_heal_to_combatant`, so Undo on the spell-cast card correctly reverted target HP. But the **heal-claim** path (cast a heal with no target → claim later via 🩹 Apply Healing) did NOT stamp; Undo refunded the slot but silently no-op'd on HP. v2.97.17 closes that gap with a one-block `_log_damage_entry(cast_id, {"kind": "heal", "target_char_id": <id>, "applied": <post-cap-delta>, "is_heal": True})` call inside `/apply_healing` right after the existing `_apply_hp_change` + `db.commit()`. The existing v2.65.0 damage/heal-undo branch reverses the HP delta.
+**Description:** One file changed in `/apply_healing` — between the existing commit and the v2.59.2 Blessed Healer branches, a new block computes `_claim_applied = post_hp - pre_hp` and stamps a heal entry when `> 0`. Stamping under the same `cast_id` ties the heal to the spell-cast card; the slot-refund leg from v2.92.0 stays in place; both legs replay on a single Undo POST.
+
+### Added
+- `kind: "heal"` log entry stamped by `/apply_healing` under the spell's `cast_id`. Mirrors the shape that `_apply_heal_to_combatant` already stamps for the auto-applied path.
+- `tests/harness/test_cast_spell_heal.py::test_undo_heal_claim_reverses_hp` — round-trip: Tavik casts Healing Word with NO target → Alice (Pip's owner) claims via `/apply_healing` → Pip's HP goes up → GM undoes → Pip's HP goes back to the pre-claim value.
+
+### Notes
+- **PATCH bump** — fills a documented v2.97.16 gap; no new endpoint, no new undo log kind, no contract change beyond an additional log entry shape. The auto-applied path was already covered by the v2.26.0 `_apply_heal_to_combatant` stamp; only the claim path needed plumbing.
+- **Blessed Healer self-heal is NOT included.** When a Life Domain Cleric casts a heal (Disciple of Life Lv 6+), the caster gets a "2 + spell level" self-heal via Blessed Healer that fires inside `/apply_healing` with `cast_id=None` (line 22490). That self-heal stays applied after Undo. Filed for a follow-up commit — the fix is to pass the same `cast_id` through to `_apply_heal_to_combatant` for the Blessed Healer leg too.
+- **Mass heals (Mass Cure Wounds / Mass Healing Word) coverage.** The AoE heal-extras loop in `/cast_spell` (v2.59.0) calls `_apply_heal_to_combatant` with `cast_id` for each affected target, so Undo already reverses every leg via the v2.26.0 plumbing. No additional work needed.
+- Total harness count: 590 (was 589 in v2.97.16) — one new heal-claim refund test.
+
+---
+
 ## [2.97.16] - 2026-05-29 — "The Effect Rewind"
 
 **Schema version:** 64

@@ -22447,6 +22447,24 @@ async def apply_healing(
     result = _apply_hp_change(char, new_cur)
     db.commit()
 
+    # v2.97.17 — stamp the heal entry against the cast_id so the
+    # spell-cast card's ↶ Undo button reverses the HP gain. The
+    # auto-applied path (v2.26.0 + v2.59.0) already stamps via
+    # _apply_heal_to_combatant; this commit closes the heal-claim
+    # path (player clicks 🩹 Apply Healing on a Cure Wounds card).
+    # Blessed Healer self-heal logged above (cast_id=None) is NOT
+    # included — undo won't refund the caster's self-heal yet;
+    # filed for a follow-up commit.
+    _claim_applied = int(result["hp"]["current"]) - int(hp_cur)
+    if _claim_applied > 0:
+        _log_damage_entry(cast_id, {
+            "kind": "heal",
+            "campaign_id": campaign_id,
+            "target_char_id": char.id,
+            "applied": _claim_applied,
+            "is_heal": True,
+        })
+
     # v2.59.2 — Disciple of Life + Blessed Healer broadcasts +
     # Blessed Healer self-heal. Mirror of the cast_spell single-
     # target Blessed Healer branch (~L 8260) but anchored on the
