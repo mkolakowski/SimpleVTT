@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.96.3] - 2026-05-29 — "Square the Tray"
+
+**Schema version:** 64
+**Commit summary:** **Pins the v2.96.1 tab tray to the same 480 px width as the drawer sidebar cards underneath it,** so the tray's left + right edges align with the sidebar instead of taking content-based width. The Ruler cluster and the tab cluster now spread to opposite ends of the fixed footprint via `justify-content: space-between`.
+**Description:** One CSS edit — `.tt-tab-card` in `app/templates/tabletop.html`. Added `width: 480px; max-width: 100%; box-sizing: border-box; justify-content: space-between;`. The 480 px matches `.drawer-sidebar` exactly. `max-width: 100%` keeps the tray from overflowing on narrow viewports; `box-sizing: border-box` keeps the padding + border inside the 480 px footprint. The existing flex layout still wraps the tab cluster onto a second line on very narrow widths (`flex-wrap: wrap; row-gap: 4px`).
+
+### Changed
+- `.tt-tab-card` — fixed 480 px width + `justify-content: space-between` so it aligns visually with the drawer sidebar below it.
+
+### Notes
+- **PATCH bump** — pure visual tweak following the v2.96.1 / v2.96.2 series. No data, schema, contract, JS, or DOM-id changes.
+
+---
+
 ## [2.96.2] - 2026-05-29 — "Mind the Gap"
 
 **Schema version:** 64

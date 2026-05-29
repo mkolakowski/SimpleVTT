@@ -153,12 +153,22 @@
        group to the right edge of the topbar; the inner
        canvas-tools / drawer-tab-bar lose their individual
        margin-left:auto via the descendant rules below so they stack
-       naturally inside the card. */
+       naturally inside the card.
+       v2.96.3 — width matches the drawer sidebar (480 px) so the
+       tray's left + right edges align with the sidebar cards that
+       sit beneath it. ``justify-content: space-between`` spreads the
+       Ruler cluster and the tab cluster to opposite ends of the
+       fixed width. ``box-sizing: border-box`` keeps the padding +
+       border inside the 480 px footprint. */
     .tt-tab-card {
         margin-left: auto;
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 8px;
+        width: 480px;
+        max-width: 100%;
+        box-sizing: border-box;
         padding: 6px 8px;
         background: color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);
         border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
