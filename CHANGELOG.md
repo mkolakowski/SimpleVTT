@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.96.0] - 2026-05-29 — "The Undo Pill"
+
+**Schema version:** 64
+**Commit summary:** **Wires the ↶ Undo pill into the roll-log card for reaction-cast feature_used events** — closes the loop on the v2.92.0 → v2.95.0 server-side refund work by making the slot refund clickable from the roll log. Now when the GM clicks ↶ Undo on a Counterspell / Shield / Hellish Rebuke / Absorb Elements / Silvery Barbs card, the server's `spell_slot_spend` refund branch fires (just like ↶ Undo on a `/cast_spell` card already did since v2.92.0). Same `POST /undo_attack_damage` contract; no new server endpoints.
+**Description:** One edit in `app/static/tabletop.js::_appendFeatureUsed`. After the existing heal/dice/charges pill builders run, a new guard checks `d.cast_id && _CAST_REACTION_SOURCES.has(d.source)` and pushes a `.feature-cast-undo` button (styled with `.result-pill .chip-undo`, same visual treatment as the weapon/spell ↶ Undo pills). `_CAST_REACTION_SOURCES` is the Set `{counterspell-cast, shield-cast, hellish-rebuke-cast, absorb-elements-cast, silvery-barbs-cast}` — kept tight so other `feature_used` cards (Lay on Hands heals, Second Wind, Ki uses, etc.) don't render a pill that wouldn't actually refund anything (their server-side refund plumbing lands as the audit continues per the v2.95.0 note).
+
+**Description (cont):** Click handler is wired immediately after `li.appendChild(...)` to keep the binding lifecycle co-located with the DOM creation. POSTs `{attack_id: cast_id}` to `/api/campaign/{cid}/undo_attack_damage` — same endpoint the weapon and spell-cast Undo buttons hit. On 200, the button label flips to `↶ Refunded` and stays disabled (no double-click double-refund). On 4xx/5xx, the failure body is surfaced via the existing `window.showToast` (or `alert` fallback) and the button re-enables so the GM can retry. The server-side `spell_slot_update` broadcast that the v2.92.0 refund branch fires is already handled by the sheet/init-tracker hydrators, so the visual slot counter on Thalindra's wizard tab (etc.) flips back automatically without any new wiring.
+
+### Added
+- `.feature-cast-undo` pill rendered on `feature_used` roll-log cards when `d.cast_id` is present and `d.source` is one of the five reaction-cast sources.
+- Click handler that POSTs `{attack_id: cast_id}` to `/undo_attack_damage`.
+
+### Notes
+- **MINOR bump** — net-new user-clickable surface (the slot refund was server-reachable but had no UI handle before this commit). No data, schema, or contract changes; the JS handler uses the existing endpoint contract from v2.92.0.
+- Why a separate `.feature-cast-undo` class instead of reusing `.weapon-atk-undo`? The existing `.weapon-atk-undo` handlers in spell-cast / weapon-attack cards are wired with their own per-card click listeners that read `d` from a closure. Re-using the class would mean another `forEach` listener somewhere that has to thread through the same selector — the new class isolates the binding lifecycle to the feature_used card alone, mirroring how each card type owns its own Undo lifecycle.
+- The same UI now picks up automatically for any future reaction-cast surface that follows the v2.92.0 plumbing pattern: stamp `cast_id` on the `feature_used` broadcast + add the source to the `_CAST_REACTION_SOURCES` Set. The 1-line Set addition is the entire client-side opt-in.
+
+---
+
 ## [2.95.0] - 2026-05-28 — "Refund the Rest"
 
 **Schema version:** 64

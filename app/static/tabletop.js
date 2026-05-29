@@ -5411,6 +5411,29 @@
             const icon = isLast ? '⚪' : '🔋';
             featurePills.push(`<span class="result-pill ${cls}">${icon} ${rem}/${mx} uses left</span>`);
         }
+        // v2.96.0 — ↶ Undo pill for reaction-cast feature_used cards
+        // that carry a cast_id (v2.93/v2.95 plumbing). Clicking POSTs
+        // to /undo_attack_damage which dispatches the v2.92.0
+        // spell_slot_spend refund branch — server bumps the slot's
+        // ``used`` count down and broadcasts spell_slot_update.
+        // Limited to the cast-* reaction sources so other
+        // feature_used cards (Lay on Hands heals, Second Wind, etc.)
+        // don't accidentally render a non-functional pill — their
+        // refund plumbing lands separately as the audit continues.
+        const _CAST_REACTION_SOURCES = new Set([
+            'counterspell-cast',
+            'shield-cast',
+            'hellish-rebuke-cast',
+            'absorb-elements-cast',
+            'silvery-barbs-cast',
+        ]);
+        if (d.cast_id && _CAST_REACTION_SOURCES.has(d.source)) {
+            featurePills.push(
+                `<button type="button" class="result-pill chip-undo feature-cast-undo"`
+                + ` data-cast-id="${escapeHTML(d.cast_id)}"`
+                + ` title="Refund the spell slot consumed by this reaction cast">↶ Undo</button>`
+            );
+        }
         const healPill = featurePills.length
             ? `<div class="result-pills">${featurePills.join('')}</div>`
             : '';
@@ -5438,6 +5461,41 @@
         ul.appendChild(li);
         _scrollRollLogToBottom();
         _persistRollEntry('feature_used', d);
+        // v2.96.0 — wire the Undo pill click. Same POST shape as the
+        // existing .weapon-atk-undo handlers; on success the server
+        // broadcasts spell_slot_update which the sheet hydrators
+        // already consume. We grey the button + change its label so
+        // the GM gets immediate feedback even before the WS round-trip.
+        const undoCastBtn = li.querySelector('.feature-cast-undo');
+        if (undoCastBtn) {
+            undoCastBtn.addEventListener('click', async () => {
+                const cid = undoCastBtn.dataset.castId;
+                if (!cid) return;
+                undoCastBtn.disabled = true;
+                const orig = undoCastBtn.textContent;
+                undoCastBtn.textContent = '↶ Refunding…';
+                try {
+                    const r = await fetch(`/api/campaign/${CAMPAIGN_ID}/undo_attack_damage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ attack_id: cid }),
+                    });
+                    if (!r.ok) {
+                        let body; try { body = await r.json(); } catch { body = null; }
+                        (window.showToast || function(m){ alert(m); })(
+                            `Undo failed: ${body ? JSON.stringify(body) : r.status}`, 'error');
+                        undoCastBtn.disabled = false;
+                        undoCastBtn.textContent = orig;
+                        return;
+                    }
+                    undoCastBtn.textContent = '↶ Refunded';
+                } catch (e) {
+                    console.warn('undo_attack_damage failed:', e);
+                    undoCastBtn.disabled = false;
+                    undoCastBtn.textContent = orig;
+                }
+            });
+        }
     }
 
     // ---------- Weapon-attack card ----------
