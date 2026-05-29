@@ -5464,6 +5464,7 @@
             'font-of-magic',
             'class-feature',
             'item-use',
+            'stunning-strike',
         ]);
         if (d.cast_id && _REFUNDABLE_FEATURE_SOURCES.has(d.source)) {
             featurePills.push(

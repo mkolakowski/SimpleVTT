@@ -19256,19 +19256,44 @@ async def use_stunning_strike(
     sheet["resources"] = resources
     char.sheet = sheet
     db.commit()
-    # v2.97.2 — Stunning Strike has NO feature_used broadcast (only
-    # roll + resource_update + roll_request), so plumbing a
-    # spell_slot_spend / resource_spend log entry here would have no
-    # UI surface — the .feature-cast-undo pill needs a feature_used
-    # card to attach to. Filed for follow-up: switch Stunning Strike
-    # to a feature_used broadcast (or add a roll-card Undo pill that
-    # accepts cast_id off the roll broadcast).
+    # v2.97.19 — closes the v2.97.2 filed follow-up. Stamp a
+    # resource_spend log entry and broadcast a feature_used so the
+    # v2.96.0 ↶ Undo pill has a card to attach to. Pre-v2.97.19 this
+    # endpoint emitted only resource_update + roll_request/roll, so
+    # ki was unrefundable through the standard undo flow.
+    ss_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(ss_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "ki",
+        "amount": 1,
+        "source_label": "Stunning Strike",
+    })
     await hub.broadcast(campaign_id, {
         "type": "resource_update",
         "data": {
             "character_id": char.id,
             "key": "ki",
             "current": ki_cur - 1,
+            "max": ki_max,
+        },
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "feature_used",
+        "data": {
+            "character_id": char.id,
+            "character_name": char.name,
+            "feature_name": (
+                f"💥 Stunning Strike → {target_combatant.get('name') or 'target'}"
+            ),
+            "feature_desc": (
+                f"Bonus rider on a melee hit · CON save DC {save_dc} "
+                f"or Stunned until end of caster's next turn."
+            ),
+            "source": "stunning-strike",
+            "cast_id": ss_cast_id,
+            "remaining": ki_cur - 1,
             "max": ki_max,
         },
     })
@@ -19399,6 +19424,7 @@ async def use_stunning_strike(
         "auto_save_passed": auto_save_passed,
         "auto_save_breakdown": auto_save_breakdown,
         "auto_save_buff_installed": auto_save_buff_installed,
+        "cast_id": ss_cast_id,
     }
 
 

@@ -359,3 +359,72 @@ async def test_stunning_strike_pc_drops_own_concentration(
         f"/api/campaign/{CAMPAIGN_ID}/end_buff",
         json={"character_id": magnus["id"], "key": "stunned"},
     )
+
+
+async def test_stunning_strike_undo_refunds_ki(gm_client, gm_ws, kael_rested):
+    """v2.97.19 — Stunning Strike was the last v2.97.2-skipped endpoint.
+    Now it broadcasts feature_used with a cast_id, the ki spend is
+    stamped as a resource_spend log entry, and the v2.96.0 ↶ Undo pill
+    can refund it.
+
+    The test casts Stunning Strike on a bandit, captures the cast_id
+    off the feature_used broadcast, posts /undo_attack_damage, then
+    asserts the refund resource_update carries ki +1.
+    """
+    kael = kael_rested
+    bandit_tmpl = await _bandit_template(gm_client)
+    bandit_id = "tok_test_ss_undo_bandit"
+    await _seed_battle(gm_client, [
+        {"id": f"tok_test_{kael['id']}", "char_id": kael["id"],
+         "name": kael["name"], "initiative": 10,
+         "hp_current": 30, "hp_max": 30, "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        {"id": bandit_id, "char_id": None,
+         "token_template_id": bandit_tmpl["id"],
+         "name": bandit_tmpl["name"], "initiative": 7,
+         "hp_current": 20, "hp_max": 20, "buffs": [],
+         "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+    ])
+    gm_ws.mark()
+
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_stunning_strike",
+        json={
+            "character_id": kael["id"],
+            "target_combatant_id": bandit_id,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    body = cast.json()
+    cast_id = body.get("cast_id")
+    assert cast_id, f"expected cast_id in response; got {body}"
+    ki_after_cast = int(body["ki_remaining"])
+
+    # Verify feature_used broadcast went out with the cast_id.
+    feature_msgs = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "stunning-strike"
+    ]
+    assert feature_msgs, (
+        f"expected stunning-strike feature_used broadcast; buffered: "
+        f"{[(m.get('type'), (m.get('data') or {}).get('source')) for m in gm_ws.buffered()]}"
+    )
+    assert feature_msgs[0]["data"].get("cast_id") == cast_id
+
+    # Undo: existing resource_spend branch in undo_attack_damage refunds
+    # the ki via resource_update.
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+
+    resource_msg = await gm_ws.wait_for("resource_update", timeout=3.0)
+    rd = resource_msg["data"]
+    assert rd["character_id"] == kael["id"]
+    assert rd["key"] == "ki"
+    assert rd["current"] == ki_after_cast + 1, (
+        f"ki not refunded: post-cast={ki_after_cast}, "
+        f"post-undo={rd['current']} (expected {ki_after_cast + 1})"
+    )

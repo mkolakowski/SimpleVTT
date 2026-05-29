@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.19] - 2026-05-29 — "Strike the Refund"
+
+**Schema version:** 64
+**Commit summary:** **Closes the v2.97.2-filed Stunning Strike UI surface gap.** Pre-v2.97.19, `/use_stunning_strike` broadcast only `resource_update` (ki counter) + `roll_request` / `roll` (the CON save). No `feature_used`, so the v2.96.0 ↶ Undo pill had nothing to attach to and the ki spend was silently unrefundable. v2.97.19 mints a `cast_id`, stamps a `resource_spend` log entry for the ki spend, broadcasts a `feature_used` carrying the cast_id, and opts `'stunning-strike'` into the JS `_REFUNDABLE_FEATURE_SOURCES` Set. The ↶ Undo pill renders on the Stunning Strike card; clicking it replays the existing v2.97.0 resource-refund branch and bumps the ki counter back by 1.
+**Description:** Four edits.
+**(1)** `/use_stunning_strike` — mints `ss_cast_id`, stamps `_log_damage_entry(ss_cast_id, {"kind": "resource_spend", "resource_key": "ki", "amount": 1, "source_label": "Stunning Strike"})` right after the existing ki decrement + commit.
+**(2)** `/use_stunning_strike` — broadcasts a new `feature_used` after the existing `resource_update`, carrying `source: "stunning-strike"`, `cast_id`, `remaining`, `max`, and a descriptive `feature_name` / `feature_desc`.
+**(3)** Response body — `cast_id` is added so callers (or test code) can refer to the Stunning Strike without scraping the WS.
+**(4)** `app/static/tabletop.js::_REFUNDABLE_FEATURE_SOURCES` — adds `'stunning-strike'`.
+
+### Added
+- `cast_id` field on `feature_used` broadcast for `source: stunning-strike`.
+- `resource_spend` log entry stamped by `/use_stunning_strike`.
+- New `feature_used` broadcast type emission from `/use_stunning_strike`.
+- `tests/harness/test_use_stunning_strike.py::test_stunning_strike_undo_refunds_ki` — full round-trip: Kael uses Stunning Strike on a bandit, asserts `feature_used` carries the cast_id, posts /undo_attack_damage, asserts the refund `resource_update` carries ki +1.
+
+### Notes
+- **PATCH bump** — fills the v2.97.2-filed UI surface gap; no contract change beyond the new broadcast emission. The new broadcast is a strict superset (existing callers ignore unknown event types).
+- **Stunned buff stays installed on undo.** The undo refunds only the ki — same precedent as Rage / Shield / Indomitable from earlier in the audit. The GM/player can manually remove the Stunned buff from the buff tracker if RAW-strict undo is needed. Filed as a buff-teardown audit case alongside the rest.
+- This effectively closes the v2.97.2 "Stunning Strike skipped" note. The audit wiki page (`docs/wiki/consume-without-refund-audit.md`) is updated to drop Stunning Strike from the filed-for-follow-up list.
+- Total harness count: 592 (was 591 in v2.97.18) — one new Stunning Strike refund test.
+
+---
+
 ## [2.97.18] - 2026-05-29 — "Heal the Healer"
 
 **Schema version:** 64
