@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.5] - 2026-05-29 — "Recover the Recovery"
+
+**Schema version:** 64
+**Commit summary:** **Adds a new `slot_restore` undo log kind for multi-leg refunds.** `/use_arcane_recovery` (Wizard Lv 1+, restores N spell-slot levels worth of slots once per long rest) now stamps TWO legs under a shared `cast_id`: a `resource_spend` for the `arcane-recovery` counter (the existing v2.97.0 plumbing) PLUS one new `slot_restore` entry per slot level that was restored. The matching new branch in `undo_attack_damage` bumps each slot's `used` back UP by `count` (clamped to `total`) and broadcasts `spell_slot_update`. A single ↶ Undo POST replays both legs atomically.
+**Description:** Three edits.
+**(1)** `app/routes/tabletop_routes.py::undo_attack_damage` — new `kind == "slot_restore"` branch. The inverse of the v2.92.0 `spell_slot_spend` refund: instead of decrementing `used` by 1 (un-spending a cast), it increments `used` by `count` (un-restoring an AR restoration). Each level gets its own log entry so a multi-level AR (`[{level:1,count:2},{level:2,count:1}]`) replays each leg's broadcast separately, matching the per-level granularity the cast-time path already uses. The "nothing to undo" early-return guard is extended to recognize `slot_restore` as a non-empty entry.
+**(2)** `/use_arcane_recovery` — mints `ar_cast_id`, stamps `_log_damage_entry(ar_cast_id, {"kind": "resource_spend", "resource_key": "arcane-recovery", "amount": 1, ...})` after the existing counter decrement, then loops `parsed_slots` stamping one `slot_restore` per `(level, count)` pair. Adds `cast_id` to the `feature_used` broadcast + the response body.
+**(3)** `app/static/tabletop.js::_REFUNDABLE_FEATURE_SOURCES` — adds `'arcane-recovery'` so the v2.96.0 ↶ Undo pill renders on the AR roll-log card.
+
+### Added
+- New `kind == "slot_restore"` undo log entry — the inverse of `spell_slot_spend`. Stores `class_slug + slot_level + count`. On undo, bumps `sheet["spell_slots"][cslug][lvl]["used"]` UP by `count` (clamped to `total`).
+- `cast_id` field on `feature_used` broadcast for `source: arcane-recovery`.
+- Per-level `slot_restore` log entries stamped by `/use_arcane_recovery` (one per `(level, count)` pair in the cast request).
+- New `tests/harness/test_undo_refunds_resource.py::test_undo_refunds_arcane_recovery` covering the round-trip (long-rest Thalindra, spend 2× L1 via /cast_spell, AR-restore both, undo, assert AR counter back to 1 + L1 slot.used back to 2).
+
+### Notes
+- **PATCH bump** — new undo kind but no new broadcast shape, no schema change, no new endpoint. The new test covers the new kind per the harness contract.
+- Same shape unlocks future multi-leg refunds: Druid's Wild Shape (HP swap + form), Warlock's Mystic Arcanum free-cast (slot or per-day counter), Bard's Magical Secrets gains, etc. — each one stamps the appropriate combination of `resource_spend` / `slot_restore` / `buff_install` under one `cast_id`.
+- Font of Magic remains skipped — it spends one resource (slot OR SP) to gain another (SP OR slot), so the undo needs the inverse of the gained leg (which is a `resource_spend` on a different key) AND the inverse of the spent leg (which depends on which direction). That's still a distinct refund shape; queued.
+- Audit remaining: `/use_feature`-routed features (Channel Divinity 8 variants, requires `/use_feature` refactor), Font of Magic to_points / to_slot (cross-resource), Stunning Strike (needs `feature_used` broadcast first), item charges via `/use_item`.
+
+---
+
 ## [2.97.4] - 2026-05-29 — "Empowered Refund"
 
 **Schema version:** 64

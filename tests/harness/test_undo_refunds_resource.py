@@ -94,6 +94,81 @@ async def test_undo_refunds_lay_on_hands_pool(gm_client, gm_ws, roster):
     )
 
 
+async def test_undo_refunds_arcane_recovery(gm_client, gm_ws, roster):
+    """v2.97.5 — Arcane Recovery cast spends 1 ``arcane-recovery``
+    counter use AND restores N spell slots. Undo must refund BOTH legs
+    (the counter via ``resource_spend`` and each slot level via the
+    new ``slot_restore`` log kind, which is the inverse of the
+    ``spell_slot_spend`` refund — it bumps ``used`` back UP).
+    """
+    thalindra = roster["Thalindra Moonwhisper"]
+    await _long_rest(gm_client, thalindra["id"])
+
+    # Spend 2 L1 slots so Arcane Recovery has something to restore.
+    for _ in range(2):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": thalindra["id"],
+                "spell_index": 3,
+                "slot_level": 1,
+                "class_slug": "wizard",
+                "override": True,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+    # Now sheet has wizard L1 used=2.
+
+    # Use Arcane Recovery to restore 2× L1 (within the Lv 5 allowance of 3).
+    ar = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_arcane_recovery",
+        json={
+            "character_id": thalindra["id"],
+            "slots": [{"level": 1, "count": 2}],
+        },
+    )
+    assert ar.status_code == 200, ar.text
+
+    # Capture cast_id off the feature_used broadcast.
+    msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    cast_id = msg["data"].get("cast_id")
+    assert cast_id, (
+        f"feature_used broadcast for Arcane Recovery missing cast_id; "
+        f"payload: {msg['data']}"
+    )
+
+    # Re-mark so wait_for picks up the refund's broadcasts, not the
+    # cast-time ones (both legs share broadcast type with cast).
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    assert undo.json()["ok"] is True
+
+    # Leg 1: arcane-recovery counter refunded (back to max=1).
+    resource_msg = await gm_ws.wait_for("resource_update", timeout=3.0)
+    rd = resource_msg["data"]
+    assert rd["character_id"] == thalindra["id"]
+    assert rd["key"] == "arcane-recovery"
+    assert rd["current"] == 1, (
+        f"AR counter not refunded: current={rd['current']} (expected 1)"
+    )
+
+    # Leg 2: wizard L1 slot.used bumped BACK UP by 2 (the count
+    # originally restored). Cast-time mark drained both broadcasts;
+    # this slot_slot_update is the slot_restore undo branch firing.
+    slot_msg = await gm_ws.wait_for("spell_slot_update", timeout=3.0)
+    sd = slot_msg["data"]
+    assert sd["character_id"] == thalindra["id"]
+    assert sd["class_slug"] == "wizard"
+    assert sd["level"] == 1
+    assert sd["used"] == 2, (
+        f"L1 wizard slot not un-restored: used={sd['used']} (expected 2)"
+    )
+
+
 async def test_undo_refunds_second_wind_use(gm_client, gm_ws, roster):
     garrik = roster["Garrik Ironside"]
     await _long_rest(gm_client, garrik["id"])

@@ -17256,6 +17256,32 @@ async def use_arcane_recovery(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.97.5 — Phase D.2 undo plumbing. Two log-entry legs under one
+    # cast_id: the resource_spend for the arcane-recovery counter +
+    # one slot_restore per level that was restored. On undo, the
+    # resource_update bumps the counter back up (clamped to max) and
+    # each slot_restore branch bumps the matching slot's `used` back
+    # UP by `count` (the inverse of cast).
+    ar_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(ar_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "arcane-recovery",
+        "amount": 1,
+        "source_label": "Arcane Recovery",
+    })
+    for level, count in parsed_slots:
+        _log_damage_entry(ar_cast_id, {
+            "kind": "slot_restore",
+            "campaign_id": campaign_id,
+            "character_id": char.id,
+            "class_slug": "wizard",
+            "slot_level": level,
+            "count": count,
+            "source_label": "Arcane Recovery",
+        })
+
     # Broadcasts.
     membership = (
         db.query(CampaignMembership)
@@ -17310,6 +17336,7 @@ async def use_arcane_recovery(
                 f"Arcane Recovery available again after a long rest."
             ),
             "source": "arcane-recovery",
+            "cast_id": ar_cast_id,
             "remaining": ar_cur - 1,
             "max": ar_max,
             "over_budget": False,
@@ -17323,6 +17350,7 @@ async def use_arcane_recovery(
         "total_levels": total_levels,
         "allowance": allowance,
         "remaining": ar_cur - 1,
+        "cast_id": ar_cast_id,
     }
 
 
@@ -25126,6 +25154,7 @@ async def undo_attack_damage(
         or e.get("kind") == "buff_install"
         or e.get("kind") == "spell_slot_spend"
         or e.get("kind") == "resource_spend"
+        or e.get("kind") == "slot_restore"
         for e in entries
     ):
         _attack_damage_log.pop(attack_id, None)
@@ -25215,11 +25244,64 @@ async def undo_attack_damage(
                         })
             continue
 
+        # v2.97.5 — Phase D.2: inverse of spell_slot_spend. Stamped by
+        # endpoints that RESTORE slots (Arcane Recovery, future Wish-
+        # like recoveries). On undo, bumps ``used`` back UP by ``count``
+        # (clamped to ``total``) and broadcasts spell_slot_update so the
+        # sheet re-pips. Paired with a resource_spend entry for the
+        # counter that drove the restore (e.g. arcane-recovery), so a
+        # single undo POST replays both legs.
+        if kind == "slot_restore":
+            char_id = entry.get("character_id")
+            cslug = (entry.get("class_slug") or "").strip().lower()
+            slot_level_entry = int(entry.get("slot_level") or 0)
+            count = int(entry.get("count") or 0)
+            if char_id and cslug and slot_level_entry >= 1 and count > 0:
+                refund_char = db.query(Character).filter(
+                    Character.id == char_id
+                ).first()
+                if refund_char:
+                    refund_sheet = refund_char.sheet or {}
+                    all_slots = dict(refund_sheet.get("spell_slots") or {})
+                    per_class = dict(all_slots.get(cslug) or {})
+                    slot_key_e = str(slot_level_entry)
+                    slot_e = dict(per_class.get(slot_key_e) or {"total": 0, "used": 0})
+                    used_e = int(slot_e.get("used") or 0)
+                    total_e = int(slot_e.get("total") or 0)
+                    new_used = min(used_e + count, total_e) if total_e > 0 else used_e + count
+                    slot_e["used"] = new_used
+                    per_class[slot_key_e] = slot_e
+                    all_slots[cslug] = per_class
+                    refund_sheet["spell_slots"] = all_slots
+                    refund_char.sheet = refund_sheet
+                    db.commit()
+                    await hub.broadcast(
+                        campaign_id,
+                        {
+                            "type": "spell_slot_update",
+                            "data": {
+                                "character_id": char_id,
+                                "class_slug": cslug,
+                                "level": slot_level_entry,
+                                "total": total_e,
+                                "used": new_used,
+                            },
+                        },
+                    )
+                    per_target_undone.append({
+                        "kind": "slot_restore_undone",
+                        "character_id": char_id,
+                        "class_slug": cslug,
+                        "slot_level": slot_level_entry,
+                        "count": count,
+                    })
+            continue
+
         # v2.92.0 — Phase C: spell-slot refund. Stamped at /cast_spell's
         # slot-decrement site (level >= 1 only — cantrips never log an
         # entry). Decrements ``sheet["spell_slots"][cslug][lvl]["used"]``
-        # by 1, clamped to 0, then broadcasts ``spell_slot_update`` so
-        # the sheet's slot row + the over-budget gate both refresh.
+        # by 1, clamped to 0, then broadcasts spell_slot_update so the
+        # sheet's slot row + the over-budget gate both refresh.
         if kind == "spell_slot_spend":
             char_id = entry.get("character_id")
             cslug = (entry.get("class_slug") or "").strip().lower()
