@@ -3648,8 +3648,26 @@
                     background:color-mix(in srgb, var(--accent) 18%, transparent);
                     border-color:var(--accent);
                 }
-                .ql-pill.is-muted { color:var(--fg-mute); border-color:var(--border); background:transparent; }
-                .ql-pill.is-muted:hover { color:var(--fg); border-color:color-mix(in srgb, var(--fg-mute) 50%, var(--border)); }
+                /* v2.97.11: reversed the hover animation for .is-muted.
+                   Pre-2.97.11 the muted variant was transparent by default
+                   and got a backing only on hover — against the encounter-
+                   background images (v2.86+) the resting state was nearly
+                   invisible, which made the Logout pill hard to find. Now
+                   the resting state carries the standard pill backing
+                   (matches the other ql-pills) and the HOVER state goes
+                   transparent + muted — the cursor still gets feedback,
+                   but the button is visible at rest no matter what's
+                   behind it. */
+                .ql-pill.is-muted {
+                    color:var(--fg);
+                    border-color:color-mix(in srgb, var(--fg-mute) 50%, var(--border));
+                    background:color-mix(in srgb, var(--accent) 8%, transparent);
+                }
+                .ql-pill.is-muted:hover {
+                    color:var(--fg-mute);
+                    border-color:var(--border);
+                    background:transparent;
+                }
             </style>
             <div style="padding:8px 10px;display:grid;grid-template-columns:1fr 1fr;gap:6px;">
                 <a href="/wiki" target="_blank" rel="noopener noreferrer" class="ql-pill" title="Open the wiki in a new tab">📖 Wiki</a>

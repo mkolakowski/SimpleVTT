@@ -10,6 +10,20 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.11] - 2026-05-29 — "Reverse Sweep"
+
+**Schema version:** 64
+**Commit summary:** **The Logout pill's hover animation is reversed so the button is visible at rest.** The `.ql-pill.is-muted` variant (used today only by the Logout link under Tools → Quick Links) used to be transparent at rest and pick up a backing on hover. Against the v2.86+ encounter-background images, the resting state was nearly invisible — players had to know the button was there to find it. v2.97.11 swaps the rest + hover states: at rest the pill carries the standard `color-mix(var(--accent) 8%)` backing (matching the other ql-pills next to it), and on hover the backing fades to transparent with muted colors. The cursor still gets clear feedback, but the button stays findable no matter what's behind it.
+
+### Changed
+- `app/templates/tabletop.html::.ql-pill.is-muted` — rest state now `color:var(--fg) / border:color-mix fg-mute 50% / bg:color-mix accent 8%` (was transparent). Hover state now `color:var(--fg-mute) / border:var(--border) / bg:transparent` (was the bright state). No JS change; the existing `transition: background .12s, border-color .12s` still drives the animation.
+
+### Notes
+- **PATCH bump** — pure visual change. No new functionality, no contract change. The class is only used for the Logout pill today, so blast radius is one button.
+- TODO.md entry "change the logout button under tools > quick links to reverse how its animated (better for backgrounds)" — done.
+
+---
+
 ## [2.97.10] - 2026-05-29 — "Polished Glass"
 
 **Schema version:** 64
