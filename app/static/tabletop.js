@@ -5435,6 +5435,11 @@
             'silvery-barbs-cast',
             'lay-on-hands',
             'second-wind',
+            'bardic-inspiration',
+            'cutting-words',
+            'action-surge',
+            'indomitable',
+            'rage',
         ]);
         if (d.cast_id && _REFUNDABLE_FEATURE_SOURCES.has(d.source)) {
             featurePills.push(

@@ -13689,6 +13689,17 @@ async def use_bardic_inspiration(
     char.sheet = sheet
     db.commit()
 
+    # v2.97.1 — log the use-spend for /undo_attack_damage refund.
+    bi_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(bi_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "bardic-inspiration",
+        "amount": 1,
+        "source_label": "Bardic Inspiration",
+    })
+
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
@@ -13716,6 +13727,7 @@ async def use_bardic_inspiration(
                 f"Add it to one attack roll, ability check, or saving throw."
             ),
             "source": "bardic-inspiration",
+            "cast_id": bi_cast_id,
             "remaining": cur - 1,
             "max": mx,
             "over_budget": was_used,
@@ -15490,6 +15502,19 @@ async def use_cutting_words(
     char.sheet = sheet
     db.commit()
 
+    # v2.97.1 — log the use-spend for /undo_attack_damage refund.
+    # Cutting Words drains Bardic Inspiration (same resource_key) so
+    # the refund bumps the same pool the v2.97.0 BI patch refunds.
+    cw_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(cw_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "bardic-inspiration",
+        "amount": 1,
+        "source_label": "Cutting Words",
+    })
+
     # Mark the reaction slot.
     await _mark_battle_economy(campaign_id, char.id, "reaction")
 
@@ -15539,6 +15564,7 @@ async def use_cutting_words(
             "dice_breakdown": breakdown,
             "dice_note": f"🎭 Cutting Words → -{rolled}{(' from ' + display_name) if display_name else ''}",
             "source": "cutting-words",
+            "cast_id": cw_cast_id,
             "remaining": cur - 1,
             "max": mx,
             "over_budget": was_used,
@@ -18115,6 +18141,17 @@ async def use_action_surge(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.97.1 — log the use-spend for /undo_attack_damage refund.
+    as_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(as_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "action-surge",
+        "amount": 1,
+        "source_label": "Action Surge",
+    })
+
     # Refund the action chip — Action Surge's whole point. v2.17.2's
     # _mark_battle_economy(..., used=False) handles the unmark + the
     # economy_update broadcast.
@@ -18146,6 +18183,7 @@ async def use_action_surge(
                 "normal Act for this turn is back."
             ),
             "source": "action-surge",
+            "cast_id": as_cast_id,
             "remaining": as_cur - 1,
             "max": as_max,
             "over_budget": False,
@@ -18258,6 +18296,21 @@ async def use_indomitable(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.97.1 — log the use-spend for /undo_attack_damage refund.
+    # The indomitable-armed buff stays installed on undo — the GM/
+    # player removes it manually via the buff tracker. Matching the
+    # Shield / Absorb Elements pattern (buff persists; only the slot
+    # refunds).
+    ind_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(ind_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "indomitable",
+        "amount": 1,
+        "source_label": "Indomitable",
+    })
+
     # Install the indomitable-armed buff. Long duration (10 rounds —
     # one minute) so the player can decide which save to spend it
     # on; the save-roll construction hook consumes it on first use.
@@ -18295,6 +18348,7 @@ async def use_indomitable(
                 "consumes on the first save you make."
             ),
             "source": "indomitable",
+            "cast_id": ind_cast_id,
             "remaining": ind_cur - 1,
             "max": ind_max,
             "over_budget": False,
@@ -18453,6 +18507,19 @@ async def use_rage(
     flag_modified(char, "sheet")
     db.commit()
 
+    # v2.97.1 — log the use-spend for /undo_attack_damage refund.
+    # Rage buff stays installed on undo (matches Indomitable / Shield);
+    # the player ends rage manually via the buff badge × button.
+    rage_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(rage_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "rage",
+        "amount": 1,
+        "source_label": "Rage",
+    })
+
     # Install the rage buff on the barbarian's combatant. ``effects`` is
     # informational — (B) Phase B roll-time intercept will read these
     # fields when applying the rage damage bonus / advantage flags /
@@ -18515,6 +18582,7 @@ async def use_rage(
                 f"attacking / taking damage."
             ),
             "source": "rage",
+            "cast_id": rage_cast_id,
             "remaining": rage_cur - 1,
             "max": rage_max,
             "over_budget": was_used,

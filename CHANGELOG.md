@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.1] - 2026-05-29 — "More Pools"
+
+**Schema version:** 64
+**Commit summary:** **Continues the v2.97.0 audit through five more `/use_*` endpoints.** Same `resource_spend` plumbing pattern: mint cast_id → log entry → add cast_id to feature_used broadcast → opt the source slug into the JS Set. No new infrastructure; just replication.
+**Description:** Patches to:
+  - `/use_bardic_inspiration` — bumps `bardic-inspiration` pool back by 1 on refund.
+  - `/use_cutting_words` — also a `bardic-inspiration` pool spend (the v2.54.0 reaction shares the BI counter); refund hits the same key.
+  - `/use_action_surge` — `action-surge` counter +1 on refund. NB: the v2.97.0 refund decrement matches the original cast's decrement; the action chip that v2.17.2 refunded is NOT re-marked-used by the undo (rare GM-side edge case; flagged in CHANGELOG for follow-up if it bites).
+  - `/use_indomitable` — `indomitable` counter +1 on refund. The `indomitable-armed` buff stays installed; the GM/player removes it manually via the buff tracker (matching the Shield / Absorb Elements pattern from v2.95.0).
+  - `/use_rage` — `rage` counter +1 on refund. Same buff-stays-installed disclaimer.
+
+JS `_REFUNDABLE_FEATURE_SOURCES` Set extended with `bardic-inspiration`, `cutting-words`, `action-surge`, `indomitable`, `rage`. The existing v2.96.0 `.feature-cast-undo` pill picks all five up automatically — no JS handler changes needed.
+
+### Added
+- `cast_id` field on `feature_used` broadcasts for `source: bardic-inspiration / cutting-words / action-surge / indomitable / rage`.
+- `spell_slot_spend`-style `resource_spend` log entries stamped by each of the five `/use_*` endpoints.
+
+### Notes
+- **PATCH bump** — pure replication of the v2.97.0 pattern across five more endpoints. No new infrastructure, contract, or schema. Same harness coverage as v2.97.0 (the resource_spend round-trip is the contract; per-endpoint tests are redundant once the pattern is proven). Full suite 581/581 green.
+- Audit remaining: `/use_channel_divinity*` (8 variants), `/use_metamagic*` (4 variants), `/use_arcane_recovery`, `/use_font_of_magic_to_points` / `_to_slot`, `/use_wholeness_of_body`, `/use_stillness_of_mind`, `/use_patient_defense`, `/flurry_of_blows`, `/use_item` (item charges). Each is the same three-line patch + JS slug; queued for follow-up commits.
+
+---
+
 ## [2.97.0] - 2026-05-29 — "Pool Refund"
 
 **Schema version:** 64
