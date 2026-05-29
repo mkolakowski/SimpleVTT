@@ -10,6 +10,29 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.8] - 2026-05-29 — "Pocket the Potion"
+
+**Schema version:** 64
+**Commit summary:** **`/use_item` learns to refund consumed inventory items on Undo.** A new `inventory_consume` undo log kind stores the pre-cast item dict + the index + a `was_removed` flag; the refund branch finds the matching item by `_slug` (preferred) or `name` and bumps its qty by 1, OR re-inserts the stored dict at the original index if the row was popped on cast. A new `inventory_update` WS broadcast fires from both `/use_item` and the refund branch so any open sheet re-renders the inventory panel.
+**Description:** Four edits.
+**(1)** `undo_attack_damage` — new `kind == "inventory_consume"` branch. Two cases: (a) the matching item is still in inventory → bump qty by 1; (b) the row was popped on cast → re-insert the saved item_dict at the pre-cast `inv_idx` (clamped to current inventory length). Broadcasts `inventory_update`. HP changes from a heal item are NOT reversed — same precedent as Lay on Hands' v2.97.0 ship (resource refunded; downstream effect refund is a separate audit case).
+**(2)** `/use_item` — snapshots the pre-cast item dict before mutation, mints `cast_id`, stamps `_log_damage_entry(cast_id, {"kind": "inventory_consume", "inv_idx", "item_dict", "was_removed", ...})`. Broadcasts the new `inventory_update` (the cast itself was previously broadcasting only `feature_used` + `heal_applied`; the inventory mutation was silent on the wire). Adds `cast_id` to the `feature_used` payload + the response body.
+**(3)** New WS broadcast type `inventory_update` — payload `{character_id, inventory_index, item_name, qty, was_removed | was_reinserted}`. Lets the resource panel / sheet inventory pane re-pip the row count without a full sheet re-read.
+**(4)** `app/static/tabletop.js::_REFUNDABLE_FEATURE_SOURCES` — adds `'item-use'` so the v2.96.0 ↶ Undo pill renders on the item-use roll-log card.
+
+### Added
+- New `kind == "inventory_consume"` undo log entry — stores `inv_idx + item_dict + was_removed` flag; on undo bumps qty by 1 or re-inserts.
+- New `inventory_update` WS broadcast, fired by both `/use_item` and the refund branch.
+- `cast_id` field on `/use_item`'s `feature_used` broadcast + response body.
+- `tests/harness/test_undo_refunds_resource.py::test_undo_refunds_item_use` — Pip drinks a Potion of Healing, undo refunds the qty (asserts the cast-time `inventory_update` then the post-undo `inventory_update` carrying qty+1).
+
+### Notes
+- **PATCH bump** — new undo kind + new broadcast shape; new broadcast asserted by the new test per the harness contract.
+- **HP refund is NOT included.** Drinking a Potion of Healing → undo → potion comes back, HP gain stays. This matches Lay on Hands' v2.97.0 precedent (the resource leg is refunded; the downstream HP/buff effects are filed for a separate audit). Filed: a v2.98.x "effect rewind" audit pass that adds heal/damage entries alongside the resource_spend / inventory_consume legs so the existing damage/heal-undo branch reverses them too.
+- **Audit complete (for now).** The remaining endpoints (Stunning Strike — needs `feature_used` first; future Metamagic variants — Twinned/Quickened/etc. not yet wired) are filed in their respective notes. The v2.97.0–v2.97.8 audit covers the surface: spell slots, feature resources (LoH, Second Wind, BI, Cutting Words, Action Surge, Indomitable, Rage, Patient Defense, Wholeness of Body, Flurry of Blows, Step of the Wind, Empowered Spell, Arcane Recovery, Font of Magic both directions, Channel Divinity 8 variants), reaction casts (Shield, Counterspell, Hellish Rebuke, Absorb Elements, Silvery Barbs), and now item charges.
+
+---
+
 ## [2.97.7] - 2026-05-29 — "Tithe and Refund"
 
 **Schema version:** 64

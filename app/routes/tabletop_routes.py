@@ -13245,9 +13245,14 @@ async def use_item(
                 "strict": strict,
             })
 
+    # Snapshot the pre-cast item dict so the v2.97.8 undo branch can
+    # re-insert it if qty hits 0 and the row is popped on cast.
+    pre_cast_item = dict(item)
+
     # Decrement qty (or remove the row when it hits zero).
     new_qty = qty - 1
-    if new_qty <= 0:
+    was_removed = new_qty <= 0
+    if was_removed:
         inventory.pop(inv_idx)
     else:
         item["qty"] = new_qty
@@ -13281,6 +13286,32 @@ async def use_item(
 
     db.commit()
 
+    # v2.97.8 — stamp inventory_consume so the ↶ Undo pill on the
+    # item-use feature_used card refunds the consumed item. HP changes
+    # from heal items are NOT included; the refund leg restores the
+    # potion/scroll, not the HP gained (matches Lay on Hands' v2.97.0
+    # precedent — downstream effect refund is a separate audit case).
+    item_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(item_cast_id, {
+        "kind": "inventory_consume",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "inv_idx": inv_idx,
+        "item_dict": pre_cast_item,
+        "was_removed": was_removed,
+        "source_label": item_name,
+    })
+    await hub.broadcast(campaign_id, {
+        "type": "inventory_update",
+        "data": {
+            "character_id": char.id,
+            "inventory_index": inv_idx if not was_removed else -1,
+            "item_name": item_name,
+            "qty": new_qty if new_qty > 0 else 0,
+            "was_removed": was_removed,
+        },
+    })
+
     # Roll log card via feature_used. The text is descriptive enough to
     # stand on its own without a dedicated item-use card type — same
     # pattern Phase 3's /use_feature uses.
@@ -13312,6 +13343,7 @@ async def use_item(
             "feature_name": feature_label,
             "feature_desc": feature_desc,
             "source": "item-use",
+            "cast_id": item_cast_id,
             "remaining": new_qty if new_qty > 0 else 0,
             "max": qty,
             "over_budget": was_used,
@@ -13354,6 +13386,7 @@ async def use_item(
         "over_budget": was_used,
         "slot": slot or "",
         "new_hp": new_hp_state,
+        "cast_id": item_cast_id,
     }
 
 
@@ -25324,6 +25357,7 @@ async def undo_attack_damage(
         or e.get("kind") == "slot_restore"
         or e.get("kind") == "resource_gain"
         or e.get("kind") == "slot_gain"
+        or e.get("kind") == "inventory_consume"
         for e in entries
     ):
         _attack_damage_log.pop(attack_id, None)
@@ -25578,6 +25612,87 @@ async def undo_attack_damage(
                         "class_slug": cslug,
                         "slot_level": slot_level_entry,
                         "ephemeral": ephemeral,
+                    })
+            continue
+
+        # v2.97.8 — Phase D.4: inventory consume refund. Stamped by
+        # /use_item when a consumable is used (potion, scroll, etc.).
+        # Stores the pre-cast item dict + index + a ``was_removed`` flag
+        # for the case where qty hit 0 and the row was popped. On undo:
+        # 1. Try to find an item in the current inventory whose ``_slug``
+        #    (preferred — survives renames) or ``name`` matches the
+        #    stored item. If found, bump its ``qty`` by 1.
+        # 2. If not found (row was popped on cast OR player has since
+        #    discarded the leftover stack), re-insert the stored
+        #    ``item_dict`` at the pre-cast ``inv_idx`` (or append if the
+        #    inventory has since shortened past that position).
+        # Broadcasts ``inventory_update`` so any open sheet re-renders.
+        # HP / death-save effects from a heal item are NOT reversed —
+        # mirroring Lay on Hands' v2.97.0 precedent that the resource
+        # leg is refunded but downstream effects are filed separately.
+        if kind == "inventory_consume":
+            char_id = entry.get("character_id")
+            inv_idx_e = int(entry.get("inv_idx") or 0)
+            item_dict = entry.get("item_dict") or {}
+            was_removed = bool(entry.get("was_removed"))
+            if char_id and item_dict:
+                refund_char = db.query(Character).filter(
+                    Character.id == char_id
+                ).first()
+                if refund_char:
+                    refund_sheet = refund_char.sheet or {}
+                    refund_inventory = list(refund_sheet.get("inventory") or [])
+                    item_slug = (item_dict.get("_slug") or "").strip().lower()
+                    item_name = (item_dict.get("name") or "").strip().lower()
+                    found_idx = -1
+                    for i, it in enumerate(refund_inventory):
+                        if not isinstance(it, dict):
+                            continue
+                        if item_slug:
+                            if (it.get("_slug") or "").strip().lower() == item_slug:
+                                found_idx = i
+                                break
+                        else:
+                            if (it.get("name") or "").strip().lower() == item_name:
+                                found_idx = i
+                                break
+                    if found_idx >= 0:
+                        cur_it = dict(refund_inventory[found_idx])
+                        cur_it["qty"] = int(cur_it.get("qty") or 0) + 1
+                        refund_inventory[found_idx] = cur_it
+                        refunded_idx = found_idx
+                        refunded_qty = int(cur_it["qty"])
+                    else:
+                        # Re-insert at the original position; clamp.
+                        restored = dict(item_dict)
+                        restored["qty"] = max(1, int(item_dict.get("qty") or 1))
+                        insert_at = min(inv_idx_e, len(refund_inventory))
+                        refund_inventory.insert(insert_at, restored)
+                        refunded_idx = insert_at
+                        refunded_qty = int(restored["qty"])
+                    refund_sheet["inventory"] = refund_inventory
+                    from sqlalchemy.orm.attributes import flag_modified
+                    refund_char.sheet = refund_sheet
+                    flag_modified(refund_char, "sheet")
+                    db.commit()
+                    await hub.broadcast(
+                        campaign_id,
+                        {
+                            "type": "inventory_update",
+                            "data": {
+                                "character_id": char_id,
+                                "inventory_index": refunded_idx,
+                                "item_name": item_dict.get("name") or "",
+                                "qty": refunded_qty,
+                                "was_reinserted": found_idx < 0,
+                            },
+                        },
+                    )
+                    per_target_undone.append({
+                        "kind": "inventory_refunded",
+                        "character_id": char_id,
+                        "item_name": item_dict.get("name") or "",
+                        "was_reinserted": found_idx < 0,
                     })
             continue
 

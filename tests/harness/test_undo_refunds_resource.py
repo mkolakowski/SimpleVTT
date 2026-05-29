@@ -169,6 +169,50 @@ async def test_undo_refunds_arcane_recovery(gm_client, gm_ws, roster):
     )
 
 
+async def test_undo_refunds_item_use(gm_client, gm_ws, roster):
+    """v2.97.8 — /use_item drains an inventory consumable (Potion of
+    Healing). New ``inventory_consume`` undo log kind refunds the qty
+    (re-inserting the row if it was popped on cast).
+    """
+    pip = roster["Pip Quickfingers"]
+    # Pip's Potion of Healing is at inventory_index 6 in the demo seed
+    # (Shortsword, Dagger, Studded leather, Thieves' tools, Burglar's
+    # pack, Hooded lantern, Potion of Healing).
+    potion_idx = 6
+
+    gm_ws.mark()
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_item",
+        json={
+            "character_id": pip["id"],
+            "inventory_index": potion_idx,
+            "override": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_id = cast.json().get("cast_id")
+    assert cast_id, f"/use_item response missing cast_id: {cast.json()}"
+
+    inv_msg = await gm_ws.wait_for("inventory_update", timeout=3.0)
+    post_cast_qty = int(inv_msg["data"]["qty"])
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+
+    refund_msg = await gm_ws.wait_for("inventory_update", timeout=3.0)
+    rd = refund_msg["data"]
+    assert rd["character_id"] == pip["id"]
+    assert "potion" in (rd.get("item_name") or "").lower()
+    assert rd["qty"] == post_cast_qty + 1, (
+        f"potion qty not refunded: post-cast={post_cast_qty}, "
+        f"post-undo={rd['qty']} (expected {post_cast_qty + 1})"
+    )
+
+
 async def test_undo_refunds_channel_divinity(gm_client, gm_ws, roster):
     """v2.97.7 — Channel Divinity routes through /use_feature with a
     new resource_key lookup in _FEATURE_ECONOMY. The endpoint decrements
