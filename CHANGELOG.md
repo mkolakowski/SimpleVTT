@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.93.0] - 2026-05-28 — "Counter the Counter"
+
+**Schema version:** 64
+**Commit summary:** **Extends the v2.92.0 spell-slot refund to the Counterspell reaction-cast path.** The Counterspell branch in `/use_reaction` decrements the L3+ slot and broadcasts `feature_used` — but the cast had no `cast_id`, so the ↶ Undo machinery had no handle to refund the slot. v2.93.0 generates a cast_id at the slot-decrement site, logs a `spell_slot_spend` entry into the per-cast undo log, and includes the cast_id on the `feature_used` broadcast so the roll-log card can wire its Undo button (UI follow-up commit).
+**Description:** One edit in `app/routes/tabletop_routes.py::use_reaction` (the `cast-counterspell` branch) plus a harness test. The branch now mints `counterspell_cast_id = uuid.uuid4().hex[:12]` after the slot decrement, calls `_log_damage_entry(counterspell_cast_id, {"kind": "spell_slot_spend", ...})` with the standard refund payload (character_id, class_slug, slot_level, used_before, spell_name), and adds `cast_id: counterspell_cast_id` to the existing `feature_used` broadcast's data dict. The v2.92.0 `undo_attack_damage` refund branch handles the rest unchanged — same `kind == "spell_slot_spend"` dispatch, same `spell_slot_update` broadcast on refund.
+
+**Description (cont):** Harness test `tests/harness/test_undo_refunds_counterspell.py` drives the full Lyra→Thalindra Counterspell flow (long-rest both, seed battle, Lyra casts Suggestion, capture the prompt for Thalindra, POST `/use_reaction` with `reaction_key=cast-counterspell`), then captures the `cast_id` off the `feature_used` broadcast, POSTs `/undo_attack_damage` with it, and asserts the resulting `spell_slot_update` broadcast carries `used = post_cast_used - 1` for Thalindra's L3 wizard slot.
+
+### Added
+- `cast_id` field on the `feature_used` broadcast for `source: counterspell-cast`.
+- `spell_slot_spend` log entry stamped by the `cast-counterspell` branch in `/use_reaction`.
+- `tests/harness/test_undo_refunds_counterspell.py` — 1 test (full prompt → cast → undo round-trip).
+
+### Notes
+- **MINOR bump** — net-new behavior on the Counterspell reaction surface. No data, schema, or contract changes (the additional `cast_id` field is additive).
+- UI follow-up filed: the roll-log card for `feature_used` with `source: counterspell-cast` should render a `.weapon-atk-undo` button when `d.cast_id` is present. Without that, the slot refund is API-only (curl / harness) for now. The server contract is right; only the JS `_appendFeatureUsed` renderer needs to opt the cast-* sources into the existing Undo pill pattern.
+- Remaining reaction-cast refund branches (Shield, Absorb Elements, Hellish Rebuke, Silvery Barbs) follow the same code shape (slot decrement + feature_used broadcast). Each one is a small near-identical patch; doing them as one bulk commit risked masking the Counterspell smoke test if any single branch had a copy-paste typo, so they're queued individually for v2.93.1+.
+
+---
+
 ## [2.92.0] - 2026-05-28 — "Refund the Magic"
 
 **Schema version:** 64

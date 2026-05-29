@@ -13958,6 +13958,11 @@ async def use_reaction(
         # (damage rolls, condition installs, etc.) are NOT auto-undone
         # in v1 — the player/GM adjudicates the result. Auto-undo of
         # the cast filed for v3.
+        # v2.93.0 — generate a cast_id + log a spell_slot_spend entry
+        # so the v2.92.0 undo machinery can refund the L3+ slot via
+        # /undo_attack_damage. cast_id is also stamped into the
+        # feature_used broadcast so the roll-log card has the handle
+        # it needs to wire the Undo button (UI follow-up commit).
         try:
             options = entry.get("options") or []
             matching = next(
@@ -13995,6 +14000,17 @@ async def use_reaction(
             sheet["spell_slots"] = all_slots
             watcher_char.sheet = sheet
             db.commit()
+            # v2.93.0 — log the slot spend for /undo_attack_damage.
+            counterspell_cast_id = uuid.uuid4().hex[:12]
+            _log_damage_entry(counterspell_cast_id, {
+                "kind": "spell_slot_spend",
+                "campaign_id": campaign_id,
+                "character_id": int(watcher_char_id),
+                "class_slug": class_slug,
+                "slot_level": int(slot_level),
+                "used_before": used,
+                "spell_name": "Counterspell",
+            })
             await _mark_battle_economy(
                 campaign_id, int(watcher_char_id), "reaction",
             )
@@ -14046,6 +14062,13 @@ async def use_reaction(
                     "source": "counterspell-cast",
                     "reaction_kind": "spell",
                     "slot_level": slot_level,
+                    # v2.93.0 — cast_id is the handle the roll-log Undo
+                    # button posts back to /undo_attack_damage; refund
+                    # branch (kind == "spell_slot_spend") reverses the
+                    # L3+ slot decrement above. UI wiring (Undo pill on
+                    # feature_used cards with d.cast_id + d.source ==
+                    # 'counterspell-cast') is a follow-up commit.
+                    "cast_id": counterspell_cast_id,
                     "countered_spell_name": spell_name,
                     "countered_caster_name": caster_name,
                     "countered_spell_level": (
