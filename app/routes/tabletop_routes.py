@@ -17495,6 +17495,33 @@ async def use_font_of_magic_to_points(
 
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
+    # v2.97.6 — Phase D.3 undo plumbing. Two legs:
+    #   1) spell_slot_spend — refunds the sacrificed slot's used count
+    #      (same shape as a normal cast's slot-refund).
+    #   2) resource_gain — on undo, subtracts the actually-gained SP from
+    #      the pool. The gain may be less than slot_level if the cast
+    #      overflowed the max (sp_cur + slot_level > sp_max), so store
+    #      actually_gained, not slot_level.
+    actually_gained = new_sp - sp_cur
+    fom_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(fom_cast_id, {
+        "kind": "spell_slot_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "class_slug": class_slug,
+        "slot_level": slot_level,
+        "source_label": "Font of Magic (sacrifice slot)",
+    })
+    if actually_gained > 0:
+        _log_damage_entry(fom_cast_id, {
+            "kind": "resource_gain",
+            "campaign_id": campaign_id,
+            "character_id": char.id,
+            "resource_key": "sorcery-points",
+            "amount": actually_gained,
+            "source_label": "Font of Magic (sacrifice slot)",
+        })
+
     await hub.broadcast(campaign_id, {
         "type": "spell_slot_update",
         "data": {
@@ -17518,7 +17545,9 @@ async def use_font_of_magic_to_points(
                 f"Bonus action. Spent one L{slot_level} spell slot to gain "
                 f"{slot_level} sorcery point{'s' if slot_level != 1 else ''}."
             ),
-            "source": "font-of-magic", "remaining": new_sp, "max": sp_max,
+            "source": "font-of-magic",
+            "cast_id": fom_cast_id,
+            "remaining": new_sp, "max": sp_max,
             "over_budget": was_used, "over_budget_slot": "bonus" if was_used else "",
         },
     })
@@ -17533,6 +17562,7 @@ async def use_font_of_magic_to_points(
         "slot_total": total,
         "slot_used": new_used,
         "sp_overflow_lost": (sp_cur + slot_level) - new_sp,
+        "cast_id": fom_cast_id,
     }
 
 
@@ -17679,6 +17709,31 @@ async def use_font_of_magic_to_slot(
 
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
+    # v2.97.6 — Phase D.3 undo plumbing. Two legs:
+    #   1) resource_spend — refunds the spent sorcery points (existing
+    #      shape; on undo bumps SP current up by cost, clamped to max).
+    #   2) slot_gain — on undo reverses the slot side. If ephemeral was
+    #      created, decrement total by 1 (and font_of_magic_extra). If
+    #      a used slot was restored, bump used back up by 1.
+    fom2_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(fom2_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "sorcery-points",
+        "amount": cost,
+        "source_label": "Font of Magic (convert to slot)",
+    })
+    _log_damage_entry(fom2_cast_id, {
+        "kind": "slot_gain",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "class_slug": class_slug,
+        "slot_level": slot_level,
+        "ephemeral": ephemeral_created,
+        "source_label": "Font of Magic (convert to slot)",
+    })
+
     await hub.broadcast(campaign_id, {
         "type": "spell_slot_update",
         "data": {
@@ -17705,7 +17760,9 @@ async def use_font_of_magic_to_slot(
                 f"L{slot_level} spell slot."
                 + (" The slot vanishes at the end of a long rest." if ephemeral_created else "")
             ),
-            "source": "font-of-magic", "remaining": new_sp, "max": sp_max,
+            "source": "font-of-magic",
+            "cast_id": fom2_cast_id,
+            "remaining": new_sp, "max": sp_max,
             "over_budget": was_used, "over_budget_slot": "bonus" if was_used else "",
         },
     })
@@ -17720,6 +17777,7 @@ async def use_font_of_magic_to_slot(
         "slot_total": new_total,
         "slot_used": new_used,
         "ephemeral_created": ephemeral_created,
+        "cast_id": fom2_cast_id,
     }
 
 
@@ -25155,6 +25213,8 @@ async def undo_attack_damage(
         or e.get("kind") == "spell_slot_spend"
         or e.get("kind") == "resource_spend"
         or e.get("kind") == "slot_restore"
+        or e.get("kind") == "resource_gain"
+        or e.get("kind") == "slot_gain"
         for e in entries
     ):
         _attack_damage_log.pop(attack_id, None)
@@ -25294,6 +25354,121 @@ async def undo_attack_damage(
                         "class_slug": cslug,
                         "slot_level": slot_level_entry,
                         "count": count,
+                    })
+            continue
+
+        # v2.97.6 — Phase D.3: inverse of resource_spend. Stamped by
+        # endpoints that GAIN a resource (Font of Magic to_points adds
+        # sorcery-points from a sacrificed slot). On undo, subtracts
+        # ``amount`` from the resource's ``current`` (clamped to 0 —
+        # can't go negative).
+        if kind == "resource_gain":
+            char_id = entry.get("character_id")
+            resource_key = (entry.get("resource_key") or "").strip().lower()
+            amount = int(entry.get("amount") or 0)
+            if char_id and resource_key and amount > 0:
+                refund_char = db.query(Character).filter(
+                    Character.id == char_id
+                ).first()
+                if refund_char:
+                    refund_sheet = refund_char.sheet or {}
+                    refund_resources = list(refund_sheet.get("resources") or [])
+                    idx_e = next(
+                        (i for i, r in enumerate(refund_resources)
+                         if (r.get("key") or "").lower() == resource_key),
+                        -1,
+                    )
+                    if idx_e >= 0:
+                        res_e = dict(refund_resources[idx_e])
+                        cur_e = int(res_e.get("current") or 0)
+                        mx_e = int(res_e.get("max") or 0)
+                        new_cur = max(0, cur_e - amount)
+                        res_e["current"] = new_cur
+                        refund_resources[idx_e] = res_e
+                        refund_sheet["resources"] = refund_resources
+                        refund_char.sheet = refund_sheet
+                        db.commit()
+                        await hub.broadcast(
+                            campaign_id,
+                            {
+                                "type": "resource_update",
+                                "data": {
+                                    "character_id": char_id,
+                                    "key": resource_key,
+                                    "current": new_cur,
+                                    "max": mx_e,
+                                },
+                            },
+                        )
+                        per_target_undone.append({
+                            "kind": "resource_gain_reverted",
+                            "character_id": char_id,
+                            "resource_key": resource_key,
+                            "amount": amount,
+                        })
+            continue
+
+        # v2.97.6 — Phase D.3: inverse of "the slot exists / is fresh".
+        # Stamped by Font of Magic to_slot for the slot side of the
+        # conversion. Two flavors:
+        #   - ephemeral=True: cast bumped the slot's ``total`` by 1 to
+        #     create an over-the-cap slot. On undo decrement total by 1
+        #     (clamped to >=0). If the player already cast the ephemeral
+        #     slot before undo, ``used`` may exceed the new ``total`` —
+        #     accept that and let the next long rest normalize.
+        #   - ephemeral=False: cast decremented ``used`` to restore a
+        #     used slot. On undo bump used back up by 1 (clamped to total).
+        if kind == "slot_gain":
+            char_id = entry.get("character_id")
+            cslug = (entry.get("class_slug") or "").strip().lower()
+            slot_level_entry = int(entry.get("slot_level") or 0)
+            ephemeral = bool(entry.get("ephemeral"))
+            if char_id and cslug and slot_level_entry >= 1:
+                refund_char = db.query(Character).filter(
+                    Character.id == char_id
+                ).first()
+                if refund_char:
+                    refund_sheet = refund_char.sheet or {}
+                    all_slots = dict(refund_sheet.get("spell_slots") or {})
+                    per_class = dict(all_slots.get(cslug) or {})
+                    slot_key_e = str(slot_level_entry)
+                    slot_e = dict(per_class.get(slot_key_e) or {"total": 0, "used": 0})
+                    total_e = int(slot_e.get("total") or 0)
+                    used_e = int(slot_e.get("used") or 0)
+                    if ephemeral:
+                        new_total = max(0, total_e - 1)
+                        slot_e["total"] = new_total
+                        existing_extra = int(slot_e.get("font_of_magic_extra") or 0)
+                        slot_e["font_of_magic_extra"] = max(0, existing_extra - 1)
+                        new_used = used_e
+                    else:
+                        new_total = total_e
+                        new_used = min(used_e + 1, total_e) if total_e > 0 else used_e + 1
+                        slot_e["used"] = new_used
+                    per_class[slot_key_e] = slot_e
+                    all_slots[cslug] = per_class
+                    refund_sheet["spell_slots"] = all_slots
+                    refund_char.sheet = refund_sheet
+                    db.commit()
+                    await hub.broadcast(
+                        campaign_id,
+                        {
+                            "type": "spell_slot_update",
+                            "data": {
+                                "character_id": char_id,
+                                "class_slug": cslug,
+                                "level": slot_level_entry,
+                                "total": new_total,
+                                "used": new_used,
+                            },
+                        },
+                    )
+                    per_target_undone.append({
+                        "kind": "slot_gain_reverted",
+                        "character_id": char_id,
+                        "class_slug": cslug,
+                        "slot_level": slot_level_entry,
+                        "ephemeral": ephemeral,
                     })
             continue
 

@@ -169,6 +169,138 @@ async def test_undo_refunds_arcane_recovery(gm_client, gm_ws, roster):
     )
 
 
+async def test_undo_refunds_font_of_magic_to_points(gm_client, gm_ws, roster):
+    """v2.97.6 — Font of Magic to_points spends a spell slot and gains
+    sorcery points. Undo refunds both legs: ``spell_slot_spend`` bumps
+    the slot's ``used`` back down by 1, and ``resource_gain`` subtracts
+    the actually-gained SP from the pool.
+    """
+    zara = roster["Zara Emberfire"]
+    await _long_rest(gm_client, zara["id"])
+
+    # Drain SP a bit first so the upcoming slot-sacrifice doesn't fully
+    # overflow. Use to_slot ephemeral creation: SP=5 → 3 (cost 2), no
+    # slots changed materially (creates an ephemeral L1 slot). Now SP=3.
+    drain = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_font_of_magic_to_slot",
+        json={"character_id": zara["id"], "slot_level": 1, "override": True},
+    )
+    assert drain.status_code == 200, drain.text
+    assert drain.json()["sp_remaining"] == 3
+
+    # Spend an L1 slot via cast (override) so the to_points L1 sacrifice
+    # decrements `used` from 1 → 2 (out of total=5 from the ephemeral).
+    # Actually we want the spell_slot_spend refund to be observable, so
+    # ANY pre-cast slot state works — just record the pre-cast value
+    # and assert it's reverted post-undo.
+    gm_ws.mark()  # drain the to_slot broadcasts so they don't confuse later asserts
+
+    # Sacrifice an L1 slot for +1 SP.
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_font_of_magic_to_points",
+        json={"character_id": zara["id"], "slot_level": 1, "override": True},
+    )
+    assert cast.status_code == 200, cast.text
+    cast_data = cast.json()
+    post_cast_sp = int(cast_data["sp_remaining"])
+    post_cast_used = int(cast_data["slot_used"])
+    assert post_cast_sp == 4, (
+        f"SP should be 3+1=4, got {post_cast_sp}"
+    )
+
+    # Capture cast_id off feature_used.
+    msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    cast_id = msg["data"].get("cast_id")
+    assert cast_id, (
+        f"feature_used missing cast_id; payload: {msg['data']}"
+    )
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+
+    # Refund order: log entries are walked in REVERSE, so the
+    # resource_gain (stamped second) refunds first → resource_update.
+    # Then spell_slot_spend → spell_slot_update.
+    resource_msg = await gm_ws.wait_for("resource_update", timeout=3.0)
+    rd = resource_msg["data"]
+    assert rd["character_id"] == zara["id"]
+    assert rd["key"] == "sorcery-points"
+    assert rd["current"] == post_cast_sp - 1, (
+        f"SP not reverted: post-cast={post_cast_sp}, "
+        f"post-undo={rd['current']} (expected {post_cast_sp - 1})"
+    )
+
+    slot_msg = await gm_ws.wait_for("spell_slot_update", timeout=3.0)
+    sd = slot_msg["data"]
+    assert sd["character_id"] == zara["id"]
+    assert sd["class_slug"] == "sorcerer"
+    assert sd["level"] == 1
+    assert sd["used"] == post_cast_used - 1, (
+        f"Slot not reverted: post-cast used={post_cast_used}, "
+        f"post-undo used={sd['used']} (expected {post_cast_used - 1})"
+    )
+
+
+async def test_undo_refunds_font_of_magic_to_slot_ephemeral(gm_client, gm_ws, roster):
+    """v2.97.6 — Font of Magic to_slot, ephemeral path: cast spends 2 SP
+    and bumps slot ``total`` by 1 (no used slot to restore). Undo refunds
+    SP via ``resource_spend`` and decrements ``total`` via ``slot_gain``.
+    """
+    zara = roster["Zara Emberfire"]
+    await _long_rest(gm_client, zara["id"])
+
+    # All Zara's slots are at used=0 after long-rest, so to_slot creates
+    # an ephemeral. SP starts at 5; after cost-2 conversion SP=3, slot
+    # total bumps from 4 → 5.
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_font_of_magic_to_slot",
+        json={"character_id": zara["id"], "slot_level": 1, "override": True},
+    )
+    assert cast.status_code == 200, cast.text
+    cd = cast.json()
+    assert cd["ephemeral_created"] is True
+    post_cast_sp = int(cd["sp_remaining"])
+    post_cast_total = int(cd["slot_total"])
+    assert post_cast_sp == 3
+    assert post_cast_total == 5  # Zara's base L1 total is 4
+
+    msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    cast_id = msg["data"].get("cast_id")
+    assert cast_id
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+
+    # Reverse order: slot_gain (stamped second) → spell_slot_update
+    # first; then resource_spend → resource_update.
+    slot_msg = await gm_ws.wait_for("spell_slot_update", timeout=3.0)
+    sd = slot_msg["data"]
+    assert sd["character_id"] == zara["id"]
+    assert sd["class_slug"] == "sorcerer"
+    assert sd["level"] == 1
+    assert sd["total"] == post_cast_total - 1, (
+        f"Ephemeral not stripped: post-cast total={post_cast_total}, "
+        f"post-undo total={sd['total']} (expected {post_cast_total - 1})"
+    )
+
+    resource_msg = await gm_ws.wait_for("resource_update", timeout=3.0)
+    rd = resource_msg["data"]
+    assert rd["character_id"] == zara["id"]
+    assert rd["key"] == "sorcery-points"
+    assert rd["current"] == post_cast_sp + 2, (
+        f"SP not refunded: post-cast={post_cast_sp}, "
+        f"post-undo={rd['current']} (expected {post_cast_sp + 2})"
+    )
+
+
 async def test_undo_refunds_second_wind_use(gm_client, gm_ws, roster):
     garrik = roster["Garrik Ironside"]
     await _long_rest(gm_client, garrik["id"])

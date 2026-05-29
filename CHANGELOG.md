@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.6] - 2026-05-29 — "Trading Posts"
+
+**Schema version:** 64
+**Commit summary:** **Adds two new undo log kinds (`resource_gain`, `slot_gain`) to support cross-resource conversions.** `/use_font_of_magic_to_points` (slot → SP) and `/use_font_of_magic_to_slot` (SP → slot, regular OR ephemeral) now both refundable. Each cast stamps two legs under a shared `cast_id` — one for the resource spent, one for the resource gained — and a single ↶ Undo POST replays both legs to restore the pre-cast state.
+**Description:** Three edits.
+**(1)** `undo_attack_damage` — two new branches:
+  - `kind == "resource_gain"`: inverse of `resource_spend`. Subtracts `amount` from the resource's `current` (clamped to 0). Broadcasts `resource_update`.
+  - `kind == "slot_gain"`: handles the slot side of a SP→slot conversion. If `ephemeral=True` (the cast bumped `total` to create an over-cap slot), decrement `total` by 1 and the `font_of_magic_extra` marker. If `ephemeral=False` (the cast decremented `used` to restore), bump `used` back up by 1. Broadcasts `spell_slot_update`.
+**(2)** `/use_font_of_magic_to_points` — stamps a `spell_slot_spend` for the sacrificed slot (existing shape; refund on undo decrements `used` by 1) PLUS a `resource_gain` for the actually-gained SP (uses `new_sp - sp_cur`, not `slot_level`, so overflow at SP cap doesn't get refunded when no gain happened). Adds `cast_id` to `feature_used` + response.
+**(3)** `/use_font_of_magic_to_slot` — stamps a `resource_spend` for the SP cost (existing shape; refund clamps to max) PLUS a `slot_gain` carrying the `ephemeral` flag, so the undo dispatches the right slot mutation. Adds `cast_id` to `feature_used` + response.
+JS `_REFUNDABLE_FEATURE_SOURCES` extended with `'font-of-magic'` so the v2.96.0 ↶ Undo pill renders on both endpoints' cast cards.
+
+### Added
+- New `kind == "resource_gain"` undo log entry — the inverse of `resource_spend`. Stores `resource_key + amount`. On undo, subtracts amount from `current` (clamped to 0).
+- New `kind == "slot_gain"` undo log entry — handles both "ephemeral slot created" and "used slot restored" cases via the `ephemeral` boolean flag.
+- `cast_id` field on `feature_used` broadcasts for `source: font-of-magic` (both endpoints).
+- `tests/harness/test_undo_refunds_resource.py::test_undo_refunds_font_of_magic_to_points` and `::test_undo_refunds_font_of_magic_to_slot_ephemeral` cover both new kinds.
+
+### Notes
+- **PATCH bump** — two new undo kinds but no new broadcast shape, no schema change, no new endpoint. Both kinds covered by the new tests.
+- The `resource_gain` shape stores `actually_gained` (the post-cap delta), not the nominal amount, so an overflow cast (`sp_cur + slot_level > sp_max`) that gained 0 SP correctly logs no entry and the undo doesn't touch SP. Trying to subtract a nominal `slot_level` would otherwise drive SP negative.
+- The `slot_gain` ephemeral case decrements `total` even if the player has since spent the ephemeral slot. That can leave `used > total` temporarily — accepted (long rest normalizes; alternatively, GM/player can mark the slot manually).
+- Audit remaining: `/use_feature`-routed features (Channel Divinity 8 variants, requires `/use_feature` refactor), Stunning Strike (needs `feature_used` broadcast first), item charges via `/use_item`.
+
+---
+
 ## [2.97.5] - 2026-05-29 — "Recover the Recovery"
 
 **Schema version:** 64
