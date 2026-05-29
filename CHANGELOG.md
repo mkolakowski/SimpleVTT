@@ -10,6 +10,30 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.30] - 2026-05-29 — "Reclaim the Inspiration"
+
+**Schema version:** 64
+**Commit summary:** **Bardic Inspiration target buff teardown.** Closes the second filed follow-up from the v2.97.28 audit refresh. `/use_bardic_inspiration` now installs a `bardic-inspiration-die` buff on the recipient (carrying the die size in `effects.bardic_inspiration_die` for a future attack/save hook), snapshots the recipient's pre-install buffs, and logs `buff_install` under the same `bi_cast_id` as the v2.97.1 `resource_spend`. Pre-v2.97.30 the BI cast was announce-only on the target — the counter refunded but the recipient had no buff to clear. Now both legs ride one cast_id; a single Undo POST tears down both.
+**Description:** One edit in `app/routes/tabletop_routes.py::use_bardic_inspiration`. After the existing `bi_cast_id` log entry + before the bonus-slot mark, build a buff dict (key `bardic-inspiration-die`, ✨ icon, 100-round duration matching RAW "10 minutes", `source_char_id` set to the bard, `effects.bardic_inspiration_die` = the scaled die string), snapshot the target's buffs via `_snapshot_target_buffs`, call `_install_buff(campaign_id, target.id, buff)`, mirror to sheet, and log `kind: "buff_install"` under `bi_cast_id`. The install is best-effort: when there's no active battle or the target isn't in init, `_install_buff` returns False and the buff_install log entry is skipped so undo doesn't try to restore an install that never happened. The v2.65.0 buff_install undo branch handles the teardown automatically.
+
+### Added
+- `bardic-inspiration-die` buff key (key, ✨ icon, 100-round duration, `effects.bardic_inspiration_die` carries the die string, `source_char_id` points to the bard).
+- `tests/harness/test_undo_refunds_resource.py::test_undo_refunds_bardic_inspiration_counter_and_buff` — long-rest Lyra, seed battle with Lyra + Pip, /use_bardic_inspiration, assert `bardic-inspiration-die` is on Pip and carries `effects.bardic_inspiration_die == "d8"` (Lyra is Bard Lv 6), undo with the returned `cast_id`, assert per_target carries BOTH `resource_refunded` and `buff_install` legs, then re-fetch Pip's buffs and assert the inspiration die is gone.
+
+### Changed
+- `app/routes/tabletop_routes.py::use_bardic_inspiration` — adds the snapshot + install + log block after the resource_spend leg.
+- `docs/wiki/consume-without-refund-audit.md` — flipped "Bardic Inspiration target buff teardown" from filed to ✅ shipped; updated header range to v2.97.0 – v2.97.30; added v2.97.30 to the cross-reference list; expanded the `/use_bardic_inspiration` coverage row to mention the buff opt-in.
+- `docs/test-harness-coverage.md` — total count 603 → 604, version stamp v2.97.29 → v2.97.30.
+
+### Notes
+- **PATCH bump** — reuses the v2.97.25 canonical target-buff pattern (snapshot → install → log under cast_id) and the existing v2.65.0 buff_install undo branch. No new undo log kinds, no new broadcast types, no schema changes.
+- **The +die attack/save hook is filed.** Today the buff installs with the die size carried in `effects.bardic_inspiration_die`, but `/use_attack` and `/respond` don't yet read it to prompt the bard's target to apply the die. When that hook lands (likely paired with the broader Bless/Hex/Hunter's Mark attack-bonus batch), the buff already carries the data it needs.
+- **First target-side PC buff under the audit.** Previous v2.97.25 (Stunning Strike NPC) and v2.97.26 (Stunning Strike PC via /respond) covered NPC + save-or-suck cases; this is the first endpoint that installs a PC target buff inline (no save roll, no NPC).
+- Total harness count: 604 (was 603 in v2.97.29) — one new BI buff-teardown round-trip test.
+- Buff-teardown audit now spans **13 sites across 11 endpoints** (the new logical endpoint is `/use_bardic_inspiration`'s target-side buff install).
+
+---
+
 ## [2.97.29] - 2026-05-29 — "Sheathe the Sacred Weapon"
 
 **Schema version:** 64

@@ -13968,6 +13968,52 @@ async def use_bardic_inspiration(
         "source_label": "Bardic Inspiration",
     })
 
+    # v2.97.30 — install a target-side ``bardic-inspiration-die`` buff
+    # so the token shows the ✨ icon, the die size is carried for a
+    # future attack/save hook to read (``effects.bardic_inspiration_die``),
+    # and the v2.65.0 buff_install undo branch can drop it on refund.
+    # Pre-v2.97.30 the BI cast was announce-only: the counter refunded
+    # on undo but the recipient had no buff to clear (the GM tracked
+    # the inspiration die manually). Now both legs ride one cast_id.
+    # Install is best-effort: ``_install_buff`` returns False when
+    # there's no active battle (e.g. a happy-path test that bypasses
+    # the combat-tracker setup), and we skip the buff_install log
+    # entry on that path so undo doesn't try to restore an install
+    # that never happened.
+    bi_buff = {
+        "key": "bardic-inspiration-die",
+        "name": f"Bardic Inspiration ({die})",
+        "icon": "✨",
+        "duration_rounds": 100,
+        "duration_max": 100,
+        "concentration": False,
+        "source_char_id": char.id,
+        "effects": {
+            "bardic_inspiration_die": die,
+        },
+        "desc": (
+            f"Add {die} to one attack roll, ability check, or saving "
+            f"throw within 10 minutes (granted by {char.name})."
+        ),
+    }
+    _bi_target_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": target.id},
+    )
+    bi_buff_installed = await _install_buff(
+        campaign_id, target.id, bi_buff,
+    )
+    if bi_buff_installed:
+        _mirror_buffs_to_sheet(
+            db, target.id, _get_buffs(campaign_id, target.id),
+        )
+        _log_damage_entry(bi_cast_id, {
+            "kind": "buff_install",
+            "campaign_id": campaign_id,
+            "target_char_id": target.id,
+            "buffs_before": _bi_target_buffs_before,
+            "buff_installed_key": "bardic-inspiration-die",
+        })
+
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 

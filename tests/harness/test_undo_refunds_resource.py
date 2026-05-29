@@ -1107,3 +1107,107 @@ async def test_undo_refunds_sacred_weapon_cd_and_buff(gm_client, gm_ws, roster):
     assert not any((b or {}).get("key") == "sacred-weapon" for b in post_buffs), (
         f"sacred-weapon still installed after undo: {post_buffs}"
     )
+
+
+async def test_undo_refunds_bardic_inspiration_counter_and_buff(
+    gm_client, gm_ws, roster,
+):
+    """v2.97.30 — /use_bardic_inspiration now installs a target-side
+    ``bardic-inspiration-die`` buff alongside the v2.97.1 counter
+    spend. Undo refunds the BI counter on the bard AND drops the
+    inspiration buff on the recipient.
+
+    Pre-v2.97.30 the cast was announce-only: the counter refunded but
+    the recipient had no buff to clear. Now both legs ride one cast_id;
+    a single Undo POST tears both down.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, lyra["id"])
+
+    # Seed a battle with BOTH Lyra and Pip so _install_buff has a
+    # combatant to attach the target buff to. /use_bardic_inspiration
+    # only installs the buff when the recipient is in init — outside
+    # combat it stays announce-only (same canonical guard as Rage /
+    # Indomitable, which gate buff install on the active battle).
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [
+                {
+                    "id": f"tok_bi_lyra_{lyra['id']}",
+                    "char_id": lyra["id"],
+                    "name": lyra["name"],
+                    "initiative": 10,
+                    "hp_current": 35, "hp_max": 35,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+                {
+                    "id": f"tok_bi_pip_{pip['id']}",
+                    "char_id": pip["id"],
+                    "name": pip["name"],
+                    "initiative": 8,
+                    "hp_current": 40, "hp_max": 40,
+                    "buffs": [],
+                    "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+                },
+            ],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_bardic_inspiration",
+        json={
+            "character_id": lyra["id"],
+            "target_character_id": pip["id"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+
+    feature_msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    cast_id = feature_msg["data"].get("cast_id")
+    assert cast_id, f"missing cast_id; payload={feature_msg['data']}"
+
+    # Verify bardic-inspiration-die buff is on PIP (the target).
+    pip_buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    bi_buff = next(
+        (b for b in pip_buffs if (b or {}).get("key") == "bardic-inspiration-die"),
+        None,
+    )
+    assert bi_buff is not None, (
+        f"expected bardic-inspiration-die installed on Pip; got {pip_buffs}"
+    )
+    # The buff carries the die size for a future attack/save hook.
+    assert (bi_buff.get("effects") or {}).get("bardic_inspiration_die") == "d8", (
+        f"expected d8 die (Lyra is Bard Lv 6); got {bi_buff}"
+    )
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "resource_refunded" in kinds, (
+        f"expected resource_refunded leg; per_target={per_target}"
+    )
+    assert "buff_install" in kinds, (
+        f"expected buff_install leg; per_target={per_target}"
+    )
+
+    # Verify the inspiration buff is gone from Pip post-undo.
+    pip_buffs_after = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any(
+        (b or {}).get("key") == "bardic-inspiration-die"
+        for b in pip_buffs_after
+    ), f"bardic-inspiration-die still installed on Pip: {pip_buffs_after}"
