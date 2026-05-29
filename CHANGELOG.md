@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.14] - 2026-05-29 — "The Card Catalogue"
+
+**Schema version:** 64
+**Commit summary:** **Extends the v2.97.13 visual-regression harness to cover the three other major roll-log card types** — the basic `.roll-card` (d20 result with the wide accent-tinted total column), the `.weapon-atk-card` (hit + damage + Undo pills), and the `.feature-used-card` (icon-prefixed name + italic desc + counter + Undo). Each lands a committed PNG baseline. The roll-log family is now four card types covered; future visual regressions to any of them fail the local harness before merge.
+
+### Added
+- `tests/harness_ui/test_visual_roll_log_cards.py` — parametrized snapshots for `roll_card_basic`, `weapon_attack_card_hit`, `feature_used_card_with_undo`. Same DOM-injection + screenshot-diff pattern as v2.97.13's `test_visual_spell_card.py`; the inline HTML for each card mirrors what the respective `appendRoll` / `appendWeaponAttack` / `_appendFeatureUsed` JS renderer produces.
+- `tests/harness_ui/__snapshots__/roll_card_basic.png` (25 KB), `weapon_attack_card_hit.png` (32 KB), `feature_used_card_with_undo.png` (37 KB) — committed baselines.
+
+### Notes
+- **PATCH bump** — test infrastructure only; no contract / schema / production-code change.
+- Same local-only constraint as v2.97.13: snapshots taken on the developer's machine; CI integration deferred. See `docs/wiki/visual-regression-harness.md` for the rationale + the planned Linux-container workflow when CI is wanted.
+- Total visual coverage: 5 baseline snapshots across 4 roll-log card types (spell-cast collapsed + expanded, basic roll, weapon attack, feature-used).
+- Total harness count unchanged at 586 in `tests/harness/` (HTTP+WS layer); the visual tests live under `tests/harness_ui/` and are local-only by design.
+
+---
+
 ## [2.97.13] - 2026-05-29 — "Snapshot the Wand"
 
 **Schema version:** 64
