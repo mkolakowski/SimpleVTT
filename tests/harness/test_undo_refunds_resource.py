@@ -604,3 +604,81 @@ async def test_undo_refunds_item_use_hp(gm_client, gm_ws, roster):
     assert hd["source"] == "undo_heal"
     assert hd["delta"] == -healed
     assert int(hd["hp"]["current"]) == pre_hp
+
+
+async def test_undo_refunds_rage_counter_and_buff(gm_client, gm_ws, roster):
+    """v2.97.20 — Rage now snapshots the caster's buffs pre-install and
+    stamps a buff_install log entry under the same cast_id as the
+    resource_spend. Undo refunds the counter (existing v2.97.1 plumbing)
+    AND drops the rage buff (new v2.97.20 plumbing via the existing
+    v2.65.0 buff_install undo branch).
+
+    Pre-v2.97.20 only the counter was refunded; the rage buff stayed
+    installed and the player had to manually × it off.
+    """
+    krieger = roster["Krieger Stonefist"]
+    await _long_rest(gm_client, krieger["id"])
+
+    # Seed a one-combatant battle so /use_rage's bonus-slot gate has a
+    # battle to mark against AND _install_buff has somewhere to attach.
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [{
+                "id": f"tok_rage_{krieger['id']}",
+                "char_id": krieger["id"],
+                "name": krieger["name"],
+                "initiative": 10,
+                "hp_current": 55, "hp_max": 55,
+                "buffs": [],
+                "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+            }],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_rage",
+        json={"character_id": krieger["id"], "override": True},
+    )
+    assert cast.status_code == 200, cast.text
+
+    feature_msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    cast_id = feature_msg["data"].get("cast_id")
+    assert cast_id, f"missing cast_id; payload: {feature_msg['data']}"
+
+    # Verify rage buff IS installed pre-undo.
+    buffs_resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/buffs"
+    )
+    assert buffs_resp.status_code == 200, buffs_resp.text
+    pre_undo_buffs = buffs_resp.json().get("buffs", [])
+    assert any((b or {}).get("key") == "rage" for b in pre_undo_buffs), (
+        f"expected rage buff installed; got {pre_undo_buffs}"
+    )
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+
+    # The undo's per_target should include both legs.
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "resource_refunded" in kinds, (
+        f"expected resource_refunded leg; per_target={per_target}"
+    )
+    assert "buff_install" in kinds, (
+        f"expected buff_install leg; per_target={per_target}"
+    )
+
+    # Verify rage buff is gone post-undo.
+    buffs_resp2 = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/buffs"
+    )
+    post_undo_buffs = buffs_resp2.json().get("buffs", [])
+    assert not any((b or {}).get("key") == "rage" for b in post_undo_buffs), (
+        f"rage buff still installed after undo: {post_undo_buffs}"
+    )

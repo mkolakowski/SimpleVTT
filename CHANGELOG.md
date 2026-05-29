@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.20] - 2026-05-29 — "Calm the Rage"
+
+**Schema version:** 64
+**Commit summary:** **Opens the buff-teardown audit on `/use_rage` as the canonical pattern.** Pre-v2.97.20, undoing a rage cast refunded the rage counter via the v2.97.1 plumbing but left the rage buff installed on the caster — net result was a caster who got rage's damage bonus + advantage + resistance without spending a charge. v2.97.20 snapshots the caster's buffs pre-install via the existing v2.65.0 `_snapshot_target_buffs` helper, stamps a `buff_install` undo log entry under the same `cast_id` as the resource_spend, and the existing v2.65.0 buff_install undo branch reverts the buff list to the snapshot on undo — dropping the rage buff along with any other buffs that landed between snapshot and undo (the snapshot is the canonical pre-install state).
+**Description:** Two edits to `/use_rage`. After the existing `_log_damage_entry(rage_cast_id, {"kind": "resource_spend", ...})`, snapshot the caster's buffs (`_caster_buffs_before = _snapshot_target_buffs(db, campaign_id, {"char_id": char.id})`). After `_install_buff`, stamp a second log entry under the same `rage_cast_id`: `{"kind": "buff_install", "target_char_id": char.id, "buffs_before": _caster_buffs_before, "buff_installed_key": "rage"}`. The existing v2.65.0 buff_install undo branch picks it up. Comment block on the pre-existing resource_spend stamp updated — "Rage buff stays installed on undo" is no longer true.
+
+### Added
+- `kind: "buff_install"` log entry stamped by `/use_rage` under the same `cast_id` as the existing `resource_spend` leg. Both legs replay on a single Undo POST.
+- `tests/harness/test_undo_refunds_resource.py::test_undo_refunds_rage_counter_and_buff` — Krieger long-rests, enters a battle, uses Rage, asserts the rage buff is installed via GET `/character/{id}/buffs`. Posts undo, asserts the per_target carries BOTH `resource_refunded` and `buff_install` legs. Re-GETs buffs, asserts the rage buff is gone.
+
+### Notes
+- **PATCH bump** — new log entry kind use but no new code path; the buff_install undo branch is the same v2.65.0 plumbing that `/cast_spell` buff installs already use. Existing `test_use_rage.py` happy-path tests pass unchanged because they don't assert on buff state post-undo.
+- **The "canonical pattern" for buff teardown across the audit:** snapshot before install, stamp `buff_install` after install, both under the same cast_id. Future commits extending this to `/use_indomitable`, the five reaction-cast paths (Shield, Counterspell, Hellish Rebuke, Absorb Elements, Silvery Barbs), `/use_patient_defense`, `/use_step_of_the_wind`, `/use_flurry_of_blows`, `/use_metamagic_empowered_spell`, `/use_stunning_strike` (target's Stunned buff), and `/use_action_surge` (the indomitable-armed mid-step) follow the same shape.
+- **Why the snapshot replaces the entire buff list rather than just dropping the rage buff?** The v2.65.0 buff_install undo branch was designed for spell-cast buffs (Bless / Hex / Sleep) where the target wouldn't normally pick up other concurrent buffs between cast and undo. For the audit's purposes (immediate undo after a rage cast), the snapshot approach correctly drops rage. Edge case: if the player took some OTHER buff (e.g. a Bless from an ally) between Rage and Undo, that ally's Bless would also drop on the Rage undo. Acceptable for v2.97.20; a per-key partial restore would be a future refinement.
+- Total harness count: 593 (was 592 in v2.97.19) — one new rage buff-teardown test.
+
+---
+
 ## [2.97.19] - 2026-05-29 — "Strike the Refund"
 
 **Schema version:** 64

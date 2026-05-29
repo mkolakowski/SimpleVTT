@@ -18787,8 +18787,10 @@ async def use_rage(
     db.commit()
 
     # v2.97.1 — log the use-spend for /undo_attack_damage refund.
-    # Rage buff stays installed on undo (matches Indomitable / Shield);
-    # the player ends rage manually via the buff badge × button.
+    # v2.97.20 — buff teardown: snapshot the caster's buffs pre-install
+    # and stamp a buff_install entry under the same cast_id so Undo
+    # also drops the rage buff. Pre-v2.97.20 the buff stayed installed
+    # after undo and the player had to manually × it off.
     rage_cast_id = uuid.uuid4().hex[:12]
     _log_damage_entry(rage_cast_id, {
         "kind": "resource_spend",
@@ -18798,6 +18800,9 @@ async def use_rage(
         "amount": 1,
         "source_label": "Rage",
     })
+    _caster_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": char.id},
+    )
 
     # Install the rage buff on the barbarian's combatant. ``effects`` is
     # informational — (B) Phase B roll-time intercept will read these
@@ -18825,6 +18830,18 @@ async def use_rage(
         ),
     }
     installed = await _install_buff(campaign_id, char.id, buff)
+    # v2.97.20 — stamp the buff_install entry AFTER the install so the
+    # snapshot above is the canonical pre-install state. The existing
+    # v2.65.0 buff_install undo branch restores ``buffs_before`` —
+    # i.e. drops the rage buff plus any other buffs that landed
+    # between snapshot and undo.
+    _log_damage_entry(rage_cast_id, {
+        "kind": "buff_install",
+        "campaign_id": campaign_id,
+        "target_char_id": char.id,
+        "buffs_before": _caster_buffs_before,
+        "buff_installed_key": "rage",
+    })
 
     # v2.19.2 Phase C.3: mirror to char.sheet["_buffs_active"] so the
     # full sheet's Active Effects panel renders Rage even when the
