@@ -1,6 +1,6 @@
-# Undo refund audit (v2.97.0 – v2.97.27)
+# Undo refund audit (v2.97.0 – v2.97.29)
 
-> **Status:** ✅ shipped. Two stacked audits closed: **consume-without-refund** (resources + slots + inventory + HP, v2.97.0 – v2.97.18) and **buff teardown** (buffs from feature use + reaction casts + spell save-or-suck, v2.97.20 – v2.97.27). Filed follow-ups documented at the bottom.
+> **Status:** ✅ shipped. Two stacked audits closed: **consume-without-refund** (resources + slots + inventory + HP, v2.97.0 – v2.97.18) and **buff teardown** (buffs from feature use + reaction casts + spell save-or-suck + catalog-driven /use_feature, v2.97.20 – v2.97.29). Filed follow-ups documented at the bottom.
 
 ## Why these audits existed
 
@@ -24,7 +24,7 @@ There are eight refund-relevant entry kinds:
 | `resource_gain` | `/use_font_of_magic_to_points` (SP gain leg) | Subtract `amount` from `current` (clamped ≥ 0) — the inverse of `resource_spend` | `resource_update` |
 | `slot_gain` | `/use_font_of_magic_to_slot` (slot gain leg) | If `ephemeral=True`: decrement `total` by 1 and `font_of_magic_extra`. If `ephemeral=False`: increment `used` by 1. | `spell_slot_update` |
 | `inventory_consume` | `/use_item` | Find item by `_slug` or `name`; bump qty by 1, OR re-insert the stored item dict at `inv_idx` | `inventory_update` |
-| `buff_install` (pre-existing v2.65.0; opted into by v2.97.20+) | `/cast_spell` non-cantrip save-or-suck, `/use_reaction` Shield + Absorb Elements, `/use_rage`, `/use_indomitable`, the 3 Monk ki spends, `/use_metamagic_empowered_spell`, `/use_stunning_strike` (NPC target + PC target via `/respond`) | Restore `target.buffs` to pre-install snapshot via `_restore_target_buffs(db, campaign_id, target_char_id, target_combatant_id, buffs_before)` | `buff_update` |
+| `buff_install` (pre-existing v2.65.0; opted into by v2.97.20+) | `/cast_spell` non-cantrip save-or-suck, `/use_reaction` Shield + Absorb Elements, `/use_rage`, `/use_indomitable`, the 3 Monk ki spends, `/use_metamagic_empowered_spell`, `/use_stunning_strike` (NPC target + PC target via `/respond`), `/use_feature` catalog-driven (Sacred Weapon, v2.97.29) | Restore `target.buffs` to pre-install snapshot via `_restore_target_buffs(db, campaign_id, target_char_id, target_combatant_id, buffs_before)` | `buff_update` |
 | `damage` / `heal` (pre-existing) | `/use_attack`, `/cast_spell`, `/apply_healing`, `/use_lay_on_hands`, `/use_second_wind`, `/use_wholeness_of_body`, `/use_item` heal kind, Blessed Healer (Disciple of Life subclass) | Reverse `applied` HP on `target_char_id` | `character_hp_update` |
 
 A single cast can stamp **multiple legs** under one `cast_id`. Examples:
@@ -98,7 +98,7 @@ Spell-cast cards use the existing `spell_cast` source + the v2.92.0 `spell_slot_
 
 ### Catalog-driven (`/use_feature` with `resource_key` in `_FEATURE_ECONOMY`)
 
-- Channel Divinity — all 8 variants (Cleric Turn Undead / Preserve Life / Radiance of the Dawn / Guided Strike; Paladin Sacred Weapon / Turn the Unholy; Death / Arcana / Peace domain options). Single catalog entry with `resource_key: "channel-divinity"` covers all variants because they share the 1-use cost.
+- Channel Divinity — all 8 variants (Cleric Turn Undead / Preserve Life / Radiance of the Dawn / Guided Strike; Paladin Sacred Weapon / Turn the Unholy; Death / Arcana / Peace domain options). Single catalog entry with `resource_key: "channel-divinity"` covers all variants because they share the 1-use cost. **Sacred Weapon** additionally installs the `sacred-weapon` caster buff via the v2.97.29 catalog-driven buff path; `_FEATURE_ECONOMY` option entries can opt in by adding a `"buff": {...}` dict and `/use_feature` snapshots → installs → logs `buff_install` under the same `cast_id` as the resource_spend. Other CD options + future class features can drop the same buff dict in and get teardown for free.
 
 ### Inventory
 
@@ -177,7 +177,7 @@ For a harness test, model on `tests/harness/test_undo_refunds_resource.py::test_
 - ~~**HP / death-save effect refund.**~~ ✅ **Audit complete across v2.97.16 + v2.97.17 + v2.97.18.** Every documented heal path now leaves an undo log entry the existing v2.65.0 heal-undo branch can reverse.
 - ~~**Stunning Strike.**~~ ✅ Shipped in **v2.97.19** (ki refund) and **v2.97.25 + v2.97.26** (NPC + PC target Stunned teardown).
 - ~~**Buff persistence after refund.**~~ ✅ **Audit complete across v2.97.20 – v2.97.27.** 11 sites across 9 endpoints now drop their buff alongside refunding the resource. Endpoint-specific notes in the table above.
-- ~~**Channel Divinity buff teardown.**~~ Filed. Sacred Weapon installs a 1-minute buff with `+CHA mod to attack rolls`; `/use_feature` (which routes Channel Divinity per v2.97.7) doesn't currently stamp a buff_install entry. The fix is to add `_snapshot_target_buffs` + `_log_damage_entry({"kind": "buff_install", ...})` to `/use_feature` when the catalog entry indicates the feature installs a buff. Requires extending `_FEATURE_ECONOMY` with a `buff_key` field (Sacred Weapon, Turn Undead, …) so the endpoint knows whether to snapshot. Filed for a v2.97.28-ish.
+- ~~**Channel Divinity buff teardown.**~~ ✅ Shipped in **v2.97.29**. `/use_feature` now reads a `buff` dict from the catalog entry (parent feature OR option override), snapshots caster buffs, installs via `_install_buff`, mirrors to sheet, and stamps `buff_install` under the resource_spend's `cast_id`. Sacred Weapon is the first opt-in (its buff carries `effects: {"sacred_weapon": True}` as a marker for a future +CHA attack-roll hook — today the icon + duration are real, the attack bonus is GM-adjudicated). Other CD options that install buffs (Sentinel of Faith, Path of the Grave, Order's Demand, …) and any future `/use_feature`-routed buff installer can opt in with the same one-key catalog edit.
 - **`/use_feature` other counters.** Divine Sense (1 + CHA/day), Cleansing Touch (CHA/day), Stroke of Luck (1/short-rest), Cunning Action if a future class adds a counter to it. All can opt in by adding `resource_key + amount` to their `_FEATURE_ECONOMY` entry (one-line change per feature — the v2.97.7 plumbing reads it).
 - **Metamagic variants beyond Empowered.** Twinned / Quickened / Heightened / Subtle / Distant / Extended Spell don't have endpoints yet (only Empowered ships in v2.97.x). When they ship, each gets the same resource_spend + (optional) buff_install patches.
 - **Bardic Inspiration target buff teardown.** `/use_bardic_inspiration` decrements the BI counter (refundable) and installs the `bardic-inspiration-die` buff on the target. The counter refunds on Undo today but the die stays. Same 3-line patch as the v2.97.20 canonical pattern applied to the target combatant.
@@ -187,4 +187,4 @@ For a harness test, model on `tests/harness/test_undo_refunds_resource.py::test_
 
 - [Realtime broadcasts catalog](realtime-broadcasts-catalog.md) — full payload shapes for `feature_used`, `resource_update`, `spell_slot_update`, `inventory_update`, `buff_update`, etc.
 - [Endpoint catalog](endpoint-catalog.md) — full request/response shapes for every endpoint covered by the audit.
-- CHANGELOG entries v2.92.0 (initial spell-slot refund), v2.97.0 ("Pool Refund"), v2.97.5 ("Recover the Recovery"), v2.97.6 ("Trading Posts"), v2.97.7 ("Tithe and Refund"), v2.97.8 ("Pocket the Potion"), v2.97.16 ("The Effect Rewind"), v2.97.17 ("Claim the Refund"), v2.97.18 ("Heal the Healer"), v2.97.19 ("Strike the Refund"), v2.97.20 ("Calm the Rage"), v2.97.21 ("Disarm the Shield"), v2.97.22 ("Three Stances Down"), v2.97.23 ("Empowered No More"), v2.97.24 ("Lower the Shield"), v2.97.25 ("Wake the Stunned"), v2.97.26 ("Wake the Other Stunned"), v2.97.27 ("Hold the Cleric").
+- CHANGELOG entries v2.92.0 (initial spell-slot refund), v2.97.0 ("Pool Refund"), v2.97.5 ("Recover the Recovery"), v2.97.6 ("Trading Posts"), v2.97.7 ("Tithe and Refund"), v2.97.8 ("Pocket the Potion"), v2.97.16 ("The Effect Rewind"), v2.97.17 ("Claim the Refund"), v2.97.18 ("Heal the Healer"), v2.97.19 ("Strike the Refund"), v2.97.20 ("Calm the Rage"), v2.97.21 ("Disarm the Shield"), v2.97.22 ("Three Stances Down"), v2.97.23 ("Empowered No More"), v2.97.24 ("Lower the Shield"), v2.97.25 ("Wake the Stunned"), v2.97.26 ("Wake the Other Stunned"), v2.97.27 ("Hold the Cleric"), v2.97.28 ("The Updated Ledger"), v2.97.29 ("Sheathe the Sacred Weapon").

@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.29] - 2026-05-29 — "Sheathe the Sacred Weapon"
+
+**Schema version:** 64
+**Commit summary:** **Channel Divinity buff teardown.** Closes the top filed follow-up from the v2.97.28 audit refresh by extending `/use_feature` to install a catalog-driven caster-side buff alongside the v2.97.7 resource decrement, and stamp a `buff_install` log entry under the same `cast_id` as the `resource_spend` leg. Sacred Weapon (Paladin Channel Divinity option) is the first opt-in: its `_FEATURE_ECONOMY` entry now carries a `"buff": {...}` dict, and `/use_feature` reads it via the new `_feature_economy_buff` helper, snapshots the caster's pre-install buffs, calls `_install_buff`, mirrors to sheet, and stamps the undo entry. Undo refunds the CD use AND drops the buff in one POST — same shape as v2.97.20 Rage / v2.97.21 Indomitable, just routed through the generic feature endpoint instead of a dedicated `/use_*`.
+**Description:** Three edits in `app/routes/tabletop_routes.py`.
+**(1)** New `_feature_economy_buff(feature_key, option_key)` helper that returns the buff dict from `_FEATURE_ECONOMY` (option override wins over parent feature; falls back to parent; returns None when neither carries a buff).
+**(2)** `_FEATURE_ECONOMY["channel-divinity"]["options"]["sacred-weapon"]` extended with a `buff` dict — key `sacred-weapon`, ⚔️ icon, 10-round duration (1 minute, matches RAW), `effects: {"sacred_weapon": True}` as a marker for a future attack-roll +CHA hook. The buff is icon-visible on the token today; the GM applies the +CHA attack bonus manually until the hook lands.
+**(3)** `/use_feature` resource-decrement leg extended: after the `resource_spend` log entry + `resource_update` broadcast, if `_feature_economy_buff` returns a dict AND `feature_cast_id` exists, snapshot caster buffs via `_snapshot_target_buffs`, install via `_install_buff`, mirror via `_mirror_buffs_to_sheet`, and log `kind: "buff_install"` under the same `cast_id`. The v2.65.0 buff_install undo branch handles the teardown automatically — no new undo kind, no new broadcast type.
+
+### Added
+- `_feature_economy_buff(feature_key, option_key)` helper in `app/routes/tabletop_routes.py`.
+- `buff` dict on `_FEATURE_ECONOMY["channel-divinity"]["options"]["sacred-weapon"]`.
+- `tests/harness/test_undo_refunds_resource.py::test_undo_refunds_sacred_weapon_cd_and_buff` — long-rest Caelan, seed solo battle, post /use_feature channel-divinity/sacred-weapon, assert sacred-weapon buff installed, undo with the returned cast_id, assert per_target carries BOTH `resource_refunded` and `buff_install` legs, then re-fetch buffs and assert the sacred-weapon buff is gone.
+
+### Changed
+- `docs/wiki/consume-without-refund-audit.md` — flipped "Channel Divinity buff teardown" from filed to ✅ shipped; updated header range to v2.97.0 – v2.97.29; added v2.97.29 to the cross-reference list; expanded the catalog-driven coverage note to mention Sacred Weapon's buff opt-in.
+- `docs/test-harness-coverage.md` — total count 602 → 603, version stamp v2.97.27 → v2.97.29.
+
+### Notes
+- **PATCH bump** — the buff install reuses the v2.97.20+ canonical pattern (`_snapshot_target_buffs` → `_install_buff` → `_log_damage_entry`), the v2.65.0 buff_install undo branch, and the v2.97.7 `/use_feature` resource decrement. No new undo log kinds, no new broadcasts, no schema changes.
+- **The +CHA mod attack hook is filed.** Today the buff installs and shows the ⚔️ icon, but the attack-roll construction doesn't yet read `effects.sacred_weapon` to add the CHA bonus. When that hook lands (likely paired with the broader Bless/Hex/Hunter's Mark batch in the audit's filed-for-follow-up list), Sacred Weapon's mechanical effect closes the loop without touching this endpoint again.
+- **The plumbing is general.** Any future `/use_feature`-routed feature (Channel Divinity option, class feature, racial trait) that wants to install a caster buff just adds a `buff` dict to its `_FEATURE_ECONOMY` entry. No code changes needed in `/use_feature` itself for the next opt-in.
+- Total harness count: 603 (was 602 in v2.97.27/28) — one new buff-teardown round-trip test.
+- Buff-teardown audit now spans **12 sites across 10 endpoints** (the new logical endpoint is `/use_feature`'s catalog-driven buff path).
+
+---
+
 ## [2.97.28] - 2026-05-29 — "The Updated Ledger"
 
 **Schema version:** 64

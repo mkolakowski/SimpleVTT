@@ -158,7 +158,26 @@ _FEATURE_ECONOMY: dict[str, dict] = {
             "radiance-of-the-dawn": {"desc": "Dispel magical darkness; deal 2d10 + cleric level radiant damage on a failed Con save (each enemy within 30 ft)."},
             "guided-strike":       {"desc": "+10 bonus to one attack roll, declared after seeing the d20."},
             # Paladin options (v2.14.3)
-            "sacred-weapon":       {"desc": "Imbue a weapon you hold with positive energy for 1 minute: +CHA mod to attack rolls, deals magical damage, emits 20 ft bright light."},
+            # v2.97.29: Sacred Weapon installs a caster-side buff so
+            # the v2.97.20+ buff-teardown audit covers it — the
+            # /use_feature install + the buff_install undo leg both
+            # ride under the same cast_id. Effects flag is a marker for
+            # a future attack-roll +CHA hook; today the buff is icon-
+            # only (the GM applies the +CHA bonus manually) but the
+            # token-side state machine + the undo wiring are both real.
+            "sacred-weapon":       {
+                "desc": "Imbue a weapon you hold with positive energy for 1 minute: +CHA mod to attack rolls, deals magical damage, emits 20 ft bright light.",
+                "buff": {
+                    "key": "sacred-weapon",
+                    "name": "Sacred Weapon",
+                    "icon": "⚔️",
+                    "duration_rounds": 10,
+                    "duration_max": 10,
+                    "concentration": False,
+                    "effects": {"sacred_weapon": True},
+                    "desc": "Weapon emits 20 ft bright light; attack rolls gain +CHA mod and deal magical damage.",
+                },
+            },
             "turn-the-unholy":     {"desc": "Each fiend or undead within 30 ft that can see/hear you must succeed on a Wisdom save or be turned for 1 minute."},
         },
     },
@@ -299,6 +318,36 @@ def _feature_economy_resource(
     if parent_key:
         return (parent_key, parent_amount or 1)
     return (None, 0)
+
+
+def _feature_economy_buff(
+    feature_key: str, option_key: str | None,
+) -> dict | None:
+    """Resolve (feature, option) to a buff dict from the curated catalog.
+
+    v2.97.29 — used by /use_feature to drive catalog-driven buff
+    installs (Sacred Weapon today; future buff-installing CD options
+    + class features opt in by adding a ``buff`` dict to their entry).
+    Option's buff takes precedence over the parent feature's; falls
+    back to the parent when the option doesn't carry one. Returns
+    None when neither carries a buff — /use_feature then skips the
+    install + log leg and matches the pre-v2.97.29 announce-only
+    behavior.
+
+    The returned dict is intended to be passed verbatim to
+    ``_install_buff(campaign_id, character_id, buff)`` after a shallow
+    copy. Callers must NOT mutate the catalog dict.
+    """
+    feat = _FEATURE_ECONOMY.get((feature_key or "").lower())
+    if not feat:
+        return None
+    parent_buff = feat.get("buff") if isinstance(feat.get("buff"), dict) else None
+    if option_key:
+        opt = (feat.get("options") or {}).get(option_key.lower()) or {}
+        opt_buff = opt.get("buff") if isinstance(opt.get("buff"), dict) else None
+        if opt_buff:
+            return opt_buff
+    return parent_buff
 
 
 def _feature_economy_desc(feature_key: str, option_key: str | None) -> str:
@@ -13141,6 +13190,35 @@ async def use_feature(
                 "max": res_max,
             },
         })
+
+        # v2.97.29: catalog-driven caster-side buff install. When the
+        # curated entry carries a ``buff`` dict (Sacred Weapon is the
+        # first opt-in — Cleric Channel Divinity options that install
+        # buffs in a future commit slot in here), snapshot the caster's
+        # buffs first so the buff_install undo entry can restore them,
+        # then install and log under the same feature_cast_id. The
+        # v2.65.0 buff_install undo branch already knows how to walk
+        # the snapshot back; this just stamps the log entry from a
+        # new producer. Buff install is gated on resource consumption
+        # so an over-budget click that already paid the slot still
+        # gets the buff + undo plumbing, but a non-resource feature
+        # (Rage / Indomitable, which have dedicated endpoints) never
+        # routes here.
+        catalog_buff = _feature_economy_buff(feature_key, option_key)
+        if catalog_buff and feature_cast_id:
+            buff_dict = dict(catalog_buff)
+            _caster_buffs_before = _snapshot_target_buffs(
+                db, campaign_id, {"char_id": char.id},
+            )
+            await _install_buff(campaign_id, char.id, buff_dict)
+            _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+            _log_damage_entry(feature_cast_id, {
+                "kind": "buff_install",
+                "campaign_id": campaign_id,
+                "target_char_id": char.id,
+                "buffs_before": _caster_buffs_before,
+                "buff_installed_key": buff_dict.get("key"),
+            })
 
     # Resolve display info for the broadcast — same pattern as cast_spell.
     membership = (

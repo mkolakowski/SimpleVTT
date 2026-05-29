@@ -1020,3 +1020,90 @@ async def test_undo_cast_spell_save_or_suck_drops_buff(
         f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/buffs"
     )).json().get("buffs", [])
     assert not any((b or {}).get("key") == "paralyzed" for b in post)
+
+
+async def test_undo_refunds_sacred_weapon_cd_and_buff(gm_client, gm_ws, roster):
+    """v2.97.29 — Channel Divinity → Sacred Weapon now installs a
+    caster-side ``sacred-weapon`` buff via the new catalog-driven
+    /use_feature buff path. Undo refunds the channel-divinity counter
+    (v2.97.7 plumbing) AND drops the buff (new v2.97.29 plumbing via
+    the existing v2.65.0 buff_install undo branch).
+
+    Pre-v2.97.29 the CD counter refunded but no buff was ever installed
+    (announce-only). v2.97.29 makes Sacred Weapon the first CD option
+    to opt into the buff dict in ``_FEATURE_ECONOMY``; the same
+    /use_feature plumbing is now reusable for any future CD option (or
+    /use_feature-routed class feature) that installs a caster buff.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    await _long_rest(gm_client, caelan["id"])
+
+    # Seed a one-combatant battle so _install_buff has somewhere to
+    # attach (mirrors the rage / indomitable seed pattern).
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [{
+                "id": f"tok_sw_{caelan['id']}",
+                "char_id": caelan["id"],
+                "name": caelan["name"],
+                "initiative": 10,
+                "hp_current": 60, "hp_max": 60,
+                "buffs": [],
+                "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+            }],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_feature",
+        json={
+            "character_id": caelan["id"],
+            "feature_key": "channel-divinity",
+            "option_key": "sacred-weapon",
+            "label": "Channel Divinity",
+            "override": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    cast_data = cast.json()
+    cast_id = cast_data.get("cast_id")
+    assert cast_id, f"missing cast_id; payload={cast_data}"
+
+    # Verify Sacred Weapon buff IS installed pre-undo.
+    buffs_resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/buffs"
+    )
+    assert buffs_resp.status_code == 200, buffs_resp.text
+    pre_buffs = buffs_resp.json().get("buffs", [])
+    assert any((b or {}).get("key") == "sacred-weapon" for b in pre_buffs), (
+        f"expected sacred-weapon buff installed; got {pre_buffs}"
+    )
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+
+    # The undo's per_target should include BOTH legs — the CD counter
+    # refund AND the buff teardown.
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "resource_refunded" in kinds, (
+        f"expected resource_refunded leg; per_target={per_target}"
+    )
+    assert "buff_install" in kinds, (
+        f"expected buff_install leg; per_target={per_target}"
+    )
+
+    # Verify Sacred Weapon buff is gone post-undo.
+    buffs_resp2 = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{caelan['id']}/buffs"
+    )
+    post_buffs = buffs_resp2.json().get("buffs", [])
+    assert not any((b or {}).get("key") == "sacred-weapon" for b in post_buffs), (
+        f"sacred-weapon still installed after undo: {post_buffs}"
+    )
