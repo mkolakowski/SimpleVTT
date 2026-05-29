@@ -10,6 +10,28 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.39] - 2026-05-29 — "The Sheen Holds"
+
+**Schema version:** 64
+**Commit summary:** **Shield of Faith +2 AC mechanical hook.** Closes the v2.97.38-filed AC bonus by extending `_read_target_ac` to sum `effects.ac_bonus` across the target's active buffs after resolving the base AC. Now a Pip with Shield of Faith reports `target_ac = sheet.ac + 2`; an attack that would hit AC 15 but not AC 17 will correctly miss. Same helper covers any future AC-bumping buff (Mage Armor, Haste, Barkskin, etc.) — they all fold in via the same dict-effects walk.
+**Description:** One edit in `app/routes/tabletop_routes.py::_read_target_ac`. Refactor: extract `base_ac` from the existing PC/NPC/fallback resolution chain (no behavior change). Add a buff walk: for PCs read `_get_buffs(campaign_id, char_id)`, for NPCs read `combatant.get("buffs")` directly (NPCs don't have a hub-backed buff store); sum `int(b["effects"]["ac_bonus"] or 0)` across dict-shaped buff entries (skipping the legacy `_SPELL_CONDITION_MAP` list-shaped effects). Return `base_ac + buff_ac_bonus`. All four `_read_target_ac` call sites — `/cast_spell` single-target attack-roll resolution, `/use_attack` primary-target hit determination, `/use_attack` multi-target loop, and the spell-attack-roll resolution at line 11641 — automatically pick up the new behavior.
+
+### Added
+- `tests/harness/test_buff_attack_hooks.py::test_shield_of_faith_adds_ac_bonus_to_target` — Krieger swings at Pip pre-SoF (records baseline `target_ac`); Caelan casts Shield of Faith on Pip; Krieger swings again; asserts `target_ac == baseline + 2`.
+
+### Changed
+- `app/routes/tabletop_routes.py::_read_target_ac` — extracts `base_ac` from the existing chain, walks buffs for `effects.ac_bonus`, returns the sum.
+- `docs/wiki/consume-without-refund-audit.md` — appended v2.97.39 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 618 → 619, version stamp v2.97.38 → v2.97.39.
+
+### Notes
+- **PATCH bump** — single-helper extension. All four `_read_target_ac` callers pick it up automatically (Shield of Faith now genuinely shifts hit/miss adjudication for attacks against the warded target). No new code paths, no schema changes.
+- **General pattern.** Any future buff that carries `effects.ac_bonus: N` in `_SPELL_BUFF_MAP` (or installed via another path) automatically adds N to the target's effective AC. Mage Armor (+ base AC 13 + DEX, no armor stack), Haste (+2 AC, concentration), Barkskin (AC becomes 16 — different mechanic, would need a separate hook), Shield (reaction +5 AC until end of next turn — different timing, also separate) all slot in as their catalog entries land.
+- **NPCs supported.** A bandit with Shield of Faith would also gain +2 AC. The helper reads from `combatant.get("buffs")` for NPCs — there's no `/cast_spell` path that installs Shield of Faith on an NPC today (the v2.97.31 walker only resolves PC targets in the AoE multi-target list), but a future test-only buff endpoint or a Bless-style multi-target install would just work.
+- Total harness count: 619 (was 618 in v2.97.38) — one new before/after attack test.
+
+---
+
 ## [2.97.38] - 2026-05-29 — "Faithward"
 
 **Schema version:** 64

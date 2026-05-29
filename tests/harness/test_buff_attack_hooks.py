@@ -446,6 +446,89 @@ async def test_bane_save_subtracts_d4(gm_client, gm_ws, roster):
     )
 
 
+async def test_shield_of_faith_adds_ac_bonus_to_target(gm_client, roster):
+    """v2.97.39 — closes the v2.97.38 filed Shield of Faith mechanical
+    hook. ``_read_target_ac`` now sums ``effects.ac_bonus`` across the
+    target's active buffs, so a Pip with Shield of Faith reports
+    target_ac = base + 2.
+
+    Two attacks: one before SoF (baseline target_ac), one after
+    (target_ac == baseline + 2). Krieger swings at Pip both times so
+    the same attacker + same combatant are isolated.
+    """
+    krieger = roster["Krieger Stonefist"]
+    caelan = roster["Sir Caelan Lightbringer"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, krieger["id"])
+    await _long_rest(gm_client, caelan["id"])
+
+    pip_tok = f"tok_sof_ac_pip_{pip['id']}"
+    await _seed_battle_with(gm_client, [
+        {"id": krieger["id"], "name": krieger["name"], "tok_id": f"tok_sof_ac_krieger_{krieger['id']}", "hp_max": 55, "initiative": 14},
+        {"id": caelan["id"], "name": caelan["name"], "tok_id": f"tok_sof_ac_caelan_{caelan['id']}", "hp_max": 60, "initiative": 12},
+        {"id": pip["id"], "name": pip["name"], "tok_id": pip_tok, "hp_max": 40, "initiative": 8},
+    ])
+
+    # Baseline attack — Krieger swings at Pip with greataxe (index 0).
+    atk_pre = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": krieger["id"],
+            "attack_index": 0,
+            "target_combatant_id": pip_tok,
+            "target_character_id": pip["id"],
+            "target_name": pip["name"],
+            "override": True,
+        },
+    )
+    assert atk_pre.status_code == 200, atk_pre.text
+    baseline_ac = atk_pre.json()["target_ac"]
+    assert baseline_ac > 0, f"unexpected baseline AC: {baseline_ac}"
+
+    # Caelan casts Shield of Faith on Pip.
+    sof = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": caelan["id"],
+            "spell_index": 2,  # Caelan's Shield of Faith
+            "slot_level": 1,
+            "class_slug": "paladin",
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert sof.status_code == 200, sof.text
+
+    # Verify buff installed.
+    pip_buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "shield-of-faith" for b in pip_buffs)
+
+    # Second attack — Krieger swings at Pip again. target_ac should
+    # now include the +2 SoF bonus.
+    atk_post = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/attack",
+        json={
+            "character_id": krieger["id"],
+            "attack_index": 0,
+            "target_combatant_id": pip_tok,
+            "target_character_id": pip["id"],
+            "target_name": pip["name"],
+            "override": True,
+        },
+    )
+    assert atk_post.status_code == 200, atk_post.text
+    boosted_ac = atk_post.json()["target_ac"]
+    assert boosted_ac == baseline_ac + 2, (
+        f"expected target_ac to gain +2 from Shield of Faith; "
+        f"baseline={baseline_ac}, boosted={boosted_ac}"
+    )
+
+
 async def test_place_aoe_pc_save_carries_bless_suffix(
     gm_client, gm_ws, roster,
 ):

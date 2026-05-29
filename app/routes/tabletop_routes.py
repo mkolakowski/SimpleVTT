@@ -3897,29 +3897,59 @@ def _read_target_ac(
 
     Returns 10 on any lookup miss so the hit determination still
     produces a sane comparison rather than skipping it.
+
+    v2.97.39 — closes the v2.97.38 filed Shield of Faith hook. After
+    resolving the base AC, the target's active buffs are walked for
+    ``effects.ac_bonus`` and the total is summed in. Shield of Faith
+    (v2.97.38) carries ``ac_bonus: 2``; future buffs like Mage Armor,
+    Haste, etc. fold in the same way. PCs read their buff list via
+    ``_get_buffs(campaign_id, char_id)``; NPCs read directly from the
+    combatant dict's ``buffs`` field.
     """
     if not combatant:
         return 10
+    base_ac = 10
     char_id = combatant.get("char_id")
     if char_id:
         char = db.query(Character).filter(Character.id == char_id).first()
         if char:
             ac = (char.sheet or {}).get("ac")
             try:
-                return int(ac) if ac is not None else 10
+                base_ac = int(ac) if ac is not None else 10
             except (TypeError, ValueError):
-                return 10
-    tmpl_id = combatant.get("token_template_id")
-    if tmpl_id:
-        tmpl = db.query(TokenTemplate).filter(TokenTemplate.id == tmpl_id).first()
-        if tmpl:
-            sheet = tmpl.sheet or {}
-            ac = sheet.get("armor_class") or sheet.get("ac")
-            try:
-                return int(ac) if ac is not None else 10
-            except (TypeError, ValueError):
-                return 10
-    return 10
+                base_ac = 10
+    else:
+        tmpl_id = combatant.get("token_template_id")
+        if tmpl_id:
+            tmpl = db.query(TokenTemplate).filter(TokenTemplate.id == tmpl_id).first()
+            if tmpl:
+                sheet = tmpl.sheet or {}
+                ac = sheet.get("armor_class") or sheet.get("ac")
+                try:
+                    base_ac = int(ac) if ac is not None else 10
+                except (TypeError, ValueError):
+                    base_ac = 10
+    # v2.97.39 — sum ``effects.ac_bonus`` across the target's active
+    # buffs. PC buffs come from the hub via _get_buffs; NPC buffs
+    # ride directly on the combatant dict (no char_id-backed buff
+    # store for NPCs). Non-dict effects (legacy descriptive-list
+    # condition buffs from _SPELL_CONDITION_MAP) are skipped.
+    if char_id:
+        buffs = _get_buffs(campaign_id, int(char_id)) or []
+    else:
+        buffs = combatant.get("buffs") or []
+    buff_ac_bonus = 0
+    for b in buffs:
+        if not isinstance(b, dict):
+            continue
+        effects = b.get("effects")
+        if not isinstance(effects, dict):
+            continue
+        try:
+            buff_ac_bonus += int(effects.get("ac_bonus") or 0)
+        except (TypeError, ValueError):
+            pass
+    return base_ac + buff_ac_bonus
 
 
 def _pick_damage_tier(scaling: list | None, level: int) -> dict | None:
