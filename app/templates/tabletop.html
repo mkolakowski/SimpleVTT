@@ -12,7 +12,13 @@
 {% block head %}
 <style>
     body { overflow: hidden; }
-    .container { padding: 8px 12px; overflow: hidden; display: flex; flex-direction: column; }
+    /* v2.91.0 — topbar is now an absolute-positioned overlay (title
+       pill + tab buttons float above the canvas), so the layout below
+       takes the full viewport. Container's top/bottom padding is
+       dropped to 0 so the map + left roll-log + right drawer sidebars
+       extend to the very top of the screen. Side padding stays at 12 px
+       so the map breathes off the left/right window edges. */
+    .container { padding: 0 12px; overflow: hidden; display: flex; flex-direction: column; }
     /* v2.49.94: ``position: relative`` so the drawer-sidebar's new
        absolute positioning anchors here. Sidebar floats over the
        right edge of the map so the map shows through the gaps
@@ -24,13 +30,20 @@
        right. pointer-events:none on the container lets clicks pass
        through to the canvas; individual pills re-enable to show a
        tooltip. Stacks above the canvas (z-index:3) but below modals. */
+    /* v2.91.0 — moved from bottom-LEFT of the map (left:12px) to
+       bottom-RIGHT, just outside the right drawer sidebar (which is
+       480 px wide + 12 px gap = 492 px). Per GM request: "to the left
+       of the right hand popout." Stays at the bottom edge so it
+       doesn't compete with the new centered title pill up top. */
     #presence-bubbles {
         position: absolute;
-        left: 12px;
+        right: 492px;
         bottom: 12px;
+        left: auto;
         z-index: 3;
         display: flex;
         flex-wrap: wrap;
+        flex-direction: row-reverse;
         gap: 6px;
         max-width: 60%;
         pointer-events: none;
@@ -69,18 +82,62 @@
     }
 
     /* ── Tabletop top bar ── */
+    /* v2.91.0 — topbar is now an absolute-positioned overlay floating
+       above the canvas. The bar itself is transparent + pointer-events
+       none (children re-enable) so most of the bar area passes clicks
+       through to the canvas; only the title pill on the left and the
+       tab buttons + ruler cluster on the right capture interaction.
+       This lets the map (and the left-side roll log) extend up to the
+       very top of the screen, with only the floating UI sitting on top.
+       z-index:60 puts the topbar above the right (z:50) + left
+       sidebars + canvas (z:1) + GIF overlay (z:2) + presence pills
+       (z:3). */
     .tt-topbar {
+        position: absolute;
+        top: 8px; left: 12px; right: 12px;
+        z-index: 60;
+        pointer-events: none;
         display: flex; align-items: center; gap: 12px;
-        flex-wrap: wrap; row-gap: 6px; margin-bottom: 6px;
+        flex-wrap: wrap; row-gap: 6px; margin: 0;
     }
+    .tt-topbar > * { pointer-events: auto; }
     .tt-topbar-thumb { width: 48px; height: 48px; border-radius: 6px; object-fit: cover; flex-shrink: 0; }
-    .tt-topbar-title { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-    .tt-topbar-badge {
-        background: var(--accent-bg2); color: var(--accent);
-        font-size: 11px; padding: 2px 8px; border-radius: 10px;
-        vertical-align: middle; white-space: nowrap;
+    /* v2.91.0 — Campaign title as a large glass pill, centered above
+       the canvas. Uses position:absolute + left:50% + translateX so it
+       stays centered regardless of the other topbar items' widths.
+       Glass recipe matches the Quick Links / GM Controls cards but with
+       a tall pill silhouette (border-radius:999px, generous padding)
+       and slightly stronger shadow so it reads as the page's anchor.
+       max-width:50vw + ellipsis keeps long campaign names from pushing
+       into the tab buttons on the right. */
+    .tt-title-pill {
+        position: absolute;
+        left: 50%;
+        top: 0;
+        transform: translateX(-50%);
+        margin: 0;
+        padding: 8px 28px;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+        line-height: 1.2;
+        color: var(--fg);
+        background: color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+        border-radius: 999px;
+        box-shadow: 0 6px 24px rgba(0,0,0,0.22), 0 1px 0 rgba(255,255,255,0.06) inset;
+        -webkit-backdrop-filter: blur(20px) saturate(170%);
+        backdrop-filter: blur(20px) saturate(170%);
+        white-space: nowrap;
+        max-width: 50vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        text-align: center;
     }
-    .tt-topbar-gm { white-space: nowrap; }
     .tt-topbar-actions {
         margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
     }
@@ -1750,9 +1807,12 @@
         .drawer-tab-btn { padding: 6px 10px; }
         .drawer-panels-wrapper { min-width: 0; }
 
-        /* On mobile condense the top bar to just the campaign title */
-        .tt-topbar { gap: 6px; margin-bottom: 4px; }
-        .tt-topbar-title { font-size: 16px; }
+        /* On mobile condense the top bar to just the campaign title.
+           v2.91.0 — class renamed tt-topbar-title → tt-title-pill;
+           also shrink the pill's padding so the centered name doesn't
+           dominate a narrow viewport. */
+        .tt-topbar { gap: 6px; }
+        .tt-title-pill { font-size: 14px; padding: 6px 18px; max-width: 75vw; }
         .tt-topbar-thumb { display: none; }
     }
 </style>
@@ -1803,10 +1863,12 @@
     {% if campaign.thumbnail_url %}
     <img src="{{ campaign.thumbnail_url }}" alt="" class="tt-topbar-thumb">
     {% endif %}
-    <h1 class="tt-topbar-title">{{ campaign.name }}
-        <span class="badge system tt-topbar-badge">{{ system.label }}</span>
-        {% if is_gm %}<span class="muted tt-topbar-gm">(GM)</span>{% endif %}
-    </h1>
+    {# v2.91.0 — campaign title rendered as a large centered glass pill.
+       The system-name badge ("Dungeons & Dragons 5e") and the "(GM)"
+       muted marker that used to sit alongside the title are removed
+       per TODO; system + role are already discoverable from
+       /campaign settings + the GM-only Tools sections in the drawer. #}
+    <h1 class="tt-title-pill" title="{{ campaign.name }}{% if is_gm %} — Game Master{% endif %}">{{ campaign.name }}</h1>
     {# v2.4.22: drawer-tab-bar moved here from inside .drawer-sidebar so the
        campaign title row + drawer tab row collapse into a single horizontal
        strip — reclaims ~36 px of vertical real estate. The buttons keep

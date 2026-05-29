@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.91.0] - 2026-05-28 — "The Floating Banner"
+
+**Schema version:** 64
+**Commit summary:** **Reshapes the tabletop topbar into floating overlays: the campaign name is now a centered glass pill, the ruler + tab buttons stay anchored to the upper-right, and the bar itself is transparent so the map (and the left-side roll log) extend visually all the way to the top of the screen.** Also relocates the presence pills from the bottom-LEFT corner of the map to the bottom-RIGHT, just outside the right drawer sidebar, per GM ask "to the left of the right hand popout."
+**Description:** Four edits, all in `app/templates/tabletop.html`. **(1)** Container padding override switched from `padding: 8px 12px` to `padding: 0 12px` so the layout fills the full viewport vertical, top-to-bottom. **(2)** `.tt-topbar` redefined as `position:absolute; top:8px; left:12px; right:12px; z-index:60; pointer-events:none;` with `> * { pointer-events:auto }` — the bar itself is a transparent overlay, only the floating children capture clicks. The map/roll-log/canvas underneath are now fully visible up to the very top of the screen. **(3)** New `.tt-title-pill` class for the campaign name: glass recipe (translucent `--bg` backing, `backdrop-filter:blur(20px) saturate(170%)`, accent-tinted border, 6 px shadow with inset highlight), `border-radius:999px`, `padding:8px 28px`, `font-size:16px;font-weight:700`, centered via `position:absolute; left:50%; transform:translateX(-50%)`, `max-width:50vw` + ellipsis so long names don't push into the right-side tabs. The H1 markup loses the `.tt-topbar-badge` (system name) and `.tt-topbar-gm` "(GM)" spans per the v2.90.2 TODO entry. **(4)** `#presence-bubbles` moved from `left:12px; bottom:12px` to `right:492px; bottom:12px; left:auto`, with `flex-direction:row-reverse` so the current user's pill stays adjacent to the sidebar edge as more pills accumulate. The 492 px right offset = 480 px sidebar width + 12 px gap.
+
+**Description (cont):** Layering rationale. The right drawer sidebar (`z-index:50`) and the left roll-log sidebar (same `.drawer-sidebar` recipe) sit BELOW the topbar's `z-index:60`. The glass title pill paints over any roll-log or drawer content that scrolls beneath it — with `backdrop-filter:blur(20px)`, content behind the pill reads as a soft frosted backdrop rather than being hidden. Same effect for the tab buttons on the right. So "roll log to top of screen" is satisfied (the roll-log sidebar's top is now at the viewport's top edge), and "not over the title pill or buttons" is honored visually (the buttons + pill paint above the log so the buttons aren't covered by log cards).
+
+### Added
+- `.tt-title-pill` — glass-pill class for the campaign name.
+
+### Changed
+- `.tt-topbar` is now an absolute-positioned transparent overlay (was: normal-flow flex row with `margin-bottom:6px`).
+- `.container` padding override in the tabletop view is `0 12px` (was: `8px 12px`).
+- `#presence-bubbles` anchored to bottom-RIGHT (left of the right drawer sidebar) instead of bottom-LEFT.
+
+### Removed
+- `.tt-topbar-badge` span (system label, e.g. "Dungeons & Dragons 5e") from the campaign-title row.
+- `.tt-topbar-gm` "(GM)" muted marker from the campaign-title row.
+- `.tt-topbar-title` class (replaced by `.tt-title-pill`).
+
+### Notes
+- **MINOR bump** — visual restructure that changes a stable surface (topbar shape, presence-pill position). No data, schema, or contract changes.
+- The system-name + GM marker text isn't lost in flow — the system label is still on `/campaign settings`, and the GM-only Tools drawer sections (Sessions, Encounters, Token Management, Music) only render for GMs, so "am I the GM here?" is still trivially visible.
+
+---
+
 ## [2.90.2] - 2026-05-28 — "Backlog Captured"
 
 **Schema version:** 64
