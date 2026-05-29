@@ -19803,6 +19803,16 @@ async def use_step_of_the_wind(
     _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
+    sotw_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(sotw_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "ki",
+        "amount": 1,
+        "source_label": "Step of the Wind",
+    })
+
     await hub.broadcast(campaign_id, {
         "type": "feature_used",
         "data": {
@@ -19811,6 +19821,7 @@ async def use_step_of_the_wind(
             "feature_name": f"{icon} Step of the Wind — {mode.capitalize()}",
             "feature_desc": desc,
             "source": "step-of-the-wind",
+            "cast_id": sotw_cast_id,
             "remaining": ki_cur - 1,
             "max": ki_max,
             "over_budget": was_used,
@@ -19832,6 +19843,7 @@ async def use_step_of_the_wind(
         "max": ki_max,
         "duration_rounds": 1,
         "buff_installed": installed,
+        "cast_id": sotw_cast_id,
     }
 
 

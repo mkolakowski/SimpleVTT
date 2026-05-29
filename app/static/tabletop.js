@@ -5443,6 +5443,7 @@
             'patient-defense',
             'flurry-of-blows',
             'wholeness-of-body',
+            'step-of-the-wind',
         ]);
         if (d.cast_id && _REFUNDABLE_FEATURE_SOURCES.has(d.source)) {
             featurePills.push(

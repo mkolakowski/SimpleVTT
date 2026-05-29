@@ -10,6 +10,23 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.3] - 2026-05-29 — "Wind on the Pool"
+
+**Schema version:** 64
+**Commit summary:** **One more ki-spend endpoint plumbed for refund.** `/use_step_of_the_wind` (Monk Lv 2+ bonus-action Disengage/Dash) now stamps a `resource_spend` entry into the per-cast undo log and surfaces a `cast_id` on its `feature_used` broadcast; the JS `_REFUNDABLE_FEATURE_SOURCES` Set opts the source slug in so the v2.96.0 ↶ Undo pill renders on the roll-log card.
+**Description:** Three-line server change (cast_id mint + `_log_damage_entry({"kind": "resource_spend", "resource_key": "ki", "amount": 1, ...})` + `cast_id` on the `feature_used` payload) + one-line JS Set addition. Both Disengage and Dash modes share the same ki cost (1), so a single source slug covers both variants — the undo refunds the 1 ki regardless of which mode was cast. The `step-of-the-wind-disengage` / `step-of-the-wind-dash` buff stays installed after undo (consistent with the Rage / Shield / Indomitable v2.95.0+ precedent — buff teardown is its own audit case).
+
+### Added
+- `cast_id` field on `feature_used` broadcast for `source: step-of-the-wind`.
+- `resource_spend` log entry stamped by `/use_step_of_the_wind` (`resource_key: ki`, `amount: 1`).
+
+### Notes
+- **PATCH bump** — pure replication of the v2.97.0 pattern. No new infrastructure, contract, or schema. Same canonical test (`tests/harness/test_undo_refunds_resource.py`) validates the round-trip; per-endpoint tests are redundant once the pattern is proven. Full suite remains green.
+- Investigated and **skipped** for this commit: Open Hand Technique (doesn't decrement a resource — Flurry of Blows already paid the Ki; OHT rides on the Flurry hit), Channel Divinity (8 variants go through generic `/use_feature` which doesn't decrement a resource counter — Channel Divinity uses are tracked via direct sheet PATCH from the resource panel; refactoring `/use_feature` to dispatch to per-source decrement is a separate audit case).
+- Audit remaining: `/use_feature`-routed features (Channel Divinity 8 variants, requires refactor), Metamagic (4 variants), Arcane Recovery, Font of Magic to_points / to_slot, Stunning Strike (needs `feature_used` broadcast first), item charges via `/use_item`.
+
+---
+
 ## [2.97.2] - 2026-05-29 — "Ki and Pool"
 
 **Schema version:** 64
