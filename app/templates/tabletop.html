@@ -2133,7 +2133,13 @@
         </ul>
     </div>
     <div class="roll-log-dice-wrap" style="padding:8px 6px 10px;border-top:1px solid var(--border);flex-shrink:0;">
-        <div style="border:1px solid rgba(167,139,250,.35);border-radius:8px;overflow:hidden;box-shadow:0 3px 14px rgba(0,0,0,.22);">
+        {# v2.97.10: Dice Roller card joins the glass-card recipe shared
+           with the roll-log cards (see .roll-card in the CSS block above
+           — color-mix translucent bg + backdrop-filter blur + saturate).
+           Pre-2.97.10 the card had only a border + box-shadow; the
+           backing was fully transparent, which made it visually
+           inconsistent with the rest of the cards stacked above it. #}
+        <div style="border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);border-radius:8px;overflow:hidden;box-shadow:0 3px 14px rgba(0,0,0,.22);background:color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);-webkit-backdrop-filter:blur(16px) saturate(160%);backdrop-filter:blur(16px) saturate(160%);">
             <!-- Card header -->
             <div style="display:flex;align-items:center;padding:6px 10px 5px;background:linear-gradient(135deg,rgba(167,139,250,.15),rgba(108,180,255,.10));border-bottom:2px solid var(--accent);">
                 <h4 style="margin:0;font-size:11px;color:var(--accent);text-transform:uppercase;letter-spacing:0.5px;">🎲 Dice Roller</h4>

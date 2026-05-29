@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.10] - 2026-05-29 — "Polished Glass"
+
+**Schema version:** 64
+**Commit summary:** **The Dice Roller card now uses the same glass recipe as the roll-log cards.** Pre-2.97.10 the Dice Roller (the input form + quick-dice row + GM Roller sub-panel at the bottom of the roll-log drawer) carried only a `border` + `box-shadow`; the backing was fully transparent, which made the panel pop out from the otherwise-translucent stack of roll cards above it. v2.97.10 inlines the same `background: color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent)` + `backdrop-filter: blur(16px) saturate(160%)` recipe that `.roll-card` uses, plus the matching `color-mix` accent border (35%), so the Dice Roller blends visually with the cards stacked above it.
+
+### Changed
+- `app/templates/tabletop.html::roll-log-dice-wrap` — Dice Roller card backing replaced with the v2.49.246 glass recipe (color-mix bg + 16px blur + 160% saturate + 35% accent border). Inline (matches the surrounding markup; no new class needed since the recipe is only used in this one spot).
+
+### Notes
+- **PATCH bump** — pure visual change. No new functionality, no contract change, no schema. No new test (no broadcast / endpoint touched; existing harness coverage unchanged).
+- Honors the per-user `--glass-alpha` slider from v2.62.0 — users who set a lower alpha will see the Dice Roller bg get more translucent too.
+- TODO.md entry "Update the Dice roller to have the same glass effects" — done.
+
+---
+
 ## [2.97.9] - 2026-05-29 — "The Refund Ledger"
 
 **Schema version:** 64
