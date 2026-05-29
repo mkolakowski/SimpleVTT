@@ -14122,6 +14122,11 @@ async def use_reaction(
                     "Immune to Magic Missile during the duration."
                 ),
             }
+            # v2.97.24 — buff teardown: snapshot caster buffs pre-install
+            # so Undo can drop the shield-active buff.
+            _caster_buffs_before = _snapshot_target_buffs(
+                db, campaign_id, {"char_id": int(watcher_char_id)},
+            )
             await _install_buff(
                 campaign_id, int(watcher_char_id), shield_buff,
             )
@@ -14129,6 +14134,13 @@ async def use_reaction(
                 db, int(watcher_char_id),
                 _get_buffs(campaign_id, int(watcher_char_id)),
             )
+            _log_damage_entry(shield_cast_id, {
+                "kind": "buff_install",
+                "campaign_id": campaign_id,
+                "target_char_id": int(watcher_char_id),
+                "buffs_before": _caster_buffs_before,
+                "buff_installed_key": "shield-active",
+            })
             await hub.broadcast(campaign_id, {
                 "type": "spell_slot_update",
                 "data": {
@@ -14463,6 +14475,10 @@ async def use_reaction(
                     f"+{slot_level}d6 {damage_type} damage."
                 ),
             }
+            # v2.97.24 — buff teardown: snapshot caster buffs pre-install.
+            _caster_buffs_before = _snapshot_target_buffs(
+                db, campaign_id, {"char_id": int(watcher_char_id)},
+            )
             await _install_buff(
                 campaign_id, int(watcher_char_id), ae_buff,
             )
@@ -14470,6 +14486,13 @@ async def use_reaction(
                 db, int(watcher_char_id),
                 _get_buffs(campaign_id, int(watcher_char_id)),
             )
+            _log_damage_entry(absorb_elements_cast_id, {
+                "kind": "buff_install",
+                "campaign_id": campaign_id,
+                "target_char_id": int(watcher_char_id),
+                "buffs_before": _caster_buffs_before,
+                "buff_installed_key": ae_buff["key"],
+            })
             await hub.broadcast(campaign_id, {
                 "type": "spell_slot_update",
                 "data": {

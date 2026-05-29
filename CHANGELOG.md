@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.24] - 2026-05-29 — "Lower the Shield"
+
+**Schema version:** 64
+**Commit summary:** **Extends the buff-teardown pattern to the two reaction-cast paths that install caster buffs: Shield and Absorb Elements.** Counterspell, Hellish Rebuke, and Silvery Barbs install NO caster buff (Counterspell negates; Hellish Rebuke deals damage; Silvery Barbs forces a reroll on the triggerer with no install on the caster) — so the "5 reaction-cast paths" filed in v2.97.20 is really 2. v2.97.24 closes both.
+**Description:** Two sites in `/use_reaction`'s cast-shield and cast-absorb-elements branches. Each: snapshot caster buffs pre-install via `_snapshot_target_buffs`, stamp a `kind: "buff_install"` log entry under the same `cast_id` as the existing `spell_slot_spend`. The existing v2.65.0 buff_install undo branch reverts the buff list on undo.
+
+### Added
+- `kind: "buff_install"` log entries stamped by the cast-shield and cast-absorb-elements branches of `/use_reaction` under their existing `cast_id`s.
+- `tests/harness/test_reaction_prompt.py::test_cast_shield_undo_refunds_slot_and_drops_buff` — drives the reaction prompt → Shield cast → asserts both `spell_slot_refunded` and `buff_install` legs in the undo's per_target, and verifies `shield-active` is gone post-undo.
+
+### Notes
+- **PATCH bump** — same canonical pattern, two sites. No new code path. Existing Shield happy-path test passes unchanged.
+- Absorb Elements gets the identical code patch; an undo+teardown test for it is filed because building the damage-trigger setup needs more harness scaffolding than this commit warrants. The pattern is identical to Shield's test, so the canonical proof carries over.
+- Total harness count: 599 (was 598 in v2.97.23) — one new Shield undo+teardown test.
+- Buff-teardown audit now spans **8 endpoint sites** across 7 endpoints (Rage, Indomitable, Patient Defense, Step of the Wind, Flurry of Blows, Metamagic Empowered, Shield-reaction, Absorb Elements-reaction). Remaining: Stunning Strike's target Stunned buff, the v2.92.0 spell_slot_spend leg in `/cast_spell` for non-cantrip buff spells (Bless, Hex, Sleep, etc. — those already pair the buff_install entry via `_cast_spell` Phase B; the new audit gap is the spell_slot_spend stamp doesn't share `cast_id` with the buff_install entry).
+
+---
+
 ## [2.97.23] - 2026-05-29 — "Empowered No More"
 
 **Schema version:** 64

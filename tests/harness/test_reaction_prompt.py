@@ -2730,3 +2730,107 @@ async def test_use_reaction_marks_npc_economy_via_combatant_id(
         (m.get("data") or {}).get("prompt_id") == prompt_id
         for m in _resolved_broadcasts(gm_ws)
     ), "expected reaction_prompt_resolved for the NPC OA prompt"
+
+
+# ── v2.97.24 — buff teardown for the 2 reaction-cast buff installers ──
+
+
+async def test_cast_shield_undo_refunds_slot_and_drops_buff(
+    gm_client, gm_ws, roster,
+):
+    """v2.97.24 — Shield undo refunds the slot AND drops the
+    shield-active buff. Pre-v2.97.24 the slot refunded but the
+    buff stayed installed."""
+    krieger = roster["Krieger Stonefist"]
+    thalindra = roster["Thalindra Moonwhisper"]
+    await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/rest",
+        json={"type": "long"},
+    )
+
+    thal_cid = f"tok_shield_undo_{thalindra['id']}"
+    await _seed_battle(gm_client, [
+        _make_combatant(krieger["name"], krieger["id"], init=12, hp=75),
+        {
+            "id": thal_cid,
+            "char_id": thalindra["id"],
+            "name": thalindra["name"],
+            "initiative": 10,
+            "hp_current": 32, "hp_max": 32,
+            "buffs": [],
+            "economy": {
+                "action": False, "bonus": False,
+                "reaction": False, "movement": 0,
+            },
+        },
+    ])
+    await asyncio.sleep(0.15)
+    gm_ws.mark()
+
+    for _ in range(20):
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/attack",
+            json={
+                "character_id": krieger["id"],
+                "attack_index": 0,
+                "target_combatant_id": thal_cid,
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert resp.status_code == 200
+        if resp.json().get("hit"):
+            break
+    else:
+        raise AssertionError("no hit landed")
+    await asyncio.sleep(0.2)
+
+    prompts = [
+        m for m in _prompt_broadcasts(gm_ws)
+        if (m.get("data") or {}).get("watcher_char_id") == thalindra["id"]
+        and (m.get("data") or {}).get("trigger_event") == "attack_targeted"
+    ]
+    assert prompts
+    prompt_id = prompts[0]["data"]["prompt_id"]
+
+    gm_ws.mark()
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_reaction",
+        json={
+            "prompt_id": prompt_id,
+            "reaction_key": "cast-shield",
+            "watcher_char_id": thalindra["id"],
+        },
+    )
+    assert cast.status_code == 200
+
+    await asyncio.sleep(0.2)
+    fu = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "shield-cast"
+    ]
+    assert fu
+    cast_id = fu[-1]["data"].get("cast_id")
+    assert cast_id
+
+    # Buff IS installed.
+    buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "shield-active" for b in buffs)
+
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    kinds = {e.get("kind") for e in (undo.json().get("per_target") or [])}
+    assert "spell_slot_refunded" in kinds
+    assert "buff_install" in kinds
+
+    buffs2 = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{thalindra['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any((b or {}).get("key") == "shield-active" for b in buffs2), (
+        f"shield-active still installed after undo: {buffs2}"
+    )
