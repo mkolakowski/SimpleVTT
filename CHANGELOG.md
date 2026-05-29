@@ -10,6 +10,32 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.33] - 2026-05-29 — "Snuff the Curse"
+
+**Schema version:** 64
+**Commit summary:** **Bane + Faerie Fire buff teardown via `_SPELL_CONDITION_MAP` catalog entries.** Both are save-or-debuff /cast_spell spells: a single failed Charisma or Dexterity save installs a buff on the target, and v2.97.27's /respond → buff_install plumbing already keys the install under cast_spell's `cast_id`. v2.97.33 closes the catalog gap by registering both spells; the existing pipeline does all the install + teardown work. Undo refunds the spell slot AND drops the buff on the failed-save target.
+**Description:** Two edits to `app/routes/tabletop_routes.py` (data-only — no new code paths) and one edit to `app/demo_seed.py` (Bane append). The map gains a `bane` entry (key `baned`, 💀 icon, 10-round duration, concentration True per RAW, effects ["-1d4 to every attack roll", "-1d4 to every saving throw"]) and a `faerie-fire` entry (key `faerie-fired`, ✨ icon, 10-round duration, concentration True, effects ["outlined in light", "attacks against this target have advantage", "can't benefit from invisibility"]). Demo Lyra's spell list gains Bane appended at index 18 so the harness has a Bard who can cast it; existing index assumptions are preserved by appending rather than inserting.
+
+### Added
+- `bane` and `faerie-fire` entries in `_SPELL_CONDITION_MAP` (`app/routes/tabletop_routes.py`).
+- Bane appended to Lyra Sunstrider's spell list in `app/demo_seed.py` (index 18 — preserves earlier index assumptions).
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_spell_faerie_fire_drops_buff` — Lyra casts Faerie Fire at Krieger; loops until the Dex save fails; asserts `faerie-fired` is installed; undoes; asserts BOTH `spell_slot_refunded` and `buff_install` legs in per_target; verifies the buff is gone.
+- `tests/harness/test_undo_refunds_resource.py::test_undo_cast_spell_bane_drops_buff` — symmetric Bane test (Cha save against Krieger's low CHA).
+
+### Changed
+- `docs/wiki/consume-without-refund-audit.md` — flipped "Other /cast_spell buff-installing spells beyond save-or-suck" to note Bane + Faerie Fire shipped; updated header range to v2.97.0 – v2.97.33; added v2.97.33 to the cross-reference list; expanded the /cast_spell coverage row to call out the new save-or-debuff additions.
+- `docs/test-harness-coverage.md` — total count 607 → 609, version stamp v2.97.32 → v2.97.33.
+
+### Notes
+- **PATCH bump** — catalog-only addition. Both spells are routed by /cast_spell's existing single-target save-or-suck path; the v2.97.27 cast_id threading + the v2.65.0 buff_install undo branch handle the teardown automatically. No code paths touched in tabletop_routes.py outside the catalog edit.
+- **Concentration: the data layer JSON marks both spells as `concentration: false`** — that's an SRD-build bug (RAW both Bane and Faerie Fire are concentration). v2.97.33 sets `concentration: True` in the catalog buff dict so the buff *behaves* correctly (drops on damage / single-concentration RAW gate). The underlying spell JSON isn't touched.
+- **The -d4 / advantage hook for Bane and Faerie Fire is filed.** Today the buff installs with descriptive `effects` strings, but `/use_attack` and `/respond` don't yet read them to apply the bonus die / advantage. When that hook lands (paired with the Bardic Inspiration +die, Sacred Weapon +CHA, Bless +d4 hooks), every "buff dict carries a marker" entry closes its mechanical loop in one batch.
+- **Demo seed re-runs on boot** (DEMO_MODE=true, DEMO_RESET_ON_BOOT=true in the dev .env), so the container rebuild for v2.97.33 picks up Lyra's appended Bane spell. The Bane harness test reads its index as 18 — that index is stable as long as no future commit inserts a spell into Lyra's list before Sleep.
+- Total harness count: 609 (was 607 in v2.97.32) — two new round-trip tests.
+- Buff-teardown audit now spans **18 sites across 13 endpoints** (the new logical sites are `/cast_spell` with bane and faerie-fire slugs — same code path, distinct catalog entries).
+
+---
+
 ## [2.97.32] - 2026-05-29 — "Untrack the Mark"
 
 **Schema version:** 64

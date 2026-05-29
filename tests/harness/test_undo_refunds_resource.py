@@ -1483,3 +1483,199 @@ async def test_undo_cast_hex_slot_and_buff(gm_client, gm_ws, roster):
     assert not any(
         (b or {}).get("key") == "hex" for b in magnus_buffs_after
     ), f"hex still installed after undo: {magnus_buffs_after}"
+
+
+async def test_undo_cast_spell_faerie_fire_drops_buff(
+    gm_client, gm_ws, roster,
+):
+    """v2.97.33 — Faerie Fire added to ``_SPELL_CONDITION_MAP``. The
+    /respond save handler installs the 'faerie-fired' buff on a failed
+    Dex save and stamps buff_install under /cast_spell's cast_id via
+    the v2.97.27 _save_request_context["cast_id"] plumbing. Undo
+    refunds the slot AND drops the buff in one POST.
+
+    Lyra casts Faerie Fire at Krieger (low DEX save bonus); loops
+    until Krieger fails his save; verifies the faerie-fired buff is
+    installed; undoes; verifies BOTH legs in per_target and the buff
+    is gone.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    krieger = roster["Krieger Stonefist"]
+    FAERIE_FIRE_INDEX = 6  # See demo_seed.py — Lyra's 7th spell.
+
+    cast_id = None
+    for _ in range(20):
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": krieger["id"], "key": "faerie-fired"},
+        )
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={
+                "combatants": [
+                    {"id": f"tok_ff_{lyra['id']}", "char_id": lyra["id"],
+                     "name": lyra["name"], "initiative": 12,
+                     "hp_current": 35, "hp_max": 35, "buffs": [],
+                     "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                    {"id": f"tok_ff_{krieger['id']}", "char_id": krieger["id"],
+                     "name": krieger["name"], "initiative": 8,
+                     "hp_current": 55, "hp_max": 55, "buffs": [],
+                     "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                ],
+                "turn_index": 0, "round": 1, "active": True,
+            },
+        )
+        cast = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": lyra["id"],
+                "spell_index": FAERIE_FIRE_INDEX,
+                "slot_level": 1,
+                "class_slug": "bard",
+                "target_combatant_id": f"tok_ff_{krieger['id']}",
+                "target_character_id": krieger["id"],
+                "target_name": krieger["name"],
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert cast.status_code == 200, cast.text
+        cd = cast.json()
+        prompt_id = cd.get("auto_save_prompt_id")
+        candidate_cast_id = cd["id"]
+        if not prompt_id:
+            # No save prompt issued — likely the bless single-target path
+            # not engaging Faerie Fire. Re-loop after long-rest.
+            continue
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/roll_request/{prompt_id}/respond",
+            json={"character_id": krieger["id"]},
+        )
+        if r.json().get("auto_buff_installed") == "Faerie Fire":
+            cast_id = candidate_cast_id
+            break
+
+    assert cast_id, "no failed Dex save in 20 tries"
+
+    pre = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "faerie-fired" for b in pre), (
+        f"faerie-fired not installed; got {pre}"
+    )
+
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    kinds = {e.get("kind") for e in (undo.json().get("per_target") or [])}
+    assert "spell_slot_refunded" in kinds
+    assert "buff_install" in kinds
+
+    post = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any((b or {}).get("key") == "faerie-fired" for b in post)
+
+
+async def test_undo_cast_spell_bane_drops_buff(
+    gm_client, gm_ws, roster,
+):
+    """v2.97.33 — Bane added to ``_SPELL_CONDITION_MAP``. Symmetric to
+    the Faerie Fire test but a Cha save (Krieger has low CHA). Failed
+    save installs the 'baned' buff on the target; undo refunds slot +
+    drops buff.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    krieger = roster["Krieger Stonefist"]
+    BANE_INDEX = 18  # Appended at the end of Lyra's spell list in v2.97.33.
+
+    cast_id = None
+    for _ in range(20):
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{lyra['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/rest",
+            json={"type": "long"},
+        )
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": krieger["id"], "key": "baned"},
+        )
+        await gm_client.put(
+            f"/api/campaign/{CAMPAIGN_ID}/battle",
+            json={
+                "combatants": [
+                    {"id": f"tok_bane_{lyra['id']}", "char_id": lyra["id"],
+                     "name": lyra["name"], "initiative": 12,
+                     "hp_current": 35, "hp_max": 35, "buffs": [],
+                     "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                    {"id": f"tok_bane_{krieger['id']}", "char_id": krieger["id"],
+                     "name": krieger["name"], "initiative": 8,
+                     "hp_current": 55, "hp_max": 55, "buffs": [],
+                     "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+                ],
+                "turn_index": 0, "round": 1, "active": True,
+            },
+        )
+        cast = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": lyra["id"],
+                "spell_index": BANE_INDEX,
+                "slot_level": 1,
+                "class_slug": "bard",
+                "target_combatant_id": f"tok_bane_{krieger['id']}",
+                "target_character_id": krieger["id"],
+                "target_name": krieger["name"],
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert cast.status_code == 200, cast.text
+        cd = cast.json()
+        prompt_id = cd.get("auto_save_prompt_id")
+        candidate_cast_id = cd["id"]
+        if not prompt_id:
+            continue
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/roll_request/{prompt_id}/respond",
+            json={"character_id": krieger["id"]},
+        )
+        if r.json().get("auto_buff_installed") == "Baned":
+            cast_id = candidate_cast_id
+            break
+
+    assert cast_id, "no failed Cha save in 20 tries"
+
+    pre = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "baned" for b in pre), (
+        f"baned not installed; got {pre}"
+    )
+
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    kinds = {e.get("kind") for e in (undo.json().get("per_target") or [])}
+    assert "spell_slot_refunded" in kinds
+    assert "buff_install" in kinds
+
+    post = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{krieger['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any((b or {}).get("key") == "baned" for b in post)

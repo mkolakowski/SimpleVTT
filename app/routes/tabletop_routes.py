@@ -839,6 +839,44 @@ _SPELL_CONDITION_MAP = {
             "attacks against prone target: advantage within 5 ft, disadvantage at range",
         ],
     },
+    # v2.97.33 — Bane (Cleric/Bard L1). CHA save, 1 minute, concentration.
+    # RAW: failed save → target subtracts 1d4 from every attack roll AND
+    # saving throw before the spell ends. The buff_install undo branch
+    # already handles teardown via the /respond → _SPELL_CONDITION_MAP
+    # path (v2.97.27 closed that gap). Effects list is descriptive;
+    # the -d4 attack/save hook is filed alongside the v2.97.31 Bless
+    # +d4 hook and will land as a single batch.
+    "bane": {
+        "key": "baned",
+        "name": "Baned",
+        "icon": "💀",
+        "duration_rounds": 10,
+        "concentration": True,
+        "effects": [
+            "-1d4 to every attack roll",
+            "-1d4 to every saving throw",
+        ],
+    },
+    # v2.97.33 — Faerie Fire (Cleric/Druid/Bard/Warlock L1). DEX save,
+    # 1 minute, concentration. Failed save → target outlined in light:
+    # attackers see it (negates invisibility) and gain advantage on
+    # attack rolls against it. The advantage-on-attacker hook is
+    # already covered by the existing _target_grants_advantage_to_attackers
+    # walker (v2.49.238 Reckless Attack); a follow-up will extend that
+    # helper to read the faerie-fire buff too — filed alongside the
+    # other v2.97.x effect-hook items.
+    "faerie-fire": {
+        "key": "faerie-fired",
+        "name": "Faerie Fire",
+        "icon": "✨",
+        "duration_rounds": 10,
+        "concentration": True,
+        "effects": [
+            "outlined in light (sheds dim light, 10 ft radius)",
+            "attacks against this target have advantage if attacker can see it",
+            "can't benefit from invisibility",
+        ],
+    },
 }
 
 

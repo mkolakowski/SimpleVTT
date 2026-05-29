@@ -991,6 +991,11 @@ def _bard_sheet(name: str) -> dict:
             # Appended to preserve any spell-index assumptions in other
             # harness tests.
             {"name": "Sleep", "level": 1, "prepared": True, "_slug": "sleep", "casting_time": "1 action"},
+            # v2.97.33 — Bane. RAW Bard spell list (also Cleric). CHA save,
+            # 1 minute, concentration. Routed via /cast_spell; failed save
+            # installs the 'baned' debuff via _SPELL_CONDITION_MAP. Appended
+            # to preserve existing spell-index assumptions.
+            {"name": "Bane", "level": 1, "prepared": True, "_slug": "bane", "casting_time": "1 action"},
         ],
         "spell_slots": {
             "bard": {
