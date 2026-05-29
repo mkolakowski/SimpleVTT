@@ -13413,6 +13413,21 @@ async def use_lay_on_hands(
 
     db.commit()
 
+    # v2.97.0 — log the pool spend so /undo_attack_damage can refund
+    # the N HP back to the pool via the ``resource_spend`` branch
+    # (clamped to pool_max). HP applied to the target is NOT reverted
+    # by this entry — separate audit case; the bug ask is about the
+    # caster-side resource.
+    loh_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(loh_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "lay-on-hands",
+        "amount": int(amount),
+        "source_label": "Lay on Hands",
+    })
+
     # Mark the caster's action slot in the realtime hub.
     await _mark_battle_economy(campaign_id, char.id, "action")
 
@@ -13447,6 +13462,7 @@ async def use_lay_on_hands(
             "heal_hp_before": target_cur,
             "heal_hp_after": result["hp"]["current"],
             "source": "lay-on-hands",
+            "cast_id": loh_cast_id,
             "remaining": pool_cur - amount,
             "max": pool_max,
             "over_budget": was_used,
@@ -17910,6 +17926,21 @@ async def use_second_wind(
     hp_result = _apply_hp_change(char, new_hp)
     db.commit()
 
+    # v2.97.0 — log the use-spend so /undo_attack_damage can refund
+    # the use via the ``resource_spend`` branch (clamped to sw_max).
+    # Same shape as Lay on Hands' refund — only the resource_key +
+    # source_label differ. amount = 1 because Second Wind is a
+    # discrete use, not a variable spend like LoH's HP pool.
+    sw_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(sw_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "second-wind",
+        "amount": 1,
+        "source_label": "Second Wind",
+    })
+
     # Mark the bonus slot.
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
@@ -17959,6 +17990,7 @@ async def use_second_wind(
             "heal_hp_before": hp_cur,
             "heal_hp_after": hp_result["hp"]["current"],
             "source": "second-wind",
+            "cast_id": sw_cast_id,
             "remaining": sw_cur - 1,
             "max": sw_max,
             "over_budget": was_used,
@@ -24958,6 +24990,7 @@ async def undo_attack_damage(
         int(e.get("applied") or 0) > 0
         or e.get("kind") == "buff_install"
         or e.get("kind") == "spell_slot_spend"
+        or e.get("kind") == "resource_spend"
         for e in entries
     ):
         _attack_damage_log.pop(attack_id, None)
@@ -24987,6 +25020,64 @@ async def undo_attack_damage(
                 "target_char_id": entry.get("target_char_id"),
                 "buff_key": entry.get("buff_installed_key"),
             })
+            continue
+
+        # v2.97.0 — Phase D: resource-pool refund. Stamped by
+        # /use_lay_on_hands + /use_second_wind (and future /use_*
+        # endpoints that follow the same shape). Bumps the matching
+        # ``sheet["resources"][i]["current"]`` back up by ``amount``,
+        # clamped to ``max``. Broadcasts ``resource_update`` so any
+        # open resources panel re-pips. Distinct from spell_slot_spend
+        # because feature uses live in a different sheet location and
+        # use a different broadcast type than spell slots.
+        if kind == "resource_spend":
+            char_id = entry.get("character_id")
+            resource_key = (entry.get("resource_key") or "").strip().lower()
+            amount = int(entry.get("amount") or 0)
+            if char_id and resource_key and amount > 0:
+                refund_char = db.query(Character).filter(
+                    Character.id == char_id
+                ).first()
+                if refund_char:
+                    refund_sheet = refund_char.sheet or {}
+                    refund_resources = list(refund_sheet.get("resources") or [])
+                    idx_e = next(
+                        (i for i, r in enumerate(refund_resources)
+                         if (r.get("key") or "").lower() == resource_key),
+                        -1,
+                    )
+                    if idx_e >= 0:
+                        res_e = dict(refund_resources[idx_e])
+                        cur_e = int(res_e.get("current") or 0)
+                        mx_e = int(res_e.get("max") or 0)
+                        new_cur = (
+                            min(cur_e + amount, mx_e) if mx_e > 0
+                            else cur_e + amount
+                        )
+                        res_e["current"] = new_cur
+                        refund_resources[idx_e] = res_e
+                        refund_sheet["resources"] = refund_resources
+                        refund_char.sheet = refund_sheet
+                        db.commit()
+                        await hub.broadcast(
+                            campaign_id,
+                            {
+                                "type": "resource_update",
+                                "data": {
+                                    "character_id": char_id,
+                                    "key": resource_key,
+                                    "current": new_cur,
+                                    "max": mx_e,
+                                },
+                            },
+                        )
+                        per_target_undone.append({
+                            "kind": "resource_refunded",
+                            "character_id": char_id,
+                            "resource_key": resource_key,
+                            "amount": amount,
+                            "source_label": entry.get("source_label") or "",
+                        })
             continue
 
         # v2.92.0 — Phase C: spell-slot refund. Stamped at /cast_spell's

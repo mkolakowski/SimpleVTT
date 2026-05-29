@@ -5411,27 +5411,36 @@
             const icon = isLast ? '⚪' : '🔋';
             featurePills.push(`<span class="result-pill ${cls}">${icon} ${rem}/${mx} uses left</span>`);
         }
-        // v2.96.0 — ↶ Undo pill for reaction-cast feature_used cards
-        // that carry a cast_id (v2.93/v2.95 plumbing). Clicking POSTs
-        // to /undo_attack_damage which dispatches the v2.92.0
-        // spell_slot_spend refund branch — server bumps the slot's
-        // ``used`` count down and broadcasts spell_slot_update.
-        // Limited to the cast-* reaction sources so other
-        // feature_used cards (Lay on Hands heals, Second Wind, etc.)
-        // don't accidentally render a non-functional pill — their
-        // refund plumbing lands separately as the audit continues.
-        const _CAST_REACTION_SOURCES = new Set([
+        // v2.96.0 / v2.97.0 — ↶ Undo pill for feature_used cards
+        // that carry a cast_id. Clicking POSTs to
+        // /undo_attack_damage which dispatches one of the v2.92+ refund
+        // branches:
+        //   * reaction-cast sources (counterspell, shield, hellish
+        //     rebuke, absorb elements, silvery barbs) → server bumps
+        //     the spell slot's ``used`` count down and broadcasts
+        //     spell_slot_update (v2.92.0 ``spell_slot_spend`` branch).
+        //   * feature-resource sources (lay-on-hands, second-wind)
+        //     → server bumps ``sheet["resources"][i]["current"]`` up
+        //     by the spent amount, clamped to max, and broadcasts
+        //     resource_update (v2.97.0 ``resource_spend`` branch).
+        // Limited to the explicit allow-list so other feature_used
+        // cards without server-side refund plumbing don't render a
+        // non-functional pill — each new refundable source opts in
+        // by adding its slug to the Set.
+        const _REFUNDABLE_FEATURE_SOURCES = new Set([
             'counterspell-cast',
             'shield-cast',
             'hellish-rebuke-cast',
             'absorb-elements-cast',
             'silvery-barbs-cast',
+            'lay-on-hands',
+            'second-wind',
         ]);
-        if (d.cast_id && _CAST_REACTION_SOURCES.has(d.source)) {
+        if (d.cast_id && _REFUNDABLE_FEATURE_SOURCES.has(d.source)) {
             featurePills.push(
                 `<button type="button" class="result-pill chip-undo feature-cast-undo"`
                 + ` data-cast-id="${escapeHTML(d.cast_id)}"`
-                + ` title="Refund the spell slot consumed by this reaction cast">↶ Undo</button>`
+                + ` title="Refund the resource consumed by this feature use">↶ Undo</button>`
             );
         }
         const healPill = featurePills.length

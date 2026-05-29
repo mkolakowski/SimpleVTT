@@ -10,6 +10,33 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.0] - 2026-05-29 — "Pool Refund"
+
+**Schema version:** 64
+**Commit summary:** **Extends the v2.92.0 ↶ Undo refund machinery from spell slots to feature resource pools.** The first two endpoints plumbed are **`/use_lay_on_hands`** (Paladin's variable HP-pool spend) and **`/use_second_wind`** (Fighter's single-use counter). Both stamp a new `resource_spend` entry kind into the per-cast undo log; a matching branch in `undo_attack_damage` bumps `sheet["resources"][i]["current"]` back up by the spent amount (clamped to `max`) and broadcasts `resource_update` so any open resources panel re-pips. The roll-log card's ↶ Undo pill picks both up automatically — the JS opt-in is a single slug addition to the `_REFUNDABLE_FEATURE_SOURCES` Set.
+**Description:** Four edits.
+**(1)** `app/routes/tabletop_routes.py::undo_attack_damage` — new `kind == "resource_spend"` branch. Distinct from `spell_slot_spend` because feature uses live in `sheet["resources"][i]` (an indexed list with a `key` selector) rather than `sheet["spell_slots"][cslug][lvl]["used"]`. The refund finds the matching resource by `key`, clamps `current + amount` to `max`, commits, and broadcasts `resource_update` with `{character_id, key, current, max}` — the same shape `/use_lay_on_hands` and `/use_second_wind` already broadcast at cast time so existing client hydrators pick it up unchanged. The "nothing to undo" early-return guard is extended to recognize `resource_spend` as a non-empty entry.
+**(2)** `/use_lay_on_hands` — mints `loh_cast_id`, calls `_log_damage_entry(loh_cast_id, {"kind": "resource_spend", "resource_key": "lay-on-hands", "amount": amount, ...})` right after the existing pool decrement + `db.commit`, adds `cast_id: loh_cast_id` to the `feature_used` broadcast.
+**(3)** `/use_second_wind` — same pattern with `resource_key: "second-wind", amount: 1`. (Second Wind is a discrete use, not a variable spend.)
+**(4)** `app/static/tabletop.js::_appendFeatureUsed` — renames `_CAST_REACTION_SOURCES` → `_REFUNDABLE_FEATURE_SOURCES` and adds `lay-on-hands` + `second-wind` to it. The existing `.feature-cast-undo` pill + click handler from v2.96.0 work unchanged for both.
+
+**Description (cont):** Harness `tests/harness/test_undo_refunds_resource.py` covers both endpoints end-to-end: long-rest the character, fire the endpoint, capture `cast_id` off the `feature_used` broadcast, POST `/undo_attack_damage`, assert the `resource_update` broadcast carries `current` clamped back up by the spent amount (full pool restored for LoH, 1 → 1 for Second Wind). Both tests pass; full suite **581/582** (one pre-existing `test_reaction_prompt` ordering flake that passes in isolation).
+
+### Added
+- `resource_spend` entry kind in the per-cast undo log + matching branch in `undo_attack_damage` that refunds `sheet["resources"][i]["current"]` by `amount` (clamped to `max`).
+- `cast_id` field on `feature_used` broadcasts for `source: "lay-on-hands"` and `source: "second-wind"`.
+- `tests/harness/test_undo_refunds_resource.py` — 2 tests (LoH happy path + Second Wind happy path).
+
+### Changed
+- `_CAST_REACTION_SOURCES` (JS Set in `tabletop.js`) renamed to `_REFUNDABLE_FEATURE_SOURCES` and extended with `lay-on-hands` + `second-wind`. The Set now covers both reaction-cast slot refunds AND feature-resource refunds.
+- The `.feature-cast-undo` pill's `title` tooltip generalized from "spell slot" to "resource."
+
+### Notes
+- **MINOR bump** — net-new behavior on two `/use_*` endpoints + a new entry kind that powers the broader audit follow-up. Same architectural pattern as v2.92.0–v2.96.0 (per-cast log + refund branch + opt-in JS source set).
+- Audit follow-up filed: the same `resource_spend` plumbing pattern applies to `/use_bardic_inspiration`, `/use_rage`, `/use_action_surge`, `/use_indomitable`, `/use_cutting_words`, the eight Channel Divinity variants, the four Metamagic variants, `/use_arcane_recovery`, `/use_font_of_magic_to_*`, `/use_wholeness_of_body`, `/use_stillness_of_mind`, `/use_patient_defense`, `/flurry_of_blows` (Ki uses), and `/use_item` (item charges). Each endpoint follows the same shape — the three-line patch is identical except for the `resource_key` + `source_label` per endpoint and the JS Set addition. Queued for staged commits rather than one bulk patch so any future broadcast-shape divergence per endpoint surfaces cleanly in its own commit.
+
+---
+
 ## [2.96.3] - 2026-05-29 — "Square the Tray"
 
 **Schema version:** 64
