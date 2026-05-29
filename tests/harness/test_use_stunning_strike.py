@@ -428,3 +428,89 @@ async def test_stunning_strike_undo_refunds_ki(gm_client, gm_ws, kael_rested):
         f"ki not refunded: post-cast={ki_after_cast}, "
         f"post-undo={rd['current']} (expected {ki_after_cast + 1})"
     )
+
+
+async def test_stunning_strike_undo_drops_target_stunned_buff(
+    gm_client, gm_ws, kael_rested,
+):
+    """v2.97.25 — Stunning Strike on an NPC: loop until the save fails
+    (Stunned installs on the bandit). Capture the cast_id off
+    feature_used. Undo refunds ki AND drops the Stunned buff from the
+    bandit. Pre-v2.97.25 the ki refunded but the Stunned stayed
+    applied.
+    """
+    kael = kael_rested
+    bandit_tmpl = await _bandit_template(gm_client)
+    bandit_id = "tok_test_stun_undo_bandit"
+
+    cast_id = None
+    for _ in range(20):
+        # Long-rest Kael each iteration so ki doesn't deplete.
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/rest",
+            json={"type": "long"},
+        )
+        await _seed_battle(gm_client, [
+            {"id": f"tok_test_{kael['id']}", "char_id": kael["id"],
+             "name": kael["name"], "initiative": 10,
+             "hp_current": 30, "hp_max": 30, "buffs": [],
+             "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+            {"id": bandit_id, "char_id": None,
+             "token_template_id": bandit_tmpl["id"],
+             "name": bandit_tmpl["name"], "initiative": 7,
+             "hp_current": 11, "hp_max": 11, "buffs": [],
+             "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0}},
+        ])
+        gm_ws.mark()
+        resp = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/use_stunning_strike",
+            json={"character_id": kael["id"], "target_combatant_id": bandit_id},
+        )
+        assert resp.status_code == 200, resp.text
+        data = resp.json()
+        if data.get("auto_save_passed") is False:
+            cast_id = data.get("cast_id")
+            break
+    assert cast_id, "no failed save in 20 tries"
+
+    # Verify Stunned IS installed via the cast-time battle_update.
+    bu = await gm_ws.wait_for("battle_update", timeout=3.0)
+    bandit = next(
+        (c for c in (bu.get("data") or {}).get("combatants", [])
+         if c.get("id") == bandit_id),
+        None,
+    )
+    assert bandit
+    stunned_buffs = [
+        b for b in (bandit.get("buffs") or [])
+        if (b or {}).get("key") == "stunned"
+    ]
+    assert stunned_buffs, f"expected stunned buff pre-undo; got {bandit.get('buffs')}"
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    kinds = {e.get("kind") for e in (undo.json().get("per_target") or [])}
+    assert "resource_refunded" in kinds
+    assert "buff_install" in kinds
+
+    # Undo broadcasts buff_update for the NPC; check the bandit's
+    # buffs list no longer carries Stunned.
+    buff_msgs = list(gm_ws.buffered("buff_update"))
+    assert buff_msgs, "expected buff_update broadcast from undo"
+    # Walk the messages to find the one targeting the bandit.
+    bandit_buff_msg = None
+    for m in reversed(buff_msgs):
+        if (m.get("data") or {}).get("combatant_id") == bandit_id:
+            bandit_buff_msg = m
+            break
+    assert bandit_buff_msg, (
+        f"expected buff_update for bandit; got {[m.get('data') for m in buff_msgs]}"
+    )
+    post_undo_buffs = bandit_buff_msg["data"].get("buffs") or []
+    assert not any(
+        (b or {}).get("key") == "stunned" for b in post_undo_buffs
+    ), f"stunned still on bandit post-undo: {post_undo_buffs}"

@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.25] - 2026-05-29 — "Wake the Stunned"
+
+**Schema version:** 64
+**Commit summary:** **Adds buff teardown for Stunning Strike's target Stunned buff (NPC path).** Pre-v2.97.25 the v2.97.19 ki refund did its job but the Stunned condition stayed on the bandit, so a refund of the ki effectively gave the monk a free stun. v2.97.25 snapshots the target combatant's buffs pre-install via `_snapshot_target_buffs(db, campaign_id, target_combatant)` and stamps a `kind: "buff_install"` entry with `target_combatant_id` under the existing `ss_cast_id`. The existing v2.65.0 buff_install undo branch already handles the NPC variant via `target_combatant_id`.
+**Description:** First buff-teardown patch that targets a NON-CASTER buff. Same canonical pattern — snapshot before install, stamp buff_install after — but the snapshot is taken on the target's combatant dict (not the caster's), and the log entry carries `target_combatant_id` instead of `target_char_id`. `_restore_target_buffs` accepts either key and walks the battle state accordingly. PC-target path stays filed: the Stunned buff for a PC target installs via `/respond` (after the player rolls the failed save), not at `/use_stunning_strike` time, so the cast_id wouldn't naturally pair. That's a follow-up.
+
+### Added
+- `kind: "buff_install"` log entry stamped by the NPC-target branch of `/use_stunning_strike` under the existing `ss_cast_id` (v2.97.19).
+- `tests/harness/test_use_stunning_strike.py::test_stunning_strike_undo_drops_target_stunned_buff` — loops until the bandit fails its save, asserts Stunned is installed via the cast-time `battle_update`, undoes, asserts the resource_refunded + buff_install legs in per_target, and verifies the bandit's post-undo `buff_update` no longer carries the stunned key.
+
+### Notes
+- **PATCH bump** — same canonical pattern; first target-side application. No new code path beyond the snapshot+stamp.
+- **PC-target path filed.** When a PC fails their CON save and `/respond` installs Stunned, the install happens AFTER /use_stunning_strike returned — the cast_id isn't naturally threaded through to the /respond handler. Fix would be to store the cast_id alongside `_save_request_context[req.id]` so /respond can stamp the buff_install entry. Filed.
+- Total harness count: 600 (was 599 in v2.97.24) — one new Stunning Strike target-buff teardown test.
+- Buff-teardown audit now spans **9 sites across 8 endpoints** (Rage, Indomitable, Patient Defense, Step of the Wind, Flurry of Blows, Metamagic Empowered, Shield-reaction, Absorb Elements-reaction, Stunning Strike NPC target). Remaining buff-side gap: PC-target Stunned (via /respond) + `/cast_spell` non-cantrip slot leg pairing.
+
+---
+
 ## [2.97.24] - 2026-05-29 — "Lower the Shield"
 
 **Schema version:** 64

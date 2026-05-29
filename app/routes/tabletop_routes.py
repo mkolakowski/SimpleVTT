@@ -19471,11 +19471,27 @@ async def use_stunning_strike(
                     "concentration": bool(cond.get("concentration", False)),
                     "effects": list(cond.get("effects", [])),
                 }
+                # v2.97.25 — buff teardown for the TARGET's Stunned buff
+                # (NPC path; PC path installs via /respond and is filed
+                # separately because the buff install happens in a
+                # different endpoint). Snapshot the target combatant's
+                # buffs pre-install so undo drops the Stunned along
+                # with refunding the ki.
+                _target_buffs_before = _snapshot_target_buffs(
+                    db, campaign_id, target_combatant,
+                )
                 installed = await _install_buff_on_combatant_id(
                     campaign_id, target_combatant.get("id"), buff,
                 )
                 if installed:
                     auto_save_buff_installed = cond["name"]
+                    _log_damage_entry(ss_cast_id, {
+                        "kind": "buff_install",
+                        "campaign_id": campaign_id,
+                        "target_combatant_id": target_combatant.get("id"),
+                        "buffs_before": _target_buffs_before,
+                        "buff_installed_key": cond["key"],
+                    })
 
     return {
         "ok": True,
