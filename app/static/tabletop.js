@@ -5444,6 +5444,7 @@
             'flurry-of-blows',
             'wholeness-of-body',
             'step-of-the-wind',
+            'metamagic-empowered-spell',
         ]);
         if (d.cast_id && _REFUNDABLE_FEATURE_SOURCES.has(d.source)) {
             featurePills.push(

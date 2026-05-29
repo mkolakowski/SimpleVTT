@@ -10,6 +10,24 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.4] - 2026-05-29 — "Empowered Refund"
+
+**Schema version:** 64
+**Commit summary:** **One more sorcery-points spend plumbed for refund.** `/use_metamagic_empowered_spell` (Sorcerer Lv 3+ Metamagic option, 1 SP) now stamps a `resource_spend` entry into the per-cast undo log and surfaces a `cast_id` on its `feature_used` broadcast; the JS `_REFUNDABLE_FEATURE_SOURCES` Set opts the source slug in so the v2.96.0 ↶ Undo pill renders on the roll-log card.
+**Description:** Three-line server patch — cast_id mint + `_log_damage_entry({"kind": "resource_spend", "resource_key": "sorcery-points", "amount": 1, ...})` + `cast_id` on the `feature_used` payload — plus a single-line JS Set addition. The `metamagic-empowered-pending` buff stays installed after undo (consistent with the Rage / Shield / Indomitable v2.95.0+ precedent — buff teardown is its own audit case; the GM/player can manually pop the pending buff if it would mis-fire on a later cast).
+
+### Added
+- `cast_id` field on `feature_used` broadcast for `source: metamagic-empowered-spell`.
+- `resource_spend` log entry stamped by `/use_metamagic_empowered_spell` (`resource_key: sorcery-points`, `amount: 1`).
+
+### Notes
+- **PATCH bump** — pure replication of the v2.97.0 pattern. No new infrastructure, contract, or schema. Same canonical test (`tests/harness/test_undo_refunds_resource.py`) validates the round-trip; per-endpoint tests are redundant once the pattern is proven. Full suite remains green.
+- **Empowered Spell is currently the only Metamagic endpoint** — earlier audit notes referencing "4 Metamagic variants" overstated the ship surface. Twinned / Quickened / Heightened / Subtle / Distant / Extended are reserved in the metamagic plan doc (`docs/plans/sorcery-points-and-metamagic.md`) but not yet wired to dedicated endpoints; when they ship they get the same three-line patch.
+- **Font of Magic is deliberately skipped.** Both `/use_font_of_magic_to_points` and `/use_font_of_magic_to_slot` perform cross-resource conversions (spell slot ↔ sorcery points), so refund requires reverting BOTH sides — a multi-resource refund branch that the current `resource_spend` shape doesn't model (it only adds back an `amount` on one resource key). Filed as a separate audit case: a new `kind == "conversion_spend"` log entry that stores both legs, with a matching refund branch in `undo_attack_damage`.
+- Audit remaining: `/use_feature`-routed features (Channel Divinity 8 variants, requires `/use_feature` refactor), Arcane Recovery, Font of Magic to_points / to_slot (cross-resource), Stunning Strike (needs `feature_used` broadcast first), item charges via `/use_item`.
+
+---
+
 ## [2.97.3] - 2026-05-29 — "Wind on the Pool"
 
 **Schema version:** 64

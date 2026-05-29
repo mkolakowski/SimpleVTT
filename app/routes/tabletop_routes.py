@@ -17812,6 +17812,16 @@ async def use_metamagic_empowered_spell(
     await _install_buff(campaign_id, char.id, buff)
     _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
 
+    mm_cast_id = uuid.uuid4().hex[:12]
+    _log_damage_entry(mm_cast_id, {
+        "kind": "resource_spend",
+        "campaign_id": campaign_id,
+        "character_id": char.id,
+        "resource_key": "sorcery-points",
+        "amount": 1,
+        "source_label": "Metamagic — Empowered Spell",
+    })
+
     await hub.broadcast(campaign_id, {
         "type": "resource_update",
         "data": {
@@ -17830,6 +17840,7 @@ async def use_metamagic_empowered_spell(
                 f"{'ce' if rerolls == 1 else ''} once."
             ),
             "source": "metamagic-empowered-spell",
+            "cast_id": mm_cast_id,
             "remaining": new_sp, "max": sp_max,
         },
     })
@@ -17840,6 +17851,7 @@ async def use_metamagic_empowered_spell(
         "sp_remaining": new_sp,
         "sp_max": sp_max,
         "rerolls_available": rerolls,
+        "cast_id": mm_cast_id,
     }
 
 
