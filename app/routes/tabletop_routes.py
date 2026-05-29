@@ -11903,6 +11903,15 @@ async def cast_spell(
                     )
                     if _cc_applies and not _ds_base.startswith("2d20kh1"):
                         _ds_base = _ds_base.replace("1d20", "2d20kh1", 1)
+                # v2.97.35 — Bless / Bane save-roll modifiers.
+                # Append +1d4 (bless) / -1d4 (baned) to the base
+                # expression so the player's /roll_request/respond
+                # rolls the d4 alongside the d20.
+                _bb_suffix = _saver_bless_bane_save_suffix(
+                    campaign_id, int(tgt_char.id),
+                )
+                if _bb_suffix:
+                    _ds_base = f"{_ds_base}{_bb_suffix}"
                 req = RollRequest(
                     campaign_id=campaign_id,
                     created_by_user_id=user.id,
@@ -11999,6 +12008,15 @@ async def cast_spell(
                         npc_sheet, "dnd5e", stat_key,
                     )
                     expr = f"1d20{npc_mod:+d}"
+                    # v2.97.35 — Bless / Bane save suffix on the
+                    # NPC save side (single-target /cast_spell). Reads
+                    # the NPC combatant's buff list directly via the
+                    # helper since NPCs don't have a char_id.
+                    _bb_suffix_npc = _saver_bless_bane_save_suffix(
+                        campaign_id, None, target_combatant,
+                    )
+                    if _bb_suffix_npc:
+                        expr = f"{expr}{_bb_suffix_npc}"
                     try:
                         _r = dice_mod.roll(expr)
                         auto_save_rolled = int(_r.total)
@@ -12277,6 +12295,14 @@ async def cast_spell(
                 _npc_sheet, "dnd5e", f"{save_ability.lower()}_save",
             )
             _expr = f"1d20{_npc_mod:+d}"
+            # v2.97.35 — Bless / Bane on AoE NPC saves. Each NPC's
+            # save uses its own buff list so a Blessed NPC + a Baned
+            # NPC in the same AoE roll different suffixes.
+            _bb_suffix_aoe = _saver_bless_bane_save_suffix(
+                campaign_id, None, extra,
+            )
+            if _bb_suffix_aoe:
+                _expr = f"{_expr}{_bb_suffix_aoe}"
             try:
                 _r = dice_mod.roll(_expr)
                 _rolled = int(_r.total)
@@ -16604,6 +16630,57 @@ def _attacker_has_bane(campaign_id: int, attacker_char_id: int) -> bool:
         if isinstance(b, dict) and b.get("key") == "baned":
             return True
     return False
+
+
+def _saver_bless_bane_save_suffix(
+    campaign_id: int,
+    saver_char_id: int | None,
+    saver_combatant: dict | None = None,
+) -> str:
+    """v2.97.35 — closes the v2.97.34 filed save-roll half. Returns a
+    suffix to append to a save-roll d20 expression: ``"+1d4"`` when
+    the saver has the ``bless`` buff, ``"-1d4"`` when the saver has
+    the ``baned`` buff, ``"+1d4-1d4"`` if both (RAW: both apply
+    independently), or ``""`` when neither is active.
+
+    RAW:
+    - Bless (PHB p.219): "the target can roll a d4 and add the number
+      rolled to the attack roll or saving throw."
+    - Bane (PHB p.216): "whenever a target that fails this saving throw
+      makes an attack roll OR A SAVING THROW … must roll a d4 and
+      subtract the number rolled."
+
+    The suffix is concatenated into the d20 save expression so the
+    dice_mod roll auto-adds / -subtracts the d4 result. PC saves
+    route through ``RollRequest.base_expression`` (the /roll_request
+    /respond handler appends the stat mod afterwards); NPC saves
+    construct the expression inline.
+
+    Either ``saver_char_id`` (preferred, reads via _get_buffs) or
+    ``saver_combatant`` (fallback, reads `combatant.buffs` directly)
+    must be set. The latter is for NPC combatants without a char_id.
+    """
+    buffs: list = []
+    if saver_char_id:
+        buffs = _get_buffs(campaign_id, int(saver_char_id)) or []
+    elif saver_combatant:
+        buffs = saver_combatant.get("buffs") or []
+    has_bless = False
+    has_bane = False
+    for b in buffs:
+        if not isinstance(b, dict):
+            continue
+        k = b.get("key")
+        if k == "bless":
+            has_bless = True
+        elif k == "baned":
+            has_bane = True
+    suffix = ""
+    if has_bless:
+        suffix += "+1d4"
+    if has_bane:
+        suffix += "-1d4"
+    return suffix
 
 
 def _rogue_level_from_sheet(sheet: dict) -> int:

@@ -10,6 +10,34 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.35] - 2026-05-29 — "Save Your Breath"
+
+**Schema version:** 64
+**Commit summary:** **Bless + Bane save-roll hooks.** Closes the second half of the v2.97.34 filed item: the +1d4 / -1d4 was already wired into attack rolls but not into saving throws. v2.97.35 adds a `_saver_bless_bane_save_suffix` helper and wires it into three save-roll construction sites — the PC roll_request's `base_expression`, the inline NPC save for single-target `/cast_spell`, and the inline NPC save for the AoE multi-target loop. After this commit, a Blessed creature rolls +1d4 on every save; a Baned creature rolls -1d4; both stack independently (RAW: each fires on its own).
+**Description:** Four edits in `app/routes/tabletop_routes.py`. **(1)** New `_saver_bless_bane_save_suffix(campaign_id, saver_char_id, saver_combatant=None)` helper that reads either the PC's buff list (via `_get_buffs`) or the NPC combatant's `buffs` field directly, returns `"+1d4"` / `"-1d4"` / `"+1d4-1d4"` / `""` depending on which buffs land. **(2)** PC save site (`/cast_spell`'s save-or-suck PC branch at ~line 11899): appends the suffix to `_ds_base` so the `RollRequest.base_expression` carries the d4 mod when the broadcast goes out. **(3) + (4)** Single-target NPC save (~12001) and AoE-loop NPC save (~12286) each append the suffix to their inline d20 expression so the server-rolled save totals include the d4. Faerie Fire intentionally NOT included — its RAW effect is "attacks against this target have advantage," not a save modifier.
+
+### Added
+- `_saver_bless_bane_save_suffix` helper in `app/routes/tabletop_routes.py`.
+- `tests/harness/test_buff_attack_hooks.py::test_bless_save_adds_d4` — Caelan blesses Pip; Lyra casts Hold Person on Pip; asserts `roll_request.base_expression` contains `"+1d4"`.
+- `tests/harness/test_buff_attack_hooks.py::test_bane_save_subtracts_d4` — Lyra banes Pip (loop fail); Lyra casts Hold Person on Pip; asserts `roll_request.base_expression` contains `"-1d4"`.
+
+### Changed
+- `/cast_spell` PC save-or-suck branch — appends bless/bane suffix to base_expression.
+- `/cast_spell` single-target NPC save branch — appends suffix to expr.
+- `/cast_spell` AoE NPC save loop — appends suffix to _expr (per-target).
+- `docs/wiki/consume-without-refund-audit.md` — appended v2.97.35 to the cross-reference list.
+- `docs/test-harness-coverage.md` — total count 613 → 615, version stamp v2.97.34 → v2.97.35.
+
+### Notes
+- **PATCH bump** — one new helper + three call sites + suffix-concat to existing expressions. No new code paths, no new broadcasts, no schema changes.
+- **RAW reminder.** Bless on a Blessed creature making a save: +d4 to add (PHB p.219). Bane on a Baned creature making a save: -d4 to subtract (PHB p.216, mandatory). Faerie Fire does NOT affect saves — only attacks against the highlighted creature (PHB p.239). The helper correctly skips faerie-fired.
+- **AoE NPC saves use the NPC's own buff list.** Each NPC's combatant dict carries its own buffs (the existing buff-install plumbing populates these). The AoE loop reads `extra.get("buffs")` so a battlefield with a Blessed bandit + a Baned bandit in the same AoE Fireball will correctly add the right modifier per saver.
+- **Other save-roll sites (filed).** `/place_aoe` (~line 12979), `/use_open_hand_technique` (~line 19797), and other save constructions outside /cast_spell aren't yet wired. One-line additions when those sites land in the audit.
+- **Bardic Inspiration +die save hook is also separately filed.** The v2.97.30 `bardic-inspiration-die` buff effects carry the die size for a future hook; same shape as Bless/Bane but the spend semantics are different (the recipient chooses when to add it, which needs a UI prompt). Filed.
+- Total harness count: 615 (was 613 in v2.97.34) — two new save-roll round-trip tests.
+
+---
+
 ## [2.97.34] - 2026-05-29 — "Roll the Reckoning"
 
 **Schema version:** 64

@@ -286,3 +286,157 @@ async def test_faerie_fire_attack_against_target_has_advantage(gm_client, roster
         f"expected advantage from faerie-fired target; "
         f"state={state}, breakdown={breakdown}"
     )
+
+
+async def test_bless_save_adds_d4(gm_client, gm_ws, roster):
+    """v2.97.35 — closes the v2.97.34 filed save-roll half for Bless.
+    Caelan blesses Pip; Lyra casts Hold Person on Pip; the player save
+    roll_request broadcast carries '+1d4' in base_expression.
+    """
+    caelan = roster["Sir Caelan Lightbringer"]
+    lyra = roster["Lyra Sunstrider"]
+    pip = roster["Pip Quickfingers"]
+    await _long_rest(gm_client, caelan["id"])
+    await _long_rest(gm_client, lyra["id"])
+    await _long_rest(gm_client, pip["id"])
+
+    pip_tok = f"tok_bsave_{pip['id']}"
+    await _seed_battle_with(gm_client, [
+        {"id": caelan["id"], "name": caelan["name"], "tok_id": f"tok_bsave_{caelan['id']}", "hp_max": 60, "initiative": 14},
+        {"id": lyra["id"], "name": lyra["name"], "tok_id": f"tok_bsave_{lyra['id']}", "hp_max": 35, "initiative": 12},
+        {"id": pip["id"], "name": pip["name"], "tok_id": pip_tok, "hp_max": 40, "initiative": 8},
+    ])
+
+    # Caelan casts Bless on Pip (index 0 — Caelan's first spell).
+    bless = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": caelan["id"],
+            "spell_index": 0,
+            "slot_level": 1,
+            "class_slug": "paladin",
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert bless.status_code == 200, bless.text
+
+    # Verify Bless installed.
+    pip_buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "bless" for b in pip_buffs), (
+        f"bless not installed on Pip; got {pip_buffs}"
+    )
+
+    gm_ws.mark()
+    # Lyra casts Hold Person on Pip. Hold Person at Lyra's index 11.
+    hp_cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": lyra["id"],
+            "spell_index": 11,
+            "slot_level": 2,
+            "class_slug": "bard",
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert hp_cast.status_code == 200, hp_cast.text
+
+    # Capture the roll_request broadcast for Pip's save.
+    rr_msg = await gm_ws.wait_for("roll_request", timeout=3.0)
+    base_expr = rr_msg["data"]["base_expression"]
+    assert "+1d4" in base_expr, (
+        f"expected '+1d4' (Bless save bonus) in base_expression; got {base_expr!r}"
+    )
+    assert "-1d4" not in base_expr
+
+
+async def test_bane_save_subtracts_d4(gm_client, gm_ws, roster):
+    """v2.97.35 — closes the v2.97.34 filed save-roll half for Bane.
+    Lyra banes Krieger (loop to fail); Lyra then casts Hold Person on
+    Pip while Pip also has bane applied? No — Bane targets Krieger.
+    Easier: Lyra banes Pip (loop), then casts Hold Person on Pip;
+    Pip's save base_expression carries '-1d4'.
+    """
+    lyra = roster["Lyra Sunstrider"]
+    pip = roster["Pip Quickfingers"]
+    BANE_INDEX = 18
+
+    pip_tok = f"tok_basave_{pip['id']}"
+
+    baned = False
+    for _ in range(20):
+        await _long_rest(gm_client, lyra["id"])
+        await _long_rest(gm_client, pip["id"])
+        await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/end_buff",
+            json={"character_id": pip["id"], "key": "baned"},
+        )
+        await _seed_battle_with(gm_client, [
+            {"id": lyra["id"], "name": lyra["name"], "tok_id": f"tok_basave_{lyra['id']}", "hp_max": 35, "initiative": 12},
+            {"id": pip["id"], "name": pip["name"], "tok_id": pip_tok, "hp_max": 40, "initiative": 8},
+        ])
+        cast = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+            json={
+                "character_id": lyra["id"],
+                "spell_index": BANE_INDEX,
+                "slot_level": 1,
+                "class_slug": "bard",
+                "target_combatant_id": pip_tok,
+                "target_character_id": pip["id"],
+                "target_name": pip["name"],
+                "override": True,
+                "override_range": True,
+            },
+        )
+        assert cast.status_code == 200, cast.text
+        prompt_id = cast.json().get("auto_save_prompt_id")
+        if not prompt_id:
+            continue
+        r = await gm_client.post(
+            f"/api/campaign/{CAMPAIGN_ID}/roll_request/{prompt_id}/respond",
+            json={"character_id": pip["id"]},
+        )
+        if r.json().get("auto_buff_installed") == "Baned":
+            baned = True
+            break
+    assert baned, "no failed Cha save in 20 tries"
+
+    # Verify the bane buff is on Pip.
+    pip_buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{pip['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "baned" for b in pip_buffs)
+
+    gm_ws.mark()
+    # Lyra casts Hold Person on baned Pip.
+    hp_cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": lyra["id"],
+            "spell_index": 11,
+            "slot_level": 2,
+            "class_slug": "bard",
+            "target_character_id": pip["id"],
+            "target_combatant_id": pip_tok,
+            "target_name": pip["name"],
+            "override": True,
+            "override_range": True,
+        },
+    )
+    assert hp_cast.status_code == 200, hp_cast.text
+
+    rr_msg = await gm_ws.wait_for("roll_request", timeout=3.0)
+    base_expr = rr_msg["data"]["base_expression"]
+    assert "-1d4" in base_expr, (
+        f"expected '-1d4' (Bane save penalty) in base_expression; got {base_expr!r}"
+    )
