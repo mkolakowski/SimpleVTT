@@ -19929,6 +19929,8 @@ async def use_patient_defense(
     db.commit()
 
     # v2.97.2 — log the ki spend for /undo_attack_damage refund.
+    # v2.97.22 — buff teardown: snapshot + buff_install entry so Undo
+    # drops the Dodging buff. Same canonical pattern as v2.97.20.
     pd_cast_id = uuid.uuid4().hex[:12]
     _log_damage_entry(pd_cast_id, {
         "kind": "resource_spend",
@@ -19938,6 +19940,9 @@ async def use_patient_defense(
         "amount": 1,
         "source_label": "Patient Defense",
     })
+    _caster_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": char.id},
+    )
 
     # Install the Dodging buff on the monk's combatant. RAW lasts
     # "until the start of your next turn" → 1 round. The (B) roll-time
@@ -19964,6 +19969,13 @@ async def use_patient_defense(
     }
     installed = await _install_buff(campaign_id, char.id, buff)
     _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    _log_damage_entry(pd_cast_id, {
+        "kind": "buff_install",
+        "campaign_id": campaign_id,
+        "target_char_id": char.id,
+        "buffs_before": _caster_buffs_before,
+        "buff_installed_key": "patient-defense",
+    })
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
     # Broadcasts.
@@ -20132,6 +20144,11 @@ async def use_step_of_the_wind(
         "effects": effects,
         "desc": desc,
     }
+    # v2.97.22 — buff teardown: snapshot caster buffs before installing
+    # so Undo can drop the SotW buff. Canonical pattern from v2.97.20.
+    _caster_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": char.id},
+    )
     installed = await _install_buff(campaign_id, char.id, buff)
     _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
     await _mark_battle_economy(campaign_id, char.id, "bonus")
@@ -20144,6 +20161,13 @@ async def use_step_of_the_wind(
         "resource_key": "ki",
         "amount": 1,
         "source_label": "Step of the Wind",
+    })
+    _log_damage_entry(sotw_cast_id, {
+        "kind": "buff_install",
+        "campaign_id": campaign_id,
+        "target_char_id": char.id,
+        "buffs_before": _caster_buffs_before,
+        "buff_installed_key": buff_key,
     })
 
     await hub.broadcast(campaign_id, {
@@ -20276,6 +20300,8 @@ async def use_flurry_of_blows(
     db.commit()
 
     # v2.97.2 — log the ki spend for /undo_attack_damage refund.
+    # v2.97.22 — buff teardown: snapshot + buff_install entry so Undo
+    # drops the flurry-of-blows-active buff. Canonical pattern from v2.97.20.
     fob_cast_id = uuid.uuid4().hex[:12]
     _log_damage_entry(fob_cast_id, {
         "kind": "resource_spend",
@@ -20285,6 +20311,9 @@ async def use_flurry_of_blows(
         "amount": 1,
         "source_label": "Flurry of Blows",
     })
+    _caster_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": char.id},
+    )
 
     # Install the Flurry buff. ``unarmed_strikes_available: 2`` is the
     # signal a future commit will read to (a) refund the attack chip
@@ -20311,6 +20340,13 @@ async def use_flurry_of_blows(
     }
     installed = await _install_buff(campaign_id, char.id, buff)
     _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    _log_damage_entry(fob_cast_id, {
+        "kind": "buff_install",
+        "campaign_id": campaign_id,
+        "target_char_id": char.id,
+        "buffs_before": _caster_buffs_before,
+        "buff_installed_key": "flurry-of-blows-active",
+    })
     await _mark_battle_economy(campaign_id, char.id, "bonus")
 
     await hub.broadcast(campaign_id, {

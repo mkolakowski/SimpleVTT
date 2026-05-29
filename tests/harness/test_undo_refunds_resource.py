@@ -744,3 +744,134 @@ async def test_undo_refunds_indomitable_counter_and_buff(
     assert not any((b or {}).get("key") == "indomitable-armed" for b in post_buffs), (
         f"indomitable-armed still installed: {post_buffs}"
     )
+
+
+# ----------------------------------------------------------------------
+# v2.97.22 — buff teardown for the 3 Monk ki-spend endpoints.
+# Same canonical pattern as v2.97.20 Rage / v2.97.21 Indomitable.
+# Each test: long-rest Kael, seed solo battle, use the endpoint,
+# verify buff installed, undo, verify both legs in per_target and
+# the buff is gone.
+# ----------------------------------------------------------------------
+
+
+async def _seed_kael_solo_battle(gm_client, kael_id: int, slot_tag: str):
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [{
+                "id": f"tok_{slot_tag}_{kael_id}",
+                "char_id": kael_id,
+                "name": "Kael",
+                "initiative": 10,
+                "hp_current": 35, "hp_max": 35,
+                "buffs": [],
+                "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+            }],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+
+async def test_undo_refunds_patient_defense_counter_and_buff(
+    gm_client, gm_ws, roster,
+):
+    kael = roster["Kael Brightleaf"]
+    await _long_rest(gm_client, kael["id"])
+    await _seed_kael_solo_battle(gm_client, kael["id"], "pd")
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_patient_defense",
+        json={"character_id": kael["id"], "override": True},
+    )
+    assert cast.status_code == 200, cast.text
+    feature_msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    cast_id = feature_msg["data"].get("cast_id")
+    assert cast_id
+
+    buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "patient-defense" for b in buffs), (
+        f"patient-defense not installed; got {buffs}"
+    )
+
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    kinds = {e.get("kind") for e in (undo.json().get("per_target") or [])}
+    assert "resource_refunded" in kinds and "buff_install" in kinds
+
+    buffs2 = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any((b or {}).get("key") == "patient-defense" for b in buffs2)
+
+
+async def test_undo_refunds_step_of_the_wind_counter_and_buff(
+    gm_client, gm_ws, roster,
+):
+    kael = roster["Kael Brightleaf"]
+    await _long_rest(gm_client, kael["id"])
+    await _seed_kael_solo_battle(gm_client, kael["id"], "sotw")
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_step_of_the_wind",
+        json={"character_id": kael["id"], "mode": "disengage", "override": True},
+    )
+    assert cast.status_code == 200, cast.text
+    feature_msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    cast_id = feature_msg["data"].get("cast_id")
+    assert cast_id
+
+    buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "step-of-the-wind-disengage" for b in buffs)
+
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    kinds = {e.get("kind") for e in (undo.json().get("per_target") or [])}
+    assert "resource_refunded" in kinds and "buff_install" in kinds
+
+    buffs2 = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any((b or {}).get("key") == "step-of-the-wind-disengage" for b in buffs2)
+
+
+async def test_undo_refunds_flurry_of_blows_counter_and_buff(
+    gm_client, gm_ws, roster,
+):
+    kael = roster["Kael Brightleaf"]
+    await _long_rest(gm_client, kael["id"])
+    await _seed_kael_solo_battle(gm_client, kael["id"], "fob")
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_flurry_of_blows",
+        json={"character_id": kael["id"], "override": True},
+    )
+    assert cast.status_code == 200, cast.text
+    feature_msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    cast_id = feature_msg["data"].get("cast_id")
+    assert cast_id
+
+    buffs = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/buffs"
+    )).json().get("buffs", [])
+    assert any((b or {}).get("key") == "flurry-of-blows-active" for b in buffs)
+
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    kinds = {e.get("kind") for e in (undo.json().get("per_target") or [])}
+    assert "resource_refunded" in kinds and "buff_install" in kinds
+
+    buffs2 = (await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{kael['id']}/buffs"
+    )).json().get("buffs", [])
+    assert not any((b or {}).get("key") == "flurry-of-blows-active" for b in buffs2)

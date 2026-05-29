@@ -10,6 +10,26 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.22] - 2026-05-29 — "Three Stances Down"
+
+**Schema version:** 64
+**Commit summary:** **Extends the buff-teardown pattern to the three Monk ki-spend endpoints in a single commit.** `/use_patient_defense`, `/use_step_of_the_wind`, and `/use_flurry_of_blows` each install a self-buff (`patient-defense` / `step-of-the-wind-{disengage,dash}` / `flurry-of-blows-active`). Pre-v2.97.22 undo refunded the ki counter but left the buff installed. v2.97.22 snapshots caster buffs pre-install and stamps a `buff_install` log entry under the same `cast_id` for each endpoint; the existing v2.65.0 buff_install undo branch reverts the buff list on undo.
+
+### Added
+- `kind: "buff_install"` log entries stamped by `/use_patient_defense`, `/use_step_of_the_wind`, and `/use_flurry_of_blows` under the same `cast_id` as their existing `resource_spend` legs.
+- Three new tests in `tests/harness/test_undo_refunds_resource.py`:
+  - `test_undo_refunds_patient_defense_counter_and_buff`
+  - `test_undo_refunds_step_of_the_wind_counter_and_buff` (disengage mode; dash uses the same path)
+  - `test_undo_refunds_flurry_of_blows_counter_and_buff`
+- `_seed_kael_solo_battle` test helper to avoid copy-paste across the three.
+
+### Notes
+- **PATCH bump** — identical pattern, three endpoints; no new code path. All three endpoint suites pass unchanged.
+- Total harness count: 597 (was 594 in v2.97.21) — three new buff-teardown tests.
+- Remaining buff-teardown surface: `/use_metamagic_empowered_spell` (metamagic-empowered-pending), the 5 reaction-cast paths (Shield, Counterspell, Hellish Rebuke, Absorb Elements, Silvery Barbs), `/use_stunning_strike` (target's Stunned buff), and `/cast_spell` non-cantrip buffs (Bless, Hex, Sleep, etc. — those already use the v2.65.0 plumbing, but the resource_spend leg in v2.92.0 isn't paired with a buff_install snapshot today).
+
+---
+
 ## [2.97.21] - 2026-05-29 — "Disarm the Shield"
 
 **Schema version:** 64
