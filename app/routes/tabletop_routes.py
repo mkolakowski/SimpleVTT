@@ -18576,10 +18576,11 @@ async def use_indomitable(
     db.commit()
 
     # v2.97.1 — log the use-spend for /undo_attack_damage refund.
-    # The indomitable-armed buff stays installed on undo — the GM/
-    # player removes it manually via the buff tracker. Matching the
-    # Shield / Absorb Elements pattern (buff persists; only the slot
-    # refunds).
+    # v2.97.21 — buff teardown: snapshot the caster's buffs pre-install
+    # and stamp a buff_install entry under the same cast_id so Undo
+    # also drops the indomitable-armed buff. Pre-v2.97.21 the buff
+    # stayed installed after undo and the GM/player had to manually
+    # × it off. Canonical pattern from v2.97.20 "/use_rage".
     ind_cast_id = uuid.uuid4().hex[:12]
     _log_damage_entry(ind_cast_id, {
         "kind": "resource_spend",
@@ -18589,6 +18590,9 @@ async def use_indomitable(
         "amount": 1,
         "source_label": "Indomitable",
     })
+    _caster_buffs_before = _snapshot_target_buffs(
+        db, campaign_id, {"char_id": char.id},
+    )
 
     # Install the indomitable-armed buff. Long duration (10 rounds —
     # one minute) so the player can decide which save to spend it
@@ -18614,6 +18618,13 @@ async def use_indomitable(
     }
     installed = await _install_buff(campaign_id, char.id, buff)
     _mirror_buffs_to_sheet(db, char.id, _get_buffs(campaign_id, char.id))
+    _log_damage_entry(ind_cast_id, {
+        "kind": "buff_install",
+        "campaign_id": campaign_id,
+        "target_char_id": char.id,
+        "buffs_before": _caster_buffs_before,
+        "buff_installed_key": "indomitable-armed",
+    })
 
     # Broadcasts.
     await hub.broadcast(campaign_id, {

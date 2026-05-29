@@ -10,6 +10,22 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.21] - 2026-05-29 — "Disarm the Shield"
+
+**Schema version:** 64
+**Commit summary:** **Extends the v2.97.20 buff-teardown pattern to `/use_indomitable`.** Undo on an Indomitable cast now drops the `indomitable-armed` buff along with refunding the counter — pre-v2.97.21 the counter refunded but the buff stayed installed, leaving a fighter still armed with advantage on their next save without having spent the use.
+**Description:** Same shape as v2.97.20 "/use_rage". After the existing `_log_damage_entry(ind_cast_id, {"kind": "resource_spend", ...})`, snapshot the caster's pre-install buffs via `_snapshot_target_buffs(db, campaign_id, {"char_id": char.id})`. After `_install_buff`, stamp a second `kind: "buff_install"` entry under the same `ind_cast_id`. The existing v2.65.0 buff_install undo branch reverts the buff list to the snapshot on undo. Comment block on the pre-existing resource_spend stamp updated — "buff stays installed" comment retired.
+
+### Added
+- `kind: "buff_install"` log entry stamped by `/use_indomitable` under the same `cast_id` as the existing `resource_spend` leg. Both replay on a single Undo POST.
+- `tests/harness/test_undo_refunds_resource.py::test_undo_refunds_indomitable_counter_and_buff` — Garrik long-rests, enters battle, uses Indomitable, verifies `indomitable-armed` is installed. Undoes, asserts per_target carries both `resource_refunded` and `buff_install`. Re-fetches buffs, asserts `indomitable-armed` is gone.
+
+### Notes
+- **PATCH bump** — same pattern, same plumbing as v2.97.20; just applied to a second endpoint. No new code path.
+- Total harness count: 594 (was 593 in v2.97.20) — one new Indomitable buff-teardown test.
+
+---
+
 ## [2.97.20] - 2026-05-29 — "Calm the Rage"
 
 **Schema version:** 64

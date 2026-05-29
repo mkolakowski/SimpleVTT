@@ -682,3 +682,65 @@ async def test_undo_refunds_rage_counter_and_buff(gm_client, gm_ws, roster):
     assert not any((b or {}).get("key") == "rage" for b in post_undo_buffs), (
         f"rage buff still installed after undo: {post_undo_buffs}"
     )
+
+
+async def test_undo_refunds_indomitable_counter_and_buff(
+    gm_client, gm_ws, roster,
+):
+    """v2.97.21 — same pattern as v2.97.20 Rage applied to Indomitable.
+    Undo refunds the counter AND drops the indomitable-armed buff.
+    """
+    garrik = roster["Garrik Ironside"]
+    await _long_rest(gm_client, garrik["id"])
+    await gm_client.put(
+        f"/api/campaign/{CAMPAIGN_ID}/battle",
+        json={
+            "combatants": [{
+                "id": f"tok_indom_{garrik['id']}",
+                "char_id": garrik["id"],
+                "name": garrik["name"],
+                "initiative": 10,
+                "hp_current": 60, "hp_max": 60,
+                "buffs": [],
+                "economy": {"action": False, "bonus": False, "reaction": False, "movement": 0},
+            }],
+            "turn_index": 0, "round": 1, "active": True,
+        },
+    )
+
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/use_indomitable",
+        json={"character_id": garrik["id"], "override": True},
+    )
+    assert cast.status_code == 200, cast.text
+    feature_msg = await gm_ws.wait_for("feature_used", timeout=3.0)
+    cast_id = feature_msg["data"].get("cast_id")
+    assert cast_id, f"missing cast_id; payload={feature_msg['data']}"
+
+    # Verify buff installed.
+    buffs_resp = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/buffs"
+    )
+    pre_buffs = buffs_resp.json().get("buffs", [])
+    assert any((b or {}).get("key") == "indomitable-armed" for b in pre_buffs), (
+        f"expected indomitable-armed installed; got {pre_buffs}"
+    )
+
+    gm_ws.mark()
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    per_target = undo.json().get("per_target") or []
+    kinds = {e.get("kind") for e in per_target}
+    assert "resource_refunded" in kinds
+    assert "buff_install" in kinds
+
+    buffs_resp2 = await gm_client.get(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{garrik['id']}/buffs"
+    )
+    post_buffs = buffs_resp2.json().get("buffs", [])
+    assert not any((b or {}).get("key") == "indomitable-armed" for b in post_buffs), (
+        f"indomitable-armed still installed: {post_buffs}"
+    )
