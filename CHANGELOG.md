@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.28] - 2026-05-29 — "The Updated Ledger"
+
+**Schema version:** 64
+**Commit summary:** **Doc-only refresh of the undo refund audit wiki page** so the on-disk reference catches up with v2.97.0 – v2.97.27. The prior copy at `docs/wiki/consume-without-refund-audit.md` only covered the consume-without-refund leg (v2.97.0 – v2.97.8) and predated the buff-teardown audit (v2.97.20 – v2.97.27) entirely; readers landing on it via `/wiki/consume-without-refund-audit` would see an inventory of refundable kinds that omitted `buff_install` and an endpoint coverage table missing every Monk ki-spend path, both reaction casts, Stunning Strike's two target legs, and the `/cast_spell` save-or-suck branch routed through `/respond`. This commit rewrites the page in place to track both audits as a single ledger.
+**Description:** Full rewrite of `docs/wiki/consume-without-refund-audit.md`. New scope line, 8-row kinds table (added the `buff_install` row, expanded the rest), multi-leg example blocks updated to include `/use_rage`, `/use_stunning_strike`, and `/cast_spell` Hold Person, and the endpoint coverage table annotated with `buff_install` columns. Added "Adding a refundable endpoint" pattern blocks for both caster-side and target-side buff snapshots, refreshed the `_REFUNDABLE_FEATURE_SOURCES` JS code block (now includes `'stunning-strike'`), and updated "Filed for follow-up" — HP refund, Stunning Strike, and buff persistence flip from filed to ✅ shipped; new filed items: Channel Divinity buff teardown, Bardic Inspiration target buff, Bless / Hex / Hunter's Mark / Haste under `/cast_spell`, Metamagic variants beyond Empowered, and the rest of the `/use_feature` counters. CHANGELOG cross-reference list now spans v2.92.0 through v2.97.27.
+
+### Changed
+- `docs/wiki/consume-without-refund-audit.md` — full rewrite covering both stacked audits as a single reference; structure preserved (Why this audit exists → Kinds → Multi-leg pattern → Coverage → Adding a refundable endpoint → Filed follow-ups → Cross-references) but every section updated against the v2.97.27 working tree.
+
+### Notes
+- **PATCH bump** — doc-only refresh. No code touched, no schema changes, no harness coverage shift (still 602 tests in `tests/harness/` and 13 in `tests/harness_ui/`). The wiki page was already in `_DOC_ALLOWLIST` (added in the v2.97.9 commit that originally introduced it), already linked from the landing-page table in `app/templates/wiki.html`, and already indexed in `docs/wiki/README.md`, so the existing harness test in `tests/harness/test_wiki.py` keeps passing without modification.
+- The audit page is now load-bearing — future undo-refund work should diff against this page first to spot what's not yet covered, and amend it in the same commit that closes a gap (same way `docs/test-harness-coverage.md` is kept in sync with the suite).
+
+---
+
 ## [2.97.27] - 2026-05-29 — "Hold the Cleric"
 
 **Schema version:** 64

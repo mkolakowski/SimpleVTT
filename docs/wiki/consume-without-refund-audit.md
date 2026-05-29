@@ -1,38 +1,42 @@
-# Consume-without-refund audit (v2.97.0 – v2.97.8)
+# Undo refund audit (v2.97.0 – v2.97.27)
 
-> **Status:** ✅ shipped (v2.97.8 closes the audit). Filed follow-ups documented at the bottom.
+> **Status:** ✅ shipped. Two stacked audits closed: **consume-without-refund** (resources + slots + inventory + HP, v2.97.0 – v2.97.18) and **buff teardown** (buffs from feature use + reaction casts + spell save-or-suck, v2.97.20 – v2.97.27). Filed follow-ups documented at the bottom.
 
-## Why this audit existed
+## Why these audits existed
 
-Pre-v2.97.0, the `↶ Undo` button on roll-log cards reverted **HP changes** (so you could un-do damage / un-do a heal) and **buff installs** (so an accidental Bless / Hex came back off). But it did **not** revert anything the cast had **consumed** — spell slots, feature resource pools, item charges. A `/cast_spell` that consumed an L1 slot and an `/use_lay_on_hands` that drained 5 HP off the Paladin's pool stayed consumed after Undo.
+Pre-v2.97.0, the `↶ Undo` button on roll-log cards reverted **HP changes** (so you could un-do damage / un-do a heal) and **buff installs from spell casts** (so an accidental Bless / Hex came back off). But it did **not** revert anything the cast had **consumed** — spell slots, feature resource pools, item charges. A `/cast_spell` that consumed an L1 slot stayed consumed after Undo. An `/use_lay_on_hands` that drained 5 HP off the Paladin's pool stayed drained.
 
-That made spam-cast → spam-undo a free-cast exploit (cast a level-1 spell, undo to refund the HP delta but keep the spell effect's broadcast in the log — except the slot was now gone, so the player just lost the slot and got nothing). More mundanely, "I clicked the wrong feature, please give me my use back" was unsupported.
+The **consume-without-refund audit** (v2.97.0 – v2.97.18) closed every endpoint that consumes a resource, plus the downstream HP-application paths.
 
-The v2.97.0 – v2.97.8 audit pass closed every endpoint that consumes a resource.
+The **buff-teardown audit** (v2.97.20 – v2.97.27) then closed the secondary gap: even after the resource refund landed, buffs installed by `/use_rage`, `/use_indomitable`, the three Monk ki spend-options, `/use_metamagic_empowered_spell`, the Shield / Absorb Elements reaction casts, Stunning Strike's target Stunned, and any `/cast_spell` save-or-suck condition would stay installed. The resource was back but the effect lingered — a Barbarian could rage indefinitely by spam Use → Undo without the rage buff ever clearing. Same shape for every other endpoint that paired a resource with a buff.
 
 ## How a refund works
 
-The per-cast undo log (`_attack_damage_log[cast_id]`, 8-hour TTL, in-memory) is the central machinery. Every endpoint that consumes something now stamps an entry into this log under the cast's `cast_id`, and `POST /undo_attack_damage` walks the entries in reverse and dispatches by `kind`.
+The per-cast undo log (`_attack_damage_log[cast_id]`, 8-hour TTL, in-memory) is the central machinery. Every endpoint that consumes something or installs a buff stamps an entry into this log under the cast's `cast_id`, and `POST /undo_attack_damage` walks the entries in reverse and dispatches by `kind`.
 
-There are five refund-relevant entry kinds:
+There are eight refund-relevant entry kinds:
 
 | Kind | Stamped by | What undo does | Broadcasts on refund |
 |---|---|---|---|
-| `spell_slot_spend` | `/cast_spell`, `/use_font_of_magic_to_points` (slot sacrifice leg) | Decrement `sheet["spell_slots"][cslug][lvl]["used"]` by 1 (clamped ≥ 0) | `spell_slot_update` |
-| `resource_spend` | All `/use_*` feature endpoints with a counter; `/use_feature` for catalog-resolved keys; `/use_font_of_magic_to_slot` (SP cost leg) | Add `amount` back to `sheet["resources"][i]["current"]` (clamped ≤ `max`) | `resource_update` |
+| `spell_slot_spend` | `/cast_spell`, reaction casts (Shield / Counterspell / etc.), `/use_font_of_magic_to_points` | Decrement `sheet["spell_slots"][cslug][lvl]["used"]` by 1 (clamped ≥ 0) | `spell_slot_update` |
+| `resource_spend` | All `/use_*` feature endpoints; `/use_feature` for catalog-resolved keys; `/use_stunning_strike`; `/use_font_of_magic_to_slot` | Add `amount` back to `sheet["resources"][i]["current"]` (clamped ≤ `max`) | `resource_update` |
 | `slot_restore` | `/use_arcane_recovery` (per-level leg) | Bump `slot.used` **up** by `count` (clamped ≤ `total`) — the inverse of `spell_slot_spend` | `spell_slot_update` |
 | `resource_gain` | `/use_font_of_magic_to_points` (SP gain leg) | Subtract `amount` from `current` (clamped ≥ 0) — the inverse of `resource_spend` | `resource_update` |
 | `slot_gain` | `/use_font_of_magic_to_slot` (slot gain leg) | If `ephemeral=True`: decrement `total` by 1 and `font_of_magic_extra`. If `ephemeral=False`: increment `used` by 1. | `spell_slot_update` |
 | `inventory_consume` | `/use_item` | Find item by `_slug` or `name`; bump qty by 1, OR re-insert the stored item dict at `inv_idx` | `inventory_update` |
-| `buff_install` (pre-existing) | `/cast_spell`, `/use_reaction` reaction-cast branches, `/use_rage`, etc. | Restore `target.buffs` to pre-install snapshot | `buff_update` |
-| `damage` / `heal` (pre-existing) | `/use_attack`, `/cast_spell`, `/apply_healing`, etc. | Reverse `applied` HP on `target_char_id` | `character_hp_update` |
+| `buff_install` (pre-existing v2.65.0; opted into by v2.97.20+) | `/cast_spell` non-cantrip save-or-suck, `/use_reaction` Shield + Absorb Elements, `/use_rage`, `/use_indomitable`, the 3 Monk ki spends, `/use_metamagic_empowered_spell`, `/use_stunning_strike` (NPC target + PC target via `/respond`) | Restore `target.buffs` to pre-install snapshot via `_restore_target_buffs(db, campaign_id, target_char_id, target_combatant_id, buffs_before)` | `buff_update` |
+| `damage` / `heal` (pre-existing) | `/use_attack`, `/cast_spell`, `/apply_healing`, `/use_lay_on_hands`, `/use_second_wind`, `/use_wholeness_of_body`, `/use_item` heal kind, Blessed Healer (Disciple of Life subclass) | Reverse `applied` HP on `target_char_id` | `character_hp_update` |
 
 A single cast can stamp **multiple legs** under one `cast_id`. Examples:
 
-- `/use_arcane_recovery` (Wizard L1): 1 × `resource_spend` (arcane-recovery counter) + N × `slot_restore` (one per restored level). One Undo replays both.
+- `/use_rage`: 1 × `resource_spend` (rage counter) + 1 × `buff_install` (caster's rage buff snapshot). Undo refunds the counter AND drops the buff in one POST.
+- `/use_arcane_recovery` (Wizard L1): 1 × `resource_spend` (arcane-recovery counter) + N × `slot_restore` (one per restored level).
 - `/use_font_of_magic_to_points`: 1 × `spell_slot_spend` (the sacrificed slot) + 1 × `resource_gain` (the gained SP, capped at actually-gained delta so an overflow cast doesn't drive SP negative on undo).
 - `/use_font_of_magic_to_slot`: 1 × `resource_spend` (SP cost) + 1 × `slot_gain` (with `ephemeral` flag to drive the right inverse).
-- `/use_item` heal: 1 × `inventory_consume`. (HP gain is **not** stamped — see "Filed for follow-up" below.)
+- `/use_lay_on_hands`: 1 × `resource_spend` (pool) + 1 × `heal` (target HP, post-cap).
+- `/use_item` heal: 1 × `inventory_consume` + 1 × `heal` (self HP, post-cap).
+- `/use_stunning_strike` (NPC target who fails save): 1 × `resource_spend` (ki) + 1 × `buff_install` (target's Stunned, keyed by `target_combatant_id`).
+- `/cast_spell` Hold Person on a PC who fails: 1 × `spell_slot_spend` (slot) + 1 × `buff_install` (target's Paralyzed). The buff_install is stamped by `/respond` under the spell's cast_id via `_save_request_context[req.id]["cast_id"]`.
 
 ## How the UI knows a card is refundable
 
@@ -50,6 +54,7 @@ const _REFUNDABLE_FEATURE_SOURCES = new Set([
     'arcane-recovery', 'font-of-magic',
     'class-feature',  // catch-all for /use_feature-routed features (Channel Divinity)
     'item-use',
+    'stunning-strike',
 ]);
 ```
 
@@ -59,30 +64,31 @@ Spell-cast cards use the existing `spell_cast` source + the v2.92.0 `spell_slot_
 
 ### Spell slots
 
-- `/cast_spell` — all leveled spells (cantrips never log; `slot_level >= 1` is the gate)
+- `/cast_spell` — all leveled spells (cantrips never log; `slot_level >= 1` is the gate). PC-target save-or-suck spells (Hold Person, Sleep, Suggestion, Tasha's Hideous Laughter, …) also pair a `buff_install` leg via `/respond` (v2.97.27).
 
 ### Reaction casts (5 endpoints, all share the `/use_reaction` dispatcher)
 
 - `cast-counterspell` — Counterspell at L3+
-- `cast-shield` — Shield
+- `cast-shield` — Shield, with caster `buff_install` (shield-active, v2.97.24)
 - `cast-hellish-rebuke` — Hellish Rebuke
-- `cast-absorb-elements` — Absorb Elements
+- `cast-absorb-elements` — Absorb Elements, with caster `buff_install` (absorb-elements buff, v2.97.24)
 - `cast-silvery-barbs` — Silvery Barbs
 
 ### Dedicated `/use_*` endpoints (single-resource spend)
 
-- `/use_lay_on_hands` — Paladin HP pool (variable amount)
-- `/use_second_wind` — Fighter Second Wind counter
+- `/use_lay_on_hands` — Paladin HP pool (variable amount) + target `heal` (v2.97.16)
+- `/use_second_wind` — Fighter Second Wind counter + self `heal` (v2.97.16)
 - `/use_bardic_inspiration` — Bard BI counter
 - `/use_cutting_words` — College of Lore reaction; shares the BI counter
 - `/use_action_surge` — Fighter action-surge counter
-- `/use_indomitable` — Fighter indomitable counter
-- `/use_rage` — Barbarian rage counter
-- `/use_patient_defense` — Monk ki
-- `/use_flurry_of_blows` — Monk ki
-- `/use_wholeness_of_body` — Way of the Open Hand 1/long-rest
-- `/use_step_of_the_wind` — Monk ki (Disengage / Dash variants)
-- `/use_metamagic_empowered_spell` — Sorcerer SP (1)
+- `/use_indomitable` — Fighter indomitable counter + caster `buff_install` (indomitable-armed, v2.97.21)
+- `/use_rage` — Barbarian rage counter + caster `buff_install` (rage, v2.97.20)
+- `/use_patient_defense` — Monk ki + caster `buff_install` (patient-defense, v2.97.22)
+- `/use_flurry_of_blows` — Monk ki + caster `buff_install` (flurry-of-blows-active, v2.97.22)
+- `/use_wholeness_of_body` — Way of the Open Hand 1/long-rest + self `heal` (v2.97.16)
+- `/use_step_of_the_wind` — Monk ki (Disengage / Dash variants) + caster `buff_install` (v2.97.22)
+- `/use_metamagic_empowered_spell` — Sorcerer SP (1) + caster `buff_install` (metamagic-empowered-pending, v2.97.23)
+- `/use_stunning_strike` — Monk ki + target `buff_install` (Stunned; NPC inline at v2.97.25, PC via `/respond` at v2.97.26)
 
 ### Cross-resource conversions (multi-leg)
 
@@ -96,20 +102,15 @@ Spell-cast cards use the existing `spell_cast` source + the v2.92.0 `spell_slot_
 
 ### Inventory
 
-- `/use_item` — any consumable (Potion of Healing, scrolls, etc.) via the new `inventory_consume` log kind
+- `/use_item` — any consumable (Potion of Healing, scrolls, etc.) via the `inventory_consume` log kind; heal items also stamp a self-`heal` leg (v2.97.16).
 
-## Filed for follow-up
+### Healing surface
 
-- ~~**HP / death-save effect refund.**~~ ✅ **Audit complete across v2.97.16 + v2.97.17 + v2.97.18.** v2.97.16 stamped heal entries for the four dedicated HP-applying endpoints (`/use_lay_on_hands`, `/use_second_wind`, `/use_wholeness_of_body`, `/use_item` heal kind). v2.97.17 closed the `/cast_spell` heal-claim path (`/apply_healing` now stamps). v2.97.18 closed the Blessed Healer self-heal at all three sites (single-target `/cast_spell`, AoE heal-extras loop, `/apply_healing`) by swapping the `cast_id=None` arg to `cast_id=cast_id`. The auto-applied `/cast_spell` heal path was already covered via `_apply_heal_to_combatant`'s pre-existing stamp; mass heals (Mass Cure Wounds / Mass Healing Word) inherit the auto-applied coverage per-target. **Every documented heal path now leaves an undo log entry the existing v2.65.0 heal-undo branch can reverse.**
-- ~~**Stunning Strike.**~~ ✅ Shipped in **v2.97.19.** `/use_stunning_strike` now emits a `feature_used` broadcast with `cast_id` alongside the existing `roll` + `roll_request` + `resource_update`, so the v2.96.0 ↶ Undo pill renders and refunds the ki spend via the standard `resource_spend` branch. The Stunned buff on the target stays after undo (buff-teardown audit case, same precedent as Rage / Shield).
-- **Buff persistence after refund.** Endpoints like `/use_rage`, `/use_shield`, `/use_indomitable`, `/use_metamagic_empowered_spell`, and Monk Ki spend-options all install a buff alongside the resource decrement. The refund only restores the resource — the buff stays installed. Players/GMs can manually pop the buff via the buff tracker. A future pass could add the buff to the per-cast `buff_install` snapshot so the v2.65.0 buff-restore branch handles it automatically.
-- **Channel Divinity buff teardown.** Sacred Weapon installs a 1-minute buff with `+CHA mod to attack rolls`. Refunding the CD use today leaves the buff active — a future pass should snapshot + restore.
-- **`/use_feature` other counters.** Divine Sense (1 + CHA/day), Cleansing Touch (CHA/day), Stroke of Luck (1/short-rest), Cunning Action if a future class adds a counter to it. All can opt in by adding `resource_key + amount` to their `_FEATURE_ECONOMY` entry (one-line change per feature — the v2.97.7 plumbing reads it).
-- **Metamagic variants beyond Empowered.** Twinned / Quickened / Heightened / Subtle / Distant / Extended Spell don't have endpoints yet (only Empowered ships in v2.97.x). When they ship, each gets the same 3-line resource_spend patch as `/use_metamagic_empowered_spell`.
+- `/apply_healing` — the heal-claim path. Refund stamps a `heal` entry against whoever Alice/the GM healed (v2.97.17). Blessed Healer self-heal also refundable (v2.97.18).
 
 ## Adding a refundable endpoint
 
-The pattern is small enough to inline:
+The pattern for a new resource refund is small enough to inline:
 
 ```python
 # After the existing decrement + db.commit():
@@ -135,12 +136,55 @@ await hub.broadcast(campaign_id, {
 })
 ```
 
-Then add `'<your-slug>'` to `_REFUNDABLE_FEATURE_SOURCES` in `app/static/tabletop.js`. The existing `↶ Undo` click handler POSTs to `/undo_attack_damage` with the `cast_id` — no other JS changes needed.
+Then add `'<your-slug>'` to `_REFUNDABLE_FEATURE_SOURCES` in `app/static/tabletop.js`.
 
-For a harness test, model on `tests/harness/test_undo_refunds_resource.py::test_undo_refunds_lay_on_hands_pool`: cast, capture `cast_id` off the `feature_used` broadcast, mark the WS, undo, assert the matching `resource_update` (or `spell_slot_update` / `inventory_update`) refund broadcast lands.
+If the endpoint also installs a buff (caster-side or target-side), pair it with a buff_install snapshot:
+
+```python
+# Caster-side (most common):
+_caster_buffs_before = _snapshot_target_buffs(
+    db, campaign_id, {"char_id": char.id},
+)
+await _install_buff(campaign_id, char.id, buff)
+_log_damage_entry(cast_id, {
+    "kind": "buff_install",
+    "campaign_id": campaign_id,
+    "target_char_id": char.id,
+    "buffs_before": _caster_buffs_before,
+    "buff_installed_key": buff["key"],
+})
+
+# Target-side (NPC):
+_target_buffs_before = _snapshot_target_buffs(
+    db, campaign_id, target_combatant,
+)
+await _install_buff_on_combatant_id(campaign_id, target_combatant.get("id"), buff)
+_log_damage_entry(cast_id, {
+    "kind": "buff_install",
+    "campaign_id": campaign_id,
+    "target_combatant_id": target_combatant.get("id"),
+    "buffs_before": _target_buffs_before,
+    "buff_installed_key": buff["key"],
+})
+```
+
+For a save-or-suck endpoint whose buff installs via `/respond` (after the player rolls), thread the cast_id through `_save_request_context[req.id]["cast_id"]`. `/respond` already prefers `ctx["cast_id"]` when stamping (v2.97.26+).
+
+For a harness test, model on `tests/harness/test_undo_refunds_resource.py::test_undo_refunds_lay_on_hands_pool` (single-leg) or `test_undo_refunds_rage_counter_and_buff` (multi-leg with buff teardown).
+
+## Filed for follow-up
+
+- ~~**HP / death-save effect refund.**~~ ✅ **Audit complete across v2.97.16 + v2.97.17 + v2.97.18.** Every documented heal path now leaves an undo log entry the existing v2.65.0 heal-undo branch can reverse.
+- ~~**Stunning Strike.**~~ ✅ Shipped in **v2.97.19** (ki refund) and **v2.97.25 + v2.97.26** (NPC + PC target Stunned teardown).
+- ~~**Buff persistence after refund.**~~ ✅ **Audit complete across v2.97.20 – v2.97.27.** 11 sites across 9 endpoints now drop their buff alongside refunding the resource. Endpoint-specific notes in the table above.
+- ~~**Channel Divinity buff teardown.**~~ Filed. Sacred Weapon installs a 1-minute buff with `+CHA mod to attack rolls`; `/use_feature` (which routes Channel Divinity per v2.97.7) doesn't currently stamp a buff_install entry. The fix is to add `_snapshot_target_buffs` + `_log_damage_entry({"kind": "buff_install", ...})` to `/use_feature` when the catalog entry indicates the feature installs a buff. Requires extending `_FEATURE_ECONOMY` with a `buff_key` field (Sacred Weapon, Turn Undead, …) so the endpoint knows whether to snapshot. Filed for a v2.97.28-ish.
+- **`/use_feature` other counters.** Divine Sense (1 + CHA/day), Cleansing Touch (CHA/day), Stroke of Luck (1/short-rest), Cunning Action if a future class adds a counter to it. All can opt in by adding `resource_key + amount` to their `_FEATURE_ECONOMY` entry (one-line change per feature — the v2.97.7 plumbing reads it).
+- **Metamagic variants beyond Empowered.** Twinned / Quickened / Heightened / Subtle / Distant / Extended Spell don't have endpoints yet (only Empowered ships in v2.97.x). When they ship, each gets the same resource_spend + (optional) buff_install patches.
+- **Bardic Inspiration target buff teardown.** `/use_bardic_inspiration` decrements the BI counter (refundable) and installs the `bardic-inspiration-die` buff on the target. The counter refunds on Undo today but the die stays. Same 3-line patch as the v2.97.20 canonical pattern applied to the target combatant.
+- **Other `/cast_spell` buff-installing spells beyond save-or-suck.** Bless, Hex, Hunter's Mark, Haste, etc. — these install a buff on the caster or target without a save. The slot leg refunds today (v2.92.0) but the buff stays. The v2.65.0 buff_install kind exists; just needs `_log_damage_entry(cast_id, ...)` wired alongside the install in each spell's resolution branch.
 
 ## Cross-references
 
-- [Realtime broadcasts catalog](realtime-broadcasts-catalog.md) — full payload shapes for `feature_used`, `resource_update`, `spell_slot_update`, `inventory_update`, etc.
+- [Realtime broadcasts catalog](realtime-broadcasts-catalog.md) — full payload shapes for `feature_used`, `resource_update`, `spell_slot_update`, `inventory_update`, `buff_update`, etc.
 - [Endpoint catalog](endpoint-catalog.md) — full request/response shapes for every endpoint covered by the audit.
-- CHANGELOG entries v2.92.0 (initial spell-slot refund), v2.97.0 ("Pool Refund"), v2.97.5 ("Recover the Recovery"), v2.97.6 ("Trading Posts"), v2.97.7 ("Tithe and Refund"), v2.97.8 ("Pocket the Potion").
+- CHANGELOG entries v2.92.0 (initial spell-slot refund), v2.97.0 ("Pool Refund"), v2.97.5 ("Recover the Recovery"), v2.97.6 ("Trading Posts"), v2.97.7 ("Tithe and Refund"), v2.97.8 ("Pocket the Potion"), v2.97.16 ("The Effect Rewind"), v2.97.17 ("Claim the Refund"), v2.97.18 ("Heal the Healer"), v2.97.19 ("Strike the Refund"), v2.97.20 ("Calm the Rage"), v2.97.21 ("Disarm the Shield"), v2.97.22 ("Three Stances Down"), v2.97.23 ("Empowered No More"), v2.97.24 ("Lower the Shield"), v2.97.25 ("Wake the Stunned"), v2.97.26 ("Wake the Other Stunned"), v2.97.27 ("Hold the Cleric").
