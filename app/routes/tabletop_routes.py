@@ -11210,14 +11210,17 @@ async def cast_spell(
                         "id": "",
                         "name": char.name,
                     }
-                # cast_id=None on the self-heal so we don't overwrite
-                # the primary heal's _attack_damage_log entry; /undo_
-                # attack_damage reverts the TARGET heal only. Player
-                # tweaks caster HP manually if they want strict undo
-                # parity (rare — Blessed Healer is +3-9 HP per cast).
+                # v2.97.18 — pass cast_id through so undo reverses the
+                # Blessed Healer self-heal alongside the primary target's
+                # heal. Pre-v2.97.18 cast_id was deliberately None here
+                # (the prior comment claimed it would overwrite the
+                # primary heal's log entry), but each call to
+                # _log_damage_entry APPENDS to the list keyed by
+                # cast_id — both legs coexist. Walking entries in
+                # reverse on undo reverses both heals cleanly.
                 bh_result = await _apply_heal_to_combatant(
                     db, campaign_id, caster_combatant, _life_self_uplift,
-                    cast_id=None,
+                    cast_id=cast_id,
                 )
                 payload["blessed_healer_uplift"] = _life_self_uplift
                 payload["blessed_healer_applied"] = bh_result["applied"]
@@ -11360,10 +11363,13 @@ async def cast_spell(
                         "id": "",
                         "name": char.name,
                     }
+                # v2.97.18 — pass cast_id through (third Blessed Healer
+                # site: the AoE heal-extras loop. Same fix as the two
+                # parallel sites in this file).
                 _bh_result = await _apply_heal_to_combatant(
                     db, campaign_id, _bh_caster_combatant,
                     _extra_self_uplift,
-                    cast_id=None,
+                    cast_id=cast_id,
                 )
                 payload["blessed_healer_uplift"] = _extra_self_uplift
                 payload["blessed_healer_applied"] = _bh_result["applied"]
@@ -22503,9 +22509,14 @@ async def apply_healing(
                 "id": "",
                 "name": caster_char.name,
             }
+        # v2.97.18 — pass cast_id through so the Blessed Healer self-heal
+        # also gets a log entry, and a single Undo POST reverses BOTH the
+        # primary target's HP gain (v2.97.17 plumbing) AND the caster's
+        # Blessed Healer self-heal. Pre-v2.97.18 this was the last
+        # remaining HP-undo gap from the v2.97.16 audit notes.
         _bh_result = await _apply_heal_to_combatant(
             db, campaign_id, _bh_caster_combatant, _life_self_uplift,
-            cast_id=None,
+            cast_id=cast_id,
         )
         await hub.broadcast(campaign_id, {
             "type": "feature_used",

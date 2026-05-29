@@ -10,6 +10,27 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.18] - 2026-05-29 — "Heal the Healer"
+
+**Schema version:** 64
+**Commit summary:** **Closes the last filed HP-refund gap: Blessed Healer self-heal.** Pre-v2.97.18, when a Life Domain Cleric (Lv 6+) cast a heal on another creature, Disciple of Life uplifted the target's HP and Blessed Healer ALSO healed the caster for `2 + spell_level`. Undo reversed the target's HP gain (existing `_apply_heal_to_combatant` stamp), but the caster's Blessed Healer self-heal stayed — three call sites passed `cast_id=None` deliberately (per a stale comment claiming the second call would "overwrite" the primary log entry; that's not how `_log_damage_entry` works — it appends to a per-cast list). v2.97.18 swaps the three `cast_id=None` to `cast_id=cast_id` so the self-heal log entry coexists with the target's; Undo walks both in reverse and reverses both heals.
+**Description:** Three trivial swaps. `/cast_spell` single-target Blessed Healer site (line 11218), `/cast_spell` AoE heal-extras loop Blessed Healer site (line 11366), `/apply_healing` heal-claim Blessed Healer site (line 22506). Plus a stale-comment cleanup explaining why `cast_id` is now passed through (the log helper appends; both legs coexist).
+
+### Added
+- `tests/harness/test_cast_spell_heal.py::test_undo_blessed_healer_self_heal` — Tavik (Lv 8 Life Domain Cleric, wounded) casts Healing Word on Krieger (wounded). Disciple of Life uplifts Krieger; Blessed Healer self-heals Tavik. Undo asserts the response's `per_target` carries TWO heal-reverted entries (one per target_char_id) and `reverted == target_applied + bh_applied`.
+
+### Changed
+- Three `_apply_heal_to_combatant(..., cast_id=None)` calls in heal sites become `cast_id=cast_id` (single-target Blessed Healer, AoE heal-extras Blessed Healer, heal-claim Blessed Healer).
+- Stale comment block at the single-target site rewritten — pre-v2.97.18 reasoning was wrong (claimed the log entry would be overwritten; in fact `_log_damage_entry` appends to a per-cast list).
+- Audit wiki page (`docs/wiki/consume-without-refund-audit.md`) marks the Blessed Healer gap as ✅ shipped.
+
+### Notes
+- **PATCH bump** — fills the last documented v2.97.16 follow-up; no new endpoint, no new undo log kind, no contract change. The behavior change is that Undo on a Life Domain heal now drops the caster's HP back too, restoring true pre-cast parity.
+- The v2.97.x consume-without-refund audit is now end-to-end complete on the HP side: every documented heal path (4 dedicated endpoints + auto-applied `/cast_spell` + AoE extras + heal-claim + Blessed Healer self-heal) leaves an entry the existing v2.65.0 heal-undo branch can reverse. The audit wiki page is updated.
+- Total harness count: 591 (was 590 in v2.97.17) — one new Blessed Healer undo test.
+
+---
+
 ## [2.97.17] - 2026-05-29 — "Claim the Refund"
 
 **Schema version:** 64

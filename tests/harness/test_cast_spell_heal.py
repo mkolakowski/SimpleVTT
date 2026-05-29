@@ -346,3 +346,94 @@ async def test_undo_heal_claim_reverses_hp(
         f"Pip's HP not restored: post-undo={hd['hp']['current']}, "
         f"expected={pre_hp}"
     )
+
+
+async def test_undo_blessed_healer_self_heal(
+    gm_client, gm_ws, tavik_full, roster,
+):
+    """v2.97.18 — when Tavik (Life Domain Cleric Lv 6+) casts a heal on
+    Krieger, Blessed Healer ALSO heals Tavik for `2 + spell_level`. Pre-
+    v2.97.18 the self-heal was applied with cast_id=None, so Undo
+    reversed Krieger's HP but Tavik's Blessed Healer self-heal stayed.
+    v2.97.18 passes cast_id through; Undo now reverses BOTH targets.
+    """
+    tavik = tavik_full
+    krieger = roster["Krieger Stonefist"]
+    # Wound both: Tavik needs HP headroom for Blessed Healer to actually
+    # apply (capped at max otherwise = 0 self-heal logged).
+    await gm_client.patch(
+        f"/api/campaign/{CAMPAIGN_ID}/character/{tavik['id']}/sheet-fields",
+        json={"hp": {"current": 30}},
+    )
+    await _set_pip_hp(gm_client, krieger["id"], 35)
+
+    await _seed_battle(gm_client, [
+        {"id": tavik["id"], "name": tavik["name"]},
+        {"id": krieger["id"], "name": krieger["name"], "hp_current": 35},
+    ])
+    gm_ws.mark()
+
+    HEALING_WORD_INDEX = 5
+    cast = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/cast_spell",
+        json={
+            "character_id": tavik["id"],
+            "spell_index": HEALING_WORD_INDEX,
+            "slot_level": 1,
+            "class_slug": "cleric",
+            "target_character_id": krieger["id"],
+            "target_combatant_id": f"tok_test_{krieger['id']}",
+            "target_name": krieger["name"],
+            "override": True,
+        },
+    )
+    assert cast.status_code == 200, cast.text
+    data = cast.json()
+    cast_id = data["id"]
+    target_applied = int(data.get("auto_heal_applied") or 0)
+    assert target_applied > 0, f"target heal didn't fire: {data}"
+
+    # Blessed Healer surfaces via the feature_used broadcast (the JSON
+    # response carries auto_heal_* for the primary target only). Look
+    # for the v2.58.0 "blessed-healer" source on the buffered WS.
+    bh_msgs = [
+        m for m in gm_ws.buffered("feature_used")
+        if (m.get("data") or {}).get("source") == "blessed-healer"
+        and (m.get("data") or {}).get("character_id") == tavik["id"]
+    ]
+    assert bh_msgs, (
+        f"expected blessed-healer broadcast for Tavik; got buffered: "
+        f"{[(m.get('type'), (m.get('data') or {}).get('source')) for m in gm_ws.buffered()]}"
+    )
+    # The broadcast's feature_name embeds the applied amount: "+N HP".
+    import re as _re
+    _m = _re.search(r"\+(\d+)\s+HP", bh_msgs[0]["data"]["feature_name"])
+    assert _m, f"couldn't parse Blessed Healer applied amount: {bh_msgs[0]}"
+    bh_applied = int(_m.group(1))
+    assert bh_applied > 0
+
+    # Undo: walk in reverse, both heals should be reversed.
+    undo = await gm_client.post(
+        f"/api/campaign/{CAMPAIGN_ID}/undo_attack_damage",
+        json={"attack_id": cast_id},
+    )
+    assert undo.status_code == 200, undo.text
+    body = undo.json()
+    assert body["was_heal"] is True
+    # per_target should now have TWO heal-reverted entries: Krieger (the
+    # primary target) and Tavik (Blessed Healer self-heal). Plus the
+    # spell-slot-refunded leg.
+    per_target = body.get("per_target") or []
+    heal_entries = [e for e in per_target if e.get("kind") == "heal"]
+    assert len(heal_entries) == 2, (
+        f"expected 2 heal entries reversed (Krieger + Tavik via Blessed "
+        f"Healer); got {len(heal_entries)}. per_target={per_target}"
+    )
+    reversed_target_ids = {e.get("target_char_id") for e in heal_entries}
+    assert krieger["id"] in reversed_target_ids
+    assert tavik["id"] in reversed_target_ids
+    # Total reverted = target_applied + bh_applied.
+    assert body["reverted"] == target_applied + bh_applied, (
+        f"expected reverted={target_applied + bh_applied}, got "
+        f"{body['reverted']}"
+    )
