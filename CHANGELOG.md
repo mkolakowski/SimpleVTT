@@ -10,6 +10,41 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.97.34] - 2026-05-29 — "Roll the Reckoning"
+
+**Schema version:** 64
+**Commit summary:** **Four buff attack-roll hooks shipped in one batch.** Closes the mechanical loops on Sacred Weapon (v2.97.29), Bless (v2.97.31), Bane (v2.97.33), and Faerie Fire (v2.97.33). Each of those commits installed the buff icon + duration + undo wiring but deferred the actual attack-roll arithmetic. v2.97.34 adds three new attacker-side helpers plus a one-line extension to the existing v2.49.238 `_target_grants_advantage_to_attackers` walker, and wires all four into `/use_attack`'s d20 expression builder. After this commit, every buff that installs actually does its thing on attack rolls.
+**Description:** Three edits in `app/routes/tabletop_routes.py`.
+**(1)** Three new helpers near `_target_grants_advantage_to_attackers`:
+ - `_attacker_sacred_weapon_attack_bonus(campaign_id, attacker_char_id, attacker_sheet)` — returns `(attacker.CHA - 10) // 2` clamped ≥ 0 when the attacker has the `sacred-weapon` buff active; zero otherwise.
+ - `_attacker_has_bless(campaign_id, attacker_char_id)` — True if the attacker has the `bless` buff.
+ - `_attacker_has_bane(campaign_id, attacker_char_id)` — True if the attacker has the `baned` buff.
+**(2)** `_target_grants_advantage_to_attackers` extended to ALSO return True when the target has a buff with `key == "faerie-fired"`. Necessary because the v2.97.33 entry uses descriptive-list `effects` (legacy `_SPELL_CONDITION_MAP` shape), so the existing `effects.incoming_attacks_have_advantage` dict-path lookup misses it. Key-keyed shortcut covers the case without forcing a catalog migration.
+**(3)** `/use_attack`'s d20 expression builder gets a buff-driven suffix. Computed once up-front:
+ - Sacred Weapon → `+{cha_mod}` (positive integer)
+ - Bless → `+1d4` (positive die)
+ - Bane → `-1d4` (negative die)
+Suffix appended in both the bonused branch (attacker has a weapon to-hit bonus) and the bonusless branch (free `1d20` roll). Suffix is empty when no relevant buffs are active, so ordinary attacks see no change. Faerie Fire's advantage layers in through the existing v2.49.238 path (advantage + dodging cancels, advantage + reckless still just advantage, etc.).
+
+### Added
+- 3 new helpers in `app/routes/tabletop_routes.py`: `_attacker_sacred_weapon_attack_bonus`, `_attacker_has_bless`, `_attacker_has_bane`.
+- `tests/harness/test_buff_attack_hooks.py` — 4 tests asserting each hook fires correctly in the attack-roll breakdown.
+
+### Changed
+- `_target_grants_advantage_to_attackers` extended to fire on the `faerie-fired` buff key.
+- `/use_attack` atk_expr builder appends the v2.97.34 buff suffix on both the bonused + bonusless branches.
+- `docs/wiki/consume-without-refund-audit.md` — header expanded to mention v2.97.34's mechanical-hook batch; updated cross-reference list.
+- `docs/test-harness-coverage.md` — total count 609 → 613, version stamp v2.97.33 → v2.97.34.
+
+### Notes
+- **PATCH bump** — extension of an existing attack-roll construction path. Three helpers + one walker extension + a string suffix. No new endpoints, no schema changes, no new undo log kinds.
+- **RAW notes.** Sacred Weapon RAW says "you can add your CHA modifier" — we add it on every attack while the buff is up (no GM toggle). Bless RAW says the target "can roll a d4 and add" — we auto-add unconditionally. Bane RAW says "must roll a d4 and subtract" — same, no choice. Faerie Fire RAW says advantage only if the attacker "can see" the target — we don't model line-of-sight, so the advantage fires unconditionally while the buff is active. All four are slight simplifications in favor of automation; an opt-out toggle is filed for a future commit when the GM-rules-authority surface gets a dedicated UI.
+- **Filed: saves with Bless / Bane / Faerie Fire.** This commit covers attack rolls only. Bless and Bane both also affect saving throws (+d4 / -d4); Faerie Fire's advantage applies only to attacks, not saves. The save-roll construction path is in a separate code site (`/respond` save handler + the various roll_request creation sites); wiring the +d4/-d4 there is a follow-up. Filed.
+- **Filed: Bardic Inspiration +die hook.** The v2.97.30 `bardic-inspiration-die` buff carries `effects.bardic_inspiration_die: "d8"` (or whatever size). Today /use_attack doesn't read it — adding a hook to prompt the recipient when their attack lands "do you want to spend your inspiration die?" is a UI question beyond v2.97.34's scope. The buff exists; the hook is filed.
+- Total harness count: 613 (was 609 in v2.97.33) — four new attack-hook round-trip tests.
+
+---
+
 ## [2.97.33] - 2026-05-29 — "Snuff the Curse"
 
 **Schema version:** 64

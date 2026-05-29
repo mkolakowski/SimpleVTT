@@ -16510,6 +16510,13 @@ def _target_grants_advantage_to_attackers(
     one imposes DISadvantage on attackers; this one grants ADvantage.
     Both can fire on the same target (a dodging-AND-reckless target
     is incoherent in RAW but the cancel logic handles it correctly).
+
+    v2.97.34 — extended to ALSO fire when the target has the
+    ``faerie-fired`` buff (from /cast_spell faerie-fire on a failed
+    Dex save). RAW (PHB p.239): "any attack roll against an affected
+    creature has advantage if the attacker can see it." We don't
+    model line-of-sight; if the target is faerie-fired, attackers
+    get advantage unconditionally. Same cancel logic as Reckless.
     """
     if not target_combatant_id:
         return False
@@ -16522,12 +16529,80 @@ def _target_grants_advantage_to_attackers(
         for b in (c.get("buffs") or []):
             if not isinstance(b, dict):
                 continue
+            # v2.97.34 — Faerie Fire (key-keyed; effects is a list
+            # of descriptive strings from _SPELL_CONDITION_MAP, not
+            # a dict, so the v2.49.238 effects-dict path below would
+            # miss it without the key shortcut).
+            if b.get("key") == "faerie-fired":
+                return True
             effects = b.get("effects")
             if not isinstance(effects, dict):
                 continue
             if effects.get("incoming_attacks_have_advantage") is True:
                 return True
         return False
+    return False
+
+
+def _attacker_sacred_weapon_attack_bonus(
+    campaign_id: int, attacker_char_id: int, attacker_sheet: dict,
+) -> int:
+    """v2.97.34 — closes the v2.97.29 Sacred Weapon mechanical hook.
+    Returns the attacker's CHA modifier (clamped ≥ 0 — RAW always a
+    bonus, never a penalty) when the ``sacred-weapon`` buff is
+    active on the attacker. Zero otherwise.
+
+    RAW (PHB p.265): "for the duration, you can add your Charisma
+    modifier to attack rolls made with that weapon." We add it on
+    every attack while the buff is up — the RAW "made with that
+    weapon" gate is GM-adjudicated for now.
+    """
+    has_sw = False
+    for b in _get_buffs(campaign_id, attacker_char_id):
+        if isinstance(b, dict) and b.get("key") == "sacred-weapon":
+            has_sw = True
+            break
+    if not has_sw:
+        return 0
+    cha = int((attacker_sheet.get("abilities") or {}).get("CHA") or 10)
+    bonus = (cha - 10) // 2
+    return max(0, bonus)
+
+
+def _attacker_has_bless(campaign_id: int, attacker_char_id: int) -> bool:
+    """v2.97.34 — closes the v2.97.31 Bless attack-roll mechanical hook.
+    Returns True if the attacker has the ``bless`` buff installed
+    (whether by the new _SPELL_BUFF_MAP path or a future caster-
+    side install). When True, /use_attack appends ``+1d4`` to the
+    d20 attack expression so the auto-rolled total includes the
+    Bless die.
+
+    RAW (PHB p.219): "the target can roll a d4 and add the number
+    rolled to the attack roll or saving throw." We auto-add on
+    every attack — the RAW "can" decision is taken away in favor
+    of automation; the buff drops itself when concentration ends.
+    """
+    for b in _get_buffs(campaign_id, attacker_char_id):
+        if isinstance(b, dict) and b.get("key") == "bless":
+            return True
+    return False
+
+
+def _attacker_has_bane(campaign_id: int, attacker_char_id: int) -> bool:
+    """v2.97.34 — closes the v2.97.33 Bane attack-roll mechanical hook.
+    Returns True if the attacker has the ``baned`` buff installed
+    (from /cast_spell bane on a failed Cha save). When True,
+    /use_attack appends ``-1d4`` to the d20 attack expression so
+    the auto-rolled total subtracts the Bane die.
+
+    RAW (PHB p.216): "whenever a target that fails this saving throw
+    makes an attack roll … the target must roll a d4 and subtract
+    the number rolled from the attack roll." Unlike Bless, the
+    subtraction is mandatory RAW — no "can" decision.
+    """
+    for b in _get_buffs(campaign_id, attacker_char_id):
+        if isinstance(b, dict) and b.get("key") == "baned":
+            return True
     return False
 
 
@@ -24147,6 +24222,25 @@ async def use_attack(
         campaign_id, target_combatant_id,
     )
 
+    # v2.97.34 — buff-driven attack-roll modifiers. Sacred Weapon
+    # (v2.97.29) adds +CHA mod, Bless (v2.97.31) adds +1d4, Bane
+    # (v2.97.33) adds -1d4. Each helper returns 0 / False when the
+    # corresponding buff isn't active on the attacker. We compute
+    # them once up-front so both the bonused and no-bonus branches
+    # below append the same string suffix.
+    _sw_attack_bonus = _attacker_sacred_weapon_attack_bonus(
+        campaign_id, char.id, sheet,
+    )
+    _has_bless_attack = _attacker_has_bless(campaign_id, char.id)
+    _has_bane_attack = _attacker_has_bane(campaign_id, char.id)
+    _buff_attack_suffix = ""
+    if _sw_attack_bonus > 0:
+        _buff_attack_suffix += f"+{_sw_attack_bonus}"
+    if _has_bless_attack:
+        _buff_attack_suffix += "+1d4"
+    if _has_bane_attack:
+        _buff_attack_suffix += "-1d4"
+
     # Build the to-hit expression. Accept "+5", "5", "1d4+3" etc.
     attack_total = None
     attack_breakdown = ""
@@ -24156,6 +24250,10 @@ async def use_attack(
             or any(c.isalpha() for c in attack_bonus_raw)\
             else "+" + attack_bonus_raw
         atk_expr = "1d20" + (bonus_expr if bonus_expr.startswith(("+", "-")) else "+" + bonus_expr)
+        # v2.97.34 — append buff-driven attack modifiers (Sacred
+        # Weapon / Bless / Bane). The suffix is "" when none apply,
+        # so this is a no-op for ordinary attacks.
+        atk_expr += _buff_attack_suffix
         # v2.2.0: apply character roll_state to the attack d20.
         # v2.20.0: layer Rage advantage on top by stamping "a" if it
         # isn't already there. ``_apply_roll_state`` already handles
@@ -24195,6 +24293,11 @@ async def use_attack(
         atk_expr, attack_roll_state_applied = _apply_roll_state(
             "1d20", (char.sheet or {}).get("roll_state"),
         )
+        # v2.97.34 — append buff-driven attack modifiers on the
+        # bonusless branch too (Sacred Weapon / Bless / Bane), so
+        # an attack with no character to-hit bonus still gets the
+        # buff dice/mod folded in.
+        atk_expr += _buff_attack_suffix
         # Same Phase B adv/dis layering as the bonused branch above.
         has_adv = rage_advantage or target_grants_advantage
         adv_label = (
