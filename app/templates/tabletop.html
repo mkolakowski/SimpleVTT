@@ -144,6 +144,40 @@
     .tt-topbar-form { display: inline; }
     .tt-topbar-actions button,
     .tt-topbar-actions .btn-link { white-space: nowrap; }
+
+    /* v2.96.1 — glass card wrapping the ruler + drawer-tab buttons.
+       Same translucent --bg + backdrop-filter recipe as the centered
+       title pill, but with a slightly squarer radius (12 px) so the
+       interior buttons read as discrete chips inside a tray rather
+       than a single oversized pill. margin-left:auto pushes the whole
+       group to the right edge of the topbar; the inner
+       canvas-tools / drawer-tab-bar lose their individual
+       margin-left:auto via the descendant rules below so they stack
+       naturally inside the card. */
+    .tt-tab-card {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        background: color-mix(in srgb, var(--bg) var(--glass-alpha, 42%), transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+        border-radius: 12px;
+        box-shadow: 0 4px 18px rgba(0,0,0,0.18), 0 1px 0 rgba(255,255,255,0.05) inset;
+        -webkit-backdrop-filter: blur(20px) saturate(170%);
+        backdrop-filter: blur(20px) saturate(170%);
+        flex-wrap: wrap;
+        row-gap: 4px;
+    }
+    .tt-tab-card .canvas-tools,
+    .tt-tab-card .drawer-tab-bar {
+        margin-left: 0;
+    }
+    .tt-tab-card .canvas-tools + .drawer-tab-bar {
+        margin-left: 0;
+        padding-left: 8px;
+        border-left: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+    }
     #vtt-canvas { display: block; image-rendering: pixelated; cursor: grab; }
     .panel { background: var(--bg-2); padding: 10px; border-radius: 6px; }
     .panel h3 { margin: 0 0 6px; font-size: 14px; }
@@ -1877,6 +1911,17 @@
        wires them unchanged. ``margin-left:auto`` pushes them to the right
        of the title; on narrow viewports the topbar's ``flex-wrap`` falls
        back to wrapping them onto a second line. #}
+    {# v2.96.1 — wrap the canvas-tools (📏 Ruler) + drawer-tab-bar
+       (Roll Log / Battle / Characters / [Settings] / Tools) in a
+       single glass card pinned to the upper-right of the topbar.
+       Replaces the previous loose-buttons-on-the-bar look with a
+       grouped pill that visually reads as "the navigation block."
+       The card itself uses the same glass recipe as the title pill
+       (translucent --bg + backdrop-filter blur + accent border)
+       and stays visible above every drawer panel via the topbar's
+       existing z-index:60. The card always sits at the top of the
+       viewport regardless of which tab is active. #}
+    <div class="tt-tab-card">
     {# v2.49.71 — canvas tools cluster. Phase 1 of docs/plans/ruler-and-range.md
        lands the ruler; future phases add hover-rangefinder + range-rings (D)
        which would also live here. Visible to both GM + players; ``aria-pressed``
@@ -1913,6 +1958,7 @@
         {% endif %}
         <button class="drawer-tab-btn gm-tools-tab" data-target="gm-tools-drawer">⚙ Tools</button>
     </div>
+    </div><!-- /.tt-tab-card -->
 </div>
 
 

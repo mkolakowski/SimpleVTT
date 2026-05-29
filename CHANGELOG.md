@@ -10,6 +10,25 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.96.1] - 2026-05-29 — "The Toolbar Tray"
+
+**Schema version:** 64
+**Commit summary:** **Wraps the ruler + drawer-tab buttons (Roll Log / Battle / Characters / [Settings] / Tools) in a single glass card pinned to the upper-right of the topbar.** Replaces the previous loose-buttons-on-the-bar look with a grouped pill that visually reads as "the navigation block" sitting in a tray. Pinned to the top of every tab via the existing topbar absolute positioning.
+**Description:** Two edits in `app/templates/tabletop.html`: **(1)** Wrap the existing `<div class="canvas-tools">` (📏 Ruler) and `<div class="drawer-tab-bar">` (Roll Log / Battle / Characters / Settings / Tools) in a new `<div class="tt-tab-card">` container. The wrapper stays inside the `.tt-topbar` so it inherits the topbar's absolute-positioned z-index:60 stacking (above every drawer panel) and the topbar's auto-margin push-to-right. **(2)** New `.tt-tab-card` CSS class — same translucent glass recipe as the v2.91.0 centered title pill (translucent `--bg` backing, `backdrop-filter:blur(20px) saturate(170%)`, accent-tinted border, 4px shadow + inset highlight) but with a squarer 12 px border radius so the interior buttons read as discrete chips inside a tray rather than a single oversized pill. The inner `.canvas-tools` + `.drawer-tab-bar` lose their individual `margin-left:auto` (via descendant rules) so they stack naturally inside the card, and a thin accent divider (`border-left: 1px solid color-mix(--accent 20%)`) sits between the ruler cluster and the tab cluster.
+
+### Added
+- `.tt-tab-card` glass class wrapping the canvas-tools + drawer-tab-bar.
+- Thin accent divider between the ruler and the tab buttons.
+
+### Changed
+- The ruler + tab buttons now render inside the new glass card instead of as loose elements on the topbar.
+
+### Notes
+- **PATCH bump** — pure visual restyle. No data, schema, contract, or DOM-id changes; the buttons keep their existing `data-target` / `id` / `class` attributes so all drawer-system JS bindings still work.
+- The card uses `flex-wrap:wrap; row-gap:4px` so narrow viewports collapse cleanly: the tab buttons wrap onto a second line inside the card rather than spilling out of it.
+
+---
+
 ## [2.96.0] - 2026-05-29 — "The Undo Pill"
 
 **Schema version:** 64
