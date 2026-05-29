@@ -10,6 +10,21 @@ Application version and database schema version are also published at runtime by
 
 ---
 
+## [2.96.2] - 2026-05-29 — "Mind the Gap"
+
+**Schema version:** 64
+**Commit summary:** **Fixes the v2.96.1 regression: the new tab tray (Ruler + Roll Log / Battle / Characters / Tools) at the top of the topbar was overlapping the drawer panel content underneath it.** GM-reported screenshot showed the GM Controls card's header peeking out above the tray + the first card slipping behind. The tab tray itself is correctly absolute-positioned with `z-index:60`, but the drawer panels start at `top:0` of their wrapper — meaning panel content scrolled UNDER the floating tray. Fixed by pushing the drawer panels down by ~64 px so their first card starts BELOW the tray.
+**Description:** One CSS edit — `.drawer-panel` in `app/templates/tabletop.html`. Changed `top: 0; height: 100%` to `top: 64px; height: calc(100% - 64px)`. The 64 px clearance matches the topbar's `top:8px` + the tray's ~52 px height (6 px padding + 36-44 px button + 1 px border × 2 + 8 px breathing room). Same value applies to both the right drawer sidebar (Battle / Characters / Tools / Roll Log when right-side) and the left roll-log sidebar — `.drawer-panel` is shared so a single rule covers both.
+
+### Changed
+- `.drawer-panel` — `top: 64px` + `height: calc(100% - 64px)` (was `top: 0` + `height: 100%`).
+
+### Notes
+- **PATCH bump** — pure layout fix for the v2.96.1 visual regression. No data, schema, contract, JS, or DOM-id changes.
+- Side-effect of the fix: the drawer's bottom edge is unchanged (the `calc(100% - 64px)` height drops by the same amount as the top offset), so the dice-roller card / scroll-to-bottom anchors still land at the same y position. Scrollable panel content (init list, encounter library, etc.) gains 64 px less visible vertical space; the gain is preferable to the overlap.
+
+---
+
 ## [2.96.1] - 2026-05-29 — "The Toolbar Tray"
 
 **Schema version:** 64
